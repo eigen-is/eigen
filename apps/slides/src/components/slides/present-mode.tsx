@@ -72,8 +72,9 @@ export function PresentMode({ frame, elements, onNext, onPrev, onExit }: Present
             // The overlay IS the presentation surface: it holds focus so a clicker's keys reach it.
             tabIndex={0}
             onKeyDown={onKeyDown}
-            // Full-screen present sits at the documented full-screen tier (z-100, like FilePreview),
-            // not the portal tier, so it covers the app chrome instead of tying with it.
+            // Why z-[100]: present mode must cover the whole app shell, so it sits at the documented
+            // full-screen tier (CODE-STANDARDS.md § Z-Index, the tier FilePreview uses), not the
+            // portal tier — at z-50 it would only tie with the app's own dropdowns and popovers.
             className={cn(
                 'fixed inset-0 z-[100] flex items-center justify-center bg-black',
                 !controlsVisible && 'cursor-none',
@@ -88,13 +89,12 @@ export function PresentMode({ frame, elements, onNext, onPrev, onExit }: Present
                 onPrev();
             }}
         >
-            <FrameView
-                frame={frame}
-                elements={elements}
-                resolveMedia={resolveMediaUrl}
-                interactive
-                className="w-full max-h-full"
-            />
+            {/* The slide fits the LIMITING axis. FrameView scales itself from its own clientWidth, so on
+                a viewport wider than the frame's ratio a full-width box would run taller than the
+                screen and crop the slide — cap the width at what the height affords. */}
+            <div style={{ width: `min(100%, calc(100dvh * ${frame.width} / ${frame.height}))` }}>
+                <FrameView frame={frame} elements={elements} resolveMedia={resolveMediaUrl} interactive />
+            </div>
             <button
                 type="button"
                 title="Exit present (Esc)"

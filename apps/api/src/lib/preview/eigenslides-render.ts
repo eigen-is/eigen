@@ -2,7 +2,7 @@ import { CANVAS_PREVIEW_WIDTH } from '@workspace/lib/constants/preview';
 import { type MediaResolver, readVectorFromDoc } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import type { TransformWarning } from '../document/transform/protocol';
-import { framePages, renderCanvasPage } from '../export/canvas/render';
+import { framePages, renderFittedPage } from '../export/canvas/render';
 import { sanitizeExportHtml } from '../export/sanitize';
 import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-marker';
 import { sanitizeSceneHtml } from './sanitize-scene';
@@ -30,9 +30,11 @@ export function renderEigenslidesPreviewBody(
 
     const truncated = pages.length > PREVIEW_MAX_SLIDES;
     const scale = CANVAS_PREVIEW_WIDTH / pages[0].width;
+    // Fitted, not bare: the lightbox and the drive hero are narrower than the composed page, and the
+    // shared .page-fit box is what scales it down for them.
     const html = pages
         .slice(0, PREVIEW_MAX_SLIDES)
-        .map((page) => renderCanvasPage(page, scale, resolveMedia))
+        .map((page) => renderFittedPage(page, scale, resolveMedia))
         .join('');
     const body = sanitizeExportHtml(truncated ? `${html}${renderPreviewTruncatedMarker()}` : html, {
         allowedRefs: new Set(mediaUrls.values()),

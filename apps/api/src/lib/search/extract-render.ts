@@ -1,6 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import type { Sheet } from '@workspace/lib/sheets';
-import type { ElementKindRegistry, VectorElement, VectorScene } from '@workspace/lib/vector';
+import type { ElementKindRegistry, VectorElement } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import type { ExtractTextJob, TransformWarning } from '../document/transform/protocol';
 import { CONTENT_INDEX_MAX_BYTES } from './limits';
@@ -72,26 +72,16 @@ function collectSheetsText(sheets: Sheet[], cap: number): string {
 }
 
 // A deck and a drawing are the same document, so one collector serves both: every kind's own
-// searchText, in reading order (frame by frame, then z-order inside a frame). `kinds` rides in from
-// the caller's dynamic import, which is what keeps the vector engine out of an eigendoc extract.
-function collectCanvasText(scene: VectorScene, kinds: ElementKindRegistry, cap: number): string {
+// searchText, over the elements the caller already put in sceneReadingOrder. `kinds` and that order
+// ride in from the caller's dynamic import, which keeps the vector engine out of an eigendoc extract.
+function collectCanvasText(elements: VectorElement[], kinds: ElementKindRegistry, cap: number): string {
     const out: CappedText = { parts: [], bytes: 0 };
-    for (const element of readingOrder(scene)) {
+    for (const element of elements) {
         const text = kinds[element.type].searchText(element);
         if (text === '') continue;
         if (!appendCapped(out, text, cap)) return out.parts.join('\n');
     }
     return out.parts.join('\n');
-}
-
-// searchScene's ordering rule, so the index and the find bar agree about what a document says: the
-// reader hands back both lists already in fractional-index order, and sort is stable, so grouping by
-// frame position keeps each frame's z-order. An unframed element sorts first (-1) — a drawing's case.
-function readingOrder(scene: VectorScene): VectorElement[] {
-    const framePosition = new Map(scene.frames.map((frame, i) => [frame.id, i]));
-    return [...scene.elements].sort(
-        (a, b) => (framePosition.get(a.frameId) ?? -1) - (framePosition.get(b.frameId) ?? -1),
-    );
 }
 
 // Body text for one collab document, capped at ~100 KB. Sheets index stored values
@@ -115,9 +105,9 @@ export async function extractCollabText(
         }
         case 'eigenslides':
         case 'eigenvector': {
-            const { ELEMENT_KINDS, readVectorFromDoc } = await import('@workspace/lib/vector');
-            const scene = readVectorFromDoc(doc);
-            return { text: collectCanvasText(scene, ELEMENT_KINDS, CONTENT_INDEX_MAX_BYTES), warnings: [] };
+            const { ELEMENT_KINDS, readVectorFromDoc, sceneReadingOrder } = await import('@workspace/lib/vector');
+            const ordered = sceneReadingOrder(readVectorFromDoc(doc));
+            return { text: collectCanvasText(ordered, ELEMENT_KINDS, CONTENT_INDEX_MAX_BYTES), warnings: [] };
         }
     }
 }

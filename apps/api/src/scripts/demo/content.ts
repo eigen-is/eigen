@@ -9,6 +9,7 @@
 // the data model keys on (ACLs, comments, calendar attendees, stickies creators) resolves by that
 // email, so ids may be random per rebuild. All names, acts and vendors are fictional.
 
+import type { FillPaint } from '@workspace/lib/types/background';
 import type {
     Arrowhead,
     Corners,
@@ -18,6 +19,7 @@ import type {
     TextAlign,
     VerticalAlign,
 } from '@workspace/lib/vector';
+import type { CanvasSide } from './canvas-build';
 
 export type LeadRole =
     | 'director'
@@ -186,12 +188,6 @@ export const BUDGET = {
 // pinned 1920x1080, its elements positioned relative to the frame's top-left corner. Slide keys are
 // stable so element ids stay the same across reseeds, and shape keys let an arrow bind by name. ---
 
-export type DeckSide = 'top' | 'right' | 'bottom' | 'left';
-
-export type DeckBackground =
-    | { type: 'solid'; color: string }
-    | { type: 'gradient'; from: string; to: string; angle: number };
-
 // A text box, authored as the TipTap HTML the editor itself stores (paragraphs, <strong>, lists).
 export type DeckText = {
     html: string;
@@ -220,8 +216,8 @@ export type DeckShape = {
 
 // Both ends dock on a named shape's side midpoint, so the arrow carries a real binding.
 export type DeckArrow = {
-    from: { shape: string; side: DeckSide };
-    to: { shape: string; side: DeckSide };
+    from: { shape: string; side: CanvasSide };
+    to: { shape: string; side: CanvasSide };
     stroke?: string;
 };
 
@@ -237,7 +233,7 @@ export type DeckImage = {
 export type DeckSlide = {
     key: string;
     name: string; // the slide's name in the rail
-    background: DeckBackground;
+    background: FillPaint;
     texts: DeckText[];
     shapes?: DeckShape[];
     arrows?: DeckArrow[];
@@ -697,10 +693,9 @@ export const BRANDING: BrandingAsset[] = [{ file: 'logo.svg', mimeType: 'image/s
 // spec — no fixture bytes; see vector-build.ts). Scene units are pixels, y down; every shape's
 // label is centred inside it. Shape keys are stable so arrows can bind to them by name. ---
 
-export type SitePlanSide = 'top' | 'right' | 'bottom' | 'left';
 // An arrow end: docked on a named shape's side (a real binding) or a free scene point.
 // `along` (0..1) docks off-centre on a rectangle side; default is the side midpoint.
-export type SitePlanEnd = { shape: string; side: SitePlanSide; along?: number } | { at: [number, number] };
+export type SitePlanEnd = { shape: string; side: CanvasSide; along?: number } | { at: [number, number] };
 
 export type SitePlanShape = {
     key: string;

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { VectorElement, VectorScene } from '@workspace/lib/vector';
-import { drawingPage, emptyPage, framePages, renderCanvasPage } from '../../lib/export/canvas/render';
+import { drawingPage, emptyPage, framePages, renderCanvasPage, renderFittedPage } from '../../lib/export/canvas/render';
 import { buildGoldenDeckScene, buildGoldenVectorScene, GOLDEN_MEDIA_NAME } from '../fixtures/golden-documents';
 
 // Box fields only: a Partial of the whole union would widen `type` on the spread below and stop the
@@ -163,6 +163,16 @@ describe('renderCanvasPage', () => {
         const page = drawingPage(buildGoldenVectorScene(), resolveMedia);
         if (!page) throw new Error('expected a page');
         expect(renderCanvasPage(page, 1)).toBe(renderCanvasPage(page, 1));
+    });
+});
+
+describe('renderFittedPage', () => {
+    test('the fit box carries the COMPOSED page box, so a scaled page fits by its own ratio', () => {
+        const page = drawingPage(sceneOf('v-rect'), noMedia);
+        if (!page) throw new Error('expected a page');
+        const html = renderFittedPage(page, 0.5);
+        expect(html.startsWith('<div class="page-fit" style="--page-w:60px;--page-ar:60/40">')).toBe(true);
+        expect(html).toContain('<div class="canvas-page"');
     });
 });
 

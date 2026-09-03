@@ -5,7 +5,7 @@
 
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { parseBackgroundFill, serializeBackgroundFill, type VectorFrame } from '@workspace/lib/vector';
+import { serializeBackgroundFill, type VectorFrame } from '@workspace/lib/vector';
 import { Button } from '@workspace/ui/components/button';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { BackgroundFillBlock } from '@workspace/ui/components/properties-panel';
@@ -96,13 +96,7 @@ export function SlideBackgroundPanel({
     );
 }
 
-// Radix hands back a plain string; narrow it rather than casting (the old panel cast here).
+// Radix hands back a plain string; narrow it rather than casting.
 function toApplyTo(value: string): ApplyTo {
     return value === 'all' || value === 'this-and-following' ? value : 'this';
-}
-
-// The frame's stored background as a parsed fill, for the block's value. Exported so the shell reads
-// it the same way rather than re-deriving the codec.
-export function frameBackground(frame: VectorFrame | undefined): BackgroundFill | null {
-    return frame ? parseBackgroundFill(frame.background) : null;
 }

@@ -5,6 +5,7 @@ import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     elementForCommentCard,
+    parseBackgroundFill,
     SLIDES_STYLE_DEFAULTS,
     serializeBackgroundFill,
     type VectorElement,
@@ -36,7 +37,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSlideDnd } from './hooks/use-slide-dnd';
 import { PresentMode, presentStep } from './present-mode';
 import { seedDeck } from './seed-deck';
-import { frameBackground, SlideBackgroundPanel } from './slide-background-panel';
+import { SlideBackgroundPanel } from './slide-background-panel';
 import { SlidePanel } from './slide-panel';
 import { Toolbar } from './toolbar';
 
@@ -102,10 +103,7 @@ function SlideEditorInner({
 
     const { addFrame, deleteFrame, duplicateFrame, updateFrame, updateFrames } = doc;
 
-    // A deck always has at least one slide, and nothing server-side writes a new container's Yjs
-    // content — so the first WRITER to open an empty deck seeds it. The emptiness test reads the LIVE
-    // Y.Doc, not React state (which is one render behind a sync and would let a second effect run seed
-    // twice), and seedDeck itself re-checks inside its transact.
+    // The first writer to open an empty deck seeds its one slide (seed-deck.ts owns the why).
     useEffect(() => {
         const yjsDoc = doc.yjsDoc;
         if (!doc.loaded || !canWrite || !yjsDoc) return;
@@ -286,6 +284,9 @@ function SlideEditorInner({
     );
 
     const enterPresent = useCallback(() => {
+        // Nothing to show on a frameless deck, and latching isPresenting there would take fullscreen
+        // for an empty screen with no canvas keymap left to leave it.
+        if (doc.frames.length === 0) return;
         setSelectedIds([]);
         // Present unmounts the find-bar subtree without closing the session, so its rings would outlive
         // the exit — drop them on the way in.
@@ -293,7 +294,7 @@ function SlideEditorInner({
         setIsPresenting(true);
         // No API (iOS Safari) or a rejected request still presents: the overlay is fixed inset-0.
         document.documentElement.requestFullscreen?.().catch(() => {});
-    }, [setSelectedIds, docSearchController]);
+    }, [doc.frames.length, setSelectedIds, docSearchController]);
 
     const exitPresent = useCallback(() => {
         setIsPresenting(false);
@@ -341,7 +342,7 @@ function SlideEditorInner({
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
     const imageInsertRef = useRef<CanvasImageInsert | null>(null);
 
-    const background = frameBackground(frame);
+    const background = frame ? parseBackgroundFill(frame.background) : null;
     const backgroundImageUrl = background?.type === 'image' ? resolveMediaUrl(background.mediaName) : null;
 
     const uploadBackgroundImage = useCallback(
@@ -387,16 +388,21 @@ function SlideEditorInner({
     };
 
     // Present mode replaces the editor outright: no tools, no rail, no panels. The doc hook stays
-    // mounted above it, so leaving present returns to the same slide with the same selection state.
+    // mounted above it, so leaving present returns to the same slide with the same selection state —
+    // and so does the leave guard, which must outlive the swap or a presenter's unsynced edits would
+    // navigate away unwarned.
     if (isPresenting && frame) {
         return (
-            <PresentMode
-                frame={frame}
-                elements={doc.elements}
-                onNext={() => presentTo(1)}
-                onPrev={() => presentTo(-1)}
-                onExit={exitPresent}
-            />
+            <>
+                <UnsyncedEditsGuard active={doc.unsyncedEdits} />
+                <PresentMode
+                    frame={frame}
+                    elements={doc.elements}
+                    onNext={() => presentTo(1)}
+                    onPrev={() => presentTo(-1)}
+                    onExit={exitPresent}
+                />
+            </>
         );
     }
 

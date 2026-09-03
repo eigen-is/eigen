@@ -5,8 +5,8 @@
 // workspace — team drive, docs, a budget sheet, a slides deck, a stickies board and a site-plan
 // drawing, mail, calendar, chat and contacts — driving the REAL product surfaces as the personas so
 // activity panels, file history and notifications populate for free. Docs and sheets dogfood the
-// shipped .docx/.xlsx importers; slides and stickies are byte-copied fixture containers; the site
-// plan is built into its Y.Doc from a typed spec (demo/vector-build.ts).
+// shipped .docx/.xlsx importers; stickies is a byte-copied fixture container; the sponsor deck and
+// the site plan are built into their Y.Docs from typed specs (demo/deck-build.ts, vector-build.ts).
 //
 // A host-level reset script wipes the data root hourly and re-runs this, so every timestamp
 // stays < 1h old. It MUST run against an empty data root (it refuses a completed setup).
@@ -562,22 +562,22 @@ async function main(): Promise<void> {
     });
     await teamDrive.flushContainerDb(teamMountId, boardId);
 
-    // --- Site plan: a vector drawing built straight into the container's Y.Doc from the SITE_PLAN
-    // spec (no fixture bytes; see demo/vector-build.ts). The two referenced images are uploaded into
-    // the container's media/ subfolder (CollabDocument.create makes it) so the drawing stays whole. ---
-    {
-        const author = userForRole(SITE_PLAN.author);
-        const container = await teamDrive.create(
-            teamMountId,
-            folderId.get(SITE_PLAN.folder)!,
-            SITE_PLAN.name,
-            'vector',
-            author,
-        );
+    // --- The two canvas containers, each built straight into its Y.Doc from a typed spec (no fixture
+    // bytes; see demo/vector-build.ts and demo/deck-build.ts): the site plan as a drawing, the sponsor
+    // deck as slides. The images a spec names are uploaded into the container's media/ subfolder
+    // (CollabDocument.create makes it) so the document stays whole. ---
+    const seedCanvasContainer = async (
+        spec: { folder: string; name: string; author: LeadRole },
+        type: 'vector' | 'slides',
+        imageFiles: string[],
+        build: (doc: Y.Doc) => void,
+    ) => {
+        const author = userForRole(spec.author);
+        const container = await teamDrive.create(teamMountId, folderId.get(spec.folder)!, spec.name, type, author);
         const mediaFolder = await teamDrive.getChildByName(teamMountId, container.id, 'media');
         if (!mediaFolder) throw new Error(`media/ subfolder missing for ${container.name}`);
-        for (const image of SITE_PLAN.images) {
-            const path = join(FIXTURES_DIR, image.file);
+        for (const file of imageFiles) {
+            const path = join(FIXTURES_DIR, file);
             const bytes = readFileSync(path);
             await teamDrive.createFileFromData(
                 teamMountId,
@@ -589,42 +589,22 @@ async function main(): Promise<void> {
             );
         }
         const collab = await teamDrive.getCollabDocument(teamMountId, container.id);
-        buildVectorDoc(collab.doc, SITE_PLAN);
+        build(collab.doc);
         await teamDrive.flushContainerDb(teamMountId, container.id);
-    }
+    };
 
-    // --- Sponsor deck: a slide deck built straight into the container's Y.Doc from the SPONSOR_DECK
-    // spec (no fixture bytes; see demo/deck-build.ts). Its images are uploaded into the container's
-    // media/ subfolder, which the deck references by name. ---
-    {
-        const author = userForRole(SPONSOR_DECK.author);
-        const container = await teamDrive.create(
-            teamMountId,
-            folderId.get(SPONSOR_DECK.folder)!,
-            SPONSOR_DECK.name,
-            'slides',
-            author,
-        );
-        const mediaFolder = await teamDrive.getChildByName(teamMountId, container.id, 'media');
-        if (!mediaFolder) throw new Error(`media/ subfolder missing for ${container.name}`);
-        for (const slide of SPONSOR_DECK.slides) {
-            for (const image of slide.images ?? []) {
-                const path = join(FIXTURES_DIR, image.file);
-                const bytes = readFileSync(path);
-                await teamDrive.createFileFromData(
-                    teamMountId,
-                    mediaFolder.id,
-                    basename(path),
-                    Bun.file(path).type,
-                    bytes,
-                    author,
-                );
-            }
-        }
-        const collab = await teamDrive.getCollabDocument(teamMountId, container.id);
-        buildDeckDoc(collab.doc, SPONSOR_DECK.slides);
-        await teamDrive.flushContainerDb(teamMountId, container.id);
-    }
+    await seedCanvasContainer(
+        SITE_PLAN,
+        'vector',
+        SITE_PLAN.images.map((image) => image.file),
+        (doc) => buildVectorDoc(doc, SITE_PLAN),
+    );
+    await seedCanvasContainer(
+        SPONSOR_DECK,
+        'slides',
+        SPONSOR_DECK.slides.flatMap((slide) => slide.images ?? []).map((image) => image.file),
+        (doc) => buildDeckDoc(doc, SPONSOR_DECK.slides),
+    );
 
     // --- Chat channels in chats/ (alternating personas; #production carries the weather worry). ---
     for (const channel of CHATS) {

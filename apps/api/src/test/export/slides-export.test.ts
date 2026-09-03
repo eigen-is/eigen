@@ -6,8 +6,9 @@ import { getHome } from '../../lib/home/get-home';
 import { driveGet, drivePost, getTestContext } from '../setup';
 
 // End-to-end guard for the download/print surface: a collaborator can put arbitrary strings
-// in the schemaless canvas scene, so the assembled HTML export must neutralize both an attribute-
-// breakout color and a script tag — the same guarantee the preview surface already gives.
+// in the schemaless canvas scene, so the assembled HTML export must neutralize an attribute-breakout
+// color, a script tag and a rich-text body's own hostile markup (a javascript: link, an onerror
+// handler) — the same guarantee the preview surface already gives.
 describe('deck export — assembled HTML surface', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     let rootId: string;
@@ -51,7 +52,12 @@ describe('deck export — assembled HTML surface', () => {
             box.set('width', 200);
             box.set('height', 100);
             box.set('fontSize', 24);
-            box.set('html', '<p>legit body</p><script>alert(1)</script>');
+            // A rich-text body is stored as raw HTML, so it is the widest hostile surface here.
+            box.set(
+                'html',
+                '<p>legit body</p><script>alert(1)</script>' +
+                    '<a href="javascript:alert(3)">click</a><img src="x" onerror="alert(4)">',
+            );
             box.set('color', 'red;" onload="alert(1)');
             elements.set('e1', box);
         });
@@ -62,7 +68,24 @@ describe('deck export — assembled HTML surface', () => {
         // No live script tag and no attribute breakout survive into the download.
         expect(html).not.toMatch(/<script/i);
         expect(html).not.toMatch(/"\s*onload/i);
+        expect(html).not.toMatch(/javascript:/i);
+        expect(html).not.toMatch(/onerror/i);
         // Legitimate body content still renders.
         expect(html).toContain('legit body');
+    });
+
+    // A deck with no frames has no page to size the document from, so the export refuses rather
+    // than serving an empty sheet (the drawing export does the same for an empty drawing).
+    test('exporting a frameless deck is rejected with 400', async () => {
+        const deckPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            'default',
+            `folder/${rootId}/create/slides`,
+            { fileName: 'empty-deck' },
+        );
+        const home = await getHome(ctx.alice.user.id);
+        const { mount, path } = await home.drive.resolveFile('default', deckPath.id);
+        expect(exportDocument(mount, path, 'html')).rejects.toThrow('The deck is empty');
     });
 });

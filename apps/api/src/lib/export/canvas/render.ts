@@ -13,7 +13,6 @@ import {
     round,
     sceneBounds,
     sceneLayers,
-    type VectorFrame,
     type VectorScene,
 } from '@workspace/lib/vector';
 
@@ -59,7 +58,7 @@ export function drawingPage(scene: VectorScene, resolveMedia: MediaResolver): Ca
 // drawing there is no content-bounds arithmetic and no origin offset; an element that overhangs is
 // clipped by the page box, exactly as the live canvas clips it.
 export function framePages(scene: VectorScene, resolveMedia: MediaResolver): CanvasPage[] {
-    return orderByFractionalIndex(scene.frames).map((frame: VectorFrame) => ({
+    return orderByFractionalIndex(scene.frames).map((frame) => ({
         width: frame.width,
         height: frame.height,
         originX: 0,
@@ -107,6 +106,16 @@ export function renderCanvasPage(page: CanvasPage, scale: number, resolveMedia?:
     ];
     const body = page.layers.map(renderLayer).join('');
     return `<div class="canvas-page" style="${style(pageStyle)}"><div style="${style(sceneStyle)}">${body}</div></div>`;
+}
+
+// The same page in the fit box every SCREEN consumer scales it in — the HTML export document, the
+// lightbox and the drive hero. The box carries the page's composed size as custom properties so one
+// rule set (`.page-fit`, packages/ui/src/styles/globals.css, mirrored by the export document's own
+// CSS) fits a 16:9 slide and a drawing of any ratio the same way.
+export function renderFittedPage(page: CanvasPage, scale: number, resolveMedia?: MediaResolver): string {
+    const width = round(page.width * scale);
+    const height = round(page.height * scale);
+    return `<div class="page-fit" style="--page-w:${width}px;--page-ar:${width}/${height}">${renderCanvasPage(page, scale, resolveMedia)}</div>`;
 }
 
 function renderLayer(layer: Layer): string {

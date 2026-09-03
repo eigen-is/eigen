@@ -43,6 +43,8 @@ describe('renderEigenvectorPreviewBody', () => {
     test('the body is a compositor page, not an svg document', () => {
         const body = previewOf('<p>hello</p>');
         expect(body).toContain('<div class="canvas-page"');
+        // Fitted like a slide is: the drawing preview is the same box on the same surfaces.
+        expect(body).toContain('<div class="page-fit" style="--page-w:960px;');
         expect(body).not.toContain('viewBox=');
         expect(body).not.toContain('<foreignObject');
     });

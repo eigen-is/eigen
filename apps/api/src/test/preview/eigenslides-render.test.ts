@@ -34,6 +34,8 @@ describe('renderEigenslidesPreviewBody', () => {
         const body = previewOf('<p>hello</p>');
         expect(body).toContain('<div class="canvas-page"');
         expect(body).toContain(`width:${CANVAS_PREVIEW_WIDTH}px`);
+        // In the shared fit box, so the lightbox and the drive hero can scale it below its own width.
+        expect(body).toContain(`<div class="page-fit" style="--page-w:${CANVAS_PREVIEW_WIDTH}px;--page-ar:960/540">`);
         // The frame is 1920 wide, so the page scales by exactly half.
         expect(body).toContain(`transform:scale(${CANVAS_PREVIEW_WIDTH / FRAME_WIDTH})`);
     });

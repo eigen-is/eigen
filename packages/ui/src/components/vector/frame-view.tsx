@@ -110,7 +110,7 @@ export const FrameThumbnail = memo(function FrameThumbnail({
             type="button"
             onClick={onClick}
             className={cn(
-                'group flex w-full items-start gap-2 rounded-sm px-1 py-1 text-left',
+                'flex w-full items-start gap-2 rounded-sm px-1 py-1 text-left',
                 'select-none [-webkit-touch-callout:none]',
                 active && 'bg-accent',
             )}

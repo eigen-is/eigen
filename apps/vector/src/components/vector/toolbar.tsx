@@ -28,9 +28,8 @@ type ToolbarProps = {
     // Present when the container has a media/ folder — opens the editor's image picker.
     onInsertImage?: () => void;
     onAccessDialogOpen: () => void;
-    // Document-level comments + activity (the props deliberately omitted until vector had a
-    // comment lifecycle). Always offered when the panels are wired: desktop draws the side panel,
-    // mobile the Column.
+    // Document-level comments + activity. Always offered: desktop draws the side panel, mobile the
+    // Column.
     onToggleCommentPanel: () => void;
     commentPanelOpen: boolean;
     assignedCommentCount: number;
@@ -76,31 +75,24 @@ export function Toolbar({
                             createIcon={Diamond}
                             createType="vector"
                         />
-                        {/* Render unconditionally once vector has a DocSearchProvider (Find items survive read-only). */}
+                        {/* Unconditional: EditMenu drops its edit section itself, and its Find entries
+                            are the read-only viewer's only menu route to the find bar. */}
+                        <EditMenu canEdit={canEdit} canUndo={canUndo} canRedo={canRedo} onUndo={undo} onRedo={redo}>
+                            <ToolMenuItems tools={EDIT_TOOLS} setTool={setTool} />
+                            <DropdownMenuCheckboxItem checked={toolLocked} onCheckedChange={setToolLocked}>
+                                Keep selected tool
+                                <DropdownMenuShortcut>Q</DropdownMenuShortcut>
+                            </DropdownMenuCheckboxItem>
+                        </EditMenu>
                         {canEdit && (
-                            <>
-                                <EditMenu
-                                    canEdit={canEdit}
-                                    canUndo={canUndo}
-                                    canRedo={canRedo}
-                                    onUndo={undo}
-                                    onRedo={redo}
-                                >
-                                    <ToolMenuItems tools={EDIT_TOOLS} setTool={setTool} />
-                                    <DropdownMenuCheckboxItem checked={toolLocked} onCheckedChange={setToolLocked}>
-                                        Keep selected tool
-                                        <DropdownMenuShortcut>Q</DropdownMenuShortcut>
-                                    </DropdownMenuCheckboxItem>
-                                </EditMenu>
-                                <ToolbarMenu label="Insert">
-                                    <ToolMenuItems tools={INSERT_TOOLS} setTool={setTool} />
-                                    {onInsertImage && (
-                                        <DropdownMenuItem onClick={onInsertImage}>
-                                            <ImagePlus className="h-4 w-4 mr-2" /> Image
-                                        </DropdownMenuItem>
-                                    )}
-                                </ToolbarMenu>
-                            </>
+                            <ToolbarMenu label="Insert">
+                                <ToolMenuItems tools={INSERT_TOOLS} setTool={setTool} />
+                                {onInsertImage && (
+                                    <DropdownMenuItem onClick={onInsertImage}>
+                                        <ImagePlus className="h-4 w-4 mr-2" /> Image
+                                    </DropdownMenuItem>
+                                )}
+                            </ToolbarMenu>
                         )}
                     </div>
                 }

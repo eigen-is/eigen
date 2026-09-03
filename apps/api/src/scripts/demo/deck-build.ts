@@ -32,25 +32,14 @@ import {
     type VectorShapeElement,
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
-import {
-    DECK_INK,
-    type DeckArrow,
-    type DeckImage,
-    type DeckShape,
-    type DeckSide,
-    type DeckSlide,
-    type DeckText,
-} from './content';
+import { type CanvasSide, mulberry32, SIDE_INDEX, ZERO_BOX } from './canvas-build';
+import { DECK_INK, type DeckArrow, type DeckImage, type DeckShape, type DeckSlide, type DeckText } from './content';
 
 // Fixed PRNG salt so every reseed draws the same roughjs seeds. The deck is flat (roughness 0), but
 // the field is stored either way and an author who raises roughness gets a stable drawing.
 const SEED_SALT = 0x5d_ec_4b_21;
-const ZERO_BOX = { x: 0, y: 0, width: 0, height: 0, angle: 0 } as const;
 // The deck's style table: the slides app's own, in the deck's ink — what an editor-authored element inherits.
 const DECK_STYLE: StyleDefaults = { ...SLIDES_STYLE_DEFAULTS, color: DECK_INK };
-
-// Side-midpoint order matches shapeAnchorPoints (right, bottom, left, top).
-const SIDE_INDEX: Record<DeckSide, number> = { right: 0, bottom: 1, left: 2, top: 3 };
 
 type StoredFrame = Omit<VectorFrame, 'width' | 'height'>;
 
@@ -214,22 +203,11 @@ function buildArrow(
 
 // An arrow end: a real binding to a named shape's side midpoint.
 function dockOn(
-    end: { shape: string; side: DeckSide },
+    end: { shape: string; side: CanvasSide },
     byKey: Map<string, VectorShapeElement>,
 ): { point: { x: number; y: number }; binding: string } {
     const shape = byKey.get(end.shape);
     if (!shape) throw new Error(`deck arrow binds to unknown shape ${end.shape}`);
     const dock = shapeAnchorPoints(shape)[SIDE_INDEX[end.side]];
     return { point: dock, binding: serializeBinding({ elementId: shape.id, fixedPoint: bindingAnchor(shape, dock) }) };
-}
-
-// mulberry32 — a tiny deterministic PRNG, one draw per element (matches addElement's seed range).
-function mulberry32(seed: number): () => number {
-    let a = seed >>> 0;
-    return () => {
-        a = (a + 0x6d2b_79f5) | 0;
-        let t = Math.imul(a ^ (a >>> 15), 1 | a);
-        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-        return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
-    };
 }

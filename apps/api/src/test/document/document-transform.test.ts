@@ -661,12 +661,14 @@ describe('document transform (xlsx import)', () => {
 // for an intentional renderer change. The embedded media data URI comes from the
 // screen-preview pipeline (sharp → WebP), so a preview-encoder change moves the
 // export hashes legitimately. The deck hashes were re-recorded when the deck moved onto the canvas
-// compositor: a slide is a `canvas-page` of scene layers now, so the bytes differ by construction.
+// compositor: a slide is a `canvas-page` of scene layers now, so the bytes differ by construction —
+// and again when every screen-rendered page gained the shared `.page-fit` wrapper, which the preview
+// body now carries too so the lightbox and the drive hero can scale a page below its own width.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'f61e8785cd4e3b3872e5fcf6ee817abdae5e2ed4119a113dc17342fd922e6b44';
 const GOLDEN_DOC_EXPORT_HTML_SHA256 = 'f4b1308435d2d2f9d140c4ed62b81a1e9cb281dee8d68aee3a880258e87edf3b';
 const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'f4b1308435d2d2f9d140c4ed62b81a1e9cb281dee8d68aee3a880258e87edf3b';
-const GOLDEN_DECK_PREVIEW_SHA256 = '3dee9a765eca312176730b328e61e375724f85c14039346efedafc00265e126e';
-const GOLDEN_DECK_EXPORT_HTML_SHA256 = '65267ff9a8e6924c7a10339f03554a0ba9a9cdaa3ea8c57a26eaf5bcccdfed1b';
+const GOLDEN_DECK_PREVIEW_SHA256 = '311befb5e41d44764a652b426ce83f96293ccccb9adffe14e16412c50b0c5c50';
+const GOLDEN_DECK_EXPORT_HTML_SHA256 = '90aedd5ee8392ed455dcd90d8ad069b0c4c16c5866879f8c03614a54e0e76c4c';
 const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = '1f82eecdcf9b60057fbcba2eec06355945d869676f947b80a59ca05bf4f8659e';
 
 // Preview media is embedded as an absolute API URL carrying per-run owner/path ids —
@@ -967,7 +969,7 @@ describe('document transform (eigenvector)', () => {
         // The body is a compositor page — the same HTML the PDF export prints, not an SVG
         // document. Its image rides the /preview URL the main thread prepared, and hostile text
         // stays escaped through DOMPurify and the serializer.
-        expect(body.startsWith('<div class="canvas-page"')).toBe(true);
+        expect(body.startsWith('<div class="page-fit"')).toBe(true);
         expect(body).toContain('Vector &lt;sketch&gt;');
         expect(body).not.toContain('<sketch>');
         expect(body).toMatch(/<image[^>]+href="https?:\/\/[^"]+\/file\/[^"]+\/preview"/);

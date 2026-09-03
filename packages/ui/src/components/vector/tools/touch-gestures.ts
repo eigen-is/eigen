@@ -64,14 +64,15 @@ export function isDoubleTap(prev: Tap | null, curr: Tap): boolean {
     );
 }
 
-// A one-finger horizontal drag pages through the frames on a view-only phone (spec D8). Distance
-// keeps a slow scroll from paging; the 2:1 ratio keeps a diagonal drag out — a finger that is mostly
-// panning vertically is not asking for the next slide. -1 is FORWARD (content moves left under the
-// finger), matching every carousel.
+// A one-finger horizontal drag pages through the frames on a view-only phone. Distance keeps a slow
+// scroll from paging; the 2:1 ratio keeps a diagonal drag out — a finger that is mostly panning
+// vertically is not asking for the next slide. The result is an INDEX delta for useActiveFrame.step,
+// so dragging left (content moves left under the finger, as every carousel does) is +1: the next
+// slide.
 const SWIPE_MIN_DISTANCE = 60;
 export function swipeFrameDelta(dx: number, dy: number): number {
     if (Math.abs(dx) < SWIPE_MIN_DISTANCE || Math.abs(dx) <= Math.abs(dy) * 2) return 0;
-    return dx < 0 ? -1 : 1;
+    return dx < 0 ? 1 : -1;
 }
 
 type DownInfo = { t: number; x: number; y: number; moved: boolean };
@@ -211,9 +212,9 @@ export function useTouchGestures(params: TouchGesturesParams): TouchGestures {
 
         // Single-finger swipe: pages the deck before the tap logic, because a swipe has moved and so
         // could never have been a tap anyway. The gesture MUST be aborted first — a view-only canvas
-        // starts a pan on the same pointerdown (canvas-editor.tsx:251 panMode, :923-930 capture +
-        // frozenRef + setPanning), and claiming the up here means the canvas' own onPointerUp returns
-        // early (:1189), so an un-aborted pan would keep the freeze and wedge every later touch. The
+        // starts a pan on the same pointerdown (canvas-editor.tsx's panMode sets frozenRef and
+        // captures the pointer), and claiming the up here means the canvas' own onPointerUp returns
+        // early, so an un-aborted pan would keep the freeze and wedge every later touch. The
         // double-tap branch below does exactly this for the same reason.
         if (di && params.onSwipe) {
             const delta = swipeFrameDelta(e.clientX - di.x, e.clientY - di.y);

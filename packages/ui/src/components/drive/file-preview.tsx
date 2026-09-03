@@ -291,7 +291,7 @@ function TextPreviewContent({ path }: { path: DrivePath }) {
             ) : data.mode === 'eigenslides' ? (
                 <div className="p-8 bg-muted/50 min-h-full">
                     <div
-                        className="w-full max-w-[960px] mx-auto flex flex-col gap-4 [&>.canvas-page]:rounded [&>.canvas-page]:shadow-md"
+                        className="w-full max-w-[960px] mx-auto flex flex-col gap-4 [&>.page-fit]:rounded [&>.page-fit]:shadow-md"
                         dangerouslySetInnerHTML={{ __html: data.body }}
                     />
                 </div>
@@ -301,7 +301,7 @@ function TextPreviewContent({ path }: { path: DrivePath }) {
                 </div>
             ) : data.mode === 'eigenvector' ? (
                 <div className="p-8 min-h-full flex justify-center">
-                    <div dangerouslySetInnerHTML={{ __html: data.body }} />
+                    <div className="w-full max-w-[960px]" dangerouslySetInnerHTML={{ __html: data.body }} />
                 </div>
             ) : (
                 <div className="eigen-prose p-8 max-w-4xl mx-auto" dangerouslySetInnerHTML={{ __html: data.body }} />

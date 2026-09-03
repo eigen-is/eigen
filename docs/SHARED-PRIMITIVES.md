@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1299 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1303 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -782,7 +782,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorToolEntry` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (553)
+## Utilities & constants (557)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1258,6 +1258,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `sampleArrowCurve` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `sceneBounds` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-route.ts |
 | `sceneLayers` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
+| `sceneReadingOrder` | `@workspace/lib/vector` | packages/lib/src/vector/search-scene.ts |
 | `sceneToSvg` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
 | `searchScene` | `@workspace/lib/vector` | packages/lib/src/vector/search-scene.ts |
 | `segSegIntersect` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
@@ -1333,8 +1334,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isVectorFontLoaded` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |
 | `loadVectorFont` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |
 | `measureVectorText` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |
+| `newElementId` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/element-writes.ts |
+| `newFrameId` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/frame-writes.ts |
 | `VECTOR_TOOLS` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `vectorFontString` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |
+| `writeFrameInDoc` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/frame-writes.ts |
 | `isTypingTarget` | `@workspace/ui/hooks/is-typing-target` | packages/ui/src/hooks/is-typing-target.ts |
 | `isFilesOnlyClipboard` | `@workspace/ui/hooks/use-file-paste-target` | packages/ui/src/hooks/use-file-paste-target.ts |
 | `createEigenAppRouter` | `@workspace/ui/lib/eigenAppRouter` | packages/ui/src/lib/eigenAppRouter.tsx |

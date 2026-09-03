@@ -2,7 +2,7 @@ import { CANVAS_PREVIEW_HEIGHT, CANVAS_PREVIEW_WIDTH } from '@workspace/lib/cons
 import { readVectorFromDoc } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import type { TransformWarning } from '../document/transform/protocol';
-import { type CanvasPage, drawingPage, emptyPage, renderCanvasPage } from '../export/canvas/render';
+import { type CanvasPage, drawingPage, emptyPage, renderFittedPage } from '../export/canvas/render';
 import { sanitizeExportHtml } from '../export/sanitize';
 import { applyPreviewByteGuard } from './preview-marker';
 import { sanitizeSceneHtml } from './sanitize-scene';
@@ -32,7 +32,7 @@ export function renderEigenvectorPreviewBody(
     // nothing here would leave an emptied drawing serving the preview it had when it had content.
     const html = page
         ? renderPreviewPage(page)
-        : renderCanvasPage(emptyPage(scene, CANVAS_PREVIEW_WIDTH, EMPTY_PREVIEW_HEIGHT), 1);
+        : renderFittedPage(emptyPage(scene, CANVAS_PREVIEW_WIDTH, EMPTY_PREVIEW_HEIGHT), 1);
     const warnings: TransformWarning[] = [];
     const sanitized = sanitizeExportHtml(html, { allowedRefs: new Set(mediaUrls.values()) });
     return { body: applyPreviewByteGuard(sanitized, warnings), warnings };
@@ -45,5 +45,5 @@ function renderPreviewPage(page: CanvasPage): string {
     // scales the body from exactly that intrinsic width. Widen the page in SCENE units and shift its
     // origin by half the difference: the box comes out full width with the drawing centred in it.
     const width = CANVAS_PREVIEW_WIDTH / scale;
-    return renderCanvasPage({ ...page, width, originX: page.originX - (width - page.width) / 2 }, scale);
+    return renderFittedPage({ ...page, width, originX: page.originX - (width - page.width) / 2 }, scale);
 }

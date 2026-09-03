@@ -130,12 +130,12 @@ describe('isDoubleTap', () => {
 });
 
 describe('swipeFrameDelta', () => {
-    test('a long leftward drag goes to the next frame', () => {
-        expect(swipeFrameDelta(-120, 10)).toBe(-1);
+    test('a long leftward drag steps to the next frame', () => {
+        expect(swipeFrameDelta(-120, 10)).toBe(1);
     });
 
-    test('a long rightward drag goes back', () => {
-        expect(swipeFrameDelta(120, -10)).toBe(1);
+    test('a long rightward drag steps back', () => {
+        expect(swipeFrameDelta(120, -10)).toBe(-1);
     });
 
     test('a short drag is not a swipe', () => {

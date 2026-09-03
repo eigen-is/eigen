@@ -100,9 +100,9 @@ function buildElementFields(): string[] {
     return out;
 }
 
-// The vector app's style table: roughness 1, hachure, Excalifont, curved corners. Slides' table lands
-// with the slides shell. A fresh element starts unpainted but hatched — the hatch style rides the fill,
-// so the first colour the user picks lands as hachure.
+// The vector app's style table: roughness 1, hachure, Excalifont, curved corners (SLIDES_STYLE_DEFAULTS
+// is the deck's flat counterpart). A fresh element starts unpainted but hatched — the hatch style rides
+// the fill, so the first colour the user picks lands as hachure.
 export const VECTOR_STYLE_DEFAULTS: StyleDefaults = {
     strokeColor: '#1e1e1e',
     strokeWidth: 2,

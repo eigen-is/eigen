@@ -28,11 +28,10 @@ export function useActiveFrame(frames: VectorFrame[]): {
 
     const step = useCallback(
         (delta: number) => {
-            const at = frames.findIndex((frame) => frame.id === frameId);
-            const next = frames[Math.min(Math.max(at + delta, 0), frames.length - 1)];
+            const next = frames[Math.min(Math.max(index + delta, 0), frames.length - 1)];
             if (next) setRequestedId(next.id);
         },
-        [frames, frameId],
+        [frames, index],
     );
 
     return { frameId, setFrameId: setRequestedId, index: index === -1 ? 0 : index, step };
