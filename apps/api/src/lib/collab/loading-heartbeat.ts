@@ -23,7 +23,7 @@ const EMPTY_AWARENESS_MESSAGE = encodeEmptyAwarenessMessage();
 
 export function startLoadingHeartbeat(conn: ServerWebSocket<undefined>, intervalMs = LOADING_HEARTBEAT_MS): () => void {
     const send = () => {
-        if (conn.readyState === 1) conn.send(Buffer.from(EMPTY_AWARENESS_MESSAGE));
+        if (conn.readyState === WebSocket.OPEN) conn.send(Buffer.from(EMPTY_AWARENESS_MESSAGE));
     };
     send();
     const timer = setInterval(send, intervalMs);

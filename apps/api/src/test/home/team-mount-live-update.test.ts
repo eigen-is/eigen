@@ -37,6 +37,21 @@ describe('TeamHome.updateMount live-Drive propagation (AUDIT 11)', () => {
         }
     });
 
+    test('adding a second mount keeps the first', async () => {
+        const home = await freshTeamHome();
+        try {
+            const first = await home.addMount({ name: 'First', maxSizeMB: 100 });
+            const second = await home.addMount({ name: 'Second', maxSizeMB: 200 });
+
+            expect(home.settings.get().mounts?.[first.id]?.name).toBe('First');
+            expect(home.settings.get().mounts?.[second.id]?.name).toBe('Second');
+            const listed = await home.drive.listMounts();
+            expect(listed.map((m) => m.id).sort()).toEqual([first.id, second.id].sort());
+        } finally {
+            await home.shutdown();
+        }
+    });
+
     test('s3Config update rebuilds the live mount around the new storage config', async () => {
         const home = await freshTeamHome();
         try {

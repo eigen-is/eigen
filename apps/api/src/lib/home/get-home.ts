@@ -1,4 +1,4 @@
-import { parseOwnerId } from '@workspace/lib/types';
+import { parseOwnerId } from '@workspace/lib/types/owner';
 import { type AsyncSingleton, createAsyncSingleton } from '../../utils/singleton';
 import { ApiError } from '../core';
 import { getOrgExists } from '../org/org';
@@ -85,8 +85,6 @@ export async function getHome(ownerId: string): Promise<Home> {
                     home = new OrgHome(getSyntheticOrgUser(ownerId), cleanUp);
                     break;
                 }
-                default:
-                    throw new ApiError(400, 'Unsupported ownerId type');
             }
             await home.init();
             return home.touch();

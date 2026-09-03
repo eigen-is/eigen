@@ -43,17 +43,17 @@ const EDIT_RECORD_THROTTLE_MS = 10 * 60_000;
 class DbProvider {
     private db: BunSQLiteDatabase<typeof schema>;
     private doc: Y.Doc;
-    private docId: string;
+    private label: string;
     private updatesSinceSnapshot = 0;
     private bytesSinceSnapshot = 0;
     private updateHandler: (update: Uint8Array) => void;
 
-    constructor(doc: Y.Doc, docId: string, managedDb: ManagedDatabase<typeof schema>) {
+    constructor(doc: Y.Doc, label: string, managedDb: ManagedDatabase<typeof schema>) {
         this.db = managedDb.db;
         this.doc = doc;
-        this.docId = docId;
+        this.label = label;
 
-        const { updatesApplied, bytesApplied } = loadYjsState(managedDb, this.doc, docId);
+        const { updatesApplied, bytesApplied } = loadYjsState(managedDb, this.doc, label);
         this.updatesSinceSnapshot = updatesApplied;
         this.bytesSinceSnapshot = bytesApplied;
 
@@ -82,7 +82,7 @@ class DbProvider {
             // finally — a throw leaves the cleanup queue stale and silently wedges every
             // later update on this doc (no persistence, no broadcast). A later snapshot
             // self-heals the gap: it encodes the full doc state.
-            console.error(`[DbProvider] Error storing update for ${this.docId}:`, error);
+            console.error(`[DbProvider] Error storing update for ${this.label}:`, error);
         }
     }
 
@@ -126,7 +126,7 @@ class DbProvider {
         } catch (error) {
             // Swallow: the update rows all survive (deleted only inside the successful
             // transaction), and the un-reset counters make the next update retry.
-            console.error(`[DbProvider] Error creating snapshot for ${this.docId}:`, error);
+            console.error(`[DbProvider] Error creating snapshot for ${this.label}:`, error);
         }
     }
 
@@ -134,6 +134,11 @@ class DbProvider {
         this.doc.off('update', this.updateHandler);
         this.createSnapshot();
     }
+}
+
+// Yjs and awareness hand back whatever origin was passed in; ours is the socket, anything else is server-side.
+function isConnection(origin: unknown): origin is ServerWebSocket<undefined> {
+    return origin !== null && typeof origin === 'object' && 'readyState' in origin;
 }
 
 export default class CollabDocument {
@@ -154,13 +159,12 @@ export default class CollabDocument {
     private lastTouchedAt = 0;
     private lastEditRecordedAt: Map<string, number> = new Map(); // userId -> ts
     private closeTimer: ReturnType<typeof setTimeout> | undefined;
-    private closeLingerMs: number;
+    private closeLingerMs = CLOSE_LINGER_MS;
     public dataDbPathId: string | null = null;
 
-    constructor(drive: Drive, path: DrivePath, opts: { closeLingerMs?: number } = {}) {
+    constructor(drive: Drive, path: DrivePath) {
         this.drive = drive;
         this.path = path;
-        this.closeLingerMs = opts.closeLingerMs ?? CLOSE_LINGER_MS;
     }
 
     static async create(drive: Drive, mountId: string, docId: string): Promise<void> {
@@ -210,16 +214,10 @@ export default class CollabDocument {
             encoding.writeVarUint(encoder, MESSAGE_SYNC);
             syncProtocol.writeUpdate(encoder, update);
             const message = encoding.toUint8Array(encoder);
-            if (origin && typeof origin === 'object' && 'readyState' in origin) {
-                const conn = origin as ServerWebSocket<undefined>;
-                this.broadcastMessage(conn, message);
-                const user = this.connections.get(conn);
-                if (user) this.recordEditThrottled(user);
-            } else {
-                for (const conn of this.connections.keys()) {
-                    if (conn.readyState === 1) conn.send(Buffer.from(message));
-                }
-            }
+            const conn = isConnection(origin) ? origin : null;
+            this.broadcastMessage(conn, message);
+            const user = conn && this.connections.get(conn);
+            if (user) this.recordEditThrottled(user);
             this.throttledTouchUpdatedAt();
         });
 
@@ -237,26 +235,21 @@ export default class CollabDocument {
                     encoder,
                     awarenessProtocol.encodeAwarenessUpdate(this.awareness, changedClients),
                 );
-                const message = encoding.toUint8Array(encoder);
-                for (const conn of this.connections.keys()) {
-                    if (conn !== origin && conn.readyState === 1) {
-                        conn.send(Buffer.from(message));
-                    }
-                }
+                this.broadcastMessage(isConnection(origin) ? origin : null, encoding.toUint8Array(encoder));
             },
         );
 
         return this;
     }
 
-    private throttledTouchUpdatedAt() {
+    private throttledTouchUpdatedAt(): void {
         const now = Date.now();
         if (now - this.lastTouchedAt < TOUCH_THROTTLE_MS) return;
         this.lastTouchedAt = now;
         this.drive.touchUpdatedAt(this.path.mountId, this.path.id).catch(() => {});
     }
 
-    private recordEditThrottled(user: User) {
+    private recordEditThrottled(user: User): void {
         // Stickies activity is fully covered by specific sticky-*/comment events; a generic
         // 'edited' row would double-report every drag.
         if (this.path.type === DRIVE_TYPE_STICKIES) return;
@@ -309,27 +302,15 @@ export default class CollabDocument {
         this.sendSyncStep1(conn);
     }
 
-    public unsubscribe(_user: User, conn: ServerWebSocket<undefined>) {
+    public unsubscribe(conn: ServerWebSocket<undefined>) {
         if (this.closed) {
             return;
         }
-        this.connections.delete(conn);
-
-        const clientIds = this.connectionClientIds.get(conn);
-        if (clientIds && clientIds.size > 0) {
-            awarenessProtocol.removeAwarenessStates(this.awareness, Array.from(clientIds), null);
-        }
-        this.connectionClientIds.delete(conn);
+        this.dropConnection(conn);
 
         for (const connection of this.connections.keys()) {
-            if (connection.readyState > 1) {
-                // CLOSING or CLOSED
-                this.connections.delete(connection);
-                const staleIds = this.connectionClientIds.get(connection);
-                if (staleIds && staleIds.size > 0) {
-                    awarenessProtocol.removeAwarenessStates(this.awareness, Array.from(staleIds), null);
-                }
-                this.connectionClientIds.delete(connection);
+            if (connection.readyState >= WebSocket.CLOSING) {
+                this.dropConnection(connection);
             }
         }
         if (this.connections.size === 0) {
@@ -337,7 +318,16 @@ export default class CollabDocument {
         }
     }
 
-    private scheduleClose() {
+    private dropConnection(conn: ServerWebSocket<undefined>): void {
+        this.connections.delete(conn);
+        const clientIds = this.connectionClientIds.get(conn);
+        if (clientIds && clientIds.size > 0) {
+            awarenessProtocol.removeAwarenessStates(this.awareness, Array.from(clientIds), null);
+        }
+        this.connectionClientIds.delete(conn);
+    }
+
+    private scheduleClose(): void {
         clearTimeout(this.closeTimer);
         this.closeTimer = setTimeout(() => {
             if (this.closed || this.connections.size > 0) return;
@@ -359,7 +349,7 @@ export default class CollabDocument {
         for (const [conn, user] of [...this.connections]) {
             if (!(await this.drive.canRead(this.path.mountId, this.path.id, user))) {
                 conn.close(1008, 'Access revoked');
-                this.unsubscribe(user, conn);
+                this.unsubscribe(conn);
             }
         }
     }
@@ -392,10 +382,11 @@ export default class CollabDocument {
             try {
                 const trackDecoder = decoding.createDecoder(awarenessUpdate);
                 const len = decoding.readVarUint(trackDecoder);
-                if (!this.connectionClientIds.has(conn)) {
-                    this.connectionClientIds.set(conn, new Set());
+                let ids = this.connectionClientIds.get(conn);
+                if (!ids) {
+                    ids = new Set();
+                    this.connectionClientIds.set(conn, ids);
                 }
-                const ids = this.connectionClientIds.get(conn)!;
                 for (let i = 0; i < len; i++) {
                     ids.add(decoding.readVarUint(trackDecoder));
                 }
@@ -412,13 +403,12 @@ export default class CollabDocument {
         }
     }
 
-    private broadcastMessage(originConn: ServerWebSocket<undefined>, message: Uint8Array) {
+    private broadcastMessage(originConn: ServerWebSocket<undefined> | null, message: Uint8Array): void {
         if (this.closed) {
             return;
         }
         for (const conn of this.connections.keys()) {
-            if (conn !== originConn && conn.readyState === 1) {
-                // OPEN
+            if (conn !== originConn && conn.readyState === WebSocket.OPEN) {
                 try {
                     conn.send(Buffer.from(message));
                 } catch (err) {
@@ -428,10 +418,7 @@ export default class CollabDocument {
         }
     }
 
-    private sendSyncStep1(conn: ServerWebSocket<undefined>) {
-        if (this.closed) {
-            return;
-        }
+    private sendSyncStep1(conn: ServerWebSocket<undefined>): void {
         try {
             const encoder = encoding.createEncoder();
             encoding.writeVarUint(encoder, MESSAGE_SYNC);

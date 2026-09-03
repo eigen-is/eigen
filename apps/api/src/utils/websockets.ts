@@ -8,8 +8,7 @@ export function keepWebSocketAlive(
     onTick?: () => void,
 ): ReturnType<typeof setInterval> {
     const pingInterval = setInterval(() => {
-        if (ws.readyState === 1) {
-            // OPEN
+        if (ws.readyState === WebSocket.OPEN) {
             try {
                 ws.ping();
             } catch {

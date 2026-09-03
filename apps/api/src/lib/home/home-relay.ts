@@ -10,7 +10,6 @@
 // server (or enqueues a message), and pull functions become remote API calls.
 
 import * as path from 'node:path';
-import { teamOwnerId } from '@workspace/lib/types';
 import type {
     Attendee,
     CalendarEvent,
@@ -20,7 +19,8 @@ import type {
 } from '@workspace/lib/types/calendar';
 import type { DriveACL, DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
-import type { HomeSizeResponse } from '@workspace/lib/types/settings';
+import { teamOwnerId } from '@workspace/lib/types/owner';
+import type { HomeSizeResponse, TeamSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import type {
     CreateEventArgs,
@@ -30,7 +30,7 @@ import type {
 } from '../calendar/types';
 import { getAvatarsDir } from '../config/paths';
 import type { User } from '../user';
-import { getMemberships, getUserByEmail, updateUser } from '../user/';
+import { getMemberships, getUserByEmail, updateUser } from '../user';
 import { atHome, getHome, getTeamHome } from './get-home';
 
 export type HomeMessage =
@@ -247,38 +247,29 @@ export async function pullCalendars(ownerUserId: string): Promise<CalendarItem[]
     return home.calendar.getCalendars();
 }
 
-export type TeamQuotaOverrides = {
-    mailAndContactsMaxMB?: number;
-    defaultMountMaxSizeMB?: number;
-};
+export type TeamQuotaOverrides = NonNullable<TeamSettings['memberOverrides']>;
+
+async function writeAvatar(ownerId: string, avatarWebP: Buffer | null): Promise<void> {
+    const avatarPath = path.join(getAvatarsDir(), `${ownerId}.webp`);
+
+    if (avatarWebP) {
+        await Bun.write(avatarPath, avatarWebP);
+    } else {
+        await Bun.file(avatarPath)
+            .delete()
+            .catch(() => {});
+    }
+}
 
 // Home → server seam: in a sharded deployment, this becomes an RPC to the central server.
 export async function pushUserProfile(userId: string, name: string, avatarWebP: Buffer | null): Promise<void> {
-    const avatarPath = path.join(getAvatarsDir(), `${userId}.webp`);
-
-    if (avatarWebP) {
-        await Bun.write(avatarPath, avatarWebP);
-    } else {
-        await Bun.file(avatarPath)
-            .delete()
-            .catch(() => {});
-    }
-
+    await writeAvatar(userId, avatarWebP);
     await updateUser(userId, name, avatarWebP ? `server/avatars/${userId}.webp` : '');
 }
 
-// Team avatars share the user-avatar file layout, but file existence is the only source of truth —
-// there's no auth-schema row to update (unlike pushUserProfile).
+// Team avatars have no auth-schema row to update (unlike pushUserProfile) — the file is the truth.
 export async function pushTeamAvatar(teamId: string, avatarWebP: Buffer | null): Promise<void> {
-    const avatarPath = path.join(getAvatarsDir(), `${teamOwnerId(teamId)}.webp`);
-
-    if (avatarWebP) {
-        await Bun.write(avatarPath, avatarWebP);
-    } else {
-        await Bun.file(avatarPath)
-            .delete()
-            .catch(() => {});
-    }
+    await writeAvatar(teamOwnerId(teamId), avatarWebP);
 }
 
 export async function pullTeamQuotaOverrides(ownerId: string): Promise<TeamQuotaOverrides> {

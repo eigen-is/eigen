@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { ServerWebSocket } from 'bun';
 import * as encoding from 'lib0/encoding';
+import * as awarenessProtocol from 'y-protocols/awareness';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
 
@@ -34,6 +35,20 @@ function makeSpyConn(): SpyConn {
         },
     };
     return conn as unknown as SpyConn;
+}
+
+function syncUpdateMessage(doc: Y.Doc): Uint8Array {
+    const encoder = encoding.createEncoder();
+    encoding.writeVarUint(encoder, 0); // MESSAGE_SYNC (mirrors collabDocument.ts)
+    syncProtocol.writeUpdate(encoder, Y.encodeStateAsUpdate(doc));
+    return encoding.toUint8Array(encoder);
+}
+
+function awarenessMessage(awareness: awarenessProtocol.Awareness, clientId: number): Uint8Array {
+    const encoder = encoding.createEncoder();
+    encoding.writeVarUint(encoder, 1); // MESSAGE_AWARENESS (mirrors collabDocument.ts)
+    encoding.writeVarUint8Array(encoder, awarenessProtocol.encodeAwarenessUpdate(awareness, [clientId]));
+    return encoding.toUint8Array(encoder);
 }
 
 describe('Collab', () => {
@@ -141,13 +156,6 @@ describe('Collab', () => {
     // below skip their bodies (status !== 101). Test the write-permission guard at its real seam
     // instead: CollabDocument.handleMessage drops sync writes (sub-types 1/2) when canWrite is false.
     describe('handleMessage write enforcement', () => {
-        function syncUpdateMessage(doc: Y.Doc): Uint8Array {
-            const encoder = encoding.createEncoder();
-            encoding.writeVarUint(encoder, 0); // MESSAGE_SYNC (mirrors collabDocument.ts)
-            syncProtocol.writeUpdate(encoder, Y.encodeStateAsUpdate(doc));
-            return encoding.toUint8Array(encoder);
-        }
-
         test('a read-only connection cannot mutate the document; a writable one can', async () => {
             const home = await getHome(ctx.alice.user.id);
             const collab = await home.drive.getCollabDocument(aliceMountId, docId);
@@ -184,6 +192,65 @@ describe('Collab', () => {
             edit.getMap('reopen-test').set('k', 'v');
             collab2.handleMessage(conn, syncUpdateMessage(edit), true);
             expect(collab2.doc.getMap('reopen-test').get('k')).toBe('v');
+        });
+    });
+
+    // The fan-out contract every broadcast path shares: a server-origin update goes to
+    // every open connection, a connection-origin update and an awareness update skip
+    // their origin.
+    describe('broadcast fan-out', () => {
+        test('a server-origin update reaches every connection; a connection-origin one skips its origin', async () => {
+            const home = await getHome(ctx.alice.user.id);
+            const collab = await home.drive.getCollabDocument(aliceMountId, docId);
+            const originConn = makeSpyConn();
+            const otherConn = makeSpyConn();
+            collab.subscribe(home.user, originConn);
+            collab.subscribe(home.user, otherConn);
+            try {
+                const originBase = originConn.sent.length;
+                const otherBase = otherConn.sent.length;
+
+                collab.doc.getMap('fanout-server').set('k', 'v');
+                expect(originConn.sent.length).toBe(originBase + 1);
+                expect(otherConn.sent.length).toBe(otherBase + 1);
+
+                const edit = new Y.Doc();
+                edit.getMap('fanout-conn').set('k', 'v');
+                collab.handleMessage(originConn, syncUpdateMessage(edit), true);
+                expect(collab.doc.getMap('fanout-conn').get('k')).toBe('v');
+                expect(originConn.sent.length).toBe(originBase + 1);
+                expect(otherConn.sent.length).toBe(otherBase + 2);
+            } finally {
+                collab.unsubscribe(originConn);
+                collab.unsubscribe(otherConn);
+            }
+        });
+
+        test('an awareness update from a connection reaches the others, never its origin', async () => {
+            const home = await getHome(ctx.alice.user.id);
+            const collab = await home.drive.getCollabDocument(aliceMountId, docId);
+            const originConn = makeSpyConn();
+            const otherConn = makeSpyConn();
+            collab.subscribe(home.user, originConn);
+            collab.subscribe(home.user, otherConn);
+            try {
+                const remoteDoc = new Y.Doc();
+                const remoteAwareness = new awarenessProtocol.Awareness(remoteDoc);
+                remoteAwareness.setLocalState({ user: { name: 'fanout-probe' } });
+
+                const originBase = originConn.sent.length;
+                const otherBase = otherConn.sent.length;
+                collab.handleMessage(originConn, awarenessMessage(remoteAwareness, remoteDoc.clientID), true);
+
+                expect(originConn.sent.length).toBe(originBase);
+                expect(otherConn.sent.length).toBeGreaterThan(otherBase);
+
+                remoteAwareness.destroy();
+                remoteDoc.destroy();
+            } finally {
+                collab.unsubscribe(originConn);
+                collab.unsubscribe(otherConn);
+            }
         });
     });
 
@@ -553,7 +620,7 @@ describe('Collab', () => {
             expect(bobConn.sent.length).toBe(bobBefore);
 
             // Don't leak the surviving spy into later same-docId tests (bob was already dropped).
-            collab.unsubscribe(aliceUser, aliceConn);
+            collab.unsubscribe(aliceConn);
         });
 
         test('revoking only write (read intact) does NOT close the connection', async () => {
@@ -592,7 +659,7 @@ describe('Collab', () => {
             expect(collab.connectionCount).toBe(baseline + 1);
 
             // Don't leak the spy into later same-docId tests.
-            collab.unsubscribe(bobUser, bobConn);
+            collab.unsubscribe(bobConn);
         });
 
         test('downgrading to read-only prevents write updates if WebSocket connected', async () => {
@@ -710,7 +777,7 @@ describe('Collab', () => {
             expect(aliceConn.sent.length).toBeGreaterThan(aliceBefore);
             expect(bobConn.sent.length).toBe(bobBefore);
 
-            collab.unsubscribe(aliceUser, aliceConn);
+            collab.unsubscribe(aliceConn);
         });
 
         test('moving a doc WITHIN the shared subtree keeps read, does NOT close', async () => {
@@ -750,7 +817,7 @@ describe('Collab', () => {
             expect(bobConn.closedWith).toBeNull();
             expect(collab.connectionCount).toBe(baseline + 1);
 
-            collab.unsubscribe(bobUser, bobConn);
+            collab.unsubscribe(bobConn);
         });
     });
 });
