@@ -45,9 +45,9 @@ import {
     SNAP_SCREEN_THRESHOLD,
     type SnapLine,
     type SnapTargets,
+    sceneBounds,
     snapBoxToTargets,
     type TextAlign,
-    unionBounds,
     type VectorArrowElement,
     type VectorElement,
     type VectorMeta,
@@ -170,7 +170,7 @@ type VectorCanvasProps = {
     // Tool lock (Q / padlock): a placement keeps the current tool active; threaded like `tool`, toggled here on Q.
     toolLocked: boolean;
     setToolLocked: (locked: boolean) => void;
-    canWrite: boolean;
+    canEdit: boolean;
     // Owner + mount of THIS document, for cross-mount image paste (re-upload into our media/ folder).
     ownerId: string;
     mountId: string;
@@ -215,7 +215,7 @@ export function VectorCanvas({
     setTool,
     toolLocked,
     setToolLocked,
-    canWrite,
+    canEdit,
     ownerId,
     mountId,
     addElement,
@@ -267,6 +267,8 @@ export function VectorCanvas({
     // SVG lines in the scene group; cleared on gesture end.
     const [snapLines, setSnapLines] = useState<SnapLine[]>([]);
     const spaceHeld = useSpaceHeld();
+    // Pan mode: space held, or a view-only scene where every primary drag scrolls (one finger on a phone).
+    const panMode = spaceHeld || !canEdit;
     const [panning, setPanning] = useState(false);
     // Select-mode hover affordance: true while the idle pointer is over a selectable element, so the
     // cursor signals draggability with `move` (the suite convention — slides/docs). Item E.
@@ -321,7 +323,7 @@ export function VectorCanvas({
         tool,
         setTool,
         toolLocked,
-        canWrite,
+        canEdit,
         zoom,
         coarse,
         ordered,
@@ -379,7 +381,7 @@ export function VectorCanvas({
     // off while a text overlay is open — the textarea's native undo/typing owns keys in-session; we
     // don't rely on the hotkey lib's input-target detection alone (UX-RULING, commit-trigger).
     useVectorKeyboard({
-        enabled: canWrite && !editing,
+        enabled: canEdit && !editing,
         elements,
         selectedIds,
         tool,
@@ -806,7 +808,7 @@ export function VectorCanvas({
 
     // Image ingestion is gated on a real upload target (a fresh .eigenvector scaffolds media/, so
     // this is normally present) and is closed while a text overlay owns paste + the pointer.
-    const imagesEnabled = canWrite && !!mediaFolderId && !editing;
+    const imagesEnabled = canEdit && !!mediaFolderId && !editing;
     // The drop hook stays ALWAYS enabled so dragover/drop are always preventDefault'd — a disabled
     // hook skips that, letting the BROWSER navigate to a file dropped while read-only or mid-text-edit
     // (destroying the editor + uncommitted text). The insertion gate lives in the callback instead;
@@ -1107,19 +1109,19 @@ export function VectorCanvas({
 
     // ⌘C / ⌘X / ⌘V via document-level ClipboardEvent listeners (the slides idiom — native events are
     // required to write the MIME flavors and to read the DataTransfer synchronously). Gated
-    // canWrite && !editing; isTypingTarget() bails so the text overlay + a comments composer keep native
+    // canEdit && !editing; isTypingTarget() bails so the text overlay + a comments composer keep native
     // clipboard (the typing-target invariant). Eigen items are consumed FIRST; a non-eigen paste falls
     // through (capture phase, no stopPropagation) to the container's useFilePasteTarget for OS files.
     useEffect(() => {
         const onCopyEvent = (e: ClipboardEvent) => {
-            if (isTypingTarget() || !canWrite || editingRef.current || selectedIds.length === 0) return;
+            if (isTypingTarget() || !canEdit || editingRef.current || selectedIds.length === 0) return;
             const data = buildData();
             if (!data.items.length) return;
             e.preventDefault();
             writeEigenClipboard(e, data, plainText());
         };
         const onCutEvent = (e: ClipboardEvent) => {
-            if (isTypingTarget() || !canWrite || editingRef.current || selectedIds.length === 0) return;
+            if (isTypingTarget() || !canEdit || editingRef.current || selectedIds.length === 0) return;
             const data = buildData();
             if (!data.items.length) return;
             e.preventDefault();
@@ -1128,7 +1130,7 @@ export function VectorCanvas({
             deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager);
         };
         const onPasteEvent = (e: ClipboardEvent) => {
-            if (isTypingTarget() || !canWrite || editingRef.current) return;
+            if (isTypingTarget() || !canEdit || editingRef.current) return;
             const cd = e.clipboardData;
             if (!cd) return;
             const paste = classifyPaste(cd);
@@ -1170,7 +1172,7 @@ export function VectorCanvas({
             document.removeEventListener('paste', onPasteEvent, true);
         };
     }, [
-        canWrite,
+        canEdit,
         selectedIds,
         buildData,
         plainText,
@@ -1187,7 +1189,7 @@ export function VectorCanvas({
     // the tap-tap). frozenRef: no new session over a live gesture. Empty canvas → new text (Excalidraw's
     // openNewText); else edit the hit text/arrow label.
     const openTextAtClient = (clientX: number, clientY: number) => {
-        if (!canWrite || tool !== 'select' || editing || frozenRef.current) return;
+        if (!canEdit || tool !== 'select' || editing || frozenRef.current) return;
         const p = clientToScene(clientX, clientY);
         const hit = hitTestTopmost(ordered, p, zoom, committedById, coarse);
         const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
@@ -1203,7 +1205,7 @@ export function VectorCanvas({
     // uses hit-testing (elements have no per-node DOM), so this lives on the container, not per object.
     const onContextMenu = (e: React.MouseEvent) => {
         // frozenRef: no menu over a live left-button gesture (marquee/move keeps its capture).
-        if (!canWrite || editing || frozenRef.current) return;
+        if (!canEdit || editing || frozenRef.current) return;
         // A multi-point draft runs unfrozen but still owns the pointer: no menu (object or browser)
         // mid-draft — the draft keeps floating and the next left click keeps placing points.
         if (drawing.multiPointDraft) {
@@ -1286,9 +1288,7 @@ export function VectorCanvas({
         // Touch gestures get first dibs (a second finger must intercept even while frozen).
         if (touch.onPointerDown(e)) return;
         if (frozenRef.current) return; // a gesture is already active (defensive)
-        // Pan: space-drag, middle mouse, or any primary drag when the scene is view-only (one-finger
-        // pan on a phone).
-        if (spaceHeld || e.button === 1 || (!canWrite && e.button === 0)) {
+        if (panMode || e.button === 1) {
             e.preventDefault();
             containerRef.current?.setPointerCapture(e.pointerId);
             frozenRef.current = true;
@@ -1297,7 +1297,7 @@ export function VectorCanvas({
             return;
         }
         if (e.button !== 0) return;
-        if (!canWrite) return;
+        if (!canEdit) return;
 
         const p = clientToScene(e.clientX, e.clientY);
 
@@ -1577,10 +1577,7 @@ export function VectorCanvas({
     const single = selectedRender.length === 1 ? selectedRender[0] : null;
     // elementBounds is arrow-aware, so the union ring encloses a labeled arrow's overhang and an
     // elbow arrow's routed bends (arrowRoute, preview-aware via renderById).
-    const unionBox =
-        selectedRender.length >= 1
-            ? boundsToBox(selectedRender.map((el) => elementBounds(el, arrowRoute(el, renderById))).reduce(unionBounds))
-            : null;
+    const unionBox = selectedRender.length >= 1 ? boundsToBox(sceneBounds(selectedRender, renderById)) : null;
     // No ObjectTransform box (no ring/grips/rotate grip) for a single 2-point line/arrow OR any ELBOW arrow —
     // the round endpoint dots (and, for an elbow, the pin dots) are its whole affordance. The elbow gate keys
     // on `elbow`, NOT the stored point count: a pinned elbow stores its full polyline (>2 points), and stale
@@ -1592,10 +1589,9 @@ export function VectorCanvas({
     // Chrome is suppressed during a create/marquee drag (grip flicker), a vertex drag (drawing.hiddenId —
     // else a stale box lingers over the reshaping point draft), or a text overlay; a move keeps it.
     const showChrome = !creating && !marquee && !editing && !drawing.active && !drawing.hiddenId;
-    const showTransform = showChrome && canWrite && single !== null && !singleLinear2pt;
+    const showTransform = showChrome && canEdit && single !== null && !singleLinear2pt;
 
-    // View-only: every drag pans, so the surface rests on the grab cursor.
-    const cursor = pointerCursor({ panning, spaceHeld: spaceHeld || !canWrite, tool, hoveringSelectable });
+    const cursor = pointerCursor({ panning, panMode, tool, hoveringSelectable });
     const background = isTransparent(meta.background) ? undefined : meta.background;
 
     // One scene node — every render path routes through here so `byId` (an elbow arrow's route context) is
@@ -1724,7 +1720,7 @@ export function VectorCanvas({
                 {/* Round vertex handles: over the box for a 3+-point linear, the sole chrome for a 2-point one. */}
                 {drawing.handles}
                 {/* Dashed union ring for multi-select + read-only single selections; a writable 2-point line/arrow shows only its handles. */}
-                {showChrome && !showTransform && unionBox && !(singleLinear2pt && canWrite) && (
+                {showChrome && !showTransform && unionBox && !(singleLinear2pt && canEdit) && (
                     <div
                         className="eigen-selection-ring eigen-selection-ring-dashed pointer-events-none absolute"
                         style={boxToStyle(unionBox)}

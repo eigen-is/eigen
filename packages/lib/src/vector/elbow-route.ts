@@ -29,7 +29,16 @@ import {
     vectorToHeading,
 } from './elbow-heading';
 import type { PinRoutingContext } from './elbow-pins';
-import { boundShape, linearLocalToScene, linearSceneToLocal, type Point, parsePoints } from './geometry';
+import {
+    type Bounds,
+    boundShape,
+    elementBounds,
+    linearLocalToScene,
+    linearSceneToLocal,
+    type Point,
+    parsePoints,
+    unionBounds,
+} from './geometry';
 import type { VectorArrowElement, VectorElement, VectorShapeElement } from './types';
 
 // Excalidraw's BASE_PADDING / BASE_BINDING_GAP_ELBOW / DEDUP_TRESHOLD.
@@ -177,6 +186,11 @@ function endpointHeadings(
         startHeading: getHeadingForElbowArrowSnap(startGlobal, endGlobal, startShape, startConeAABB, origStart),
         endHeading: getHeadingForElbowArrowSnap(endGlobal, startGlobal, endShape, endConeAABB, origEnd),
     };
+}
+
+// Union of every element's arrow-aware bounds (label overhang + derived elbow bends); non-empty input.
+export function sceneBounds(elements: VectorElement[], byId: Map<string, VectorElement>): Bounds {
+    return elements.map((el) => elementBounds(el, arrowRoute(el, byId))).reduce(unionBounds);
 }
 
 // The routing context an end-segment pin jog needs — the two endpoint headings decomposed into

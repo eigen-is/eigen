@@ -13,15 +13,14 @@ import {
     DEFAULT_SHAPE_ROUNDNESS,
     ELEMENT_FIELDS,
     elbowBindPoint,
-    elementBounds,
     followBindings,
     generateNKeysBetween,
     getLineHeightPx,
     normalizeLinear,
     type Point,
+    sceneBounds,
     serializeBinding,
     shapeSideMidpoints,
-    unionBounds,
     type VectorArrowElement,
     type VectorElement,
     type VectorImageElement,
@@ -93,9 +92,9 @@ export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
     const images: VectorImageElement[] = plan.images.map(buildImage);
     const arrows: VectorArrowElement[] = plan.arrows.map((a, i) => buildArrow(a, i, byKey, byId));
     // Shape labels are texts drawn after the fills/images/arrows so they sit on top; free texts follow.
-    const labels: VectorTextElement[] = plan.shapes
-        .filter((s) => s.label !== '')
-        .map((s) => buildLabel(s, byKey.get(s.key)!));
+    const labels: VectorTextElement[] = plan.shapes.flatMap((s, i) =>
+        s.label === '' ? [] : [buildLabel(s, shapes[i])],
+    );
     const texts: VectorTextElement[] = plan.texts.map((t, i) => buildText(t, i));
 
     // Bottom-up z-order: ground outlines, lines, shapes, images, arrows, then every text on top.
@@ -111,9 +110,9 @@ export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
 
     // The spec is authored top-left-positive; the editor opens on the scene origin, so shift the
     // drawing to sit centred on it. Linear points and binding anchors are element-relative and ride along.
-    const bounds = ordered.map((el) => elementBounds(el)).reduce(unionBounds);
-    const dx = Math.round((bounds.minX + bounds.maxX) / 2);
-    const dy = Math.round((bounds.minY + bounds.maxY) / 2);
+    const bounds = sceneBounds(ordered, new Map(ordered.map((el) => [el.id, el])));
+    const dx = (bounds.minX + bounds.maxX) / 2;
+    const dy = (bounds.minY + bounds.maxY) / 2;
     for (const el of ordered) {
         el.x -= dx;
         el.y -= dy;

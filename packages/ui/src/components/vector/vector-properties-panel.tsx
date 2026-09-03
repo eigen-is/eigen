@@ -1,5 +1,5 @@
 // The right-side w-64 properties panel for the vector editor — mirrors how slides mounts
-// SlidePropertiesPanel (non-empty selection + canWrite). It edits every selected element through
+// SlidePropertiesPanel (non-empty selection + canEdit). It edits every selected element through
 // the shared MIXED conventions: '—' in number inputs / color swatches / select placeholders and a
 // data-mixed attribute on toggles. Each control change is one updateElements transact across the
 // selection (one undo step, stopCapturing sealed on both sides). Field scoping: fill /

@@ -1,7 +1,7 @@
 export * from './arrange';
 export { elbowBindPoint, redockBindingsForElbow } from './elbow-heading';
 export * from './elbow-pins';
-export { arrowRoute, elbowRoute, elbowRoutingContext } from './elbow-route';
+export { arrowRoute, elbowRoute, elbowRoutingContext, sceneBounds } from './elbow-route';
 export * from './font-metrics';
 export * from './fractional-index';
 export * from './geometry';

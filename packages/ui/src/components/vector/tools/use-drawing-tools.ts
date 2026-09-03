@@ -122,7 +122,7 @@ type DrawingToolsParams = {
     setTool: (t: VectorTool) => void;
     // When the tool lock is on, a finished line/arrow keeps its tool active (freedraw/eraser always do).
     toolLocked: boolean;
-    canWrite: boolean;
+    canEdit: boolean;
     zoom: number;
     // The active pointer is coarse (finger/stylus) → the eraser and hit paths use a fatter screen slop.
     coarse: boolean;
@@ -180,7 +180,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         tool,
         setTool,
         toolLocked,
-        canWrite,
+        canEdit,
         zoom,
         coarse,
         ordered,
@@ -405,7 +405,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
 
     // --- Pointer dispatch -----------------------------------------------------------------------
     const onPointerDown = (e: React.PointerEvent, scene: Point): boolean => {
-        if (!canWrite) return false;
+        if (!canEdit) return false;
         // Any pointerdown that reaches the surface clears the point selection (clicking the shaft, the
         // canvas, or another element) — vertex/midpoint handles stopPropagation, so a handle click never
         // gets here and keeps its own selection.
@@ -598,7 +598,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     const sole = selectedIds.length === 1 ? ordered.find((el) => el.id === selectedIds[0]) : undefined;
     // Lines and arrows get vertex handles; freedraw never does.
     const selectedLine =
-        !busy && !activeKind && canWrite && (sole?.type === 'line' || sole?.type === 'arrow') ? sole : undefined;
+        !busy && !activeKind && canEdit && (sole?.type === 'line' || sole?.type === 'arrow') ? sole : undefined;
     const isEndpoint = (index: number, count: number) => index === 0 || index === count - 1;
 
     // If the selected line/arrow vanishes mid vertex-drag — a remote delete unmounts LinePointHandles

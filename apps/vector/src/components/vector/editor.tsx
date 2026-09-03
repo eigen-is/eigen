@@ -45,15 +45,16 @@ const EMPTY_ANCHOR_TEXTS: Map<string, string> = new Map();
 export function VectorEditor({
     ownerId,
     path,
-    canWrite: hasWriteAccess,
+    canWrite,
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
     initialChatName,
 }: VectorEditorProps) {
     const { isMobile } = useLayout();
-    // Phones are view-only for now (no touch editing); tablets sit above the breakpoint and keep the editor.
-    const canWrite = hasWriteAccess && !isMobile;
+    // Small screens view the scene, never edit it (the slides canEdit split: file menu, share and
+    // comments keep canWrite); tablets sit above the breakpoint.
+    const canEdit = canWrite && !isMobile;
     const doc = useVectorDoc(ownerId, path.mountId, path.id);
     const { tool, setTool, toolLocked, setToolLocked } = useTool();
     const { selectedIds, setSelectedIds, toggle } = useSelection();
@@ -66,7 +67,7 @@ export function VectorEditor({
         () => doc.elements.filter((el) => selectedIds.includes(el.id)),
         [doc.elements, selectedIds],
     );
-    const showPanel = canWrite && selectedElements.length > 0;
+    const showPanel = canEdit && selectedElements.length > 0;
 
     // Aspect lock, lifted here so the panel checkbox and the canvas' ObjectTransform
     // resizeMode share one ephemeral setting. Default ON for image-only selections.
@@ -182,6 +183,7 @@ export function VectorEditor({
                             <Toolbar
                                 path={path}
                                 canWrite={canWrite}
+                                canEdit={canEdit}
                                 offline={doc.offline}
                                 storageUnavailable={doc.loaded && doc.storageUnavailable}
                                 undoManager={doc.undoManager}
@@ -189,7 +191,7 @@ export function VectorEditor({
                                 setTool={setTool}
                                 toolLocked={toolLocked}
                                 setToolLocked={setToolLocked}
-                                onInsertImage={canWrite && mediaFolderId ? () => setImagePickerOpen(true) : undefined}
+                                onInsertImage={canEdit && mediaFolderId ? () => setImagePickerOpen(true) : undefined}
                                 onAccessDialogOpen={onAccessDialogOpen}
                                 onToggleCommentPanel={toggleComments}
                                 commentPanelOpen={commentPanelOpen}
@@ -212,7 +214,7 @@ export function VectorEditor({
                                         setTool={setTool}
                                         toolLocked={toolLocked}
                                         setToolLocked={setToolLocked}
-                                        canWrite={canWrite}
+                                        canEdit={canEdit}
                                         ownerId={ownerId}
                                         mountId={path.mountId}
                                         addElement={doc.addElement}

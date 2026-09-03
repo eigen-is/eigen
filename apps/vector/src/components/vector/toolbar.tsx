@@ -14,6 +14,7 @@ import { Diamond, ImagePlus } from 'lucide-react';
 type ToolbarProps = {
     path: DrivePath;
     canWrite: boolean;
+    canEdit: boolean;
     offline: boolean;
     storageUnavailable: boolean;
     // Exactly what useYjsUndoState consumes (Y.UndoManager | null) — named via the hook so the app
@@ -54,6 +55,7 @@ function ToolMenuItem({ tool, setTool }: { tool: (typeof VECTOR_TOOLS)[number]; 
 export function Toolbar({
     path,
     canWrite,
+    canEdit,
     offline,
     storageUnavailable,
     undoManager,
@@ -69,7 +71,7 @@ export function Toolbar({
     onToggleActivityPanel,
     activityPanelOpen,
 }: ToolbarProps) {
-    const { canUndo, canRedo, undo, redo } = useYjsUndoState(undoManager, canWrite);
+    const { canUndo, canRedo, undo, redo } = useYjsUndoState(undoManager, canEdit);
     const { exportPath, isExporting } = useDocumentExport();
     const isCompact = useIsCompactToolbar();
 
@@ -89,10 +91,10 @@ export function Toolbar({
                             createType="vector"
                         />
                         {/* Render unconditionally once vector has a DocSearchProvider (Find items survive read-only). */}
-                        {canWrite && (
+                        {canEdit && (
                             <>
                                 <EditMenu
-                                    canEdit={canWrite}
+                                    canEdit={canEdit}
                                     canUndo={canUndo}
                                     canRedo={canRedo}
                                     onUndo={undo}
@@ -122,7 +124,7 @@ export function Toolbar({
                 }
                 center={
                     // Below the compact-toolbar breakpoint the cluster folds into the Insert menu (the slides idiom).
-                    canWrite &&
+                    canEdit &&
                     !isCompact && (
                         <>
                             {VECTOR_TOOLS.map((t) => (

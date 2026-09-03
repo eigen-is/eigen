@@ -6,13 +6,8 @@ import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
-import {
-    elementBounds,
-    orderByFractionalIndex,
-    parseBinding,
-    readVectorFromDoc,
-    unionBounds,
-} from '@workspace/lib/vector';
+import { orderByFractionalIndex, parseBinding, readVectorFromDoc, sceneBounds } from '@workspace/lib/vector';
+import type * as Y from 'yjs';
 import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import { loadYjsState } from '../../lib/collab/yjs-loader';
 import { openLocalDatabase } from '../../lib/core';
@@ -158,8 +153,8 @@ describe('seed-demo', () => {
             expect(existsSync(mountsDir)).toBe(true);
             // mounts/ also holds shared.db — pick the mount's own subdirectory.
             const mountId = readdirSync(mountsDir, { withFileTypes: true }).find((d) => d.isDirectory())?.name;
-            expect(mountId).toBeDefined();
-            const metadataDb = join(mountsDir, mountId!, 'metadata.db');
+            if (!mountId) throw new Error('team mount directory missing');
+            const metadataDb = join(mountsDir, mountId, 'metadata.db');
             expect(existsSync(metadataDb)).toBe(true);
             const events = query<{ n: number }>(metadataDb, 'SELECT count(*) AS n FROM file_events');
             expect(events[0].n).toBeGreaterThanOrEqual(1);
@@ -178,7 +173,7 @@ describe('seed-demo', () => {
             expect(photoRows.length).toBe(PHOTOS.length);
             for (const photo of photoRows) {
                 expect(photo.name).toEndWith('.webp');
-                const blob = join(mountsDir, mountId!, 'data', photo.file);
+                const blob = join(mountsDir, mountId, 'data', photo.file);
                 expect(existsSync(blob)).toBe(true);
                 expect(statSync(blob).size).toBeGreaterThan(10_000);
             }
@@ -195,7 +190,7 @@ describe('seed-demo', () => {
             );
             expect(brandingRows.length).toBe(BRANDING.length);
             for (const asset of brandingRows) {
-                const blob = join(mountsDir, mountId!, 'data', asset.file);
+                const blob = join(mountsDir, mountId, 'data', asset.file);
                 expect(existsSync(blob)).toBe(true);
                 expect(statSync(blob).size).toBeGreaterThan(0);
             }
@@ -212,7 +207,7 @@ describe('seed-demo', () => {
             // Budget sheet: hand-maintained fixture placed onto the team drive with real data.db bytes.
             // Decoded through the shipped reader, not just size-checked — the fixture bytes predate
             // every stored-shape change, so a rename that skips them has to fail here.
-            const sheetDataDb = findContainerDataDb(metadataDb, mountsDir, mountId!, `${BUDGET.name}.eigensheets`);
+            const sheetDataDb = findContainerDataDb(metadataDb, mountsDir, mountId, `${BUDGET.name}.eigensheets`);
             expect(statSync(sheetDataDb).size).toBeGreaterThan(0);
             const { sheets } = readSheetsFromDoc(await loadCollabDoc(sheetDataDb));
             expect(sheets.length).toBeGreaterThanOrEqual(1);
@@ -236,7 +231,7 @@ describe('seed-demo', () => {
             );
             expect(deckImages.length).toBeGreaterThanOrEqual(1);
             for (const img of deckImages) {
-                const blob = join(mountsDir, mountId!, 'data', img.file);
+                const blob = join(mountsDir, mountId, 'data', img.file);
                 expect(existsSync(blob)).toBe(true);
                 expect(statSync(blob).size).toBeGreaterThan(0);
             }
@@ -246,7 +241,7 @@ describe('seed-demo', () => {
             // pre-rename keys (w/h/rotation) yields undefined width/height/angle rather than throwing —
             // it would silently render collapsed in the demo. Assert the numbers, not just the read.
             const deckDoc = await loadCollabDoc(
-                findContainerDataDb(metadataDb, mountsDir, mountId!, `${SPONSOR_DECK.name}.eigenslides`),
+                findContainerDataDb(metadataDb, mountsDir, mountId, `${SPONSOR_DECK.name}.eigenslides`),
             );
             const deckData = readDeckFromDoc(deckDoc);
             expect(deckData.slideOrder.length).toBeGreaterThanOrEqual(1);
@@ -293,9 +288,9 @@ describe('seed-demo', () => {
 
             // Doc comments: the panel renders exclusively from the doc's `comments` Y.Map, and
             // only cards anchored by a comment mark in the text. Assert both for the seeded doc.
-            const docDataDb = findContainerDataDb(metadataDb, mountsDir, mountId!, 'production plan.eigendoc');
+            const docDataDb = findContainerDataDb(metadataDb, mountsDir, mountId, 'production plan.eigendoc');
             const ydoc = await loadCollabDoc(docDataDb);
-            const cards = [...ydoc.getMap<import('yjs').Map<unknown>>('comments').values()].map((card) => ({
+            const cards = [...ydoc.getMap<Y.Map<unknown>>('comments').values()].map((card) => ({
                 id: card.get('id') as string,
                 color: card.get('color') as string,
                 chatName: card.get('chatName') as string,
@@ -316,9 +311,9 @@ describe('seed-demo', () => {
 
             // Stickies board: every card gets the same default color plus a real linked chat
             // (same pattern as doc comments), so no card ever renders uncolored or unlinked.
-            const boardDataDb = findContainerDataDb(metadataDb, mountsDir, mountId!, `${KANBAN.name}.eigenstickies`);
+            const boardDataDb = findContainerDataDb(metadataDb, mountsDir, mountId, `${KANBAN.name}.eigenstickies`);
             const board = await loadCollabDoc(boardDataDb);
-            const tasks = [...board.getMap<import('yjs').Map<unknown>>('tasks').values()].map((task) => ({
+            const tasks = [...board.getMap<Y.Map<unknown>>('tasks').values()].map((task) => ({
                 color: task.get('color') as string,
                 chatName: task.get('chatName') as string,
                 creator: task.get('creator') as string,
@@ -334,14 +329,14 @@ describe('seed-demo', () => {
             // (no fixture). It reads back through the shipped reader with surviving shape bindings,
             // elbow arrows, measured text, and every image pointing at a media file that landed.
             const vectorName = `${SITE_PLAN.name}.eigenvector`;
-            const vectorDataDb = findContainerDataDb(metadataDb, mountsDir, mountId!, vectorName);
+            const vectorDataDb = findContainerDataDb(metadataDb, mountsDir, mountId, vectorName);
             const scene = readVectorFromDoc(await loadCollabDoc(vectorDataDb));
             expect(scene.elements.length).toBeGreaterThanOrEqual(60);
 
             // The editor opens on the scene origin, so the drawing is stored centred on it.
-            const bounds = scene.elements.map((el) => elementBounds(el)).reduce(unionBounds);
-            expect(Math.abs(bounds.minX + bounds.maxX)).toBeLessThanOrEqual(1);
-            expect(Math.abs(bounds.minY + bounds.maxY)).toBeLessThanOrEqual(1);
+            const bounds = sceneBounds(scene.elements, new Map(scene.elements.map((el) => [el.id, el])));
+            expect(bounds.minX + bounds.maxX).toBeCloseTo(0, 6);
+            expect(bounds.minY + bounds.maxY).toBeCloseTo(0, 6);
 
             // Z-order: the fence outline sits under everything (a click inside it lands on what it
             // encloses), and the wind-cover ring sits just under the stage it rings.

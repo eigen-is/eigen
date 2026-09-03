@@ -8,19 +8,17 @@ import type { Drawable, OpSet, Options } from 'roughjs/bin/core';
 import { RoughGenerator } from 'roughjs/bin/generator';
 import { getFontFamily } from '../constants/fonts';
 import { headingIsHorizontal, vectorToHeading } from './elbow-heading';
-import { arrowRoute } from './elbow-route';
+import { arrowRoute, sceneBounds } from './elbow-route';
 import { getLineHeightPx, getVerticalOffset } from './font-metrics';
 import { orderByFractionalIndex } from './fractional-index';
 import type { Box, Point } from './geometry';
 import {
     arrowheadGeometry,
     arrowLabelBox,
-    elementBounds,
     FREEDRAW_SIZE_FACTOR,
     isClosedPath,
     parsePoints,
     parsePressures,
-    unionBounds,
 } from './geometry';
 import {
     type Arrowhead,
@@ -62,9 +60,7 @@ export function sceneToSvg(scene: VectorScene, opts: SceneToSvgOptions = {}): st
     // byId feeds the derived elbow route (its bends spill past the stored 2-endpoint box, and depend on the
     // bound shapes) to both bounds and rendering.
     const byId = new Map(scene.elements.map((el) => [el.id, el]));
-    // elementBounds unions an arrow's label rect, so a wide label on a short arrow isn't clipped
-    // by the viewBox; for an elbow arrow it's the derived route's bbox, else the plain box AABB.
-    const bounds = ordered.map((el) => elementBounds(el, arrowRoute(el, byId))).reduce(unionBounds);
+    const bounds = sceneBounds(ordered, byId);
     const minX = round(bounds.minX - padding);
     const minY = round(bounds.minY - padding);
     const width = round(bounds.maxX - bounds.minX + padding * 2);
