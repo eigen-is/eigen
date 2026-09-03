@@ -140,15 +140,15 @@ export type DraftAttachmentUpload = {
 };
 
 export type AttachmentMeta = {
-    /** Stable client-side identity for React keys. */
+    // Stable client-side identity for React keys.
     key: string;
-    /** Present while the binary is still staged on the server and not yet embedded in the draft EML. */
+    // Present while the binary is still staged on the server and not yet embedded in the draft EML.
     tempId?: string;
     filename: string;
     size: number;
     contentType: string;
-    /** Position of the parsed attachment in the on-disk EML (for download URLs). */
+    // Position of the parsed attachment in the on-disk EML (for download URLs).
     index?: number;
-    /** Blob URL for local image thumbnails — not sent to the server. */
+    // Blob URL for local image thumbnails — not sent to the server.
     localUrl?: string;
 };
