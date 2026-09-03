@@ -6,9 +6,9 @@ import { getHome } from '../../lib/home/get-home';
 import { driveGet, drivePost, getTestContext } from '../setup';
 
 // End-to-end guard for the download/print surface: a collaborator can put arbitrary strings
-// in the schemaless deck, so the assembled HTML export must neutralize both an attribute-
+// in the schemaless canvas scene, so the assembled HTML export must neutralize both an attribute-
 // breakout color and a script tag — the same guarantee the preview surface already gives.
-describe('slides export — assembled HTML surface', () => {
+describe('deck export — assembled HTML surface', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     let rootId: string;
 
@@ -30,32 +30,30 @@ describe('slides export — assembled HTML surface', () => {
         const home = await getHome(ctx.alice.user.id);
         const collab = await home.drive.getCollabDocument('default', deckPath.id);
         collab.doc.transact(() => {
-            const slidesMap = collab.doc.getMap('slides');
-            const objectsMap = collab.doc.getMap('objects');
-            const slideOrder = collab.doc.getArray('slideOrder');
+            const elements = collab.doc.getMap('elements');
+            const frames = collab.doc.getMap('frames');
 
-            const obj = new Y.Map();
-            obj.set('id', 'o1');
-            obj.set('slideId', 's1');
-            obj.set('type', 'text');
-            obj.set('x', 0);
-            obj.set('y', 0);
-            obj.set('width', 200);
-            obj.set('height', 100);
-            obj.set('fontSize', 24);
-            obj.set('text', '<p>legit body</p><script>alert(1)</script>');
-            obj.set('color', 'red;" onload="alert(1)');
-            objectsMap.set('o1', obj);
+            const frame = new Y.Map();
+            frame.set('id', 'f1');
+            frame.set('index', 'a0');
+            frame.set('name', '');
+            // A breakout attempt in the stored background: the fill codec must refuse it outright.
+            frame.set('background', '{"type":"solid","color":"red;\\"><script>alert(2)</script>"}');
+            frames.set('f1', frame);
 
-            const slide = new Y.Map();
-            slide.set('id', 's1');
-            slide.set('background', { type: 'solid', color: 'red;"><script>alert(2)</script>' });
-            const objectIds = new Y.Array();
-            objectIds.push(['o1']);
-            slide.set('objectIds', objectIds);
-            slidesMap.set('s1', slide);
-
-            slideOrder.push(['s1']);
+            const box = new Y.Map();
+            box.set('id', 'e1');
+            box.set('type', 'richtext');
+            box.set('index', 'a0');
+            box.set('frameId', 'f1');
+            box.set('x', 0);
+            box.set('y', 0);
+            box.set('width', 200);
+            box.set('height', 100);
+            box.set('fontSize', 24);
+            box.set('html', '<p>legit body</p><script>alert(1)</script>');
+            box.set('color', 'red;" onload="alert(1)');
+            elements.set('e1', box);
         });
 
         const { mount, path } = await home.drive.resolveFile('default', deckPath.id);

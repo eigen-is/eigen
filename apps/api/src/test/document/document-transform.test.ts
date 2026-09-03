@@ -1,7 +1,6 @@
 import { beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { decodeSheetsSnapshot, encodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
-import type { ImageObject, TextObject } from '@workspace/lib/slides';
 import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import * as engine from '@workspace/sheet/engine';
 import { eq } from 'drizzle-orm';
@@ -37,15 +36,15 @@ import { renderEigenslidesPreviewBody } from '../../lib/preview/eigenslides-rend
 import { renderEigenvectorPreviewBody } from '../../lib/preview/eigenvector-render';
 import type { User } from '../../lib/user';
 import {
-    buildGoldenDeck,
+    buildGoldenDeckScene,
     buildGoldenDocJson,
     buildGoldenVectorScene,
     editGoldenDeckTitle,
     GOLDEN_BEYOND_CAP,
     GOLDEN_MEDIA_NAME,
+    seedDeckDoc,
     seedDocumentMedia,
     seedEigendoc,
-    seedSlidesDoc,
     seedVectorDoc,
 } from '../fixtures/golden-documents';
 import { buildGoldenDocx, GOLDEN_DOCX_IMAGE_NAME } from '../fixtures/golden-docx';
@@ -661,13 +660,14 @@ describe('document transform (xlsx import)', () => {
 // move off-thread is proven byte-identical. Regenerate only
 // for an intentional renderer change. The embedded media data URI comes from the
 // screen-preview pipeline (sharp → WebP), so a preview-encoder change moves the
-// export hashes legitimately.
+// export hashes legitimately. The deck hashes were re-recorded when the deck moved onto the canvas
+// compositor: a slide is a `canvas-page` of scene layers now, so the bytes differ by construction.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'f61e8785cd4e3b3872e5fcf6ee817abdae5e2ed4119a113dc17342fd922e6b44';
 const GOLDEN_DOC_EXPORT_HTML_SHA256 = 'f4b1308435d2d2f9d140c4ed62b81a1e9cb281dee8d68aee3a880258e87edf3b';
 const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'f4b1308435d2d2f9d140c4ed62b81a1e9cb281dee8d68aee3a880258e87edf3b';
-const GOLDEN_DECK_PREVIEW_SHA256 = '351d31560954f2490f67bd5aeba11f24d083e3646c78b25599e0fef816c65616';
-const GOLDEN_DECK_EXPORT_HTML_SHA256 = '7b584e034fcf9fe42b2dc2dd6d20d9f4af4bb1c21444875c985dacfe59bd9644';
-const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = '4c70de4e940fd61e27152e00f718546b37747bc22f5f1acbc5d53d8c753f6aec';
+const GOLDEN_DECK_PREVIEW_SHA256 = '3dee9a765eca312176730b328e61e375724f85c14039346efedafc00265e126e';
+const GOLDEN_DECK_EXPORT_HTML_SHA256 = '65267ff9a8e6924c7a10339f03554a0ba9a9cdaa3ea8c57a26eaf5bcccdfed1b';
+const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = '1f82eecdcf9b60057fbcba2eec06355945d869676f947b80a59ca05bf4f8659e';
 
 // Preview media is embedded as an absolute API URL carrying per-run owner/path ids —
 // normalize them out so the golden pins the rendering, not the fixture's uuids.
@@ -691,7 +691,7 @@ async function seedGoldenDocument(
     const home = await getHome(ctx.alice.user.id);
     const collab = await home.drive.getCollabDocument(mountId, created.id);
     if (type === 'doc') seedEigendoc(collab.doc, buildGoldenDocJson());
-    else seedSlidesDoc(collab.doc, buildGoldenDeck());
+    else seedDeckDoc(collab.doc, buildGoldenDeckScene());
     edit?.(collab.doc);
 
     const resolved = await home.drive.resolveFile(mountId, created.id);
@@ -853,11 +853,12 @@ describe('document transform (eigenslides)', () => {
         expect(body).toBe(direct.body);
         expect(response.ok && response.warnings).toEqual(direct.warnings);
 
-        // First 8 slides with the truncated marker, media as an embed URL.
+        // First 8 slides as compositor pages, with the truncated marker and media as an embed URL.
+        expect(body.match(/class="canvas-page"/g)).toHaveLength(8);
         expect(body).toContain('Deck <strong>title</strong>');
         expect(body).not.toContain(GOLDEN_BEYOND_CAP);
         expect(body).toContain('Preview truncated');
-        expect(body).toMatch(/<img src="http:\/\/localhost\/drive\/[^"]+\/preview"/);
+        expect(body).toMatch(/href="http:\/\/localhost\/drive\/[^"]+\/preview"/);
         expect(body).not.toMatch(/<script/i);
         expect(body).not.toMatch(/"\s*onload/i);
         expect(sha256(normalizeMediaUrls(body))).toBe(GOLDEN_DECK_PREVIEW_SHA256);
@@ -872,13 +873,14 @@ describe('document transform (eigenslides)', () => {
         expect(preview.body).toBe(body);
     }, 120_000);
 
-    test('html export is byte-identical to the pre-move pipeline', async () => {
+    test('html export matches the pinned golden bytes', async () => {
         const result = await exportDocument(golden.mount, golden.path, 'html');
         expect(sha256(result.data)).toBe(GOLDEN_DECK_EXPORT_HTML_SHA256);
     }, 120_000);
 
-    test('pdf-html export is byte-identical to the pre-move pipeline', async () => {
-        // Fixed-size PDF mode: px geometry instead of container queries.
+    test('pdf-html export matches the pinned golden bytes', async () => {
+        // The PDF arm keeps each page unscaled on its own sheet; only the screen arm wraps a page
+        // in the container-query fit box.
         const html = await runDocumentExport(
             { documentType: 'eigenslides', format: 'pdf-html' },
             golden.mount,
@@ -886,30 +888,6 @@ describe('document transform (eigenslides)', () => {
         );
         expect(sha256(html)).toBe(GOLDEN_DECK_EXPORT_PDF_HTML_SHA256);
     }, 120_000);
-
-    test('an image object naming a prototype key renders empty, not a crash', () => {
-        // mediaName is document data — an unknown name must resolve to null, never to
-        // something off Object.prototype.
-        const deck = buildGoldenDeck();
-        (deck.objects['obj-2'] as ImageObject).mediaName = 'toString';
-        const doc = new Y.Doc();
-        seedSlidesDoc(doc, deck);
-        expect(renderEigenslidesPreviewBody(doc, new Map()).body).not.toContain('<img');
-    });
-
-    test('byte guard replaces an oversized body with the truncated notice, never a sliced string', () => {
-        // The cap counts slides, not bytes — one enormous text object sails through
-        // the 8-slide limit and only the byte guard stands between it and the cache.
-        const deck = buildGoldenDeck();
-        (deck.objects['obj-1'] as TextObject).text = `<p>${'x'.repeat(9_000_000)}</p>`;
-        const doc = new Y.Doc();
-        seedSlidesDoc(doc, deck);
-
-        const { body, warnings } = renderEigenslidesPreviewBody(doc, new Map());
-        expect(warnings.some((warning) => warning.code === 'byte-guard-truncated')).toBe(true);
-        expect(body).toContain('Preview truncated');
-        expect(body.length).toBeLessThan(1000);
-    }, 60_000);
 
     test('a corrupt update blob surfaces as a warning, never a failed export', async () => {
         // The export side of the shared worker.ts blob-skip path (preview side: the

@@ -1,7 +1,4 @@
-import { escapeHtml } from '@workspace/lib/html';
 import { isTransparentColor, readVectorFromDoc, sceneToSvg, type VectorScene } from '@workspace/lib/vector';
-// CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
-import canvasTextCSSRaw from '@workspace/ui/styles/canvas-text.css' with { type: 'text' };
 import type * as Y from 'yjs';
 import { ApiError } from '../../core/errors';
 import { spliceAfterSvgOpenTag, toDataUriMap } from '../../document/media';
@@ -11,8 +8,9 @@ import {
     toTransferableText,
     type VectorExportFormat,
 } from '../../document/transform/protocol';
-import { drawingPage, renderCanvasPage } from '../canvas/render';
-import { getFontCSS, getFontFaceCSSForFamilies } from '../fonts';
+import { drawingPage } from '../canvas/render';
+import { canvasHtmlDocument } from '../canvas/transform';
+import { getFontFaceCSSForFamilies } from '../fonts';
 import { sanitizeExportHtml } from '../sanitize';
 
 // A rich-text box renders as an HTML <div> inside <foreignObject>, and DOMPurify drops both by
@@ -54,11 +52,10 @@ export function renderEigenvectorExport(
     const page = drawingPage(paperScene, (mediaName) => dataUriMap.get(mediaName) ?? null);
     // Nothing to print, and nothing to size a page from.
     if (!page) throw new ApiError(400, 'The drawing is empty');
-    // A collaborator can put arbitrary strings in the schemaless scene — including a rich-text box's
-    // raw HTML — so the assembled body runs through the shared sanitizer (the documented SSRF
-    // closure). No ADD_TAGS here: the compositor emits ordinary HTML, never a foreignObject.
-    const body = sanitizeExportHtml(renderCanvasPage(page, 1));
-    return { data: toTransferableText(wrapInPdfDocument(title, body, page.width, page.height)), warnings: [] };
+    // The shared canvas document sanitizes the assembled body and owns the @page rule, the fonts and
+    // the reset — a deck's pages and a drawing's single page leave through the same wrapper.
+    const html = canvasHtmlDocument({ title, pages: [page], scale: 1, mode: 'pdf' });
+    return { data: toTransferableText(html), warnings: [] };
 }
 
 // The drawing's own SVG, with the @font-face blocks its text uses injected into a <defs>
@@ -81,27 +78,4 @@ function usedFontFamilies(scene: VectorScene): Set<string> {
         if (el.type === 'arrow' && el.text !== '') families.add(el.fontFamily);
     }
     return families;
-}
-
-// A minimal page sized to the drawing so WeasyPrint prints one PDF page the size of the artwork,
-// with the same font faces the screen uses. canvas-text.css rides along because the reset below zeroes
-// every padding, which would otherwise pull a rich-text box's list markers outside its box. The body
-// arrives already sanitized; the wrapper is ours.
-function wrapInPdfDocument(title: string, body: string, width: number, height: number): string {
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <title>${escapeHtml(title)}</title>
-    <style>${getFontCSS()}
-@page { size: ${width}px ${height}px; margin: 0; }
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body { margin: 0; }
-svg { display: block; }
-${canvasTextCSSRaw}</style>
-</head>
-<body>
-    ${body}
-</body>
-</html>`;
 }
