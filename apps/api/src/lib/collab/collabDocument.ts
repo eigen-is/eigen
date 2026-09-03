@@ -175,7 +175,7 @@ export default class CollabDocument {
         await drive.createFolder(mountId, docId, 'chat');
     }
 
-    public async init() {
+    public async init(): Promise<CollabDocument> {
         let [dataDbPath, commentsDbPath] = await Promise.all([
             this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db'),
             this.drive.getChildByName(this.path.mountId, this.path.id, 'comments.db'),
@@ -263,7 +263,7 @@ export default class CollabDocument {
         const now = Date.now();
         if (now - (this.lastEditRecordedAt.get(user.id) ?? 0) < EDIT_RECORD_THROTTLE_MS) return;
         this.lastEditRecordedAt.set(user.id, now);
-        this.drive.recordFileEvent(this.path.mountId, this.path.id, user, 'edited').catch(() => {});
+        this.drive.recordFileEvent(this.path.mountId, this.path.id, user, { eventType: 'edited' }).catch(() => {});
     }
 
     public destruct() {

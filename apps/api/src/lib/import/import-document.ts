@@ -11,7 +11,7 @@ import {
 } from '../document/transform/protocol';
 import { runImportToDocumentUpdate, runImportToSnapshotJson } from '../document/transform/run-transform';
 import { documentTransformRunner } from '../document/transform/runner';
-import type { Drive, SharedDrive } from '../drive';
+import type { DriveLike } from '../drive/get-drive';
 import type { Mount } from '../mount';
 import type { User } from '../user';
 
@@ -39,7 +39,7 @@ function importDocxUpdate(buffer: Buffer, signal?: AbortSignal): Promise<DocImpo
 // minutes — long enough for the share to be revoked. `getCollabDocument` re-checks
 // read only, so the commit needs its own write check — as the LAST await before the
 // synchronous write, or a revocation landing during the lookup still commits.
-async function requireWritePermission(drive: Drive | SharedDrive, path: DrivePath, user: User): Promise<void> {
+async function requireWritePermission(drive: DriveLike, path: DrivePath, user: User): Promise<void> {
     if (!(await drive.canWrite(path.mountId, path.id, user))) throw new ApiError(403, 'No write permission');
 }
 
@@ -61,7 +61,7 @@ async function saveDocImages(mount: Mount, docPath: DrivePath, images: Transform
 // No signal parameter by design: conversion detaches from the request so a page
 // reload cannot kill a minute of Worker progress (routes/drive.ts /convert).
 export async function convertToDocument(
-    drive: Drive | SharedDrive,
+    drive: DriveLike,
     mount: Mount,
     sourcePath: DrivePath,
     targetType: 'eigensheets' | 'eigendoc',
@@ -106,7 +106,7 @@ export async function convertToDocument(
 }
 
 export async function importIntoDocument(
-    drive: Drive | SharedDrive,
+    drive: DriveLike,
     mount: Mount,
     path: DrivePath,
     buffer: Buffer,

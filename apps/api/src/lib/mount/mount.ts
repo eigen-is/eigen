@@ -11,7 +11,7 @@ import {
     type MountConfig,
     parseOwnerId,
 } from '@workspace/lib/types';
-import { type DriveVisibility, EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
+import { EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
 import type { BunFile } from 'bun';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
@@ -44,6 +44,8 @@ type LocalDatabaseGetter = <S extends SchemaType>(
     config: DatabaseConfig<S>,
     relativePath: string,
 ) => Promise<ManagedDatabase<S>>;
+
+export type MimeOptions = { excludeDocumentChildren?: boolean };
 
 export class Mount {
     readonly id: string;
@@ -1128,12 +1130,7 @@ export class Mount {
         return result?.count ?? 0;
     }
 
-    async getPathsByMimeType(
-        mimeTypePrefix: string,
-        options?: {
-            excludeDocumentChildren?: boolean;
-        },
-    ): Promise<DrivePath[]> {
+    async getPathsByMimeType(mimeTypePrefix: string, options?: MimeOptions): Promise<DrivePath[]> {
         const conditions = [];
         if (mimeTypePrefix) {
             conditions.push(sql`${paths.mimeType} LIKE ${`${mimeTypePrefix}%`}`);
@@ -1236,7 +1233,7 @@ export class Mount {
             hash: row.hash,
             thumbnail: row.thumbnail,
             acl: row.acl,
-            visibility: (row.visibility ?? 'private') as DriveVisibility,
+            visibility: row.visibility ?? 'private',
             sharingRestricted: !!row.sharingRestricted,
             details: row.details ?? null,
             trashedAt: row.trashedAt ?? null,

@@ -4,6 +4,7 @@ import { DRIVE_TYPE_FOLDER, isContainerType } from '@workspace/lib/types/drive';
 import { eq } from 'drizzle-orm';
 import { ApiError } from '../core';
 import { writeTempWithHash } from '../drive/streaming';
+import { isVersionsFolder } from '../versioning/versions-folder';
 import type { Mount } from './mount';
 import { paths } from './schema';
 
@@ -26,7 +27,7 @@ export async function copyPath(
         const containerType: DriveContainerType | undefined = isEigenDoc ? src.type : undefined;
         const newId = await mount.createFolder(destParentId, name, containerType);
         if (actor) {
-            await mount.history.record({
+            mount.history.record({
                 pathId: newId,
                 eventType: 'copied',
                 actor,
@@ -41,7 +42,7 @@ export async function copyPath(
         for (const child of children) {
             // Inside an eigen-doc container, versions/ is snapshot history — a
             // fresh copy starts clean rather than inheriting old snapshots.
-            if (isEigenDoc && child.type === DRIVE_TYPE_FOLDER && child.name === 'versions') continue;
+            if (isEigenDoc && isVersionsFolder(child)) continue;
             await copyPath(mount, child.id, newId, child.name, actor);
         }
         // The copied container's data.db is byte-copied as raw bytes — no onSync fires
@@ -67,7 +68,7 @@ export async function copyPath(
     try {
         const newId = await mount.createFileFromTemp(destParentId, name, src.mimeType, size, hash, tempId);
         if (actor) {
-            await mount.history.record({
+            mount.history.record({
                 pathId: newId,
                 eventType: 'copied',
                 actor,

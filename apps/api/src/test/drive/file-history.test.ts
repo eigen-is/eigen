@@ -147,13 +147,13 @@ describe('FileHistory', () => {
 
     test('record and list a renamed event', async () => {
         const fileId = await mount.touchFile(rootId, 'a.txt', 'text/plain');
-        await mount.history.record({
+        mount.history.record({
             pathId: fileId,
             eventType: 'renamed',
             actor: { id: 'u1', email: 'u1@test' },
             details: { oldName: 'a.txt', newName: 'b.txt' },
         });
-        const events = await mount.history.list(fileId);
+        const events = mount.history.list(fileId);
         expect(events).toHaveLength(1);
         expect(events[0].eventType).toBe('renamed');
         expect(events[0].details).toEqual({ oldName: 'a.txt', newName: 'b.txt' });
@@ -169,18 +169,18 @@ describe('FileHistory', () => {
         const fileId = await mount.touchFile(subFolderId, 'deep.txt', 'text/plain');
 
         // Record two events on the file so we can verify ordering + limit
-        await mount.history.record({
+        mount.history.record({
             pathId: fileId,
             eventType: 'created',
             actor: { id: 'u2', email: 'u2@test' },
         });
-        await mount.history.record({
+        mount.history.record({
             pathId: fileId,
             eventType: 'edited',
             actor: { id: 'u2', email: 'u2@test' },
         });
 
-        const events = await mount.history.list(folderId);
+        const events = mount.history.list(folderId);
         expect(events.length).toBeGreaterThanOrEqual(2);
 
         // Verify ordering: newest first
@@ -193,19 +193,19 @@ describe('FileHistory', () => {
         expect(fileEventsForFile.length).toBe(2);
         expect(fileEventsForFile[0].pathName).toBe('deep.txt');
 
-        const limited = await mount.history.list(folderId, { limit: 1 });
+        const limited = mount.history.list(folderId, { limit: 1 });
         expect(limited).toHaveLength(1);
     });
 
     test('deleting a path cascades its file_events rows', async () => {
         const fileId = await mount.touchFile(rootId, 'cascade-test.txt', 'text/plain');
-        await mount.history.record({
+        mount.history.record({
             pathId: fileId,
             eventType: 'created',
             actor: { id: 'u3', email: 'u3@test' },
         });
 
-        const before = await mount.history.list(fileId);
+        const before = mount.history.list(fileId);
         expect(before).toHaveLength(1);
 
         await mount.trashPath(fileId);
@@ -216,7 +216,7 @@ describe('FileHistory', () => {
         const surviving = metaDb.db.select().from(fileEvents).where(eq(fileEvents.pathId, fileId)).all();
         expect(surviving).toHaveLength(0);
 
-        const after = await mount.history.list(fileId);
+        const after = mount.history.list(fileId);
         expect(after).toHaveLength(0);
     });
 
@@ -230,10 +230,10 @@ describe('FileHistory', () => {
         };
         const opts = { dedupeWindowMs: 30_000 };
 
-        await mount.history.record(input, opts);
-        await mount.history.record(input, opts);
+        mount.history.record(input, opts);
+        mount.history.record(input, opts);
 
-        const events = await mount.history.list(fileId);
+        const events = mount.history.list(fileId);
         expect(events).toHaveLength(1);
     });
 
@@ -241,7 +241,7 @@ describe('FileHistory', () => {
         const fileId = await mount.touchFile(rootId, 'dedupe-details-test.txt', 'text/plain');
 
         const opts = { dedupeWindowMs: 30_000 };
-        await mount.history.record(
+        mount.history.record(
             {
                 pathId: fileId,
                 eventType: 'renamed',
@@ -250,7 +250,7 @@ describe('FileHistory', () => {
             },
             opts,
         );
-        await mount.history.record(
+        mount.history.record(
             {
                 pathId: fileId,
                 eventType: 'renamed',
@@ -260,7 +260,7 @@ describe('FileHistory', () => {
             opts,
         );
 
-        const events = await mount.history.list(fileId);
+        const events = mount.history.list(fileId);
         expect(events).toHaveLength(2);
     });
 
@@ -283,12 +283,12 @@ describe('FileHistory', () => {
                 .run();
         }
 
-        const beforePrune = await mount.history.list(fileId, { limit: 600 });
+        const beforePrune = mount.history.list(fileId, { limit: 600 });
         expect(beforePrune.length).toBe(502);
 
         mount.history.prune();
 
-        const afterPrune = await mount.history.list(fileId, { limit: 600 });
+        const afterPrune = mount.history.list(fileId, { limit: 600 });
         expect(afterPrune.length).toBe(500);
     });
 });
@@ -310,7 +310,7 @@ describe('FileHistory old-row prune', () => {
     test('prune drops rows older than 90 days', async () => {
         const fileId = await mount.touchFile(rootId, 'old-event.txt', 'text/plain');
 
-        await mount.history.record({
+        mount.history.record({
             pathId: fileId,
             eventType: 'created',
             actor: { id: 'u7', email: 'u7@test' },
@@ -331,12 +331,12 @@ describe('FileHistory old-row prune', () => {
             })
             .run();
 
-        const beforePrune = await mount.history.list(fileId, { limit: 600 });
+        const beforePrune = mount.history.list(fileId, { limit: 600 });
         expect(beforePrune.length).toBe(2);
 
         mount.history.prune();
 
-        const afterPrune = await mount.history.list(fileId, { limit: 600 });
+        const afterPrune = mount.history.list(fileId, { limit: 600 });
         expect(afterPrune.length).toBe(1);
         expect(afterPrune[0].eventType).toBe('created');
     });

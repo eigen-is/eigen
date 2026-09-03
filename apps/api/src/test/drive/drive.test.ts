@@ -3774,4 +3774,106 @@ describe('Drive', () => {
             expect(managed.db).toBeDefined();
         });
     });
+
+    // The owner's own Drive resolves the path before it acts, so a bogus pathId must 404 rather
+    // than fall through to a mutation on a missing row.
+    describe('Missing path is a 404 on the owner drive', () => {
+        const MISSING = 'no-such-path-id';
+
+        test('listing a missing folder returns 404', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${MISSING}`,
+            );
+            expect(res.status).toBe(404);
+        });
+
+        test('creating a folder or doc under a missing parent returns 404', async () => {
+            const folderRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${MISSING}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folderName: 'ghost' }),
+                },
+            );
+            expect(folderRes.status).toBe(404);
+
+            const docRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${MISSING}/create/doc`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fileName: 'ghost' }),
+                },
+            );
+            expect(docRes.status).toBe(404);
+        });
+
+        test('uploading into a missing parent returns 404', async () => {
+            const formData = new FormData();
+            formData.append('file', new File(['x'], 'ghost.txt', { type: 'text/plain' }));
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${MISSING}`,
+                { method: 'POST', body: formData },
+            );
+            expect(res.status).toBe(404);
+        });
+
+        test('renaming a missing path returns 404', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${MISSING}/rename`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ newName: 'ghost' }),
+                },
+            );
+            expect(res.status).toBe(404);
+        });
+
+        test('moving a missing path, or into a missing target, returns 404', async () => {
+            const missingSource = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${MISSING}/move`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ targetParentId: aliceRootId }),
+                },
+            );
+            expect(missingSource.status).toBe(404);
+
+            const folder = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}`,
+                { folderName: 'Move Missing Target' },
+            );
+            const missingTarget = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${folder.id}/move`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ targetParentId: MISSING }),
+                },
+            );
+            expect(missingTarget.status).toBe(404);
+        });
+
+        test('trashing a missing path returns 404', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${MISSING}`,
+                { method: 'DELETE' },
+            );
+            expect(res.status).toBe(404);
+        });
+    });
 });

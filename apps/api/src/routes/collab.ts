@@ -9,8 +9,7 @@ import type CollabDocument from '../lib/collab/collabDocument';
 import { startLoadingHeartbeat } from '../lib/collab/loading-heartbeat';
 import { ApiError } from '../lib/core/errors';
 import { getSharedDrive } from '../lib/drive';
-import type Drive from '../lib/drive/drive';
-import type SharedDrive from '../lib/drive/sharedDrive';
+import type { DriveLike } from '../lib/drive/get-drive';
 import { touchHomeIfLoaded } from '../lib/home';
 import { sendToHome } from '../lib/home/home-relay';
 import { getUserByEmail, type User } from '../lib/user';
@@ -23,7 +22,7 @@ const toRawWs = (ws: unknown) => (ws as { raw: ServerWebSocket<undefined> }).raw
 type CollabWsData = {
     user?: User;
     params: { ownerId: string; mountId: string; pathId: string };
-    drive?: Drive | SharedDrive;
+    drive?: DriveLike;
     collabDocument?: CollabDocument;
     pingInterval?: ReturnType<typeof setInterval>;
     opened?: Promise<void>;

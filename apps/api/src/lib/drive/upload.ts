@@ -53,11 +53,11 @@ export async function finalizeUpload(
     // History row only — fan-out is the caller's job, so a multi-file upload
     // notifies watchers once per batch instead of once per file.
     if (args.user) {
-        await mount.history.record({
+        mount.history.record({
             pathId,
             eventType: 'uploaded',
             actor: args.user,
-            details: { size: uploadedFile.size ?? 0 },
+            details: { size: uploadedFile.size },
         });
     }
 
@@ -98,7 +98,9 @@ export function regenerateThumbnailAsync(
                     ...(thumbnail.duration !== undefined && { duration: thumbnail.duration }),
                 },
             });
-            drive.emit(SSEventType.DRIVE_FILE_UPLOADED, (await mount.getPath(pathId))!);
+            const updated = await mount.getPath(pathId);
+            if (!updated) return;
+            drive.emit(SSEventType.DRIVE_FILE_UPLOADED, updated);
         } finally {
             await onCleanup?.();
         }

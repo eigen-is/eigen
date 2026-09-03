@@ -18,7 +18,7 @@ export type Lock = {
     userId: string;
 };
 
-const DEFAULT_TTL_MS = 600_000;
+export const LOCK_DEFAULT_TTL_MS = 600_000;
 
 export class LockManager {
     private locks = new Map<string, Lock>();
@@ -68,7 +68,7 @@ export class LockManager {
             depth: args.depth,
             scope: args.scope,
             userId: args.userId,
-            expiresAt: Date.now() + (args.ttlMs ?? DEFAULT_TTL_MS),
+            expiresAt: Date.now() + (args.ttlMs ?? LOCK_DEFAULT_TTL_MS),
         };
         this.locks.set(token, lock);
         let pathTokens = this.byPath.get(args.pathId);
@@ -80,7 +80,7 @@ export class LockManager {
         return lock;
     }
 
-    refresh(token: string, ttlMs = DEFAULT_TTL_MS): Lock | null {
+    refresh(token: string, ttlMs = LOCK_DEFAULT_TTL_MS): Lock | null {
         const lock = this.locks.get(token);
         if (!lock || lock.expiresAt <= Date.now()) return null;
         lock.expiresAt = Date.now() + ttlMs;
@@ -146,5 +146,3 @@ export function parseIfHeaderTokens(header: string | null): string[] {
     if (!header) return [];
     return [...header.matchAll(/<([^>]+)>/g)].map((m) => m[1]);
 }
-
-export const LOCK_DEFAULT_TTL_MS = DEFAULT_TTL_MS;

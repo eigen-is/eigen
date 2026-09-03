@@ -1,8 +1,6 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
-import type Drive from '../drive/drive';
-import { getSharedDrive } from '../drive/get-drive';
-import type SharedDrive from '../drive/sharedDrive';
+import { type DriveLike, getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
 import { enclosingDocumentContainer } from './container-guard';
 import { assertWritable } from './locks';
@@ -29,7 +27,7 @@ function parseDestination(destHeader: string, requestUrl: string): DestParts {
 }
 
 type Resolved = {
-    drive: Drive | SharedDrive;
+    drive: DriveLike;
     src: DrivePath;
     destParent: DrivePath;
     destExisting: DrivePath | null;

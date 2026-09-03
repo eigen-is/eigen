@@ -6,7 +6,7 @@ import { eq, inArray, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { sanitizeFtsQuery } from '../core';
 import { ApiError } from '../core/errors';
-import type { Drive, SharedDrive } from '../drive';
+import type { DriveLike } from '../drive/get-drive';
 import { COMMENT_INDEX_DB_CONFIG } from './comment-db-config';
 import * as commentSchema from './comment-schema';
 
@@ -146,7 +146,7 @@ export class CommentIndex {
     }
 }
 
-export async function openCommentIndex(drive: Drive | SharedDrive, containerPath: DrivePath): Promise<CommentIndex> {
+export async function openCommentIndex(drive: DriveLike, containerPath: DrivePath): Promise<CommentIndex> {
     const dbPath = await drive.getChildByName(containerPath.mountId, containerPath.id, 'comments.db');
     if (!dbPath) throw new ApiError(404, 'comments.db not found');
     const managed = await drive.openDatabase(containerPath.mountId, COMMENT_INDEX_DB_CONFIG, dbPath.id);
@@ -155,11 +155,7 @@ export async function openCommentIndex(drive: Drive | SharedDrive, containerPath
 
 // Convenience: resolves path + opens index. When called with a SharedDrive, getPath enforces
 // read permission; raw Drive callers (own-drive paths) skip the check intentionally.
-export async function getCommentIndex(
-    drive: Drive | SharedDrive,
-    mountId: string,
-    pathId: string,
-): Promise<CommentIndex> {
+export async function getCommentIndex(drive: DriveLike, mountId: string, pathId: string): Promise<CommentIndex> {
     const path = await drive.getPath(mountId, pathId);
     if (!path) throw new ApiError(404, 'Container not found');
     return openCommentIndex(drive, path);
@@ -169,7 +165,7 @@ export async function getCommentIndex(
 // index row, but must never mint a row (+ 'assigned' event + dead-link notification) for a phantom
 // name. Chats live at <container>/chat/<chatName>; require a real .eigenchat there.
 export async function assertCommentChatExists(
-    drive: Drive | SharedDrive,
+    drive: DriveLike,
     mountId: string,
     containerId: string,
     chatName: string,

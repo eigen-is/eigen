@@ -1,7 +1,7 @@
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import type { SSEventChat } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
-import type { Drive, SharedDrive } from '../drive';
+import type { DriveLike } from '../drive/get-drive';
 import { relayEventToMembers, sendToHome } from '../home/home-relay';
 
 export function buildChatEvent(type: SSEventChat['type'], chat: SSEventChat['chat']): SSEventChat {
@@ -15,7 +15,7 @@ export function buildCommentIndexUpdatedEvent(containerId: string, ownerId: stri
 // Mirrors ChatRoom's home.broadcast + notifySharedUsers pair: owner home + effective-member
 // fan-out. Callers that already resolved the members (route validation) pass them in.
 export async function broadcastCommentIndexUpdated(
-    drive: Drive | SharedDrive,
+    drive: DriveLike,
     ownerId: string,
     mountId: string,
     containerId: string,
