@@ -30,7 +30,16 @@ of changes needs all of it.
 5. **Independent review before merge** — a reviewer that did NOT write the code, in two
    stages: spec compliance first, then quality (bugs, edge cases, conventions), held to the
    [Review Standard](#review-standard) below.
-6. **Real-world verification is mandatory** — drive the running dev app headless against REAL
+6. **Standards audit before merge** — a cold reviewer briefed with nothing but [AGENTS.md](../AGENTS.md),
+   [CODE-STANDARDS.md](CODE-STANDARDS.md) and the Review Standard below grades every touched non-test file
+   better / neutral / worse, with a finding per slip: comments (why only, one line, neighbour density,
+   pre-existing slop in a touched file), philosophy (no single-use helpers, no test-only options on
+   production signatures, no casts, `type` over `interface`, one source of truth), and broken windows
+   left behind. It asks a different question than step 5 — not "is this right" but "does every touched
+   file now meet the written bar" — and finds different things; a "worse" or "neutral with findings"
+   blocks the merge until fixed. The mechanical half of that bar is gated for free by
+   `bun scripts/check-standards.ts` in `bun run check`.
+7. **Real-world verification is mandatory** — drive the running dev app headless against REAL
    documents with a throwaway test user, and read the screenshots: verdicts come from pixels
    plus behavioral probes (scroll, click, reload-persistence), not from data-shape assertions
    alone. Data pipelines verify as closed round-trips with feature counts; pure refactors are
@@ -38,13 +47,13 @@ of changes needs all of it.
    (xlsx, ics, eml, …) get spot-opened in the real consumer. Full recipe — test-user
    conventions, auth cookie injection, upload/convert API, HMR workarounds — in
    [VERIFICATION.md](VERIFICATION.md).
-7. **Simplify pass after** — review the whole diff from four angles (reuse, simplification,
+8. **Simplify pass after** — review the whole diff from four angles (reuse, simplification,
    efficiency, altitude), apply what's worth it, and re-gate with the same tests/pixels.
    Per-step reviews catch local issues; this pass catches cross-cutting drift.
-8. **Docs in the same cycle** — update the domain doc and any status/backlog before calling the
+9. **Docs in the same cycle** — update the domain doc and any status/backlog before calling the
    work done; record accepted drifts and out-of-scope decisions where the next session will
    look for them.
-9. **Design changes go in small rounds** — one or two visual changes at a time, screenshots
+10. **Design changes go in small rounds** — one or two visual changes at a time, screenshots
    first, a human verdict before merge.
 
 ## Review Standard

@@ -16,11 +16,11 @@ export type PropMap = Map<string, string>;
 // One requested property. `name` is the local name (prefix stripped) used to match PropMap keys — the same
 // local-name idiom both REPORT parsers use. `prefix`/`ns` are kept only to echo an unknown prop back in its
 // declared namespace inside the 404 propstat.
-interface RequestedProp {
+type RequestedProp = {
     name: string;
     prefix: string;
     ns: string | null;
-}
+};
 
 export type PropfindRequest = { allprop: true } | { allprop: false; props: RequestedProp[] };
 
