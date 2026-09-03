@@ -170,7 +170,7 @@ A manual pass over the DOM chrome after the `sheet-` rename. Recorded so it isn'
 
 ## Next up — kill the config-mirror bug class
 
-N1 and N2 are done. The follow-up question, whether sheets should keep its op log or become a real Yjs document with `Y.UndoManager`, is researched in [PROPOSAL_SHEETS_YJS_WORKBOOK.md](proposals/PROPOSAL_SHEETS_YJS_WORKBOOK.md) (2026-09-03). Its answer: fix the op log in place first (agreed order for same-key conflicts, transformed concurrent inserts, server-side compaction, the two undo fixes above), and build the Yjs version only with stable row/column ids, when the engine needs those anyway.
+N1 and N2 are done. The follow-up question, whether sheets should keep its op log or become a real Yjs document with `Y.UndoManager`, is researched in [PROPOSAL_SHEETS_YJS_WORKBOOK.md](proposals/PROPOSAL_SHEETS_YJS_WORKBOOK.md) (2026-09-03). Its answer: fix the op log in place first (agreed order for same-key conflicts, rebase to array order on concurrent inserts, server-side compaction, the two undo fixes above), and build the Yjs version only with stable row/column ids, when the engine needs those anyway.
 
 N1 landed on 2026-08-28 and N2 on 2026-08-30 (both on branch `sheets-kill-config-mirror`). N2 was **rewritten** before it was built: its stated premise did not survive contact with the code, and the real defect it was groping at turned out to be worse. **Backwards compatibility is explicitly NOT required** (Reinder, 2026-08-28): stored sheet JSON, the op wire shape and the in-memory shape are all free to change.
 
