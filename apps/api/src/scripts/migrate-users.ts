@@ -1,13 +1,11 @@
-/**
- * One-time migration script: copies users from users_current.db to users3.db.
- *
- * For each user in users_current.db:
- *   - If the user (by email) doesn't exist in users3.db, inserts the user row
- *   - Copies the matching account row (preserving the hashed password)
- *   - Adds the user as a member of the default organization
- *
- * Usage:  bun run apps/api/src/scripts/migrate-users.ts
- */
+// One-time migration script: copies users from users_current.db to users3.db.
+//
+// For each user in users_current.db:
+//   - If the user (by email) doesn't exist in users3.db, inserts the user row
+//   - Copies the matching account row (preserving the hashed password)
+//   - Adds the user as a member of the default organization
+//
+// Usage:  bun run apps/api/src/scripts/migrate-users.ts
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';

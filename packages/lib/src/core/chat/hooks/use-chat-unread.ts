@@ -29,7 +29,7 @@ export function useUnreadChatIds(userId: string): Set<string> {
     }, [notifications]);
 }
 
-/** Auto-mark a single chat's notifications as read when the chat is being viewed. */
+// Auto-mark a single chat's notifications as read when the chat is being viewed.
 export function useAutoMarkChatRead(userId: string, chatId: string) {
     const { data: notifications = [] } = useNotifications(userId);
     const markChatRead = useMarkChatRead(userId);

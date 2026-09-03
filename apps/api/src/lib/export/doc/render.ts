@@ -7,10 +7,7 @@ type Lowlight = {
     highlightAuto(code: string): HastNode;
 };
 
-/**
- * Renders a codeBlock node with lowlight syntax highlighting.
- * Caller provides their own lowlight instance so this module stays side-effect-free.
- */
+// The caller passes its lowlight instance so this module stays side-effect-free.
 export function renderCodeBlockNode(
     node: { attrs: Record<string, unknown>; textContent?: string; content?: unknown },
     lowlight: Lowlight,
@@ -49,10 +46,7 @@ function hastToHtml(tree: HastNode): string {
     return '';
 }
 
-/**
- * Renders a taskItem node as an `<li>` with a checkbox. The tiptap static renderer
- * doesn't preserve the `checked` attribute correctly, so we handle it explicitly.
- */
+// The tiptap static renderer drops the `checked` attribute, so the checkbox is rendered here.
 export function renderTaskItemNode(
     node: { attrs: Record<string, unknown> },
     children: string | string[] | undefined,
@@ -64,11 +58,7 @@ export function renderTaskItemNode(
     return `<li data-type="taskItem" data-checked="${dataChecked}"><label><input type="checkbox"${checkedAttr} disabled /></label><div>${content}</div></li>`;
 }
 
-/**
- * Renders a figure node to HTML. The `resolveImgSrc` callback controls how
- * media references are turned into `src` values (data-URIs for export,
- * embed URLs for preview).
- */
+// `resolveImgSrc` decides what a media reference becomes: a data URI for export, an embed URL for preview.
 export function renderFigureNode(
     attrs: Record<string, unknown>,
     resolveImgSrc: FigureImgSrcResolver,

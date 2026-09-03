@@ -8,25 +8,23 @@ import ReactDOM from 'react-dom/client';
 // createRoot() before" warning (and, on some HMR paths, a fatal removeChild).
 const rootCache = new Map<string, ReactDOM.Root>();
 
-/**
- * Mount a React app onto a container element, doing the right thing for both
- * prerendered and SPA pages, and surviving Vite HMR re-evaluation.
- *
- * - HMR re-run: reuse the cached root and `.render()` again — no second
- *   `createRoot`, so no double-root warning.
- * - Prerendered page (container already holds server HTML, e.g. apps/index):
- *   `hydrateRoot`, so React attaches to the existing markup instead of throwing
- *   it away. The first client render MUST match that markup — for the index
- *   site that is guaranteed by AuthProvider rendering children (signed-out)
- *   on the first client render; the session resolves afterwards and swaps the
- *   UI. Using `createRoot` here would discard the server HTML and (in the
- *   incident) left the page dead.
- * - SPA page (empty container, e.g. drive/mail/…): `createRoot`.
- *
- * Container emptiness is decided with `hasChildNodes()`: every app's
- * `index.html` ships `<div id="app"></div>` (no whitespace), so it is false for
- * SPAs and true only once the index prerender injects the app body.
- */
+// Mount a React app onto a container element, doing the right thing for both
+// prerendered and SPA pages, and surviving Vite HMR re-evaluation.
+//
+// - HMR re-run: reuse the cached root and `.render()` again — no second
+//   `createRoot`, so no double-root warning.
+// - Prerendered page (container already holds server HTML, e.g. apps/index):
+//   `hydrateRoot`, so React attaches to the existing markup instead of throwing
+//   it away. The first client render MUST match that markup — for the index
+//   site that is guaranteed by AuthProvider rendering children (signed-out)
+//   on the first client render; the session resolves afterwards and swaps the
+//   UI. Using `createRoot` here would discard the server HTML and (in the
+//   incident) left the page dead.
+// - SPA page (empty container, e.g. drive/mail/…): `createRoot`.
+//
+// Container emptiness is decided with `hasChildNodes()`: every app's
+// `index.html` ships `<div id="app"></div>` (no whitespace), so it is false for
+// SPAs and true only once the index prerender injects the app body.
 export function mountReactApp(elementId: string, component: ReactElement): void {
     const rootElement = document.getElementById(elementId);
 

@@ -1,25 +1,23 @@
-/**
- * seed-demo.ts — builds the "Tuimel Festival" demo world for an EIGEN_DEMO instance.
- *
- * Offline, in-process seeder. Boots the API in the same process (as the test harness does),
- * runs first-run setup, creates a ~20-persona crew in one org + team, and fills a lived-in
- * workspace — team drive, docs, a budget sheet, a slides deck, a stickies board and a site-plan
- * drawing, mail, calendar, chat and contacts — driving the REAL product surfaces as the personas so
- * activity panels, file history and notifications populate for free. Docs and sheets dogfood the
- * shipped .docx/.xlsx importers; slides and stickies are byte-copied fixture containers; the site
- * plan is built into its Y.Doc from a typed spec (demo/vector-build.ts).
- *
- * A host-level reset script wipes the data root hourly and re-runs this, so every timestamp
- * stays < 1h old. It MUST run against an empty data root (it refuses a completed setup).
- *
- * Required env: EIGEN_DATA_ROOT (absolute). Optional: DOMAIN, MAIL_DOMAIN (persona emails =
- * <local-part>@MAIL_DOMAIN), EIGEN_DEMO_ADMIN_PASSWORD (else a random one is printed).
- *
- * Run locally:
- *   cd apps/api && EIGEN_DATA_ROOT=/abs/data MAIL_DOMAIN=tuimel.example bun run src/scripts/seed-demo.ts
- * Run on the demo box (throwaway container, WORKDIR /app/apps/api, compose env applies):
- *   docker compose run --rm --no-deps eigen-api bun run /app/apps/api/src/scripts/seed-demo.ts
- */
+// seed-demo.ts — builds the "Tuimel Festival" demo world for an EIGEN_DEMO instance.
+//
+// Offline, in-process seeder. Boots the API in the same process (as the test harness does),
+// runs first-run setup, creates a ~20-persona crew in one org + team, and fills a lived-in
+// workspace — team drive, docs, a budget sheet, a slides deck, a stickies board and a site-plan
+// drawing, mail, calendar, chat and contacts — driving the REAL product surfaces as the personas so
+// activity panels, file history and notifications populate for free. Docs and sheets dogfood the
+// shipped .docx/.xlsx importers; slides and stickies are byte-copied fixture containers; the site
+// plan is built into its Y.Doc from a typed spec (demo/vector-build.ts).
+//
+// A host-level reset script wipes the data root hourly and re-runs this, so every timestamp
+// stays < 1h old. It MUST run against an empty data root (it refuses a completed setup).
+//
+// Required env: EIGEN_DATA_ROOT (absolute). Optional: DOMAIN, MAIL_DOMAIN (persona emails =
+// <local-part>@MAIL_DOMAIN), EIGEN_DEMO_ADMIN_PASSWORD (else a random one is printed).
+//
+// Run locally:
+//   cd apps/api && EIGEN_DATA_ROOT=/abs/data MAIL_DOMAIN=tuimel.example bun run src/scripts/seed-demo.ts
+// Run on the demo box (throwaway container, WORKDIR /app/apps/api, compose env applies):
+//   docker compose run --rm --no-deps eigen-api bun run /app/apps/api/src/scripts/seed-demo.ts
 import { randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
