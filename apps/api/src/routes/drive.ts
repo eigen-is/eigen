@@ -638,7 +638,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/path/:pathId/history',
         async ({ params, body, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            await drive.recordClientFileEvent(params.mountId, params.pathId, user, body.eventType, body.details);
+            await drive.recordClientFileEvent(params.mountId, params.pathId, user, body);
             return { success: true };
         },
         {

@@ -9,12 +9,17 @@ import {
 import type { User } from '../user';
 import type { Memberships } from '../user/';
 
-// Public visibility that grants read: both public-read and public-write let anyone read.
 export function grantsPublicRead(visibility: DriveVisibility): boolean {
     return visibility === 'public-read' || visibility === 'public-write';
 }
 
-export function canReadFromAncestors(ancestors: DrivePath[], user: User, memberships: Memberships): boolean {
+// Ownership, team membership, public visibility or an ACL entry on the path or any ancestor.
+function canFromAncestors(
+    ancestors: DrivePath[],
+    user: User,
+    memberships: Memberships,
+    permission: 'read' | 'write',
+): boolean {
     for (const path of ancestors) {
         if (path.ownerId === user.id) return true;
 
@@ -23,33 +28,24 @@ export function canReadFromAncestors(ancestors: DrivePath[], user: User, members
             if (memberships.teamIds.includes(parsed.id)) return true;
         }
 
-        if (grantsPublicRead(path.visibility)) return true;
+        if (permission === 'read' ? grantsPublicRead(path.visibility) : path.visibility === 'public-write') {
+            return true;
+        }
 
         if (path.acl) {
-            if (matchesACL(path.acl, user, memberships, 'read')) return true;
+            if (matchesACL(path.acl, user, memberships, permission)) return true;
         }
     }
 
     return false;
 }
 
+export function canReadFromAncestors(ancestors: DrivePath[], user: User, memberships: Memberships): boolean {
+    return canFromAncestors(ancestors, user, memberships, 'read');
+}
+
 export function canWriteFromAncestors(ancestors: DrivePath[], user: User, memberships: Memberships): boolean {
-    for (const path of ancestors) {
-        if (path.ownerId === user.id) return true;
-
-        const parsed = parseOwnerId(path.ownerId);
-        if (parsed.type === 'team') {
-            if (memberships.teamIds.includes(parsed.id)) return true;
-        }
-
-        if (path.visibility === 'public-write') return true;
-
-        if (path.acl) {
-            if (matchesACL(path.acl, user, memberships, 'write')) return true;
-        }
-    }
-
-    return false;
+    return canFromAncestors(ancestors, user, memberships, 'write');
 }
 
 export function matchesACL(
@@ -121,8 +117,8 @@ export function findContainerFromAncestors(ancestors: DrivePath[]): DrivePath | 
     return container;
 }
 
-// Checks if an ACL entry is already covered by inherited permissions from ancestor
-// paths or by ownership of the drive (team membership).
+// Splits an ACL into the entries worth storing and the ones an ancestor's ACL (or team
+// ownership of the drive) already grants.
 export function filterRedundantACL(
     acl: DriveACL[],
     path: DrivePath,
@@ -130,7 +126,7 @@ export function filterRedundantACL(
 ): { filtered: DriveACL[]; removed: DriveACL[] } {
     const inherited = new Map<string, { read: boolean; write: boolean }>();
 
-    // ancestors excludes the path itself, so every entry is a parent/grandparent
+    // Breadcrumbs include the path itself; without the skip every entry would cover itself.
     for (const ancestor of ancestors) {
         if (ancestor.id === path.id) continue;
         if (ancestor.acl) {

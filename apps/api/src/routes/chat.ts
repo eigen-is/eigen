@@ -104,7 +104,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
                         undefined,
                         undefined,
                         user,
-                        { suppressShareEmail: true },
+                        { suppressShareEmail: 'registered' },
                     );
                 } catch (err) {
                     await drive.deletePath(params.mountId, chat.id).catch((e) => {

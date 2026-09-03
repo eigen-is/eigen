@@ -23,20 +23,19 @@ export class CollabRegistry {
 
     async get(drive: Drive, mount: Mount, pathId: string): Promise<CollabDocument> {
         const key = this.key(mount.id, pathId);
-        if (!this.documents.has(key)) {
-            this.documents.set(
-                key,
-                createAsyncSingleton(async () => {
-                    const path = await mount.getActivePath(pathId);
-                    if (!isCollabType(path.type)) {
-                        throw new ApiError(404, 'Document not found');
-                    }
-                    const document = new CollabDocument(drive, path);
-                    return (await document.init()) as CollabDocument;
-                }),
-            );
+        let getter = this.documents.get(key);
+        if (!getter) {
+            getter = createAsyncSingleton(async () => {
+                const path = await mount.getActivePath(pathId);
+                if (!isCollabType(path.type)) {
+                    throw new ApiError(404, 'Document not found');
+                }
+                const document = new CollabDocument(drive, path);
+                return document.init();
+            });
+            this.documents.set(key, getter);
         }
-        return (await this.documents.get(key)!()) as CollabDocument;
+        return getter();
     }
 
     async close(mount: Mount, pathId: string, opts?: { skipFinalSnapshot?: boolean }): Promise<void> {

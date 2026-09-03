@@ -5,6 +5,7 @@ import { ApiError } from '../core';
 import type Drive from '../drive/drive';
 import type { Mount } from '../mount/mount';
 import { DEFAULT_RETENTION, type RetentionPolicy } from './retention';
+import { VERSIONS_FOLDER_NAME } from './versions-folder';
 
 export async function restoreContainer(
     drive: Drive,
@@ -13,7 +14,7 @@ export async function restoreContainer(
     snapshotName: string,
     policy: RetentionPolicy = DEFAULT_RETENTION,
 ): Promise<void> {
-    const versions = await mount.getChildByName(container.id, 'versions');
+    const versions = await mount.getChildByName(container.id, VERSIONS_FOLDER_NAME);
     if (!versions) throw new ApiError(404, 'No versions folder');
     const target = await mount.getChildByName(versions.id, snapshotName);
     if (!target) throw new ApiError(404, `Snapshot ${snapshotName} not found`);

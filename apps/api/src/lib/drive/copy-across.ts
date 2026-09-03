@@ -2,10 +2,8 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FOLDER, isContainerType } from '@workspace/lib/types/drive';
 import { ApiError } from '../core';
 import type { User } from '../user';
-import type Drive from './drive';
-import type SharedDrive from './sharedDrive';
-
-type DriveLike = Drive | SharedDrive;
+import { isVersionsFolder } from '../versioning/versions-folder';
+import type { DriveLike } from './get-drive';
 
 // Recursive copy across mount and/or owner boundaries. Re-uploads each file into
 // the target via downloadFile + createFileFromData; recreates folders/containers
@@ -32,7 +30,7 @@ export async function copyPathAcross(
 
         const children = await source.getFolderContents(srcMountId, srcPathId);
         for (const child of children) {
-            if (isEigenDoc && child.type === DRIVE_TYPE_FOLDER && child.name === 'versions') continue;
+            if (isEigenDoc && isVersionsFolder(child)) continue;
             await copyPathAcross(source, srcMountId, child.id, target, destMountId, created.id, child.name, user);
         }
         return created;

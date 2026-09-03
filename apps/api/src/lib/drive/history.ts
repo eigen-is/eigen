@@ -26,13 +26,10 @@ export class FileHistory {
         readonly mountId: string,
     ) {}
 
-    // Entities living inside an eigendoc/chat container (per-card comment threads,
-    // attachment media, the chat/ + media/ subfolders) are container scaffolding
-    // and never belong in the timeline — the container speaks through its own
-    // events + client-emitted sticky-*/slide-* events. Walks the parentId chain
-    // for a document-type (collab or chat) ancestor strictly above the path.
+    // Entities inside an eigendoc/chat container (per-card comment threads, attachment media)
+    // are scaffolding, never timeline rows — the container speaks through its own events.
     private isContainerInternal(pathId: string): boolean {
-        const ancestors = this.db.all<{ type: string }>(sql`
+        const ancestors = this.db.all<{ type: DrivePathType }>(sql`
             WITH RECURSIVE chain(id) AS (
                 SELECT ${sql.raw('parentId')} FROM ${paths} WHERE id = ${pathId} AND ${sql.raw('parentId')} IS NOT NULL
                 UNION
@@ -41,10 +38,10 @@ export class FileHistory {
             )
             SELECT p.type AS type FROM ${paths} p JOIN chain c ON p.id = c.id
         `);
-        return ancestors.some((a) => isDocumentType(a.type as DrivePathType));
+        return ancestors.some((a) => isDocumentType(a.type));
     }
 
-    async record(input: FileEventInput, opts?: { dedupeWindowMs?: number }): Promise<void> {
+    record(input: FileEventInput, opts?: { dedupeWindowMs?: number }): void {
         if (this.isContainerInternal(input.pathId)) return;
         if (opts?.dedupeWindowMs) {
             const last = this.db
@@ -79,7 +76,7 @@ export class FileHistory {
 
     // File: direct events. Folder/container: events on the path and every descendant
     // (recursive CTE downward), newest first.
-    async list(pathId: string, opts?: { limit?: number }): Promise<FileEvent[]> {
+    list(pathId: string, opts?: { limit?: number }): FileEvent[] {
         const limit = opts?.limit ?? 50;
 
         const rows = this.db.all<{
@@ -91,7 +88,7 @@ export class FileHistory {
             details: string | null;
             createdAt: number;
             pathName: string;
-            pathType: string;
+            pathType: DrivePathType;
         }>(sql`
             WITH RECURSIVE subtree(id) AS (
                 SELECT id FROM ${paths} WHERE id = ${pathId}
@@ -113,10 +110,10 @@ export class FileHistory {
             eventType: toFileEventType(row.eventType),
             actorUserId: row.actorUserId,
             actorEmail: row.actorEmail,
-            details: row.details != null ? (JSON.parse(row.details) as never) : null,
+            details: row.details != null ? JSON.parse(row.details) : null,
             createdAt: new Date(row.createdAt * 1000),
             pathName: row.pathName,
-            pathType: row.pathType as FileEvent['pathType'],
+            pathType: row.pathType,
         }));
     }
 
@@ -220,12 +217,8 @@ export class FileHistory {
         const d = opts.details;
         const cardId = d && 'cardId' in d ? d.cardId : undefined;
         const chatName = d && 'chatName' in d ? d.chatName : undefined;
-        // Per-watcher lookups run concurrently — a shared folder with many watchers
-        // would otherwise add serial auth-db round-trips to every mutation request.
-        // Each watcher is isolated and best-effort: delivery happens after the mutation
-        // already committed, so one watcher's auth-db hiccup must neither reject the
-        // fan-out (which would 500 the committed write / abort emptyTrash mid-loop) nor
-        // drop the other watchers — a bare Promise.all would do both on the first reject.
+        // Concurrent + per-watcher isolated: delivery runs after the mutation committed, so one
+        // watcher's auth-db hiccup must neither reject the fan-out nor drop the other watchers.
         await Promise.all(
             watcherIds.map(async (watcherId) => {
                 try {
@@ -286,14 +279,11 @@ export class FileHistory {
         });
     }
 
-    // Synchronous; called fire-and-forget from Mount.init.
     prune(): void {
-        // Drop rows older than 90 days
         this.db.run(sql`
             DELETE FROM ${fileEvents}
             WHERE createdAt < unixepoch() - ${HISTORY_MAX_AGE_DAYS * 24 * 3600}
         `);
-        // Trim rows beyond 500 per path (keep the newest ones)
         this.db.run(sql`
             DELETE FROM ${fileEvents} WHERE id IN (
                 SELECT id FROM (

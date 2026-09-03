@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import type { HomeSizeResponse } from '@workspace/lib/types/settings';
+import type { HomeSizeResponse, UserSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { createAsyncSingleton } from '../../utils/singleton';
 import { time } from '../../utils/timing';
@@ -19,7 +19,7 @@ import type { Mail } from '../mail/mail-domain';
 import type { NotificationCenter } from '../notification-center/notification-center';
 import type { User } from '../user';
 
-export type HomeSettings = Record<string, unknown>;
+export type HomeSettings = Pick<UserSettings, 'mounts'>;
 
 export class Home {
     public user: User;

@@ -9,11 +9,10 @@ import { addRegistryEntry } from '../share';
 import { getTeamMembers } from '../team';
 import { getUserByEmail } from '../user/';
 
-// Opt-in (default share behaviour stays byte-identical): `true` skips the share email for entries
-// that resolve to a registered user — mirror fan-out, SSE, and in-app notification still fire, and
-// account-less emails keep the email as their only invite vehicle (used by the new-chat wizard).
-// `'all'` additionally skips account-less emails — for internal grants that carry their own invite.
-export type ACLPropagationOptions = { suppressShareEmail?: boolean | 'all' };
+// 'registered' skips the share email for entries that resolve to a registered user — mirror fan-out,
+// SSE and the in-app notification still fire, and an account-less email keeps the mail as its only
+// invite vehicle. 'all' also skips account-less emails, for internal grants carrying their own invite.
+export type ACLPropagationOptions = { suppressShareEmail?: 'registered' | 'all' };
 
 export async function resolveACLUserIds(ownerId: string, acls: DriveACL[]): Promise<Set<string>> {
     const ids = new Set<string>();
@@ -53,68 +52,47 @@ export function diffACLEmails(
     };
 }
 
+// Merge into an effective-member map keyed by lowercased email: most permissive wins.
+export function addEffectiveMember(
+    members: Map<string, EffectiveMember>,
+    email: string,
+    read: boolean,
+    write: boolean,
+): void {
+    const key = email.toLowerCase();
+    const existing = members.get(key);
+    if (existing) {
+        existing.read = existing.read || read;
+        existing.write = existing.write || write;
+    } else {
+        members.set(key, { email: key, read, write });
+    }
+}
+
 // Resolves ACL entries to individual user emails with permissions.
 // Teams are expanded to their members. Deduplicated by email (most permissive wins).
 export async function resolveACLToEmails(acls: DriveACL[]): Promise<Map<string, EffectiveMember>> {
     const members = new Map<string, EffectiveMember>();
-
-    function addMember(email: string, read: boolean, write: boolean) {
-        const key = email.toLowerCase();
-        const existing = members.get(key);
-        if (existing) {
-            existing.read = existing.read || read;
-            existing.write = existing.write || write;
-        } else {
-            members.set(key, { email: key, read, write });
-        }
-    }
 
     for (const acl of acls) {
         const parsed = parseOwnerId(acl.id);
         if (parsed.type === 'team') {
             const teamMembers = await getTeamMembers(parsed.id);
             for (const m of teamMembers) {
-                addMember(m.user.email, acl.read, acl.write);
+                addEffectiveMember(members, m.user.email, acl.read, acl.write);
             }
         } else {
-            addMember(acl.id, acl.read, acl.write);
+            addEffectiveMember(members, acl.id, acl.read, acl.write);
         }
     }
     return members;
 }
 
-async function emailNewlyAddedAclEntries(
-    path: DrivePath,
-    addedUserEmails: string[],
-    actor: { name: string; email: string },
-    suppress: boolean | 'all',
-): Promise<void> {
-    // 'all' suppresses every share email, including account-less invites the caller replaces itself.
-    if (suppress === 'all') return;
-    const settings = getServerSettings();
-    for (const email of addedUserEmails) {
-        const target = await getUserByEmail(email);
-        // Suppression only covers users reachable in-app; an account-less email still needs the invite.
-        if (suppress && target) continue;
-        const isGuest = !target || target.role === 'guest';
-        const enabled = isGuest
-            ? settings.notifications.email.guestOnAclAdd
-            : settings.notifications.email.userOnAclAdd;
-        if (!enabled) continue;
-        sendMail(composeShareEmail(path, email, actor)).catch((err) =>
-            console.error('Failed to send share email:', err),
-        );
-    }
-}
-
-// Recipient delivery is asynchronous: shared_paths mirrors, notifications, and recipient SSE are
-// derived state (enforcement is always owner-side via SharedDrive/canReadFromAncestors), so the
-// request never waits for per-recipient home opens — a 25-person ACL previously cost 1–2s of
-// sequential cold home opens. The semaphore bounds concurrent opens (each open Home costs
-// ~25–30 fds); the per-path promise chain keeps rapid successive changes to the same path
-// ordered per recipient — an out-of-order add→revoke would resurrect a stale mirror row. In-flight
-// deliveries are lost on a crash (same window the old swallowed-error loop had); the durable
-// outbox that closes it is roadmapped (ROADMAP.md § Durable home-relay outbox).
+// Delivery is derived state (enforcement is always owner-side via SharedDrive/canReadFromAncestors),
+// so the request never waits on per-recipient home opens. The semaphore bounds concurrent opens
+// (~25–30 fds each); the per-path chain keeps successive changes to one path ordered per recipient,
+// since an out-of-order add→revoke would resurrect a stale mirror row. In-flight deliveries are lost
+// on a crash — the durable outbox that closes it is roadmapped (ROADMAP.md § Durable home-relay outbox).
 const FAN_OUT_CONCURRENCY = 8;
 const fanOutSemaphore = new Semaphore(FAN_OUT_CONCURRENCY);
 const pendingFanOuts = new Map<string, Promise<void>>();
@@ -171,10 +149,24 @@ export async function propagateSharedPathChange(
 
     queueACLFanOut(ids, path, newACL, actor?.email, actor?.name);
 
-    if (actor && newACL) {
+    const suppress = options?.suppressShareEmail;
+    if (actor && newACL && suppress !== 'all') {
         const addedUserEmails = diffACLEmails(oldACL, newACL).added.filter((e) => parseOwnerId(e).type === 'user');
         if (addedUserEmails.length > 0) {
-            await emailNewlyAddedAclEntries(path, addedUserEmails, actor, options?.suppressShareEmail ?? false);
+            const settings = getServerSettings();
+            for (const email of addedUserEmails) {
+                const target = await getUserByEmail(email);
+                // Suppression only covers users reachable in-app; an account-less email still needs the invite.
+                if (suppress === 'registered' && target) continue;
+                const isGuest = !target || target.role === 'guest';
+                const enabled = isGuest
+                    ? settings.notifications.email.guestOnAclAdd
+                    : settings.notifications.email.userOnAclAdd;
+                if (!enabled) continue;
+                sendMail(composeShareEmail(path, email, actor)).catch((err) =>
+                    console.error('Failed to send share email:', err),
+                );
+            }
         }
     }
 }

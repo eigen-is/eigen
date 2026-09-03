@@ -216,7 +216,7 @@ describe('ACL share email', () => {
         spy.mockRestore();
     });
 
-    test('suppressShareEmail true still emails an account-less address', async () => {
+    test("suppressShareEmail 'registered' still emails an account-less address", async () => {
         const aliceHome = await getHome(ctx.alice.user.id);
         const mailer = await import('../../lib/core/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
@@ -231,7 +231,7 @@ describe('ACL share email', () => {
             undefined,
             undefined,
             aliceHome.user,
-            { suppressShareEmail: true },
+            { suppressShareEmail: 'registered' },
         );
         await new Promise((r) => setTimeout(r, 10));
 

@@ -6,7 +6,6 @@ import {
     DRIVE_TYPE_FOLDER,
     type MountConfig,
     type MountInfo,
-    type MountSettings,
     mountStorageIdentity,
     parseOwnerId,
 } from '@workspace/lib/types';
@@ -25,14 +24,13 @@ import {
     withEigenExtension,
 } from '@workspace/lib/types/drive';
 import {
-    type ClientFileEventType,
+    type ClientFileEventRecord,
     type FileEvent,
-    type FileEventDetailsMap,
-    type FileEventInput,
-    type FileEventType,
+    type FileEventRecord,
     isClientFileEventType,
     type PathWatchStatus,
 } from '@workspace/lib/types/file-history';
+import type { SSEventDrive } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { validateACLEntries, validateEmailAddress } from '@workspace/lib/validation';
@@ -45,11 +43,10 @@ import { ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType } 
 import { composeCollaboratorsEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
-import { createDefaultMountConfig, createMountConfig, Mount } from '../mount';
+import { createDefaultMountConfig, createMountConfig, type MimeOptions, Mount } from '../mount';
 import { extractText } from '../search/extract-text';
 import { getEntriesForTarget } from '../share';
 import type { StorageFile } from '../storage';
-import { getTeamMembers } from '../team';
 import type { User } from '../user';
 import { getMemberships, getUserByEmail, type Memberships } from '../user/';
 import { listVersions } from '../versioning/list';
@@ -67,6 +64,7 @@ import {
 } from './acl';
 import {
     type ACLPropagationOptions,
+    addEffectiveMember,
     diffACLEmails,
     propagateSharedPathChange,
     resolveACLToEmails,
@@ -114,8 +112,7 @@ export default class Drive {
     }
 
     async init(autoCreateDefaultMount: boolean = false): Promise<void> {
-        const settings = this.home.settings?.get() as Record<string, unknown> | undefined;
-        const mountSettings = (settings?.['mounts'] ?? {}) as Record<string, MountSettings>;
+        const mountSettings = this.home.settings.get().mounts ?? {};
 
         for (const [id, ms] of Object.entries(mountSettings)) {
             if (!ms.enabled) continue;
@@ -215,17 +212,17 @@ export default class Drive {
     // config/enforcement (quota checks during uploads). Not directly route-callable.
     async size(mountId: string): Promise<number> {
         const mount = this.getMount(mountId);
-        return await mount.getTotalSize();
+        return mount.getTotalSize();
     }
 
     async getRootFolder(mountId: string): Promise<DrivePath | null> {
         const mount = this.getMount(mountId);
-        return await mount.getRootFolder();
+        return mount.getRootFolder();
     }
 
     async getPath(mountId: string, pathId: string): Promise<DrivePath | null> {
         const mount = this.getMount(mountId);
-        return await mount.getPath(pathId);
+        return mount.getPath(pathId);
     }
 
     async resolvePath(mountId: string, pathStr: string): Promise<DrivePath | null> {
@@ -239,11 +236,7 @@ export default class Drive {
             throw new ApiError(404, 'Folder not found');
         }
 
-        if (!(await this.canRead(mountId, pathId, this.owner))) {
-            throw new ApiError(403, 'No read permission');
-        }
-
-        return await mount.listFolder(pathId);
+        return mount.listFolder(pathId);
     }
 
     async createFolder(
@@ -259,15 +252,11 @@ export default class Drive {
             throw new ApiError(404, 'Parent folder not found');
         }
 
-        if (!(await this.canWrite(mountId, parentId, this.owner))) {
-            throw new ApiError(403, 'No write permission');
-        }
-
         const pathId = await mount.createFolder(parentId, folderName, containerType);
         const folder = await mount.getPath(pathId);
         if (!folder) throw new ApiError(500, 'Failed to create folder');
         this.emit(SSEventType.DRIVE_FOLDER_CREATED, folder);
-        if (user) await this.recordFileEvent(mountId, folder.id, user, 'created', undefined, { burst: true });
+        if (user) await this.recordFileEvent(mountId, folder.id, user, { eventType: 'created' }, { burst: true });
         return folder;
     }
 
@@ -276,10 +265,6 @@ export default class Drive {
         const parent = await mount.getActivePath(parentId);
         if (!isContainerType(parent.type)) {
             throw new ApiError(404, 'Parent folder not found');
-        }
-
-        if (!(await this.canWrite(mountId, parentId, this.owner))) {
-            throw new ApiError(403, 'No write permission');
         }
 
         const safeName = withEigenExtension(name, type);
@@ -306,7 +291,7 @@ export default class Drive {
         if (!created) throw new ApiError(500, `Failed to create ${type}`);
         this.emit(SSEventType.DRIVE_FILE_CREATED, created);
         // Not burst: a single new document deserves its own tag
-        if (user) await this.recordFileEvent(mountId, created.id, user, 'created');
+        if (user) await this.recordFileEvent(mountId, created.id, user, { eventType: 'created' });
         return created;
     }
 
@@ -368,8 +353,7 @@ export default class Drive {
                 mountId,
                 pathId,
                 user,
-                'assigned',
-                { assignee, card, chatName },
+                { eventType: 'assigned', details: { assignee, card, chatName } },
                 { excludeEmails: new Set([assignee]) },
             );
         }
@@ -391,10 +375,10 @@ export default class Drive {
         if (card) await index.setTitle(chatName, card);
         if (status === 'resolved') {
             await index.resolve(chatName, user.email);
-            await this.recordFileEvent(mountId, pathId, user, 'resolved', { card, chatName });
+            await this.recordFileEvent(mountId, pathId, user, { eventType: 'resolved', details: { card, chatName } });
         } else {
             await index.reopen(chatName);
-            await this.recordFileEvent(mountId, pathId, user, 'reopened', { card, chatName });
+            await this.recordFileEvent(mountId, pathId, user, { eventType: 'reopened', details: { card, chatName } });
         }
     }
 
@@ -409,10 +393,6 @@ export default class Drive {
         const parent = await mount.getActivePath(parentId);
         if (parent.type !== DRIVE_TYPE_FOLDER) {
             throw new ApiError(404, 'Parent folder not found');
-        }
-
-        if (!(await this.canWrite(mountId, parentId, this.owner))) {
-            throw new ApiError(403, 'No write permission');
         }
 
         const streamed = await streamFilesToTemp(mount, request, maxSize);
@@ -447,7 +427,7 @@ export default class Drive {
                 path: lastUploaded,
                 chainRootIds: [parentId],
                 burst: true,
-                details: { size: lastUploaded.size ?? 0 },
+                details: { size: lastUploaded.size },
                 verifyAncestors: () => mount.getBreadcrumb(lastUploaded.id),
             });
         }
@@ -470,10 +450,6 @@ export default class Drive {
         // isContainerType gate; only a leaf file can never be a parent.
         if (!isContainerType(parent.type)) throw new ApiError(400, 'Target is not a folder');
 
-        if (!(await this.canWrite(mountId, parentId, this.owner))) {
-            throw new ApiError(403, 'No write permission');
-        }
-
         const tempId = randomUUID();
         try {
             const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), data);
@@ -485,7 +461,7 @@ export default class Drive {
                     path: created,
                     chainRootIds: [created.parentId],
                     burst: true,
-                    details: { size: created.size ?? 0 },
+                    details: { size: created.size },
                     verifyAncestors: () => mount.getBreadcrumb(created.id),
                 });
             }
@@ -500,9 +476,6 @@ export default class Drive {
         const mount = this.getMount(mountId);
         const item = await mount.getActivePath(pathId);
         if (item.parentId === null) throw new ApiError(400, 'Cannot trash root folder');
-        if (!(await this.canWrite(mountId, pathId, this.owner))) {
-            throw new ApiError(403, 'No write permission');
-        }
         await deletePath(this, mount, item, user);
     }
 
@@ -544,14 +517,6 @@ export default class Drive {
             throw new ApiError(404, 'Target parent is not a folder');
         }
 
-        if (!(await this.canWrite(mountId, pathId, this.owner))) {
-            throw new ApiError(403, 'No write permission');
-        }
-
-        if (!(await this.canWrite(mountId, targetParentId, this.owner))) {
-            throw new ApiError(403, 'No write permission on target folder');
-        }
-
         if (await mount.isSelfOrDescendant(pathId, targetParentId)) {
             throw new ApiError(400, 'Cannot move a folder into itself or its own descendant');
         }
@@ -564,7 +529,7 @@ export default class Drive {
         if (!movedPath) throw new ApiError(500, 'Failed to move path');
         this.emit(SSEventType.DRIVE_PATH_MOVED, movedPath, oldParentId ?? undefined);
         if (user && oldParentId) {
-            await mount.history.record({
+            mount.history.record({
                 pathId,
                 eventType: 'moved',
                 actor: user,
@@ -597,10 +562,6 @@ export default class Drive {
         const item = await mount.getActivePath(pathId);
         const oldName = item.name;
 
-        if (!(await this.canWrite(mountId, pathId, this.owner))) {
-            throw new ApiError(403, 'No write permission');
-        }
-
         await mount.updatePath(pathId, { name: newName });
         const renamedItem = await mount.getPath(pathId);
         if (renamedItem) {
@@ -609,13 +570,15 @@ export default class Drive {
             await propagateSharedPathChange(renamedItem, renamedItem.acl, renamedItem.acl, null);
             this.emit(SSEventType.DRIVE_PATH_RENAMED, renamedItem);
         }
-        if (user) await this.recordFileEvent(mountId, pathId, user, 'renamed', { oldName, newName });
+        if (user) {
+            await this.recordFileEvent(mountId, pathId, user, { eventType: 'renamed', details: { oldName, newName } });
+        }
     }
 
-    async downloadFile(mountId: string, pathId: string) {
+    async downloadFile(mountId: string, pathId: string): Promise<StorageFile | null> {
         const mount = this.getMount(mountId);
         await mount.getActivePath(pathId);
-        return await mount.readFile(pathId);
+        return mount.readFile(pathId);
     }
 
     // Flushes a container's live data.db before a copy.
@@ -678,9 +641,6 @@ export default class Drive {
         if (path.type !== DRIVE_TYPE_FILE) {
             throw new ApiError(404, 'File not found');
         }
-        if (!(await this.canWrite(mountId, pathId, this.owner))) {
-            throw new ApiError(403, 'No write permission');
-        }
 
         let thumbnailSource: Buffer | string | null = null;
         let thumbnailCleanup: (() => Promise<void>) | undefined;
@@ -711,7 +671,12 @@ export default class Drive {
         const updated = await mount.getPath(pathId);
         if (!updated) throw new ApiError(500, 'Failed to get updated file');
         this.emit(SSEventType.DRIVE_FILE_UPLOADED, updated);
-        if (user) await this.recordFileEvent(mountId, pathId, user, 'uploaded', { size: updated.size ?? 0 });
+        if (user) {
+            await this.recordFileEvent(mountId, pathId, user, {
+                eventType: 'uploaded',
+                details: { size: updated.size },
+            });
+        }
 
         if (thumbnailSource !== null) {
             regenerateThumbnailAsync(
@@ -735,11 +700,8 @@ export default class Drive {
 
     async getMimeTypeContents(
         mimeType: string,
-        options: {
-            excludeDocumentChildren?: boolean;
-        } = { excludeDocumentChildren: true },
+        options: MimeOptions = { excludeDocumentChildren: true },
     ): Promise<DrivePath[]> {
-        // Aggregate results from all mounts
         const allResults: DrivePath[] = [];
         for (const mount of this.mounts.values()) {
             const mountResults = await mount.getPathsByMimeType(mimeType, options);
@@ -754,9 +716,7 @@ export default class Drive {
     async getMountMimeTypeContents(
         mountId: string,
         mimeType: string,
-        options: {
-            excludeDocumentChildren?: boolean;
-        } = { excludeDocumentChildren: true },
+        options: MimeOptions = { excludeDocumentChildren: true },
     ): Promise<DrivePath[]> {
         const mount = this.getMount(mountId);
         return mount.getPathsByMimeType(mimeType, options);
@@ -783,7 +743,7 @@ export default class Drive {
 
     async breadCrumb(mountId: string, pathId: string): Promise<DrivePath[]> {
         const mount = this.getMount(mountId);
-        return await mount.getBreadcrumb(pathId);
+        return mount.getBreadcrumb(pathId);
     }
 
     // One tail per path: updateACLDelta's read-merge-write must not interleave with a concurrent
@@ -883,7 +843,10 @@ export default class Drive {
             if (actor) {
                 const { added, removed } = diffACLEmails(oldACL, normalizedACL);
                 if (added.length || removed.length) {
-                    await this.recordFileEvent(mountId, pathId, actor, 'acl-changed', { added, removed });
+                    await this.recordFileEvent(mountId, pathId, actor, {
+                        eventType: 'acl-changed',
+                        details: { added, removed },
+                    });
                 }
             }
             // A revoked read must drop the user's live collab socket now, not whenever they
@@ -907,7 +870,6 @@ export default class Drive {
     // Split out of getEffectiveMembers so checkAccessForEmails can reuse the single getBreadcrumb
     // walk it already needs for visibility instead of paying for a second recursive CTE.
     private async membersFromCrumbs(crumbs: DrivePath[]): Promise<EffectiveMember[]> {
-        // Collect ACL entries from the path and all ancestors
         const allACL: DriveACL[] = [];
         for (const crumb of crumbs) {
             if (crumb.acl) {
@@ -915,30 +877,16 @@ export default class Drive {
             }
         }
 
-        // Resolve explicit ACL entries to individual emails (expands teams, deduplicates)
-        const members = await resolveACLToEmails(allACL);
-
-        function addMember(email: string) {
-            const key = email.toLowerCase();
-            const existing = members.get(key);
-            if (existing) {
-                existing.read = true;
-                existing.write = true;
-            } else {
-                members.set(key, { email: key, read: true, write: true });
-            }
-        }
-
-        // Team-owned drives: all team members have implicit full access
-        // (same logic as canRead/canWrite in acl.ts)
+        // A team-owned drive grants every member full access (acl.ts does the same for canRead/
+        // canWrite), so the owner rides along as a last ACL entry and resolveACLToEmails expands it.
         const parsed = parseOwnerId(this.owner.id);
         if (parsed.type === 'team') {
-            const teamMembers = await getTeamMembers(parsed.id);
-            for (const m of teamMembers) {
-                addMember(m.user.email);
-            }
-        } else if (this.owner.email) {
-            addMember(this.owner.email);
+            allACL.push({ id: this.owner.id, read: true, write: true });
+        }
+
+        const members = await resolveACLToEmails(allACL);
+        if (parsed.type !== 'team' && this.owner.email) {
+            addEffectiveMember(members, this.owner.email, true, true);
         }
 
         return [...members.values()];
@@ -1090,8 +1038,9 @@ export default class Drive {
         if (!container) throw new ApiError(404, `Container ${containerId} not found`);
         await restoreContainer(this, mount, container, snapshotName);
         if (user) {
-            await this.recordFileEvent(mountId, containerId, user, 'version-restored', {
-                versionName: snapshotName,
+            await this.recordFileEvent(mountId, containerId, user, {
+                eventType: 'version-restored',
+                details: { versionName: snapshotName },
             });
         }
     }
@@ -1106,28 +1055,25 @@ export default class Drive {
     // Drive.recordClientFileEvent below. Not route-callable — no SharedDrive wrapper.
     // Mutations that rewrite the parent chain (trash/move/permanent-delete) or recurse
     // through mounts (copy) keep their own inline record + fan-out instead.
-    async recordFileEvent<K extends FileEventType>(
+    async recordFileEvent(
         mountId: string,
         pathId: string,
         actor: User,
-        eventType: K,
-        details?: K extends keyof FileEventDetailsMap ? FileEventDetailsMap[K] : undefined,
+        event: FileEventRecord,
         opts?: { excludeEmails?: Set<string>; dedupeWindowMs?: number; burst?: boolean },
     ): Promise<void> {
         const mount = this.getMount(mountId);
         const path = await mount.getPath(pathId);
         if (!path || path.trashedAt) return;
-        await mount.history.record({ pathId, eventType, actor, details } as FileEventInput, {
-            dedupeWindowMs: opts?.dedupeWindowMs,
-        });
+        mount.history.record({ pathId, actor, ...event }, { dedupeWindowMs: opts?.dedupeWindowMs });
         await mount.history.fanOut({
-            eventType,
+            eventType: event.eventType,
             actor,
             path,
             chainRootIds: [path.parentId],
             burst: opts?.burst,
             excludeEmails: opts?.excludeEmails,
-            details,
+            details: event.details,
             verifyAncestors: () => mount.getBreadcrumb(pathId),
         });
         // Live-refresh open Activity panels for the owner + everyone the item is shared with.
@@ -1141,14 +1087,13 @@ export default class Drive {
         mountId: string,
         pathId: string,
         user: User,
-        eventType: ClientFileEventType,
-        details: FileEventDetailsMap[ClientFileEventType],
+        event: ClientFileEventRecord,
     ): Promise<void> {
         // Defence in depth — the route's typebox union is the primary gate.
-        if (!isClientFileEventType(eventType)) {
-            throw new ApiError(400, `Event type not client-postable: ${eventType}`);
+        if (!isClientFileEventType(event.eventType)) {
+            throw new ApiError(400, `Event type not client-postable: ${event.eventType}`);
         }
-        await this.recordFileEvent(mountId, pathId, user, eventType, details, { dedupeWindowMs: 30_000 });
+        await this.recordFileEvent(mountId, pathId, user, event, { dedupeWindowMs: 30_000 });
     }
 
     async watchPath(mountId: string, pathId: string, user: User): Promise<void> {
@@ -1191,8 +1136,8 @@ export default class Drive {
     // transient storage hiccup during create would leave a dead-letter row
     // that makes every subsequent open() throw 503. Uses mount.deletePath
     // (not Drive.deletePath, which trashes via mount.trashPath and runs
-    // canWrite/ACL/SSE side effects that don't apply to a never-opened
-    // brand-new metadata row).
+    // ACL/SSE side effects that don't apply to a never-opened brand-new
+    // metadata row).
     async provisionManagedDbs(
         mountId: string,
         parentId: string,
@@ -1351,7 +1296,7 @@ export default class Drive {
 
     // Called by: the extracted Drive body modules (upload.ts, trash.ts). Not route-callable —
     // no SharedDrive wrapper, so the union keeps it off the route surface.
-    emit(type: Parameters<typeof buildDriveEvent>[0], path: DrivePath, oldParentId?: string): void {
+    emit(type: SSEventDrive['type'], path: DrivePath, oldParentId?: string): void {
         this.home.broadcast(buildDriveEvent(type, path, oldParentId));
     }
 }

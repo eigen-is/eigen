@@ -36,17 +36,19 @@ export const CLIENT_FILE_EVENT_TYPES = [
 export type ClientFileEventType = (typeof CLIENT_FILE_EVENT_TYPES)[number];
 
 export function isClientFileEventType(t: string): t is ClientFileEventType {
-    return (CLIENT_FILE_EVENT_TYPES as readonly string[]).includes(t);
+    return CLIENT_FILE_EVENT_TYPES.some((x) => x === t);
 }
 
-// Discriminated write input: details required exactly when the event type has them.
-export type FileEventInput = {
-    [K in FileEventType]: {
-        pathId: string;
-        eventType: K;
-        actor: { id: string; email: string };
-    } & (K extends keyof FileEventDetailsMap ? { details: FileEventDetailsMap[K] } : { details?: undefined });
+// Discriminated write payload: details required exactly when the event type has them.
+export type FileEventRecord = {
+    [K in FileEventType]: { eventType: K } & (K extends keyof FileEventDetailsMap
+        ? { details: FileEventDetailsMap[K] }
+        : { details?: undefined });
 }[FileEventType];
+
+export type ClientFileEventRecord = Extract<FileEventRecord, { eventType: ClientFileEventType }>;
+
+export type FileEventInput = FileEventRecord & { pathId: string; actor: { id: string; email: string } };
 
 // Discriminated read shape. pathName/pathType are resolved at read time so folder
 // timelines can name and link the descendant the event happened on.

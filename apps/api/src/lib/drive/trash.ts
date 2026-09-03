@@ -1,4 +1,4 @@
-import { type DrivePath, isChatType, isCollabType, isContainerType } from '@workspace/lib/types/drive';
+import { type DrivePath, isCollabType, isContainerType } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { Mount } from '../mount';
 import type { User } from '../user';
@@ -7,7 +7,7 @@ import type Drive from './drive';
 import { broadcastFileHistoryUpdated } from './sse-events';
 
 // Trash lifecycle bodies. Drive's deletePath/restorePath/permanentlyDelete keep their
-// liveness + permission checks and delegate here (the versioning/restore.ts pattern).
+// liveness checks and delegate here (the versioning/restore.ts pattern).
 
 export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, user?: User): Promise<void> {
     // Capture BEFORE trashPath re-parents the item to the mount root — the
@@ -24,23 +24,14 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
     if (isContainerType(item.type)) {
         await closeCollabDocumentsRecursively(drive, mount, item.id);
         await propagateACLRemovalRecursively(mount, item.id, user);
-    } else {
-        if (isCollabType(item.type)) {
-            try {
-                await drive.closeCollabDocument(mount.id, item.id);
-            } catch (e) {
-                console.error(`Failed to close collab document ${item.id}:`, e);
-            }
-        }
-        if (item.acl) {
-            await propagateSharedPathChange(item, item.acl, null, user ?? null);
-        }
+    } else if (item.acl) {
+        await propagateSharedPathChange(item, item.acl, null, user ?? null);
     }
 
     const trashedItem = await mount.trashPath(item.id);
     drive.emit(SSEventType.DRIVE_PATH_TRASHED, trashedItem, item.parentId ?? undefined);
     if (user) {
-        await mount.history.record({ pathId: item.id, eventType: 'trashed', actor: user });
+        mount.history.record({ pathId: item.id, eventType: 'trashed', actor: user });
         // path: pre-trash snapshot — trashedAt is still null so the fan-out guard passes
         await mount.history.fanOut({
             eventType: 'trashed',
@@ -70,7 +61,7 @@ export async function restorePath(drive: Drive, mount: Mount, pathId: string, us
     drive.emit(SSEventType.DRIVE_PATH_RESTORED, restoredItem);
     // recordFileEvent re-fetches the path, so it sees the post-restore row
     // (trashedAt cleared, original parentId) — the chain it walks is the restored one
-    if (user) await drive.recordFileEvent(mount.id, pathId, user, 'restored');
+    if (user) await drive.recordFileEvent(mount.id, pathId, user, { eventType: 'restored' });
 }
 
 export async function permanentlyDelete(drive: Drive, mount: Mount, item: DrivePath, user?: User): Promise<void> {
@@ -86,7 +77,7 @@ export async function permanentlyDelete(drive: Drive, mount: Mount, item: DriveP
 
     await mount.permanentlyDeleteFromTrash(item.id);
 
-    if (isContainerType(item.type) || isCollabType(item.type) || isChatType(item.type)) {
+    if (isContainerType(item.type)) {
         drive.emit(SSEventType.DRIVE_FOLDER_DELETED, item);
     } else {
         drive.emit(SSEventType.DRIVE_FILE_DELETED, item);

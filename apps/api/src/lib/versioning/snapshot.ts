@@ -9,6 +9,7 @@ import { paths } from '../mount/schema';
 import { markContainerContentDirty } from '../mount/search-index';
 import { type RetentionPolicy, selectSnapshotsToPrune } from './retention';
 import { formatSnapshotTimestamp } from './timestamp';
+import { VERSIONS_FOLDER_NAME } from './versions-folder';
 
 // The mechanics half of file versioning: write/replace a container's data.db snapshot on
 // its mount. The orchestration half (grab target, pre-restore snapshot, Yjs surgery vs
@@ -76,9 +77,9 @@ async function takeSnapshot(
     const cached = mount.documentDbs.get(dataDb.id)?.peek();
     if (cached) await cached.flush();
 
-    let versions = await mount.getChildByName(containerId, 'versions');
+    let versions = await mount.getChildByName(containerId, VERSIONS_FOLDER_NAME);
     if (!versions) {
-        const newId = await mount.createFolder(containerId, 'versions');
+        const newId = await mount.createFolder(containerId, VERSIONS_FOLDER_NAME);
         const created = await mount.getPath(newId);
         if (!created) throw new ApiError(500, 'Failed to create versions folder');
         versions = created;

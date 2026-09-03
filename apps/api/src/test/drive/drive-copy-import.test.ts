@@ -148,6 +148,42 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
                 await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 35);
             }
         });
+
+        // The cross-mount bridge walks a container's children itself, so its versions/ skip is
+        // separate from the same-mount copy's (pinned in mount-copy.test.ts).
+        test('copying a container across drives starts the copy without the source versions/', async () => {
+            const token = ctx.alice.user.sessionToken;
+            const ownerId = ctx.alice.user.id;
+            const doc = await drivePost<DrivePath>(token, ownerId, mountId, `folder/${aliceRootId}/create/doc`, {
+                fileName: 'copy-across-versions',
+            });
+            const saved = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${doc.id}/versions/save`, {
+                method: 'POST',
+            });
+            expect(saved.status).toBe(200);
+
+            const { copyPathAcross } = await import('../../lib/drive/copy-across');
+            const { getHome } = await import('../../lib/home');
+            const { getUserById } = await import('../../lib/user');
+            const home = await getHome(ownerId);
+            const user = await getUserById(ownerId);
+            const copied = await copyPathAcross(
+                home.drive,
+                mountId,
+                doc.id,
+                home.drive,
+                mountId,
+                aliceRootId,
+                'copy-across-versions-copy',
+                user!,
+            );
+
+            const sourceNames = (await home.drive.getFolderContents(mountId, doc.id)).map((c) => c.name);
+            expect(sourceNames).toContain('versions');
+            const copiedNames = (await home.drive.getFolderContents(mountId, copied.id)).map((c) => c.name);
+            expect(copiedNames).toContain('data.db');
+            expect(copiedNames).not.toContain('versions');
+        });
     });
 
     describe('/import-from-drive', () => {

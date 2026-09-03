@@ -294,8 +294,7 @@ export class ChatRoom {
                     targetPath.mountId,
                     targetPath.id,
                     author,
-                    'commented',
-                    { preview: content.slice(0, 80), chatName: this.path.name },
+                    { eventType: 'commented', details: { preview: content.slice(0, 80), chatName: this.path.name } },
                     { excludeEmails: coveredEmails },
                 );
             }
