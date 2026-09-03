@@ -35,7 +35,7 @@ import {
     type VectorElement,
     type VectorMeta,
 } from '@workspace/lib/vector';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type * as Y from 'yjs';
 import { isTypingTarget } from '../../../hooks/is-typing-target';
 import { measureVectorText } from '../text-measure';
@@ -308,9 +308,28 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
     // canEdit && !editing; isTypingTarget() bails so the text overlay + a comments composer keep native
     // clipboard (the typing-target invariant). Eigen items are consumed FIRST; a non-eigen paste falls
     // through (capture phase, no stopPropagation) to the container's useFilePasteTarget for OS files.
+    // The three listeners bind ONCE and read the live scene/selection/writers through this ref: a
+    // canvas render (a drag preview, a pan commit) must not tear them down and rebuild them.
+    const handlers = {
+        canEdit,
+        selectedIds,
+        buildData,
+        plainText,
+        pasteEigenItems,
+        pasteNonEigenText,
+        insertImageFiles,
+        viewportCenterScene,
+        deleteElements,
+        setSelectedIds,
+        undoManager,
+    };
+    const live = useRef(handlers);
+    live.current = handlers;
+
     useEffect(() => {
-        const blocked = () => isTypingTarget() || !canEdit || textEditingRef.current;
+        const blocked = () => isTypingTarget() || !live.current.canEdit || textEditingRef.current;
         const onCopyEvent = (e: ClipboardEvent) => {
+            const { selectedIds, buildData, plainText } = live.current;
             if (blocked() || selectedIds.length === 0) return;
             const data = buildData();
             if (!data.items.length) return;
@@ -318,6 +337,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             writeEigenClipboard(e, data, plainText());
         };
         const onCutEvent = (e: ClipboardEvent) => {
+            const { selectedIds, buildData, plainText, deleteElements, setSelectedIds, undoManager } = live.current;
             if (blocked() || selectedIds.length === 0) return;
             const data = buildData();
             if (!data.items.length) return;
@@ -327,6 +347,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager);
         };
         const onPasteEvent = (e: ClipboardEvent) => {
+            const { pasteEigenItems, pasteNonEigenText, insertImageFiles, viewportCenterScene } = live.current;
             if (blocked()) return;
             const cd = e.clipboardData;
             if (!cd) return;
@@ -366,20 +387,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             document.removeEventListener('cut', onCutEvent);
             document.removeEventListener('paste', onPasteEvent, true);
         };
-    }, [
-        canEdit,
-        textEditingRef,
-        selectedIds,
-        buildData,
-        plainText,
-        pasteEigenItems,
-        pasteNonEigenText,
-        insertImageFiles,
-        viewportCenterScene,
-        deleteElements,
-        setSelectedIds,
-        undoManager,
-    ]);
+    }, [textEditingRef]);
 
     // Menu clipboard rows: no ClipboardEvent here, so copy/cut go through the async writer and paste
     // through the async reader (eigen items only — OS files still need ⌘V). Same producer/consumer as

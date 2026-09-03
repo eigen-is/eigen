@@ -1,16 +1,35 @@
 // Pan/zoom viewport for the canvas editor. scene = (client - offset)/zoom - scroll (Excalidraw's
 // convention; scroll is stored in SCENE units). The SVG zoom group and the screen-space chrome
 // overlay share the container origin, so viewport-relative px = (scene + scroll) * zoom.
+//
+// The LIVE viewport lives in a ref, not in React state: a pan/zoom event writes the ref and one rAF
+// paints the three nodes that are the viewport (the scene layer, the overlay group, the chrome layer),
+// so a gesture costs no render at all. React state is the last COMMITTED viewport, published on a
+// trailing timer — one render per gesture — and it is what layout reads: `boxToStyle`, the zoom pill,
+// the snap thresholds. Anything that must be exact MID-gesture (clientToScene, screenDeltaToScene, a
+// hit threshold) reads `viewportRef` instead, which is why those functions are identity-stable.
 
 import type { Box, CanvasViewport, Extent } from '@workspace/lib/vector';
-import { clampFrameViewport, fitFrameViewport } from '@workspace/lib/vector';
+import {
+    chromeTransform,
+    clampFrameViewport,
+    fitFrameViewport,
+    groupTransform,
+    sceneTransform,
+} from '@workspace/lib/vector';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 30;
 const WHEEL_DELTA_CLAMP = 10;
+// Trailing delay before a gesture's viewport reaches React: long enough to span a trackpad's wheel
+// stream and a pointerup, short enough that the zoom pill settles as soon as the input stops.
+const COMMIT_DELAY_MS = 120;
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+const same = (a: CanvasViewport, b: CanvasViewport) =>
+    a.zoom === b.zoom && a.scrollX === b.scrollX && a.scrollY === b.scrollY;
 
 // Zoom to `nextZoom`, keeping the scene point under the container-relative (px, py) fixed.
 const zoomAt = (v: CanvasViewport, nextZoom: number, px: number, py: number): CanvasViewport => ({
@@ -29,7 +48,15 @@ export type UseViewportOptions = {
 
 export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseViewportOptions = {}) {
     const containerRef = useRef<HTMLDivElement>(null);
-    const [viewport, setViewport] = useState<CanvasViewport>({ zoom: 1, scrollX: 0, scrollY: 0 });
+    // The three nodes whose position IS the viewport. The canvas attaches them; the rAF writes them.
+    const sceneRef = useRef<HTMLDivElement>(null);
+    const overlayRef = useRef<SVGGElement>(null);
+    const chromeRef = useRef<HTMLDivElement>(null);
+
+    const viewportRef = useRef<CanvasViewport>({ zoom: 1, scrollX: 0, scrollY: 0 });
+    const [viewport, setViewport] = useState<CanvasViewport>(viewportRef.current);
+    // The viewport the chrome layer was last laid out at — the base chromeTransform corrects from.
+    const committedRef = useRef<CanvasViewport>(viewport);
     // Frozen while any drag is active: a mid-drag pan/zoom silently invalidates the
     // screenDeltaToScene scale and the rotate pivot captured at pointerdown (UX-RULING 10). The
     // canvas flips this ref around every gesture; the wheel handler and pan start both honor it.
@@ -57,6 +84,67 @@ export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseView
         [containerExtent],
     );
 
+    // The live viewport, straight to the DOM: the scene layer and the overlay group take it whole, the
+    // chrome layer takes the correction from the viewport its children were laid out at.
+    const paint = useCallback(() => {
+        const live = viewportRef.current;
+        if (sceneRef.current) sceneRef.current.style.transform = sceneTransform(live);
+        overlayRef.current?.setAttribute('transform', groupTransform(live));
+        if (chromeRef.current) chromeRef.current.style.transform = chromeTransform(committedRef.current, live);
+    }, []);
+
+    const frameRef = useRef(0);
+    const commitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // A gesture write: settle, store, paint once per animation frame, and publish to React once the
+    // input stops. `next` reads the LIVE viewport — never the state one, which lags a gesture.
+    const write = useCallback(
+        (next: (v: CanvasViewport) => CanvasViewport) => {
+            const settled = settle(next(viewportRef.current));
+            if (same(settled, viewportRef.current)) return;
+            viewportRef.current = settled;
+            if (!frameRef.current) {
+                frameRef.current = requestAnimationFrame(() => {
+                    frameRef.current = 0;
+                    paint();
+                });
+            }
+            if (commitRef.current) clearTimeout(commitRef.current);
+            commitRef.current = setTimeout(() => {
+                commitRef.current = null;
+                setViewport(viewportRef.current);
+            }, COMMIT_DELAY_MS);
+        },
+        [settle, paint],
+    );
+
+    // The non-gesture writes (the opening view, a frame fit, the zoom-pill reset): one per user action
+    // or layout pass, so they publish to React at once and the layout effect below paints them.
+    const set = useCallback((next: CanvasViewport) => {
+        if (commitRef.current) {
+            clearTimeout(commitRef.current);
+            commitRef.current = null;
+        }
+        if (same(next, viewportRef.current)) return;
+        viewportRef.current = next;
+        setViewport(next);
+    }, []);
+
+    // After every render the chrome sits at `viewport` again: rebase, then repaint from the live value.
+    // Runs before the browser paints, so it also plants the opening transform without a flash.
+    useLayoutEffect(() => {
+        committedRef.current = viewport;
+        paint();
+    });
+
+    useEffect(
+        () => () => {
+            if (frameRef.current) cancelAnimationFrame(frameRef.current);
+            if (commitRef.current) clearTimeout(commitRef.current);
+        },
+        [],
+    );
+
     // Letterbox the frame in the measured container. False until the container has a real size, so the
     // opening effect below knows to keep waiting.
     const fitFrame = useCallback((): boolean => {
@@ -64,9 +152,9 @@ export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseView
         if (!bounds) return false;
         const extent = containerExtent();
         if (extent.width === 0 || extent.height === 0) return false;
-        setViewport(fitFrameViewport(extent, bounds));
+        set(fitFrameViewport(extent, bounds));
         return true;
-    }, [containerExtent]);
+    }, [containerExtent, set]);
 
     // Opening view: the scene origin at the container centre (infinite), or the frame letterboxed
     // (frame mode, re-run on every `resetKey` change so a frame switch resets the pan). Waits for a
@@ -81,7 +169,8 @@ export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseView
             if (framed) return fitFrame();
             const { width, height } = el.getBoundingClientRect();
             if (width === 0 || height === 0) return false;
-            setViewport((v) => ({ ...v, scrollX: width / 2 / v.zoom, scrollY: height / 2 / v.zoom }));
+            const v = viewportRef.current;
+            set({ ...v, scrollX: width / 2 / v.zoom, scrollY: height / 2 / v.zoom });
             return true;
         };
         if (open() && !framed) return;
@@ -90,26 +179,25 @@ export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseView
         });
         observer.observe(el);
         return () => observer.disconnect();
-    }, [mode, resetKey, fitFrame]);
+    }, [mode, resetKey, fitFrame, set]);
 
-    const clientToScene = useCallback(
-        (clientX: number, clientY: number) => {
-            const rect = containerRef.current?.getBoundingClientRect();
-            const ox = rect?.left ?? 0;
-            const oy = rect?.top ?? 0;
-            return { x: (clientX - ox) / zoom - scrollX, y: (clientY - oy) / zoom - scrollY };
-        },
-        [zoom, scrollX, scrollY],
-    );
+    const clientToScene = useCallback((clientX: number, clientY: number) => {
+        const rect = containerRef.current?.getBoundingClientRect();
+        const ox = rect?.left ?? 0;
+        const oy = rect?.top ?? 0;
+        const v = viewportRef.current;
+        return { x: (clientX - ox) / v.zoom - v.scrollX, y: (clientY - oy) / v.zoom - v.scrollY };
+    }, []);
 
     // Uniform scale in x and y — the seam precondition ObjectTransform's screen-space math relies on.
     const screenDeltaToScene = useCallback(
-        (dxPx: number, dyPx: number) => ({ dx: dxPx / zoom, dy: dyPx / zoom }),
-        [zoom],
+        (dxPx: number, dyPx: number) => ({ dx: dxPx / viewportRef.current.zoom, dy: dyPx / viewportRef.current.zoom }),
+        [],
     );
 
     // Container-relative px position/size of a scene box's unrotated top-left + extent; the chrome
-    // overlay adds transform: rotate() itself, so this is position/size only.
+    // overlay adds transform: rotate() itself, so this is position/size only. Reads the COMMITTED
+    // viewport: it lays out the chrome layer, whose live correction is chromeTransform.
     const boxToStyle = useCallback(
         (box: Box): React.CSSProperties => ({
             left: (box.x + scrollX) * zoom,
@@ -120,21 +208,12 @@ export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseView
         [zoom, scrollX, scrollY],
     );
 
-    const groupTransform = `translate(${scrollX * zoom} ${scrollY * zoom}) scale(${zoom})`;
-
-    // The scene div's CSS transform: the same mapping groupTransform applies inside the overlay SVG,
-    // so layer boxes are plain SCENE units and the two surfaces stay registered at any zoom.
-    // transform-origin must be 0 0 at the callsite (the SVG group's origin is the container corner).
-    const sceneTransform = `translate(${scrollX * zoom}px, ${scrollY * zoom}px) scale(${zoom})`;
-
     // Incremental pan by a screen-px delta (space-drag / middle-mouse); scroll is scene units.
     const panBy = useCallback(
         (dxPx: number, dyPx: number) => {
-            setViewport((v) =>
-                settle({ ...v, scrollX: v.scrollX + dxPx / v.zoom, scrollY: v.scrollY + dyPx / v.zoom }),
-            );
+            write((v) => ({ ...v, scrollX: v.scrollX + dxPx / v.zoom, scrollY: v.scrollY + dyPx / v.zoom }));
         },
-        [settle],
+        [write],
     );
 
     // Two-finger pinch: zoom by `scale` about the container-relative (px, py) midpoint AND pan by the
@@ -143,27 +222,27 @@ export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseView
     // frozenRef: a pinch IS the active gesture.
     const pinch = useCallback(
         (scale: number, px: number, py: number, panDxPx: number, panDyPx: number) => {
-            setViewport((v) => {
+            write((v) => {
                 const nextZoom = clamp(v.zoom * scale, MIN_ZOOM, MAX_ZOOM);
                 const z = zoomAt(v, nextZoom, px, py);
-                return settle({
+                return {
                     zoom: nextZoom,
                     scrollX: z.scrollX + panDxPx / nextZoom,
                     scrollY: z.scrollY + panDyPx / nextZoom,
-                });
+                };
             });
         },
-        [settle],
+        [write],
     );
 
     // Zoom-pill reset: back to 100%, keeping the scene point at the container centre fixed.
     const resetZoom = useCallback(() => {
         const { width, height } = containerExtent();
-        setViewport((v) => settle(zoomAt(v, 1, width / 2, height / 2)));
-    }, [containerExtent, settle]);
+        set(settle(zoomAt(viewportRef.current, 1, width / 2, height / 2)));
+    }, [containerExtent, settle, set]);
 
     // Non-passive wheel: pan by default, zoom-at-cursor on ctrl/meta (trackpad pinch sends ctrl).
-    // Bound once; reads live viewport via functional setState and the container rect at call time.
+    // Bound once; reads the live viewport through `write` and the container rect at call time.
     useEffect(() => {
         const el = containerRef.current;
         if (!el) return;
@@ -175,29 +254,31 @@ export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseView
                 const px = e.clientX - rect.left;
                 const py = e.clientY - rect.top;
                 const delta = clamp(e.deltaY, -WHEEL_DELTA_CLAMP, WHEEL_DELTA_CLAMP);
-                setViewport((v) => {
+                write((v) => {
                     const nextZoom = clamp(v.zoom - delta / 100, MIN_ZOOM, MAX_ZOOM);
-                    return nextZoom === v.zoom ? v : settle(zoomAt(v, nextZoom, px, py));
+                    return nextZoom === v.zoom ? v : zoomAt(v, nextZoom, px, py);
                 });
             } else {
                 const dx = e.shiftKey ? e.deltaY : e.deltaX;
                 const dy = e.shiftKey ? 0 : e.deltaY;
-                setViewport((v) =>
-                    settle({ ...v, scrollX: v.scrollX - dx / v.zoom, scrollY: v.scrollY - dy / v.zoom }),
-                );
+                write((v) => ({ ...v, scrollX: v.scrollX - dx / v.zoom, scrollY: v.scrollY - dy / v.zoom }));
             }
         };
         el.addEventListener('wheel', onWheel, { passive: false });
         return () => el.removeEventListener('wheel', onWheel);
-    }, [settle]);
+    }, [write]);
 
     return {
         containerRef,
+        sceneRef,
+        overlayRef,
+        chromeRef,
+        // The LIVE viewport, for event handlers (a hit threshold, an image placement) that must be
+        // exact while a gesture runs ahead of React. Renders read `zoom` / `boxToStyle` instead.
+        viewportRef,
         clientToScene,
         screenDeltaToScene,
         boxToStyle,
-        groupTransform,
-        sceneTransform,
         panBy,
         pinch,
         resetZoom,
