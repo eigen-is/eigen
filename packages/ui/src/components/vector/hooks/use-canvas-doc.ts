@@ -13,6 +13,7 @@ import {
     VECTOR_STYLE_DEFAULTS,
     type VectorArrowElement,
     type VectorElementType,
+    type VectorFrame,
     type VectorImageElement,
     type VectorLinearElement,
     type VectorRichTextElement,
@@ -22,6 +23,13 @@ import {
 import { useCallback, useState } from 'react';
 import * as Y from 'yjs';
 import { duplicateElementsInDoc, hasSeed, newElementId, topmostIndex } from './element-writes';
+import {
+    addFrameInDoc,
+    deleteFrameInDoc,
+    duplicateFrameInDoc,
+    moveFrameInDoc,
+    updateFramesInDoc,
+} from './frame-writes';
 
 // Origin sentinel for writes the UndoManager must IGNORE. Its trackedOrigins defaults to {null}
 // (the ctor below passes none), so any non-null transaction origin escapes capture — while the sync
@@ -130,18 +138,21 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string) =
         ownerId,
         mountId,
         pathId,
-        undoScope: (doc) => [doc.getMap('elements'), doc.getMap('meta')],
+        undoScope: (doc) => [doc.getMap('elements'), doc.getMap('frames'), doc.getMap('meta')],
         onInit: ({ doc }) => {
             const elementsMap = doc.getMap('elements');
+            const framesMap = doc.getMap('frames');
             const metaMap = doc.getMap('meta');
             // readVectorFromDoc materializes each per-element Y.Map through the ELEMENT_FIELDS
             // whitelist, orders by fractional index, and heals invalid runs — the whole read path.
             const updateReactState = () => setScene(readVectorFromDoc(doc));
             elementsMap.observeDeep(updateReactState);
+            framesMap.observeDeep(updateReactState);
             metaMap.observeDeep(updateReactState);
             updateReactState();
             return () => {
                 elementsMap.unobserveDeep(updateReactState);
+                framesMap.unobserveDeep(updateReactState);
                 metaMap.unobserveDeep(updateReactState);
             };
         },
@@ -275,8 +286,39 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string) =
         [],
     );
 
+    // Frame ops: thin wrappers over frame-writes.ts, the way the element ops wrap element-writes.ts.
+    // add/duplicate return the new frame id so the caller can activate it.
+    const addFrame = useCallback(
+        (afterId?: string) => (docRef.current ? addFrameInDoc(docRef.current, afterId) : undefined),
+        [],
+    );
+
+    const deleteFrame = useCallback((id: string) => {
+        if (docRef.current) deleteFrameInDoc(docRef.current, id);
+    }, []);
+
+    const duplicateFrame = useCallback(
+        (id: string) => (docRef.current ? duplicateFrameInDoc(docRef.current, id) : undefined),
+        [],
+    );
+
+    // `afterId` null moves the frame to the front.
+    const moveFrame = useCallback((id: string, afterId: string | null) => {
+        if (docRef.current) moveFrameInDoc(docRef.current, id, afterId);
+    }, []);
+
+    const updateFrames = useCallback((patches: { id: string; fields: Partial<VectorFrame> }[]) => {
+        if (docRef.current) updateFramesInDoc(docRef.current, patches);
+    }, []);
+
+    const updateFrame = useCallback(
+        (id: string, fields: Partial<VectorFrame>) => updateFrames([{ id, fields }]),
+        [updateFrames],
+    );
+
     return {
         elements: scene.elements,
+        frames: scene.frames,
         meta: scene.meta,
         addElement,
         addElements,
@@ -286,6 +328,12 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string) =
         deleteElements,
         deleteElementsUntracked,
         duplicateElements,
+        addFrame,
+        deleteFrame,
+        duplicateFrame,
+        moveFrame,
+        updateFrame,
+        updateFrames,
         undoManager,
         // Exposed for awareness (cursors + remote selections).
         provider,
