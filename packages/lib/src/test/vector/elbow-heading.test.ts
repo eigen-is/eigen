@@ -33,7 +33,6 @@ const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
     angle: 0,
     index: 'a0',
     fill: solidFill('transparent'),
-    fillStyle: 'solid',
     roughness: 1,
     seed: 1,
     corners: 'straight',

@@ -225,11 +225,22 @@ describe('readVectorFromDoc', () => {
         expect(el).toMatchObject({ type: 'line', points: '[[0,0],[40,10]]' });
     });
 
-    test('accepts the new zigzag fill style', () => {
+    test('the hatch style rides the fill, and an unknown one degrades to the default', () => {
         const doc = docWith((elements) => {
-            writeElement(elements, 'r', { type: 'rectangle', index: 'a0', fillStyle: 'zigzag' });
+            writeElement(elements, 'r', {
+                type: 'rectangle',
+                index: 'a0',
+                fill: '{"type":"solid","color":"#ff0000","style":"zigzag"}',
+            });
+            writeElement(elements, 'r2', {
+                type: 'rectangle',
+                index: 'a1',
+                fill: '{"type":"solid","color":"#ff0000","style":"tartan"}',
+            });
         });
-        expect(readVectorFromDoc(doc).elements[0]).toMatchObject({ fillStyle: 'zigzag' });
+        const [zigzag, bogus] = readVectorFromDoc(doc).elements;
+        expect(zigzag).toMatchObject({ fill: '{"type":"solid","color":"#ff0000","style":"zigzag"}' });
+        expect(bogus).toMatchObject({ fill: '{"type":"solid","color":"#ff0000","style":"solid"}' });
     });
 
     test('keeps a single-point linear element (a dot)', () => {
@@ -468,7 +479,7 @@ describe('readVectorFromDoc', () => {
         expect(scene.meta.background).toBe(DEFAULT_SCENE_META.background);
         expect(scene.elements[0]).toMatchObject({
             strokeColor: '#abc',
-            fill: '{"type":"solid","color":"transparent"}',
+            fill: '{"type":"solid","color":"transparent","style":"solid"}',
         });
         expect(scene.elements[1].strokeColor).toBe(DEFAULT_ELEMENT_PROPS.strokeColor);
     });
@@ -495,7 +506,7 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
         'strokeWidth',
         'strokeStyle',
     ];
-    const PAINT_FIELDS = ['fill', 'fillStyle'];
+    const PAINT_FIELDS = ['fill'];
     const SKETCH_FIELDS = ['roughness', 'seed'];
 
     const base = (over: Record<string, unknown>): Record<string, unknown> => ({
@@ -515,14 +526,13 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
         ...over,
     });
 
-    const paint = { fill: '{"type":"solid","color":"#123456"}', fillStyle: 'cross-hatch' };
+    const paint = { fill: '{"type":"solid","color":"#123456","style":"cross-hatch"}' };
     const sketch = { roughness: 3, seed: 999 };
 
     const rect = base({ id: 'rect1', type: 'rectangle', ...paint, ...sketch, corners: 'round' });
     const richtext = base({
         id: 'rich1',
         type: 'richtext',
-        // rich text carries `fill` without `fillStyle` — a hachured text box is not a thing
         fill: paint.fill,
         html: '<p>hello</p>',
         corners: 'straight',
@@ -544,7 +554,7 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
         type: 'line',
         ...paint,
         ...sketch,
-        fillStyle: 'zigzag',
+        fill: '{"type":"solid","color":"#123456","style":"zigzag"}',
         roundness: 'round',
         points: '[[0,0],[80,10],[40,-5]]',
     });
@@ -808,7 +818,9 @@ describe('readVectorFromDoc — the canvas model', () => {
     test('an unparseable fill reads back as the transparent solid fill', () => {
         const doc = new Y.Doc();
         doc.transact(() => writeElement(doc.getMap('elements'), 'r', { type: 'rectangle', index: 'a0', fill: 'nope' }));
-        expect(readVectorFromDoc(doc).elements[0]).toMatchObject({ fill: '{"type":"solid","color":"transparent"}' });
+        expect(readVectorFromDoc(doc).elements[0]).toMatchObject({
+            fill: '{"type":"solid","color":"transparent","style":"solid"}',
+        });
     });
 
     test('corners falls back to the shape default and only accepts the vocabulary', () => {

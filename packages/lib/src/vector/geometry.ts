@@ -305,6 +305,14 @@ export function isClosedPath(points: Point[]): boolean {
     return Math.hypot(first.x - last.x, first.y - last.y) <= CLOSE_PATH_THRESHOLD;
 }
 
+// Does this freedraw/line paint a fill at all? Only a looping path does — the rule the renderers apply
+// (freedraw's render arm and linearRoughOptions, both on the points they already hold), so the kind's
+// per-element `fill` capability answers through the same predicate and the panel offers the Fill block
+// exactly when the paint would land.
+export function isClosedLinear(el: VectorLinearElement): boolean {
+    return isClosedPath(parsePoints(el.points));
+}
+
 // `arrowRoute` is the derived elbow polyline (local frame); pass it for an elbow arrow so the hit-test runs
 // against the routed segments, not the straight 2-point line. Ignored for every other element.
 export function hitTestElement(element: VectorElement, point: Point, threshold: number, arrowRoute?: Point[]): boolean {

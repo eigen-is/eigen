@@ -20,6 +20,7 @@ import {
     Palette,
     Trash2,
 } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { PropertySection } from './properties-panel';
 
@@ -54,6 +55,9 @@ type BackgroundFillBlockProps = {
     mixed?: boolean;
     onPickImage?: () => void;
     imagePreviewUrl?: string | null;
+    // Extra rows for this block, rendered under the paint body while a paint is set — the vector Fill's
+    // hatch-style row lives here, because the hatch is half of the same stored fill.
+    children?: ReactNode;
 };
 
 export function BackgroundFillBlock({
@@ -65,6 +69,7 @@ export function BackgroundFillBlock({
     mixed = false,
     onPickImage,
     imagePreviewUrl,
+    children,
 }: BackgroundFillBlockProps) {
     const current: Segment | '' = mixed ? '' : value === null ? 'none' : value.type;
 
@@ -125,6 +130,8 @@ export function BackgroundFillBlock({
                     onPick={onPickImage}
                 />
             )}
+
+            {(mixed || value !== null) && children}
         </PropertySection>
     );
 }

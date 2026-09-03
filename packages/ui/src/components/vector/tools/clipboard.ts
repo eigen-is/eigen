@@ -12,7 +12,6 @@ import {
     type Arrowhead,
     type Corners,
     eigenMediaHref,
-    type FillStyle,
     isLinearElement,
     type Roundness,
     type StrokeStyle,
@@ -28,7 +27,8 @@ import {
 // relative layout before it is re-anchored on the viewport. `type` present ⇒ restore a shape or a
 // linear element (which then also carries `points` + `roundness`), else a text element. `id` is the
 // element's own id so a paste can remap arrow bindings across the pasted set; an arrow also
-// carries its heads, bindings, label and elbow flag. `fill` is the serialized Fill, verbatim.
+// carries its heads, bindings, label and elbow flag. `fill` is the serialized Fill (paint + hatch
+// style), verbatim.
 // `strokeColor` is the element's border; a rich-text carrier rides its text colour in `color` beside it.
 export type VectorClipMeta = {
     x: number;
@@ -40,7 +40,6 @@ export type VectorClipMeta = {
     strokeColor?: string;
     color?: string;
     fill?: string;
-    fillStyle?: FillStyle;
     strokeStyle?: StrokeStyle;
     strokeWidth?: number;
     roughness?: number;
@@ -122,10 +121,7 @@ function buildElementClipboardItem(
         roughness: el.roughness,
         opacity: el.opacity,
     };
-    if (el.type !== 'arrow') {
-        vector.fill = el.fill;
-        vector.fillStyle = el.fillStyle;
-    }
+    if (el.type !== 'arrow') vector.fill = el.fill;
     if (el.type === 'rectangle' || el.type === 'diamond') vector.corners = el.corners;
     if (isLinearElement(el)) {
         vector.points = el.points;

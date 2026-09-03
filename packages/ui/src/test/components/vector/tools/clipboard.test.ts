@@ -31,7 +31,6 @@ const rect = (id: string, index: string): VectorElement => ({
     seed: 1,
     index,
     fill: solidFill('transparent'),
-    fillStyle: 'solid',
     corners: 'straight',
 });
 

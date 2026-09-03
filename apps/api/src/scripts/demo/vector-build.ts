@@ -176,8 +176,7 @@ function buildShape(s: SitePlanShape): VectorShapeElement {
         strokeColor: s.stroke ?? DEFAULT_ELEMENT_PROPS.strokeColor,
         strokeWidth: s.strokeWidth ?? DEFAULT_ELEMENT_PROPS.strokeWidth,
         strokeStyle: s.strokeStyle ?? DEFAULT_ELEMENT_PROPS.strokeStyle,
-        fill: solidFill(s.fill ?? 'transparent'),
-        fillStyle: s.fillStyle ?? DEFAULT_FILL_STYLE,
+        fill: solidFill(s.fill ?? 'transparent', s.fillStyle ?? DEFAULT_FILL_STYLE),
         ...DEFAULT_SKETCH_PROPS,
     };
     // An ellipse has no corners to treat, so it carries no `corners` field.
@@ -202,7 +201,6 @@ function buildLine(l: SitePlanLine, i: number): VectorLinearElement {
         strokeWidth: l.strokeWidth ?? DEFAULT_ELEMENT_PROPS.strokeWidth,
         strokeStyle: l.strokeStyle ?? DEFAULT_ELEMENT_PROPS.strokeStyle,
         fill: solidFill('transparent'),
-        fillStyle: DEFAULT_FILL_STYLE,
         ...DEFAULT_SKETCH_PROPS,
         roundness: l.roundness ?? DEFAULT_LINE_ROUNDNESS,
         points: norm.points,
