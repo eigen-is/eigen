@@ -1,6 +1,6 @@
 # Proposal: make concurrent same-cell sheet edits converge
 
-> **Status — Proposal, written 2026-08-30 after N2 landed, not started.** Asked for by Reinder as the follow-up to the config-mirror work ([SHEETS-TODO.md § Next up](../SHEETS-TODO.md#next-up--kill-the-config-mirror-bug-class)). The question it answers: now that `config` is keyed and every write is granular, is "use Yjs structures for the config instead of an op log" still worth doing? **Short answer: not on its own.** The divergence that remains is not a config problem, it is a same-key problem, and cells have it worse than config. The cheap fix is to make the op log respect Yjs's order for conflicting keys (§ Design A). Real Yjs structures (§ Design B) are the long-term answer for the whole workbook, not for `config` alone.
+> **Status — Proposal, written 2026-08-30 after N2 landed, not started.** Asked for by Reinder as the follow-up to the config-mirror work ([SHEETS-TODO.md § Next up](../SHEETS-TODO.md#next-up--kill-the-config-mirror-bug-class)). The question it answers: now that `config` is keyed and every write is granular, is "use Yjs structures for the config instead of an op log" still worth doing? **Short answer: not on its own.** The divergence that remains is not a config problem, it is a same-key problem, and cells have it worse than config. The cheap fix is to make the op log respect Yjs's order for conflicting keys (§ Design A). Real Yjs structures (§ Design B) are the long-term answer for the whole workbook, not for `config` alone. Design B is worked out, benched and scoped in [PROPOSAL_SHEETS_YJS_WORKBOOK.md](PROPOSAL_SHEETS_YJS_WORKBOOK.md) (2026-09-03): a `"r_c"`-keyed map is a trap, the real version needs stable row/column ids, and Design A plus three more in-place fixes come first.
 
 ## TL;DR
 
@@ -8,7 +8,7 @@
 - After N1 and N2, two clients editing **different** keys converge. Two clients editing the **same** key — the same cell value, the same row height, the same cell's border — end up with each other's value, permanently. Probed, reproducible, not theoretical.
 - The same-key case is inherent to "apply mine now, apply theirs when they arrive". It is not specific to `config`; cell values (`sheets[i].data[r][c]`) go through the same path and are edited concurrently far more often than config.
 - **Design A (recommended next):** keep the op log, resolve same-key conflicts by the converged order of the `Y.Array`. About a hundred lines in `use-sheet.ts` + `Workbook.applyOp`, no data-model change, no migration. Closes the case for cells *and* config.
-- **Design B (later, bigger):** cells and config as real Yjs structures (`Y.Map` per collection, keyed `"r_c"`). Closes the case by construction, removes the snapshot string, and makes undo, versioning and BE reads uniform with the other editors. It needs the [CRDT migration machinery](PROPOSAL_CRDT_MIGRATION.md) first, and the formula engine's recalc has to learn to run off Yjs events. Not a config-only change; doing it for config alone buys nothing A doesn't.
+- **Design B (later, bigger):** cells and config as real Yjs structures (`Y.Map` per collection, keyed `"r_c"`). Closes the case by construction, removes the snapshot string, and makes undo, versioning and BE reads uniform with the other editors. It no longer needs the [CRDT migration machinery](PROPOSAL_CRDT_MIGRATION.md) first (sheets has no backwards-compatibility requirement), but it does need stable row/column ids, see [PROPOSAL_SHEETS_YJS_WORKBOOK.md](PROPOSAL_SHEETS_YJS_WORKBOOK.md). Not a config-only change; doing it for config alone buys nothing A doesn't.
 
 ## Problem
 
@@ -90,7 +90,7 @@ Doing it properly means:
 
 1. **Build Design A** as the next sheets sync step. It removes the last known divergence class for the cost of a key table, and it makes the sentence "the workbook is the snapshot plus the ops in array order" true on every client, not only on joiners.
 2. **Do not** build Yjs structures for `config` alone. It closes nothing Design A doesn't and splits the workbook across two sync models.
-3. **Reconsider Design B** when one of these becomes true: the CRDT migration machinery exists; sheets needs `Y.UndoManager` semantics (undo across clients, or undo that survives a reload); or the snapshot string becomes the bottleneck it was before the v2 codec. Until then the op log, now granular and keyed, is fine.
+3. **Reconsider Design B** on the triggers in [PROPOSAL_SHEETS_YJS_WORKBOOK.md](PROPOSAL_SHEETS_YJS_WORKBOOK.md) § When to build the real thing. Note that `Y.UndoManager` is an in-memory per-tab stack like the engine's own; it does not survive a reload and it does not undo peers' edits. What it does better (never overwriting a peer's later edit, staying on the right cell after a peer's row insert) needs stable ids, and can also be added to the engine's stack cheaply. The CRDT migration machinery is no longer a prerequisite: sheets has no backwards-compatibility requirement (Reinder, 2026-09-03). Until then the op log, now granular and keyed, is fine.
 
 ## Evidence
 

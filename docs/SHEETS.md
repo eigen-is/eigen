@@ -77,10 +77,12 @@ movement is a resize.
 
 **Flow**: Local edit → `onOp` callback → push to Y.Array → Yjs WebSocket → remote `applyOp()` (no React re-render).
 
-**Snapshot**: Saved on `beforeunload` (flushes latest data to `state.snapshot` and clears the ops array). New joiners
+**Snapshot**: Saved on unmount, and on `beforeunload` only while the socket is connected (`use-sheet.ts` `flushSnapshot`), so a tab closed during a blip writes none and the ops array grows until a connected tab flushes. New joiners
 load from the snapshot, then replay any pending ops that arrived during initial sync via the shared
 `replaySheetsOps(sheets, opBatches)` from `@workspace/sheet/engine` — the same function the BE document
 reader uses, so every consumer agrees on what "snapshot + ops → `Sheet[]`" means.
+
+**Undo** is the engine's own stack (`GlobalCache.undoList`/`redoList`, inverse immer patches per recipe, no depth limit, per tab). `handleUndo`/`handleRedo` (`Workbook/index.tsx`) apply the inverse and broadcast it as an ordinary op batch, so peers see an undo as an edit; a peer's batch applies with `noHistory` and is never undoable locally. The stack's paths are absolute row/column numbers and `reduceUndoList` corrects them only for sheet deletions, so an undo after a peer's row insert lands one row off (filed in [SHEETS-TODO.md](SHEETS-TODO.md)). Whether sheets should move to Yjs structures and `Y.UndoManager` is answered in [PROPOSAL_SHEETS_YJS_WORKBOOK.md](proposals/PROPOSAL_SHEETS_YJS_WORKBOOK.md): possible only with stable row/column ids, and not the first thing to do.
 
 **`selections` never persists**: it's a per-client cursor — the ops path drops it (`filterPatch`) and the
 snapshot encoder strips it (`snapshot-codec.ts`; a persisted cursor once resurfaced on open as phantom
