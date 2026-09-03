@@ -377,6 +377,7 @@ export default class CollabDocument {
             }
         } else if (messageType === MESSAGE_AWARENESS) {
             const awarenessUpdate = decoding.readVarUint8Array(decoder);
+            // Applying fires the awareness 'update' handler, which is the one fan-out to the other peers.
             awarenessProtocol.applyAwarenessUpdate(this.awareness, awarenessUpdate, conn);
 
             try {
@@ -393,11 +394,6 @@ export default class CollabDocument {
             } catch {
                 // ignore parsing errors
             }
-
-            const encoder = encoding.createEncoder();
-            encoding.writeVarUint(encoder, MESSAGE_AWARENESS);
-            encoding.writeVarUint8Array(encoder, awarenessUpdate);
-            this.broadcastMessage(conn, encoding.toUint8Array(encoder));
         } else {
             console.warn(`Unknown message type: ${messageType}`);
         }

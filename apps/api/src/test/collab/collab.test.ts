@@ -243,7 +243,7 @@ describe('Collab', () => {
                 collab.handleMessage(originConn, awarenessMessage(remoteAwareness, remoteDoc.clientID), true);
 
                 expect(originConn.sent.length).toBe(originBase);
-                expect(otherConn.sent.length).toBeGreaterThan(otherBase);
+                expect(otherConn.sent.length).toBe(otherBase + 1);
 
                 remoteAwareness.destroy();
                 remoteDoc.destroy();
