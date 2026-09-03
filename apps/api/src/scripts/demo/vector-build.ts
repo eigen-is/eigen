@@ -5,28 +5,39 @@
 // seeder has no DOM to measure with. Deterministic ids + seeds: a reseed renders identical jitter.
 
 import { basename } from 'node:path';
+import { escapeHtml } from '@workspace/lib/html';
 import {
     bindingAnchor,
     DEFAULT_ARROW_PROPS,
+    DEFAULT_CORNERS,
     DEFAULT_ELEMENT_PROPS,
+    DEFAULT_FILL_STYLE,
     DEFAULT_LINE_ROUNDNESS,
-    DEFAULT_SHAPE_ROUNDNESS,
+    DEFAULT_OBJECT_FIT,
+    DEFAULT_SKETCH_PROPS,
     ELEMENT_FIELDS,
     elbowBindPoint,
     followBindings,
     generateNKeysBetween,
+    getFontMetrics,
     getLineHeightPx,
     normalizeLinear,
     type Point,
+    type StyleDefaults,
     sceneBounds,
     serializeBinding,
     shapeSideMidpoints,
+    solidFill,
+    type TextAlign,
+    VECTOR_STYLE_DEFAULTS,
     type VectorArrowElement,
     type VectorElement,
+    type VectorElementBase,
     type VectorImageElement,
     type VectorLinearElement,
+    type VectorRichTextElement,
     type VectorShapeElement,
-    type VectorTextElement,
+    type VerticalAlign,
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import type {
@@ -45,6 +56,8 @@ import { EXCALIFONT_ADVANCES, EXCALIFONT_KERNING } from './excalifont-metrics';
 const SEED_SALT = 0x5170_2e73;
 const ZERO_BOX = { x: 0, y: 0, width: 0, height: 0, angle: 0 } as const;
 const FONT = 'Excalifont';
+// The vector app's own style table, with the drawing's font — what an editor-authored element inherits.
+const SITE_PLAN_STYLE: StyleDefaults = { ...VECTOR_STYLE_DEFAULTS, fontFamily: FONT };
 const DEFAULT_LABEL_SIZE = 16;
 const DEFAULT_ARROW_LABEL_SIZE = 13;
 
@@ -91,11 +104,11 @@ export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
     const lines: VectorLinearElement[] = plan.lines.map(buildLine);
     const images: VectorImageElement[] = plan.images.map(buildImage);
     const arrows: VectorArrowElement[] = plan.arrows.map((a, i) => buildArrow(a, i, byKey, byId));
-    // Shape labels are texts drawn after the fills/images/arrows so they sit on top; free texts follow.
-    const labels: VectorTextElement[] = plan.shapes.flatMap((s, i) =>
+    // Shape labels are rich text drawn after the fills/images/arrows so they sit on top; free texts follow.
+    const labels: VectorRichTextElement[] = plan.shapes.flatMap((s, i) =>
         s.label === '' ? [] : [buildLabel(s, shapes[i])],
     );
-    const texts: VectorTextElement[] = plan.texts.map((t, i) => buildText(t, i));
+    const texts: VectorRichTextElement[] = plan.texts.map((t, i) => buildText(t, i));
 
     // Bottom-up z-order: ground outlines, lines, shapes, images, arrows, then every text on top.
     const ground = shapes.filter((_, i) => plan.shapes[i].ground);
@@ -105,7 +118,9 @@ export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
     const seed = mulberry32(SEED_SALT);
     for (const [i, el] of ordered.entries()) {
         el.index = keys[i];
-        el.seed = Math.floor(seed() * 2 ** 31);
+        // One draw per element either way, so adding an unsketched kind never shifts the others' jitter.
+        const drawn = Math.floor(seed() * 2 ** 31);
+        if ('seed' in el) el.seed = drawn;
     }
 
     // The spec is authored top-left-positive; the editor opens on the scene origin, so shift the
@@ -133,34 +148,49 @@ export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
     });
 }
 
-function buildShape(s: SitePlanShape): VectorShapeElement {
+// The base every element shares; each builder adds its type, box and kind fields.
+function baseElement(id: string): Omit<VectorElementBase, 'type' | 'x' | 'y' | 'width' | 'height' | 'angle'> {
     return {
-        id: `el-${s.key}`,
-        type: s.kind,
+        id,
+        index: '',
+        frameId: DEFAULT_ELEMENT_PROPS.frameId,
+        commentCardIds: DEFAULT_ELEMENT_PROPS.commentCardIds,
+        opacity: DEFAULT_ELEMENT_PROPS.opacity,
+        locked: DEFAULT_ELEMENT_PROPS.locked,
+        strokeColor: DEFAULT_ELEMENT_PROPS.strokeColor,
+        strokeWidth: DEFAULT_ELEMENT_PROPS.strokeWidth,
+        strokeStyle: DEFAULT_ELEMENT_PROPS.strokeStyle,
+    };
+}
+
+function buildShape(s: SitePlanShape): VectorShapeElement {
+    const box = {
+        ...baseElement(`el-${s.key}`),
         x: s.x,
         y: s.y,
         width: s.width,
         height: s.height,
         angle: s.angle ?? 0,
         strokeColor: s.stroke ?? DEFAULT_ELEMENT_PROPS.strokeColor,
-        backgroundColor: s.fill ?? DEFAULT_ELEMENT_PROPS.backgroundColor,
-        fillStyle: s.fillStyle ?? DEFAULT_ELEMENT_PROPS.fillStyle,
         strokeWidth: s.strokeWidth ?? DEFAULT_ELEMENT_PROPS.strokeWidth,
         strokeStyle: s.strokeStyle ?? DEFAULT_ELEMENT_PROPS.strokeStyle,
-        roughness: DEFAULT_ELEMENT_PROPS.roughness,
-        seed: 0,
-        opacity: DEFAULT_ELEMENT_PROPS.opacity,
-        locked: false,
-        index: '',
-        roundness: s.roundness ?? DEFAULT_SHAPE_ROUNDNESS,
+        fill: solidFill(s.fill ?? 'transparent'),
+        fillStyle: s.fillStyle ?? DEFAULT_FILL_STYLE,
+        roughness: DEFAULT_SKETCH_PROPS.roughness,
+        seed: DEFAULT_SKETCH_PROPS.seed,
     };
+    // An ellipse has no corners to treat, so it carries no `corners` field.
+    if (s.kind === 'ellipse') return { ...box, type: 'ellipse' };
+    const corners = s.corners ?? DEFAULT_CORNERS;
+    if (s.kind === 'diamond') return { ...box, type: 'diamond', corners };
+    return { ...box, type: 'rectangle', corners };
 }
 
 function buildLine(l: SitePlanLine, i: number): VectorLinearElement {
     const points = l.points.map(([x, y]) => ({ x, y }));
     const norm = normalizeLinear(ZERO_BOX, points);
     return {
-        id: `el-line-${i}`,
+        ...baseElement(`el-line-${i}`),
         type: l.freedraw ? 'freedraw' : 'line',
         x: norm.x,
         y: norm.y,
@@ -168,15 +198,12 @@ function buildLine(l: SitePlanLine, i: number): VectorLinearElement {
         height: norm.height,
         angle: 0,
         strokeColor: l.stroke ?? DEFAULT_ELEMENT_PROPS.strokeColor,
-        backgroundColor: DEFAULT_ELEMENT_PROPS.backgroundColor,
-        fillStyle: DEFAULT_ELEMENT_PROPS.fillStyle,
         strokeWidth: l.strokeWidth ?? DEFAULT_ELEMENT_PROPS.strokeWidth,
         strokeStyle: l.strokeStyle ?? DEFAULT_ELEMENT_PROPS.strokeStyle,
-        roughness: DEFAULT_ELEMENT_PROPS.roughness,
-        seed: 0,
-        opacity: DEFAULT_ELEMENT_PROPS.opacity,
-        locked: false,
-        index: '',
+        fill: solidFill('transparent'),
+        fillStyle: DEFAULT_FILL_STYLE,
+        roughness: DEFAULT_SKETCH_PROPS.roughness,
+        seed: DEFAULT_SKETCH_PROPS.seed,
         roundness: l.roundness ?? DEFAULT_LINE_ROUNDNESS,
         points: norm.points,
         pressures: '',
@@ -186,24 +213,16 @@ function buildLine(l: SitePlanLine, i: number): VectorLinearElement {
 
 function buildImage(im: SitePlanImage, i: number): VectorImageElement {
     return {
-        id: `el-image-${i}`,
+        ...baseElement(`el-image-${i}`),
         type: 'image',
         x: im.x,
         y: im.y,
         width: im.width,
         height: im.height,
         angle: 0,
-        strokeColor: DEFAULT_ELEMENT_PROPS.strokeColor,
-        backgroundColor: DEFAULT_ELEMENT_PROPS.backgroundColor,
-        fillStyle: DEFAULT_ELEMENT_PROPS.fillStyle,
-        strokeWidth: DEFAULT_ELEMENT_PROPS.strokeWidth,
-        strokeStyle: DEFAULT_ELEMENT_PROPS.strokeStyle,
-        roughness: DEFAULT_ELEMENT_PROPS.roughness,
-        seed: 0,
-        opacity: DEFAULT_ELEMENT_PROPS.opacity,
-        locked: false,
-        index: '',
         mediaName: basename(im.file),
+        corners: SITE_PLAN_STYLE.corners,
+        objectFit: DEFAULT_OBJECT_FIT,
     };
 }
 
@@ -219,7 +238,7 @@ function buildArrow(
     const fontSize = a.labelSize ?? DEFAULT_ARROW_LABEL_SIZE;
     const label = a.label ?? '';
     const arrow: VectorArrowElement = {
-        id: `el-arrow-${i}`,
+        ...baseElement(`el-arrow-${i}`),
         type: 'arrow',
         x: norm.x,
         y: norm.y,
@@ -227,15 +246,9 @@ function buildArrow(
         height: norm.height,
         angle: 0,
         strokeColor: a.stroke ?? DEFAULT_ELEMENT_PROPS.strokeColor,
-        backgroundColor: DEFAULT_ELEMENT_PROPS.backgroundColor,
-        fillStyle: DEFAULT_ELEMENT_PROPS.fillStyle,
-        strokeWidth: DEFAULT_ELEMENT_PROPS.strokeWidth,
         strokeStyle: a.strokeStyle ?? DEFAULT_ELEMENT_PROPS.strokeStyle,
-        roughness: DEFAULT_ELEMENT_PROPS.roughness,
-        seed: 0,
-        opacity: DEFAULT_ELEMENT_PROPS.opacity,
-        locked: false,
-        index: '',
+        roughness: DEFAULT_SKETCH_PROPS.roughness,
+        seed: DEFAULT_SKETCH_PROPS.seed,
         roundness: DEFAULT_ARROW_PROPS.roundness,
         points: norm.points,
         elbow: a.elbow ?? false,
@@ -291,57 +304,77 @@ function sidePoint(shape: VectorShapeElement, end: { side: SitePlanSide; along?:
     }
 }
 
-function buildLabel(s: SitePlanShape, shape: VectorShapeElement): VectorTextElement {
+function buildLabel(s: SitePlanShape, shape: VectorShapeElement): VectorRichTextElement {
     const fontSize = s.fontSize ?? DEFAULT_LABEL_SIZE;
     const { width, height } = measureExcalifont(s.label, fontSize);
-    return {
-        id: `el-${s.key}-label`,
-        type: 'text',
+    return buildRichText(`el-${s.key}-label`, s.label, {
         x: shape.x + shape.width / 2 - width / 2,
         y: shape.y + shape.height / 2 - height / 2,
         width,
         height,
         angle: shape.angle,
-        strokeColor: DEFAULT_ELEMENT_PROPS.strokeColor,
-        backgroundColor: DEFAULT_ELEMENT_PROPS.backgroundColor,
-        fillStyle: DEFAULT_ELEMENT_PROPS.fillStyle,
-        strokeWidth: DEFAULT_ELEMENT_PROPS.strokeWidth,
-        strokeStyle: DEFAULT_ELEMENT_PROPS.strokeStyle,
-        roughness: DEFAULT_ELEMENT_PROPS.roughness,
-        seed: 0,
-        opacity: DEFAULT_ELEMENT_PROPS.opacity,
-        locked: false,
-        index: '',
-        text: s.label,
         fontSize,
-        fontFamily: FONT,
+        color: SITE_PLAN_STYLE.color,
         textAlign: 'center',
-    };
+        verticalAlign: 'center',
+    });
 }
 
-function buildText(t: SitePlanText, i: number): VectorTextElement {
+function buildText(t: SitePlanText, i: number): VectorRichTextElement {
     const { width, height } = measureExcalifont(t.text, t.fontSize);
-    return {
-        id: `el-text-${i}`,
-        type: 'text',
+    return buildRichText(`el-text-${i}`, t.text, {
         x: t.x,
         y: t.y,
         width,
         height,
         angle: 0,
-        strokeColor: t.color ?? DEFAULT_ELEMENT_PROPS.strokeColor,
-        backgroundColor: DEFAULT_ELEMENT_PROPS.backgroundColor,
-        fillStyle: DEFAULT_ELEMENT_PROPS.fillStyle,
-        strokeWidth: DEFAULT_ELEMENT_PROPS.strokeWidth,
-        strokeStyle: DEFAULT_ELEMENT_PROPS.strokeStyle,
-        roughness: DEFAULT_ELEMENT_PROPS.roughness,
-        seed: 0,
-        opacity: DEFAULT_ELEMENT_PROPS.opacity,
-        locked: false,
-        index: '',
-        text: t.text,
         fontSize: t.fontSize,
-        fontFamily: FONT,
+        color: t.color ?? SITE_PLAN_STYLE.color,
         textAlign: 'left',
+        verticalAlign: 'top',
+    });
+}
+
+// Both text builders go through one place: the box the seeder measured plus the typography the drawing
+// is authored in. Written out rather than spread from ELEMENT_KINDS.richtext.defaults() because that
+// returns Record<string, unknown> — spreading it would drop every field's type.
+type RichTextBox = {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    angle: number;
+    fontSize: number;
+    color: string;
+    textAlign: TextAlign;
+    verticalAlign: VerticalAlign;
+};
+
+function buildRichText(id: string, text: string, box: RichTextBox): VectorRichTextElement {
+    return {
+        ...baseElement(id),
+        ...box,
+        type: 'richtext',
+        strokeWidth: 0, // text, not a bordered box
+        html: toParagraphs(text),
+        fill: SITE_PLAN_STYLE.fill,
+        fillStyle: SITE_PLAN_STYLE.fillStyle,
+        corners: SITE_PLAN_STYLE.corners,
+        fontFamily: SITE_PLAN_STYLE.fontFamily,
+        fontWeight: 'normal',
+        fontStyle: 'normal',
+        textDecoration: 'none',
+        letterSpacing: 0,
+        // The line height measureExcalifont sized the box with, so the text fills exactly that box.
+        lineHeight: getFontMetrics(SITE_PLAN_STYLE.fontFamily).lineHeight,
+        highlightColor: 'transparent',
     };
+}
+
+// The seeder has no editor, so it writes the same markup LightEditor would: one <p> per line, escaped.
+function toParagraphs(text: string): string {
+    return text
+        .split('\n')
+        .map((line) => `<p>${escapeHtml(line)}</p>`)
+        .join('');
 }
