@@ -8,8 +8,8 @@ const OBJECT_FIT_LABELS: Record<ObjectFit, string> = { fill: 'Stretch', contain:
 const OBJECT_FIT_OPTIONS = OBJECT_FITS.map((value) => ({ value, label: OBJECT_FIT_LABELS[value] }));
 
 export function ImagePanelSection({ elements, onChange }: KindPanelSectionProps) {
+    // The panel mounts a kind's section only for a SOLE-kind selection, so this narrows rather than filters.
     const images = elements.filter((el): el is VectorImageElement => el.type === 'image');
-    if (images.length === 0) return null;
     const objectFit = getMergedValue(images, (el) => el.objectFit);
     return (
         <PropertySection title="Image">

@@ -9,10 +9,21 @@ import {
     VECTOR_STYLE_DEFAULTS,
     type VectorElement,
 } from '@workspace/lib/vector';
+import type { VectorTool } from '../hooks/use-tool';
 
 const CREATING_ID = '__creating__';
 
-export type CreatingState = { type: 'rectangle' | 'diamond' | 'ellipse' | 'richtext'; seed: number; box: Box };
+// The kinds a box drag creates. The literal tuple is what gives CreatingState a narrow type, so
+// creatingElement composes each kind's own element without a cast; `isBoxTool` answers from the
+// registry's `creation` capability, and the registry test pins the two against each other.
+const BOX_TOOLS = ['rectangle', 'diamond', 'ellipse', 'richtext'] as const;
+export type BoxTool = (typeof BOX_TOOLS)[number];
+
+export function isBoxTool(tool: VectorTool): tool is BoxTool {
+    return tool !== 'select' && tool !== 'eraser' && ELEMENT_KINDS[tool].capabilities.creation === 'box';
+}
+
+export type CreatingState = { type: BoxTool; seed: number; box: Box };
 
 // Axis-aligned box from two corner points (also the marquee rect); direction is dropped.
 export function normalizeRect(x0: number, y0: number, x1: number, y1: number): Box {
@@ -47,8 +58,9 @@ export function creatingElement(c: CreatingState): VectorElement {
         index: 'a0',
     };
     // The preview takes its style from the same kind defaults the committed element will (addElement),
-    // so the two can't drift; only the gesture's seed carries over. One branch per kind, because an
-    // ellipse has no corners to treat and the field is not part of its model.
+    // so the two can't drift; only the gesture's seed carries over. One branch per kind because each
+    // composes its OWN element type — a union-typed `ELEMENT_KINDS[c.type].defaults()` spread would need
+    // a cast — and because rich text is seedless and previews with an outline no committed box has.
     if (c.type === 'ellipse') {
         return { ...box, ...ELEMENT_KINDS.ellipse.defaults(VECTOR_STYLE_DEFAULTS), type: 'ellipse', seed: c.seed };
     }

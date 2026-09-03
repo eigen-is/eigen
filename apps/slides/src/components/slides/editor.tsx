@@ -6,11 +6,11 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     elementForCommentCard,
     parseBackgroundFill,
+    parseIdList,
     SLIDES_STYLE_DEFAULTS,
     serializeBackgroundFill,
+    serializeIdList,
     type VectorElement,
-    withCommentCard,
-    withoutCommentCard,
 } from '@workspace/lib/vector';
 import { CollabLoadingState, Column, ColumnLayout, EmptyState, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
@@ -232,7 +232,11 @@ function SlideEditorInner({
             const card = await createCard({ ...patch, attachments });
             if (card && anchorId) {
                 const el = doc.elements.find((e) => e.id === anchorId);
-                if (el) doc.updateElement(anchorId, { commentCardIds: withCommentCard(el, card.id) });
+                // Idempotent: a double submit must not list the same card twice on the element.
+                const ids = el ? parseIdList(el.commentCardIds) : [];
+                if (el && !ids.includes(card.id)) {
+                    doc.updateElement(anchorId, { commentCardIds: serializeIdList([...ids, card.id]) });
+                }
             }
             if (assignee !== undefined && card?.chatName) {
                 assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });
@@ -253,9 +257,14 @@ function SlideEditorInner({
             yjsDoc.transact(() => {
                 yjsDoc.getMap('comments').delete(cardId);
             });
-            if (anchor) doc.updateElement(anchor.id, { commentCardIds: withoutCommentCard(anchor, cardId) });
+            // Untracked: stripping the anchor is bookkeeping for a delete the UndoManager never saw (the
+            // comments map is outside its scope), so ⌘Z must not resurrect the flag without its card.
+            if (anchor) {
+                const ids = parseIdList(anchor.commentCardIds).filter((id) => id !== cardId);
+                doc.updateElementUntracked(anchor.id, { commentCardIds: serializeIdList(ids) });
+            }
         },
-        [doc.yjsDoc, doc.elements, doc.updateElement],
+        [doc.yjsDoc, doc.elements, doc.updateElementUntracked],
     );
 
     // Adding a slide activates it, the way inserting one always has. Duplicate and delete are the

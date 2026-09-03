@@ -41,8 +41,6 @@ import {
     type VectorElement,
     type VectorLinearElement,
     type VectorMeta,
-    withFillPaint,
-    withFillStyle,
 } from '@workspace/lib/vector';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import {
@@ -404,7 +402,7 @@ export function CanvasPropertiesPanel({
                     mixed={isMixed(fillRaw)}
                     onChange={(next) => {
                         const paint: FillPaint = next === null || next.type === 'image' ? TRANSPARENT_FILL : next;
-                        applyFill((fill) => withFillPaint(fill, paint));
+                        applyFill((fill) => ({ ...paint, style: fill.style }));
                     }}
                     allowedTypes={['solid', 'gradient']}
                 >
@@ -412,7 +410,7 @@ export function CanvasPropertiesPanel({
                         <PropertyRow label="Style">
                             <MergedSelect
                                 value={fillStyle}
-                                onChange={(v) => applyFill((fill) => withFillStyle(fill, v))}
+                                onChange={(v) => applyFill((fill) => ({ ...fill, style: v }))}
                                 options={FILL_STYLE_OPTIONS}
                             />
                         </PropertyRow>

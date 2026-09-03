@@ -1,6 +1,8 @@
 // The scene as an ordered list of placed boxes: one definition of "where does this element go and what
 // does it draw", so the live canvas (one absolutely positioned div per element), the server compositor
-// (the same boxes as HTML) and the standalone SVG serializer agree by construction.
+// (the same boxes as HTML) and the standalone SVG serializer agree by construction. The canvas draws one
+// elementLayer per element (ElementLayer); sceneLayers is the same pass over a whole scene, for a host
+// that lays a whole page out at once.
 
 import { arrowRoute } from './elbow-route';
 import { orderByFractionalIndex } from './fractional-index';

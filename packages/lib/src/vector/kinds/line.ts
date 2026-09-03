@@ -30,8 +30,6 @@ export const lineKind = defineKind<VectorLinearElement>({
         corners: false,
         stroke: true,
         strokeOptional: false,
-        typography: false,
-        objectFit: false,
         bindable: false,
         silhouette: 'box',
         creation: 'polyline',

@@ -48,11 +48,6 @@ export type Capabilities = {
     // Not derivable from `fill`: a line fills only when its path closes yet IS its stroke, and an
     // image's body is pixels rather than a Fill.
     strokeOptional: boolean;
-    // The rich-text typography section (font, weight, alignment, spacing, colour, padding). An arrow's
-    // label fonts are NOT this: they are measured client-side through the panel's own label path.
-    typography: boolean;
-    // The image fit row (`objectFit`).
-    objectFit: boolean;
     bindable: boolean;
     // Which family the elbow router's heading heuristics follow — the silhouette, not the exact outline.
     // A new bindable kind picks one of the three instead of adding a branch to elbow-heading.

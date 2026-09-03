@@ -13,7 +13,9 @@ import { escapeXml, round } from './kinds/render-utils';
 import { RICH_TEXT_CLASS } from './scene-layers';
 import type { VectorElement, VectorScene } from './types';
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
+// The SVG namespace, one spelling for every surface that writes it: the documents this module
+// serializes and the live <svg> nodes the canvas mounts.
+export const SVG_NS = 'http://www.w3.org/2000/svg';
 
 // The margin left around a drawing, so a standalone SVG and a compositor page frame it alike.
 // sceneBounds is the geometric union of the element boxes and the derived elbow routes; it does not

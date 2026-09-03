@@ -1,4 +1,4 @@
-// The vector object context menu — the singleton useContextMenu surface opened by a right-click on an
+// The canvas object context menu — the singleton useContextMenu surface opened by a right-click on an
 // element. Composes the same shared groups slides' menu uses (Arrange → Copy/Cut/Paste → Duplicate →
 // Delete) so the two apps' menus read byte-identically. The ops act on the canvas' full selection,
 // wired host-side to the clipboard producer/consumer, applyZOrder / duplicateElements / deleteElements.
@@ -20,7 +20,7 @@ import {
 } from '../dropdown-menu';
 import type { ZOp } from '../properties-panel/z-order';
 
-type VectorObjectMenuProps = {
+type CanvasObjectMenuProps = {
     // The item is the right-clicked element id; the ops themselves read the canvas' selection.
     contextMenu: ReturnType<typeof useContextMenu<string>>;
     onArrange: (op: ZOp) => void;
@@ -33,7 +33,7 @@ type VectorObjectMenuProps = {
     onComment?: () => void;
 };
 
-export function VectorObjectMenu({
+export function CanvasObjectMenu({
     contextMenu,
     onArrange,
     onCopy,
@@ -42,7 +42,7 @@ export function VectorObjectMenu({
     onDuplicate,
     onDelete,
     onComment,
-}: VectorObjectMenuProps) {
+}: CanvasObjectMenuProps) {
     return (
         <ContextMenuAnchor contextMenu={contextMenu} className="min-w-48">
             {contextMenu.item && (

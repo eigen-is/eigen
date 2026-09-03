@@ -16,7 +16,6 @@ import {
     elementBounds,
     elementsInFrame,
     fitImageSize,
-    frameSnapExtras,
     getElementsBounds,
     IMAGE_CASCADE_OFFSET,
     type ImageSize,
@@ -32,6 +31,7 @@ import {
     SNAP_SCREEN_THRESHOLD,
     type SnapLine,
     type SnapTargets,
+    SVG_NS,
     sceneBounds,
     snapBoxToTargets,
     type VectorArrowElement,
@@ -50,6 +50,7 @@ import { FileDropOverlay } from '../file-drop-overlay';
 import { HintPill } from '../hint-pill';
 import { readImageSize, readImageSizeFromUrl } from '../media/read-image-size';
 import type { ZOp } from '../properties-panel/z-order';
+import { CanvasObjectMenu } from './canvas-object-menu';
 import { pointerCursor } from './cursor';
 import { ElementLayer } from './element-layer';
 import { useCanvasClipboard } from './hooks/use-canvas-clipboard';
@@ -66,14 +67,11 @@ import { isVectorFontLoaded, loadVectorFont, measureVectorText } from './text-me
 import { TextOverlay } from './text-overlay';
 import { buildPreviewById, followArrowPreview, unbindDraggedArrow } from './tools/binding';
 import { boundsToBox, boxToBounds, elementBox } from './tools/boxes';
-import { type CreatingState, creatingElement, newShapeBox, normalizeRect } from './tools/create-shape';
-import { homeToFrame } from './tools/frame-scope';
+import { type CreatingState, creatingElement, isBoxTool, newShapeBox, normalizeRect } from './tools/create-shape';
 import { SnapGuides } from './tools/snap-guides';
 import { useTouchGestures } from './tools/touch-gestures';
 import { useDrawingTools } from './tools/use-drawing-tools';
-import { VectorObjectMenu } from './vector-object-menu';
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
 // Below this scene-unit extent (in BOTH dimensions) a drag-create is a click → discarded.
 const CREATE_MIN_SIZE = 1;
 const MIN_ELEMENT_SIZE = 1;
@@ -157,8 +155,9 @@ type CanvasEditorProps = {
     onSwipeFrame?: (delta: number) => void;
 };
 
-// The live, interactive SVG scene surface: pan/zoom viewport, tool-driven drag-create, selection,
-// move, and the shared ObjectTransform chrome. Every drag/resize/rotate preview is LOCAL state;
+// The live, interactive canvas surface — one absolutely positioned layer per element, with the
+// scene-space overlay and the screen-space chrome above it: pan/zoom viewport, tool-driven
+// drag-create, selection, move, and the shared ObjectTransform chrome. Every drag/resize/rotate preview is LOCAL state;
 // exactly one Yjs transact fires per completed gesture (UX-RULING 5), with stopCapturing() at each
 // gesture start so one gesture = one undo step.
 export function CanvasEditor({
@@ -203,23 +202,27 @@ export function CanvasEditor({
     // background paints — and clips — the layers.
     const frame = viewport === 'frame' ? frames.find((f) => f.id === frameId) : undefined;
     // In frame mode the viewport's scene space IS the frame's space (elements store frame-relative
-    // coordinates), so an insert needs no translation — only the home frame stamped on it. Every
-    // insert path (drag-create, image drop/paste/picker, clipboard) goes through these two.
+    // coordinates), so an insert needs no translation — only the home frame stamped on it. Every insert
+    // path (drag-create, image drop/paste/picker, clipboard) goes through these two, so no callsite can
+    // forget it. `frameId` sits AFTER the spread on purpose: a pasted element carries the SOURCE frame's
+    // id and must land in the frame being pasted into.
     const addElement = useCallback(
-        (partial: NewVectorElement) => addElementRaw(homeToFrame(partial, frameId)),
+        (partial: NewVectorElement) => addElementRaw({ ...partial, frameId }),
         [addElementRaw, frameId],
     );
     const addElements = useCallback(
-        (partials: NewVectorElement[]) => addElementsRaw(partials.map((p) => homeToFrame(p, frameId))),
+        (partials: NewVectorElement[]) => addElementsRaw(partials.map((p) => ({ ...p, frameId }))),
         [addElementsRaw, frameId],
     );
     const {
         containerRef,
+        sceneRef,
+        overlayRef,
+        chromeRef,
+        viewportRef,
         clientToScene,
         screenDeltaToScene,
         boxToStyle,
-        groupTransform,
-        sceneTransform,
         panBy,
         pinch,
         resetZoom,
@@ -355,6 +358,7 @@ export function CanvasEditor({
         toolLocked,
         canEdit,
         zoom,
+        viewportRef,
         coarse,
         ordered,
         byId: committedById,
@@ -375,7 +379,7 @@ export function CanvasEditor({
     // mid-drag. Built only while a preview is live AND the scene holds an arrow, so an arrow-free
     // drag doesn't reallocate it every frame.
     const hasPreviews = Object.keys(previews).length > 0;
-    const hasArrows = ordered.some((el) => el.type === 'arrow');
+    const hasArrows = useMemo(() => ordered.some((el) => el.type === 'arrow'), [ordered]);
     const previewById = useMemo(
         () => (hasPreviews && hasArrows ? buildPreviewById(ordered, previews) : null),
         [hasPreviews, hasArrows, ordered, previews],
@@ -415,7 +419,6 @@ export function CanvasEditor({
         enabled: canEdit && !textEditing,
         elements: visibleElements,
         selectedIds,
-        tool,
         setTool,
         toolLocked,
         setToolLocked,
@@ -548,15 +551,13 @@ export function CanvasEditor({
     // aligns to its neighbours. The infinite canvas has no edges to seed. Threshold is screen-space:
     // SNAP_SCREEN_THRESHOLD / zoom keeps the snap radius a constant pixel distance at any zoom.
     const buildSnapTargets = useCallback(
-        (excludeIds: Set<string>) => {
-            const extras = frame ? frameSnapExtras(frame) : undefined;
-            return computeSnapTargets(
+        (excludeIds: Set<string>) =>
+            computeSnapTargets(
                 visibleRef.current.map((el) => ({ id: el.id, box: elementBox(el) })),
                 excludeIds,
-                extras?.extraV,
-                extras?.extraH,
-            );
-        },
+                frame && [0, frame.width / 2, frame.width],
+                frame && [0, frame.height / 2, frame.height],
+            ),
         [frame],
     );
 
@@ -587,12 +588,12 @@ export function CanvasEditor({
                 b,
                 buildSnapTargets(new Set([id])),
                 mode,
-                SNAP_SCREEN_THRESHOLD / zoom,
+                SNAP_SCREEN_THRESHOLD / viewportRef.current.zoom,
             );
             setSnapLines(lines);
             return box;
         },
-        [selectedIds, zoom, buildSnapTargets],
+        [selectedIds, buildSnapTargets, viewportRef],
     );
 
     // Sweep zombie image placeholders left behind by a tab close or reload mid-upload (vector adopts
@@ -701,14 +702,15 @@ export function CanvasEditor({
     const imagePlacements = useCallback(
         (intrinsics: (ImageSize | null)[], anchor: { x: number; y: number }) => {
             const rect = containerRef.current?.getBoundingClientRect();
-            const view = { width: (rect?.width ?? 0) / zoom, height: (rect?.height ?? 0) / zoom };
+            const { zoom: live } = viewportRef.current;
+            const view = { width: (rect?.width ?? 0) / live, height: (rect?.height ?? 0) / live };
             return intrinsics.map((intrinsic, i) => {
                 const { width, height } = fitImageSize(intrinsic, view);
                 const off = i * IMAGE_CASCADE_OFFSET;
                 return { x: anchor.x + off - width / 2, y: anchor.y + off - height / 2, width, height };
             });
         },
-        [containerRef, zoom],
+        [containerRef, viewportRef],
     );
 
     // Drop/paste image(s) → upload into media/ and place each at natural size, centered on `anchor`
@@ -862,7 +864,7 @@ export function CanvasEditor({
     const openTextAtClient = (clientX: number, clientY: number) => {
         if (!canEdit || tool !== 'select' || textEditing || frozenRef.current) return;
         const p = clientToScene(clientX, clientY);
-        const hit = hitTestTopmost(ordered, p, zoom, committedById, coarse);
+        const hit = hitTestTopmost(ordered, p, viewportRef.current.zoom, committedById, coarse);
         const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
         if (hitEl?.type === 'arrow') openEditArrowLabel(hitEl);
         else if (hitEl && ELEMENT_KIND_UI[hitEl.type].InPlaceEditor) openRichText(hitEl.id);
@@ -883,7 +885,7 @@ export function CanvasEditor({
             return;
         }
         const p = clientToScene(e.clientX, e.clientY);
-        const hitId = hitTestTopmost(ordered, p, zoom, committedById, coarse);
+        const hitId = hitTestTopmost(ordered, p, viewportRef.current.zoom, committedById, coarse);
         if (!hitId) return;
         if (!selectedIds.includes(hitId)) setSelectedIds([hitId]);
         objectContextMenu.handleContextMenu(e, hitId);
@@ -946,7 +948,7 @@ export function CanvasEditor({
         // Box tool → start a local (not-yet-Yjs) drag-create. (Freehand/line/eraser already returned via
         // the tools hook.) Rich text drags out like a shape; a click under the threshold places the
         // default box instead of discarding it — see finishGesture.
-        if (tool === 'rectangle' || tool === 'diamond' || tool === 'ellipse' || tool === 'richtext') {
+        if (isBoxTool(tool)) {
             frozenRef.current = true;
             undoManager?.stopCapturing();
             setSelectedIds([]);
@@ -960,7 +962,7 @@ export function CanvasEditor({
         }
 
         // Select tool.
-        const hitId = hitTestTopmost(ordered, p, zoom, committedById, coarse);
+        const hitId = hitTestTopmost(ordered, p, viewportRef.current.zoom, committedById, coarse);
         if (hitId) {
             if (e.shiftKey) {
                 toggle(hitId); // shift-click toggles membership, no move
@@ -1030,7 +1032,7 @@ export function CanvasEditor({
         if (drawing.onPointerMove(e)) return;
         // Hover affordance (idle select): one hitTestTopmost on this same move path (no separate scanner) flips the `move` cursor; a gesture never pays for it.
         if (!g && tool === 'select' && !textEditing) {
-            const over = hitTestTopmost(ordered, scene, zoom, committedById, coarse) !== null;
+            const over = hitTestTopmost(ordered, scene, viewportRef.current.zoom, committedById, coarse) !== null;
             if (over !== hoveringSelectable) setHoveringSelectable(over);
         }
         if (!g || e.pointerId !== g.pointerId) return;
@@ -1073,7 +1075,7 @@ export function CanvasEditor({
                     boundsToBox(b),
                     g.snapTargets,
                     'move',
-                    SNAP_SCREEN_THRESHOLD / zoom,
+                    SNAP_SCREEN_THRESHOLD / viewportRef.current.zoom,
                     anyRotated,
                     lockAxis,
                 );
@@ -1165,7 +1167,7 @@ export function CanvasEditor({
                     // Past the unbind threshold, a dragged arrow detaches from any bound shape left behind
                     // (a shape dragged along stays bound — updateElements re-snaps it).
                     const movedIds = new Set(g.ids);
-                    const farEnough = Math.hypot(dx, dy) * zoom >= ARROW_UNBIND_SCREEN;
+                    const farEnough = Math.hypot(dx, dy) * viewportRef.current.zoom >= ARROW_UNBIND_SCREEN;
                     const patches = g.ids
                         .filter((id) => previews[id])
                         .map((id) => {
@@ -1200,7 +1202,9 @@ export function CanvasEditor({
         finishGesture(e.altKey);
     };
 
-    const selectedRender = ordered.filter((el) => selectedIds.includes(el.id)).map(renderEl);
+    // The O(elements) scan is memoized; the map over it is O(selection) and reads the live previews.
+    const selectedElements = useMemo(() => ordered.filter((el) => selectedIds.includes(el.id)), [ordered, selectedIds]);
+    const selectedRender = selectedElements.map(renderEl);
     const single = selectedRender.length === 1 ? selectedRender[0] : null;
     // elementBounds is arrow-aware, so the union ring encloses a labeled arrow's overhang and an
     // elbow arrow's routed bends (arrowRoute, preview-aware via renderById).
@@ -1306,20 +1310,24 @@ export function CanvasEditor({
             {...fileDropProps}
         >
             {/* The scene: plain SCENE units, one layer div per element. pointer-events-none — hit
-                testing is geometry math on the container, never DOM hit testing. */}
-            <div className="pointer-events-none absolute inset-0 origin-top-left" style={{ transform: sceneTransform }}>
+                testing is geometry math on the container, never DOM hit testing. The viewport writes
+                the transform of this node (and of the two below) itself, so a pan/zoom event moves
+                them without a React render. */}
+            <div ref={sceneRef} className="pointer-events-none absolute inset-0 origin-top-left">
                 {frameLayers}
             </div>
             {/* Scene-space chrome stays SVG: guides and bind affordances ride rotation/zoom for free. */}
             <svg className="pointer-events-none absolute inset-0 h-full w-full" xmlns={SVG_NS}>
-                <g transform={groupTransform}>
+                <g ref={overlayRef}>
                     <SnapGuides lines={snapLines} />
                     {drawing.bindingOutline}
                     {drawing.snapDots}
                     {drawing.focusIndicators}
                 </g>
             </svg>
-            <div className="pointer-events-none absolute inset-0">
+            {/* Screen-space chrome, laid out by boxToStyle at the viewport React last rendered; a live
+                gesture moves the whole layer with one transform (chromeTransform) instead. */}
+            <div ref={chromeRef} className="pointer-events-none absolute inset-0 origin-top-left">
                 {/* Comment flags: screen-space like the selection ring, so they keep their size at any zoom. */}
                 {onOpenCard &&
                     commentedElements.map(({ id, cardId, corner }) => {
@@ -1442,15 +1450,15 @@ export function CanvasEditor({
                         onCommit={commitEditing}
                     />
                 )}
+                {/* Remote peers: cursors + selection rings. Screen-space (its own subscription), above
+                    the local chrome; renders nothing when alone. */}
+                <CursorLayer
+                    provider={provider}
+                    boxes={cursorBoxes}
+                    boxToStyle={boxToStyle}
+                    isPeerVisible={isPeerVisible}
+                />
             </div>
-            {/* Remote peers: cursors + selection rings. Screen-space (its own subscription), above
-                the scene + local chrome; renders nothing when alone. */}
-            <CursorLayer
-                provider={provider}
-                boxes={cursorBoxes}
-                boxToStyle={boxToStyle}
-                isPeerVisible={isPeerVisible}
-            />
             {/* OS-file drag-over affordance. Shown only when a drop would actually insert (the drop
                 hook stays enabled even when it wouldn't — see above). */}
             <FileDropOverlay visible={isDragging && imagesEnabled} label="Drop images to add" icon={ImageIcon} />
@@ -1466,7 +1474,7 @@ export function CanvasEditor({
             <HintPill className="bottom-3 right-3" title="Reset zoom" onClick={resetZoom}>
                 {Math.round(zoom * 100)}%
             </HintPill>
-            <VectorObjectMenu
+            <CanvasObjectMenu
                 contextMenu={objectContextMenu}
                 onArrange={onMenuArrange}
                 onCopy={onMenuCopy}

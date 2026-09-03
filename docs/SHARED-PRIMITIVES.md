@@ -997,6 +997,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isPendingMediaName` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
 | `mimeContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `mountMimeContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
+| `PENDING_PREFIX` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
 | `EIGEN_DOC_ICONS` | `@workspace/lib/eigendoc-icons` | packages/lib/src/core/eigendoc-icons.ts |
 | `getFileIconComponent` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
 | `getFilePresentation` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
@@ -1118,6 +1119,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `boxCenter` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `buildElementsClipboardItem` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
 | `capabilitiesOf` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
+| `chromeTransform` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `clampFrameViewport` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `COARSE_HIT_SLOP_MULTIPLIER` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `commentAnchorTexts` | `@workspace/lib/vector` | packages/lib/src/vector/comments.ts |
@@ -1173,7 +1175,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FRAME_HEIGHT` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `FRAME_WIDTH` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `framesFrom` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
-| `frameSnapExtras` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `FREEDRAW_SIZE_FACTOR` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `generateKeyBetween` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `generateNKeysBetween` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
@@ -1183,6 +1184,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getLineHeightPx` | `@workspace/lib/vector` | packages/lib/src/vector/font-metrics.ts |
 | `getVerticalOffset` | `@workspace/lib/vector` | packages/lib/src/vector/font-metrics.ts |
 | `gradientVector` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
+| `groupTransform` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `HIT_THRESHOLD_SCREEN` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `hitTestBox` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `hitTestDiamond` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1260,6 +1262,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `sceneLayers` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `sceneReadingOrder` | `@workspace/lib/vector` | packages/lib/src/vector/search-scene.ts |
 | `sceneToSvg` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
+| `sceneTransform` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `searchScene` | `@workspace/lib/vector` | packages/lib/src/vector/search-scene.ts |
 | `segSegIntersect` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `serializeBackgroundFill` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
@@ -1279,6 +1282,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `stripEigenMediaRefs` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
 | `STROKE_STYLES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `STROKE_WIDTH_OPTIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `SVG_NS` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
 | `syncInvalidIndices` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `TEXT_ALIGNS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `TEXT_DECORATIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -1291,10 +1295,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `validateOrderKey` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `VECTOR_STYLE_DEFAULTS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `VERTICAL_ALIGNS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `withCommentCard` | `@workspace/lib/vector` | packages/lib/src/vector/comments.ts |
-| `withFillPaint` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
-| `withFillStyle` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
-| `withoutCommentCard` | `@workspace/lib/vector` | packages/lib/src/vector/comments.ts |
 | `alphaGroupKey` | `@workspace/ui` | packages/ui/src/components/alphabetical-list.tsx |
 | `FILTER_LABELS` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
 | `formatDownloadLabel` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/file-menu.tsx |

@@ -385,6 +385,9 @@
         "y-websocket": "^3.0.0",
         "yjs": "^13.6.27",
       },
+      "devDependencies": {
+        "happy-dom": "^20.10.6",
+      },
       "peerDependencies": {
         "@tiptap/core": "^3.21.0",
         "@tiptap/extension-list": "^3.21.0",

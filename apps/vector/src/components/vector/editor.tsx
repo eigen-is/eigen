@@ -3,12 +3,7 @@ import { useCommentCards, useCommentFilter, useCommentLifecycle, useDocumentPane
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import {
-    elementForCommentCard,
-    VECTOR_STYLE_DEFAULTS,
-    withCommentCard,
-    withoutCommentCard,
-} from '@workspace/lib/vector';
+import { elementForCommentCard, parseIdList, serializeIdList, VECTOR_STYLE_DEFAULTS } from '@workspace/lib/vector';
 import { CollabLoadingState, Column, ColumnLayout, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import { type CommentContextMenuItem, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
@@ -73,9 +68,6 @@ export function VectorEditor({
         () => doc.elements.filter((el) => selectedIds.includes(el.id)),
         [doc.elements, selectedIds],
     );
-    // Always mounted while editing: with nothing selected the panel edits the canvas itself.
-    const showPanel = canEdit;
-
     // Aspect lock, lifted here so the panel checkbox and the canvas' ObjectTransform
     // resizeMode share one ephemeral setting. Default ON for image-only selections.
     const allImageSelected = selectedElements.length > 0 && selectedElements.every((el) => el.type === 'image');
@@ -83,7 +75,8 @@ export function VectorEditor({
 
     // Comments + activity (the slides PanelColumn shape). Read the cards here so the "active" set is
     // derived independently of the lifecycle's own card read (the slides idiom). A card anchored to an
-    // element takes that element's text as its panel row; every card stays active either way (D2.13).
+    // element takes that element's text as its panel row; every card stays active either way — one whose
+    // element was deleted degrades to document-level rather than vanishing.
     const cards = useCommentCards(doc.yjsDoc, 'comments');
     const activeComments = useCanvasComments(doc.elements, cards);
 
@@ -137,7 +130,7 @@ export function VectorEditor({
 
     // A w-64 sibling occupies the right edge whenever the comment/activity pane or the properties
     // panel is up — inset the find bar clear of it (the slides rule).
-    const rightPanelShown = (!isMobile && !!panel) || showPanel;
+    const rightPanelShown = (!isMobile && !!panel) || canEdit;
 
     const [addOpen, setAddOpen] = useState(false);
     // The element the pending "New comment" anchors to — set by the canvas menu's Comment row, null for
@@ -181,7 +174,11 @@ export function VectorEditor({
             const card = await createCard({ ...patch, attachments });
             if (card && anchorId) {
                 const el = doc.elements.find((e) => e.id === anchorId);
-                if (el) doc.updateElement(anchorId, { commentCardIds: withCommentCard(el, card.id) });
+                // Idempotent: a double submit must not list the same card twice on the element.
+                const ids = el ? parseIdList(el.commentCardIds) : [];
+                if (el && !ids.includes(card.id)) {
+                    doc.updateElement(anchorId, { commentCardIds: serializeIdList([...ids, card.id]) });
+                }
             }
             if (assignee !== undefined && card?.chatName) {
                 assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });
@@ -202,9 +199,14 @@ export function VectorEditor({
             yjsDoc.transact(() => {
                 yjsDoc.getMap('comments').delete(cardId);
             });
-            if (anchor) doc.updateElement(anchor.id, { commentCardIds: withoutCommentCard(anchor, cardId) });
+            // Untracked: stripping the anchor is bookkeeping for a delete the UndoManager never saw (the
+            // comments map is outside its scope), so ⌘Z must not resurrect the flag without its card.
+            if (anchor) {
+                const ids = parseIdList(anchor.commentCardIds).filter((id) => id !== cardId);
+                doc.updateElementUntracked(anchor.id, { commentCardIds: serializeIdList(ids) });
+            }
         },
-        [doc.yjsDoc, doc.elements, doc.updateElement],
+        [doc.yjsDoc, doc.elements, doc.updateElementUntracked],
     );
 
     const panelProps = {
@@ -300,10 +302,12 @@ export function VectorEditor({
                                         />
                                     </div>
                                     {/* Right side: the comment/activity pane wins over the properties panel
-                                    (the slides arrangement); mobile hosts the pane as an outside sibling. */}
+                                    (the slides arrangement); mobile hosts the pane as an outside sibling.
+                                    The panel stays up for the whole editing session — with nothing
+                                    selected it edits the canvas itself. */}
                                     {!isMobile && panel ? (
                                         <PanelColumn activePanel={panel} {...panelProps} />
-                                    ) : showPanel ? (
+                                    ) : canEdit ? (
                                         <CanvasPropertiesPanel
                                             elements={doc.elements}
                                             selectedElements={selectedElements}

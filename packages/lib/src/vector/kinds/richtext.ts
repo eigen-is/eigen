@@ -1,7 +1,7 @@
-import { backgroundCss } from '../../background/style';
+import { backgroundCss } from '../../background';
 import { getFontFamily } from '../../constants/fonts';
 import { stripTagsServer } from '../../core/html';
-import { isTransparentColor, isTransparentFill, parseFill } from '../fill';
+import { isTransparentFill, parseFill } from '../fill';
 import { hitTestBox } from '../geometry';
 import { cornerRadius, rectOutline } from '../outline';
 import {
@@ -18,7 +18,7 @@ import {
 } from '../types';
 import { defineKind } from './kind';
 import { clampNum, color, fillField, fontFamily, fontSize, htmlField, oneOf } from './read-fields';
-import { round } from './render-utils';
+import { isBordered, round } from './render-utils';
 
 export const richTextKind = defineKind<VectorRichTextElement>({
     type: 'richtext',
@@ -47,8 +47,6 @@ export const richTextKind = defineKind<VectorRichTextElement>({
         corners: true,
         stroke: true,
         strokeOptional: true,
-        typography: true,
-        objectFit: false,
         bindable: false,
         silhouette: 'box',
         creation: 'box',
@@ -124,7 +122,7 @@ export function richTextCssText(el: VectorRichTextElement): string {
     const fill = parseFill(el.fill);
     style.push(...backgroundCss(isTransparentFill(fill) ? null : fill));
     // The stroke fields are this kind's BORDER (types.ts) — CSS border-style shares our vocabulary.
-    const bordered = el.strokeWidth > 0 && !isTransparentColor(el.strokeColor);
+    const bordered = isBordered(el);
     if (bordered) style.push(`border:${round(el.strokeWidth)}px ${el.strokeStyle} ${el.strokeColor}`);
     const radius = cornerRadius(el, 'rectangle');
     if (radius > 0) style.push(`border-radius:${round(radius)}px`);

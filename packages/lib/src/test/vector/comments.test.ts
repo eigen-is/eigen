@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { commentAnchorTexts, elementForCommentCard, withCommentCard, withoutCommentCard } from '../../vector/comments';
+import { commentAnchorTexts, elementForCommentCard } from '../../vector/comments';
 import {
     DEFAULT_ARROW_PROPS,
     DEFAULT_ELEMENT_PROPS,
@@ -101,32 +101,5 @@ describe('elementForCommentCard', () => {
 
     test('a card no element claims is document-level', () => {
         expect(elementForCommentCard([shape({ id: 'a', type: 'rectangle' })], 'c1')).toBeUndefined();
-    });
-});
-
-describe('withCommentCard', () => {
-    test('appends without duplicating', () => {
-        const el = shape({ id: 'a', type: 'rectangle', commentCardIds: '' });
-        expect(withCommentCard(el, 'c1')).toBe('["c1"]');
-        expect(withCommentCard({ ...el, commentCardIds: '["c1"]' }, 'c1')).toBe('["c1"]');
-        expect(withCommentCard({ ...el, commentCardIds: '["c1"]' }, 'c2')).toBe('["c1","c2"]');
-    });
-
-    test('a malformed list is replaced, not extended', () => {
-        expect(withCommentCard(shape({ id: 'a', type: 'rectangle', commentCardIds: '{oops' }), 'c1')).toBe('["c1"]');
-    });
-});
-
-describe('withoutCommentCard', () => {
-    test('strips the card and empties back to the unanchored scalar', () => {
-        const el = shape({ id: 'a', type: 'rectangle', commentCardIds: '["c1","c2"]' });
-        expect(withoutCommentCard(el, 'c1')).toBe('["c2"]');
-        expect(withoutCommentCard({ ...el, commentCardIds: '["c1"]' }, 'c1')).toBe('');
-    });
-
-    test('stripping a card the element never held is a no-op', () => {
-        expect(withoutCommentCard(shape({ id: 'a', type: 'rectangle', commentCardIds: '["c1"]' }), 'c9')).toBe(
-            '["c1"]',
-        );
     });
 });

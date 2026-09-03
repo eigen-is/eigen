@@ -18,6 +18,7 @@ import {
     writeEigenClipboard,
     writeEigenClipboardAsync,
 } from '@workspace/lib/clipboard';
+import { PENDING_PREFIX } from '@workspace/lib/drive';
 import { textToParagraphHtml } from '@workspace/lib/html';
 import { htmlToPlainText, readDominantTextAlign } from '@workspace/lib/html-dom';
 import type { EigenClipboardData, EigenClipboardImageItem, EigenClipboardItem } from '@workspace/lib/types/clipboard';
@@ -35,7 +36,7 @@ import {
     type VectorElement,
     type VectorMeta,
 } from '@workspace/lib/vector';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type * as Y from 'yjs';
 import { isTypingTarget } from '../../../hooks/is-typing-target';
 import { measureVectorText } from '../text-measure';
@@ -154,9 +155,12 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                 const box = readClipboardBox(item);
                 const angle = box.angle ?? 0;
                 if (item.type === 'image') {
+                    // No media/ folder means no upload target and nothing to resolve a name against, so
+                    // the image is dropped rather than pasted broken (insertImageFiles bails the same way).
+                    if (!mediaFolderId) continue;
                     const { width, height } = box;
                     const index = plan.partials.length;
-                    const crossMount = !!mediaFolderId && needsReUpload(item.sourceParentId, mediaFolderId);
+                    const crossMount = needsReUpload(item.sourceParentId, mediaFolderId);
                     plan.partials.push({
                         type: 'image',
                         ...placeAt(width, height),
@@ -164,7 +168,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                         height,
                         angle,
                         // Optimistic add with a pending name; the real name swaps in a late transact.
-                        mediaName: crossMount ? `pending:${crypto.randomUUID()}` : item.mediaName,
+                        mediaName: crossMount ? `${PENDING_PREFIX}${crypto.randomUUID()}` : item.mediaName,
                     });
                     if (crossMount) plan.crossMount.push({ index, item });
                     continue;
@@ -207,7 +211,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             setSelectedIds(ids);
 
             // Cross-mount images: fetch from source, re-upload into our media/, swap the pending name
-            // (late transact) or drop the element on failure — the shipped M4 optimistic-insert idiom.
+            // (late transact) or drop the element on failure — the shared optimistic-insert idiom.
             for (const { index, item } of plan.crossMount) {
                 const id = ids[index];
                 if (!id || !mediaFolderId) continue;
@@ -226,8 +230,8 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                         }
                         // Untracked: this technical swap is NOT its own undo step, so the whole
                         // cross-mount paste is a single ⌘Z (reverts the insert; peers converge via its
-                        // inverse). Redo re-adds the element at its recorded pending name — the same
-                        // accepted optimistic-insert redo edge as the sheets fix.
+                        // inverse). Redo re-adds the element at its recorded pending name, the accepted
+                        // edge of every optimistic insert.
                         updateElementUntracked(id, { mediaName: result.mediaName });
                     })
                     .catch(() => {});
@@ -308,9 +312,28 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
     // canEdit && !editing; isTypingTarget() bails so the text overlay + a comments composer keep native
     // clipboard (the typing-target invariant). Eigen items are consumed FIRST; a non-eigen paste falls
     // through (capture phase, no stopPropagation) to the container's useFilePasteTarget for OS files.
+    // The three listeners bind ONCE and read the live scene/selection/writers through this ref: a
+    // canvas render (a drag preview, a pan commit) must not tear them down and rebuild them.
+    const handlers = {
+        canEdit,
+        selectedIds,
+        buildData,
+        plainText,
+        pasteEigenItems,
+        pasteNonEigenText,
+        insertImageFiles,
+        viewportCenterScene,
+        deleteElements,
+        setSelectedIds,
+        undoManager,
+    };
+    const live = useRef(handlers);
+    live.current = handlers;
+
     useEffect(() => {
-        const blocked = () => isTypingTarget() || !canEdit || textEditingRef.current;
+        const blocked = () => isTypingTarget() || !live.current.canEdit || textEditingRef.current;
         const onCopyEvent = (e: ClipboardEvent) => {
+            const { selectedIds, buildData, plainText } = live.current;
             if (blocked() || selectedIds.length === 0) return;
             const data = buildData();
             if (!data.items.length) return;
@@ -318,6 +341,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             writeEigenClipboard(e, data, plainText());
         };
         const onCutEvent = (e: ClipboardEvent) => {
+            const { selectedIds, buildData, plainText, deleteElements, setSelectedIds, undoManager } = live.current;
             if (blocked() || selectedIds.length === 0) return;
             const data = buildData();
             if (!data.items.length) return;
@@ -327,6 +351,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager);
         };
         const onPasteEvent = (e: ClipboardEvent) => {
+            const { pasteEigenItems, pasteNonEigenText, insertImageFiles, viewportCenterScene } = live.current;
             if (blocked()) return;
             const cd = e.clipboardData;
             if (!cd) return;
@@ -366,20 +391,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             document.removeEventListener('cut', onCutEvent);
             document.removeEventListener('paste', onPasteEvent, true);
         };
-    }, [
-        canEdit,
-        textEditingRef,
-        selectedIds,
-        buildData,
-        plainText,
-        pasteEigenItems,
-        pasteNonEigenText,
-        insertImageFiles,
-        viewportCenterScene,
-        deleteElements,
-        setSelectedIds,
-        undoManager,
-    ]);
+    }, [textEditingRef]);
 
     // Menu clipboard rows: no ClipboardEvent here, so copy/cut go through the async writer and paste
     // through the async reader (eigen items only — OS files still need ⌘V). Same producer/consumer as

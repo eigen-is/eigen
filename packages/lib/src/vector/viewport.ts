@@ -1,7 +1,7 @@
 // Viewport math for a BOUNDED canvas. The infinite canvas needs none of this — it scrolls forever and
 // opens at the origin — but a frame is a page: it opens fitted, and a pan may never push it off screen.
-// Pure, so both the live hook and the deck shell's thumbnails resolve the same numbers. Scroll is in
-// SCENE units and scene maps to px as (scene + scroll) * zoom, the canvas-wide convention.
+// Pure, so every host resolves the same numbers. Scroll is in SCENE units and scene maps to px as
+// (scene + scroll) * zoom, the canvas-wide convention.
 
 export type CanvasViewport = { zoom: number; scrollX: number; scrollY: number };
 export type Extent = { width: number; height: number };
@@ -33,11 +33,25 @@ export function fitFrameViewport(container: Extent, frame: Extent, padding = FRA
     return clampFrameViewport({ zoom, scrollX: 0, scrollY: 0 }, container, frame);
 }
 
-// The frame's own edges and centre lines as snap targets, so an object aligns to the page the way it
-// aligns to its neighbours (computeSnapTargets' extraV/extraH seam).
-export function frameSnapExtras(frame: Extent): { extraV: number[]; extraH: number[] } {
-    return {
-        extraV: [0, frame.width / 2, frame.width],
-        extraH: [0, frame.height / 2, frame.height],
-    };
+// The scene layer's CSS transform and the overlay group's SVG transform: ONE mapping in two syntaxes,
+// applied with transform-origin 0 0 at both callsites, so the two surfaces stay registered at any zoom.
+export function sceneTransform(v: CanvasViewport): string {
+    return `translate(${v.scrollX * v.zoom}px, ${v.scrollY * v.zoom}px) scale(${v.zoom})`;
+}
+
+export function groupTransform(v: CanvasViewport): string {
+    return `translate(${v.scrollX * v.zoom} ${v.scrollY * v.zoom}) scale(${v.zoom})`;
+}
+
+// Screen-space chrome (selection ring, comment flags, peer cursors) is laid out at the viewport React
+// last rendered; a live gesture runs ahead of that. This is the correction that carries that layout
+// onto `live` — scene positions and scene-sized boxes land exactly right, screen-sized details (a
+// border, a grip) ride the scale until the gesture commits. '' when the two agree: the resting case.
+export function chromeTransform(rendered: CanvasViewport, live: CanvasViewport): string {
+    if (live.zoom === rendered.zoom && live.scrollX === rendered.scrollX && live.scrollY === rendered.scrollY)
+        return '';
+    const scale = live.zoom / rendered.zoom;
+    const dx = (live.scrollX - rendered.scrollX) * live.zoom;
+    const dy = (live.scrollY - rendered.scrollY) * live.zoom;
+    return `translate(${dx}px, ${dy}px) scale(${scale})`;
 }

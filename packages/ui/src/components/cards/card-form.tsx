@@ -4,7 +4,7 @@ import type { ChatAttachment } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
-import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { LightEditor } from '@workspace/ui/components/editor/light-editor';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
@@ -130,6 +130,10 @@ export function CardForm({
             {dialogTitle && (
                 <DialogHeader>
                     <DialogTitle>{dialogTitle}</DialogTitle>
+                    {/* Radix requires a description on every DialogContent; the fields carry their own labels. */}
+                    <DialogDescription className="sr-only">
+                        Set the card's title, description and color.
+                    </DialogDescription>
                 </DialogHeader>
             )}
             {/* Fields scroll so the footer stays pinned on short viewports. */}

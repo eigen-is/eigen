@@ -39,6 +39,17 @@ import {
 // step (⌘Z reverts the insert; peers converge via its inverse) instead of two.
 const UNTRACKED_ORIGIN = Symbol('vector-untracked-write');
 
+// One discrete op = one undo step. Y.UndoManager merges everything inside a 500ms capture window, so a
+// discrete op seals on BOTH sides: nothing that happened just before it (a nudge) and nothing that
+// follows joins its step. The canvas' element ops, the panel's writes and the frame ops all go through
+// this — a gesture that deliberately coalesces (a nudge, a keystroke) simply doesn't call it.
+export function sealed<T>(undoManager: Y.UndoManager | null, op: () => T): T {
+    undoManager?.stopCapturing();
+    const result = op();
+    undoManager?.stopCapturing();
+    return result;
+}
+
 // A partial patch over the write/read allow-list — every field optional, so a caller sets any
 // subset of any element variant's fields (the union members share the geometry base). id/type
 // are never patched; z-order changes rewrite `index`.
@@ -130,8 +141,9 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
     const defaultsRef = useRef(defaults);
     defaultsRef.current = defaults;
 
-    // Shared lifecycle: doc/provider/UndoManager creation + teardown. The UndoManager tracks the two
-    // element roots with default trackedOrigins, so UNTRACKED_ORIGIN writes escape capture (below).
+    // Shared lifecycle: doc/provider/UndoManager creation + teardown. The UndoManager tracks the three
+    // scene roots (elements, frames, meta) with default trackedOrigins, so UNTRACKED_ORIGIN writes
+    // escape capture (below).
     const {
         docRef,
         doc: yjsDoc,
@@ -248,7 +260,7 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
                     if (!(elMap instanceof Y.Map)) continue;
                     for (const [k, v] of Object.entries(fields)) {
                         if (k === 'id' || k === 'type' || v === undefined) continue;
-                        if ((ELEMENT_FIELDS as readonly string[]).includes(k)) elMap.set(k, v);
+                        if (ELEMENT_FIELDS.includes(k)) elMap.set(k, v);
                     }
                     patchedIds.add(id);
                 }
@@ -295,25 +307,40 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
     );
 
     // Frame ops: thin wrappers over frame-writes.ts, the way the element ops wrap element-writes.ts.
-    // add/duplicate return the new frame id so the caller can activate it.
+    // Each is a discrete op, so each is `sealed` — adding a page then renaming it must be two undo
+    // steps. add/duplicate return the new frame id so the caller can activate it.
     const addFrame = useCallback(
-        (afterId?: string) => (docRef.current ? addFrameInDoc(docRef.current, afterId) : undefined),
-        [],
+        (afterId?: string) => {
+            const doc = docRef.current;
+            return doc ? sealed(undoManager, () => addFrameInDoc(doc, afterId)) : undefined;
+        },
+        [undoManager],
     );
 
-    const deleteFrame = useCallback((id: string) => {
-        if (docRef.current) deleteFrameInDoc(docRef.current, id);
-    }, []);
+    const deleteFrame = useCallback(
+        (id: string) => {
+            const doc = docRef.current;
+            if (doc) sealed(undoManager, () => deleteFrameInDoc(doc, id));
+        },
+        [undoManager],
+    );
 
     const duplicateFrame = useCallback(
-        (id: string) => (docRef.current ? duplicateFrameInDoc(docRef.current, id) : undefined),
-        [],
+        (id: string) => {
+            const doc = docRef.current;
+            return doc ? sealed(undoManager, () => duplicateFrameInDoc(doc, id)) : undefined;
+        },
+        [undoManager],
     );
 
     // `afterId` null moves the frame to the front.
-    const moveFrame = useCallback((id: string, afterId: string | null) => {
-        if (docRef.current) moveFrameInDoc(docRef.current, id, afterId);
-    }, []);
+    const moveFrame = useCallback(
+        (id: string, afterId: string | null) => {
+            const doc = docRef.current;
+            if (doc) sealed(undoManager, () => moveFrameInDoc(doc, id, afterId));
+        },
+        [undoManager],
+    );
 
     const updateFrames = useCallback((patches: { id: string; fields: Partial<VectorFrame> }[]) => {
         if (docRef.current) updateFramesInDoc(docRef.current, patches);

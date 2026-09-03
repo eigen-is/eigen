@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { clampFrameViewport, FRAME_FIT_PADDING, fitFrameViewport, frameSnapExtras } from '../../vector/viewport';
+import {
+    chromeTransform,
+    clampFrameViewport,
+    FRAME_FIT_PADDING,
+    fitFrameViewport,
+    groupTransform,
+    sceneTransform,
+} from '../../vector/viewport';
 
 const FRAME = { width: 1920, height: 1080 };
 
@@ -54,6 +61,39 @@ describe('clampFrameViewport', () => {
     });
 });
 
-test('frameSnapExtras seeds the frame edges and centre lines', () => {
-    expect(frameSnapExtras(FRAME)).toEqual({ extraV: [0, 960, 1920], extraH: [0, 540, 1080] });
+describe('sceneTransform / groupTransform', () => {
+    test('map a scene point the same way in both syntaxes', () => {
+        const v = { zoom: 2, scrollX: 30, scrollY: -10 };
+        expect(sceneTransform(v)).toBe('translate(60px, -20px) scale(2)');
+        expect(groupTransform(v)).toBe('translate(60 -20) scale(2)');
+    });
+});
+
+describe('chromeTransform', () => {
+    const rendered = { zoom: 2, scrollX: 30, scrollY: -10 };
+    // Where boxToStyle puts a scene box: (scene + scroll) * zoom.
+    const px = (v: typeof rendered, x: number) => (x + v.scrollX) * v.zoom;
+    // What the correction does to that px position: translate(d) scale(s) about origin 0 0.
+    const applied = (t: string, left: number) => {
+        const [, dx, s] = t.match(/translate\((-?[\d.]+)px, (?:-?[\d.]+)px\) scale\((-?[\d.]+)\)/) ?? [];
+        return Number(s) * left + Number(dx);
+    };
+
+    test('is empty while the live viewport still matches the rendered one', () => {
+        expect(chromeTransform(rendered, { ...rendered })).toBe('');
+    });
+
+    test('a pan lands the rendered chrome on the live position, at scale 1', () => {
+        const live = { ...rendered, scrollX: 55, scrollY: 4 };
+        const t = chromeTransform(rendered, live);
+        expect(t).toContain('scale(1)');
+        expect(applied(t, px(rendered, 100))).toBeCloseTo(px(live, 100), 9);
+    });
+
+    test('a zoom lands it too, scaling the chrome with the scene', () => {
+        const live = { zoom: 3.5, scrollX: 12, scrollY: 40 };
+        const t = chromeTransform(rendered, live);
+        expect(applied(t, px(rendered, 100))).toBeCloseTo(px(live, 100), 9);
+        expect(applied(t, px(rendered, -250))).toBeCloseTo(px(live, -250), 9);
+    });
 });

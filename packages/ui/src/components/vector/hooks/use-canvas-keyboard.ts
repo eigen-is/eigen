@@ -15,9 +15,10 @@ import {
     orderByFractionalIndex,
     type VectorElement,
 } from '@workspace/lib/vector';
+import { useCallback, useMemo, useRef } from 'react';
 import type * as Y from 'yjs';
 import { useZOrderHotkeys, type ZOp } from '../../properties-panel/z-order';
-import type { VectorElementPatch } from './use-canvas-doc';
+import { sealed, type VectorElementPatch } from './use-canvas-doc';
 import { VECTOR_TOOLS, type VectorTool } from './use-tool';
 
 // Fractional-index rewrites for a z-order change. The selection moves as a block relative to the
@@ -56,16 +57,14 @@ function computeZOrder(ordered: VectorElement[], selectedIds: string[], op: ZOp)
 }
 
 // Duplicate the selection (⌘D and the object context menu share this) — offsets each copy by +10,+10,
-// seals the undo group on both sides so it's one step, and reselects the new copies.
+// one sealed undo step, and reselects the new copies.
 export function duplicateSelection(
     selectedIds: string[],
     duplicateElements: (ids: string[], dx: number, dy: number) => string[],
     setSelection: (ids: string[]) => void,
     undoManager: Y.UndoManager | null,
 ): void {
-    undoManager?.stopCapturing();
-    const ids = duplicateElements(selectedIds, DUPLICATE_OFFSET, DUPLICATE_OFFSET);
-    undoManager?.stopCapturing();
+    const ids = sealed(undoManager, () => duplicateElements(selectedIds, DUPLICATE_OFFSET, DUPLICATE_OFFSET));
     if (ids.length) setSelection(ids);
 }
 
@@ -77,15 +76,13 @@ export function deleteSelection(
     setSelection: (ids: string[]) => void,
     undoManager: Y.UndoManager | null,
 ): void {
-    undoManager?.stopCapturing();
-    deleteElements(selectedIds);
-    undoManager?.stopCapturing();
+    sealed(undoManager, () => deleteElements(selectedIds));
     setSelection([]);
 }
 
 // The z-order write, shared by the keyboard brackets and the properties panel's Arrange buttons so
-// the fractional-index math lives in one place. Seals the undo group on both sides (one step) and
-// no-ops when the block is already at the edge.
+// the fractional-index math lives in one place. One sealed undo step, and a no-op when the block is
+// already at the edge.
 export function applyZOrder(
     op: ZOp,
     elements: VectorElement[],
@@ -95,16 +92,13 @@ export function applyZOrder(
 ): void {
     const patches = computeZOrder(orderByFractionalIndex(elements), selectedIds, op);
     if (!patches.length) return;
-    undoManager?.stopCapturing();
-    updateElements(patches.map((p) => ({ id: p.id, fields: { index: p.index } })));
-    undoManager?.stopCapturing();
+    sealed(undoManager, () => updateElements(patches.map((p) => ({ id: p.id, fields: { index: p.index } }))));
 }
 
-type VectorKeyboardParams = {
+type CanvasKeyboardParams = {
     enabled: boolean;
     elements: VectorElement[];
     selectedIds: string[];
-    tool: VectorTool;
     setTool: (t: VectorTool) => void;
     toolLocked: boolean;
     setToolLocked: (locked: boolean) => void;
@@ -115,76 +109,112 @@ type VectorKeyboardParams = {
     duplicateElements: (ids: string[], dx: number, dy: number) => string[];
 };
 
-export function useCanvasKeyboard(params: VectorKeyboardParams) {
-    const { enabled, elements, selectedIds, setTool, toolLocked, setToolLocked, setSelection, undoManager } = params;
-    const { deleteElements, updateElements, duplicateElements } = params;
+// The nudge bindings in one table, so the eight handlers are built — and memoized — in one place.
+const NUDGES = [
+    ['ArrowLeft', -NUDGE_STEP, 0],
+    ['ArrowRight', NUDGE_STEP, 0],
+    ['ArrowUp', 0, -NUDGE_STEP],
+    ['ArrowDown', 0, NUDGE_STEP],
+    ['Shift+ArrowLeft', -NUDGE_STEP_LARGE, 0],
+    ['Shift+ArrowRight', NUDGE_STEP_LARGE, 0],
+    ['Shift+ArrowUp', 0, -NUDGE_STEP_LARGE],
+    ['Shift+ArrowDown', 0, NUDGE_STEP_LARGE],
+] as const;
+
+export function useCanvasKeyboard(params: CanvasKeyboardParams) {
+    const { enabled, elements, selectedIds, undoManager } = params;
     const hasSelection = selectedIds.length > 0;
+
+    // Every handler below reads the live params through this ref, so all 34 registrations keep ONE
+    // identity for the canvas' lifetime: a render (a drag preview, a selection change) allocates no
+    // callbacks and rebuilds no registration. Only `enabled` may change, in the memoized options.
+    const live = useRef(params);
+    live.current = params;
 
     // Undo/redo through the doc's own UndoManager (⌘Z / ⌘⇧Z / ⌘Y).
     useYjsUndoHotkeys(undoManager, enabled);
 
+    const on = useMemo(() => ({ enabled }), [enabled]);
+    const onSelection = useMemo(() => ({ enabled: enabled && hasSelection }), [enabled, hasSelection]);
+    const onSelectionMod = useMemo(
+        () => ({ enabled: enabled && hasSelection, ignoreInputs: true }),
+        [enabled, hasSelection],
+    );
+    const onElementsMod = useMemo(
+        () => ({ enabled: enabled && elements.length > 0, ignoreInputs: true }),
+        [enabled, elements.length],
+    );
+
     // Tools — single keys, so the lib's ignoreInputs default keeps them off while typing elsewhere. The
     // letter and the digit come from VECTOR_TOOLS, the one table the toolbar reads, so a new tool binds
     // itself. A module constant, so the hook count and order are fixed across renders.
-    for (const { tool, shortcut, digit } of VECTOR_TOOLS) {
-        useHotkey(shortcut, () => setTool(tool), { enabled });
-        useHotkey(digit, () => setTool(tool), { enabled });
+    const toolHandlers = useMemo(
+        () =>
+            VECTOR_TOOLS.map(
+                ({ tool }) =>
+                    () =>
+                        live.current.setTool(tool),
+            ),
+        [],
+    );
+    for (const [i, { shortcut, digit }] of VECTOR_TOOLS.entries()) {
+        useHotkey(shortcut, toolHandlers[i], on);
+        useHotkey(digit, toolHandlers[i], on);
     }
 
     // Tool lock — keeps the selected tool active after a placement (Excalidraw's Q padlock).
-    useHotkey('Q', () => setToolLocked(!toolLocked), { enabled });
+    const toggleLock = useCallback(() => live.current.setToolLocked(!live.current.toolLocked), []);
+    useHotkey('Q', toggleLock, on);
 
-    // Discrete ops seal the undo group on BOTH sides (see deleteSelection/duplicateSelection): a
-    // nudge inside the 500ms capture window then can't merge into them. Nudges themselves carry no
-    // seal, so rapid taps still coalesce.
-    const del = () => deleteSelection(selectedIds, deleteElements, setSelection, undoManager);
-    useHotkey('Delete', del, { enabled: enabled && hasSelection });
-    useHotkey('Backspace', del, { enabled: enabled && hasSelection });
+    // Discrete ops go through `sealed` (see deleteSelection/duplicateSelection): a nudge inside the
+    // 500ms capture window then can't merge into them. Nudges themselves are unsealed, so rapid taps
+    // still coalesce into one step.
+    const del = useCallback(() => {
+        const p = live.current;
+        deleteSelection(p.selectedIds, p.deleteElements, p.setSelection, p.undoManager);
+    }, []);
+    useHotkey('Delete', del, onSelection);
+    useHotkey('Backspace', del, onSelection);
 
     // Mod combos default ignoreInputs off, so opt in — ⌘A must not hijack select-all in an input.
-    useHotkey(
-        'Mod+A',
-        (e) => {
-            e.preventDefault();
-            setSelection(elements.map((el) => el.id));
-        },
-        { enabled: enabled && elements.length > 0, ignoreInputs: true },
-    );
-    useHotkey(
-        'Mod+D',
-        (e) => {
-            e.preventDefault();
-            duplicateSelection(selectedIds, duplicateElements, setSelection, undoManager);
-        },
-        { enabled: enabled && hasSelection, ignoreInputs: true },
-    );
+    const selectAll = useCallback((e: KeyboardEvent) => {
+        e.preventDefault();
+        const p = live.current;
+        p.setSelection(p.elements.map((el) => el.id));
+    }, []);
+    useHotkey('Mod+A', selectAll, onElementsMod);
+    const duplicate = useCallback((e: KeyboardEvent) => {
+        e.preventDefault();
+        const p = live.current;
+        duplicateSelection(p.selectedIds, p.duplicateElements, p.setSelection, p.undoManager);
+    }, []);
+    useHotkey('Mod+D', duplicate, onSelectionMod);
 
     // Nudge — 1px, Shift 5px (scene units). One transact per press (undo coalesces rapid taps).
-    const nudge = (dx: number, dy: number) => {
-        const byId = new Map(elements.map((el) => [el.id, el]));
-        const patches = selectedIds
+    const nudge = useCallback((dx: number, dy: number) => {
+        const p = live.current;
+        const byId = new Map(p.elements.map((el) => [el.id, el]));
+        const patches = p.selectedIds
             .map((id) => byId.get(id))
             .filter((el): el is VectorElement => !!el)
             .map((el) => ({ id: el.id, fields: { x: el.x + dx, y: el.y + dy } }));
-        if (patches.length) updateElements(patches);
-    };
-    const arrow = (dx: number, dy: number) => (e: KeyboardEvent) => {
-        e.preventDefault();
-        nudge(dx, dy);
-    };
-    const nudgeEnabled = { enabled: enabled && hasSelection };
-    useHotkey('ArrowLeft', arrow(-NUDGE_STEP, 0), nudgeEnabled);
-    useHotkey('ArrowRight', arrow(NUDGE_STEP, 0), nudgeEnabled);
-    useHotkey('ArrowUp', arrow(0, -NUDGE_STEP), nudgeEnabled);
-    useHotkey('ArrowDown', arrow(0, NUDGE_STEP), nudgeEnabled);
-    useHotkey('Shift+ArrowLeft', arrow(-NUDGE_STEP_LARGE, 0), nudgeEnabled);
-    useHotkey('Shift+ArrowRight', arrow(NUDGE_STEP_LARGE, 0), nudgeEnabled);
-    useHotkey('Shift+ArrowUp', arrow(0, -NUDGE_STEP_LARGE), nudgeEnabled);
-    useHotkey('Shift+ArrowDown', arrow(0, NUDGE_STEP_LARGE), nudgeEnabled);
+        if (patches.length) p.updateElements(patches);
+    }, []);
+    const nudgeHandlers = useMemo(
+        () =>
+            NUDGES.map(([, dx, dy]) => (e: KeyboardEvent) => {
+                e.preventDefault();
+                nudge(dx, dy);
+            }),
+        [nudge],
+    );
+    for (const [i, [key]] of NUDGES.entries()) useHotkey(key, nudgeHandlers[i], onSelection);
 
     // Z-order: ⌘[/⌘] step, ⌘⇧[/⌘⇧] to back/front — shared hook owns the manual event.code listener,
     // fed vector's fractional-index write.
-    useZOrderHotkeys(enabled && hasSelection, (op) =>
-        applyZOrder(op, elements, selectedIds, updateElements, undoManager),
-    );
+    const arrange = useCallback((op: ZOp) => {
+        const p = live.current;
+        applyZOrder(op, p.elements, p.selectedIds, p.updateElements, p.undoManager);
+    }, []);
+    useZOrderHotkeys(enabled && hasSelection, arrange);
 }

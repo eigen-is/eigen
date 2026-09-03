@@ -426,7 +426,7 @@ Optional `onResolve`/`onAssign` for apps that surface resolve/assign at the dial
 ### Vector
 
 - `VectorElementBase.commentCardIds` is a JSON id string on the element (`parseIdList` /
-  `serializeIdList`); `withCommentCard` / `withoutCommentCard` are the two writers.
+  `serializeIdList`); the host adds and removes an id inline through those two.
 - `useCanvasComments(elements, cards)` builds the `ActiveComments` projection: every card is active,
   and `commentAnchorTexts` gives each anchored card the element's own `searchText` (first anchor wins,
   falling back to the kind's UI label).
