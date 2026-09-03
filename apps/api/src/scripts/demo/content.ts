@@ -84,6 +84,7 @@ export type DocComment = {
     text: string;
     replies?: { author: string; text: string }[];
     assignTo?: LeadRole; // records an `assigned` activity + notification
+    attach?: string[]; // seeded team documents pinned to the card, see ChatLine.attach
 };
 
 export type SeededDoc = {
@@ -118,6 +119,7 @@ export const DOCS: SeededDoc[] = [
                 anchor: 'short on crew for the build weekend',
                 author: 'saar',
                 text: "We're still about 10 volunteers short for the build weekend. Can we push the call-out again?",
+                attach: ['crew roster'],
                 replies: [
                     { author: 'nour', text: 'On it, sending a fresh call-out to the mailing list today.' },
                     { author: 'saar', text: '/highfive' },
@@ -191,6 +193,7 @@ export type CardSpec = {
     chat: string; // slug, lowercase, no extension
     chatText: string;
     chatReplies?: { author: string; text: string }[];
+    attach?: string[]; // seeded team documents pinned to the card, see ChatLine.attach
 };
 
 export const KANBAN = {
@@ -256,6 +259,7 @@ export const KANBAN = {
             chatReplies: [
                 { author: 'timo', text: 'Make sure the backup can carry the second stage on its own if it has to.' },
             ],
+            attach: ['site plan'],
         },
         {
             title: 'Print wristbands',
@@ -890,7 +894,10 @@ export const SITE_PLAN = {
 
 // --- Chat channels (real chat rooms in chats/, seeded via ChatRoom.postMessage as personas) ---
 
-export type ChatLine = { author: string; text: string };
+// `attach` names seeded team documents (a DOCS/BUDGET/SPONSOR_DECK/KANBAN/SITE_PLAN name, or 'crew
+// roster') posted as drive-reference attachments; the seeder resolves them to the real ids at seed time,
+// so a document can only be attached from content seeded after it.
+export type ChatLine = { author: string; text: string; attach?: string[] };
 export type SeededChat = { name: string; messages: ChatLine[] };
 
 export const CHATS: SeededChat[] = [
@@ -911,7 +918,8 @@ export const CHATS: SeededChat[] = [
             { author: 'timo', text: '/highfive' },
             {
                 author: 'saar',
-                text: 'Site plan draft is in production/, based on last year. We walk it on the site visit and make it final after. Timo, check the generator runs. Fenna, the bar tent moved next to the food trucks.',
+                text: 'Site plan draft is up, based on last year. We walk it on the site visit and make it final after. Timo, check the generator runs. Fenna, the bar tent moved next to the food trucks.',
+                attach: ['site plan'],
             },
             { author: 'fenna', text: 'Closer to the food, closer to the queue. Fine by me.' },
             { author: 'timo', text: 'Runs look right. The backup on the second stage is exactly what Rob confirmed.' },
@@ -923,7 +931,7 @@ export const CHATS: SeededChat[] = [
             { author: 'nour', text: "We're about 10 short for the build weekend. Pushing the call-out today." },
             { author: 'maud', text: 'i can bring two friends for load-in thursday' },
             { author: 'maud', text: '*friday' },
-            { author: 'nour', text: 'Nice, added you three to the roster.' },
+            { author: 'nour', text: 'Nice, added you three to the roster.', attach: ['crew roster'] },
             { author: 'maud', text: '/allthethings' },
             { author: 'yara', text: 'Camping host desk needs one more for the night shift.' },
             { author: 'imke', text: 'First aid is covered for both days, one gap Sunday morning.' },

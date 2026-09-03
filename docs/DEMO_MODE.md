@@ -107,7 +107,7 @@ demo settings (`guests.openSignup: false`, `defaultMountMaxSizeMB: 50`, `maxUplo
   mechanics.
 - **Content conventions.** All seeded directory and file names are lowercase; chat channels live in a
   `chats/` directory on the team drive (a few messages, and some doc/stickies comment replies, are
-  `/cheer`-style slash-command emotes the chat app renders). A `festival crew` team is created
+  `/cheer`-style slash-command emotes the chat app renders). A chat line's `attach` names seeded team documents (`'site plan'`, `'crew roster'`, …) the seeder posts as drive-reference attachments, so the message links the real container. A `festival crew` team is created
   (`createTeam` + `addTeamMember` per persona) with an explicit shared mount.
 - **Docs through the shipped importer.** Docs are HTML → `.docx` (`@turbodocx/html-to-docx`) →
   `convertToDocument(..., 'eigendoc')`. The demo dogfoods import on every reset; no bespoke Y.Doc builder.

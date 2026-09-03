@@ -27,8 +27,8 @@ import { getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { Attendee, EventData } from '@workspace/lib/types/calendar';
 import type { CommentCard } from '@workspace/lib/types/comments';
-import { DRIVE_MIME_FOLDER, DRIVE_TYPE_FOLDER, stripEigenExtension } from '@workspace/lib/types/drive';
-import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
+import { DRIVE_MIME_FOLDER, DRIVE_TYPE_FOLDER, type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
+import { type AttachmentReference, toAttachmentReference } from '@workspace/lib/types/drive-reference';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import * as Y from 'yjs';
 import type { User } from '../lib/user';
@@ -179,6 +179,7 @@ function writeCommentCard(doc: Y.Doc, card: CommentCard): void {
     if (card.chatName) y.set('chatName', card.chatName);
     if (card.creator) y.set('creator', card.creator);
     if (card.createdAt !== undefined) y.set('createdAt', card.createdAt);
+    if (card.attachments) y.set('attachments', card.attachments);
     getItemMapRoot(doc, 'comments').set(card.id, y);
 }
 
@@ -337,6 +338,14 @@ async function main(): Promise<void> {
         await room.postMessage(author, text);
     };
 
+    // Seeded team documents by content name, so chat lines can attach them as drive references.
+    const teamDocs = new Map<string, DrivePath>();
+    const teamDocRef = (name: string): AttachmentReference => {
+        const path = teamDocs.get(name);
+        if (!path) throw new Error(`Chat line attaches unknown team document '${name}'`);
+        return toAttachmentReference(path);
+    };
+
     // --- Site photos: committed .webp fixtures uploaded into images/ through the real drive path. ---
     const imagesFolderId = folderId.get('images')!;
     for (const photo of PHOTOS) {
@@ -365,6 +374,37 @@ async function main(): Promise<void> {
         );
     }
 
+    // --- Volunteer roster: a doc in volunteers/ listing every crew member with a link to their team
+    // contact card. Built here (not in content.ts) so the links carry the runtime team id + emails.
+    // The team id is shared by every persona, so one URL works for every visitor. Links are
+    // root-relative (no host) so they resolve against whatever domain the demo is served on. ---
+    {
+        const author = userForRole('volunteers');
+        const rosterItems = PERSONAS.map((p) => {
+            const url = `/contacts/team/${teamId}?contactId=${encodeURIComponent(emailFor(p.key))}`;
+            return `<li><a href="${url}">${p.name}</a> - ${p.title}</li>`;
+        }).join('');
+        const rosterHtml = [
+            '<h1>Crew roster</h1>',
+            '<p>Everyone helping to run the festival this edition. Click a name to open their contact card.</p>',
+            `<ul>${rosterItems}</ul>`,
+        ].join('');
+        const docxBytes = Buffer.from(await htmlToDocx(rosterHtml));
+        const upload = await teamDrive.createFileFromData(
+            teamMountId,
+            folderId.get('volunteers')!,
+            'crew roster.docx',
+            DOCX_MIME,
+            docxBytes,
+            author,
+        );
+        const { mount: docMount, path: docSource } = await teamDrive.resolveFile(teamMountId, upload.id);
+        const docPath = await convertToDocument(teamDrive, docMount, docSource, 'eigendoc', author);
+        await teamDrive.deletePath(teamMountId, upload.id, author); // trash the raw upload
+        await teamDrive.flushContainerDb(teamMountId, docPath.id);
+        teamDocs.set('crew roster', docPath);
+    }
+
     // --- Docs: HTML -> .docx -> shipped converter -> eigendoc; comment threads as nested chats. ---
     for (const doc of DOCS) {
         const author = userForRole(doc.author);
@@ -381,6 +421,7 @@ async function main(): Promise<void> {
         const { mount: docMount, path: docSource } = await teamDrive.resolveFile(teamMountId, upload.id);
         const docPath = await convertToDocument(teamDrive, docMount, docSource, 'eigendoc', author);
         await teamDrive.deletePath(teamMountId, upload.id, author); // trash the raw upload
+        teamDocs.set(doc.name, docPath);
 
         // Comment threads are chats inside the container's chat/ subfolder (see assertCommentChatExists).
         const chatFolder = await teamDrive.getChildByName(teamMountId, docPath.id, 'chat');
@@ -404,6 +445,7 @@ async function main(): Promise<void> {
                 chatName: chat.name,
                 creator: commentAuthor.email,
                 createdAt: Date.now(),
+                attachments: comment.attach?.map(teamDocRef),
             };
             if (!injectCommentMark(docJson, comment.anchor, card.id)) {
                 throw new Error(`Anchor "${comment.anchor}" not found in "${doc.name}"`);
@@ -443,132 +485,6 @@ async function main(): Promise<void> {
         await teamDrive.flushContainerDb(teamMountId, docPath.id);
     }
 
-    // --- Volunteer roster: a doc in volunteers/ listing every crew member with a link to their team
-    // contact card. Built here (not in content.ts) so the links carry the runtime team id + emails.
-    // The team id is shared by every persona, so one URL works for every visitor. Links are
-    // root-relative (no host) so they resolve against whatever domain the demo is served on. ---
-    {
-        const author = userForRole('volunteers');
-        const rosterItems = PERSONAS.map((p) => {
-            const url = `/contacts/team/${teamId}?contactId=${encodeURIComponent(emailFor(p.key))}`;
-            return `<li><a href="${url}">${p.name}</a> - ${p.title}</li>`;
-        }).join('');
-        const rosterHtml = [
-            '<h1>Crew roster</h1>',
-            '<p>Everyone helping to run the festival this edition. Click a name to open their contact card.</p>',
-            `<ul>${rosterItems}</ul>`,
-        ].join('');
-        const docxBytes = Buffer.from(await htmlToDocx(rosterHtml));
-        const upload = await teamDrive.createFileFromData(
-            teamMountId,
-            folderId.get('volunteers')!,
-            'crew roster.docx',
-            DOCX_MIME,
-            docxBytes,
-            author,
-        );
-        const { mount: docMount, path: docSource } = await teamDrive.resolveFile(teamMountId, upload.id);
-        const docPath = await convertToDocument(teamDrive, docMount, docSource, 'eigendoc', author);
-        await teamDrive.deletePath(teamMountId, upload.id, author); // trash the raw upload
-        await teamDrive.flushContainerDb(teamMountId, docPath.id);
-    }
-
-    // --- Slides / sheets / stickies: byte-copy the committed fixture containers. The slides deck and
-    // budget sheet are hand-maintained (edited in a live demo, copied back — see fixtures/), so their
-    // data.db carries the real content; the stickies board's creators/colors are patched below. ---
-    const placeFixture = async (
-        parentId: string,
-        driveName: string,
-        type: 'slides' | 'sheets' | 'stickies',
-        fixtureDir: string,
-        actor: User,
-    ): Promise<string> => {
-        const container = await teamDrive.createFolder(teamMountId, parentId, driveName, actor, type);
-        for (const dbName of ['data.db', 'comments.db']) {
-            const bytes = readFileSync(join(FIXTURES_DIR, fixtureDir, dbName));
-            await teamDrive.createFileFromData(teamMountId, container.id, dbName, SQLITE_MIME, bytes, actor);
-        }
-        // Embedded media (e.g. an image dropped into the deck) lives under the fixture's media/ folder
-        // and is referenced by name from data.db — copy it so the byte-copied doc stays whole.
-        const mediaFolder = await teamDrive.createFolder(teamMountId, container.id, 'media', actor);
-        const mediaDir = join(FIXTURES_DIR, fixtureDir, 'media');
-        if (existsSync(mediaDir)) {
-            for (const file of readdirSync(mediaDir)) {
-                const path = join(mediaDir, file);
-                const bytes = readFileSync(path);
-                await teamDrive.createFileFromData(
-                    teamMountId,
-                    mediaFolder.id,
-                    file,
-                    Bun.file(path).type,
-                    bytes,
-                    actor,
-                );
-            }
-        }
-        await teamDrive.createFolder(teamMountId, container.id, 'chat', actor);
-        return container.id;
-    };
-
-    await placeFixture(
-        folderId.get(SPONSOR_DECK.folder)!,
-        `${SPONSOR_DECK.name}.eigenslides`,
-        'slides',
-        'sponsor-pitch.eigenslides',
-        userForRole(SPONSOR_DECK.author),
-    );
-
-    await placeFixture(
-        folderId.get(BUDGET.folder)!,
-        `${BUDGET.name}.eigensheets`,
-        'sheets',
-        'festival-budget.eigensheets',
-        userForRole(BUDGET.author),
-    );
-
-    const boardId = await placeFixture(
-        folderId.get(KANBAN.folder)!,
-        `${KANBAN.name}.eigenstickies`,
-        'stickies',
-        'festival-kanban.eigenstickies',
-        userForRole('production'),
-    );
-    const board = await teamDrive.getCollabDocument(teamMountId, boardId);
-
-    // Card chat threads: same pattern as doc comments — a real chat inside the container's chat/
-    // subfolder, seeded by the card's creator persona and linked back onto the card by name.
-    const boardChatFolder = await teamDrive.getChildByName(teamMountId, boardId, 'chat');
-    if (!boardChatFolder) throw new Error(`chat/ subfolder missing for ${KANBAN.name}`);
-    const cardChatNames = new Map<string, string>();
-    for (const [i, card] of KANBAN.cards.entries()) {
-        const cardAuthor = userByKey.get(card.creator)!;
-        const chat = await teamDrive.create(teamMountId, boardChatFolder.id, card.chat, 'chat', cardAuthor);
-        await postTo(chat.id, cardAuthor, card.chatText);
-        for (const reply of card.chatReplies ?? []) {
-            await postTo(chat.id, userByKey.get(reply.author)!, reply.text);
-        }
-        cardChatNames.set(`card-${i + 1}`, chat.name);
-    }
-
-    // The fixture bakes card/column creators as bare persona keys; rewrite them to runtime emails
-    // so the board resolves author names under any MAIL_DOMAIN. Every card also gets the shared
-    // default card color and its chat link.
-    board.doc.transact(() => {
-        for (const rootName of ['tasks', 'columns']) {
-            for (const [, entry] of getItemMapRoot(board.doc, rootName)) {
-                const creator = entry.get('creator');
-                if (typeof creator === 'string' && !creator.includes('@')) entry.set('creator', emailFor(creator));
-            }
-        }
-        const tasksMap = getItemMapRoot(board.doc, 'tasks');
-        for (const [cardId, chatName] of cardChatNames) {
-            const task = tasksMap.get(cardId)!;
-            task.set('color', DEFAULT_CARD_COLOR);
-            task.set('chatName', chatName);
-        }
-    });
-    await teamDrive.flushContainerDb(teamMountId, boardId);
-
     // --- Site plan: a vector drawing built straight into the container's Y.Doc from the SITE_PLAN
     // spec (no fixture bytes; see demo/vector-build.ts). The two referenced images are uploaded into
     // the container's media/ subfolder (CollabDocument.create makes it) so the drawing stays whole. ---
@@ -598,7 +514,113 @@ async function main(): Promise<void> {
         const collab = await teamDrive.getCollabDocument(teamMountId, container.id);
         buildVectorDoc(collab.doc, SITE_PLAN);
         await teamDrive.flushContainerDb(teamMountId, container.id);
+        teamDocs.set(SITE_PLAN.name, container);
     }
+
+    // --- Slides / sheets / stickies: byte-copy the committed fixture containers. The slides deck and
+    // budget sheet are hand-maintained (edited in a live demo, copied back — see fixtures/), so their
+    // data.db carries the real content; the stickies board's creators/colors are patched below. ---
+    const placeFixture = async (
+        parentId: string,
+        driveName: string,
+        type: 'slides' | 'sheets' | 'stickies',
+        fixtureDir: string,
+        actor: User,
+    ): Promise<DrivePath> => {
+        const container = await teamDrive.createFolder(teamMountId, parentId, driveName, actor, type);
+        for (const dbName of ['data.db', 'comments.db']) {
+            const bytes = readFileSync(join(FIXTURES_DIR, fixtureDir, dbName));
+            await teamDrive.createFileFromData(teamMountId, container.id, dbName, SQLITE_MIME, bytes, actor);
+        }
+        // Embedded media (e.g. an image dropped into the deck) lives under the fixture's media/ folder
+        // and is referenced by name from data.db — copy it so the byte-copied doc stays whole.
+        const mediaFolder = await teamDrive.createFolder(teamMountId, container.id, 'media', actor);
+        const mediaDir = join(FIXTURES_DIR, fixtureDir, 'media');
+        if (existsSync(mediaDir)) {
+            for (const file of readdirSync(mediaDir)) {
+                const path = join(mediaDir, file);
+                const bytes = readFileSync(path);
+                await teamDrive.createFileFromData(
+                    teamMountId,
+                    mediaFolder.id,
+                    file,
+                    Bun.file(path).type,
+                    bytes,
+                    actor,
+                );
+            }
+        }
+        await teamDrive.createFolder(teamMountId, container.id, 'chat', actor);
+        return container;
+    };
+
+    teamDocs.set(
+        SPONSOR_DECK.name,
+        await placeFixture(
+            folderId.get(SPONSOR_DECK.folder)!,
+            `${SPONSOR_DECK.name}.eigenslides`,
+            'slides',
+            'sponsor-pitch.eigenslides',
+            userForRole(SPONSOR_DECK.author),
+        ),
+    );
+
+    teamDocs.set(
+        BUDGET.name,
+        await placeFixture(
+            folderId.get(BUDGET.folder)!,
+            `${BUDGET.name}.eigensheets`,
+            'sheets',
+            'festival-budget.eigensheets',
+            userForRole(BUDGET.author),
+        ),
+    );
+
+    const boardPath = await placeFixture(
+        folderId.get(KANBAN.folder)!,
+        `${KANBAN.name}.eigenstickies`,
+        'stickies',
+        'festival-kanban.eigenstickies',
+        userForRole('production'),
+    );
+    teamDocs.set(KANBAN.name, boardPath);
+    const boardId = boardPath.id;
+    const board = await teamDrive.getCollabDocument(teamMountId, boardId);
+
+    // Card chat threads: same pattern as doc comments — a real chat inside the container's chat/
+    // subfolder, seeded by the card's creator persona and linked back onto the card by name.
+    const boardChatFolder = await teamDrive.getChildByName(teamMountId, boardId, 'chat');
+    if (!boardChatFolder) throw new Error(`chat/ subfolder missing for ${KANBAN.name}`);
+    const cardChatNames = new Map<string, string>();
+    for (const [i, card] of KANBAN.cards.entries()) {
+        const cardAuthor = userByKey.get(card.creator)!;
+        const chat = await teamDrive.create(teamMountId, boardChatFolder.id, card.chat, 'chat', cardAuthor);
+        await postTo(chat.id, cardAuthor, card.chatText);
+        for (const reply of card.chatReplies ?? []) {
+            await postTo(chat.id, userByKey.get(reply.author)!, reply.text);
+        }
+        cardChatNames.set(`card-${i + 1}`, chat.name);
+    }
+
+    // The fixture bakes card/column creators as bare persona keys; rewrite them to runtime emails
+    // so the board resolves author names under any MAIL_DOMAIN. Every card also gets the shared
+    // default card color and its chat link.
+    board.doc.transact(() => {
+        for (const rootName of ['tasks', 'columns']) {
+            for (const [, entry] of getItemMapRoot(board.doc, rootName)) {
+                const creator = entry.get('creator');
+                if (typeof creator === 'string' && !creator.includes('@')) entry.set('creator', emailFor(creator));
+            }
+        }
+        const tasksMap = getItemMapRoot(board.doc, 'tasks');
+        for (const [i, spec] of KANBAN.cards.entries()) {
+            const task = tasksMap.get(`card-${i + 1}`)!;
+            task.set('color', DEFAULT_CARD_COLOR);
+            task.set('chatName', cardChatNames.get(`card-${i + 1}`)!);
+            if (spec.attach) task.set('attachments', spec.attach.map(teamDocRef));
+        }
+    });
+    await teamDrive.flushContainerDb(teamMountId, boardId);
 
     // --- Chat channels in chats/ (alternating personas; #production carries the weather worry). ---
     for (const channel of CHATS) {
@@ -606,7 +628,15 @@ async function main(): Promise<void> {
         const chat = await teamDrive.create(teamMountId, folderId.get('chats')!, channel.name, 'chat', first);
         const room = await teamDrive.getChat(teamMountId, chat.id);
         for (const line of channel.messages) {
-            await room.postMessage(userByKey.get(line.author)!, line.text);
+            const attachments = line.attach?.map(teamDocRef);
+            await room.postMessage(
+                userByKey.get(line.author)!,
+                line.text,
+                'message',
+                undefined,
+                undefined,
+                attachments,
+            );
         }
     }
 

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
+import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import { orderByFractionalIndex, parseBinding, readVectorFromDoc, sceneBounds } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
@@ -295,6 +296,7 @@ describe('seed-demo', () => {
                 color: card.get('color') as string,
                 chatName: card.get('chatName') as string,
                 creator: card.get('creator') as string,
+                attachments: (card.get('attachments') as AttachmentReference[] | undefined) ?? [],
             }));
             expect(cards.length).toBeGreaterThanOrEqual(3);
             const defaultCardColor = EIGEN_STICKIES_COLORS[0][1].value;
@@ -332,6 +334,25 @@ describe('seed-demo', () => {
             const vectorDataDb = findContainerDataDb(metadataDb, mountsDir, mountId, vectorName);
             const scene = readVectorFromDoc(await loadCollabDoc(vectorDataDb));
             expect(scene.elements.length).toBeGreaterThanOrEqual(60);
+
+            // Chat lines with `attach` post the seeded document as a drive-reference attachment
+            // that points at the real container (the site plan, in #production).
+            const sitePlanId = query<{ id: string }>(
+                metadataDb,
+                `SELECT id FROM paths WHERE name = '${vectorName}' AND trashedAt IS NULL`,
+            )[0].id;
+            const productionChatDb = findContainerDataDb(metadataDb, mountsDir, mountId, 'production.eigenchat');
+            const attached = query<{ attachments: string }>(
+                productionChatDb,
+                'SELECT attachments FROM messages WHERE attachments IS NOT NULL',
+            ).flatMap((row) => JSON.parse(row.attachments) as AttachmentReference[]);
+            expect(attached.some((a) => a.type === 'reference' && a.id === sitePlanId)).toBe(true);
+            // ...and a kanban card / doc comment with `attach` carries the same reference on the card.
+            const pinned = [...board.getMap<Y.Map<unknown>>('tasks').values()]
+                .flatMap((task) => (task.get('attachments') as AttachmentReference[] | undefined) ?? [])
+                .concat(cards.flatMap((card) => card.attachments));
+            expect(pinned.some((a) => a.type === 'reference' && a.id === sitePlanId)).toBe(true);
+            expect(pinned.some((a) => a.type === 'reference' && a.name === 'crew roster.eigendoc')).toBe(true);
 
             // The editor opens on the scene origin, so the drawing is stored centred on it.
             const bounds = sceneBounds(scene.elements, new Map(scene.elements.map((el) => [el.id, el])));
