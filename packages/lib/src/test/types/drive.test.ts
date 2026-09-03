@@ -111,3 +111,12 @@ describe('EIGEN_DOC_TYPE_INFO.yjsRoots covers every Y root the app touches', () 
         });
     }
 });
+
+describe('EIGEN_DOC_TYPE_INFO declares roots an app does not write yet', () => {
+    // Frames are read by the vector reader before any writer exists (phase 2 adds
+    // one). The root must be declared now: applySnapshotState throws for an
+    // undeclared root the moment a restored vector document carries one.
+    test('vector declares the frames root alongside elements and meta', () => {
+        expect(EIGEN_DOC_TYPE_INFO.vector.yjsRoots).toEqual({ elements: 'map', frames: 'map', meta: 'map' });
+    });
+});

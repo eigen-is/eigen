@@ -146,7 +146,7 @@ export const EIGEN_DOC_TYPE_INFO = {
         colorVar: '--app-vector-color',
         softColorVar: '--app-vector-color-soft',
         appName: 'vector',
-        yjsRoots: { elements: 'map', meta: 'map' },
+        yjsRoots: { elements: 'map', frames: 'map', meta: 'map' },
     },
 } as const satisfies Record<EigenDocType, EigenDocTypeInfo>;
 
