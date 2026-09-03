@@ -1,15 +1,8 @@
-import { boxCenter, getElementBounds, hitTestBox, type Point, rotatePoint } from '../geometry';
+import { boxCenter, hitTestBox, type Point, rotatePoint } from '../geometry';
 import { cornerRadius, rectOutline } from '../outline';
-import {
-    CORNERS,
-    DEFAULT_CORNERS,
-    DEFAULT_FILL_STYLE,
-    DEFAULT_SKETCH_PROPS,
-    FILL_STYLES,
-    type VectorRectangleElement,
-} from '../types';
+import { CORNERS, DEFAULT_CORNERS, DEFAULT_FILL_STYLE, FILL_STYLES, type VectorRectangleElement } from '../types';
 import { defineKind } from './kind';
-import { fillField, num, oneOf } from './read-fields';
+import { fillField, oneOf, roughness, seed } from './read-fields';
 import { renderRoughShape } from './render-utils';
 
 // Excalidraw shrinks a rectangle's projection diagonals by 15px at each end
@@ -23,17 +16,11 @@ export const rectangleKind = defineKind<VectorRectangleElement>({
     capabilities: {
         fill: true,
         fillStyle: true,
-        stroke: true,
         roughness: true,
         corners: true,
-        opacity: true,
-        typography: false,
-        objectFit: false,
-        arrowheads: false,
         bindable: true,
         silhouette: 'box',
         creation: 'box',
-        resize: 'box',
     },
     defaults: (style) => ({
         fill: style.fill,
@@ -48,10 +35,9 @@ export const rectangleKind = defineKind<VectorRectangleElement>({
         fill: fillField(src.get('fill')),
         fillStyle: oneOf(src.get('fillStyle'), FILL_STYLES, DEFAULT_FILL_STYLE),
         corners: oneOf(src.get('corners'), CORNERS, DEFAULT_CORNERS),
-        roughness: num(src.get('roughness'), DEFAULT_SKETCH_PROPS.roughness),
-        seed: num(src.get('seed'), DEFAULT_SKETCH_PROPS.seed),
+        roughness: roughness(src.get('roughness')),
+        seed: seed(src.get('seed')),
     }),
-    bounds: (el) => getElementBounds(el),
     hitTest: (el, point) => hitTestBox(el, point),
     outline: (el, inflate) =>
         rectOutline({ x: el.x, y: el.y, width: el.width, height: el.height }, cornerRadius(el, 'rectangle'), inflate),
@@ -69,7 +55,6 @@ export const rectangleKind = defineKind<VectorRectangleElement>({
         ];
     },
     render: (el) => ({ svg: renderRoughShape(el) }),
-    searchText: () => '',
 });
 
 // Pull a segment in by DIAGONAL_SHRINK at each end, along its own direction. A segment shorter than the

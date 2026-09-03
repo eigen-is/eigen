@@ -9,12 +9,8 @@
 import {
     arrowRoute,
     type Box,
-    DEFAULT_ARROW_PROPS,
     DEFAULT_ELEMENT_PROPS,
-    DEFAULT_FILL_STYLE,
-    DEFAULT_LINE_ROUNDNESS,
-    DEFAULT_LINEAR_ROUNDNESS,
-    DEFAULT_SKETCH_PROPS,
+    ELEMENT_KINDS,
     elbowBindPoint,
     elbowRoutingContext,
     elementToSvg,
@@ -28,8 +24,8 @@ import {
     parsePoints,
     renormalize,
     serializePressures,
-    solidFill,
     unpinSegment,
+    VECTOR_STYLE_DEFAULTS,
     type VectorArrowElement,
     type VectorElement,
     type VectorLinearElement,
@@ -77,30 +73,26 @@ function dist(a: Point, b: Point): number {
     return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-// The shared geometry of a live preview element (draw draft), built from the create defaults and the
-// same normalizeLinear pass as the commit, so it matches the element that will be written exactly (the
-// renderer scales roughness by the box, so a 0×0 box would pop on release).
-function linearBase(origin: Point, points: Point[], seed: number) {
+// The shared geometry of a live preview element (draw draft): the KIND'S OWN create defaults — the same
+// table the commit writes through addElement, so a preview can never drift from the element that lands —
+// plus the gesture's seed and the same normalizeLinear pass (the renderer scales roughness by the box, so
+// a 0×0 box would pop on release).
+function previewBase(origin: Point, points: Point[], seed: number) {
     return {
         id: PREVIEW_ID,
         angle: 0,
-        ...DEFAULT_ELEMENT_PROPS,
-        ...DEFAULT_SKETCH_PROPS,
-        roundness: DEFAULT_LINEAR_ROUNDNESS,
-        seed,
         index: 'a0',
+        seed,
+        ...DEFAULT_ELEMENT_PROPS,
         ...normalizeLinear({ x: origin.x, y: origin.y, width: 0, height: 0, angle: 0 }, points),
     };
 }
 
 function previewElement(type: 'freedraw' | 'line', origin: Point, points: Point[], seed: number): VectorLinearElement {
-    // linearBase is sharp (freedraw's default, and arrowElement overrides it); a new line curves by default.
     return {
-        ...linearBase(origin, points, seed),
+        ...ELEMENT_KINDS[type].defaults(VECTOR_STYLE_DEFAULTS),
+        ...previewBase(origin, points, seed),
         type,
-        fill: solidFill('transparent'),
-        fillStyle: DEFAULT_FILL_STYLE,
-        roundness: type === 'line' ? DEFAULT_LINE_ROUNDNESS : DEFAULT_LINEAR_ROUNDNESS,
         // The live preview always simulates; real per-point pressure is written on commit (finishFreedraw).
         pressures: '',
         simulatePressure: true,
@@ -111,9 +103,9 @@ function previewElement(type: 'freedraw' | 'line', origin: Point, points: Point[
 // (a draft binds only at commit through bindArrow). Reused as the provisional element bindArrow snaps.
 function arrowElement(origin: Point, points: Point[], seed: number): VectorArrowElement {
     return {
-        ...linearBase(origin, points, seed),
+        ...ELEMENT_KINDS.arrow.defaults(VECTOR_STYLE_DEFAULTS),
+        ...previewBase(origin, points, seed),
         type: 'arrow',
-        ...DEFAULT_ARROW_PROPS,
     };
 }
 

@@ -5,7 +5,7 @@
 // seeder has no DOM to measure with. Deterministic ids + seeds: a reseed renders identical jitter.
 
 import { basename } from 'node:path';
-import { escapeHtml } from '@workspace/lib/html';
+import { textToParagraphHtml } from '@workspace/lib/html';
 import {
     bindingAnchor,
     DEFAULT_ARROW_PROPS,
@@ -27,7 +27,7 @@ import {
     type StyleDefaults,
     sceneBounds,
     serializeBinding,
-    shapeSideMidpoints,
+    shapeAnchorPoints,
     solidFill,
     type TextAlign,
     VECTOR_STYLE_DEFAULTS,
@@ -62,7 +62,7 @@ const SITE_PLAN_STYLE: StyleDefaults = { ...VECTOR_STYLE_DEFAULTS, fontFamily: F
 const DEFAULT_LABEL_SIZE = 16;
 const DEFAULT_ARROW_LABEL_SIZE = 13;
 
-// Side-midpoint order matches shapeSideMidpoints (right, bottom, left, top).
+// Side-midpoint order matches shapeAnchorPoints (right, bottom, left, top).
 const SIDE_INDEX: Record<'right' | 'bottom' | 'left' | 'top', number> = { right: 0, bottom: 1, left: 2, top: 3 };
 
 // Unlisted glyphs fall back to the average advance (the metrics table's own note).
@@ -285,7 +285,7 @@ function resolveEnd(
     if ('at' in end) return { point: { x: end.at[0], y: end.at[1] }, binding: '' };
     const shape = byKey.get(end.shape);
     if (!shape) throw new Error(`site plan arrow binds to unknown shape ${end.shape}`);
-    const dock = end.along === undefined ? shapeSideMidpoints(shape)[SIDE_INDEX[end.side]] : sidePoint(shape, end);
+    const dock = end.along === undefined ? shapeAnchorPoints(shape)[SIDE_INDEX[end.side]] : sidePoint(shape, end);
     const fixedPoint = elbow ? elbowBindPoint(shape, dock).fixedPoint : bindingAnchor(shape, dock);
     return { point: dock, binding: serializeBinding({ elementId: shape.id, fixedPoint }) };
 }
@@ -336,9 +336,7 @@ function buildText(t: SitePlanText, i: number): VectorRichTextElement {
     });
 }
 
-// Both text builders go through one place: the box the seeder measured plus the typography the drawing
-// is authored in, over the rich-text kind's own defaults.
-type RichTextBox = {
+type RichTextSpec = {
     x: number;
     y: number;
     width: number;
@@ -350,23 +348,17 @@ type RichTextBox = {
     verticalAlign: VerticalAlign;
 };
 
-function buildRichText(id: string, text: string, box: RichTextBox): VectorRichTextElement {
+// Both text builders go through one place: the box the seeder measured plus the typography the drawing
+// is authored in, over the rich-text kind's own defaults.
+function buildRichText(id: string, text: string, box: RichTextSpec): VectorRichTextElement {
     return {
         ...baseElement(id),
         ...ELEMENT_KINDS.richtext.defaults(SITE_PLAN_STYLE),
         ...box,
         type: 'richtext',
         strokeWidth: 0, // text, not a bordered box
-        html: toParagraphs(text),
+        html: textToParagraphHtml(text),
         // The line height measureExcalifont sized the box with, so the text fills exactly that box.
         lineHeight: getFontMetrics(SITE_PLAN_STYLE.fontFamily).lineHeight,
     };
-}
-
-// The seeder has no editor, so it writes the same markup LightEditor would: one <p> per line, escaped.
-function toParagraphs(text: string): string {
-    return text
-        .split('\n')
-        .map((line) => `<p>${escapeHtml(line)}</p>`)
-        .join('');
 }

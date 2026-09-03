@@ -4,6 +4,7 @@
 // corrupt peer write can never throw on a render path.
 
 import type { BackgroundFill, Fill } from '../types/background';
+import { prop } from './types';
 
 export const TRANSPARENT_FILL: Fill = { type: 'solid', color: 'transparent' };
 
@@ -15,8 +16,14 @@ export function isColorToken(v: unknown): v is string {
     return typeof v === 'string' && (v === 'transparent' || HEX_COLOR.test(v));
 }
 
+// "Paint nothing" — the sentinel a bare colour string carries too, so the scene background and an
+// element's fill answer the question through one predicate.
+export function isTransparentColor(color: string): boolean {
+    return color === 'transparent';
+}
+
 export function isTransparentFill(fill: Fill): boolean {
-    return fill.type === 'solid' && (fill.color === '' || fill.color === 'transparent');
+    return fill.type === 'solid' && isTransparentColor(fill.color);
 }
 
 export function parseFill(value: string): Fill {
@@ -82,11 +89,6 @@ export function gradientVector(angle: number): { x1: number; y1: number; x2: num
         x2: round4(0.5 + dx * half),
         y2: round4(0.5 + dy * half),
     };
-}
-
-// Read a property off an unknown object without a cast (Reflect.get is typed to accept any object).
-function prop(target: object, key: string): unknown {
-    return Reflect.get(target, key);
 }
 
 function normalizeDegrees(value: unknown): number {

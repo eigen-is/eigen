@@ -1,7 +1,6 @@
-// Pure scene-space geometry for eigen|vector>. Angle is DEGREES at every boundary;
-// radian math never escapes a function body. `Box` is the canonical transform core shared
-// by hit-testing, bounds, the properties bar, and (later) the shared ObjectTransform
-// primitive.
+// Pure scene-space geometry for the canvas. Angle is DEGREES at every boundary; radian math never
+// escapes a function body. `Box` is the canonical transform core shared by hit-testing, bounds, the
+// properties bar and the shared ObjectTransform primitive.
 
 import { moveEndpoints, renormalize } from './elbow-pins';
 import { elbowRoutingContext } from './elbow-route';
@@ -11,7 +10,7 @@ import { getLineHeightPx } from './font-metrics';
 // module body calls across the cycle while either is still evaluating (test/vector/kinds/cycle.test.ts
 // pins both entry orders).
 import { ELEMENT_KINDS } from './kinds';
-import { outlineHits } from './outline';
+import { distanceToSegment, outlineHits, segSegIntersect } from './outline';
 import {
     type Arrowhead,
     isBindable,
@@ -324,16 +323,6 @@ export function linearLocalToScene(box: Box, local: Point): Point {
     return rotatePoint({ x: box.x + local.x, y: box.y + local.y }, boxCenter(box), box.angle);
 }
 
-// Point-to-segment distance (Excalidraw's distanceToLineSegment): project onto the segment, clamp the
-// parameter to [0,1], measure to the clamped foot.
-export function distanceToSegment(p: Point, a: Point, b: Point): number {
-    const cx = b.x - a.x;
-    const cy = b.y - a.y;
-    const lenSq = cx * cx + cy * cy;
-    const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * cx + (p.y - a.y) * cy) / lenSq));
-    return Math.hypot(p.x - (a.x + t * cx), p.y - (a.y + t * cy));
-}
-
 // Even-odd ray cast, for inside-hits on a closed filled path.
 export function pointInPolygon(p: Point, points: Point[]): boolean {
     let inside = false;
@@ -417,7 +406,7 @@ function pointInShape(shape: VectorShapeElement, point: Point): boolean {
 // getSnapOutlineMidPoint order, so a bind-time midpoint snap resolves the same side on a tie. The one owner
 // of this geometry — both the snap-to-midpoint bind and the snap-dot overlay read it, so the dots sit
 // exactly where the dock lands.
-export function shapeSideMidpoints(shape: VectorShapeElement): Point[] {
+export function shapeAnchorPoints(shape: VectorShapeElement): Point[] {
     return ELEMENT_KINDS[shape.type].anchorPoints(shape);
 }
 
@@ -428,7 +417,7 @@ export function shapeSideMidpoints(shape: VectorShapeElement): Point[] {
 // the centre). Scene coordinates throughout; the caller suppresses it on Ctrl/Cmd like every other snap.
 export function focusSnapPoint(shape: VectorShapeElement, point: Point, zoom: number): Point | null {
     const within = bindingDistance(zoom) + shape.strokeWidth / 2;
-    const targets = [...shapeSideMidpoints(shape), boxCenter(shape)];
+    const targets = [...shapeAnchorPoints(shape), boxCenter(shape)];
     let best: Point | null = null;
     let bestDist = within;
     for (const t of targets) {
@@ -447,7 +436,7 @@ export function focusSnapPoint(shape: VectorShapeElement, point: Point, zoom: nu
 function snapOutlineMidPoint(shape: VectorShapeElement, point: Point, zoom: number): Point | null {
     if (pointInShape(shape, point)) return null;
     const within = bindingDistance(zoom) + shape.strokeWidth / 2;
-    for (const mid of shapeSideMidpoints(shape)) {
+    for (const mid of shapeAnchorPoints(shape)) {
         if (Math.hypot(point.x - mid.x, point.y - mid.y) <= within) return mid;
     }
     return null;
@@ -847,20 +836,6 @@ export function arrowLabelCenter(el: VectorArrowElement, route?: Point[]): Point
 // docks to.
 function shapeOutlineHits(shape: VectorShapeElement, a: Point, b: Point, gap: number): Point[] {
     return outlineHits(ELEMENT_KINDS[shape.type].outline(shape, gap), a, b);
-}
-
-// Segment ∩ segment, both bounded — the intersection point or null when parallel / not overlapping.
-function segSegIntersect(p1: Point, p2: Point, p3: Point, p4: Point): Point | null {
-    const d1x = p2.x - p1.x;
-    const d1y = p2.y - p1.y;
-    const d2x = p4.x - p3.x;
-    const d2y = p4.y - p3.y;
-    const denom = d1x * d2y - d1y * d2x;
-    if (denom === 0) return null;
-    const t = ((p3.x - p1.x) * d2y - (p3.y - p1.y) * d2x) / denom;
-    const u = ((p3.x - p1.x) * d1y - (p3.y - p1.y) * d1x) / denom;
-    if (t < 0 || t > 1 || u < 0 || u > 1) return null;
-    return { x: p1.x + t * d1x, y: p1.y + t * d1y };
 }
 
 // Extend the ray a→b past b by `ext` scene units (a === b is left as-is).

@@ -1,4 +1,4 @@
-import { getElementBounds, hitTestBox } from '../geometry';
+import { hitTestBox } from '../geometry';
 import { cornerRadius, outlinePath, rectOutline } from '../outline';
 import { CORNERS, DEFAULT_CORNERS, DEFAULT_OBJECT_FIT, OBJECT_FITS, type VectorImageElement } from '../types';
 import { defineKind } from './kind';
@@ -13,17 +13,11 @@ export const imageKind = defineKind<VectorImageElement>({
     capabilities: {
         fill: false,
         fillStyle: false,
-        stroke: true,
         roughness: false,
         corners: true,
-        opacity: true,
-        typography: false,
-        objectFit: true,
-        arrowheads: false,
         bindable: false,
         silhouette: 'box',
         creation: 'none',
-        resize: 'box',
     },
     defaults: (style) => ({
         mediaName: '',
@@ -37,7 +31,6 @@ export const imageKind = defineKind<VectorImageElement>({
         corners: oneOf(src.get('corners'), CORNERS, DEFAULT_CORNERS),
         objectFit: oneOf(src.get('objectFit'), OBJECT_FITS, DEFAULT_OBJECT_FIT),
     }),
-    bounds: (el) => getElementBounds(el),
     hitTest: (el, point) => hitTestBox(el, point),
     outline: (el, inflate) =>
         rectOutline({ x: el.x, y: el.y, width: el.width, height: el.height }, cornerRadius(el, 'rectangle'), inflate),
@@ -55,5 +48,4 @@ export const imageKind = defineKind<VectorImageElement>({
             svg: `<defs><clipPath id="${clipId}"><path d="${d}"/></clipPath></defs><g clip-path="url(#${clipId})">${image}</g>`,
         };
     },
-    searchText: () => '',
 });

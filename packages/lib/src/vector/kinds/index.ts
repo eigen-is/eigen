@@ -1,6 +1,7 @@
 // The registry. TypeScript forces every member of VectorElementType to have an entry, so a new kind
 // cannot be half-added.
 
+import { serializeFill, TRANSPARENT_FILL } from '../fill';
 import { BASE_ELEMENT_FIELDS, type ElementOfType, type VectorElementType } from '../types';
 import { arrowKind } from './arrow';
 import { diamondKind } from './diamond';
@@ -12,17 +13,8 @@ import { lineKind } from './line';
 import { rectangleKind } from './rectangle';
 import { richTextKind } from './richtext';
 
-export type {
-    Capabilities,
-    ElementKind,
-    FieldSource,
-    KindSpec,
-    RenderContext,
-    RenderOutput,
-    StyleDefaults,
-} from './kind';
+export type { ElementKind, RenderOutput, StyleDefaults } from './kind';
 export { defineKind } from './kind';
-export { richTextStyle } from './richtext';
 
 // Each entry keeps its own element type, so `ELEMENT_KINDS.richtext.defaults(style)` is rich text's
 // field set and a generic `ELEMENT_KINDS[el.type]` lookup still answers with the union.
@@ -39,8 +31,14 @@ export const ELEMENT_KINDS: ElementKindRegistry = {
     arrow: arrowKind,
 };
 
-// Toolbar order (Excalidraw's, with rich text where the hand text tool used to sit). Every type appears
-// exactly once; the registry test pins that against Object.keys(ELEMENT_KINDS).
+// The registry answers the vocabulary question too, so a stored `type` is validated against the one
+// table. hasOwn, not `in`: `'constructor' in ELEMENT_KINDS` is true and would dispatch to Object's.
+export function isVectorElementType(v: unknown): v is VectorElementType {
+    return typeof v === 'string' && Object.hasOwn(ELEMENT_KINDS, v);
+}
+
+// Toolbar order (Excalidraw's). Every type appears exactly once; the registry test pins that against
+// Object.keys(ELEMENT_KINDS).
 export const TOOL_ORDER: VectorElementType[] = [
     'rectangle',
     'diamond',
@@ -83,7 +81,7 @@ function buildElementFields(): string[] {
 export const VECTOR_STYLE_DEFAULTS: StyleDefaults = {
     strokeColor: '#1e1e1e',
     strokeWidth: 2,
-    fill: '{"type":"solid","color":"transparent"}',
+    fill: serializeFill(TRANSPARENT_FILL),
     fillStyle: 'hachure',
     roughness: 1,
     corners: 'curved',

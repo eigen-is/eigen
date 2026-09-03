@@ -16,7 +16,6 @@ import {
 } from '@workspace/lib/vector';
 
 export type EditingState = {
-    kind: 'arrow';
     id: string;
     isNew: boolean;
     x: number;
@@ -45,7 +44,6 @@ export function arrowLabelEditing(el: VectorArrowElement, route?: Point[]): Edit
     const height = label?.height ?? 0;
     const scene = linearLocalToScene(el, center);
     return {
-        kind: 'arrow',
         id: el.id,
         isNew: el.text === '',
         x: scene.x - width / 2,

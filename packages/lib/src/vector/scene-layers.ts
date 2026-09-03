@@ -1,6 +1,7 @@
-// The one function every surface renders through: the live canvas (absolutely positioned divs), the
-// thumbnails, present mode and the server compositor. What you see is what prints because there is one
-// definition of "the scene as a list of placed boxes".
+// The scene as an ordered list of placed boxes: one definition of "where does this element go and what
+// does it draw", so a renderer that positions elements itself (absolutely positioned divs) and one that
+// serializes an SVG document agree by construction. sceneToSvg places elements itself; this is the seam
+// for the renderers that do not.
 
 import { arrowRoute } from './elbow-route';
 import { orderByFractionalIndex } from './fractional-index';

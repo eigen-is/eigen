@@ -16,7 +16,7 @@ import {
     type Point,
     parseBinding,
     parsePoints,
-    shapeSideMidpoints,
+    shapeAnchorPoints,
     type VectorArrowElement,
     type VectorElement,
     type VectorShapeElement,
@@ -65,7 +65,7 @@ export function SnapDots({
     // Excalidraw draws nothing when the cursor is buried inside a NON-elbow bindable (interactiveScene's
     // `!cursorIsInsideBindable || isElbow` gate); an elbow always draws.
     if (!elbow && pointInsideShape(shape, pointer)) return null;
-    const mids = shapeSideMidpoints(shape);
+    const mids = shapeAnchorPoints(shape);
     const r = SNAP_DOT_SCREEN_R / zoom;
     const highlightWithin = bindingDistance(zoom) + shape.strokeWidth / 2;
     // The dot nearest the pointer is the one the dock will snap to.

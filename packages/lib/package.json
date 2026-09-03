@@ -76,7 +76,6 @@
     "./sheets/*": "./src/sheets/*.ts",
     "./slides": "./src/slides/index.ts",
     "./vector": "./src/vector/index.ts",
-    "./vector/kinds": "./src/vector/kinds/index.ts",
     "./vector/*": "./src/vector/*.ts",
     "./background": "./src/background/index.ts"
   },

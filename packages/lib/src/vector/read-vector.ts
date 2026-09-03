@@ -7,13 +7,24 @@ import type * as Y from 'yjs';
 import { parseBackgroundFill, serializeBackgroundFill } from './fill';
 import { orderByFractionalIndex, syncInvalidIndices } from './fractional-index';
 import { FRAME_HEIGHT, FRAME_WIDTH, type VectorFrame } from './frames';
-import { ELEMENT_KINDS } from './kinds';
-import { bool, cleanStr, color, coord, isYMapLike, num, oneOf, size, str } from './kinds/read-fields';
+import { ELEMENT_KINDS, isVectorElementType } from './kinds';
+import {
+    bool,
+    cleanStr,
+    color,
+    coord,
+    isYMapLike,
+    num,
+    oneOf,
+    size,
+    str,
+    strokeWidth,
+    type YMapLike,
+} from './kinds/read-fields';
 import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_SCENE_META,
     isBindable,
-    isVectorElementType,
     parseBinding,
     parseIdList,
     STROKE_STYLES,
@@ -77,7 +88,7 @@ function readElement(value: unknown): VectorElement | null {
     return ELEMENT_KINDS[type].read(value, readBase(value, id, type));
 }
 
-function readBase(value: { get(key: string): unknown }, id: string, type: VectorElementType): VectorElementBase {
+function readBase(value: YMapLike, id: string, type: VectorElementType): VectorElementBase {
     return {
         id,
         type,
@@ -92,7 +103,7 @@ function readBase(value: { get(key: string): unknown }, id: string, type: Vector
         opacity: Math.min(100, Math.max(0, num(value.get('opacity'), DEFAULT_ELEMENT_PROPS.opacity))),
         locked: bool(value.get('locked'), DEFAULT_ELEMENT_PROPS.locked),
         strokeColor: color(value.get('strokeColor'), DEFAULT_ELEMENT_PROPS.strokeColor),
-        strokeWidth: num(value.get('strokeWidth'), DEFAULT_ELEMENT_PROPS.strokeWidth),
+        strokeWidth: strokeWidth(value.get('strokeWidth')),
         strokeStyle: oneOf(value.get('strokeStyle'), STROKE_STYLES, DEFAULT_ELEMENT_PROPS.strokeStyle),
     };
 }

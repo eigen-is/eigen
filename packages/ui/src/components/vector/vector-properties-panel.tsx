@@ -112,9 +112,9 @@ const ARROWHEAD_OPTIONS: { value: Arrowhead; label: string }[] = [
 ];
 
 // The solid colour the Fill swatch shows: '' for transparent (an unset swatch) and for a gradient,
-// which has no single colour — the gradient row is phase 2. undefined on a kind that has no fill.
+// which has no single swatch colour. undefined on a kind that has no fill.
 function fillColorOf(el: VectorElement): string | undefined {
-    if (!ELEMENT_KINDS[el.type].capabilities.fill || el.type === 'arrow' || el.type === 'image') return undefined;
+    if (!ELEMENT_KINDS[el.type].capabilities.fill || !('fill' in el)) return undefined;
     const fill = parseFill(el.fill);
     return fill.type === 'solid' && !isTransparentFill(fill) ? fill.color : '';
 }
@@ -153,13 +153,18 @@ export function VectorPropertiesPanel({
 }: VectorPropertiesPanelProps) {
     const selectedIds = selectedElements.map((el) => el.id);
     const byId = new Map(selectedElements.map((el) => [el.id, el]));
-    const isShape = (t: VectorElementType) => t === 'rectangle' || t === 'diamond' || t === 'ellipse';
     const has = selectedElements.length > 0;
-    const isClosedLinear = (el: VectorElement) => isLinearElement(el) && isClosedPath(parsePoints(el.points));
-    // Paint sections (Stroke / Fill / Sketch) apply to shapes and linear elements; images/text opt out.
-    const allPaintable = has && selectedElements.every((el) => isShape(el.type) || isLinearElement(el));
-    // Fill only makes sense for shapes and CLOSED linear elements (an open stroke has nothing to fill).
-    const showFill = has && selectedElements.every((el) => isShape(el.type) || isClosedLinear(el));
+    // Paint sections (Stroke / Fill / Sketch) are the roughjs-drawn kinds — capabilities.roughness is
+    // exactly that family. An image and a rich-text box are DOM boxes; this path paints neither.
+    const allPaintable = has && selectedElements.every((el) => ELEMENT_KINDS[el.type].capabilities.roughness);
+    // Fill needs a fillable kind, and an OPEN linear element has nothing to fill.
+    const showFill =
+        has &&
+        selectedElements.every(
+            (el) =>
+                ELEMENT_KINDS[el.type].capabilities.fill &&
+                (!isLinearElement(el) || isClosedPath(parsePoints(el.points))),
+        );
     // Stroke Style (dashed/dotted) is meaningless for a freehand stroke — hide it if any is selected.
     const anyFreedraw = selectedElements.some((el) => el.type === 'freedraw');
     // Corners follow the kind's own capability; the separate Edges row is the shaft curvature a line or
@@ -228,10 +233,9 @@ export function VectorPropertiesPanel({
         undoManager?.stopCapturing();
     };
 
-    // A font family / size change re-measures each
-    // arrow's own label and writes `labelWidth` (the sole width source, height derives from the line
-    // count) in the SAME transact as the font — after the face loads, or measureText reads fallback
-    // metrics. Per-element widths (each label differs) in one undo step.
+    // A font family / size change re-measures each arrow's own label and writes `labelWidth` (the sole
+    // width source, height derives from the line count) in the SAME transact as the font — after the face
+    // loads, or measureText reads fallback metrics. Per-element widths (each label differs), one undo step.
     const applyArrowFont = async (patch: { fontSize?: number; fontFamily?: string }) => {
         if (!arrowEls.length) return;
         await Promise.all(
@@ -272,7 +276,6 @@ export function VectorPropertiesPanel({
         undoManager?.stopCapturing();
     };
 
-    // Numeric transform — x/y/angle write straight through applyToAll.
     const tx = getMergedValue(selectedElements, (el) => Math.round(el.x));
     const ty = getMergedValue(selectedElements, (el) => Math.round(el.y));
     const tWidth = getMergedValue(selectedElements, (el) => Math.round(el.width));
@@ -284,21 +287,15 @@ export function VectorPropertiesPanel({
     const strokeStyle = getMergedValue(selectedElements, (el) => el.strokeStyle);
     const fill: MergedValue<string> = getMergedValue(selectedElements, fillColorOf);
     const fillStyle = getMergedValue(selectedElements, (el) =>
-        ELEMENT_KINDS[el.type].capabilities.fillStyle && el.type !== 'arrow' && el.type !== 'image'
-            ? el.fillStyle
-            : undefined,
+        ELEMENT_KINDS[el.type].capabilities.fillStyle && 'fillStyle' in el ? el.fillStyle : undefined,
     );
     const roughness = getMergedValue(selectedElements, (el) =>
-        el.type === 'image' || el.type === 'richtext' ? undefined : el.roughness,
+        ELEMENT_KINDS[el.type].capabilities.roughness && 'roughness' in el ? el.roughness : undefined,
     );
     const corners = getMergedValue(selectedElements, (el) =>
-        el.type === 'rectangle' || el.type === 'diamond' || el.type === 'image' || el.type === 'richtext'
-            ? el.corners
-            : undefined,
+        ELEMENT_KINDS[el.type].capabilities.corners && 'corners' in el ? el.corners : undefined,
     );
-    const roundness = getMergedValue(selectedElements, (el) =>
-        el.type === 'line' || el.type === 'arrow' ? el.roundness : undefined,
-    );
+    const roundness = getMergedValue(selectedElements, (el) => ('roundness' in el ? el.roundness : undefined));
     const opacity = getMergedValue(selectedElements, (el) => el.opacity);
     const arrowShape = getMergedValue(arrowEls, (el) => arrowShapeOf(el));
     const startArrowhead = getMergedValue(arrowEls, (el) => el.startArrowhead);

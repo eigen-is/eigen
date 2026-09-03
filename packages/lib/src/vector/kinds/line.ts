@@ -2,7 +2,6 @@ import { RoughGenerator } from 'roughjs/bin/generator';
 import { isTransparentFill, parseFill } from '../fill';
 import {
     distanceToPolyline,
-    getElementBounds,
     isClosedPath,
     LINEAR_HIT_SCREEN_FACTOR,
     linearLocalToScene,
@@ -16,13 +15,12 @@ import {
     DEFAULT_FILL_STYLE,
     DEFAULT_LINE_ROUNDNESS,
     DEFAULT_LINEAR_ROUNDNESS,
-    DEFAULT_SKETCH_PROPS,
     FILL_STYLES,
     ROUNDNESS,
     type VectorLinearElement,
 } from '../types';
 import { defineKind } from './kind';
-import { clampCoord, fillField, num, oneOf, str } from './read-fields';
+import { clampCoord, fillField, oneOf, roughness, seed, str } from './read-fields';
 import { drawableToSvg, fillDefs, linearRoughOptions } from './render-utils';
 
 export const lineKind = defineKind<VectorLinearElement>({
@@ -34,17 +32,11 @@ export const lineKind = defineKind<VectorLinearElement>({
     capabilities: {
         fill: true,
         fillStyle: true,
-        stroke: true,
         roughness: true,
         corners: false,
-        opacity: true,
-        typography: false,
-        objectFit: false,
-        arrowheads: false,
         bindable: false,
         silhouette: 'box',
         creation: 'polyline',
-        resize: 'points',
     },
     defaults: (style) => ({
         fill: style.fill,
@@ -65,15 +57,14 @@ export const lineKind = defineKind<VectorLinearElement>({
             type: 'line',
             fill: fillField(src.get('fill')),
             fillStyle: oneOf(src.get('fillStyle'), FILL_STYLES, DEFAULT_FILL_STYLE),
-            roughness: num(src.get('roughness'), DEFAULT_SKETCH_PROPS.roughness),
-            seed: num(src.get('seed'), DEFAULT_SKETCH_PROPS.seed),
+            roughness: roughness(src.get('roughness')),
+            seed: seed(src.get('seed')),
             roundness: oneOf(src.get('roundness'), ROUNDNESS, DEFAULT_LINEAR_ROUNDNESS),
             points: serializePoints(clamped),
             pressures: '',
             simulatePressure: true,
         };
     },
-    bounds: (el) => getElementBounds(el),
     hitTest: (el, point, threshold) => {
         const points = parsePoints(el.points);
         if (points.length === 0) return false;
@@ -100,5 +91,4 @@ export const lineKind = defineKind<VectorLinearElement>({
         const defs = options.fill === undefined ? '' : fillDefs(el);
         return { svg: `${defs}<g stroke-linecap="round">${drawableToSvg(drawable)}</g>` };
     },
-    searchText: () => '',
 });

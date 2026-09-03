@@ -2,8 +2,9 @@
 // value passes one of these on the way into the scene, and a corrupt write degrades to the field default
 // instead of reaching roughjs, SVG or a layout pass.
 
+import { EIGEN_FONT_NAMES } from '../../constants/fonts';
 import { isColorToken, parseFill, serializeFill } from '../fill';
-import { DEFAULT_FONT_SIZE } from '../types';
+import { DEFAULT_ELEMENT_PROPS, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE, DEFAULT_SKETCH_PROPS } from '../types';
 
 // Sanity bound on spatial fields. Without a cap one client's corrupt write (say 1e15 from a math bug)
 // freezes every other peer — rough fill cost scales with element area.
@@ -18,7 +19,7 @@ const MAX_FONT_SIZE = 400;
 // render and export unbounded. 64 KiB per element, truncated on a UTF-8 boundary. The truncation can
 // leave an unbalanced tag; every consumer that mounts this html sanitises at its own seam, so a torn tag
 // is a cosmetic loss, never an injection.
-export const MAX_HTML_BYTES = 64 * 1024;
+const MAX_HTML_BYTES = 64 * 1024;
 
 export type YMapLike = { get(key: string): unknown };
 
@@ -46,6 +47,26 @@ export function size(v: unknown): number {
 
 export function fontSize(v: unknown): number {
     return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, num(v, DEFAULT_FONT_SIZE)));
+}
+
+// A font name reaches a CSS declaration list (rich text's style body), where a stray `;` would open a
+// declaration of the writer's choosing. Only an EIGEN_FONTS name passes; the picker writes nothing else.
+export function fontFamily(v: unknown): string {
+    return oneOf(v, EIGEN_FONT_NAMES, DEFAULT_FONT_FAMILY);
+}
+
+// roughjs inputs. A negative strokeWidth reaches SVG as an invalid stroke-width, and an out-of-band
+// roughness or seed turns the generator's output into NaN coordinates.
+export function strokeWidth(v: unknown): number {
+    return clampNum(v, 0, 100, DEFAULT_ELEMENT_PROPS.strokeWidth);
+}
+
+export function roughness(v: unknown): number {
+    return clampNum(v, 0, 10, DEFAULT_SKETCH_PROPS.roughness);
+}
+
+export function seed(v: unknown): number {
+    return clampNum(v, 0, 2 ** 31, DEFAULT_SKETCH_PROPS.seed);
 }
 
 export function clampCoord(n: number): number {
@@ -93,7 +114,7 @@ export function htmlField(v: unknown): string {
     return capBytes(cleanStr(v, ''), MAX_HTML_BYTES);
 }
 
-export function capBytes(value: string, maxBytes: number): string {
+function capBytes(value: string, maxBytes: number): string {
     const bytes = new TextEncoder().encode(value);
     if (bytes.length <= maxBytes) return value;
     let end = maxBytes;

@@ -8,10 +8,8 @@ import {
     followBindings,
     generateKeyBetween,
     generateNKeysBetween,
-    isValidFractionalIndex,
     isVectorElementType,
     readVectorFromDoc,
-    remapBinding,
     VECTOR_STYLE_DEFAULTS,
     type VectorArrowElement,
     type VectorElementType,
@@ -21,9 +19,9 @@ import {
     type VectorScene,
     type VectorShapeElement,
 } from '@workspace/lib/vector';
-import { nanoid } from 'nanoid';
 import { useCallback, useState } from 'react';
 import * as Y from 'yjs';
+import { duplicateElementsInDoc, hasSeed, newElementId, topmostIndex } from './element-writes';
 
 // Origin sentinel for writes the UndoManager must IGNORE. Its trackedOrigins defaults to {null}
 // (the ctor below passes none), so any non-null transaction origin escapes capture — while the sync
@@ -59,26 +57,6 @@ function elementDefaults(type: VectorElementType): Record<string, unknown> {
     };
 }
 
-// Only the roughjs kinds declare a seed; writing one onto an image or a rich-text box is exactly the
-// drift the ELEMENT_FIELDS whitelist exists to prevent.
-function hasSeed(type: unknown): boolean {
-    return isVectorElementType(type) && ELEMENT_KINDS[type].fields.includes('seed');
-}
-
-// Live topmost fractional index in the map. Skips non-map entries and malformed index strings —
-// a corrupt peer write must not make generateKeyBetween throw and brick adding elements
-// (read-vector heals them on read).
-function topmostIndex(elementsMap: Y.Map<unknown>): string | null {
-    let topmost: string | null = null;
-    for (const value of elementsMap.values()) {
-        if (!(value instanceof Y.Map)) continue;
-        const idx = value.get('index');
-        if (typeof idx !== 'string' || !isValidFractionalIndex(idx, undefined, undefined)) continue;
-        if (topmost === null || idx > topmost) topmost = idx;
-    }
-    return topmost;
-}
-
 // After a patch, re-run followBindings and write the geometry into the same transact for every
 // arrow bound to a patched SHAPE — and for every patched BOUND ARROW, so a nudge/align/rotate of a bound
 // arrow alone re-glues its endpoints to the stationary shape instead of leaving them detached until the
@@ -89,7 +67,7 @@ function followBoundArrows(doc: Y.Doc, elementsMap: Y.Map<unknown>, patchedIds: 
     for (const id of patchedIds) {
         const m = elementsMap.get(id);
         const t = m instanceof Y.Map ? m.get('type') : undefined;
-        if (t === 'rectangle' || t === 'diamond' || t === 'ellipse') touched = true;
+        if (isVectorElementType(t) && ELEMENT_KINDS[t].capabilities.bindable) touched = true;
         else if (t === 'arrow' && m instanceof Y.Map && (m.get('startBinding') || m.get('endBinding'))) touched = true;
         if (touched) break;
     }
@@ -172,7 +150,7 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
     const addElement = useCallback((partial: NewVectorElement) => {
         const doc = docRef.current;
         if (!doc) return;
-        const id = `el-${nanoid(10)}`;
+        const id = newElementId();
         // Honor a caller-supplied seed so a drag-create preview and its committed element share
         // the same roughjs jitter (no visual pop on release); otherwise generate one. undefined on a
         // seedless kind drops the key (the write loop skips undefined).
@@ -212,7 +190,7 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
             const elementsMap = doc.getMap('elements');
             const keys = generateNKeysBetween(topmostIndex(elementsMap), null, partials.length);
             partials.forEach((partial, i) => {
-                const id = `el-${nanoid(10)}`;
+                const id = newElementId();
                 const seed = hasSeed(partial.type) ? (partial.seed ?? Math.floor(Math.random() * 2 ** 31)) : undefined;
                 const record: Record<string, unknown> = {
                     ...elementDefaults(partial.type),
@@ -293,59 +271,11 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
 
     // Clone elements offset by (dx, dy) in ONE transact, stacked on top preserving their relative
     // z-order, each with a fresh id + seed. Returns the new ids so the caller reselects the clones.
-    const duplicateElements = useCallback((ids: string[], dx: number, dy: number): string[] => {
-        const doc = docRef.current;
-        if (!doc) return [];
-        const newIds: string[] = [];
-        doc.transact(() => {
-            const elementsMap = doc.getMap('elements');
-            const sources = ids
-                .map((id) => elementsMap.get(id))
-                .filter((m): m is Y.Map<unknown> => m instanceof Y.Map)
-                .sort((a, b) => {
-                    const ia = typeof a.get('index') === 'string' ? (a.get('index') as string) : '';
-                    const ib = typeof b.get('index') === 'string' ? (b.get('index') as string) : '';
-                    return ia < ib ? -1 : ia > ib ? 1 : 0;
-                });
-            if (sources.length === 0) return;
-            const keys = generateNKeysBetween(topmostIndex(elementsMap), null, sources.length);
-            // Allocate every clone id FIRST, then remap bindings across the set: an arrow bound to a shape
-            // that was duplicated too points at its clone; a bound shape outside the set clears.
-            const idMap = new Map<string, string>();
-            for (const src of sources) {
-                const oldId = src.get('id');
-                const id = `el-${nanoid(10)}`;
-                if (typeof oldId === 'string') idMap.set(oldId, id);
-                newIds.push(id);
-            }
-            sources.forEach((src, i) => {
-                const id = newIds[i];
-                const clone = new Y.Map();
-                for (const field of ELEMENT_FIELDS) {
-                    const v = src.get(field);
-                    if (v !== undefined) clone.set(field, v);
-                }
-                clone.set('id', id);
-                if (hasSeed(src.get('type'))) clone.set('seed', Math.floor(Math.random() * 2 ** 31));
-                clone.set('index', keys[i]);
-                // A copy starts with no comments; the cards belong to the element that was commented on.
-                clone.set('commentCardIds', '');
-                if (src.get('type') === 'arrow') {
-                    const sb = src.get('startBinding');
-                    const eb = src.get('endBinding');
-                    clone.set('startBinding', remapBinding(typeof sb === 'string' ? sb : '', idMap));
-                    clone.set('endBinding', remapBinding(typeof eb === 'string' ? eb : '', idMap));
-                }
-                // Read x/y from the source map — the clone is not integrated into the doc yet
-                const x = src.get('x');
-                const y = src.get('y');
-                if (typeof x === 'number') clone.set('x', x + dx);
-                if (typeof y === 'number') clone.set('y', y + dy);
-                elementsMap.set(id, clone);
-            });
-        });
-        return newIds;
-    }, []);
+    const duplicateElements = useCallback(
+        (ids: string[], dx: number, dy: number): string[] =>
+            docRef.current ? duplicateElementsInDoc(docRef.current, ids, dx, dy) : [],
+        [],
+    );
 
     return {
         elements: scene.elements,

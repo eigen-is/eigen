@@ -4,7 +4,6 @@ import { isTransparentFill, parseFill } from '../fill';
 import {
     distanceToPolyline,
     FREEDRAW_SIZE_FACTOR,
-    getElementBounds,
     isClosedPath,
     LINEAR_HIT_SCREEN_FACTOR,
     linearLocalToScene,
@@ -19,13 +18,12 @@ import { polylineOutline } from '../outline';
 import {
     DEFAULT_FILL_STYLE,
     DEFAULT_LINEAR_ROUNDNESS,
-    DEFAULT_SKETCH_PROPS,
     FILL_STYLES,
     ROUNDNESS,
     type VectorLinearElement,
 } from '../types';
 import { defineKind } from './kind';
-import { bool, clampCoord, fillField, num, oneOf, str } from './read-fields';
+import { bool, clampCoord, fillField, oneOf, roughness, seed, str } from './read-fields';
 import { drawableToSvg, escapeXml, fillDefs, getSvgPathFromStroke, linearRoughOptions } from './render-utils';
 
 export const freedrawKind = defineKind<VectorLinearElement>({
@@ -35,17 +33,11 @@ export const freedrawKind = defineKind<VectorLinearElement>({
     capabilities: {
         fill: true,
         fillStyle: true,
-        stroke: true,
         roughness: true,
         corners: false,
-        opacity: true,
-        typography: false,
-        objectFit: false,
-        arrowheads: false,
         bindable: false,
         silhouette: 'box',
         creation: 'freedraw',
-        resize: 'points',
     },
     defaults: (style) => ({
         fill: style.fill,
@@ -76,15 +68,14 @@ export const freedrawKind = defineKind<VectorLinearElement>({
             type: 'freedraw',
             fill: fillField(src.get('fill')),
             fillStyle: oneOf(src.get('fillStyle'), FILL_STYLES, DEFAULT_FILL_STYLE),
-            roughness: num(src.get('roughness'), DEFAULT_SKETCH_PROPS.roughness),
-            seed: num(src.get('seed'), DEFAULT_SKETCH_PROPS.seed),
+            roughness: roughness(src.get('roughness')),
+            seed: seed(src.get('seed')),
             roundness: oneOf(src.get('roundness'), ROUNDNESS, DEFAULT_LINEAR_ROUNDNESS),
             points: serializePoints(clamped),
             pressures: useReal ? serializePressures(pressures) : '',
             simulatePressure: !useReal,
         };
     },
-    bounds: (el) => getElementBounds(el),
     // Unrotate the probe into the element's local frame, then measure to the polyline. Tolerance is the
     // larger of the 0.85-scaled screen threshold and the drawn ink half-width (+0.1); a closed, filled
     // path is also hit anywhere inside.
@@ -112,11 +103,11 @@ export const freedrawKind = defineKind<VectorLinearElement>({
             fill = `${fillDefs(el)}${drawableToSvg(new RoughGenerator().polygon(coords, options))}`;
         }
 
-        // Real per-point pressure iff the element opts out of simulation AND carries an index-aligned array
-        // (the reader guarantees alignment; guard here too so a hand-built element can't misfeed getStroke).
-        // Absent/'' + simulate ⇒ the 2-tuple coords with simulatePressure:true — byte-identical to legacy.
+        // Real per-point pressure iff the element opts out of simulation and carries an array — the reader
+        // is what guarantees it is index-aligned with `points` ('' + simulate otherwise), so this reads the
+        // pair as given. Absent/'' + simulate ⇒ the 2-tuple coords, byte-identical to legacy.
         const pressures = !el.simulatePressure && el.pressures !== '' ? parsePressures(el.pressures) : [];
-        const realPressure = pressures.length > 0 && pressures.length === coords.length;
+        const realPressure = pressures.length === coords.length && pressures.length > 0;
         const outline = getStroke(realPressure ? coords.map(([x, y], i): number[] => [x, y, pressures[i]]) : coords, {
             simulatePressure: !realPressure,
             size: el.strokeWidth * FREEDRAW_SIZE_FACTOR,
@@ -130,5 +121,4 @@ export const freedrawKind = defineKind<VectorLinearElement>({
         const stroke = d ? `<path d="${d}" fill="${escapeXml(el.strokeColor)}" stroke="none"/>` : '';
         return { svg: `${fill}${stroke}` };
     },
-    searchText: () => '',
 });

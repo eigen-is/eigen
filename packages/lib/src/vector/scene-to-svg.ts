@@ -5,7 +5,7 @@
 // body lives in the registry (kinds/); this module places what a kind draws.
 
 import { arrowRoute, sceneBounds } from './elbow-route';
-import { isTransparentFill } from './fill';
+import { isTransparentColor } from './fill';
 import { orderByFractionalIndex } from './fractional-index';
 import type { Box } from './geometry';
 import { ELEMENT_KINDS } from './kinds';
@@ -22,8 +22,8 @@ export type MediaResolver = (mediaName: string) => string | null;
 export type SceneToSvgOptions = {
     resolveMedia?: MediaResolver;
     padding?: number;
-    // elementToSvg only: false ⇒ the bare fragment, no translate/rotate/opacity, because the layer box
-    // sceneLayers hands the renderer carries them instead.
+    // elementToSvg only: false ⇒ the bare fragment, no translate/rotate/opacity, for a caller that places
+    // the element itself from a layer box (sceneLayers).
     positioned?: boolean;
 };
 
@@ -44,7 +44,7 @@ export function sceneToSvg(scene: VectorScene, opts: SceneToSvgOptions = {}): st
     const height = round(bounds.maxY - bounds.minY + padding * 2);
 
     let body = '';
-    if (!isTransparentFill({ type: 'solid', color: scene.meta.background })) {
+    if (!isTransparentColor(scene.meta.background)) {
         body += `<rect x="${minX}" y="${minY}" width="${width}" height="${height}" fill="${escapeXml(scene.meta.background)}"/>`;
     }
     for (const el of ordered) {

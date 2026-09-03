@@ -19,6 +19,7 @@ import {
     sceneToSvg,
     type TextAlign,
     type VectorElement,
+    type VectorElementType,
     type VectorMeta,
 } from '@workspace/lib/vector';
 
@@ -32,7 +33,9 @@ export type VectorClipMeta = {
     x: number;
     y: number;
     id?: string;
-    type?: 'rectangle' | 'diamond' | 'ellipse' | 'freedraw' | 'line' | 'arrow';
+    // Every kind except the two that ride their own item shape (an image is an image item, a rich-text
+    // box a text item), derived so a new kind is carried without editing this list.
+    type?: Exclude<VectorElementType, 'image' | 'richtext'>;
     strokeColor?: string;
     fill?: string;
     fillStyle?: FillStyle;

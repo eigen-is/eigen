@@ -27,22 +27,19 @@ export type StyleDefaults = {
 
 // What a kind supports. The panel, the tools and the binding code read these instead of switching on
 // `type`; `creation: 'none'` keeps a kind off the toolbar (an image arrives by upload, not by drawing).
+// One entry per question something actually asks — a capability nothing reads is a second list waiting
+// to disagree with the code that does the work.
 export type Capabilities = {
     fill: boolean;
     fillStyle: boolean;
-    stroke: boolean;
+    // Also "is this kind drawn by roughjs at all": the sketch paint rows follow it.
     roughness: boolean;
     corners: boolean;
-    opacity: boolean;
-    typography: boolean;
-    objectFit: boolean;
-    arrowheads: boolean;
     bindable: boolean;
     // Which family the elbow router's heading heuristics follow — the silhouette, not the exact outline.
     // A new bindable kind picks one of the three instead of adding a branch to elbow-heading.
     silhouette: 'box' | 'diamond' | 'ellipse';
     creation: 'box' | 'polyline' | 'freedraw' | 'none';
-    resize: 'box' | 'points' | 'none';
 };
 
 // A per-element Y.Map, or anything else exposing its `get` (the reader's only requirement).
@@ -61,7 +58,7 @@ export type RenderOutput = { svg: string } | { html: string; style: string };
 // A kind's OWN stored fields: its element minus the base every kind shares. Distributive, so a
 // union-typed T (the generic registry lookup) yields the union of the members' field sets, not the
 // handful of keys they happen to share.
-export type KindFields<T extends VectorElement> = T extends VectorElement ? Omit<T, keyof VectorElementBase> : never;
+type KindFields<T extends VectorElement> = T extends VectorElement ? Omit<T, keyof VectorElementBase> : never;
 
 export type KindSpec<T extends VectorElement> = {
     type: T['type'];
@@ -71,7 +68,8 @@ export type KindSpec<T extends VectorElement> = {
     capabilities: Capabilities;
     defaults(style: StyleDefaults): KindFields<T>;
     read(src: FieldSource, base: VectorElementBase): T | null;
-    bounds(el: T, route?: Point[]): Bounds;
+    // Omit for the rotated-box default (only a routed arrow spills past its box).
+    bounds?(el: T, route?: Point[]): Bounds;
     hitTest(el: T, point: Point, threshold: number, route?: Point[]): boolean;
     outline(el: T, inflate: number): OutlineShape;
     // The four dock anchors in SCENE space, right/bottom/left/top. Omit for the box default.
@@ -79,7 +77,8 @@ export type KindSpec<T extends VectorElement> = {
     // The two lines a straight arrow's bind-time aim projects onto. Omit for the box default.
     aimLines?(el: T): [[Point, Point], [Point, Point]];
     render(el: T, ctx: RenderContext): RenderOutput;
-    searchText(el: T): string;
+    // What the kind contributes to the search index. Omit when it carries no text.
+    searchText?(el: T): string;
 };
 
 // The registry entry. `defaults` and `read` keep the kind's own element type, so a consumer that names
@@ -103,9 +102,10 @@ export type ElementKind<T extends VectorElement = VectorElement> = {
 // The empty outline a mis-dispatched element gets: no edge, so nothing docks to it.
 const EMPTY_OUTLINE: OutlineShape = { kind: 'polyline', points: [] };
 
-// The dock anchors of anything box-shaped: the right/bottom/left/top edge midpoints (an ellipse's are its
-// axis extremes), rotated by the element's angle. Excalidraw's getSnapOutlineMidPoint order, so a bind-time
-// midpoint snap resolves the same side on a tie.
+// The dock anchors of anything box-shaped: the right/bottom/left/top edge midpoints, rotated by the
+// element's angle. An ellipse's are its axis extremes and a diamond's are its four tips (Excalidraw's
+// getDiamondBaseCorners) — the same four points, so no kind overrides this. Excalidraw's
+// getSnapOutlineMidPoint order, so a bind-time midpoint snap resolves the same side on a tie.
 function boxAnchorPoints(el: VectorElement): Point[] {
     const { x, y, width: w, height: h } = el;
     const center = boxCenter(el);
@@ -139,12 +139,12 @@ export function defineKind<T extends VectorElement>(spec: KindSpec<T>): ElementK
         capabilities: spec.capabilities,
         defaults: spec.defaults,
         read: spec.read,
-        bounds: (el, route) => (spec.is(el) ? spec.bounds(el, route) : getElementBounds(el)),
+        bounds: (el, route) => (spec.is(el) && spec.bounds ? spec.bounds(el, route) : getElementBounds(el)),
         hitTest: (el, point, threshold, route) => (spec.is(el) ? spec.hitTest(el, point, threshold, route) : false),
         outline: (el, inflate) => (spec.is(el) ? spec.outline(el, inflate) : EMPTY_OUTLINE),
         anchorPoints: (el) => (spec.is(el) && spec.anchorPoints ? spec.anchorPoints(el) : boxAnchorPoints(el)),
         aimLines: (el) => (spec.is(el) && spec.aimLines ? spec.aimLines(el) : boxAimLines(el)),
         render: (el, ctx) => (spec.is(el) ? spec.render(el, ctx) : { svg: '' }),
-        searchText: (el) => (spec.is(el) ? spec.searchText(el) : ''),
+        searchText: (el) => (spec.is(el) && spec.searchText ? spec.searchText(el) : ''),
     };
 }

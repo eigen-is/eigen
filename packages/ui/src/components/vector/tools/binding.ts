@@ -9,16 +9,16 @@ import {
     type Box,
     bindingAnchor,
     bindingDistance,
+    boxCenter,
+    ELEMENT_KINDS,
     elbowAnchorScene,
     elbowRoutingContext,
     followBindings,
-    hitTestBox,
-    hitTestDiamond,
-    hitTestEllipse,
     isBindable,
     isTransparentFill,
     linearLocalToScene,
     moveEndpoints,
+    outlineContains,
     type PinPatch,
     type Point,
     parseBinding,
@@ -26,6 +26,7 @@ import {
     parsePoints,
     projectFixedPointOntoDiagonal,
     remapBinding,
+    rotatePoint,
     serializeBinding,
     solidFill,
     type VectorArrowElement,
@@ -33,20 +34,12 @@ import {
     type VectorShapeElement,
 } from '@workspace/lib/vector';
 
-// Is `point` within `pad` of the shape's outline in the shape's own frame — the shape's box grown (or,
-// with a negative pad, shrunk) uniformly on all sides, hit-tested by type. The centre is unchanged, so a
-// rotated shape stays correct (the type hit-tests unrotate about the centre).
+// Is `point` inside the shape's own outline grown by `pad` (shrunk, for a negative pad)? The kind owns
+// the curve, so a rounded corner binds where it is drawn rather than out at the sharp box. The outline
+// lives in the shape's unrotated frame, so the query point is unrotated about the centre to match.
 function insideShape(shape: VectorShapeElement, point: Point, pad: number): boolean {
-    const box: Box = {
-        x: shape.x - pad,
-        y: shape.y - pad,
-        width: shape.width + 2 * pad,
-        height: shape.height + 2 * pad,
-        angle: shape.angle,
-    };
-    if (shape.type === 'ellipse') return hitTestEllipse(box, point);
-    if (shape.type === 'diamond') return hitTestDiamond(box, point);
-    return hitTestBox(box, point);
+    const local = rotatePoint(point, boxCenter(shape), -shape.angle);
+    return outlineContains(ELEMENT_KINDS[shape.type].outline(shape, pad), local);
 }
 
 // Whether a dragged endpoint at `point` should bind to a shape: a filled shape binds anywhere inside or

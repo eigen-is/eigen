@@ -11,7 +11,7 @@ import type { Point } from './geometry';
 import type { Corners } from './types';
 
 export type OutlineBox = { x: number; y: number; width: number; height: number };
-export type Seg = { a: Point; b: Point };
+type Seg = { a: Point; b: Point };
 
 const EPS = 1e-7;
 const PROPORTIONAL_RADIUS = 0.25;
@@ -26,7 +26,7 @@ const ELLIPSE_SEED = 0.707;
 // recognisable, degenerating exactly to the inscribed circle (or a pill, for a rect with w ≠ h).
 //   rect:    min(w, h) / 2
 //   diamond: (w·h) / (2·√(w² + h²))          [= a·b/√(a²+b²) with a = w/2, b = h/2]
-export function roundRadius(box: OutlineBox, kind: 'rectangle' | 'diamond'): number {
+function roundRadius(box: OutlineBox, kind: 'rectangle' | 'diamond'): number {
     if (kind === 'rectangle') return Math.min(box.width, box.height) / 2;
     const a = box.width / 2;
     const b = box.height / 2;
@@ -35,7 +35,7 @@ export function roundRadius(box: OutlineBox, kind: 'rectangle' | 'diamond'): num
 }
 
 // The inset "core" of a rounded rect: the box pulled in by `radius` on all four sides.
-export function rectCore(box: OutlineBox, radius: number): Point[] {
+function rectCore(box: OutlineBox, radius: number): Point[] {
     const r = clamp(radius, 0, roundRadius(box, 'rectangle'));
     return dedupe([
         { x: box.x + r, y: box.y + r },
@@ -48,7 +48,7 @@ export function rectCore(box: OutlineBox, radius: number): Point[] {
 // The inset core of a rounded diamond: a SIMILAR diamond scaled by k = 1 − radius / inradius, because
 // offsetting every edge inward by `radius` scales the distance-from-centre-to-edge (= the inradius)
 // by that factor. k = 0 ⇒ the core is the centre point ⇒ the shape is the inscribed circle.
-export function diamondCore(box: OutlineBox, radius: number): Point[] {
+function diamondCore(box: OutlineBox, radius: number): Point[] {
     const a = box.width / 2;
     const b = box.height / 2;
     const inradius = roundRadius(box, 'diamond');
@@ -121,13 +121,26 @@ export function outlineDistance(shape: OutlineShape, p: Point): number {
     if (shape.kind === 'ellipse') return ellipseEdgeDistance(shape, p);
     let best = Number.POSITIVE_INFINITY;
     if (shape.kind === 'polygon') {
-        for (const [a, b] of coreEdges(shape.corners)) best = Math.min(best, distToSegment(p, a, b));
+        for (const [a, b] of coreEdges(shape.corners)) best = Math.min(best, distanceToSegment(p, a, b));
     } else {
         for (let i = 1; i < shape.points.length; i++) {
-            best = Math.min(best, distToSegment(p, shape.points[i - 1], shape.points[i]));
+            best = Math.min(best, distanceToSegment(p, shape.points[i - 1], shape.points[i]));
         }
     }
     return Number.isFinite(best) ? best : 0;
+}
+
+// Is the point inside the closed outline (on the edge counts)? An open polyline has no interior, so it
+// never contains. One containment definition, so a bind candidate covers exactly the drawn silhouette
+// instead of the sharp box behind a rounded corner.
+export function outlineContains(shape: OutlineShape, p: Point): boolean {
+    if (shape.kind === 'rounded') return coreDistance(p, shape.core) <= shape.radius;
+    if (shape.kind === 'polygon') return shape.corners.length > 2 && insideConvex(p, shape.corners);
+    if (shape.kind === 'ellipse') {
+        if (shape.rx <= 0 || shape.ry <= 0) return false;
+        return ((p.x - shape.cx) / shape.rx) ** 2 + ((p.y - shape.cy) / shape.ry) ** 2 <= 1;
+    }
+    return false;
 }
 
 // The stored corner intent → a radius in scene units. `curved` is Excalidraw's adaptive radius (the value
@@ -149,7 +162,7 @@ export function cornerRadius(
 // segment∩segment, or the two roots of a quadratic for segment∩circle); the level-set predicate then
 // keeps only the ones actually on the outline. That predicate replaces per-vertex normal-cone maths and
 // stays correct when the core degenerates to a segment (pill) or a point (circle).
-export function coreHits(seg: Seg, core: Point[], R: number): Point[] {
+function coreHits(seg: Seg, core: Point[], R: number): Point[] {
     if (R <= 0 || core.length === 0) return [];
     const candidates: Point[] = [];
     for (const v of core) candidates.push(...segCircleHits(seg, v, R));
@@ -194,7 +207,7 @@ function distToCore(p: Point, core: Point[]): number {
 function coreDistance(p: Point, core: Point[]): number {
     if (core.length === 1) return Math.hypot(p.x - core[0].x, p.y - core[0].y);
     let best = Number.POSITIVE_INFINITY;
-    for (const [a, b] of coreEdges(core)) best = Math.min(best, distToSegment(p, a, b));
+    for (const [a, b] of coreEdges(core)) best = Math.min(best, distanceToSegment(p, a, b));
     return core.length > 2 && insideConvex(p, core) ? -best : best;
 }
 
@@ -213,7 +226,7 @@ function insideConvex(p: Point, poly: Point[]): boolean {
 
 // --- sharp offsets: the radius-0 path --------------------------------------------------------
 
-export function sharpRectOffset(box: OutlineBox, gap: number): Point[] {
+function sharpRectOffset(box: OutlineBox, gap: number): Point[] {
     return [
         { x: box.x - gap, y: box.y - gap },
         { x: box.x + box.width + gap, y: box.y - gap },
@@ -254,43 +267,6 @@ function segSharpHits(seg: Seg, corners: Point[]): Point[] {
 // coreHits intersects. roughjs's gen.path normalizes `A` to cubics itself, for both the stroke and the
 // pointsOnPath fill, so no caller pre-flattens.
 
-export function roundedRectPath(box: OutlineBox, radius: number): string {
-    const { x, y, width: w, height: h } = box;
-    const r = clamp(radius, 0, roundRadius(box, 'rectangle'));
-    if (r <= 0) return `M ${n(x)} ${n(y)} L ${n(x + w)} ${n(y)} L ${n(x + w)} ${n(y + h)} L ${n(x)} ${n(y + h)} Z`;
-    const arc = (px: number, py: number) => `A ${n(r)} ${n(r)} 0 0 1 ${n(px)} ${n(py)}`;
-    return [
-        `M ${n(x + r)} ${n(y)}`,
-        `L ${n(x + w - r)} ${n(y)}`,
-        arc(x + w, y + r),
-        `L ${n(x + w)} ${n(y + h - r)}`,
-        arc(x + w - r, y + h),
-        `L ${n(x + r)} ${n(y + h)}`,
-        arc(x, y + h - r),
-        `L ${n(x)} ${n(y + r)}`,
-        arc(x + r, y),
-        'Z',
-    ].join(' ');
-}
-
-export function roundedDiamondPath(box: OutlineBox, radius: number): string {
-    const a = box.width / 2;
-    const b = box.height / 2;
-    const cx = box.x + a;
-    const cy = box.y + b;
-    const r = clamp(radius, 0, roundRadius(box, 'diamond'));
-    if (r <= 0) {
-        const sharp = [
-            { x: cx, y: cy - b },
-            { x: cx + a, y: cy },
-            { x: cx, y: cy + b },
-            { x: cx - a, y: cy },
-        ];
-        return `${sharp.map((p, i) => `${i === 0 ? 'M' : 'L'} ${n(p.x)} ${n(p.y)}`).join(' ')} Z`;
-    }
-    return corePath(diamondCore(box, r), r);
-}
-
 // The SVG `d` for an outline — the shape outlineHits intersects, drawn.
 export function outlinePath(shape: OutlineShape): string {
     if (shape.kind === 'polygon') {
@@ -309,8 +285,8 @@ export function outlinePath(shape: OutlineShape): string {
 }
 
 // core ⊕ disc(r) as a path: each core edge offset outward by r, joined by tangent arcs about the core
-// vertices. A single-point core is the circle; a two-point core is the pill. roundedDiamondPath is this;
-// roundedRectPath stays an independent builder so its exact-string tests keep this one honest.
+// vertices. A single-point core is the circle; a two-point core is the pill. The one rounded builder —
+// rectangle, diamond and the image clip all draw the curve outlineHits intersects.
 function corePath(core: Point[], r: number): string {
     if (r <= 0 || core.length === 0) return '';
     if (core.length === 1) {
@@ -392,25 +368,13 @@ function segEllipseHits(seg: Seg, cx: number, cy: number, rx: number, ry: number
     return hits;
 }
 
+// A circle is the ellipse with equal radii; one quadratic serves both.
 function segCircleHits(seg: Seg, c: Point, r: number): Point[] {
-    const dx = seg.b.x - seg.a.x;
-    const dy = seg.b.y - seg.a.y;
-    const fx = seg.a.x - c.x;
-    const fy = seg.a.y - c.y;
-    const A = dx * dx + dy * dy;
-    const B = 2 * (fx * dx + fy * dy);
-    const C = fx * fx + fy * fy - r * r;
-    const disc = B * B - 4 * A * C;
-    if (A === 0 || disc < 0) return [];
-    const sq = Math.sqrt(disc);
-    const hits: Point[] = [];
-    for (const t of [(-B - sq) / (2 * A), (-B + sq) / (2 * A)]) {
-        if (t >= 0 && t <= 1) hits.push({ x: seg.a.x + t * dx, y: seg.a.y + t * dy });
-    }
-    return hits;
+    return segEllipseHits(seg, c.x, c.y, r, r);
 }
 
-function segSegIntersect(p1: Point, p2: Point, p3: Point, p4: Point): Point | null {
+// Segment ∩ segment, both bounded — the intersection point or null when parallel / not overlapping.
+export function segSegIntersect(p1: Point, p2: Point, p3: Point, p4: Point): Point | null {
     const d1x = p2.x - p1.x;
     const d1y = p2.y - p1.y;
     const d2x = p4.x - p3.x;
@@ -423,7 +387,9 @@ function segSegIntersect(p1: Point, p2: Point, p3: Point, p4: Point): Point | nu
     return { x: p1.x + t * d1x, y: p1.y + t * d1y };
 }
 
-function distToSegment(p: Point, a: Point, b: Point): number {
+// Point-to-segment distance (Excalidraw's distanceToLineSegment): project onto the segment, clamp the
+// parameter to [0,1], measure to the clamped foot.
+export function distanceToSegment(p: Point, a: Point, b: Point): number {
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const len2 = dx * dx + dy * dy;

@@ -1,21 +1,18 @@
 // The roughjs/serializer bodies every drawing kind shares: option assembly, the Drawable → SVG
-// serializer, and the two string helpers. Moved out of scene-to-svg.ts, which now only assembles the
-// document; nothing here knows a kind beyond the fields it reads.
+// serializer, and the two string helpers. Nothing here knows a kind beyond the fields it reads.
 
 import type { Drawable, OpSet, Options } from 'roughjs/bin/core';
 import { RoughGenerator } from 'roughjs/bin/generator';
 import { gradientVector, isTransparentFill, parseFill } from '../fill';
 import { isClosedPath, type Point } from '../geometry';
-import { cornerRadius, roundedDiamondPath, roundedRectPath, sharpDiamondOffset } from '../outline';
+import { cornerRadius, diamondOutline, outlinePath, rectOutline, sharpDiamondOffset } from '../outline';
 import { isLinearElement, type VectorArrowElement, type VectorLinearElement, type VectorShapeElement } from '../types';
 
 // Everything the fill paint needs: the stored Fill JSON plus the id its gradient def is scoped to.
 type FillSource = { id: string; fill: string };
 
-// A closed shape's rough drawing. Straight corners keep roughjs's own generators so the output is
-// byte-identical to before; a rounded shape is the shared outline path — the same curve docking
-// intersects. The generator is per-call: seeded roughjs output depends only on el.seed. The linecap
-// rides the paths (the caller owns the placing <g>).
+// A closed shape's rough drawing. The generator is per-call: seeded roughjs output depends only on
+// el.seed. The linecap rides the paths (the caller owns the placing <g>).
 export function renderRoughShape(el: VectorShapeElement): string {
     const paths = drawableToSvg(shapeDrawable(new RoughGenerator(), el));
     return `${fillDefs(el)}<g stroke-linecap="round">${paths}</g>`;
@@ -57,8 +54,8 @@ function shapeDrawable(gen: RoughGenerator, el: VectorShapeElement): Drawable {
             options,
         );
     }
-    const d = el.type === 'rectangle' ? roundedRectPath(box, radius) : roundedDiamondPath(box, radius);
-    return gen.path(d, options);
+    const outline = el.type === 'rectangle' ? rectOutline(box, radius, 0) : diamondOutline(box, radius, 0);
+    return gen.path(outlinePath(outline), options);
 }
 
 // Options assembly, replicated from Excalidraw's generateRoughOptions, minus the
@@ -108,16 +105,17 @@ export function fillDefs(el: FillSource): string {
 // What roughjs is told to paint the fill with. drawableToSvg copies it into `fill=` on fillPath sets and
 // `stroke=` on the fillSketch sets hachure/cross-hatch/zigzag emit, which is what a gradient needs on
 // both. The stroke proper stays a solid colour.
-export function fillPaint(el: FillSource): string | undefined {
+function fillPaint(el: FillSource): string | undefined {
     const fill = parseFill(el.fill);
     if (isTransparentFill(fill)) return undefined;
     return fill.type === 'solid' ? fill.color : `url(#${svgId('fill', el.id)})`;
 }
 
-// A document-unique SVG id for one element's own defs. Stripped to id-safe characters so a hostile
-// element id can't escape the attribute.
+// A document-unique SVG id for one element's own defs. Every character outside the id-safe set is
+// hex-ESCAPED, not stripped: a hostile element id can neither escape the attribute nor collapse onto
+// another element's id and paint its gradient.
 export function svgId(prefix: string, elementId: string): string {
-    return `${prefix}-${elementId.replace(/[^A-Za-z0-9_-]/g, '')}`;
+    return `${prefix}-${elementId.replace(/[^A-Za-z0-9-]/g, (c) => `_${c.charCodeAt(0).toString(16)}_`)}`;
 }
 
 // A line/freedraw fills only when its path loops (Excalidraw's generateRoughOptions line arm).

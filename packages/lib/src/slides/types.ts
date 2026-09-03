@@ -52,7 +52,7 @@ export type DeckData = {
     slideOrder: string[];
 };
 
-// Slide space IS frame space; the deck moves onto frames in phase 4 and these aliases go with it.
+// Slide space is frame space: one owner of the numbers (vector/frames.ts), aliased here.
 export const SLIDE_ASPECT_RATIO = FRAME_ASPECT_RATIO;
 export const SLIDE_BASE_WIDTH = FRAME_WIDTH;
 export const SLIDE_BASE_HEIGHT = FRAME_HEIGHT;

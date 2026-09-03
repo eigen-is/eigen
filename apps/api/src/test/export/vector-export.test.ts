@@ -138,6 +138,39 @@ describe('Eigenvector export — SVG media sanitization', () => {
     }, 120_000);
 });
 
+describe('Eigenvector export — rich-text HTML sanitization', () => {
+    test('a hostile rich-text body exports with scripts, handlers and external refs stripped', async () => {
+        // `html` is raw TipTap markup any collaborator can write, and the reader only caps and cleans it
+        // (no tag filtering), so the assembled SVG must go through DOMPurify before it is served.
+        const created = await seedVector('Evil Text', false);
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, created.id);
+        const scene = buildGoldenVectorScene();
+        seedVectorDoc(collab.doc, {
+            ...scene,
+            elements: scene.elements.map((el) =>
+                el.type === 'richtext'
+                    ? {
+                          ...el,
+                          html:
+                              '<p onclick="alert(1)">safe<img src=x onerror="alert(2)">' +
+                              '<script>alert(3)</script><a href="javascript:alert(4)">link</a></p>',
+                      }
+                    : el,
+            ),
+        });
+
+        const res = await exportRequest(created.id, 'svg');
+        expect(res.status).toBe(200);
+        const svg = await res.text();
+        expect(svg).toContain('safe');
+        expect(svg).not.toContain('<script');
+        expect(svg).not.toContain('onerror');
+        expect(svg).not.toContain('onclick');
+        expect(svg).not.toContain('javascript:');
+    }, 120_000);
+});
+
 const suite = (await isWeasyPrintAvailable()) ? describe : describe.skip;
 
 suite('Eigenvector export route — PDF (WeasyPrint end-to-end)', () => {

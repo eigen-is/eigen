@@ -20,6 +20,15 @@ export function unescapeHtml(html: string): string {
         .replace(/&amp;/g, '&');
 }
 
+// Plain text → paragraph HTML, the inverse of stripTagsServer: one <p> per line, escaped. The one
+// builder for "this text becomes a rich-text body" (the canvas' text paste, the demo builder).
+export function textToParagraphHtml(text: string): string {
+    return text
+        .split('\n')
+        .map((line) => `<p>${escapeHtml(line)}</p>`)
+        .join('');
+}
+
 // Server-side HTML → plain-text. Browser code should use `htmlToPlainText` from
 // ./html-dom, which delegates to the DOM parser; this regex variant is intended for
 // Node/Bun where there's no `document`. Used by the email composers to populate the

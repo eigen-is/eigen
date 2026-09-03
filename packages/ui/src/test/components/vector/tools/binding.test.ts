@@ -11,7 +11,7 @@ import {
     projectFixedPointOntoDiagonal,
     rotatePoint,
     serializeBinding,
-    shapeSideMidpoints,
+    shapeAnchorPoints,
     solidFill,
     type VectorArrowElement,
     type VectorElement,
@@ -130,7 +130,7 @@ describe('bindArrow — outside side-midpoint drop snaps the anchor onto the dot
         for (const angle of [0, 30]) {
             test(`${end} end, ${angle}° rect: anchor rests on the right-edge midpoint`, () => {
                 const shape = rect({ id: 'shape', angle });
-                const rightMid = shapeSideMidpoints(shape)[0]; // right, bottom, left, top order
+                const rightMid = shapeAnchorPoints(shape)[0]; // right, bottom, left, top order
                 // 5px outside the right edge (local (205,50)) — outside the fill, within the snap band.
                 const drop = rotatePoint({ x: 205, y: 50 }, { x: 100, y: 50 }, angle);
                 // The free end sits far along the right edge's outward normal, so the chord crosses the right

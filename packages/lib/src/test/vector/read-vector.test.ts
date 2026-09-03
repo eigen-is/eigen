@@ -3,7 +3,7 @@ import * as Y from 'yjs';
 import { isValidFractionalIndex } from '../../vector/fractional-index';
 import { ELEMENT_FIELDS } from '../../vector/kinds';
 import { readVectorFromDoc } from '../../vector/read-vector';
-import { DEFAULT_CORNERS, DEFAULT_ELEMENT_PROPS, DEFAULT_SCENE_META } from '../../vector/types';
+import { DEFAULT_CORNERS, DEFAULT_ELEMENT_PROPS, DEFAULT_FONT_FAMILY, DEFAULT_SCENE_META } from '../../vector/types';
 
 function writeElement(map: Y.Map<unknown>, id: string, fields: Record<string, unknown>) {
     const m = new Y.Map();
@@ -347,6 +347,81 @@ describe('readVectorFromDoc', () => {
         });
         const padding = readVectorFromDoc(doc).elements.map((el) => el.type === 'richtext' && el.padding);
         expect(padding).toEqual([12, 0, 200]);
+    });
+
+    test('clamps richtext letter-spacing and line-height to their layout ranges', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'ok', {
+                type: 'richtext',
+                index: 'a0',
+                html: 'x',
+                letterSpacing: 12,
+                lineHeight: 2,
+            });
+            writeElement(elements, 'low', {
+                type: 'richtext',
+                index: 'a1',
+                html: 'x',
+                letterSpacing: -1e9,
+                lineHeight: 0,
+            });
+            writeElement(elements, 'high', {
+                type: 'richtext',
+                index: 'a2',
+                html: 'x',
+                letterSpacing: 1e9,
+                lineHeight: 1e9,
+            });
+        });
+        const spacing = readVectorFromDoc(doc).elements.map((el) => el.type === 'richtext' && el.letterSpacing);
+        const leading = readVectorFromDoc(doc).elements.map((el) => el.type === 'richtext' && el.lineHeight);
+        expect(spacing).toEqual([12, -200, 200]);
+        expect(leading).toEqual([2, 0.5, 10]);
+    });
+
+    test('a fontFamily outside the font registry falls back, so it can never carry CSS', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'ok', { type: 'richtext', index: 'a0', html: 'x', fontFamily: 'Inter' });
+            writeElement(elements, 'evil', {
+                type: 'richtext',
+                index: 'a1',
+                html: 'x',
+                fontFamily: "x', sans-serif; background:url(https://attacker.example/p)",
+            });
+            writeElement(elements, 'arrow', {
+                type: 'arrow',
+                index: 'a2',
+                points: '[[0,0],[10,0]]',
+                text: 'label',
+                fontFamily: 'Comic Sans; color:red',
+            });
+        });
+        const fonts = readVectorFromDoc(doc).elements.map((el) => 'fontFamily' in el && el.fontFamily);
+        expect(fonts).toEqual(['Inter', DEFAULT_FONT_FAMILY, DEFAULT_FONT_FAMILY]);
+    });
+
+    test('clamps the roughjs inputs a corrupt write could poison', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'neg', {
+                type: 'rectangle',
+                index: 'a0',
+                strokeWidth: -4,
+                roughness: -2,
+                seed: -1,
+            });
+            writeElement(elements, 'huge', {
+                type: 'rectangle',
+                index: 'a1',
+                strokeWidth: 1e9,
+                roughness: 1e9,
+                seed: 1e300,
+            });
+        });
+        const [neg, huge] = readVectorFromDoc(doc).elements;
+        expect(neg).toMatchObject({ strokeWidth: 0 });
+        expect(huge).toMatchObject({ strokeWidth: 100 });
+        expect(neg.type === 'rectangle' && [neg.roughness, neg.seed]).toEqual([0, 0]);
+        expect(huge.type === 'rectangle' && [huge.roughness, huge.seed]).toEqual([10, 2 ** 31]);
     });
 
     test('clears a binding whose target is absent or not bindable (doc untouched)', () => {
@@ -700,6 +775,9 @@ describe('readVectorFromDoc — the canvas model', () => {
         const [a, b] = readVectorFromDoc(doc).elements;
         expect(a.frameId).toBe('f1');
         expect(b.frameId).toBe('f2');
+        // the doc itself is left alone — the next real write of the element is what persists the re-home
+        const stored = doc.getMap('elements').get('a');
+        expect(stored instanceof Y.Map && stored.get('frameId')).toBe('ghost');
     });
 
     test('with no frames at all a dangling frameId falls back to the infinite canvas', () => {

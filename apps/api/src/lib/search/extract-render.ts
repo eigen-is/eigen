@@ -1,7 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import type { Sheet } from '@workspace/lib/sheets';
 import type { DeckData } from '@workspace/lib/slides';
-import type { ElementKind, VectorElementType, VectorScene } from '@workspace/lib/vector';
+import type { ElementKindRegistry, VectorScene } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import type { ExtractTextJob, TransformWarning } from '../document/transform/protocol';
 import { CONTENT_INDEX_MAX_BYTES } from './limits';
@@ -87,12 +87,9 @@ function collectSheetsText(sheets: Sheet[], cap: number): string {
     return out.parts.join(' ');
 }
 
-// Whatever each kind declares as its words, in z-order, joined with newlines. The registry
-// owns the per-kind answer — rich text arrives tag-stripped, an arrow contributes its label,
-// a shape nothing — so a new kind is indexed the day it exists. Empty strings contribute
-// nothing. `kinds` rides in from the caller's dynamic import, which is what keeps the vector
-// engine out of an eigendoc extract.
-function collectVectorText(scene: VectorScene, kinds: Record<VectorElementType, ElementKind>, cap: number): string {
+// `kinds` rides in from the caller's dynamic import, which is what keeps the vector engine out of an
+// eigendoc extract.
+function collectVectorText(scene: VectorScene, kinds: ElementKindRegistry, cap: number): string {
     const out: CappedText = { parts: [], bytes: 0 };
     for (const element of scene.elements) {
         const text = kinds[element.type].searchText(element);

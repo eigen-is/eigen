@@ -20,7 +20,7 @@ import {
     useUploadFile,
     useZombieMediaSweep,
 } from '@workspace/lib/drive';
-import { escapeHtml } from '@workspace/lib/html';
+import { textToParagraphHtml } from '@workspace/lib/html';
 import { htmlToPlainText, readDominantTextAlign } from '@workspace/lib/html-dom';
 import { useIsCoarsePointer } from '@workspace/lib/media';
 import type { EigenClipboardData, EigenClipboardImageItem, EigenClipboardItem } from '@workspace/lib/types/clipboard';
@@ -37,7 +37,7 @@ import {
     getElementsBounds,
     type ImageSize,
     isLinearElement,
-    isTransparentFill,
+    isTransparentColor,
     type MarqueeMode,
     marqueeMode,
     orderByFractionalIndex,
@@ -104,8 +104,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 // Below this scene-unit extent (in BOTH dimensions) a drag-create is a click → discarded.
 const CREATE_MIN_SIZE = 1;
 const MIN_ELEMENT_SIZE = 1;
-// The box a click with the rich-text tool places, in scene units. There is no in-place editor yet, so
-// the box arrives empty and selected.
+// The box a click with the rich-text tool places, in scene units. It arrives empty and selected.
 const NEW_RICHTEXT_SIZE = { width: 200, height: 40 };
 // Image drop/paste SIZING (natural-size-that-fits, 80% viewport cap, never upscale, unreadable →
 // default box) is the shared `fitImageSize` helper — vector is its reference behavior. Only the
@@ -127,14 +126,6 @@ function boundsToBox(b: Bounds): Box {
 
 function boxToBounds(b: Box): Bounds {
     return { minX: b.x, minY: b.y, maxX: b.x + b.width, maxY: b.y + b.height };
-}
-
-// Plain text → a rich-text box's HTML: one paragraph per line, the inverse of stripTagsServer.
-function textToHtml(text: string): string {
-    return text
-        .split('\n')
-        .map((line) => `<p>${escapeHtml(line)}</p>`)
-        .join('');
 }
 
 // pointerId gates move/up to the pointer that started the gesture — on touch, a second finger's
@@ -939,7 +930,7 @@ export function VectorCanvas({
                     width: w,
                     height: h,
                     angle,
-                    html: textToHtml(item.text),
+                    html: textToParagraphHtml(item.text),
                     fontSize,
                     fontFamily,
                     textAlign: toVectorTextAlign(typo.textAlign),
@@ -1015,7 +1006,7 @@ export function VectorCanvas({
                 width: w,
                 height: h,
                 angle: 0,
-                html: textToHtml(text),
+                html: textToParagraphHtml(text),
                 fontSize: DEFAULT_FONT_SIZE,
                 fontFamily: DEFAULT_FONT_FAMILY,
                 textAlign,
@@ -1027,7 +1018,7 @@ export function VectorCanvas({
     );
 
     // Non-eigen text paste (the keyboard fallthrough and the async menu path share this policy): plain
-    // text, or the flattened text of pasted HTML, becomes one text element. Prose alignment rides in
+    // text, or the flattened text of pasted HTML, becomes one rich-text box. Prose alignment rides in
     // text/html as a block text-align; carry it through toVectorTextAlign (justify→left). Returns true
     // when it consumed content so the keyboard handler can gate its preventDefault on a real paste.
     const pasteNonEigenText = useCallback(
@@ -1089,7 +1080,7 @@ export function VectorCanvas({
             }
             // No eigen/SVG payload. OS files fall through to useFilePasteTarget (image drop path).
             if (paste.files.length > 0) return;
-            // Plain text (or the text of pasted HTML) → a new text element; only claim the event when
+            // Plain text (or the text of pasted HTML) → a new rich-text box; only claim the event when
             // content is actually consumed, else it falls through to the OS-file path.
             if (pasteNonEigenText(paste.html, paste.text)) {
                 e.preventDefault();
@@ -1119,8 +1110,8 @@ export function VectorCanvas({
     ]);
 
     // Text-edit entry shared by a mouse double-click and a touch double-tap (touch-gestures synthesizes
-    // the tap-tap). frozenRef: no new session over a live gesture. Only an arrow label opens — a
-    // rich-text box has no in-place editor until phase 2.
+    // the tap-tap). frozenRef: no new session over a live gesture. Only an arrow label opens; a
+    // rich-text box has no in-place editor.
     const openTextAtClient = (clientX: number, clientY: number) => {
         if (!canEdit || tool !== 'select' || editing || frozenRef.current) return;
         const p = clientToScene(clientX, clientY);
@@ -1237,7 +1228,7 @@ export function VectorCanvas({
         if (drawing.onPointerDown(e, p)) return;
 
         // Rich-text tool: a click places an EMPTY box at the point and selects it (no drag-create, no
-        // capture). There is no in-place editor until phase 2, so nothing opens over it.
+        // capture). There is no in-place editor, so nothing opens over it.
         if (tool === 'richtext') {
             e.preventDefault();
             undoManager?.stopCapturing();
@@ -1518,7 +1509,7 @@ export function VectorCanvas({
     const showTransform = showChrome && canEdit && single !== null && !singleLinear2pt;
 
     const cursor = pointerCursor({ panning, panMode, tool, hoveringSelectable });
-    const background = isTransparentFill({ type: 'solid', color: meta.background }) ? undefined : meta.background;
+    const background = isTransparentColor(meta.background) ? undefined : meta.background;
 
     // One scene node — every render path routes through here so `byId` (an elbow arrow's route context) is
     // threaded in one place, not per callsite.
@@ -1560,8 +1551,7 @@ export function VectorCanvas({
                         // The element under edit is drawn only by the overlay textarea (WYSIWYG). An
                         // arrow keeps its shaft/heads and hides just the label (render text='').
                         if (editing?.id === el.id) {
-                            const isArrow = editing.kind === 'arrow' && el.type === 'arrow';
-                            return isArrow ? node(renderEl({ ...el, text: '' })) : null;
+                            return el.type === 'arrow' ? node(renderEl({ ...el, text: '' })) : null;
                         }
                         return node(renderEl(el));
                     })}

@@ -4,7 +4,6 @@ import { solidFill } from '../../vector/fill';
 import { outlineIntersections, type Point } from '../../vector/geometry';
 import {
     cornerRadius,
-    diamondCore,
     diamondOutline,
     ellipseOutline,
     type OutlineBox,
@@ -12,14 +11,8 @@ import {
     outlineHits,
     outlinePath,
     polylineOutline,
-    rectCore,
     rectOutline,
-    roundedDiamondPath,
-    roundedRectPath,
-    roundRadius,
-    type Seg,
     sharpDiamondOffset,
-    sharpRectOffset,
 } from '../../vector/outline';
 import { DEFAULT_ELEMENT_PROPS, type VectorRectangleElement, type VectorShapeElement } from '../../vector/types';
 
@@ -43,6 +36,50 @@ const shapeEl = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'i
     ...SHAPE_BASE,
     ...over,
 });
+
+// The maths the module builds its outlines from, re-derived here as the test's own oracle: the inradius,
+// the two inset cores and the sharp rectangle. Independent formulations, so a wrong rewrite of the
+// shipped ones fails these.
+type Seg = { a: Point; b: Point };
+const inradius = (box: OutlineBox, kind: 'rectangle' | 'diamond'): number => {
+    if (kind === 'rectangle') return Math.min(box.width, box.height) / 2;
+    const a = box.width / 2;
+    const b = box.height / 2;
+    return (a * b) / Math.hypot(a, b);
+};
+const rectCoreOf = (box: OutlineBox, radius: number): Point[] => {
+    const r = Math.min(radius, inradius(box, 'rectangle'));
+    const pts = [
+        { x: box.x + r, y: box.y + r },
+        { x: box.x + box.width - r, y: box.y + r },
+        { x: box.x + box.width - r, y: box.y + box.height - r },
+        { x: box.x + r, y: box.y + box.height - r },
+    ];
+    return pts.filter((p, i) => pts.findIndex((q) => dist(p, q) < 1e-7) === i);
+};
+const diamondCoreOf = (box: OutlineBox, radius: number): Point[] => {
+    const a = box.width / 2;
+    const b = box.height / 2;
+    const inr = inradius(box, 'diamond');
+    const k = inr === 0 ? 0 : 1 - Math.min(radius, inr) / inr;
+    const cx = box.x + a;
+    const cy = box.y + b;
+    const pts = [
+        { x: cx, y: cy - b * k },
+        { x: cx + a * k, y: cy },
+        { x: cx, y: cy + b * k },
+        { x: cx - a * k, y: cy },
+    ];
+    return pts.filter((p, i) => pts.findIndex((q) => dist(p, q) < 1e-7) === i);
+};
+const sharpRect = (box: OutlineBox, gap: number): Point[] => [
+    { x: box.x - gap, y: box.y - gap },
+    { x: box.x + box.width + gap, y: box.y - gap },
+    { x: box.x + box.width + gap, y: box.y + box.height + gap },
+    { x: box.x - gap, y: box.y + box.height + gap },
+];
+const roundedRectPath = (box: OutlineBox, radius: number): string => outlinePath(rectOutline(box, radius, 0));
+const roundedDiamondPath = (box: OutlineBox, radius: number): string => outlinePath(diamondOutline(box, radius, 0));
 
 const ray = (from: Point, dx: number, dy: number, len = 1000): Seg => {
     const m = Math.hypot(dx, dy);
@@ -83,19 +120,19 @@ const DIA: OutlineBox = { x: 0, y: 0, width: 100, height: 60 };
 
 describe('round radius (the inradius, for both shapes)', () => {
     test('rectangle: min(w, h) / 2 — a pill', () => {
-        expect(roundRadius(PILL, 'rectangle')).toBe(50);
-        expect(roundRadius({ x: 0, y: 0, width: 80, height: 80 }, 'rectangle')).toBe(40);
+        expect(inradius(PILL, 'rectangle')).toBe(50);
+        expect(inradius({ x: 0, y: 0, width: 80, height: 80 }, 'rectangle')).toBe(40);
     });
 
     test('diamond: w·h / (2·√(w² + h²)) — the inscribed circle', () => {
-        expect(roundRadius(DIA, 'diamond')).toBeCloseTo((100 * 60) / (2 * Math.hypot(100, 60)), 9);
+        expect(inradius(DIA, 'diamond')).toBeCloseTo((100 * 60) / (2 * Math.hypot(100, 60)), 9);
         // a square diamond of side s: s / (2√2)
-        expect(roundRadius({ x: 0, y: 0, width: 80, height: 80 }, 'diamond')).toBeCloseTo(80 / (2 * Math.SQRT2), 9);
+        expect(inradius({ x: 0, y: 0, width: 80, height: 80 }, 'diamond')).toBeCloseTo(80 / (2 * Math.SQRT2), 9);
     });
 
     test('at the round radius the core degenerates (pill = segment, diamond = point)', () => {
-        expect(rectCore(PILL, roundRadius(PILL, 'rectangle'))).toHaveLength(2);
-        expect(diamondCore(DIA, roundRadius(DIA, 'diamond'))).toHaveLength(1);
+        expect(rectCoreOf(PILL, inradius(PILL, 'rectangle'))).toHaveLength(2);
+        expect(diamondCoreOf(DIA, inradius(DIA, 'diamond'))).toHaveLength(1);
     });
 });
 
@@ -111,7 +148,7 @@ describe('a ray exits on the arc, not the sharp corner', () => {
         expect(hit.x).toBeLessThan(200 - 1e-6);
         expect(hit.y).toBeLessThan(100 - 1e-6);
         // and strictly inside the sharp outline the old code would have used
-        expect(pointInPolygon(hit, sharpRectOffset(PILL, 0))).toBe(true);
+        expect(pointInPolygon(hit, sharpRect(PILL, 0))).toBe(true);
     });
 
     test('the arc hit is measurably short of the sharp hit (> 10px on a pill)', () => {
@@ -167,10 +204,10 @@ describe('gap inflation: an inflated rounded shape has radius r + gap', () => {
     test('diamond: an arc hit is exactly r + gap from its core vertex', () => {
         const c = centre(DIA);
         const r = 8;
-        const core = diamondCore(DIA, r);
+        const core = diamondCoreOf(DIA, r);
         const seg = ray(c, 1, 0);
         const hit = nearest(outlineHits(diamondOutline(DIA, r, 8), seg.a, seg.b), c);
-        const nearestVertex = core.reduce((best, v) => (dist(v, hit) < dist(best, hit) ? v : best));
+        const nearestVertex = core.reduce((best: Point, v: Point) => (dist(v, hit) < dist(best, hit) ? v : best));
         expect(dist(hit, nearestVertex)).toBeCloseTo(r + 8, 6);
     });
 });
@@ -215,7 +252,7 @@ describe('a rounded diamond docks inside the sharp diamond outline', () => {
 
     test('at the round radius the diamond IS the inscribed circle', () => {
         const c = centre(DIA);
-        const r = roundRadius(DIA, 'diamond');
+        const r = inradius(DIA, 'diamond');
         for (let deg = 0; deg < 360; deg += 13) {
             const seg = ray(c, Math.cos((deg * Math.PI) / 180), Math.sin((deg * Math.PI) / 180));
             expect(dist(c, nearest(outlineHits(diamondOutline(DIA, r, 4), seg.a, seg.b), c))).toBeCloseTo(r + 4, 6);
@@ -297,13 +334,13 @@ describe('every returned hit is genuinely on the outline (level-set fuzz)', () =
                 for (const [hits, core, rEff] of [
                     [
                         outlineHits(rectOutline(box, radius, 6), seg.a, seg.b),
-                        rectCore(box, radius),
-                        Math.min(radius, roundRadius(box, 'rectangle')),
+                        rectCoreOf(box, radius),
+                        Math.min(radius, inradius(box, 'rectangle')),
                     ],
                     [
                         outlineHits(diamondOutline(box, radius, 6), seg.a, seg.b),
-                        diamondCore(box, radius),
-                        Math.min(radius, roundRadius(box, 'diamond')),
+                        diamondCoreOf(box, radius),
+                        Math.min(radius, inradius(box, 'diamond')),
                     ],
                 ] as const) {
                     expect(hits.length).toBeGreaterThan(0);
@@ -346,7 +383,7 @@ describe('SVG path strings (the shared outline definition)', () => {
     });
 
     test('diamond at the round radius collapses to the inscribed circle (two half arcs)', () => {
-        const d = roundedDiamondPath(DIA, roundRadius(DIA, 'diamond'));
+        const d = roundedDiamondPath(DIA, inradius(DIA, 'diamond'));
         expect(d.match(/A /g)).toHaveLength(2);
     });
 
@@ -371,13 +408,13 @@ describe('SVG path strings (the shared outline definition)', () => {
     test('the path sampled by roughjs matches the intersection geometry (arc tangency)', () => {
         // every "L" endpoint of the diamond path is exactly r from its core vertex
         const r = 12;
-        const core = diamondCore(DIA, r);
+        const core = diamondCoreOf(DIA, r);
         const nums = roundedDiamondPath(DIA, r).match(/-?\d+(\.\d+)?/g) ?? [];
         const pts: Point[] = [];
         for (let i = 0; i + 1 < nums.length; i += 2) pts.push({ x: Number(nums[i]), y: Number(nums[i + 1]) });
         let tangent = 0;
         for (const p of pts) {
-            if (core.some((v) => Math.abs(dist(p, v) - r) < 1e-2)) tangent++;
+            if (core.some((v: Point) => Math.abs(dist(p, v) - r) < 1e-2)) tangent++;
         }
         expect(tangent).toBeGreaterThan(4);
     });
@@ -424,16 +461,6 @@ describe('ellipse and polyline outlines', () => {
 });
 
 describe('outlinePath', () => {
-    test('a rounded rect path matches the tested per-shape builder', () => {
-        const box = { x: 0, y: 0, width: 100, height: 60 };
-        expect(outlinePath(rectOutline(box, 10, 0))).toBe(roundedRectPath(box, 10));
-    });
-
-    test('a rounded diamond path matches the tested per-shape builder', () => {
-        const box = { x: 0, y: 0, width: 100, height: 60 };
-        expect(outlinePath(diamondOutline(box, 8, 0))).toBe(roundedDiamondPath(box, 8));
-    });
-
     test('radius 0 renders the plain polygon', () => {
         expect(outlinePath(rectOutline({ x: 0, y: 0, width: 10, height: 10 }, 0, 0))).toBe(
             'M 0 0 L 10 0 L 10 10 L 0 10 Z',

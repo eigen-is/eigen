@@ -47,7 +47,7 @@ import {
     rotatePoint,
     sampleArrowCurve,
     serializePoints,
-    shapeSideMidpoints,
+    shapeAnchorPoints,
     snapAngle,
     unionBounds,
 } from '../../vector/geometry';
@@ -1457,10 +1457,10 @@ describe('projectFixedPointOntoDiagonal', () => {
     });
 });
 
-describe('shapeSideMidpoints', () => {
+describe('shapeAnchorPoints', () => {
     test('rect/ellipse → right, bottom, left, top edge midpoints (Excalidraw order)', () => {
         const rect = shapeEl({ id: 'r', type: 'rectangle', x: 0, y: 0, width: 200, height: 100 });
-        expect(shapeSideMidpoints(rect)).toEqual([
+        expect(shapeAnchorPoints(rect)).toEqual([
             { x: 200, y: 50 },
             { x: 100, y: 100 },
             { x: 0, y: 50 },
@@ -1470,7 +1470,7 @@ describe('shapeSideMidpoints', () => {
 
     test('diamond → its four vertices/tips (right, bottom, left, top)', () => {
         const dia = shapeEl({ id: 'd', type: 'diamond', x: 0, y: 0, width: 200, height: 100 });
-        expect(shapeSideMidpoints(dia)).toEqual([
+        expect(shapeAnchorPoints(dia)).toEqual([
             { x: 200, y: 50 },
             { x: 100, y: 100 },
             { x: 0, y: 50 },

@@ -1,5 +1,5 @@
 import { escapeHtml } from '@workspace/lib/html';
-import { isTransparentFill, readVectorFromDoc, sceneToSvg, type VectorScene } from '@workspace/lib/vector';
+import { isTransparentColor, readVectorFromDoc, sceneToSvg, type VectorScene } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import { ApiError } from '../../core/errors';
 import { spliceAfterSvgOpenTag, toDataUriMap } from '../../document/media';
@@ -12,16 +12,16 @@ import {
 import { getFontCSS, getFontFaceCSSForFamilies } from '../fonts';
 import { sanitizeExportHtml } from '../sanitize';
 
-// A transparent drawing keeps its transparency in the SVG download but exports as white
-// paper for PDF — WeasyPrint has no canvas behind the page.
-const PDF_PAPER = '#ffffff';
-
 // A rich-text box renders as an HTML <div> inside <foreignObject>, and DOMPurify drops both by
 // default: foreignObject is not in its SVG allowlist, and HTML nested in SVG survives only under a
 // declared integration point. Allowing the pair keeps the box; its markup still goes through the
 // ordinary HTML pass, so scripts, event handlers and non-data: refs come out exactly as they do in
 // the doc and slides exports.
 const RICH_TEXT_TAGS = { ADD_TAGS: ['foreignObject'], HTML_INTEGRATION_POINTS: { foreignobject: true } };
+
+// A transparent drawing keeps its transparency in the SVG download but exports as white
+// paper for PDF — WeasyPrint has no canvas behind the page.
+const PDF_PAPER = '#ffffff';
 
 // Materialized doc + prepared media → export bytes. Runs inside the transform Worker
 // (worker.ts owns execution; the main-thread orchestration lives in export-document.ts).
@@ -36,16 +36,16 @@ export function renderEigenvectorExport(
     const dataUriMap = toDataUriMap(media);
 
     if (format === 'svg') {
-        // A collaborator can put arbitrary strings in the schemaless scene, so the assembled
-        // SVG runs through the shared export sanitizer (the documented SSRF closure) exactly
-        // like slides/sheets — even though the preview surface trusts the serializer.
+        // A collaborator can put arbitrary strings in the schemaless scene — including a rich-text
+        // box's raw HTML — so the assembled SVG runs through the shared sanitizer (the documented
+        // SSRF closure) exactly like slides/sheets and the preview.
         const svg = sanitizeExportHtml(renderSceneSvg(scene, dataUriMap, { inlineFonts: true }), RICH_TEXT_TAGS);
         return { data: toTransferableText(svg), warnings: [] };
     }
 
     // pdf-html: nothing to print from an empty scene (the SVG has a zero-size viewBox).
     if (scene.elements.length === 0) throw new ApiError(400, 'The drawing is empty');
-    const paperScene = isTransparentFill({ type: 'solid', color: scene.meta.background })
+    const paperScene = isTransparentColor(scene.meta.background)
         ? { ...scene, meta: { ...scene.meta, background: PDF_PAPER } }
         : scene;
     // The page is sized off the serializer's own width/height, read before sanitizing (the

@@ -1,13 +1,13 @@
 import { getFontFamily } from '../../constants/fonts';
 import { stripTagsServer } from '../../core/html';
-import { getElementBounds, hitTestBox } from '../geometry';
+import { hitTestBox } from '../geometry';
 import { cornerRadius, rectOutline } from '../outline';
 import {
     CORNERS,
     DEFAULT_CORNERS,
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_FILL_STYLE,
-    DEFAULT_FONT_FAMILY,
+    DEFAULT_RICHTEXT_PROPS,
     FILL_STYLES,
     FONT_STYLES,
     FONT_WEIGHTS,
@@ -17,7 +17,7 @@ import {
     type VectorRichTextElement,
 } from '../types';
 import { defineKind } from './kind';
-import { clampNum, cleanStr, color, fillField, fontSize, htmlField, oneOf } from './read-fields';
+import { clampNum, color, fillField, fontFamily, fontSize, htmlField, oneOf } from './read-fields';
 import { round } from './render-utils';
 
 export const richTextKind = defineKind<VectorRichTextElement>({
@@ -45,35 +45,21 @@ export const richTextKind = defineKind<VectorRichTextElement>({
     capabilities: {
         fill: true,
         fillStyle: false,
-        stroke: true,
         roughness: false,
         corners: true,
-        opacity: true,
-        typography: true,
-        objectFit: false,
-        arrowheads: false,
         bindable: false,
         silhouette: 'box',
         creation: 'box',
-        resize: 'box',
     },
     defaults: (style) => ({
+        ...DEFAULT_RICHTEXT_PROPS,
         html: '',
         fill: style.fill,
         fillStyle: style.fillStyle,
         corners: style.corners,
         fontFamily: style.fontFamily,
         fontSize: style.fontSize,
-        fontWeight: 'normal',
-        fontStyle: 'normal',
-        textDecoration: 'none',
-        textAlign: 'left',
-        verticalAlign: 'top',
         color: style.color,
-        letterSpacing: 0,
-        lineHeight: 1.2,
-        highlightColor: 'transparent',
-        padding: 0,
     }),
     read: (src, base) => ({
         ...base,
@@ -82,22 +68,21 @@ export const richTextKind = defineKind<VectorRichTextElement>({
         fill: fillField(src.get('fill')),
         fillStyle: oneOf(src.get('fillStyle'), FILL_STYLES, DEFAULT_FILL_STYLE),
         corners: oneOf(src.get('corners'), CORNERS, DEFAULT_CORNERS),
-        fontFamily: cleanStr(src.get('fontFamily'), DEFAULT_FONT_FAMILY),
+        fontFamily: fontFamily(src.get('fontFamily')),
         fontSize: fontSize(src.get('fontSize')),
-        fontWeight: oneOf(src.get('fontWeight'), FONT_WEIGHTS, 'normal'),
-        fontStyle: oneOf(src.get('fontStyle'), FONT_STYLES, 'normal'),
-        textDecoration: oneOf(src.get('textDecoration'), TEXT_DECORATIONS, 'none'),
-        textAlign: oneOf(src.get('textAlign'), TEXT_ALIGNS, 'left'),
-        verticalAlign: oneOf(src.get('verticalAlign'), VERTICAL_ALIGNS, 'top'),
+        fontWeight: oneOf(src.get('fontWeight'), FONT_WEIGHTS, DEFAULT_RICHTEXT_PROPS.fontWeight),
+        fontStyle: oneOf(src.get('fontStyle'), FONT_STYLES, DEFAULT_RICHTEXT_PROPS.fontStyle),
+        textDecoration: oneOf(src.get('textDecoration'), TEXT_DECORATIONS, DEFAULT_RICHTEXT_PROPS.textDecoration),
+        textAlign: oneOf(src.get('textAlign'), TEXT_ALIGNS, DEFAULT_RICHTEXT_PROPS.textAlign),
+        verticalAlign: oneOf(src.get('verticalAlign'), VERTICAL_ALIGNS, DEFAULT_RICHTEXT_PROPS.verticalAlign),
         color: color(src.get('color'), DEFAULT_ELEMENT_PROPS.strokeColor),
-        highlightColor: color(src.get('highlightColor'), 'transparent'),
+        highlightColor: color(src.get('highlightColor'), DEFAULT_RICHTEXT_PROPS.highlightColor),
         // Bounded so a hostile value can't blow every peer's layout: ±200px tracking, 0.5-10x leading,
         // 0-200px inset.
-        letterSpacing: clampNum(src.get('letterSpacing'), -200, 200, 0),
-        lineHeight: clampNum(src.get('lineHeight'), 0.5, 10, 1.2),
-        padding: clampNum(src.get('padding'), 0, 200, 0),
+        letterSpacing: clampNum(src.get('letterSpacing'), -200, 200, DEFAULT_RICHTEXT_PROPS.letterSpacing),
+        lineHeight: clampNum(src.get('lineHeight'), 0.5, 10, DEFAULT_RICHTEXT_PROPS.lineHeight),
+        padding: clampNum(src.get('padding'), 0, 200, DEFAULT_RICHTEXT_PROPS.padding),
     }),
-    bounds: (el) => getElementBounds(el),
     hitTest: (el, point) => hitTestBox(el, point),
     outline: (el, inflate) =>
         rectOutline({ x: el.x, y: el.y, width: el.width, height: el.height }, cornerRadius(el, 'rectangle'), inflate),
@@ -110,7 +95,7 @@ export const richTextKind = defineKind<VectorRichTextElement>({
 // The box's typography as CSS, the one body the foreignObject wrapper and the live layer renderer share.
 // `highlightColor` is deliberately absent: it is a text mark applied inside `html`, and painting it on the
 // box is what gave slides its full-width highlight bug.
-export function richTextStyle(el: VectorRichTextElement): string {
+function richTextStyle(el: VectorRichTextElement): string {
     const justify =
         el.verticalAlign === 'center' ? 'center' : el.verticalAlign === 'bottom' ? 'flex-end' : 'flex-start';
     const style = [

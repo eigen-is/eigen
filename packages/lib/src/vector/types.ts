@@ -250,6 +250,31 @@ export const DEFAULT_ELEMENT_PROPS = {
 // roughjs tuning, on the six sketched kinds only.
 export const DEFAULT_SKETCH_PROPS = { roughness: 1, seed: 0 };
 
+// Rich-text defaults beyond the host's style table: the typography a fresh box starts in, and the
+// fallback a corrupt stored value degrades to.
+export const DEFAULT_RICHTEXT_PROPS = {
+    fontWeight: 'normal',
+    fontStyle: 'normal',
+    textDecoration: 'none',
+    textAlign: 'left',
+    verticalAlign: 'top',
+    letterSpacing: 0,
+    lineHeight: 1.2,
+    highlightColor: 'transparent',
+    padding: 0,
+} satisfies Pick<
+    VectorRichTextElement,
+    | 'fontWeight'
+    | 'fontStyle'
+    | 'textDecoration'
+    | 'textAlign'
+    | 'verticalAlign'
+    | 'letterSpacing'
+    | 'lineHeight'
+    | 'highlightColor'
+    | 'padding'
+>;
+
 // Arrow-only defaults. Plain arrow, head on the end only, unbound, no label — Excalidraw's
 // currentItem defaults.
 export const DEFAULT_ARROW_PROPS = {
@@ -290,6 +315,12 @@ export const STROKE_WIDTH_OPTIONS: { value: string; label: string }[] = [
     { value: '4', label: 'Bold' },
 ];
 
+// Read a property off a parsed-JSON object without a cast (Reflect.get is typed to accept any object).
+// The one idiom every decoder in the vector model uses.
+export function prop(target: object, key: string): unknown {
+    return Reflect.get(target, key);
+}
+
 // A comment-card list is a JSON scalar like `points`; '' and anything malformed read as no cards.
 export function parseIdList(value: string): string[] {
     if (value === '') return [];
@@ -309,19 +340,6 @@ export function parseIdList(value: string): string[] {
 
 export function serializeIdList(ids: string[]): string {
     return ids.length === 0 ? '' : JSON.stringify(ids);
-}
-
-export function isVectorElementType(v: unknown): v is VectorElementType {
-    return (
-        v === 'rectangle' ||
-        v === 'diamond' ||
-        v === 'ellipse' ||
-        v === 'image' ||
-        v === 'richtext' ||
-        v === 'freedraw' ||
-        v === 'line' ||
-        v === 'arrow'
-    );
 }
 
 // The linear family (freedraw / line / arrow) — the elements carrying a `points` string. One narrowing
@@ -347,7 +365,8 @@ export function parseBinding(s: string): Binding | null {
         return null;
     }
     if (typeof raw !== 'object' || raw === null) return null;
-    const { elementId, fixedPoint } = raw as { elementId?: unknown; fixedPoint?: unknown };
+    const elementId = prop(raw, 'elementId');
+    const fixedPoint = prop(raw, 'fixedPoint');
     if (typeof elementId !== 'string' || elementId === '') return null;
     if (!Array.isArray(fixedPoint) || fixedPoint.length !== 2) return null;
     const [fx, fy] = fixedPoint;
@@ -373,14 +392,9 @@ export function parseFixedSegments(s: string): ParsedFixedSegments {
         return empty;
     }
     // Envelope form only — a bare array is legacy and dropped.
-    if (typeof raw !== 'object' || raw === null || !Array.isArray((raw as { segments?: unknown }).segments)) {
-        return empty;
-    }
-    const { segments, startIsSpecial, endIsSpecial } = raw as {
-        segments: unknown[];
-        startIsSpecial?: unknown;
-        endIsSpecial?: unknown;
-    };
+    if (typeof raw !== 'object' || raw === null) return empty;
+    const segments = prop(raw, 'segments');
+    if (!Array.isArray(segments)) return empty;
     const out: FixedSegment[] = [];
     for (const entry of segments) {
         const seg = fixedSegmentOf(entry);
@@ -388,14 +402,16 @@ export function parseFixedSegments(s: string): ParsedFixedSegments {
     }
     return {
         segments: out,
-        startIsSpecial: startIsSpecial === true,
-        endIsSpecial: endIsSpecial === true,
+        startIsSpecial: prop(raw, 'startIsSpecial') === true,
+        endIsSpecial: prop(raw, 'endIsSpecial') === true,
     };
 }
 
 function fixedSegmentOf(entry: unknown): FixedSegment | null {
     if (typeof entry !== 'object' || entry === null) return null;
-    const { index, start, end } = entry as { index?: unknown; start?: unknown; end?: unknown };
+    const index = prop(entry, 'index');
+    const start = prop(entry, 'start');
+    const end = prop(entry, 'end');
     if (typeof index !== 'number' || !Number.isInteger(index) || index < 1) return null;
     const s = pairOf(start);
     const e = pairOf(end);

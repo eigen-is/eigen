@@ -4,13 +4,14 @@ import {
     CREATION_TOOL_TYPES,
     ELEMENT_FIELDS,
     ELEMENT_KINDS,
+    isVectorElementType,
     TOOL_ORDER,
     VECTOR_STYLE_DEFAULTS,
 } from '../../../vector/kinds';
 import {
     BASE_ELEMENT_FIELDS,
     DEFAULT_ELEMENT_PROPS,
-    isVectorElementType,
+    isBindable,
     type VectorElementBase,
     type VectorRichTextElement,
 } from '../../../vector/types';
@@ -70,6 +71,21 @@ describe('ELEMENT_KINDS', () => {
         expect(ELEMENT_KINDS.image.capabilities.creation).toBe('none');
     });
 
+    test('isBindable and capabilities.bindable name the same kinds', () => {
+        // isBindable stays in types.ts (moving it into kinds/ would make types → kinds an eval cycle), so
+        // it is a second list of one fact — pinned here in both directions.
+        for (const type of ['rectangle', 'diamond', 'ellipse'] as const) {
+            expect(isBindable(shape({ id: 'b', type }))).toBe(ELEMENT_KINDS[type].capabilities.bindable);
+            expect(ELEMENT_KINDS[type].capabilities.bindable).toBe(true);
+        }
+        expect(isBindable(richtext({ id: 't' }))).toBe(ELEMENT_KINDS.richtext.capabilities.bindable);
+        expect(TYPES.filter((type) => ELEMENT_KINDS[type].capabilities.bindable)).toEqual([
+            'rectangle',
+            'diamond',
+            'ellipse',
+        ]);
+    });
+
     test('the elbow router reads each silhouette off the kind, never off the type', () => {
         expect(ELEMENT_KINDS.rectangle.capabilities.silhouette).toBe('box');
         expect(ELEMENT_KINDS.diamond.capabilities.silhouette).toBe('diamond');
@@ -113,8 +129,8 @@ describe('ELEMENT_KINDS', () => {
         expect(ELEMENT_KINDS.ellipse.capabilities.corners).toBe(false);
         expect(ELEMENT_KINDS.rectangle.capabilities.bindable).toBe(true);
         expect(ELEMENT_KINDS.arrow.capabilities.bindable).toBe(false);
-        expect(ELEMENT_KINDS.richtext.capabilities.typography).toBe(true);
-        expect(ELEMENT_KINDS.image.capabilities.objectFit).toBe(true);
+        expect(ELEMENT_KINDS.richtext.capabilities.roughness).toBe(false);
+        expect(ELEMENT_KINDS.image.capabilities.fill).toBe(false);
     });
 
     test('rich text carries a padding field, unpadded by default', () => {
