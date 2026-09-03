@@ -65,25 +65,16 @@ stale content after an inline edit.
 | `eigendoc`     | Yjs blobs → transform Worker → PM JSON (first 20 blocks) → tiptap static renderer → HTML |
 | `eigenslides`  | Yjs blobs → transform Worker → first 8 slides → positioned divs with container-query sizing |
 | `eigensheets`  | Yjs blobs → transform Worker → bounded first-sheet HTML table (`renderSheetsPreviewHtml`) |
-| `eigenvector`  | Yjs blobs → transform Worker → `sceneToSvg` (images as `eigen-media:` name refs) → the svg-media-inline pass (media as `data:` URIs, eigen font faces injected — an `<img>`-hosted SVG never fetches external URLs) → served as-is as `image/svg+xml` through the screen-preview image cache (sandbox CSP; no rasterizing, no HTML wrapper) |
+| `eigenvector`  | Yjs blobs → transform Worker → `drawingPage` + `renderCanvasPage` (`export/canvas/render.ts`) → one HTML page composed at `CANVAS_PREVIEW_WIDTH` (960px), media as `/preview` URLs, each rich-text `html` DOMPurified per element |
 
 Plaintext is deliberately **not** `<pre>`: `eigen-prose` paints every `<pre>` as a dark, non-wrapping
 code block, and a `.txt` file should read like rendered markdown instead.
 
-The `eigendoc`/`eigenslides`/`eigensheets` modes load the file's Yjs document (via `getCollabPreview` in
-`preview-cache.ts`) rather than raw file text, and render only a compact slice — see Compact Previews below.
+The `eigendoc`/`eigenslides`/`eigensheets`/`eigenvector` modes load the file's Yjs document (via `getCollabPreview` in `preview-cache.ts`) rather than raw file text. The first three render only a compact slice — see Compact Previews below.
 
-`getTextPreview` (`preview-cache.ts`) is the single entry point. It splits on path type: eigen-native
-containers go to the three `*-preview.ts` generators (`eigendoc-preview.ts`, `eigenslides-preview.ts`,
-`eigensheets-preview.ts`), everything else reads the file as text and calls `generateTextPreview`.
-Both sides go through the same `getOrCacheText` read-through cache, so caching, in-flight sharing and
-stale-while-revalidate behave identically. The eigen-native generators render only a compact slice —
-see Compact Previews below.
+`getTextPreview` (`preview-cache.ts`) is the single entry point. It splits on path type: eigen-native containers (`doc`, `slides`, `sheets`, `vector`) go through `getCollabPreview` to the Worker-side `preview/eigen{doc,slides,sheets,vector}-render.ts` bodies, everything else reads the file as text and calls `generateTextPreview`. Both sides go through the same `getOrCacheText` read-through cache, so caching, in-flight sharing and stale-while-revalidate behave identically.
 
-Body is consumed via the `useTextPreview()` hook (TanStack Query) and rendered with
-`dangerouslySetInnerHTML` inside a `.eigen-prose` container. No iframe, no shadow DOM. Its
-`staleTime` is deliberately short — **30 s** — so that when the server hands back a
-stale-while-revalidate body, the next refetch trigger (window focus or remount) picks up the fresh one.
+Body is consumed via the `useTextPreview()` hook (TanStack Query) and rendered with `dangerouslySetInnerHTML` inside a `.eigen-prose` container. No iframe, no shadow DOM. Its `staleTime` is deliberately short — **30 s** — so that when the server hands back a stale-while-revalidate body, the next refetch trigger (window focus or remount) picks up the fresh one. The `eigenvector` body is the exception on both counts: it is a self-contained page div carrying its own box, background and absolutely-positioned layers, so the lightbox only centres it and the drive hero scales it from its known intrinsic width (`CANVAS_PREVIEW_WIDTH`, the same machinery `eigenslides` uses with `SLIDE_BASE_WIDTH` and `eigendoc` with `A4_WIDTH_PX`) inside a `.drive-preview-canvas` wrapper rather than a prose one.
 
 Shared `eigen-prose.css` in `packages/ui/src/styles/` provides prose typography + Catppuccin code highlighting,
 used by both previews and the docs editor.
@@ -98,12 +89,9 @@ document. The cap keeps the cached preview body small. Each type compacts by its
 | eigensheets | first sheet, ≤ 200 rows × 50 cols / 10,000 cells | `renderSheetsPreviewHtml(sheets)` clips from the top-left of the used range — the CF resolver still spans every sheet so cross-sheet formula refs resolve |
 | eigenslides | first 8 slides            | `renderEigenslidesPreviewBody` slices `deck.slideOrder` (slides/objects maps stay whole) |
 | eigendoc    | first 20 top-level blocks | `renderEigendocPreviewBody` slices `json.content` before rendering        |
+| eigenvector | the whole drawing         | one page sized to the content bounds; the shared 8 MB byte guard is the only ceiling |
 
-Every preview render module slices its own input (`renderSheetsPreviewHtml` for sheets, the render modules
-themselves for slides/eigendoc), leaving the full-document export renderers untouched. When content is actually
-dropped, each render module appends a shared `renderPreviewTruncatedMarker()`
-(`apps/api/src/lib/preview/preview-marker.ts`) — inline-styled because preview HTML is embedded without the
-document `<head>`.
+Each capped preview render module slices its own input (`renderSheetsPreviewHtml` for sheets, the render modules themselves for slides/eigendoc), leaving the full-document export renderers untouched. A drawing has no natural unit to cap on — its layers are one page — so `renderEigenvectorPreviewBody` composes all of them. When content is actually dropped, each render module appends a shared `renderPreviewTruncatedMarker()` (`apps/api/src/lib/preview/preview-marker.ts`) — inline-styled because preview HTML is embedded without the document `<head>`.
 
 The sheet window bounds *declared* spans too, not just emitted cells — one legal merge or conditional-format
 range can name millions of cells. Merge `colspan`/`rowspan` clip to the window edge (sets the truncated
@@ -113,18 +101,16 @@ the editor canvas remains the fidelity reference. Formula rules keep their range
 relative references) with ends clipped, and a rule whose kept area still exceeds 50,000 cells is dropped from
 the preview outright. Exports render declarations in full.
 
-All three then run their body through `applyPreviewByteGuard()` from that same module: the caps count blocks,
-slides and cells, so one enormous block sails through all of them. A body over 8MB is replaced by the
-truncated marker — never a partially sliced string — and surfaces a `byte-guard-truncated` warning.
+All four then run their body through `applyPreviewByteGuard()` from that same module: the caps count blocks, slides and cells, so one enormous block sails through all of them, and a drawing has no cap at all. A body over 8MB is replaced by the truncated marker — never a partially sliced string — and surfaces a `byte-guard-truncated` warning.
 
 ## Off-thread Collab Previews (document-transform Worker)
 
-Eigensheets, eigendoc and eigenslides preview generation runs in a one-shot Bun Worker so Yjs reconstruction,
+Eigensheets, eigendoc, eigenslides and eigenvector preview generation runs in a one-shot Bun Worker so Yjs reconstruction,
 op replay, recalc, HTML rendering, and sanitization never block the API event loop
 ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)). Every export rides the same runner
 through the same seam — see [EXPORT.md](EXPORT.md):
 
-1. The main thread keeps ACL, cache lookup/dedupe, builds the media URL map for doc and slides, and captures
+1. The main thread keeps ACL, cache lookup/dedupe, builds the media URL map for doc, slides and vector, and captures
    the document's compressed Yjs blobs in a short SELECT-only transaction (`readYjsStatePayload` via
    `captureCollabSource`).
    That main-thread half is one shared entry, `generateDocumentPreview` in `preview/preview-document.ts`
@@ -135,18 +121,7 @@ through the same seam — see [EXPORT.md](EXPORT.md):
    16 with foreground (first cache miss) and background (stale regeneration) priorities, foreground admission
    additionally bounded by predicted wait. Overload rejects with `503` (surfaced to the client); background
    overflow is dropped — a later request re-enqueues it. There is **never** a main-thread fallback.
-3. The Worker (`lib/document/transform/worker.ts`) materializes the payload and dispatches on document type
-   through dynamic imports into the Worker-pure render modules (`preview/eigen{doc,slides,sheets}-render.ts`,
-   which reach neither the Mount nor the transform seam), so a doc preview never evaluates the sheet engine:
-   sheets replay ops — never recalc: stored values render as-is and a valueless formula cell stays blank,
-   because a legacy never-computed workbook can cost an unbounded recalc (~39s measured) that the 30s
-   deadline would kill on every attempt; only the export read recalcs (SHEETS.md § Server-side recalc) —
-   and render the bounded first-sheet view; doc/slides convert the Yjs roots and
-   render their capped slice with media resolved from a name → URL map the main thread prepared
-   (`buildPreviewUrlMap` — the Worker never sees a Mount). All
-   three sanitize with DOMPurify (`FORCE_BODY` only — the preview config, distinct from `sanitizeExportHtml`)
-   and return the body plus warnings over a typed, closed protocol (`protocol.ts`). Corrupt blobs are skipped
-   with warnings, matching the live-read behavior.
+3. The Worker (`lib/document/transform/worker.ts`) materializes the payload and dispatches on document type through dynamic imports into the Worker-pure render modules (`preview/eigen{doc,slides,sheets,vector}-render.ts`, which reach neither the Mount nor the transform seam), so a doc preview never evaluates the sheet engine: sheets replay ops — never recalc: stored values render as-is and a valueless formula cell stays blank, because a legacy never-computed workbook can cost an unbounded recalc (~39s measured) that the 30s deadline would kill on every attempt; only the export read recalcs (SHEETS.md § Server-side recalc) — and render the bounded first-sheet view; doc, slides and vector convert the Yjs roots and render with media resolved from a name → URL map the main thread prepared (`buildPreviewUrlMap` — the Worker never sees a Mount). Doc, slides and sheets sanitize their assembled body with DOMPurify (`FORCE_BODY` only — the preview config, distinct from `sanitizeExportHtml`); vector sanitizes *per element* instead, filtering each rich-text `html` before the compositor runs, so the page's own generated markup is never rewritten (the reader is the trust boundary for a scene's scalar fields, but not for a rich-text body, which it caps and cleans without filtering tags). All four return the body plus warnings over a typed, closed protocol (`protocol.ts`). Corrupt blobs are skipped with warnings, matching the live-read behavior.
 4. The main thread writes the usual `{ body, mode }` cache envelope. One-shot Workers are terminated after
    every outcome (success, timeout at the 30s preview deadline in `TRANSFORM_LIMITS`, crash, cancellation, shutdown);
    `gracefulShutdown` (`src/index.ts`) closes the runner before mount teardown.
@@ -165,7 +140,10 @@ tries sharp first, then HEIC-specific conversion, then exiftool extraction. Used
 screen previews (max 2560px). `preview-cache.ts` passes `StorageFile` references from `mount.readFile()` directly
 to avoid buffering the entire file upfront.
 
-- **SVG**: Served as-is (no rasterisation). `preview-cache.ts` caches the raw SVG locally for S3 mounts
+- **SVG**: Served as-is (no rasterisation). `preview-cache.ts` caches the raw SVG locally for S3 mounts, and
+  runs the stored bytes through `svg-media-inline.ts` first: an `<image href="eigen-media:<name>">` ref is
+  resolved against the file's own folder and inlined as a `data:` URI, because an `<img>`-hosted SVG never
+  fetches external refs. The content type stays `image/svg+xml`, so the route serves it under the sandbox CSP
 - **Standard images** (JPEG, PNG, WebP, GIF, TIFF): sharp resize + WebP conversion
 - **HEIC/HEIF**: sharp first (works if libvips has HEIC support), else `heic-convert` to JPEG → sharp → WebP
 - **RAW/PSD/AI**: sharp if libvips supports it, else exiftool extracts embedded JPEG → sharp → WebP
@@ -201,7 +179,8 @@ FilePreview (fixed, z-[100])
     video:    <video src={embedUrl} controls>
     audio:    <audio src={embedUrl} controls>
     pdf:      <iframe src={embedUrl}>
-    text:     TextPreviewContent (useTextPreview → eigen-prose div)
+    text:     TextPreviewContent (useTextPreview → eigen-prose div; the eigenvector
+              body is a self-contained page, centred rather than prose-styled)
     fallback: file icon + "No preview available" + Download button
   Footer   — Open, Download/Save to Drive, Download all/Save all to Drive
 ```
@@ -238,7 +217,7 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 | `apps/api/src/lib/shared/thumbnails.ts`                                   | Unified image processing (sharp + heic-convert + exiftool) |
 | `apps/api/src/lib/shared/video-thumbnail.ts`                              | ffmpeg-based video frame extractor + `isFfmpegAvailable`   |
 | `apps/api/src/lib/preview/video-preview.ts`                               | `isVideoCandidate` MIME gate                               |
-| `packages/lib/src/constants/preview.ts`                                   | `TextPreviewMode`, `getTextPreviewMode()`, `isExiftoolExtension()` |
+| `packages/lib/src/constants/preview.ts`                                   | `TextPreviewMode`, `getTextPreviewMode()`, `isExiftoolExtension()`, `CANVAS_PREVIEW_WIDTH` |
 | `apps/api/src/lib/drive/drive.ts`                                         | `resolveFile()` → ACL-checked `{ mount, path }` for preview/export/thumb routes |
 | `apps/api/src/routes/drive.ts`                                            | `/preview` + `/text-preview` routes              |
 | `packages/ui/src/styles/eigen-prose.css`                                  | Shared prose + code highlight styles             |
@@ -247,9 +226,10 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 | `packages/lib/src/core/drive/hooks/reads.ts`                              | `useTextPreview()` hook                          |
 | `packages/lib/src/core/drive/media-resolver.tsx`                          | Uses `getDrivePreviewUrl` for editor images      |
 | `apps/drive/src/components/editor/native-file-editor.tsx`                 | Inline editor with text preview in read-only     |
-| `apps/api/src/lib/preview/eigen{doc,slides,sheets}-render.ts`             | Worker-side body renderers (first 20 blocks / 8 slides / budgeted first sheet) |
-| `apps/api/src/lib/preview/preview-document.ts`                            | Main-thread orchestration for all three types: media prep + the transform seam |
+| `apps/api/src/lib/preview/eigen{doc,slides,sheets,vector}-render.ts`      | Worker-side body renderers (first 20 blocks / 8 slides / budgeted first sheet / the whole drawing) |
+| `apps/api/src/lib/preview/preview-document.ts`                            | Main-thread orchestration for every collab type: media prep + the transform seam |
 | `apps/api/src/lib/document/media.ts`                                      | Document media helpers: listing, preview URLs, Worker-side data URIs |
+| `apps/api/src/lib/export/canvas/render.ts`                                | Worker-pure compositor shared with the PDF export (see [EXPORT.md](EXPORT.md)) |
 | `apps/api/src/lib/preview/preview-marker.ts`                              | `renderPreviewTruncatedMarker()` appended on truncation |
 | `apps/api/src/lib/document/transform/protocol.ts`                         | Clone-safe transform job/request/response unions    |
 | `apps/api/src/lib/document/transform/run-transform.ts`                    | Shared main-thread seam: capture → run → map        |
@@ -261,7 +241,7 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 
 - CSV table rendering (currently treated as code/plaintext) — parse server-side and emit a bounded
   HTML table, so the frontend stays a plain `eigen-prose` container
-- Eigenstickies preview (eigendoc, eigenslides, eigensheets are done)
+- Eigenstickies preview (eigendoc, eigenslides, eigensheets, eigenvector are done)
 - DOCX/XLSX/PPTX preview
 
 ---
@@ -278,15 +258,16 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 
 ### Phase — Eigen Native Types (eigenstickies remaining)
 
-**Goal:** Preview Eigen native files without opening them. eigendoc/eigenslides/eigensheets are done — each
-preview reuses the export render functions (`doc/render.ts`, `slides/render.ts`, `sheets/render.ts`) over the
-shared content readers in `apps/api/src/lib/document/`, inside the transform Worker.
+**Goal:** Preview Eigen native files without opening them. eigendoc/eigenslides/eigensheets/eigenvector are
+done — each preview reuses the export render path (`doc/render.ts`, `slides/render.ts`, `sheets/render.ts`,
+`canvas/render.ts`) over the shared content readers, inside the transform Worker.
 
 | Type | Status | Approach |
 |------|--------|----------|
 | eigendoc | **Done** | `renderEigendocPreviewBody` in the transform Worker (`readEigendocFromDoc` → tiptap static renderer with `doc/render.ts` node mappings), first 20 blocks |
 | eigenslides | **Done** | `renderEigenslidesPreviewBody` in the transform Worker (`readDeckFromDoc` → `renderDeckHtml`), first 8 slides |
 | eigensheets | **Done** | `renderEigensheetsPreviewBody` in the transform Worker (`readSheetsFromDoc` → `renderSheetsPreviewHtml`), budgeted first sheet |
+| eigenvector | **Done** | `renderEigenvectorPreviewBody` in the transform Worker (`readVectorFromDoc` → `drawingPage` → `renderCanvasPage`), the whole drawing as one page |
 | eigenstickies | Future | Load stickies JSON, render simplified kanban columns as HTML |
 
 ---

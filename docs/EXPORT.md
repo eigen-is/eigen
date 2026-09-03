@@ -1,8 +1,9 @@
 # Document Export: DOCX, PDF, HTML
 
 > **TLDR**: One route exports eigendocs, slides, sheets and vector drawings. Each type renders standalone
-> HTML (vector: its own SVG) with embedded fonts and base64 images; PDF is that document through a
-> WeasyPrint subprocess, DOCX through `@turbodocx/html-to-docx`, XLSX straight from `Sheet[]` via ExcelJS.
+> HTML (vector: its own SVG, or its scene layers composed as an HTML page for PDF) with embedded fonts and
+> base64 images; PDF is that document through a WeasyPrint subprocess, DOCX through
+> `@turbodocx/html-to-docx`, XLSX straight from `Sheet[]` via ExcelJS.
 > Every rendered body goes through `sanitizeExportHtml` — DOMPurify plus a data-URI-only rule that closes
 > SSRF against WeasyPrint — and SVG media bytes get the same pass before they are embedded.
 
@@ -18,7 +19,7 @@ fonts, base64 images, and flattened eigen-prose CSS. DOCX and PDF are derived fr
 Eigenslides and eigensheets reuse the same HTML→PDF pipeline (sheets also export native XLSX), and
 eigenvector exports its own SVG (PDF = the same drawing recomposed as HTML layers on a WeasyPrint page) — see their sections below.
 
-Every eigendoc/eigenslides/eigensheets export runs its Yjs reconstruction, rendering and sanitization in the
+Every eigendoc/eigenslides/eigensheets/eigenvector export runs its Yjs reconstruction, rendering and sanitization in the
 one-shot document-transform Worker ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)): the
 main thread prepares media, the Worker returns the finished document bytes. The DOCX conversion runs there too
 — the Worker loads the externalized `@turbodocx/html-to-docx` from runtime `node_modules`. WeasyPrint stays a
@@ -162,7 +163,9 @@ resources as data URIs, so a remote reference can only have come from an attacke
 string (a slide text run, a sheet cell). WeasyPrint fetches such references server-side while
 rendering, from the API host, and its CLI has no way to restrict fetch protocols — so the
 restriction has to happen here. The style-element coverage exists for the sheets exports, which
-emit their interned class rules in a body `<style>` (SHEETS.md § HTML/PDF export). `<a href>` is
+emit their interned class rules in a body `<style>` (SHEETS.md § HTML/PDF export). The same rule is why
+the vector compositor keeps a gradient or clip reference in an SVG `fill`/`stroke`/`clip-path` attribute and
+never in CSS — attributes are not scanned, a `style` `url(#…)` would be stripped. `<a href>` is
 deliberately left alone: link targets are not fetched
 during render, and docs and sheets carry legitimate http(s) hyperlinks.
 
@@ -205,7 +208,9 @@ New document > Open > Rename > Export > [separator] > Share > ... > Print > Dele
 
 ### Drive Context Menu (`packages/ui/src/components/drive/drive-table.tsx`)
 
-Export submenu for eigendoc, eigenslides, and eigensheets files, driven by `onExport` callback.
+Export submenu for eigendoc, eigenslides, eigensheets and eigenvector files, driven by `onExport` callback.
+The offered formats follow the type: `docx/pdf/html` for a doc, `xlsx/pdf/html` for a sheet, `svg/pdf` for a
+drawing, `pdf/html` for everything else.
 
 ## Dependencies
 
@@ -270,9 +275,20 @@ Eigenvector (`.eigenvector`) drawings export as SVG and PDF via the same route:
 | Format | Pipeline |
 |--------|----------|
 | `svg`  | `sceneToSvg` (the shared `packages/lib/src/vector` serializer previews/embeds also use), media as `data:` URIs, the used `@font-face` blocks spliced into `<defs><style>`, then `sanitizeExportHtml` |
-| `pdf`  | The drawing as compositor layers (`export/canvas/render.ts` — `drawingPage` + `renderCanvasPage`), fonts in the wrapping page's `<style>`, on a minimal white page sized `@page` to the drawing → WeasyPrint. Rich text prints because it is an HTML div here; WeasyPrint ignores the `<foreignObject>` the svg arm uses. An empty drawing is a 400 |
+| `pdf`  | The drawing as compositor layers (`export/canvas/render.ts` — `drawingPage` + `renderCanvasPage`), fonts in the wrapping page's `<style>`, on a page `@page`-sized to the artwork → WeasyPrint. Rich text prints because it is an HTML div here; WeasyPrint ignores the `<foreignObject>` the svg arm uses. An empty drawing is a 400 |
 
-`renderEigenvectorExport` lives in `export/vector/transform.ts` and runs in the document-transform Worker like the other types; `collectExportMedia` prepares the media on the main thread. Media previews serve SVG bytes as-is, so `prepareMedia` (`export/media.ts`) passes `image/svg+xml` media through `sanitizeExportHtml` before it is embedded — a nested `<image href>` inside an SVG data: URI reaches WeasyPrint's fetcher, the same SSRF the assembled document already closes. A transparent drawing keeps its transparency in the SVG download and exports on white paper for PDF.
+`renderEigenvectorExport` lives in `export/vector/transform.ts` and runs in the document-transform Worker like the other types; `collectExportMedia` prepares the media on the main thread. Both arms run their assembled output through `sanitizeExportHtml` inside the Worker — the svg arm with `ADD_TAGS: ['foreignObject']` plus an HTML integration point so the rich-text `<div>` nested in the SVG survives, the compositor arm with the default config, because it emits ordinary HTML and never a `foreignObject`. Media previews serve SVG bytes as-is, so `prepareMedia` (`export/media.ts`) passes `image/svg+xml` media through `sanitizeExportHtml` before it is embedded — a nested `<image href>` inside an SVG data: URI reaches WeasyPrint's fetcher, the same SSRF the assembled document already closes. A transparent drawing keeps its transparency in the SVG download and exports on white paper for PDF.
+
+### The Canvas Compositor
+
+`export/canvas/render.ts` is the one definition of "a page of `sceneLayers` as HTML", shared by the vector PDF export and the vector preview ([PREVIEWS.md](PREVIEWS.md)). It is Worker-pure — no Mount, no preview cache, no DOM — and it restates no geometry, typography or fill CSS: it calls `layerInnerHtml`, the kind's own `render` (which supplies `richTextCssText`) and `backgroundCss` from `packages/lib`.
+
+- `drawingPage(scene, { resolveMedia })` → one `CanvasPage` sized to the drawing's content bounds plus 10px of padding — the same margin a standalone `sceneToSvg` leaves, absorbing roughjs's overshoot past the geometric bounds — carrying the scene background and the scene's `sceneLayers`. A drawing with no elements has nothing to size a page from and returns `null`: the export answers 400, the preview serves an empty body.
+- `renderCanvasPage(page, scale)` → a clipped page div holding the scene at 1:1, with the whole scene scaled **once** (`transform: scale(k)` + `transform-origin: 0 0`) rather than re-unitising each length, because a layer's body is authored in scene pixels by `packages/lib`. Each layer is an absolutely-positioned box at `translate(x,y) rotate(a)` — exactly the box the live canvas uses (`packages/ui` `element-layer.tsx`), so what a user sees is what prints. A rich-text layer *is* its styled div; every other kind is a fragment inside an `overflow="visible"` `<svg>` viewport, because roughjs overshoots its box and an elbow route spills past it.
+
+**A kind's gradient and clip references must stay SVG attributes, pointing inside the layer's own `<svg>`.** A sketchy fill names its own `<defs>` with `fill="url(#…)"` / `stroke="url(#…)"` and a rounded image clips with `clip-path="url(#…)"` — never a CSS declaration. Both halves are load-bearing. `sanitize.ts` rewrites every non-`data:` `url()` it finds in a `style` attribute or a `<style>` block to `url()` (the SSRF rule above), so a gradient moved into CSS silently stops painting in the PDF; and WeasyPrint resolves `url(#id)` only within the same `<svg>` element — a cross-`<svg>` reference renders nothing, silently — so per-element `<defs>` are mandatory.
+
+**Known limitation.** WeasyPrint ignores `clip-rule="evenodd"`, so in a PDF an arrow's shaft strikes through its bound label: the hole punched around the label is an even-odd `clipPath`. The SVG export and the live canvas are correct.
 
 ```
 apps/api/src/lib/export/canvas/

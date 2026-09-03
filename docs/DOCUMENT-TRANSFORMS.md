@@ -1,6 +1,6 @@
 # Document Transform Workers
 
-> **TLDR**: Every CPU-heavy document transform — eigensheets/eigendoc/eigenslides previews, HTML/PDF/XLSX/DOCX
+> **TLDR**: Every CPU-heavy document transform — eigensheets/eigendoc/eigenslides/eigenvector previews, HTML/PDF/XLSX/DOCX
 > exports, the xlsx/docx import and convert, and background search extraction — runs in a one-shot Bun Worker
 > behind one bounded runner (`apps/api/src/lib/document/transform/`). The main thread keeps auth/ACL, cache
 > coordination, storage I/O, media prep and the import commit; only transferred `ArrayBuffer`s and plain
@@ -39,8 +39,8 @@ Every operation follows the same layout: a Worker-pure module per type behind a 
 
 | Operation | Main-thread entry | Worker-pure modules | Detail doc |
 |---|---|---|---|
-| Preview  | `preview/preview-document.ts` | `preview/eigen{doc,slides,sheets}-render.ts` | [PREVIEWS.md](PREVIEWS.md) |
-| Export   | `export/export-document.ts` (`runDocumentExport` + the format→envelope table) | `export/{doc,slides,sheets}/{render,transform}.ts` | [EXPORT.md](EXPORT.md) |
+| Preview  | `preview/preview-document.ts` | `preview/eigen{doc,slides,sheets,vector}-render.ts` | [PREVIEWS.md](PREVIEWS.md) |
+| Export   | `export/export-document.ts` (`runDocumentExport` + the format→envelope table) | `export/{doc,slides,sheets,vector}/{render,transform}.ts`, `export/canvas/render.ts` | [EXPORT.md](EXPORT.md) |
 | Import / convert | `import/import-document.ts` | `import/{doc,sheets}/transform.ts` | [EXPORT.md](EXPORT.md), [SHEETS.md](SHEETS.md) |
 | Search extraction | `search/extract-text.ts` | `search/extract-render.ts` | [SEARCH.md](SEARCH.md) |
 
