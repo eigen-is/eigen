@@ -1,12 +1,19 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
+import { getHome } from '../../lib/home/get-home';
 import { Mount } from '../../lib/mount/mount';
 import { isExiftoolCandidate } from '../../lib/preview/exiftool-preview';
 import { getTextPreview } from '../../lib/preview/preview-cache';
 import { isVideoCandidate } from '../../lib/preview/video-preview';
 import { generateImagePreview, saveThumbnail } from '../../lib/shared/thumbnails';
+import {
+    buildGoldenVectorScene,
+    GOLDEN_MEDIA_NAME,
+    seedDocumentMedia,
+    seedVectorDoc,
+} from '../fixtures/golden-documents';
 import { createTestMountConfig } from '../mount-test-helpers';
-import { authedRequest, driveGet, driveUpload, getTestContext, TEST_PNG_BYTES } from '../setup';
+import { authedRequest, driveGet, drivePost, driveUpload, getTestContext, TEST_PNG_BYTES } from '../setup';
 
 describe('Preview', () => {
     let token: string;
@@ -420,4 +427,56 @@ describe('getTextPreview (stale-while-revalidate)', () => {
         expect(fresh?.stale).toBe(false);
         expect(fresh?.value.body).toContain('version two');
     });
+});
+
+// A drawing previews as a compositor HTML body, not as an image: it rides the text-preview
+// cache like every other eigen container, and the screen-preview route no longer answers for it.
+describe('Vector previews are text previews', () => {
+    const mountId = 'default';
+    let token: string;
+    let ownerId: string;
+    let vectorPathId: string;
+    let emptyVectorPathId: string;
+
+    beforeAll(async () => {
+        const ctx = await getTestContext();
+        token = ctx.alice.user.sessionToken;
+        ownerId = ctx.alice.user.id;
+        const root = await driveGet(token, ownerId, mountId, 'root');
+
+        const created = await drivePost(token, ownerId, mountId, `folder/${root.id}/create/vector`, {
+            fileName: 'Preview Drawing',
+        });
+        const home = await getHome(ownerId);
+        const collab = await home.drive.getCollabDocument(mountId, created.id);
+        seedVectorDoc(collab.doc, buildGoldenVectorScene());
+        const resolved = await home.drive.resolveFile(mountId, created.id);
+        await seedDocumentMedia(resolved.mount, resolved.path, GOLDEN_MEDIA_NAME, TEST_PNG_BYTES);
+        vectorPathId = created.id;
+
+        const empty = await drivePost(token, ownerId, mountId, `folder/${root.id}/create/vector`, {
+            fileName: 'Empty Drawing',
+        });
+        emptyVectorPathId = empty.id;
+    });
+
+    test('the text-preview route serves a compositor body under the eigenvector mode', async () => {
+        const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${vectorPathId}/text-preview`);
+        expect(res.status).toBe(200);
+        const value = await res.json();
+        expect(value.mode).toBe('eigenvector');
+        expect(value.body).toContain('<div class="canvas-page"');
+    }, 120_000);
+
+    test('the screen-preview route no longer serves a drawing as an image', async () => {
+        const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${vectorPathId}/preview`);
+        expect(res.status).toBe(404);
+    }, 120_000);
+
+    test('an empty drawing has no preview at all', async () => {
+        // renderEigenvectorPreviewBody returns '' for a drawing with no bounds; getOrCacheText's
+        // `if (!body) return null` turns that into the route's 404, so nothing empty is cached.
+        const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${emptyVectorPathId}/text-preview`);
+        expect(res.status).toBe(404);
+    }, 120_000);
 });

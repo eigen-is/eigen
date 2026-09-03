@@ -35,7 +35,6 @@ import { renderEigendocPreviewBody } from '../../lib/preview/eigendoc-render';
 import { renderEigensheetsPreviewBody } from '../../lib/preview/eigensheets-render';
 import { renderEigenslidesPreviewBody } from '../../lib/preview/eigenslides-render';
 import { renderEigenvectorPreviewBody } from '../../lib/preview/eigenvector-render';
-import { getScreenPreview } from '../../lib/preview/preview-cache';
 import type { User } from '../../lib/user';
 import {
     buildGoldenDeck,
@@ -44,7 +43,6 @@ import {
     editGoldenDeckTitle,
     GOLDEN_BEYOND_CAP,
     GOLDEN_MEDIA_NAME,
-    GOLDEN_VECTOR_TEXT,
     seedDocumentMedia,
     seedEigendoc,
     seedSlidesDoc,
@@ -996,15 +994,6 @@ describe('document transform (eigenvector)', () => {
         expect(body).not.toContain('<sketch>');
         expect(body).toMatch(/<image[^>]+href="https?:\/\/[^"]+\/file\/[^"]+\/preview"/);
         expect(body).not.toContain('eigen-media:');
-    }, 120_000);
-
-    test('getScreenPreview caches and serves the drawing as an image/svg+xml buffer', async () => {
-        const result = await getScreenPreview(golden.mount, golden.path, 'unused-embed');
-        if (result?.type !== 'image') throw new Error(`expected an image preview, got ${JSON.stringify(result)}`);
-        expect(result.contentType).toBe('image/svg+xml');
-        const svg = result.data.toString('utf-8');
-        expect(svg.startsWith('<svg')).toBe(true);
-        expect(svg).toContain(GOLDEN_VECTOR_TEXT.replace('<', '&lt;').replace('>', '&gt;'));
     }, 120_000);
 });
 
