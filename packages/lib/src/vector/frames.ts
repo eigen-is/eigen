@@ -16,3 +16,12 @@ export type VectorFrame = {
     height: number;
     background: string;
 };
+
+// The stored keys a frame writer may set. `width`/`height` are constants, never stored, so a writer
+// that tried to persist them would be inventing a second source for the frame size.
+export const FRAME_FIELDS: readonly string[] = ['id', 'index', 'name', 'background'];
+
+// The elements homed to one frame. '' selects the infinite canvas's own elements.
+export function elementsInFrame<T extends { frameId: string }>(elements: T[], frameId: string): T[] {
+    return elements.filter((el) => el.frameId === frameId);
+}

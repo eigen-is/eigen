@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { sceneLayers } from '../../vector/scene-layers';
-import { elementToSvg } from '../../vector/scene-to-svg';
+import { ELEMENT_KINDS, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
+import { elementLayer, layerInnerHtml, sceneLayers } from '../../vector/scene-layers';
 import {
     DEFAULT_ARROW_PROPS,
     DEFAULT_ELEMENT_PROPS,
@@ -115,11 +115,65 @@ describe('sceneLayers', () => {
             ]),
         );
         const content = layers[2].content;
-        expect('svg' in content && content.svg).not.toBe(elementToSvg(arrow, { positioned: false }));
+        // Rendered without the scene there is no route to derive, so the same arrow draws differently.
+        const unrouted = elementLayer(arrow)?.content;
+        expect('svg' in content && content.svg).not.toBe(unrouted && 'svg' in unrouted && unrouted.svg);
         expect(layers[2].box).toEqual({ x: 100, y: 30, width: 200, height: 160, angle: 0 });
     });
 
     test('an empty scene is no layers, not a throw', () => {
         expect(sceneLayers(scene([]))).toEqual([]);
+    });
+});
+
+describe('elementLayer', () => {
+    test('places one element and returns unpositioned content', () => {
+        const el = shape({ id: 'r1', type: 'rectangle', x: 12, y: 34, width: 100, height: 50, angle: 30, opacity: 60 });
+        const layer = elementLayer(el);
+        expect(layer).not.toBeNull();
+        expect(layer?.box).toEqual({ x: 12, y: 34, width: 100, height: 50, angle: 30 });
+        expect(layer?.opacity).toBe(60);
+        // The fragment must NOT carry the placing transform — the box does.
+        expect(layer && 'svg' in layer.content && layer.content.svg).not.toContain('translate(12 34)');
+    });
+
+    test('an element whose content renders nothing is not a layer', () => {
+        const img: VectorImageElement = {
+            ...DEFAULT_ELEMENT_PROPS,
+            ...ELEMENT_KINDS.image.defaults(VECTOR_STYLE_DEFAULTS),
+            id: 'i1',
+            type: 'image',
+            x: 0,
+            y: 0,
+            width: 40,
+            height: 40,
+            angle: 0,
+            index: 'a0',
+            mediaName: 'missing.png',
+        };
+        expect(elementLayer(img, { resolveMedia: () => null })).toBeNull();
+    });
+
+    test('sceneLayers is elementLayer over the ordered, frame-scoped elements', () => {
+        const framed = scene([
+            shape({ id: 'a', type: 'rectangle', index: 'a1', frameId: 'f1' }),
+            shape({ id: 'b', type: 'rectangle', index: 'a0', frameId: 'f1' }),
+            shape({ id: 'c', type: 'rectangle', index: 'a2' }),
+        ]);
+        expect(sceneLayers(framed, { frameId: 'f1' }).map((l) => l.id)).toEqual(['b', 'a']);
+        expect(sceneLayers(framed).map((l) => l.id)).toEqual(['b', 'a', 'c']);
+    });
+
+    test('layerInnerHtml wraps rich text in the same styled div the foreignObject arm emits', () => {
+        const html = layerInnerHtml({ html: '<p>hi</p>', style: 'color:#111;width:100%' });
+        expect(html).toBe('<div style="color:#111;width:100%"><p>hi</p></div>');
+    });
+
+    test('layerInnerHtml escapes the style attribute', () => {
+        expect(layerInnerHtml({ html: '', style: 'font-family:"x"' })).toContain('font-family:&quot;x&quot;');
+    });
+
+    test('layerInnerHtml passes an svg fragment through untouched', () => {
+        expect(layerInnerHtml({ svg: '<path d="M0 0"/>' })).toBe('<path d="M0 0"/>');
     });
 });

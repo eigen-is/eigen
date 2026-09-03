@@ -674,18 +674,3 @@ describe('gradient fills', () => {
         expect(elementToSvg(goldenShape({ id: 'g3', type: 'rectangle' }))).not.toContain('linearGradient');
     });
 });
-
-describe('elementToSvg options', () => {
-    test('positioned:false drops the translate/rotate group so a layer box can carry it', () => {
-        const el = goldenShape({ id: 'p', type: 'rectangle', x: 40, y: 60, angle: 30 });
-        expect(elementToSvg(el)).toContain('transform="translate(40 60) rotate(30');
-        expect(elementToSvg(el, { positioned: false })).not.toContain('translate(');
-    });
-
-    test('positioned:false is per-element — a scene always places its elements', () => {
-        const svg = sceneToSvg(scene([goldenShape({ id: 'p', type: 'rectangle', x: 40, y: 60 })]), {
-            positioned: false,
-        });
-        expect(svg).toContain('transform="translate(40 60)"');
-    });
-});
