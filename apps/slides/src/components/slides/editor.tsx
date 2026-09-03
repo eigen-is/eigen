@@ -33,8 +33,11 @@ import {
 import { cn } from '@workspace/ui/lib/utils';
 import { Presentation } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSlideDnd } from './hooks/use-slide-dnd';
+import { PresentMode, presentStep } from './present-mode';
 import { seedDeck } from './seed-deck';
 import { frameBackground, SlideBackgroundPanel } from './slide-background-panel';
+import { SlidePanel } from './slide-panel';
 import { Toolbar } from './toolbar';
 
 type SlideEditorProps = {
@@ -84,6 +87,10 @@ function SlideEditorInner({
     const canEdit = canWrite && !isMobile;
     const doc = useCanvasDoc(ownerId, path.mountId, path.id, SLIDES_STYLE_DEFAULTS);
     const { frameId, setFrameId, index: frameIndex, step: stepFrame } = useActiveFrame(doc.frames);
+    const { dragActiveId, handleDragStart, handleDragEnd } = useSlideDnd({
+        frames: doc.frames,
+        moveFrame: doc.moveFrame,
+    });
     const { tool, setTool, toolLocked, setToolLocked } = useTool();
     const { selectedIds, setSelectedIds, toggle } = useSelection();
     const { user } = useAuth();
@@ -93,7 +100,7 @@ function SlideEditorInner({
     const uploadFile = useUploadFile(ownerId, path.mountId);
     const { mutateAsync: copyToMediaFolder } = useCopyToMediaFolder(ownerId, path.mountId);
 
-    const { addFrame, updateFrame, updateFrames } = doc;
+    const { addFrame, deleteFrame, duplicateFrame, updateFrame, updateFrames } = doc;
 
     // A deck always has at least one slide, and nothing server-side writes a new container's Yjs
     // content — so the first WRITER to open an empty deck seeds it. The emptiness test reads the LIVE
@@ -161,6 +168,14 @@ function SlideEditorInner({
         contextOf,
     });
 
+    // A rail thumbnail rings when the slide holds a match: ⌘F spans the whole deck, so most hits are
+    // on slides the canvas is not showing.
+    const matchedFrameIds = useMemo(() => {
+        const ids = new Set<string>();
+        for (const el of doc.elements) if (searchMatchedIds.has(el.id)) ids.add(el.frameId);
+        return ids;
+    }, [doc.elements, searchMatchedIds]);
+
     const lifecycle = useCommentLifecycle({
         ownerId,
         mountId: path.mountId,
@@ -185,6 +200,7 @@ function SlideEditorInner({
     const commentFilter = useCommentFilter();
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
 
+    const [isPresenting, setIsPresenting] = useState(false);
     const [addOpen, setAddOpen] = useState(false);
     // The element a pending "New comment" anchors to — null for a card raised from the pane, which
     // stays document-level.
@@ -251,6 +267,75 @@ function SlideEditorInner({
         if (id) setFrameId(id);
     }, [addFrame, frameId, setFrameId]);
 
+    const duplicateSlide = useCallback(
+        (id: string) => {
+            const copyId = duplicateFrame(id);
+            if (copyId) setFrameId(copyId);
+        },
+        [duplicateFrame, setFrameId],
+    );
+
+    // No fallback to pick here: useActiveFrame hands over to whatever now holds the deleted slide's
+    // position. The rail disables the row for a one-slide deck, and this guards the keyboard path.
+    const deleteSlide = useCallback(
+        (id: string) => {
+            if (doc.frames.length <= 1) return;
+            deleteFrame(id);
+        },
+        [deleteFrame, doc.frames.length],
+    );
+
+    const enterPresent = useCallback(() => {
+        setSelectedIds([]);
+        // Present unmounts the find-bar subtree without closing the session, so its rings would outlive
+        // the exit — drop them on the way in.
+        docSearchController.highlightAll([]);
+        setIsPresenting(true);
+        // No API (iOS Safari) or a rejected request still presents: the overlay is fixed inset-0.
+        document.documentElement.requestFullscreen?.().catch(() => {});
+    }, [setSelectedIds, docSearchController]);
+
+    const exitPresent = useCallback(() => {
+        setIsPresenting(false);
+        if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    }, []);
+
+    // Fullscreen also ends outside our control (the browser's own Esc, an Android back gesture) —
+    // leave present with it.
+    useEffect(() => {
+        const onFullscreenChange = () => {
+            if (!document.fullscreenElement) setIsPresenting(false);
+        };
+        document.addEventListener('fullscreenchange', onFullscreenChange);
+        return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+    }, []);
+
+    const presentTo = useCallback(
+        (delta: number) => {
+            const next = presentStep(frameIndex, doc.frames.length, delta);
+            if (next === -1) exitPresent();
+            else setFrameId(doc.frames[next].id);
+        },
+        [frameIndex, doc.frames, exitPresent, setFrameId],
+    );
+
+    // Layered Escape, capture phase (docs/CANVAS.md § Layered Escape): present is the OUTERMOST layer
+    // and claims Escape before anything else sees it; the find bar's own bubble-phase handler and the
+    // canvas' text-edit / gesture / deselect layers keep the rest. A capture listener is required
+    // because the bar closes itself on bubble, so a bubble handler here could never tell it had been
+    // open. State rides a ref so the listener never goes stale.
+    const presentingRef = useRef(false);
+    presentingRef.current = isPresenting;
+    useEffect(() => {
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key !== 'Escape' || !presentingRef.current) return;
+            e.stopPropagation();
+            exitPresent();
+        };
+        document.addEventListener('keydown', onKeyDown, true);
+        return () => document.removeEventListener('keydown', onKeyDown, true);
+    }, [exitPresent]);
+
     // Toolbar "Add image": the picker lives here, placement goes through the canvas' published insert
     // surface (placement needs the live viewport).
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
@@ -301,6 +386,20 @@ function SlideEditorInner({
         onAddComment: canWrite && chatFolderId ? () => setAddOpen(true) : undefined,
     };
 
+    // Present mode replaces the editor outright: no tools, no rail, no panels. The doc hook stays
+    // mounted above it, so leaving present returns to the same slide with the same selection state.
+    if (isPresenting && frame) {
+        return (
+            <PresentMode
+                frame={frame}
+                elements={doc.elements}
+                onNext={() => presentTo(1)}
+                onPrev={() => presentTo(-1)}
+                onExit={exitPresent}
+            />
+        );
+    }
+
     return (
         <ColumnLayout>
             <UnsyncedEditsGuard active={doc.unsyncedEdits} />
@@ -332,7 +431,7 @@ function SlideEditorInner({
                                 toolLocked={toolLocked}
                                 setToolLocked={setToolLocked}
                                 onAddSlide={addSlide}
-                                onPresent={() => {}}
+                                onPresent={enterPresent}
                                 onInsertImage={canEdit && mediaFolderId ? () => setImagePickerOpen(true) : undefined}
                                 onAccessDialogOpen={onAccessDialogOpen}
                                 onToggleCommentPanel={toggleComments}
@@ -348,6 +447,22 @@ function SlideEditorInner({
                             <CollabLoadingState storageUnavailable={doc.storageUnavailable} />
                         ) : (
                             <div className="flex h-full w-full overflow-hidden">
+                                {/* The rail is desktop-only: a phone pages with a swipe (spec D8),
+                                    and a 52-wide column would take a third of the screen. */}
+                                {!isMobile && (
+                                    <SlidePanel
+                                        frames={doc.frames}
+                                        elements={doc.elements}
+                                        activeFrameId={frameId}
+                                        onSelectFrame={setFrameId}
+                                        onDragStart={handleDragStart}
+                                        onDragEnd={handleDragEnd}
+                                        dragActiveId={dragActiveId}
+                                        onDeleteSlide={canEdit ? deleteSlide : undefined}
+                                        onDuplicateSlide={canEdit ? duplicateSlide : undefined}
+                                        matchedFrameIds={matchedFrameIds}
+                                    />
+                                )}
                                 {frame ? (
                                     <div className="flex-1 min-w-0 flex flex-col">
                                         <div className="flex-1 min-h-0">
