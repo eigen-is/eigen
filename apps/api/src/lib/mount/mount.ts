@@ -861,9 +861,10 @@ export class Mount {
     }
 
     async readRange(pathId: string, start: number, end: number): Promise<StorageFile | null> {
-        // NOT freshest-first (unlike readFile): a ranged GET of a container-internal db with a pending
-        // upload reads storage. Pre-existing and container-internal-db-only; future follow-up.
         const storageKey = await this.getStorageKey(pathId);
+        // Freshest-first, same as readFile: a Range GET or content extraction must not read the stale object.
+        const staged = this.pendingStagedCopy(storageKey);
+        if (staged) return Bun.file(staged).slice(start, end);
         const probe = this.storage.read(storageKey);
         if (!(await probe.exists())) return null;
         if (this.storage.readRange) return this.storage.readRange(storageKey, start, end);

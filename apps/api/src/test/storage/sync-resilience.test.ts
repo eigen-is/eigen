@@ -439,6 +439,11 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
         // readFile is freshest-first (the seam behind downloadFile / copyPathAcross): it must surface
         // the staged {1,2}, not the stale {1} in storage.
         expect(await countRowsInFile(await mount.readFile(dataDbId), TEST_DIR)).toBe(2);
+        // readRange is freshest-first too (the seam behind Range GETs and content extraction); a slice
+        // is a Blob without exists(), so compare bytes against the staged copy instead of counting rows.
+        const stagedBytes = Buffer.from(await (await mount.readFile(dataDbId))!.arrayBuffer());
+        const rangedBytes = Buffer.from(await (await mount.readRange(dataDbId, 0, stagedBytes.length))!.arrayBuffer());
+        expect(rangedBytes.equals(stagedBytes)).toBe(true);
 
         // Copy the whole container: the recursion into data.db must copy the staged {1,2}, not "S3" {1}.
         const copy = await mount.copyPath(containerId, rootId, 'doc-copy');
