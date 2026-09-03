@@ -1,6 +1,6 @@
 // One scene element as its own memoized, absolutely positioned layer: a div carrying the element's
-// box (left/top/width/height + rotate about the box centre, which is CSS's default transform-origin)
-// holding either the kind's unpositioned SVG fragment or its rich-text div. The SAME lib render path
+// box (a transform to its origin + rotate about the box centre, which is CSS's default
+// transform-origin) holding either the kind's unpositioned SVG fragment or its rich-text div. The SAME lib render path
 // previews, embeds, export and the print compositor use — elementLayer is the one definition of where
 // an element goes and what it draws.
 
@@ -8,6 +8,7 @@ import {
     arrowRoute,
     ELEMENT_FIELDS,
     elementLayer,
+    type Layer,
     layerInnerHtml,
     type MediaResolver,
     type Point,
@@ -63,18 +64,29 @@ export function sameLayerProps(prev: ElementLayerProps, next: ElementLayerProps)
     return samePoints(arrowRoute(prev.el, prev.byId), arrowRoute(next.el, next.byId));
 }
 
+// The box as CSS. The origin rides in a transform, not in left/top, because the browser pixel-snaps a
+// fractional box origin before painting the layer's own <svg> — that put every element up to half a
+// pixel off the exact float coordinates the single-<svg> renderer drew at. Transforms are not snapped.
+// transform-origin stays the default box centre and translate is origin-independent, so
+// `translate(x,y) rotate(a)` is the old renderer's `translate(x y) rotate(a w/2 h/2)` exactly. No
+// will-change: promoting 500 layers to their own composited surface costs more memory than it buys.
+export function layerStyle({ box, opacity }: Pick<Layer, 'box' | 'opacity'>): React.CSSProperties {
+    const rotate = box.angle === 0 ? '' : ` rotate(${box.angle}deg)`;
+    return {
+        left: 0,
+        top: 0,
+        width: box.width,
+        height: box.height,
+        transform: `translate(${box.x}px, ${box.y}px)${rotate}`,
+        opacity: opacity === 100 ? undefined : opacity / 100,
+    };
+}
+
 export const ElementLayer = memo(function ElementLayer({ el, resolveMedia, byId, children }: ElementLayerProps) {
     const layer = elementLayer(el, { resolveMedia, route: arrowRoute(el, byId) });
     if (!layer) return null;
-    const { box, content } = layer;
-    const style: React.CSSProperties = {
-        left: box.x,
-        top: box.y,
-        width: box.width,
-        height: box.height,
-        transform: box.angle === 0 ? undefined : `rotate(${box.angle}deg)`,
-        opacity: layer.opacity === 100 ? undefined : layer.opacity / 100,
-    };
+    const { content } = layer;
+    const style = layerStyle(layer);
     if (children) {
         return (
             <div data-element-id={el.id} className="pointer-events-auto absolute" style={style}>

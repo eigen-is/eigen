@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { DEFAULT_ELEMENT_PROPS, DEFAULT_SKETCH_PROPS, solidFill, type VectorShapeElement } from '@workspace/lib/vector';
-import { sameLayerProps } from '../../../components/vector/element-layer';
+import { layerStyle, sameLayerProps } from '../../../components/vector/element-layer';
 
 const rect = (over: Partial<VectorShapeElement> = {}): VectorShapeElement => ({
     ...DEFAULT_ELEMENT_PROPS,
@@ -46,5 +46,36 @@ describe('sameLayerProps', () => {
         const b = new Map([[el.id, el]]);
         // A plain rectangle derives no route, so a fresh map identity is not a reason to re-render.
         expect(sameLayerProps({ el, byId: a }, { el, byId: b })).toBe(true);
+    });
+});
+
+describe('layerStyle', () => {
+    // The box is pinned with CSS transforms, never fractional left/top: the browser pixel-snaps a box
+    // origin before painting the element's svg, which is what shifted every element up to half a pixel
+    // off the float coordinates the old single-svg renderer drew at.
+    const box = { x: 12.5, y: -3.25, width: 40, height: 20, angle: 0 };
+
+    test('an unrotated layer translates to its box origin and leaves left/top at zero', () => {
+        expect(layerStyle({ box, opacity: 100 })).toEqual({
+            left: 0,
+            top: 0,
+            width: 40,
+            height: 20,
+            transform: 'translate(12.5px, -3.25px)',
+            opacity: undefined,
+        });
+    });
+
+    test('a rotated layer composes rotate after translate, pivoting on the default centre origin', () => {
+        // transform-origin is the box centre, and translate is origin-independent, so this is the old
+        // renderer's `translate(x y) rotate(angle w/2 h/2)` exactly.
+        expect(layerStyle({ box: { ...box, angle: 30 }, opacity: 100 }).transform).toBe(
+            'translate(12.5px, -3.25px) rotate(30deg)',
+        );
+    });
+
+    test('opacity rides on the layer, and only below full', () => {
+        expect(layerStyle({ box, opacity: 40 }).opacity).toBe(0.4);
+        expect(layerStyle({ box, opacity: 100 }).opacity).toBeUndefined();
     });
 });
