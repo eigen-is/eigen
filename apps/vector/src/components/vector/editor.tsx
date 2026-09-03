@@ -66,7 +66,8 @@ export function VectorEditor({
     // Awareness: publish this user's identity + selection, get a throttled cursor publisher for the
     // canvas. Selection is threaded from here (the editor owns selectedIds).
     const { user } = useAuth();
-    const publishCursor = useCanvasPresence(doc.provider, user, selectedIds);
+    // '' is the infinite canvas' frame: every peer publishes it, so every peer is visible.
+    const publishCursor = useCanvasPresence(doc.provider, user, selectedIds, '');
 
     const selectedElements = useMemo(
         () => doc.elements.filter((el) => selectedIds.includes(el.id)),

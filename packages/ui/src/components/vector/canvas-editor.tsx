@@ -55,7 +55,7 @@ import { ElementLayer } from './element-layer';
 import { useCanvasClipboard } from './hooks/use-canvas-clipboard';
 import type { CanvasDoc, NewVectorElement, VectorElementPatch } from './hooks/use-canvas-doc';
 import { applyZOrder, deleteSelection, duplicateSelection, useCanvasKeyboard } from './hooks/use-canvas-keyboard';
-import type { PublishCursor } from './hooks/use-canvas-presence';
+import { type CanvasPeerState, type PublishCursor, peerOnFrame } from './hooks/use-canvas-presence';
 import { hitTestTopmost, marqueeSelect } from './hooks/use-selection';
 import { useSpaceHeld } from './hooks/use-space-held';
 import type { VectorTool } from './hooks/use-tool';
@@ -317,6 +317,13 @@ export function CanvasEditor({
     // derive its route. Deliberately spans the WHOLE scene: an elbow arrow inside a frame still routes
     // around a bound shape outside it. Hit/marquee/label paths use it; the render path overlays previews.
     const committedById = useMemo(() => new Map(elements.map((el) => [el.id, el])), [elements]);
+
+    // Frame mode shows only the peers on this frame; the infinite canvas shows everyone (an undefined
+    // filter is CursorLayer's "no filter" contract).
+    const isPeerVisible = useMemo(
+        () => (viewport === 'frame' ? (s: CanvasPeerState) => peerOnFrame(s, frameId) : undefined),
+        [viewport, frameId],
+    );
 
     // Element boxes by id for the shared CursorLayer's remote selection rings — rebuilt only when the
     // scene changes, never on a peer cursor tick (the layer holds its own awareness subscription).
@@ -1434,7 +1441,12 @@ export function CanvasEditor({
             </div>
             {/* Remote peers: cursors + selection rings. Screen-space (its own subscription), above
                 the scene + local chrome; renders nothing when alone. */}
-            <CursorLayer provider={provider} boxes={cursorBoxes} boxToStyle={boxToStyle} />
+            <CursorLayer
+                provider={provider}
+                boxes={cursorBoxes}
+                boxToStyle={boxToStyle}
+                isPeerVisible={isPeerVisible}
+            />
             {/* OS-file drag-over affordance. Shown only when a drop would actually insert (the drop
                 hook stays enabled even when it wouldn't — see above). */}
             <FileDropOverlay visible={isDragging && imagesEnabled} label="Drop images to add" icon={ImageIcon} />
