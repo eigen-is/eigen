@@ -74,7 +74,7 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
     const [loaded, setLoaded] = useState(false);
 
     const docRef = useRef<Y.Doc | null>(null);
-    // Local edits made while the socket was down, cleared once a sync handshake completes.
+    // Doc updates applied while the socket was down, cleared once a sync handshake completes.
     const unsyncedRef = useRef(false);
 
     // Host config held in refs so its identity never re-runs the lifecycle effect: the doc/provider

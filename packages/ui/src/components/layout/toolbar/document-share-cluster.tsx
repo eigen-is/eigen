@@ -26,7 +26,6 @@ type DocumentShareClusterProps = {
 
 export function DocumentShareCluster(props: DocumentShareClusterProps) {
     const isMobile = useIsMobile();
-    // The socket is down but the editor stays live: edits are safe as long as this tab stays open.
     const offlineBadge = props.offline && (
         <Badge variant="outline" className="h-7 bg-muted font-normal text-muted-foreground">
             <WifiOff />
