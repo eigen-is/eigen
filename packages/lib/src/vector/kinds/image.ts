@@ -3,7 +3,7 @@ import { cornerRadius, outlinePath, rectOutline } from '../outline';
 import { CORNERS, DEFAULT_CORNERS, DEFAULT_OBJECT_FIT, OBJECT_FITS, type VectorImageElement } from '../types';
 import { defineKind } from './kind';
 import { oneOf, str } from './read-fields';
-import { escapeXml, round } from './render-utils';
+import { escapeXml, round, svgId } from './render-utils';
 
 export const imageKind = defineKind<VectorImageElement>({
     type: 'image',
@@ -50,7 +50,7 @@ export const imageKind = defineKind<VectorImageElement>({
         if (radius <= 0) return { svg: image };
         // The same outline path the shape kinds draw, used as a clip — one definition of a rounded box.
         const d = outlinePath(rectOutline({ x: 0, y: 0, width: el.width, height: el.height }, radius, 0));
-        const clipId = `image-clip-${el.id.replace(/[^A-Za-z0-9_-]/g, '')}`;
+        const clipId = svgId('image-clip', el.id);
         return {
             svg: `<defs><clipPath id="${clipId}"><path d="${d}"/></clipPath></defs><g clip-path="url(#${clipId})">${image}</g>`,
         };

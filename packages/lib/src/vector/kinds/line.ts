@@ -23,7 +23,7 @@ import {
 } from '../types';
 import { defineKind } from './kind';
 import { clampCoord, fillField, num, oneOf, str } from './read-fields';
-import { drawableToSvg, linearRoughOptions } from './render-utils';
+import { drawableToSvg, fillDefs, linearRoughOptions } from './render-utils';
 
 export const lineKind = defineKind<VectorLinearElement>({
     type: 'line',
@@ -96,7 +96,9 @@ export const lineKind = defineKind<VectorLinearElement>({
                 : options.fill
                   ? gen.polygon(coords, options)
                   : gen.linearPath(coords, options);
-        return { svg: `<g stroke-linecap="round">${drawableToSvg(drawable)}</g>` };
+        // A gradient's defs ride along only when the path actually loops and fills.
+        const defs = options.fill === undefined ? '' : fillDefs(el);
+        return { svg: `${defs}<g stroke-linecap="round">${drawableToSvg(drawable)}</g>` };
     },
     searchText: () => '',
 });

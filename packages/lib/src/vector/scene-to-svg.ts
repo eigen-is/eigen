@@ -22,6 +22,9 @@ export type MediaResolver = (mediaName: string) => string | null;
 export type SceneToSvgOptions = {
     resolveMedia?: MediaResolver;
     padding?: number;
+    // elementToSvg only: false ⇒ the bare fragment, no translate/rotate/opacity, because the layer box
+    // sceneLayers hands the renderer carries them instead.
+    positioned?: boolean;
 };
 
 export function sceneToSvg(scene: VectorScene, opts: SceneToSvgOptions = {}): string {
@@ -45,7 +48,8 @@ export function sceneToSvg(scene: VectorScene, opts: SceneToSvgOptions = {}): st
         body += `<rect x="${minX}" y="${minY}" width="${width}" height="${height}" fill="${escapeXml(scene.meta.background)}"/>`;
     }
     for (const el of ordered) {
-        body += elementToSvg(el, opts, byId);
+        // A scene always places its own elements, whatever the caller asked elementToSvg for.
+        body += elementToSvg(el, { ...opts, positioned: true }, byId);
     }
 
     return `<svg xmlns="${SVG_NS}" width="${width}" height="${height}" viewBox="${minX} ${minY} ${width} ${height}">${body}</svg>`;
@@ -70,6 +74,7 @@ export function elementToSvg(
             ? out.svg
             : `<foreignObject x="0" y="0" width="${round(el.width)}" height="${round(el.height)}"><div xmlns="http://www.w3.org/1999/xhtml" style="${escapeXml(out.style)}">${out.html}</div></foreignObject>`;
     if (body === '') return '';
+    if (opts.positioned === false) return body;
     return `${groupOpen(el)}${body}</g>`;
 }
 

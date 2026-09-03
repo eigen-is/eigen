@@ -4,11 +4,13 @@
 
 import type { Drawable, OpSet, Options } from 'roughjs/bin/core';
 import { RoughGenerator } from 'roughjs/bin/generator';
-import type { Fill } from '../../types/background';
-import { isTransparentFill, parseFill } from '../fill';
+import { gradientVector, isTransparentFill, parseFill } from '../fill';
 import { isClosedPath, type Point } from '../geometry';
 import { cornerRadius, roundedDiamondPath, roundedRectPath, sharpDiamondOffset } from '../outline';
 import { isLinearElement, type VectorArrowElement, type VectorLinearElement, type VectorShapeElement } from '../types';
+
+// Everything the fill paint needs: the stored Fill JSON plus the id its gradient def is scoped to.
+type FillSource = { id: string; fill: string };
 
 // A closed shape's rough drawing. Straight corners keep roughjs's own generators so the output is
 // byte-identical to before; a rounded shape is the shared outline path — the same curve docking
@@ -16,7 +18,7 @@ import { isLinearElement, type VectorArrowElement, type VectorLinearElement, typ
 // rides the paths (the caller owns the placing <g>).
 export function renderRoughShape(el: VectorShapeElement): string {
     const paths = drawableToSvg(shapeDrawable(new RoughGenerator(), el));
-    return `<g stroke-linecap="round">${paths}</g>`;
+    return `${fillDefs(el)}<g stroke-linecap="round">${paths}</g>`;
 }
 
 // Ported from Excalidraw's getFreeDrawSvgPath: a chain of quadratic segments whose control points are
@@ -88,25 +90,43 @@ export function baseRoughOptions(
 function roughOptions(el: VectorShapeElement, continuousPath: boolean): Options {
     const options = baseRoughOptions(el, continuousPath);
     options.fillStyle = el.fillStyle;
-    options.fill = fillPaint(parseFill(el.fill));
+    options.fill = fillPaint(el);
     if (el.type === 'ellipse') options.curveFitting = 1;
     return options;
 }
 
-// roughjs paints one colour. A gradient paints as its first stop until the renderer emits a real
-// <linearGradient>; transparent means no fill at all.
-function fillPaint(fill: Fill): string | undefined {
+// A gradient is one <linearGradient> in the element's OWN <defs>, referenced by the paths beside it:
+// WeasyPrint renders nothing for a url(#…) into a different <svg>. Ids are element-scoped, so many
+// fragments on one page never collide.
+export function fillDefs(el: FillSource): string {
+    const fill = parseFill(el.fill);
+    if (fill.type !== 'gradient') return '';
+    const { x1, y1, x2, y2 } = gradientVector(fill.angle);
+    return `<defs><linearGradient id="${svgId('fill', el.id)}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"><stop offset="0" stop-color="${escapeXml(fill.from)}"/><stop offset="1" stop-color="${escapeXml(fill.to)}"/></linearGradient></defs>`;
+}
+
+// What roughjs is told to paint the fill with. drawableToSvg copies it into `fill=` on fillPath sets and
+// `stroke=` on the fillSketch sets hachure/cross-hatch/zigzag emit, which is what a gradient needs on
+// both. The stroke proper stays a solid colour.
+export function fillPaint(el: FillSource): string | undefined {
+    const fill = parseFill(el.fill);
     if (isTransparentFill(fill)) return undefined;
-    return fill.type === 'solid' ? fill.color : fill.from;
+    return fill.type === 'solid' ? fill.color : `url(#${svgId('fill', el.id)})`;
+}
+
+// A document-unique SVG id for one element's own defs. Stripped to id-safe characters so a hostile
+// element id can't escape the attribute.
+export function svgId(prefix: string, elementId: string): string {
+    return `${prefix}-${elementId.replace(/[^A-Za-z0-9_-]/g, '')}`;
 }
 
 // A line/freedraw fills only when its path loops (Excalidraw's generateRoughOptions line arm).
 export function linearRoughOptions(el: VectorLinearElement, points: Point[]): Options {
     const options = baseRoughOptions(el, false);
-    const fill = parseFill(el.fill);
-    if (isClosedPath(points) && !isTransparentFill(fill)) {
+    const paint = fillPaint(el);
+    if (isClosedPath(points) && paint !== undefined) {
         options.fillStyle = el.fillStyle;
-        options.fill = fillPaint(fill);
+        options.fill = paint;
     }
     return options;
 }

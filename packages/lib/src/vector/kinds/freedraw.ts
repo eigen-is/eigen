@@ -26,7 +26,7 @@ import {
 } from '../types';
 import { defineKind } from './kind';
 import { bool, clampCoord, fillField, num, oneOf, str } from './read-fields';
-import { drawableToSvg, escapeXml, getSvgPathFromStroke, linearRoughOptions } from './render-utils';
+import { drawableToSvg, escapeXml, fillDefs, getSvgPathFromStroke, linearRoughOptions } from './render-utils';
 
 export const freedrawKind = defineKind<VectorLinearElement>({
     type: 'freedraw',
@@ -109,7 +109,7 @@ export const freedrawKind = defineKind<VectorLinearElement>({
         if (isClosedPath(points) && !isTransparentFill(parseFill(el.fill))) {
             const options = linearRoughOptions(el, points);
             options.stroke = 'none';
-            fill = drawableToSvg(new RoughGenerator().polygon(coords, options));
+            fill = `${fillDefs(el)}${drawableToSvg(new RoughGenerator().polygon(coords, options))}`;
         }
 
         // Real per-point pressure iff the element opts out of simulation AND carries an index-aligned array
