@@ -1,9 +1,9 @@
 # In-Document Search
 
-> **TLDR**: One shared `⌘F` find bar over six surfaces — the four eigendoc editors (docs, sheets,
-> slides, stickies) and both Drive inline editors (markdown, code). Each implements a small
+> **TLDR**: One shared `⌘F` find bar over seven surfaces — the five eigendoc editors (docs, sheets,
+> slides, stickies, vector) and both Drive inline editors (markdown, code). Each implements a small
 > `DocSearchController` over its own live state; `DocSearchProvider` owns the session, the keybinds
-> and the floating `FindReplaceBar`. Everything but slides and stickies also replaces (`⌥⌘F`).
+> and the floating `FindReplaceBar`. Everything but slides, stickies and vector also replaces (`⌥⌘F`).
 
 Matches are **plain serialisable data** (`id` + `label` + `context`) revealed by id, never closures —
 so the same controller also feeds the command palette `doc:` scope and the `?q=` deep link. Comment
@@ -99,6 +99,7 @@ the same:
 | Sheets | `apps/sheets/src/components/sheets/hooks/use-search-controller.ts` | adapter over `packages/sheet` `collectMatches`, iterating **all tabs**; `reveal` reuses scroll-and-select | ✓ |
 | Slides | `apps/slides/src/components/slides/hooks/use-slides-doc-search.ts` | in-memory scan of the deck | — |
 | Stickies | `apps/stickies/src/components/stickies/hooks/use-stickies-doc-search.ts` | Y.Doc scan of `tasks` / `columns`; `reveal` scrolls to + flashes the card | — |
+| Vector | `packages/ui/src/components/vector/hooks/use-canvas-doc-search.ts` | `searchScene` over every element kind's `searchText` (rich text plain-texted, arrow labels), frame then z-order; match ids ARE element ids, and `reveal` hands the host the element so it can select it | — |
 | Drive markdown editor | `useProseMirrorSearchController` + `use-codemirror-search-controller.ts` (`apps/drive/src/components/editor/`) | the shared PM controller in WYSIWYG mode, the CodeMirror one in source mode | ✓ |
 | Drive code editor | `apps/drive/src/components/editor/use-codemirror-search-controller.ts` | `buildSearchRegex` over the plain CodeMirror doc; `reveal` selects + scrolls the range | ✓ |
 
@@ -106,7 +107,7 @@ The ProseMirror controller lives in `packages/ui` precisely because two apps nee
 eigendoc editor and Drive's inline markdown editor share one implementation. Both PM and CodeMirror
 controllers take a `canWrite` flag that becomes `canReplace`, so a read-only file gets search only.
 
-Slides and stickies leave the replace members unset and stay search-only; no v1 caller changes shape.
+Slides, stickies and vector leave the replace members unset and stay search-only; no v1 caller changes shape. The canvas controller lives in `packages/ui` with the engine, not in an app, because the engine is what any canvas host mounts.
 
 ## The `?q=` Deep Link
 

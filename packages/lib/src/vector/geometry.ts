@@ -37,6 +37,9 @@ const DEG_TO_RAD = Math.PI / 180;
 export const NUDGE_STEP = 1;
 export const NUDGE_STEP_LARGE = 5;
 export const DUPLICATE_OFFSET = 10;
+// A multi-image drop/paste staggers by this much instead, so a stack of natural-size images stays
+// visible (the duplicate step is for identical copies; images need more).
+export const IMAGE_CASCADE_OFFSET = 20;
 
 export function boxCenter(box: Box): Point {
     return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
@@ -303,6 +306,14 @@ export function isClosedPath(points: Point[]): boolean {
     const first = points[0];
     const last = points[points.length - 1];
     return Math.hypot(first.x - last.x, first.y - last.y) <= CLOSE_PATH_THRESHOLD;
+}
+
+// Does this freedraw/line paint a fill at all? Only a looping path does — the rule the renderers apply
+// (freedraw's render arm and linearRoughOptions, both on the points they already hold), so the kind's
+// per-element `fill` capability answers through the same predicate and the panel offers the Fill block
+// exactly when the paint would land.
+export function isClosedLinear(el: VectorLinearElement): boolean {
+    return isClosedPath(parsePoints(el.points));
 }
 
 // `arrowRoute` is the derived elbow polyline (local frame); pass it for an elbow arrow so the hit-test runs

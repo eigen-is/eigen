@@ -1,7 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { getElementBounds } from '../../../vector/geometry';
+import { solidFill } from '../../../vector/fill';
+import { getElementBounds, serializePoints } from '../../../vector/geometry';
 import {
+    baseDefaultsFor,
     CREATION_TOOL_TYPES,
+    capabilitiesOf,
     ELEMENT_FIELDS,
     ELEMENT_KINDS,
     isVectorElementType,
@@ -14,7 +17,7 @@ import {
     type VectorElementBase,
     type VectorRichTextElement,
 } from '../../../vector/types';
-import { richtext, shape } from '../element-factories';
+import { linear, richtext, shape } from '../element-factories';
 
 const TYPES = ['rectangle', 'diamond', 'ellipse', 'image', 'richtext', 'freedraw', 'line', 'arrow'] as const;
 
@@ -168,5 +171,111 @@ describe('ELEMENT_KINDS', () => {
             ELEMENT_KINDS.richtext.searchText(richtext({ id: 'x', html: '<p>hello <strong>world</strong></p>' })),
         ).toBe('hello world');
         expect(ELEMENT_KINDS.rectangle.searchText(shape({ id: 'r', type: 'rectangle' }))).toBe('');
+    });
+});
+
+describe('capabilities agree with the stored fields', () => {
+    test('fill, corners and roughness are derivable from each kind own fields', () => {
+        for (const [type, kind] of Object.entries(ELEMENT_KINDS)) {
+            const fields = kind.fields;
+            expect([type, kind.capabilities.fill]).toEqual([type, fields.includes('fill')]);
+            expect([type, kind.capabilities.corners]).toEqual([type, fields.includes('corners')]);
+            expect([type, kind.capabilities.roughness]).toEqual([type, fields.includes('roughness')]);
+        }
+    });
+
+    test('only the kinds roughjs hatches honour the fill style half', () => {
+        // The hatch style rides the stored `fill`, so it is NOT derivable from the field list: rich text
+        // paints its box background as CSS and an arrow's fill is its arrowheads'.
+        const hatched = Object.entries(ELEMENT_KINDS)
+            .filter(([, kind]) => kind.capabilities.fillStyle)
+            .map(([type]) => type);
+        expect(hatched.sort()).toEqual(['diamond', 'ellipse', 'freedraw', 'line', 'rectangle']);
+    });
+
+    test('the stroke is optional exactly on the kinds that still have a body without it', () => {
+        // NOT derivable from `fill`: a line and a freedraw stroke fill when their path closes (fill:
+        // true) yet ARE their stroke, and an image's body is pixels rather than a Fill (fill: false).
+        const optional = Object.entries(ELEMENT_KINDS)
+            .filter(([, kind]) => kind.capabilities.strokeOptional)
+            .map(([type]) => type);
+        expect(optional.sort()).toEqual(['diamond', 'ellipse', 'image', 'rectangle', 'richtext']);
+    });
+
+    test('every kind paints a stroke', () => {
+        // strokeColor/Width/Style are BASE fields, so there is nothing to derive this from — it is
+        // pinned instead: shapes and linear elements draw the stroke, image and rich text use it as a
+        // border. A kind that answers false here must have a renderer that ignores the fields.
+        for (const [type, kind] of Object.entries(ELEMENT_KINDS)) {
+            expect([type, kind.capabilities.stroke]).toEqual([type, true]);
+        }
+    });
+});
+
+describe('capabilitiesOf', () => {
+    // The renderers paint a linear fill only when the path loops (freedraw's render arm and
+    // linearRoughOptions), so the capability has to be answered per ELEMENT, not per kind.
+    const open = serializePoints([
+        { x: 0, y: 0 },
+        { x: 40, y: 0 },
+        { x: 40, y: 40 },
+    ]);
+    const closed = serializePoints([
+        { x: 0, y: 0 },
+        { x: 40, y: 0 },
+        { x: 40, y: 40 },
+        { x: 0, y: 0 },
+    ]);
+
+    test('an open freedraw or line has no fill to offer; a closed one does', () => {
+        for (const type of ['freedraw', 'line'] as const) {
+            expect([type, capabilitiesOf(linear({ id: 'o', type, points: open })).fill]).toEqual([type, false]);
+            expect([type, capabilitiesOf(linear({ id: 'c', type, points: closed })).fill]).toEqual([type, true]);
+        }
+    });
+
+    test('a kind without geometry-dependent answers gets its static table', () => {
+        const rect = shape({ id: 'r', type: 'rectangle' });
+        expect(capabilitiesOf(rect)).toEqual(ELEMENT_KINDS.rectangle.capabilities);
+        expect(capabilitiesOf(richtext({ id: 't' }))).toEqual(ELEMENT_KINDS.richtext.capabilities);
+    });
+
+    test('the capability and the renderer agree on which strokes paint a fill', () => {
+        for (const type of ['freedraw', 'line'] as const) {
+            for (const points of [open, closed]) {
+                const el = linear({ id: 'l', type, points, fill: solidFill('#ff0000') });
+                const output = ELEMENT_KINDS[type].render(el, {});
+                const painted = 'svg' in output && output.svg.includes('#ff0000');
+                expect([type, points === closed, painted]).toEqual([type, points === closed, capabilitiesOf(el).fill]);
+            }
+        }
+    });
+});
+
+describe('baseDefaults', () => {
+    test('a new rich text box or image paints no border until a stroke colour is picked', () => {
+        for (const type of ['richtext', 'image'] as const) {
+            expect([type, baseDefaultsFor(type).strokeColor]).toEqual([type, 'transparent']);
+        }
+        const out = ELEMENT_KINDS.richtext.render(richtext({ id: 'rt', ...ELEMENT_KINDS.richtext.baseDefaults }), {});
+        expect('html' in out && out.style).not.toContain('border:');
+    });
+
+    test('a kind that draws its stroke keeps the shared base defaults', () => {
+        for (const type of ['rectangle', 'diamond', 'ellipse', 'freedraw', 'line', 'arrow'] as const) {
+            expect([type, ELEMENT_KINDS[type].baseDefaults]).toEqual([type, {}]);
+            expect([type, baseDefaultsFor(type).strokeColor]).toEqual([type, DEFAULT_ELEMENT_PROPS.strokeColor]);
+        }
+    });
+
+    test('baseDefaultsFor answers what creating the kind would give it — what a panel reset restores', () => {
+        // The reset bug: an image whose border was coloured must reset to none, not to the shared ink
+        // colour. The panel reads this, the creation path spreads it, so the two cannot drift.
+        for (const [type, kind] of Object.entries(ELEMENT_KINDS)) {
+            expect([type, baseDefaultsFor(kind.type)]).toEqual([
+                type,
+                { ...DEFAULT_ELEMENT_PROPS, ...kind.baseDefaults },
+            ]);
+        }
     });
 });

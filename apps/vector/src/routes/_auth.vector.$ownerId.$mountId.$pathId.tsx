@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { EigenDocRouteStatus, RequestAccessView } from '@workspace/ui';
 import { eigenDocEditorValidateSearch } from '@workspace/ui/components/drive';
 import { DriveAccessDialog } from '@workspace/ui/components/drive/drive-access-dialog';
-import { useEigenDocEditorRoute } from '@workspace/ui/hooks/use-eigen-doc-editor-route';
+import { useEigenDocEditorRoute, useLatchedDocSearchTerm } from '@workspace/ui/hooks/use-eigen-doc-editor-route';
 import { VectorEditor } from '../components/vector/editor';
 
 export const Route = createFileRoute('/_auth/vector/$ownerId/$mountId/$pathId')({
@@ -12,9 +12,10 @@ export const Route = createFileRoute('/_auth/vector/$ownerId/$mountId/$pathId')(
 
 function VectorView() {
     const { ownerId, mountId, pathId } = Route.useParams();
-    // ?chat=<chatName> deep-links straight to a comment thread (validated by eigenDocEditorValidateSearch;
-    // ?q= stays unconsumed — vector has no in-document find bar).
-    const { chat } = Route.useSearch();
+    // ?chat=<chatName> deep-links straight to a comment thread, ?q= lands in the find bar (both
+    // validated by eigenDocEditorValidateSearch).
+    const { chat, q } = Route.useSearch();
+    const initialSearchTerm = useLatchedDocSearchTerm(q);
     const {
         docInfo,
         isError,
@@ -41,6 +42,7 @@ function VectorView() {
                 chatFolderId={chatFolderId}
                 onAccessDialogOpen={openAccessDialog}
                 initialChatName={chat}
+                initialSearchTerm={initialSearchTerm}
             />
             <DriveAccessDialog path={path} open={accessDialogOpen} onOpenChange={setAccessDialogOpen} />
         </>

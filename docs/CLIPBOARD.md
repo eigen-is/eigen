@@ -66,7 +66,15 @@ type EigenClipboardImageItem = {
     meta?: Record<string, unknown>;
 };
 
-type EigenClipboardItem = EigenClipboardTextItem | EigenClipboardImageItem;
+type EigenClipboardElementsItem = {
+    type: 'elements';
+    elements: Record<string, string | number | boolean>[]; // whole stored records (the ELEMENT_FIELDS scalars)
+    sourceFrameId: string; // '' when the source was an infinite canvas
+    width: number; // the selection's bounding box
+    height: number;
+};
+
+type EigenClipboardItem = EigenClipboardTextItem | EigenClipboardImageItem | EigenClipboardElementsItem;
 
 type EigenClipboardData = { version: 1; items: EigenClipboardItem[]; svg?: string }; // svg: the vector copy flavour, see below
 ```
@@ -98,10 +106,18 @@ The wire is forgeable by any web page, so the read seam (`readEigenClipboard`) d
 aren't finite numbers before a consumer ever sees it (the same threat model that makes rich HTML get re-sanitized on
 paste).
 
+### The elements item (canvas copies)
+
+A canvas selection rides as ONE `elements` item: the whole stored record of every copied element (`buildElementsClipboardItem`, `packages/lib/src/vector/clipboard.ts`), so a canvas→canvas paste restores exactly what was copied — including every field a future kind adds. Reading is `readElementsClipboardItem`, which runs each record through the document reader (`readElementFromFields`): the wire is forgeable by any web page, so a forged record is dropped and a hostile value is clamped by the same validator a hostile peer write meets. There is no second field list to drift.
+
+It is the one item type that carries **position**: the coordinates are the stored ones (scene coordinates on an infinite canvas, frame-relative inside a frame), because pasting a drawing back into a drawing is a paste in place, not "at the app's default spot". `sourceFrameId` is what lets the paste tell those apart: a paste into the frame it was copied from offsets the copy by the duplicate step, one into a different frame lands in place, and a payload crossing to or from an infinite canvas re-anchors on the viewport centre. `width`/`height` are the selection's bounding box, so the mandatory-dimensions contract above holds with no special case.
+
+**A canvas copy writes the other items too**: an `image` item per copied image (the cross-mount re-upload manifest, keyed by `mediaName`, and the payload a foreign host places) and a `text` item per rich-text box (flattened text, its typography, the HTML under `meta.html`). Hosts that cannot place native elements ignore the `elements` item and read those, or the `svg` flavour below.
+
 ### Empty text carriers
 
-Vector shapes ride the wire as text items with `text: ''` — the item exists to carry geometry, not words. Consumers
-MUST filter with `clipboardTextItemHasContent` so a foreign shape never lands as a blank paragraph or a blank cell.
+Nothing writes an empty text item today, but the wire is forgeable and any app may. Consumers filter with
+`clipboardTextItemHasContent` so a contentless carrier never lands as a blank paragraph or a blank cell.
 
 ### Copy flavors
 
@@ -199,7 +215,7 @@ Rich payload (`EigenClipboardData`):
 | eigendoc editor | `apps/docs/src/components/docs/editor.tsx` |
 | eigenslides editor | `apps/slides/src/components/slides/editor.tsx` |
 | eigensheets | `packages/sheet/src/components/Workbook/index.tsx` (media re-upload in `apps/sheets/src/components/sheets/editor.tsx`) |
-| eigenvector canvas | `packages/ui/src/components/vector/vector-canvas.tsx` (lives in `packages/ui`, not an app) |
+| eigenvector canvas | `packages/ui/src/components/vector/canvas-editor.tsx` + `hooks/use-canvas-clipboard.ts` (lives in `packages/ui`, not an app) |
 
 ### Sheets caveat
 

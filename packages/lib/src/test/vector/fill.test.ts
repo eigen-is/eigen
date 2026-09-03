@@ -13,40 +13,57 @@ import {
 describe('parseFill', () => {
     test('empty and malformed strings read back as the transparent solid fill', () => {
         for (const bad of ['', 'nonsense', '{', '[]', '{"type":"image","mediaName":"a.png","fit":"cover"}']) {
-            expect(parseFill(bad)).toEqual({ type: 'solid', color: 'transparent' });
+            expect(parseFill(bad)).toEqual({ type: 'solid', color: 'transparent', style: 'solid' });
         }
     });
 
     test('a solid fill round-trips and rejects non-colour tokens', () => {
-        expect(parseFill(serializeFill({ type: 'solid', color: '#ff0000' }))).toEqual({
+        expect(parseFill(serializeFill({ type: 'solid', color: '#ff0000', style: 'zigzag' }))).toEqual({
             type: 'solid',
             color: '#ff0000',
+            style: 'zigzag',
         });
         expect(parseFill('{"type":"solid","color":"url(http://x/y.svg)"}')).toEqual({
             type: 'solid',
             color: 'transparent',
+            style: 'solid',
         });
     });
 
     test('a gradient round-trips, normalizes its angle and rejects bad stops', () => {
-        const fill = { type: 'gradient', from: '#000000', to: '#ffffff', angle: 45 } as const;
+        const fill = { type: 'gradient', from: '#000000', to: '#ffffff', angle: 45, style: 'cross-hatch' } as const;
         expect(parseFill(serializeFill(fill))).toEqual(fill);
         expect(parseFill('{"type":"gradient","from":"#000000","to":"#ffffff","angle":-90}')).toEqual({
             type: 'gradient',
             from: '#000000',
             to: '#ffffff',
             angle: 270,
+            style: 'solid',
         });
         expect(parseFill('{"type":"gradient","from":"red","to":"#ffffff","angle":0}')).toEqual({
             type: 'solid',
             color: 'transparent',
+            style: 'solid',
         });
     });
 
+    test('the hatch style is half of the fill: unknown and missing ones read as the default', () => {
+        expect(parseFill('{"type":"solid","color":"#ff0000","style":"hachure"}').style).toBe('hachure');
+        expect(parseFill('{"type":"solid","color":"#ff0000","style":"tartan"}').style).toBe('solid');
+        expect(parseFill('{"type":"solid","color":"#ff0000"}').style).toBe('solid');
+        expect(solidFill('#ff0000', 'zigzag')).toBe('{"type":"solid","color":"#ff0000","style":"zigzag"}');
+    });
+
     test('solidFill and isTransparentFill agree on the no-fill sentinel', () => {
-        expect(parseFill(solidFill('transparent'))).toEqual({ type: 'solid', color: 'transparent' });
+        expect(parseFill(solidFill('transparent'))).toEqual({
+            type: 'solid',
+            color: 'transparent',
+            style: 'solid',
+        });
         expect(isTransparentFill(parseFill(''))).toBe(true);
-        expect(isTransparentFill({ type: 'gradient', from: '#000000', to: '#ffffff', angle: 0 })).toBe(false);
+        expect(isTransparentFill({ type: 'gradient', from: '#000000', to: '#ffffff', angle: 0, style: 'solid' })).toBe(
+            false,
+        );
     });
 });
 
@@ -57,6 +74,8 @@ describe('parseBackgroundFill', () => {
         expect(serializeBackgroundFill(null)).toBe('');
         expect(parseBackgroundFill('')).toBeNull();
         expect(parseBackgroundFill('{"type":"image","mediaName":"../evil","fit":"cover"}')).toBeNull();
+        // A frame background is the paint alone: an element's hatch style means nothing to it.
+        expect(parseBackgroundFill(solidFill('#ff0000', 'zigzag'))).toEqual({ type: 'solid', color: '#ff0000' });
     });
 });
 

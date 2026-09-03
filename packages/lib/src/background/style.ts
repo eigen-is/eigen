@@ -45,3 +45,18 @@ export function isSameFill(a: BackgroundFill | null | undefined, b: BackgroundFi
     if (a.type === 'image' && b.type === 'image') return a.mediaName === b.mediaName && a.fit === b.fit;
     return false;
 }
+
+// The same fill as CSS declarations, for the serializers that build a style STRING (the rich-text layer
+// body, shared verbatim by the live canvas, the SVG foreignObject and the print compositor). Derived
+// from getBackgroundStyle so the gradient/colour syntax has one owner.
+export function backgroundCss(
+    fill: BackgroundFill | null | undefined,
+    resolveMediaUrl?: (mediaName: string) => string | null,
+): string[] {
+    const declarations: string[] = [];
+    for (const [key, value] of Object.entries(getBackgroundStyle(fill, resolveMediaUrl))) {
+        if (typeof value === 'string')
+            declarations.push(`${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}:${value}`);
+    }
+    return declarations;
+}

@@ -3,10 +3,16 @@
 
 import type { Drawable, OpSet, Options } from 'roughjs/bin/core';
 import { RoughGenerator } from 'roughjs/bin/generator';
-import { gradientVector, isTransparentFill, parseFill } from '../fill';
+import { gradientVector, isTransparentColor, isTransparentFill, parseFill } from '../fill';
 import { isClosedPath, type Point } from '../geometry';
 import { cornerRadius, diamondOutline, outlinePath, rectOutline, sharpDiamondOffset } from '../outline';
-import { isLinearElement, type VectorArrowElement, type VectorLinearElement, type VectorShapeElement } from '../types';
+import {
+    type FillStyle,
+    isLinearElement,
+    type VectorArrowElement,
+    type VectorLinearElement,
+    type VectorShapeElement,
+} from '../types';
 
 // Everything the fill paint needs: the stored Fill JSON plus the id its gradient def is scoped to.
 type FillSource = { id: string; fill: string };
@@ -86,8 +92,12 @@ export function baseRoughOptions(
 
 function roughOptions(el: VectorShapeElement, continuousPath: boolean): Options {
     const options = baseRoughOptions(el, continuousPath);
-    options.fillStyle = el.fillStyle;
-    options.fill = fillPaint(el);
+    // A shape with its border switched off (capabilities.strokeOptional): roughjs's own 'none' skips
+    // the outline sets entirely, so the fill still paints and no invisible path is serialized.
+    if (isTransparentColor(el.strokeColor)) options.stroke = 'none';
+    const { fill, fillStyle } = fillOptions(el);
+    options.fill = fill;
+    options.fillStyle = fillStyle;
     if (el.type === 'ellipse') options.curveFitting = 1;
     return options;
 }
@@ -102,13 +112,20 @@ export function fillDefs(el: FillSource): string {
     return `<defs><linearGradient id="${svgId('fill', el.id)}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"><stop offset="0" stop-color="${escapeXml(fill.from)}"/><stop offset="1" stop-color="${escapeXml(fill.to)}"/></linearGradient></defs>`;
 }
 
-// What roughjs is told to paint the fill with. drawableToSvg copies it into `fill=` on fillPath sets and
-// `stroke=` on the fillSketch sets hachure/cross-hatch/zigzag emit, which is what a gradient needs on
-// both. The stroke proper stays a solid colour.
-function fillPaint(el: FillSource): string | undefined {
+// The stored Fill as roughjs options: what to paint with, and the hatch style it carries. drawableToSvg
+// copies the paint into `fill=` on fillPath sets and `stroke=` on the fillSketch sets hachure/cross-hatch/
+// zigzag emit, which is what a gradient needs on both. The stroke proper stays a solid colour.
+// `fill: undefined` (a transparent paint) leaves roughjs drawing the outline alone.
+function fillOptions(el: FillSource): { fill: string | undefined; fillStyle: FillStyle } {
     const fill = parseFill(el.fill);
-    if (isTransparentFill(fill)) return undefined;
-    return fill.type === 'solid' ? fill.color : `url(#${svgId('fill', el.id)})`;
+    return {
+        fill: isTransparentFill(fill)
+            ? undefined
+            : fill.type === 'solid'
+              ? fill.color
+              : `url(#${svgId('fill', el.id)})`,
+        fillStyle: fill.style,
+    };
 }
 
 // A document-unique SVG id for one element's own defs. Every character outside the id-safe set is
@@ -121,10 +138,10 @@ export function svgId(prefix: string, elementId: string): string {
 // A line/freedraw fills only when its path loops (Excalidraw's generateRoughOptions line arm).
 export function linearRoughOptions(el: VectorLinearElement, points: Point[]): Options {
     const options = baseRoughOptions(el, false);
-    const paint = fillPaint(el);
-    if (isClosedPath(points) && paint !== undefined) {
-        options.fillStyle = el.fillStyle;
-        options.fill = paint;
+    const { fill, fillStyle } = fillOptions(el);
+    if (isClosedPath(points) && fill !== undefined) {
+        options.fill = fill;
+        options.fillStyle = fillStyle;
     }
     return options;
 }
@@ -142,7 +159,15 @@ function adjustRoughness(el: VectorShapeElement | VectorLinearElement | VectorAr
     return Math.min(el.roughness / (maxSize < 10 ? 3 : 2), 2.5);
 }
 
-function dashArray(strokeStyle: VectorShapeElement['strokeStyle'], strokeWidth: number): number[] | undefined {
+// The DOM-box kinds (image, rich text) use the stroke fields as a BORDER rather than a drawn outline,
+// so "does this one paint a border" is one predicate, not a repeated pair of tests.
+export function isBordered(el: { strokeWidth: number; strokeColor: string }): boolean {
+    return el.strokeWidth > 0 && !isTransparentColor(el.strokeColor);
+}
+
+// The stroke-style vocabulary as roughjs `strokeLineDash` / an SVG `stroke-dasharray`: one dash table,
+// shared by the drawing kinds and by the image's border.
+export function dashArray(strokeStyle: VectorShapeElement['strokeStyle'], strokeWidth: number): number[] | undefined {
     if (strokeStyle === 'dashed') return [8, 8 + strokeWidth];
     if (strokeStyle === 'dotted') return [1.5, 6 + strokeWidth];
     return undefined;

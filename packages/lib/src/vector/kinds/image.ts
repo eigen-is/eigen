@@ -3,7 +3,7 @@ import { cornerRadius, outlinePath, rectOutline } from '../outline';
 import { CORNERS, DEFAULT_CORNERS, DEFAULT_OBJECT_FIT, OBJECT_FITS, type VectorImageElement } from '../types';
 import { defineKind } from './kind';
 import { oneOf, str } from './read-fields';
-import { escapeXml, round, svgId } from './render-utils';
+import { dashArray, escapeXml, isBordered, round, svgId } from './render-utils';
 
 export const imageKind = defineKind<VectorImageElement>({
     type: 'image',
@@ -15,6 +15,8 @@ export const imageKind = defineKind<VectorImageElement>({
         fillStyle: false,
         roughness: false,
         corners: true,
+        stroke: true,
+        strokeOptional: true,
         bindable: false,
         silhouette: 'box',
         creation: 'none',
@@ -24,6 +26,8 @@ export const imageKind = defineKind<VectorImageElement>({
         corners: style.corners,
         objectFit: DEFAULT_OBJECT_FIT,
     }),
+    // The stroke is this kind's border, so a pasted picture arrives unframed.
+    baseDefaults: { strokeColor: 'transparent' },
     read: (src, base) => ({
         ...base,
         type: 'image',
@@ -40,12 +44,18 @@ export const imageKind = defineKind<VectorImageElement>({
         const fit = el.objectFit === 'fill' ? 'none' : el.objectFit === 'cover' ? 'xMidYMid slice' : 'xMidYMid meet';
         const image = `<image x="0" y="0" width="${round(el.width)}" height="${round(el.height)}" href="${escapeXml(href)}" preserveAspectRatio="${fit}"/>`;
         const radius = cornerRadius(el, 'rectangle');
-        if (radius <= 0) return { svg: image };
-        // The same outline path the shape kinds draw, used as a clip — one definition of a rounded box.
+        // The same outline path the shape kinds draw: one silhouette, both clipped and stroked.
         const d = outlinePath(rectOutline({ x: 0, y: 0, width: el.width, height: el.height }, radius, 0));
+        // The stroke fields are this kind's BORDER (types.ts), the way they are rich text's. It is drawn
+        // after the picture, so a border never sits under the pixels it frames.
+        const dash = dashArray(el.strokeStyle, el.strokeWidth);
+        const border = isBordered(el)
+            ? `<path d="${d}" fill="none" stroke="${escapeXml(el.strokeColor)}" stroke-width="${round(el.strokeWidth)}"${dash ? ` stroke-dasharray="${dash.map(round).join(' ')}"` : ''}/>`
+            : '';
+        if (radius <= 0) return { svg: `${image}${border}` };
         const clipId = svgId('image-clip', el.id);
         return {
-            svg: `<defs><clipPath id="${clipId}"><path d="${d}"/></clipPath></defs><g clip-path="url(#${clipId})">${image}</g>`,
+            svg: `<defs><clipPath id="${clipId}"><path d="${d}"/></clipPath></defs><g clip-path="url(#${clipId})">${image}</g>${border}`,
         };
     },
 });

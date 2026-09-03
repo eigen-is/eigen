@@ -18,7 +18,7 @@ import {
     parsePoints,
     rotatePoint,
 } from './geometry';
-import { ELEMENT_KINDS } from './kinds';
+import { capabilitiesOf, ELEMENT_KINDS } from './kinds';
 import { outlineDistance } from './outline';
 import {
     isBindable,
@@ -111,7 +111,7 @@ export function distanceToElement(shape: VectorShapeElement, p: Point): number {
 // Heading from the ×2 search cones around the shape's (inflated) AABB centre — a wide shape gets wider
 // UP/DOWN cones. Diamonds use vertex sectors instead. Excalidraw's headingForPointFromElement.
 function headingForPointFromElement(shape: VectorShapeElement, aabb: B4, p: Point): Heading {
-    if (ELEMENT_KINDS[shape.type].capabilities.silhouette === 'diamond') {
+    if (capabilitiesOf(shape).silhouette === 'diamond') {
         return headingForPointFromDiamond(shape, aabb, p);
     }
     const mid = centerOf(aabb);
@@ -250,7 +250,7 @@ function elbowDock(shape: VectorShapeElement, point: Point): Point {
     const gap = bindingGap(shape);
     const center = boxCenter(shape);
     const aabb = aabbForElement(shape);
-    const boxy = ELEMENT_KINDS[shape.type].capabilities.silhouette === 'box';
+    const boxy = capabilitiesOf(shape).silhouette === 'box';
     const edgePoint = boxy ? avoidRectangularCorner(shape, point, gap) : point;
     const isHorizontal = headingIsHorizontal(headingForPointFromElement(shape, aabb, point));
     const resolved = snapToMid(shape, edgePoint, 0.05, gap) ?? point;
@@ -341,7 +341,7 @@ function snapToMid(shape: VectorShapeElement, p: Point, tolerance: number, gap: 
         return rot({ x: x + w + gap, y: center.y });
     if (np.y >= y + h / 2 && np.x > center.x - hThresh && np.x < center.x + hThresh)
         return rot({ x: center.x, y: y + h + gap });
-    if (ELEMENT_KINDS[shape.type].capabilities.silhouette === 'diamond') {
+    if (capabilitiesOf(shape).silhouette === 'diamond') {
         const thr = Math.max(hThresh, vThresh);
         const corners: Point[] = [
             { x: x + w / 4 - gap, y: y + h / 4 - gap },

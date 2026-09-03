@@ -1,5 +1,5 @@
 // Drag-time attach affordances for arrows, drawn in the scene group next to the bind-target outline
-// (the snap dots and the straight-arrow focus point). Pulled out of vector-canvas.tsx and use-drawing-tools
+// (the snap dots and the straight-arrow focus point). Pulled out of canvas-editor.tsx and use-drawing-tools
 // (the canvas only dispatches; this unit owns its own render) so neither file grows. All geometry is SCENE
 // space — the group scales by zoom, so screen-constant sizes divide by zoom and stroke widths ride
 // `vectorEffect="non-scaling-stroke"`, exactly as SnapGuides does. Colours are ours (the selection-handle

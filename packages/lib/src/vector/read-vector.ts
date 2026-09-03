@@ -43,7 +43,7 @@ export function readVectorFromDoc(doc: Y.Doc): VectorScene {
     const frames = readFrames(framesMap);
     const elements: VectorElement[] = [];
     for (const value of elementsMap.values()) {
-        const el = readElement(value);
+        const el = readElementFromFields(value);
         if (el) elements.push(el);
     }
 
@@ -79,7 +79,9 @@ function readFrames(framesMap: Y.Map<unknown>): VectorFrame[] {
     return syncInvalidIndices(orderByFractionalIndex(frames));
 }
 
-function readElement(value: unknown): VectorElement | null {
+// The one validator for a stored element record: the scene reader runs it over each Y.Map, and the
+// clipboard runs it over each pasted record, so a forged wire is exactly as safe as a hostile peer write.
+export function readElementFromFields(value: unknown): VectorElement | null {
     // A per-element Y.Map exposes .get; foreign/partial values without it are skipped.
     if (!isYMapLike(value)) return null;
     const type = value.get('type');

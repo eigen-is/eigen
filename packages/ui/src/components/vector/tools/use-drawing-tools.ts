@@ -1,4 +1,4 @@
-// The drawing tools (freehand, line, eraser) + line point-handles, factored out of vector-canvas.tsx
+// The drawing tools (freehand, line, eraser) + line point-handles, factored out of canvas-editor.tsx
 // so the canvas only DISPATCHES (the ground-rule that the canvas file must not grow).
 // This hook owns the local gesture state (never Yjs until finish), the live preview element rendered
 // through the SAME elementToSvg path as committed elements, the eraser's marked-set dimming, and the
@@ -9,6 +9,7 @@
 import {
     arrowRoute,
     type Box,
+    type CanvasViewport,
     DEFAULT_ELEMENT_PROPS,
     ELEMENT_KINDS,
     elbowBindPoint,
@@ -34,8 +35,8 @@ import {
 import { createElement, Fragment, type MutableRefObject, type ReactNode, useEffect, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 import { isTypingTarget } from '../../../hooks/is-typing-target';
+import type { NewVectorElement, VectorElementPatch } from '../hooks/use-canvas-doc';
 import type { VectorTool } from '../hooks/use-tool';
-import type { NewVectorElement, VectorElementPatch } from '../hooks/use-vector-doc';
 import { FocusIndicators, FocusPointHandles, SnapDots } from './arrow-affordances';
 import {
     bindArrow,
@@ -53,10 +54,11 @@ import { distinctCount, type LineDraft, previewPoints, snapSegment, startLineDra
 import { LinePointHandles } from './point-handles';
 import { isFreedrawSpike } from './touch-gestures';
 
-// Screen-px thresholds (÷ zoom → constant on-screen distance): the eraser sample step (Excalidraw's
-// eraser trail), the freehand minimum sample spacing that thins sub-pixel points, the multi-point
-// line's confirm/close radius (LINE_CONFIRM_THRESHOLD), and the drag-vs-click threshold that splits a
-// 2-point line from a multi-point one. Hit tolerance is the shared hitThresholdScreen (coarse-aware).
+// Screen-px thresholds (÷ the LIVE zoom → constant on-screen distance): the eraser sample step
+// (Excalidraw's eraser trail), the freehand minimum sample spacing that thins sub-pixel points, the
+// multi-point line's confirm/close radius (LINE_CONFIRM_THRESHOLD), and the drag-vs-click threshold that
+// splits a 2-point line from a multi-point one. Hit tolerance is the shared hitThresholdScreen
+// (coarse-aware).
 const ERASER_STEP_SCREEN = 4;
 const FREEDRAW_MIN_STEP_SCREEN = 1;
 const LINE_CONFIRM_SCREEN = 8;
@@ -115,7 +117,12 @@ type DrawingToolsParams = {
     // When the tool lock is on, a finished line/arrow keeps its tool active (freedraw/eraser always do).
     toolLocked: boolean;
     canEdit: boolean;
+    // The COMMITTED viewport's zoom — what the screen-space handles/outlines/dots are laid out at, the
+    // same value the canvas lays its own chrome out at. Never a gesture threshold; those read the ref.
     zoom: number;
+    // The LIVE viewport. A pan/zoom writes it without a React render, so every threshold a pointer
+    // handler measures reads its zoom from here or it lags the gesture by a whole pinch.
+    viewportRef: MutableRefObject<CanvasViewport>;
     // The active pointer is coarse (finger/stylus) → the eraser and hit paths use a fatter screen slop.
     coarse: boolean;
     ordered: VectorElement[];
@@ -174,6 +181,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         toolLocked,
         canEdit,
         zoom,
+        viewportRef,
         coarse,
         ordered,
         byId,
@@ -189,6 +197,10 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         setSelectedIds,
         undoManager,
     } = params;
+
+    // Every screen-px threshold below divides by this, never by the `zoom` prop: that one is the last
+    // COMMITTED viewport (published on a trailing timer), so mid-gesture it can be a whole pinch stale.
+    const liveZoom = () => viewportRef.current.zoom;
 
     // Gesture state lives in refs (read synchronously in the pointer handlers, before the next render
     // flushes); the mirroring React state drives what the canvas renders.
@@ -243,7 +255,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         setBindHint(shape ? { shapeId: shape.id, pointer, elbow } : null);
     // The bindable shape an endpoint at `scene` reaches (null when nothing reaches / binding is suppressed).
     const candidateShape = (scene: Point, suppressed: boolean): VectorShapeElement | undefined => {
-        const id = bindingCandidate(ordered, scene, zoom, suppressed);
+        const id = bindingCandidate(ordered, scene, liveZoom(), suppressed);
         const shape = id ? ordered.find((el) => el.id === id) : undefined;
         return shape && isBindable(shape) ? shape : undefined;
     };
@@ -335,7 +347,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 arrowElement(draft.origin, points, seedRef.current),
                 { start: true, end: true },
                 ordered,
-                zoom,
+                liveZoom(),
                 suppressRef.current,
             );
             id = addElement({ type: 'arrow', seed: seedRef.current, ...bound });
@@ -364,7 +376,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         const rel = { x: scene.x - draft.origin.x, y: scene.y - draft.origin.y };
         const last = draft.committed[draft.committed.length - 1];
         const first = draft.committed[0];
-        const confirm = LINE_CONFIRM_SCREEN / zoom;
+        const confirm = LINE_CONFIRM_SCREEN / liveZoom();
         if (draft.committed.length >= 2 && dist(rel, last) <= confirm) return finishLineWith(draft.committed);
         if (draft.type === 'line' && draft.committed.length >= 3 && dist(rel, first) <= confirm) {
             // Close the loop on the first point so the fill (isClosedPath) reads a closed path.
@@ -425,8 +437,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 ordered,
                 scene,
                 scene,
-                hitThresholdScreen(coarse) / zoom,
-                ERASER_STEP_SCREEN / zoom,
+                hitThresholdScreen(coarse) / liveZoom(),
+                ERASER_STEP_SCREEN / liveZoom(),
                 e.altKey,
                 marked,
                 byId,
@@ -468,7 +480,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             const src = coalesced.length ? coalesced : [native];
             const pts = src.map((ce) => clientToScene(ce.clientX, ce.clientY));
             const pressures = src.map((ce) => ce.pressure);
-            extendFreedrawStroke(strokeRef.current, pts, pressures, FREEDRAW_MIN_STEP_SCREEN / zoom);
+            extendFreedrawStroke(strokeRef.current, pts, pressures, FREEDRAW_MIN_STEP_SCREEN / liveZoom());
             setPreviewEl(
                 previewElement('freedraw', strokeRef.current.origin, strokeRef.current.points, seedRef.current),
             );
@@ -482,8 +494,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 ordered,
                 er.last,
                 scene,
-                hitThresholdScreen(coarse) / zoom,
-                ERASER_STEP_SCREEN / zoom,
+                hitThresholdScreen(coarse) / liveZoom(),
+                ERASER_STEP_SCREEN / liveZoom(),
                 e.altKey,
                 er.marked,
                 byId,
@@ -498,7 +510,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             const rel = { x: scene.x - draft.origin.x, y: scene.y - draft.origin.y };
             const last = draft.committed[draft.committed.length - 1];
             draft.trailing = e.shiftKey ? snapSegment(last, rel) : rel;
-            if (draft.mode === 'pending' && dist(scene, draft.origin) >= LINE_DRAG_SCREEN / zoom)
+            if (draft.mode === 'pending' && dist(scene, draft.origin) >= LINE_DRAG_SCREEN / liveZoom())
                 lineMovedRef.current = true;
             // The moving endpoint (origin + trailing) drives the binding highlight for an arrow draft.
             // Read Ctrl/Cmd off the live pointer event here — a keyup missed during a window blur can
@@ -730,7 +742,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                     reshaped,
                     { start: index === 0, end: index === points.length - 1 },
                     ordered,
-                    zoom,
+                    liveZoom(),
                     suppressRef.current,
                 );
                 updateElement(selectedLine.id, bound);

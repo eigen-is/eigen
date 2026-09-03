@@ -4,36 +4,12 @@
 // keyboard sets it).
 
 import type { LetterKey, NumberKey } from '@tanstack/react-hotkeys';
-import { CREATION_TOOL_TYPES, type CreationToolType, type VectorElementType } from '@workspace/lib/vector';
-import {
-    Circle,
-    Diamond,
-    Eraser,
-    type LucideIcon,
-    Minus,
-    MousePointer2,
-    MoveUpRight,
-    Pencil,
-    Square,
-    Type,
-} from 'lucide-react';
+import { CREATION_TOOL_TYPES, type VectorElementType } from '@workspace/lib/vector';
+import { Eraser, type LucideIcon, MousePointer2 } from 'lucide-react';
 import { useState } from 'react';
+import { ELEMENT_KIND_UI } from '../kinds';
 
 export type VectorTool = 'select' | 'eraser' | VectorElementType;
-
-// Presentation only; the LIST and its ORDER come from the registry, so adding a kind adds a tool.
-// Keying by CreationToolType is what makes TypeScript demand an entry per creatable kind (and reject
-// one for image, which arrives by upload). Letters are Excalidraw's; `digit` is the same tool on the
-// number row, and useVectorKeyboard binds both straight off this table.
-const TOOL_UI: Record<CreationToolType, { icon: LucideIcon; label: string; shortcut: LetterKey; digit: NumberKey }> = {
-    rectangle: { icon: Square, label: 'Rectangle', shortcut: 'R', digit: '2' },
-    diamond: { icon: Diamond, label: 'Diamond', shortcut: 'D', digit: '3' },
-    ellipse: { icon: Circle, label: 'Ellipse', shortcut: 'O', digit: '4' },
-    arrow: { icon: MoveUpRight, label: 'Arrow', shortcut: 'A', digit: '5' },
-    line: { icon: Minus, label: 'Line', shortcut: 'L', digit: '6' },
-    freedraw: { icon: Pencil, label: 'Draw', shortcut: 'P', digit: '7' },
-    richtext: { icon: Type, label: 'Text', shortcut: 'T', digit: '8' },
-};
 
 type VectorToolEntry = {
     tool: VectorTool;
@@ -46,9 +22,19 @@ type VectorToolEntry = {
     inserts: boolean;
 };
 
+// A creatable kind without a shortcut is a registry bug, not a runtime state (the registry test pins
+// it); this keeps the type honest without inventing a second table or a cast.
+const NO_SHORTCUT: { letter: LetterKey; digit: NumberKey } = { letter: 'V', digit: '1' };
+
+// The LIST, its ORDER and its presentation come from the registries, so adding a kind adds a tool:
+// CREATION_TOOL_TYPES is the vocabulary, ELEMENT_KIND_UI the icon/label/shortcut. useCanvasKeyboard
+// binds both keys straight off this table.
 export const VECTOR_TOOLS: VectorToolEntry[] = [
     { tool: 'select', icon: MousePointer2, label: 'Select', shortcut: 'V', digit: '1', inserts: false },
-    ...CREATION_TOOL_TYPES.map((type) => ({ tool: type, ...TOOL_UI[type], inserts: true })),
+    ...CREATION_TOOL_TYPES.map((type) => {
+        const { icon, label, shortcut = NO_SHORTCUT } = ELEMENT_KIND_UI[type];
+        return { tool: type, icon, label, shortcut: shortcut.letter, digit: shortcut.digit, inserts: true };
+    }),
     { tool: 'eraser', icon: Eraser, label: 'Eraser', shortcut: 'E', digit: '0', inserts: false },
 ];
 

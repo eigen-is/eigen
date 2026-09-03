@@ -1,18 +1,4 @@
-import {
-    classifyPaste,
-    clipboardTextItemHasContent,
-    EIGEN_CLIPBOARD_RENDER_ATTR,
-    extractClipboardSvgMetadata,
-    inlineClipboardSvgMedia,
-    needsReUpload,
-    readClipboardBox,
-    readEigenClipboardAsync,
-    reUploadImage,
-    svgToImageDataUri,
-    svgToImageFile,
-    writeEigenClipboard,
-    writeEigenClipboardAsync,
-} from '@workspace/lib/clipboard';
+import { getBackgroundStyle } from '@workspace/lib/background';
 import {
     isPendingMediaName,
     useCopyToMediaFolder,
@@ -20,45 +6,41 @@ import {
     useUploadFile,
     useZombieMediaSweep,
 } from '@workspace/lib/drive';
-import { textToParagraphHtml } from '@workspace/lib/html';
-import { htmlToPlainText, readDominantTextAlign } from '@workspace/lib/html-dom';
+import { stripTagsServer } from '@workspace/lib/html';
 import { useIsCoarsePointer } from '@workspace/lib/media';
-import type { EigenClipboardData, EigenClipboardImageItem, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     arrowRoute,
-    type Bounds,
     type Box,
     computeSnapTargets,
-    DEFAULT_FONT_FAMILY,
-    DEFAULT_FONT_SIZE,
     elementBounds,
+    elementsInFrame,
     fitImageSize,
     getElementsBounds,
+    IMAGE_CASCADE_OFFSET,
     type ImageSize,
     isLinearElement,
     isTransparentColor,
     type MarqueeMode,
     marqueeMode,
     orderByFractionalIndex,
+    parseBackgroundFill,
+    parseIdList,
     parsePoints,
     resizeLinear,
     SNAP_SCREEN_THRESHOLD,
     type SnapLine,
     type SnapTargets,
+    SVG_NS,
     sceneBounds,
     snapBoxToTargets,
-    type TextAlign,
     type VectorArrowElement,
     type VectorElement,
-    type VectorMeta,
 } from '@workspace/lib/vector';
 import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
 import { cn } from '@workspace/ui/lib/utils';
-import { Image as ImageIcon } from 'lucide-react';
+import { Image as ImageIcon, MessageSquare } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { WebsocketProvider } from 'y-websocket';
-import type * as Y from 'yjs';
 import { isTypingTarget } from '../../hooks/is-typing-target';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
 import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
@@ -68,65 +50,39 @@ import { FileDropOverlay } from '../file-drop-overlay';
 import { HintPill } from '../hint-pill';
 import { readImageSize, readImageSizeFromUrl } from '../media/read-image-size';
 import type { ZOp } from '../properties-panel/z-order';
+import { CanvasObjectMenu } from './canvas-object-menu';
 import { pointerCursor } from './cursor';
-import { ElementNode } from './element-node';
+import { ElementLayer } from './element-layer';
+import { useCanvasClipboard } from './hooks/use-canvas-clipboard';
+import type { CanvasDoc, NewVectorElement, VectorElementPatch } from './hooks/use-canvas-doc';
+import { applyZOrder, deleteSelection, duplicateSelection, useCanvasKeyboard } from './hooks/use-canvas-keyboard';
+import { type CanvasPeerState, type PublishCursor, peerOnFrame } from './hooks/use-canvas-presence';
 import { hitTestTopmost, marqueeSelect } from './hooks/use-selection';
 import { useSpaceHeld } from './hooks/use-space-held';
 import type { VectorTool } from './hooks/use-tool';
-import type { NewVectorElement, VectorElementPatch } from './hooks/use-vector-doc';
-import { applyZOrder, deleteSelection, duplicateSelection, useVectorKeyboard } from './hooks/use-vector-keyboard';
-import type { PublishCursor } from './hooks/use-vector-presence';
 import { useViewport } from './hooks/use-viewport';
+import { ELEMENT_KIND_UI } from './kinds';
 import { arrowLabelEditing, type EditingState } from './text-editing';
 import { isVectorFontLoaded, loadVectorFont, measureVectorText } from './text-measure';
 import { TextOverlay } from './text-overlay';
-import {
-    buildPreviewById,
-    followArrowPreview,
-    type PastedArrow,
-    remapPastedArrows,
-    unbindDraggedArrow,
-} from './tools/binding';
-import {
-    buildSelectionData,
-    readVectorMeta,
-    selectionPlainText,
-    toVectorTextAlign,
-    type VectorClipMeta,
-} from './tools/clipboard';
-import { type CreatingState, creatingElement, newShapeBox, normalizeRect } from './tools/create-shape';
+import { buildPreviewById, followArrowPreview, unbindDraggedArrow } from './tools/binding';
+import { boundsToBox, boxToBounds, elementBox } from './tools/boxes';
+import { type CreatingState, creatingElement, isBoxTool, newShapeBox, normalizeRect } from './tools/create-shape';
 import { SnapGuides } from './tools/snap-guides';
 import { useTouchGestures } from './tools/touch-gestures';
 import { useDrawingTools } from './tools/use-drawing-tools';
-import { VectorObjectMenu } from './vector-object-menu';
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
 // Below this scene-unit extent (in BOTH dimensions) a drag-create is a click → discarded.
 const CREATE_MIN_SIZE = 1;
 const MIN_ELEMENT_SIZE = 1;
 // The box a click with the rich-text tool places, in scene units. It arrives empty and selected.
 const NEW_RICHTEXT_SIZE = { width: 200, height: 40 };
 // Image drop/paste SIZING (natural-size-that-fits, 80% viewport cap, never upscale, unreadable →
-// default box) is the shared `fitImageSize` helper — vector is its reference behavior. Only the
-// CASCADE offset stays vector-side.
-// Each subsequent image in a multi-file drop staggers by this many scene units so a stack of
-// natural-size images stays visible (⌘D's +10 is for identical duplicates; images need more).
-const IMAGE_CASCADE_OFFSET = 20;
+// default box) is the shared `fitImageSize` helper — vector is its reference behavior; the cascade
+// offset is the shared IMAGE_CASCADE_OFFSET.
 // A bound arrow dragged alone unbinds only past this SCREEN distance, so a click-select never detaches it
 // (Excalidraw's DRAGGING_THRESHOLD).
 const ARROW_UNBIND_SCREEN = 10;
-
-function elementBox(el: VectorElement): Box {
-    return { x: el.x, y: el.y, width: el.width, height: el.height, angle: el.angle };
-}
-
-function boundsToBox(b: Bounds): Box {
-    return { x: b.minX, y: b.minY, width: b.maxX - b.minX, height: b.maxY - b.minY, angle: 0 };
-}
-
-function boxToBounds(b: Box): Bounds {
-    return { minX: b.x, minY: b.y, maxX: b.x + b.width, maxY: b.y + b.height };
-}
 
 // pointerId gates move/up to the pointer that started the gesture — on touch, a second finger's
 // events would otherwise drive (and prematurely commit) the first finger's gesture.
@@ -152,14 +108,19 @@ type Gesture = { pointerId: number } & (
 
 // Imperative image-insert surface the canvas publishes for the toolbar's Insert entries — the
 // editor owns the picker dialog, but placement needs the live viewport (centre + zoom).
-export type VectorImageInsert = {
+export type CanvasImageInsert = {
     insertFiles: (files: File[]) => void;
     insertDrivePaths: (paths: DrivePath[]) => Promise<void>;
 };
 
-type VectorCanvasProps = {
-    elements: VectorElement[];
-    meta: VectorMeta;
+type CanvasEditorProps = {
+    // The host's document: the scene and every writer, taken whole rather than threaded prop by prop.
+    doc: CanvasDoc;
+    // 'infinite' is the drawing canvas; 'frame' bounds it to one page — the canvas then renders,
+    // hit-tests, snaps and creates inside `frameId` only, and a pan can't push the page off screen.
+    viewport: 'infinite' | 'frame';
+    // The active frame, '' on the infinite canvas — the home stamped on every new element.
+    frameId?: string;
     tool: VectorTool;
     setTool: (t: VectorTool) => void;
     // Tool lock (Q / padlock): a placement keeps the current tool active; threaded like `tool`, toggled here on Q.
@@ -169,20 +130,6 @@ type VectorCanvasProps = {
     // Owner + mount of THIS document, for cross-mount image paste (re-upload into our media/ folder).
     ownerId: string;
     mountId: string;
-    addElement: (partial: NewVectorElement) => string | undefined;
-    // Batch add (paste) — the whole set in ONE transact / one undo step.
-    addElements: (partials: NewVectorElement[]) => string[];
-    updateElement: (id: string, fields: VectorElementPatch) => void;
-    // Non-undoable single-element update — the cross-mount pending→real image swap, so the paste stays
-    // one undo step (peers still receive it).
-    updateElementUntracked: (id: string, fields: VectorElementPatch) => void;
-    updateElements: (patches: { id: string; fields: VectorElementPatch }[]) => void;
-    deleteElements: (ids: string[]) => void;
-    // Non-undoable delete — cleanup of a failed optimistic image insert, so the failed paste/drop
-    // leaves no undo step that resurrects a broken pending element.
-    deleteElementsUntracked: (ids: string[]) => void;
-    duplicateElements: (ids: string[], dx: number, dy: number) => string[];
-    undoManager: Y.UndoManager | null;
     // Selection is lifted to the editor so the properties panel and canvas share one source (the
     // slides editor/canvas idiom).
     selectedIds: string[];
@@ -191,21 +138,30 @@ type VectorCanvasProps = {
     // Aspect lock, shared with the properties-panel checkbox: ObjectTransform's 'aspect-default'
     // (Shift frees) when on, 'free' when off.
     aspectLocked: boolean;
-    // Awareness: the provider drives the CursorLayer's own subscription; publishCursor pushes the
-    // local pointer's scene position (throttled in the editor's use-vector-presence).
-    provider: WebsocketProvider | null;
+    // Awareness: doc.provider drives the CursorLayer's own subscription; publishCursor pushes the
+    // local pointer's scene position (throttled in the editor's use-canvas-presence).
     publishCursor: PublishCursor;
     // Published/cleared by the canvas itself; optional so read-only hosts can omit it.
-    imageInsertRef?: { current: VectorImageInsert | null };
+    imageInsertRef?: { current: CanvasImageInsert | null };
+    // Comments. A commented element flags its top-right corner; clicking the flag opens the first card
+    // (the host reveals it). Omitting onOpenCard hides the flags, omitting onAddComment the menu row.
+    onOpenCard?: (cardId: string) => void;
+    onAddComment?: (elementId: string) => void;
+    // ⌘F: every matching element rings, the stepped-to one rings brighter and flashes. Both come from
+    // the host's useCanvasDocSearch — the canvas only paints them.
+    searchMatchedIds?: ReadonlySet<string>;
+    searchActiveId?: string | null;
 };
 
-// The live, interactive SVG scene surface: pan/zoom viewport, tool-driven drag-create, selection,
-// move, and the shared ObjectTransform chrome. Every drag/resize/rotate preview is LOCAL state;
+// The live, interactive canvas surface — one absolutely positioned layer per element, with the
+// scene-space overlay and the screen-space chrome above it: pan/zoom viewport, tool-driven
+// drag-create, selection, move, and the shared ObjectTransform chrome. Every drag/resize/rotate preview is LOCAL state;
 // exactly one Yjs transact fires per completed gesture (UX-RULING 5), with stopCapturing() at each
 // gesture start so one gesture = one undo step.
-export function VectorCanvas({
-    elements,
-    meta,
+export function CanvasEditor({
+    doc,
+    viewport,
+    frameId = '',
     tool,
     setTool,
     toolLocked,
@@ -213,35 +169,67 @@ export function VectorCanvas({
     canEdit,
     ownerId,
     mountId,
-    addElement,
-    addElements,
-    updateElement,
-    updateElementUntracked,
-    updateElements,
-    deleteElements,
-    deleteElementsUntracked,
-    duplicateElements,
-    undoManager,
     selectedIds,
     setSelectedIds,
     toggle,
     aspectLocked,
-    provider,
     publishCursor,
     imageInsertRef,
-}: VectorCanvasProps) {
+    onOpenCard,
+    onAddComment,
+    searchMatchedIds,
+    searchActiveId,
+}: CanvasEditorProps) {
+    const {
+        elements,
+        meta,
+        frames,
+        addElement: addElementRaw,
+        addElements: addElementsRaw,
+        updateElement,
+        updateElementUntracked,
+        updateElements,
+        deleteElements,
+        deleteElementsUntracked,
+        duplicateElements,
+        undoManager,
+        provider,
+    } = doc;
+    // The page this canvas is bounded to, if any: its extent drives the fit/clamp/snap math and its
+    // background paints — and clips — the layers.
+    const frame = viewport === 'frame' ? frames.find((f) => f.id === frameId) : undefined;
+    // In frame mode the viewport's scene space IS the frame's space (elements store frame-relative
+    // coordinates), so an insert needs no translation — only the home frame stamped on it. Every insert
+    // path (drag-create, image drop/paste/picker, clipboard) goes through these two, so no callsite can
+    // forget it. `frameId` sits AFTER the spread on purpose: a pasted element carries the SOURCE frame's
+    // id and must land in the frame being pasted into.
+    const addElement = useCallback(
+        (partial: NewVectorElement) => addElementRaw({ ...partial, frameId }),
+        [addElementRaw, frameId],
+    );
+    const addElements = useCallback(
+        (partials: NewVectorElement[]) => addElementsRaw(partials.map((p) => ({ ...p, frameId }))),
+        [addElementsRaw, frameId],
+    );
     const {
         containerRef,
+        sceneRef,
+        overlayRef,
+        chromeRef,
+        viewportRef,
         clientToScene,
         screenDeltaToScene,
         boxToStyle,
-        groupTransform,
         panBy,
         pinch,
         resetZoom,
         frozenRef,
         zoom,
-    } = useViewport();
+    } = useViewport({
+        mode: viewport,
+        frame: frame ? { width: frame.width, height: frame.height } : undefined,
+        resetKey: frameId,
+    });
     // Coarse pointers (finger/stylus) get a fatter hit-slop and drive the touch gesture policy below.
     const coarse = useIsCoarsePointer();
     // Images resolve/upload through the container's media/ folder (the provider the editor wraps
@@ -269,6 +257,10 @@ export function VectorCanvas({
     // cursor signals draggability with `move` (the suite convention — slides/docs). Item E.
     const [hoveringSelectable, setHoveringSelectable] = useState(false);
     const [editing, setEditing] = useState<EditingState | null>(null);
+    // In-place rich-text editing. Separate from `editing` (the arrow-label TextOverlay session) because
+    // the two never coexist and each owns a different commit contract: a label commits once on close,
+    // a rich-text box writes on every change.
+    const [richTextEditId, setRichTextEditId] = useState<string | null>(null);
     // The object context menu (right-click) — the singleton surface; item is the right-clicked
     // element id, its ops act on the selection below.
     const objectContextMenu = useContextMenu<string>();
@@ -286,12 +278,55 @@ export function VectorCanvas({
     // open — the freeze safety-net below and commitEditing both consult it.
     const editingRef = useRef<EditingState | null>(null);
     editingRef.current = editing;
+    const richTextEditRef = useRef<string | null>(null);
+    richTextEditRef.current = richTextEditId;
+    // "Some text surface owns the keyboard and the pointer" — every gate that used to read `editing`.
+    const textEditing = editing !== null || richTextEditId !== null;
+    // The same answer for listeners bound once (the clipboard hook's), which can't read state.
+    const textEditingRef = useRef(false);
+    textEditingRef.current = textEditing;
 
-    const ordered = useMemo(() => orderByFractionalIndex(elements), [elements]);
+    // The elements this canvas renders, hit-tests, marquees, snaps to and selects-all: one frame's in
+    // frame mode, the whole scene otherwise. NOT the comment/search paths — both must reach an element
+    // on another frame, so both read the host's `elements`.
+    const visibleElements = useMemo(
+        () => (viewport === 'frame' ? elementsInFrame(elements, frameId) : elements),
+        [viewport, elements, frameId],
+    );
+    const ordered = useMemo(() => orderByFractionalIndex(visibleElements), [visibleElements]);
 
-    // All elements by id (committed scene) — the map an elbow arrow reads (arrowRoute) to resolve its
-    // bound shapes and derive its route. Hit/marquee/label paths use it; the render path overlays previews.
-    const committedById = useMemo(() => new Map(ordered.map((el) => [el.id, el])), [ordered]);
+    // The flagged elements: those carrying at least one comment card, with the corner the flag sits on
+    // (a zero-size box, so boxToStyle maps it to the screen point at render time).
+    const commentedElements = useMemo(
+        () =>
+            ordered.flatMap((el) => {
+                const [cardId] = parseIdList(el.commentCardIds);
+                const box = elementBox(el);
+                return cardId
+                    ? [{ id: el.id, cardId, corner: { x: box.x + box.width, y: box.y, width: 0, height: 0, angle: 0 } }]
+                    : [];
+            }),
+        [ordered],
+    );
+
+    // The ringed elements. Only what this canvas renders: a match on another frame is revealed by the
+    // host activating that frame, and the ring follows.
+    const matchedElements = useMemo(
+        () => (searchMatchedIds ? ordered.filter((el) => searchMatchedIds.has(el.id)) : []),
+        [ordered, searchMatchedIds],
+    );
+
+    // All elements by id — the map an elbow arrow reads (arrowRoute) to resolve its bound shapes and
+    // derive its route. Deliberately spans the WHOLE scene: an elbow arrow inside a frame still routes
+    // around a bound shape outside it. Hit/marquee/label paths use it; the render path overlays previews.
+    const committedById = useMemo(() => new Map(elements.map((el) => [el.id, el])), [elements]);
+
+    // Frame mode shows only the peers on this frame; the infinite canvas shows everyone (an undefined
+    // filter is CursorLayer's "no filter" contract).
+    const isPeerVisible = useMemo(
+        () => (viewport === 'frame' ? (s: CanvasPeerState) => peerOnFrame(s, frameId) : undefined),
+        [viewport, frameId],
+    );
 
     // Element boxes by id for the shared CursorLayer's remote selection rings — rebuilt only when the
     // scene changes, never on a peer cursor tick (the layer holds its own awareness subscription).
@@ -320,6 +355,7 @@ export function VectorCanvas({
         toolLocked,
         canEdit,
         zoom,
+        viewportRef,
         coarse,
         ordered,
         byId: committedById,
@@ -340,13 +376,13 @@ export function VectorCanvas({
     // mid-drag. Built only while a preview is live AND the scene holds an arrow, so an arrow-free
     // drag doesn't reallocate it every frame.
     const hasPreviews = Object.keys(previews).length > 0;
-    const hasArrows = ordered.some((el) => el.type === 'arrow');
+    const hasArrows = useMemo(() => ordered.some((el) => el.type === 'arrow'), [ordered]);
     const previewById = useMemo(
         () => (hasPreviews && hasArrows ? buildPreviewById(ordered, previews) : null),
         [hasPreviews, hasArrows, ordered, previews],
     );
     // The map the render path feeds an elbow arrow's route: preview boxes when a shape is mid-drag (the
-    // snake follows live), else the committed scene — its per-frame identity is the ElementNode memo's cue.
+    // snake follows live), else the committed scene — its per-frame identity is the ElementLayer memo's cue.
     const renderById = previewById ?? committedById;
 
     // An element renders with its live local preview (move/resize/rotate) overriding the Yjs values;
@@ -372,14 +408,14 @@ export function VectorCanvas({
         return out;
     };
 
-    // Every canvas hotkey (V/R/D/O/T, Delete/Backspace, arrows, ⌘A, ⌘D, ⌘Z/⌘⇧Z, z-order) is gated
-    // off while a text overlay is open — the textarea's native undo/typing owns keys in-session; we
-    // don't rely on the hotkey lib's input-target detection alone (UX-RULING, commit-trigger).
-    useVectorKeyboard({
-        enabled: canEdit && !editing,
-        elements,
+    // Every canvas hotkey (V/R/D/O/T, Q, Delete/Backspace, arrows, ⌘A, ⌘D, ⌘Z/⌘⇧Z, z-order) is gated
+    // off while ANY text surface is open — the textarea's native undo/typing owns keys in-session, and
+    // the lib's ignoreInputs default does not cover a ProseMirror contenteditable, so a tool letter
+    // would otherwise be swallowed as a keystroke inside the in-place editor.
+    useCanvasKeyboard({
+        enabled: canEdit && !textEditing,
+        elements: visibleElements,
         selectedIds,
-        tool,
         setTool,
         toolLocked,
         setToolLocked,
@@ -393,12 +429,12 @@ export function VectorCanvas({
     // Freeze the viewport while an overlay is open (same latch as gestures): a pan/zoom would
     // desync the overlay from the element it sits over.
     useEffect(() => {
-        if (!editing) return;
+        if (!textEditing) return;
         frozenRef.current = true;
         return () => {
             frozenRef.current = false;
         };
-    }, [editing, frozenRef]);
+    }, [textEditing, frozenRef]);
 
     // Safety net: any pointerup ends the freeze, clears the transform-start latch, and drops
     // leftover previews — ObjectTransform's Escape-cancel and no-move paths fire no onCommit, so
@@ -414,7 +450,7 @@ export function VectorCanvas({
             // own pointerup and every intra-textarea caret click must NOT unfreeze it (else wheel
             // zoom, a re-opened session, or a spurious move gesture leak in mid-edit). The editing
             // effect below clears the freeze when the session ends.
-            if (editingRef.current) return;
+            if (editingRef.current || richTextEditRef.current) return;
             frozenRef.current = false;
             transformStartedRef.current = false;
             setPreviews((p) => (Object.keys(p).length ? {} : p));
@@ -422,7 +458,9 @@ export function VectorCanvas({
             setSnapLines((l) => (l.length ? [] : l));
         };
         const onBlur = () => {
-            if (editingRef.current) return; // the textarea's own onBlur commits the session
+            // The textarea's own onBlur commits a label session; a rich-text session is ended by its
+            // own click-away/Escape, and neither may lose the viewport freeze here.
+            if (editingRef.current || richTextEditRef.current) return;
             finishRef.current();
             touchResetRef.current();
             clear();
@@ -497,19 +535,27 @@ export function VectorCanvas({
     // renderer's source of truth, and the measurement util stays the sole dim writer). Re-validated
     // against the LIVE element at resolve time: a newer edit (text/font/size) owns the dims, so a
     // slow load can never write stale dims over it — and the single .then can't loop.
+    // What this canvas sees (frame-scoped in frame mode) — the snap builder, the resize/move selection
+    // paths and the label heal read it. `elementsRef` stays the WHOLE scene: a pending image on another
+    // frame is still this tab's to sweep.
+    const visibleRef = useRef(visibleElements);
+    visibleRef.current = visibleElements;
     const elementsRef = useRef(elements);
     elementsRef.current = elements;
 
-    // Snap targets = every OTHER element's edges/centre (rotated → centre only). Infinite canvas, so no
-    // canvas-edge guides (slides seeds those). Threshold is screen-space: SNAP_SCREEN_THRESHOLD / zoom
-    // keeps the snap radius a constant pixel distance at any zoom.
+    // Snap targets = every OTHER visible element's edges/centre (rotated → centre only), plus the
+    // frame's own edges and centre lines when there is one — an object aligns to the page the way it
+    // aligns to its neighbours. The infinite canvas has no edges to seed. Threshold is screen-space:
+    // SNAP_SCREEN_THRESHOLD / zoom keeps the snap radius a constant pixel distance at any zoom.
     const buildSnapTargets = useCallback(
         (excludeIds: Set<string>) =>
             computeSnapTargets(
-                elementsRef.current.map((el) => ({ id: el.id, box: elementBox(el) })),
+                visibleRef.current.map((el) => ({ id: el.id, box: elementBox(el) })),
                 excludeIds,
+                frame && [0, frame.width / 2, frame.width],
+                frame && [0, frame.height / 2, frame.height],
             ),
-        [],
+        [frame],
     );
 
     // Resize-time snapping, fed to ObjectTransform's snapBox seam (the resize half of snapping; move snaps in
@@ -521,7 +567,7 @@ export function VectorCanvas({
             if (b.angle !== 0) return b;
             const id = selectedIds.length === 1 ? selectedIds[0] : null;
             if (!id) return b;
-            const startEl = elementsRef.current.find((el) => el.id === id);
+            const startEl = visibleRef.current.find((el) => el.id === id);
             if (!startEl) return b;
             const start = elementBox(startEl);
             const EPS = 0.001;
@@ -539,12 +585,12 @@ export function VectorCanvas({
                 b,
                 buildSnapTargets(new Set([id])),
                 mode,
-                SNAP_SCREEN_THRESHOLD / zoom,
+                SNAP_SCREEN_THRESHOLD / viewportRef.current.zoom,
             );
             setSnapLines(lines);
             return box;
         },
-        [selectedIds, zoom, buildSnapTargets],
+        [selectedIds, buildSnapTargets, viewportRef],
     );
 
     // Sweep zombie image placeholders left behind by a tab close or reload mid-upload (vector adopts
@@ -572,7 +618,7 @@ export function VectorCanvas({
             if (isVectorFontLoaded(fontSize, fontFamily)) return;
             loadVectorFont(fontSize, fontFamily)
                 .then(() => {
-                    const el = elementsRef.current.find((x) => x.id === id);
+                    const el = visibleRef.current.find((x) => x.id === id);
                     if (el?.type !== 'arrow') return; // deleted meanwhile — nothing to heal
                     if (el.text !== text || el.fontSize !== fontSize || el.fontFamily !== fontFamily) return;
                     // A label's height derives from its line count, so only labelWidth is measured.
@@ -614,6 +660,33 @@ export function VectorCanvas({
         [updateElement, undoManager, setSelectedIds, setTool, healLabelWidth],
     );
 
+    // Open an in-place rich-text session. Seal first, so the session's writes are their own undo step.
+    const openRichText = (id: string) => {
+        undoManager?.stopCapturing();
+        setSelectedIds([id]);
+        setRichTextEditId(id);
+    };
+
+    // Close it: an empty box is deleted (a rich-text box with no text is invisible chrome), otherwise the
+    // trailing seal closes the session's coalesced writes. Reads the LIVE element — the session wrote
+    // through updateElement, so React state may be one tick behind.
+    const closeRichText = useCallback(() => {
+        const id = richTextEditRef.current;
+        richTextEditRef.current = null;
+        setRichTextEditId(null);
+        if (!id) return;
+        const el = visibleRef.current.find((e) => e.id === id);
+        if (el?.type === 'richtext' && stripTagsServer(el.html).trim() === '') {
+            // Seal FIRST: without it, the delete lands inside Y.UndoManager's 500ms captureTimeout and
+            // merges into the session's last keystroke, so whether it is its own undo step would depend
+            // on how fast the user clicked away.
+            undoManager?.stopCapturing();
+            deleteElements([id]);
+            setSelectedIds([]);
+        }
+        undoManager?.stopCapturing();
+    }, [deleteElements, setSelectedIds, undoManager]);
+
     // A paste carries no coordinates (unlike a drop), so it anchors on the visible viewport center.
     const viewportCenterScene = useCallback(() => {
         const rect = containerRef.current?.getBoundingClientRect();
@@ -626,14 +699,15 @@ export function VectorCanvas({
     const imagePlacements = useCallback(
         (intrinsics: (ImageSize | null)[], anchor: { x: number; y: number }) => {
             const rect = containerRef.current?.getBoundingClientRect();
-            const view = { width: (rect?.width ?? 0) / zoom, height: (rect?.height ?? 0) / zoom };
+            const { zoom: live } = viewportRef.current;
+            const view = { width: (rect?.width ?? 0) / live, height: (rect?.height ?? 0) / live };
             return intrinsics.map((intrinsic, i) => {
                 const { width, height } = fitImageSize(intrinsic, view);
                 const off = i * IMAGE_CASCADE_OFFSET;
                 return { x: anchor.x + off - width / 2, y: anchor.y + off - height / 2, width, height };
             });
         },
-        [containerRef, zoom],
+        [containerRef, viewportRef],
     );
 
     // Drop/paste image(s) → upload into media/ and place each at natural size, centered on `anchor`
@@ -741,7 +815,7 @@ export function VectorCanvas({
 
     // Image ingestion is gated on a real upload target (a fresh .eigenvector scaffolds media/, so
     // this is normally present) and is closed while a text overlay owns paste + the pointer.
-    const imagesEnabled = canEdit && !!mediaFolderId && !editing;
+    const imagesEnabled = canEdit && !!mediaFolderId && !textEditing;
     // The drop hook stays ALWAYS enabled so dragover/drop are always preventDefault'd — a disabled
     // hook skips that, letting the BROWSER navigate to a file dropped while read-only or mid-text-edit
     // (destroying the editor + uncommitted text). The insertion gate lives in the callback instead;
@@ -755,370 +829,42 @@ export function VectorCanvas({
         void insertImageFiles(files, viewportCenterScene());
     }, imagesEnabled);
 
-    // The clipboard PRODUCER (typed items + the self-contained SVG flavour) + plain-text flavor live in
-    // ./tools/clipboard; the canvas calls them with the live z-order, selection, background and path resolver.
-    const buildData = useCallback(
-        (): EigenClipboardData => buildSelectionData(ordered, selectedIds, meta, resolveMediaPath),
-        [ordered, selectedIds, meta, resolveMediaPath],
-    );
-    const plainText = useCallback(() => selectionPlainText(ordered, selectedIds), [ordered, selectedIds]);
-
-    // The eigen `svg` field references images BY NAME and renders blank outside eigen's server-side
-    // inliner. For the async menu-copy path only, build a foreign-visible `<img src="data:svg…">` whose
-    // images are inlined as base64 data URIs, so a plain contenteditable pastes the drawing as an image.
-    // Bytes come from the credentialed media resolver; over the soft cap (or on inline failure) we skip
-    // the flavour and write today's payload. The sync ⌘C path stays byte-free (a copy event can't fetch).
-    const fetchMediaBlob = useCallback(
-        async (name: string): Promise<Blob | null> => {
-            const url = resolveMediaUrl(name);
-            if (!url) return null;
-            try {
-                const res = await fetch(url, { credentials: 'include' });
-                return res.ok ? await res.blob() : null;
-            } catch {
-                return null;
-            }
-        },
-        [resolveMediaUrl],
-    );
-    const foreignImgHtml = useCallback(
-        async (svg: string | undefined): Promise<string | undefined> => {
-            if (!svg) return undefined;
-            const inlined = await inlineClipboardSvgMedia(svg, fetchMediaBlob);
-            // Mark the img so hasRichHtmlBeyondMarker ignores it — else a shape-only vector copy reads
-            // as rich HTML and a non-media host persists the base64 SVG as a figure.
-            return inlined
-                ? `<img ${EIGEN_CLIPBOARD_RENDER_ATTR}="" src="${await svgToImageDataUri(inlined)}">`
-                : undefined;
-        },
-        [fetchMediaBlob],
-    );
-
-    // Element clipboard CONSUMER: eigen items → new elements. Images size from the TYPED width/height
-    // (authoritative; angle applied; cross-mount re-uploads into our media/ then swaps the pending name
-    // in a late transact). Text re-measures its dims LOCALLY (typed size is never written onto text).
-    // Shapes rebuild from meta.vector. All ADDS run in ONE transact; the
-    // set is re-anchored on the viewport centre preserving each element's relative offset.
-    const pasteEigenItems = useCallback(
-        (items: EigenClipboardItem[]) => {
-            if (!items.length) return;
-            const anchor = viewportCenterScene();
-
-            // Translate the vector-origin items (those carrying scene coords) so their bounding-box
-            // centre lands on the viewport; cross-app items (no meta.vector) cascade from the anchor.
-            const positioned = items.map((item) => ({ item, meta: readVectorMeta(item), box: readClipboardBox(item) }));
-            const withCoords = positioned.filter(
-                (p): p is typeof p & { meta: NonNullable<typeof p.meta> } => p.meta != null,
-            );
-            let dx = 0;
-            let dy = 0;
-            if (withCoords.length) {
-                let minX = Number.POSITIVE_INFINITY;
-                let minY = Number.POSITIVE_INFINITY;
-                let maxX = Number.NEGATIVE_INFINITY;
-                let maxY = Number.NEGATIVE_INFINITY;
-                for (const { meta, box } of withCoords) {
-                    minX = Math.min(minX, meta.x);
-                    minY = Math.min(minY, meta.y);
-                    maxX = Math.max(maxX, meta.x + box.width);
-                    maxY = Math.max(maxY, meta.y + box.height);
-                }
-                dx = anchor.x - (minX + maxX) / 2;
-                dy = anchor.y - (minY + maxY) / 2;
-            }
-
-            const partials: NewVectorElement[] = [];
-            const crossMount: { index: number; item: EigenClipboardImageItem }[] = [];
-            // Each pasted element's partial index → its source id (for the remap map), and the arrows whose
-            // bindings are remapped across the pasted set once the clones have ids.
-            const cloneIds = new Map<number, string>();
-            const arrowRemaps: PastedArrow[] = [];
-            let cascade = 0;
-            const placeAt = (meta: VectorClipMeta | null, w: number, h: number) => {
-                if (meta) return { x: meta.x + dx, y: meta.y + dy };
-                const off = cascade * IMAGE_CASCADE_OFFSET;
-                cascade += 1;
-                return { x: anchor.x - w / 2 + off, y: anchor.y - h / 2 + off };
-            };
-
-            for (const { item, meta, box } of positioned) {
-                const angle = box.angle ?? 0;
-                if (item.type === 'image') {
-                    const w = box.width;
-                    const h = box.height;
-                    const pos = placeAt(meta, w, h);
-                    const index = partials.length;
-                    if (needsReUpload(item.sourceParentId, mediaFolderId) && mediaFolderId) {
-                        // Optimistic add with a pending name; the real name swaps in a late transact.
-                        partials.push({
-                            type: 'image',
-                            ...pos,
-                            width: w,
-                            height: h,
-                            angle,
-                            mediaName: `pending:${crypto.randomUUID()}`,
-                        });
-                        crossMount.push({ index, item });
-                    } else {
-                        partials.push({ type: 'image', ...pos, width: w, height: h, angle, mediaName: item.mediaName });
-                    }
-                    continue;
-                }
-                // Shape or linear carrier (a text item whose meta.vector names a shape/freedraw/line/arrow
-                // type). A linear element additionally restores its `points` (undefined for shapes); an
-                // arrow also restores its heads + label and is queued for the binding remap below.
-                if (meta?.type) {
-                    // A linear carrier without points would read back as nothing (read-vector drops it).
-                    if ((meta.type === 'freedraw' || meta.type === 'line' || meta.type === 'arrow') && !meta.points)
-                        continue;
-                    const w = box.width;
-                    const h = box.height;
-                    const pos = placeAt(meta, w, h);
-                    const index = partials.length;
-                    if (meta.id) cloneIds.set(index, meta.id);
-                    const partial: NewVectorElement = {
-                        type: meta.type,
-                        ...pos,
-                        width: w,
-                        height: h,
-                        angle,
-                        strokeColor: meta.strokeColor,
-                        fill: meta.fill,
-                        fillStyle: meta.fillStyle,
-                        strokeStyle: meta.strokeStyle,
-                        strokeWidth: meta.strokeWidth,
-                        roughness: meta.roughness,
-                        opacity: meta.opacity,
-                        corners: meta.corners,
-                        roundness: meta.roundness,
-                        points: meta.points,
-                    };
-                    if (meta.type === 'freedraw') {
-                        partial.pressures = meta.pressures;
-                        partial.simulatePressure = meta.simulatePressure;
-                    }
-                    if (meta.type === 'arrow') {
-                        partial.startArrowhead = meta.startArrowhead;
-                        partial.endArrowhead = meta.endArrowhead;
-                        partial.elbow = meta.elbow;
-                        partial.fixedSegments = meta.fixedSegments;
-                        partial.text = meta.text;
-                        partial.fontSize = meta.fontSize;
-                        partial.fontFamily = meta.fontFamily;
-                        partial.labelWidth = meta.labelWidth;
-                        arrowRemaps.push({
-                            index,
-                            startBinding: meta.startBinding ?? '',
-                            endBinding: meta.endBinding ?? '',
-                        });
-                    }
-                    partials.push(partial);
-                    continue;
-                }
-                // Real text item → a rich-text box, sized locally from the text (never the wire size).
-                // An empty text item is another app's contentless carrier (a shape from a foreign doc)
-                // — skip it.
-                if (!clipboardTextItemHasContent(item)) continue;
-                const typo = item.typography ?? {};
-                const fontFamily = typo.fontFamily ?? DEFAULT_FONT_FAMILY;
-                const fontSize = typo.fontSize ?? DEFAULT_FONT_SIZE;
-                const { width: w, height: h } = measureVectorText(item.text, fontSize, fontFamily);
-                const pos = placeAt(meta, w, h);
-                partials.push({
-                    type: 'richtext',
-                    ...pos,
-                    width: w,
-                    height: h,
-                    angle,
-                    html: textToParagraphHtml(item.text),
-                    fontSize,
-                    fontFamily,
-                    textAlign: toVectorTextAlign(typo.textAlign),
-                    color: meta?.color,
-                    strokeColor: meta?.strokeColor,
-                    fill: meta?.fill,
-                    opacity: meta?.opacity,
-                });
-            }
-
-            if (!partials.length) return;
-            undoManager?.stopCapturing();
-            const ids = addElements(partials); // ONE transact for all adds
-            // Remap each pasted arrow's bindings now that the clones have ids — no stopCapturing between the
-            // add and this update, so the whole paste stays ONE undo step.
-            const remap = remapPastedArrows(arrowRemaps, cloneIds, ids);
-            if (remap.length) updateElements(remap);
-            undoManager?.stopCapturing();
-            if (!ids.length) return;
-            setSelectedIds(ids);
-
-            // Cross-mount images: fetch from source, re-upload into our media/, swap the pending name
-            // (late transact) or drop the element on failure — the shipped M4 optimistic-insert idiom.
-            for (const { index, item } of crossMount) {
-                const id = ids[index];
-                if (!id || !mediaFolderId) continue;
-                reUploadImage(
-                    item.sourcePathId,
-                    item.sourceOwnerId,
-                    item.sourceMountId,
-                    mediaFolderId,
-                    uploadFile.mutateAsync,
-                    item.mediaName,
-                )
-                    .then((result) => {
-                        if (!result) {
-                            deleteElementsUntracked([id]);
-                            return;
-                        }
-                        // Untracked: this technical swap is NOT its own undo step, so the whole
-                        // cross-mount paste is a single ⌘Z (reverts the insert; peers converge via its
-                        // inverse). Redo re-adds the element at its recorded pending name — the same
-                        // accepted optimistic-insert redo edge as the sheets fix.
-                        updateElementUntracked(id, { mediaName: result.mediaName });
-                    })
-                    .catch(() => {});
-            }
-        },
-        [
-            viewportCenterScene,
-            mediaFolderId,
-            addElements,
-            updateElements,
-            setSelectedIds,
-            undoManager,
-            updateElementUntracked,
-            deleteElementsUntracked,
-            uploadFile.mutateAsync,
-        ],
-    );
-
-    // Plain-text paste (no eigen payload, no OS files) → ONE rich-text box at the viewport centre, with
-    // default typography and a locally-measured box (the pasteEigenItems text idiom). Multi-line text is
-    // preserved — textToParagraphHtml keeps one paragraph per line. One sealed undo step.
-    const pasteTextElement = useCallback(
-        (text: string, textAlign: TextAlign = 'left') => {
-            const anchor = viewportCenterScene();
-            const { width: w, height: h } = measureVectorText(text, DEFAULT_FONT_SIZE, DEFAULT_FONT_FAMILY);
-            undoManager?.stopCapturing();
-            const id = addElement({
-                type: 'richtext',
-                x: anchor.x - w / 2,
-                y: anchor.y - h / 2,
-                width: w,
-                height: h,
-                angle: 0,
-                html: textToParagraphHtml(text),
-                fontSize: DEFAULT_FONT_SIZE,
-                fontFamily: DEFAULT_FONT_FAMILY,
-                textAlign,
-            });
-            undoManager?.stopCapturing();
-            if (id) setSelectedIds([id]);
-        },
-        [viewportCenterScene, addElement, setSelectedIds, undoManager],
-    );
-
-    // Non-eigen text paste (the keyboard fallthrough and the async menu path share this policy): plain
-    // text, or the flattened text of pasted HTML, becomes one rich-text box. Prose alignment rides in
-    // text/html as a block text-align; carry it through toVectorTextAlign (justify→left). Returns true
-    // when it consumed content so the keyboard handler can gate its preventDefault on a real paste.
-    const pasteNonEigenText = useCallback(
-        (html: string, plain: string): boolean => {
-            const content = plain || htmlToPlainText(html);
-            if (!content.trim()) return false;
-            pasteTextElement(content, html ? toVectorTextAlign(readDominantTextAlign(html) ?? undefined) : 'left');
-            return true;
-        },
-        [pasteTextElement],
-    );
-
-    // ⌘C / ⌘X / ⌘V via document-level ClipboardEvent listeners (the slides idiom — native events are
-    // required to write the MIME flavors and to read the DataTransfer synchronously). Gated
-    // canEdit && !editing; isTypingTarget() bails so the text overlay + a comments composer keep native
-    // clipboard (the typing-target invariant). Eigen items are consumed FIRST; a non-eigen paste falls
-    // through (capture phase, no stopPropagation) to the container's useFilePasteTarget for OS files.
-    useEffect(() => {
-        const onCopyEvent = (e: ClipboardEvent) => {
-            if (isTypingTarget() || !canEdit || editingRef.current || selectedIds.length === 0) return;
-            const data = buildData();
-            if (!data.items.length) return;
-            e.preventDefault();
-            writeEigenClipboard(e, data, plainText());
-        };
-        const onCutEvent = (e: ClipboardEvent) => {
-            if (isTypingTarget() || !canEdit || editingRef.current || selectedIds.length === 0) return;
-            const data = buildData();
-            if (!data.items.length) return;
-            e.preventDefault();
-            writeEigenClipboard(e, data, plainText());
-            // One sealed undo step (deleteSelection stopCaptures on both sides).
-            deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager);
-        };
-        const onPasteEvent = (e: ClipboardEvent) => {
-            if (isTypingTarget() || !canEdit || editingRef.current) return;
-            const cd = e.clipboardData;
-            if (!cd) return;
-            const paste = classifyPaste(cd);
-            // Eigen items are consumed FIRST (before the SVG rung) so a vector→vector paste restores
-            // native elements instead of landing as one flat image.
-            if (paste.eigen) {
-                e.preventDefault();
-                e.stopPropagation();
-                pasteEigenItems(paste.eigen.items);
-                return;
-            }
-            // A bare SVG on the clipboard: ours (element JSON in `<metadata>`) restores native elements;
-            // any other SVG inserts as an image via the media path. OS files still fall through.
-            if (paste.svg) {
-                e.preventDefault();
-                e.stopPropagation();
-                // Ours (element JSON in <metadata>) restores native elements; any other SVG inserts as
-                // an image. The native-vs-image split is vector-local, so we read the metadata here.
-                const restored = extractClipboardSvgMetadata(paste.svg.svg);
-                if (restored) pasteEigenItems(restored.items);
-                else void insertImageFiles([svgToImageFile(paste.svg.svg)], viewportCenterScene());
-                return;
-            }
-            // No eigen/SVG payload. OS files fall through to useFilePasteTarget (image drop path).
-            if (paste.files.length > 0) return;
-            // Plain text (or the text of pasted HTML) → a new rich-text box; only claim the event when
-            // content is actually consumed, else it falls through to the OS-file path.
-            if (pasteNonEigenText(paste.html, paste.text)) {
-                e.preventDefault();
-                e.stopPropagation();
-            }
-        };
-        document.addEventListener('copy', onCopyEvent);
-        document.addEventListener('cut', onCutEvent);
-        document.addEventListener('paste', onPasteEvent, true);
-        return () => {
-            document.removeEventListener('copy', onCopyEvent);
-            document.removeEventListener('cut', onCutEvent);
-            document.removeEventListener('paste', onPasteEvent, true);
-        };
-    }, [
+    // ⌘C/⌘X/⌘V, the menu clipboard rows and the whole paste ladder live in the sibling hook (the
+    // canvas only hands it the scene, the selection and the frame-stamped writers).
+    const { onMenuCopy, onMenuCut, onMenuPaste } = useCanvasClipboard({
         canEdit,
+        textEditingRef,
+        viewport,
+        frameId,
+        ordered,
+        meta,
         selectedIds,
-        buildData,
-        plainText,
-        pasteEigenItems,
-        pasteNonEigenText,
-        insertImageFiles,
-        viewportCenterScene,
-        deleteElements,
         setSelectedIds,
+        addElement,
+        addElements,
+        updateElements,
+        updateElementUntracked,
+        deleteElements,
+        deleteElementsUntracked,
         undoManager,
-    ]);
+        viewportCenterScene,
+        insertImageFiles,
+        mediaFolderId,
+        resolveMediaPath,
+        resolveMediaUrl,
+        uploadFile: uploadFile.mutateAsync,
+    });
 
     // Text-edit entry shared by a mouse double-click and a touch double-tap (touch-gestures synthesizes
-    // the tap-tap). frozenRef: no new session over a live gesture. Only an arrow label opens; a
-    // rich-text box has no in-place editor.
+    // the tap-tap). frozenRef: no new session over a live gesture. An arrow opens the label overlay;
+    // any kind with an in-place editor opens that instead, inside its own layer.
     const openTextAtClient = (clientX: number, clientY: number) => {
-        if (!canEdit || tool !== 'select' || editing || frozenRef.current) return;
+        if (!canEdit || tool !== 'select' || textEditing || frozenRef.current) return;
         const p = clientToScene(clientX, clientY);
-        const hit = hitTestTopmost(ordered, p, zoom, committedById, coarse);
+        const hit = hitTestTopmost(ordered, p, viewportRef.current.zoom, committedById, coarse);
         const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
         if (hitEl?.type === 'arrow') openEditArrowLabel(hitEl);
+        else if (hitEl && ELEMENT_KIND_UI[hitEl.type].InPlaceEditor) openRichText(hitEl.id);
     };
     const onDoubleClick = (e: React.MouseEvent) => openTextAtClient(e.clientX, e.clientY);
 
@@ -1128,7 +874,7 @@ export function VectorCanvas({
     // uses hit-testing (elements have no per-node DOM), so this lives on the container, not per object.
     const onContextMenu = (e: React.MouseEvent) => {
         // frozenRef: no menu over a live left-button gesture (marquee/move keeps its capture).
-        if (!canEdit || editing || frozenRef.current) return;
+        if (!canEdit || textEditing || frozenRef.current) return;
         // A multi-point draft runs unfrozen but still owns the pointer: no menu (object or browser)
         // mid-draft — the draft keeps floating and the next left click keeps placing points.
         if (drawing.multiPointDraft) {
@@ -1136,7 +882,7 @@ export function VectorCanvas({
             return;
         }
         const p = clientToScene(e.clientX, e.clientY);
-        const hitId = hitTestTopmost(ordered, p, zoom, committedById, coarse);
+        const hitId = hitTestTopmost(ordered, p, viewportRef.current.zoom, committedById, coarse);
         if (!hitId) return;
         if (!selectedIds.includes(hitId)) setSelectedIds([hitId]);
         objectContextMenu.handleContextMenu(e, hitId);
@@ -1144,50 +890,11 @@ export function VectorCanvas({
 
     // Menu ops act on the full selection, wired to the same writes as ⌘[/] , ⌘D, and Delete so the
     // menu and the keyboard stay one behavior (one sealed undo step each).
-    const onMenuArrange = (op: ZOp) => applyZOrder(op, elements, selectedIds, updateElements, undoManager);
+    const onMenuArrange = (op: ZOp) => applyZOrder(op, visibleElements, selectedIds, updateElements, undoManager);
     const onMenuDuplicate = () => duplicateSelection(selectedIds, duplicateElements, setSelectedIds, undoManager);
     const onMenuDelete = () => deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager);
-    // Menu clipboard rows: no ClipboardEvent here, so copy/cut go through the async writer and paste
-    // through the async reader (eigen items only — OS files still need ⌘V). Same producer/consumer as
-    // the keyboard path, so the two stay one behavior.
-    const onMenuCopy = () => {
-        const data = buildData();
-        if (!data.items.length) return;
-        // The inliner promise goes straight into the writer: the clipboard write must start inside
-        // the user gesture (Safari/Firefox), not after the media fetch resolves.
-        void writeEigenClipboardAsync(data, plainText(), foreignImgHtml(data.svg)).catch(() => {});
-    };
-    const onMenuCut = () => {
-        const data = buildData();
-        if (!data.items.length) return;
-        // Delete only once the async write lands — a denied/failed clipboard write must not destroy
-        // the selection (the content would exist nowhere but the undo stack).
-        void writeEigenClipboardAsync(data, plainText(), foreignImgHtml(data.svg))
-            .then(() => deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager))
-            .catch(() => {});
-    };
-    const onMenuPaste = () => {
-        (async () => {
-            const data = await readEigenClipboardAsync();
-            if (data) {
-                pasteEigenItems(data.items);
-                return;
-            }
-            // Non-eigen clipboard: mirror the keyboard path's plain-text fallback (same
-            // pasteNonEigenText policy). OS-file image paste stays ⌘V-only (the async API exposes no
-            // File objects for the drop pipeline).
-            let html = '';
-            let text = '';
-            for (const clip of await navigator.clipboard.read()) {
-                if (!html && clip.types.includes('text/html')) html = await (await clip.getType('text/html')).text();
-                if (!text && clip.types.includes('text/plain')) text = await (await clip.getType('text/plain')).text();
-            }
-            pasteNonEigenText(html, text);
-        })().catch(() => {
-            /* clipboard read denied or unavailable */
-        });
-    };
-
+    // A comment is raised on the right-clicked element, not on the selection: a card anchors to one element.
+    const menuItemId = objectContextMenu.item;
     // Touch/stylus policy (penMode palm rejection, two-finger pan/pinch, double-tap → text) lives in
     // the sibling module; the canvas only dispatches. Its second-finger takeover ends any live one-finger
     // gesture through this callback (a draw draft in the tools hook, else a canvas create/move/marquee).
@@ -1210,6 +917,10 @@ export function VectorCanvas({
         containerRef.current?.focus();
         // Touch gestures get first dibs (a second finger must intercept even while frozen).
         if (touch.onPointerDown(e)) return;
+        // A pointerdown that reaches the CONTAINER is outside the editor (the editor stops its own), so
+        // it ends the session; the session's viewport freeze is lifted by its effect on the next render,
+        // so this click only closes — the following one selects or draws.
+        if (richTextEditRef.current) closeRichText();
         if (frozenRef.current) return; // a gesture is already active (defensive)
         if (panMode || e.button === 1) {
             e.preventDefault();
@@ -1228,23 +939,12 @@ export function VectorCanvas({
         // the event for those tools and the canvas does nothing more.
         if (drawing.onPointerDown(e, p)) return;
 
-        // Rich-text tool: a click places an EMPTY box at the point and selects it (no drag-create, no
-        // capture). There is no in-place editor, so nothing opens over it.
-        if (tool === 'richtext') {
-            e.preventDefault();
-            undoManager?.stopCapturing();
-            const id = addElement({ type: 'richtext', x: p.x, y: p.y, angle: 0, ...NEW_RICHTEXT_SIZE });
-            undoManager?.stopCapturing();
-            if (id) setSelectedIds([id]);
-            if (!toolLocked) setTool('select');
-            return;
-        }
-
         containerRef.current?.setPointerCapture(e.pointerId);
 
-        // Shape tool → start a local (not-yet-Yjs) drag-create. (Freehand/line/eraser already
-        // returned via the tools hook, the richtext tool just above.)
-        if (tool === 'rectangle' || tool === 'diamond' || tool === 'ellipse') {
+        // Box tool → start a local (not-yet-Yjs) drag-create. (Freehand/line/eraser already returned via
+        // the tools hook.) Rich text drags out like a shape; a click under the threshold places the
+        // default box instead of discarding it — see finishGesture.
+        if (isBoxTool(tool)) {
             frozenRef.current = true;
             undoManager?.stopCapturing();
             setSelectedIds([]);
@@ -1258,7 +958,7 @@ export function VectorCanvas({
         }
 
         // Select tool.
-        const hitId = hitTestTopmost(ordered, p, zoom, committedById, coarse);
+        const hitId = hitTestTopmost(ordered, p, viewportRef.current.zoom, committedById, coarse);
         if (hitId) {
             if (e.shiftKey) {
                 toggle(hitId); // shift-click toggles membership, no move
@@ -1327,8 +1027,8 @@ export function VectorCanvas({
         // the tools hook, which consumes the move.
         if (drawing.onPointerMove(e)) return;
         // Hover affordance (idle select): one hitTestTopmost on this same move path (no separate scanner) flips the `move` cursor; a gesture never pays for it.
-        if (!g && tool === 'select' && !editing) {
-            const over = hitTestTopmost(ordered, scene, zoom, committedById, coarse) !== null;
+        if (!g && tool === 'select' && !textEditing) {
+            const over = hitTestTopmost(ordered, scene, viewportRef.current.zoom, committedById, coarse) !== null;
             if (over !== hoveringSelectable) setHoveringSelectable(over);
         }
         if (!g || e.pointerId !== g.pointerId) return;
@@ -1371,7 +1071,7 @@ export function VectorCanvas({
                     boundsToBox(b),
                     g.snapTargets,
                     'move',
-                    SNAP_SCREEN_THRESHOLD / zoom,
+                    SNAP_SCREEN_THRESHOLD / viewportRef.current.zoom,
                     anyRotated,
                     lockAxis,
                 );
@@ -1424,20 +1124,27 @@ export function VectorCanvas({
             const c = creating;
             setCreating(null);
             if (!toolLocked) setTool('select');
-            if (c && (c.box.width >= CREATE_MIN_SIZE || c.box.height >= CREATE_MIN_SIZE)) {
-                const id = addElement({
-                    type: c.type,
-                    x: c.box.x,
-                    y: c.box.y,
-                    width: Math.max(MIN_ELEMENT_SIZE, c.box.width),
-                    height: Math.max(MIN_ELEMENT_SIZE, c.box.height),
-                    seed: c.seed,
-                });
-                if (id) setSelectedIds([id]);
-                // Trailing seal: a nudge inside the 500ms capture window must not merge into
-                // this gesture's undo step (nudges deliberately carry no leading stopCapturing).
-                undoManager?.stopCapturing();
-            }
+            if (!c) return;
+            // A drag under the threshold is a CLICK: a shape is discarded, a rich-text box is placed at
+            // its default size, because a click is how you start typing.
+            const clicked = c.box.width < CREATE_MIN_SIZE && c.box.height < CREATE_MIN_SIZE;
+            if (clicked && c.type !== 'richtext') return;
+            const box = clicked ? { ...c.box, ...NEW_RICHTEXT_SIZE } : c.box;
+            const id = addElement({
+                type: c.type,
+                x: box.x,
+                y: box.y,
+                width: Math.max(MIN_ELEMENT_SIZE, box.width),
+                height: Math.max(MIN_ELEMENT_SIZE, box.height),
+                seed: c.seed,
+            });
+            if (id) setSelectedIds([id]);
+            // Trailing seal: a nudge inside the 500ms capture window must not merge into
+            // this gesture's undo step (nudges deliberately carry no leading stopCapturing).
+            undoManager?.stopCapturing();
+            // A kind with an in-place editor opens it on creation — an empty box you cannot type into is
+            // not a text tool.
+            if (id && ELEMENT_KIND_UI[c.type].InPlaceEditor) openRichText(id);
             return;
         }
         if (g.kind === 'move') {
@@ -1456,11 +1163,11 @@ export function VectorCanvas({
                     // Past the unbind threshold, a dragged arrow detaches from any bound shape left behind
                     // (a shape dragged along stays bound — updateElements re-snaps it).
                     const movedIds = new Set(g.ids);
-                    const farEnough = Math.hypot(dx, dy) * zoom >= ARROW_UNBIND_SCREEN;
+                    const farEnough = Math.hypot(dx, dy) * viewportRef.current.zoom >= ARROW_UNBIND_SCREEN;
                     const patches = g.ids
                         .filter((id) => previews[id])
                         .map((id) => {
-                            const el = elementsRef.current.find((e) => e.id === id);
+                            const el = visibleRef.current.find((e) => e.id === id);
                             const fields: VectorElementPatch = { x: previews[id].x, y: previews[id].y };
                             if (farEnough && el?.type === 'arrow')
                                 Object.assign(fields, unbindDraggedArrow(el, movedIds));
@@ -1491,7 +1198,9 @@ export function VectorCanvas({
         finishGesture(e.altKey);
     };
 
-    const selectedRender = ordered.filter((el) => selectedIds.includes(el.id)).map(renderEl);
+    // The O(elements) scan is memoized; the map over it is O(selection) and reads the live previews.
+    const selectedElements = useMemo(() => ordered.filter((el) => selectedIds.includes(el.id)), [ordered, selectedIds]);
+    const selectedRender = selectedElements.map(renderEl);
     const single = selectedRender.length === 1 ? selectedRender[0] : null;
     // elementBounds is arrow-aware, so the union ring encloses a labeled arrow's overhang and an
     // elbow arrow's routed bends (arrowRoute, preview-aware via renderById).
@@ -1506,16 +1215,68 @@ export function VectorCanvas({
         ((single.type === 'arrow' && single.elbow) || parsePoints(single.points).length <= 2);
     // Chrome is suppressed during a create/marquee drag (grip flicker), a vertex drag (drawing.hiddenId —
     // else a stale box lingers over the reshaping point draft), or a text overlay; a move keeps it.
-    const showChrome = !creating && !marquee && !editing && !drawing.active && !drawing.hiddenId;
+    const showChrome = !creating && !marquee && !textEditing && !drawing.active && !drawing.hiddenId;
     const showTransform = showChrome && canEdit && single !== null && !singleLinear2pt;
 
     const cursor = pointerCursor({ panning, panMode, tool, hoveringSelectable });
-    const background = isTransparentColor(meta.background) ? undefined : meta.background;
+    // The scene's own paint is the INFINITE canvas's background. A frame paints its own (below) and
+    // the surface around it stays the app's, so a letterboxed page reads as a page.
+    const background = viewport === 'infinite' && !isTransparentColor(meta.background) ? meta.background : undefined;
 
     // One scene node — every render path routes through here so `byId` (an elbow arrow's route context) is
     // threaded in one place, not per callsite.
     const node = (el: VectorElement) => (
-        <ElementNode key={el.id} el={el} resolveMedia={resolveMediaUrl} byId={renderById} />
+        <ElementLayer key={el.id} el={el} resolveMedia={resolveMediaUrl} byId={renderById} />
+    );
+
+    // Every element's layer, in z-order, plus the in-flight create and freehand/vertex drafts.
+    const layers = (
+        <>
+            {ordered.map((el) => {
+                // A line being vertex-dragged is drawn by the drawing preview below instead.
+                if (drawing.hiddenId === el.id) return null;
+                // Only an arrow label opens the overlay, so the element under edit keeps its
+                // shaft/heads and hides just the label the textarea draws (render text='').
+                if (editing?.id === el.id && el.type === 'arrow') return node(renderEl({ ...el, text: '' }));
+                // The box being edited draws nothing of its own: the in-place editor inside its layer
+                // IS the rendering, painted with the same CSS the renderer would have emitted.
+                if (el.id === richTextEditId) {
+                    const Editor = ELEMENT_KIND_UI[el.type].InPlaceEditor;
+                    return Editor ? (
+                        <ElementLayer key={el.id} el={renderEl(el)} resolveMedia={resolveMediaUrl} byId={renderById}>
+                            <Editor
+                                element={el}
+                                onChange={(fields) => updateElement(el.id, fields)}
+                                onExit={closeRichText}
+                            />
+                        </ElementLayer>
+                    ) : null;
+                }
+                return node(renderEl(el));
+            })}
+            {creating && node(creatingElement(creating))}
+            {/* Live freehand/line draft, or a point-edit reshape — the SAME render path. */}
+            {drawing.previewElement && node(drawing.previewElement)}
+        </>
+    );
+
+    // A frame is a page: it paints its own background and CLIPS what overhangs it. The infinite canvas
+    // has no such box — its layers sit straight on the scene.
+    const frameLayers = frame ? (
+        <div
+            className="absolute overflow-hidden"
+            style={{
+                left: 0,
+                top: 0,
+                width: frame.width,
+                height: frame.height,
+                ...getBackgroundStyle(parseBackgroundFill(frame.background), resolveMediaUrl),
+            }}
+        >
+            {layers}
+        </div>
+    ) : (
+        layers
     );
 
     return (
@@ -1544,27 +1305,58 @@ export function VectorCanvas({
             onPaste={onPaste}
             {...fileDropProps}
         >
+            {/* The scene: plain SCENE units, one layer div per element. pointer-events-none — hit
+                testing is geometry math on the container, never DOM hit testing. The viewport writes
+                the transform of this node (and of the two below) itself, so a pan/zoom event moves
+                them without a React render. */}
+            <div ref={sceneRef} className="pointer-events-none absolute inset-0 origin-top-left">
+                {frameLayers}
+            </div>
+            {/* Scene-space chrome stays SVG: guides and bind affordances ride rotation/zoom for free. */}
             <svg className="pointer-events-none absolute inset-0 h-full w-full" xmlns={SVG_NS}>
-                <g transform={groupTransform}>
-                    {ordered.map((el) => {
-                        // A line being vertex-dragged is drawn by the drawing preview below instead.
-                        if (drawing.hiddenId === el.id) return null;
-                        // Only an arrow label opens the overlay, so the element under edit keeps its
-                        // shaft/heads and hides just the label the textarea draws (render text='').
-                        if (editing?.id === el.id && el.type === 'arrow') return node(renderEl({ ...el, text: '' }));
-                        return node(renderEl(el));
-                    })}
-                    {creating && node(creatingElement(creating))}
-                    {/* Live freehand/line draft, or a point-edit reshape — the SAME elementToSvg path. */}
-                    {drawing.previewElement && node(drawing.previewElement)}
+                <g ref={overlayRef}>
                     <SnapGuides lines={snapLines} />
-                    {/* Bind-target chrome — SVG in the scene group, so it rides rotation/roundness/zoom. */}
                     {drawing.bindingOutline}
                     {drawing.snapDots}
                     {drawing.focusIndicators}
                 </g>
             </svg>
-            <div className="pointer-events-none absolute inset-0">
+            {/* Screen-space chrome, laid out by boxToStyle at the viewport React last rendered; a live
+                gesture moves the whole layer with one transform (chromeTransform) instead. */}
+            <div ref={chromeRef} className="pointer-events-none absolute inset-0 origin-top-left">
+                {/* Comment flags: screen-space like the selection ring, so they keep their size at any zoom. */}
+                {onOpenCard &&
+                    commentedElements.map(({ id, cardId, corner }) => {
+                        const { left, top } = boxToStyle(corner);
+                        return (
+                            <button
+                                key={id}
+                                type="button"
+                                className="pointer-events-auto absolute -translate-y-1/2 translate-x-1/2 rounded-full bg-background p-0.5 text-muted-foreground shadow"
+                                style={{ left, top }}
+                                onClick={() => onOpenCard(cardId)}
+                                title="Open comment"
+                            >
+                                <MessageSquare className="h-3 w-3" />
+                            </button>
+                        );
+                    })}
+                {/* ⌘F match rings, in the same screen-space chrome layer as the selection ring. */}
+                {matchedElements.map((el) => (
+                    <div
+                        key={el.id}
+                        className={cn(
+                            'pointer-events-none absolute',
+                            el.id === searchActiveId
+                                ? 'eigen-search-ring-active eigen-search-flash'
+                                : 'eigen-search-ring',
+                        )}
+                        style={{
+                            ...boxToStyle(elementBox(el)),
+                            transform: el.angle ? `rotate(${el.angle}deg)` : undefined,
+                        }}
+                    />
+                ))}
                 {showTransform && single && (
                     <ObjectTransform
                         box={elementBox(single)}
@@ -1596,7 +1388,7 @@ export function VectorCanvas({
                                 // A linear element rescales its points to the new box through resizeLinear,
                                 // reading the COMMITTED element so the total scale is exact.
                                 if (next.width !== start.width || next.height !== start.height) {
-                                    const base = elementsRef.current.find((b) => b.id === single.id);
+                                    const base = visibleRef.current.find((b) => b.id === single.id);
                                     if (base && isLinearElement(base)) {
                                         const r = resizeLinear(base, next);
                                         fields.width = r.width;
@@ -1654,10 +1446,15 @@ export function VectorCanvas({
                         onCommit={commitEditing}
                     />
                 )}
+                {/* Remote peers: cursors + selection rings. Screen-space (its own subscription), above
+                    the local chrome; renders nothing when alone. */}
+                <CursorLayer
+                    provider={provider}
+                    boxes={cursorBoxes}
+                    boxToStyle={boxToStyle}
+                    isPeerVisible={isPeerVisible}
+                />
             </div>
-            {/* Remote peers: cursors + selection rings. Screen-space (its own subscription), above
-                the scene + local chrome; renders nothing when alone. */}
-            <CursorLayer provider={provider} boxes={cursorBoxes} boxToStyle={boxToStyle} />
             {/* OS-file drag-over affordance. Shown only when a drop would actually insert (the drop
                 hook stays enabled even when it wouldn't — see above). */}
             <FileDropOverlay visible={isDragging && imagesEnabled} label="Drop images to add" icon={ImageIcon} />
@@ -1673,7 +1470,7 @@ export function VectorCanvas({
             <HintPill className="bottom-3 right-3" title="Reset zoom" onClick={resetZoom}>
                 {Math.round(zoom * 100)}%
             </HintPill>
-            <VectorObjectMenu
+            <CanvasObjectMenu
                 contextMenu={objectContextMenu}
                 onArrange={onMenuArrange}
                 onCopy={onMenuCopy}
@@ -1681,6 +1478,7 @@ export function VectorCanvas({
                 onPaste={onMenuPaste}
                 onDuplicate={onMenuDuplicate}
                 onDelete={onMenuDelete}
+                onComment={onAddComment && menuItemId ? () => onAddComment(menuItemId) : undefined}
             />
         </div>
     );

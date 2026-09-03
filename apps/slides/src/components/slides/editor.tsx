@@ -26,7 +26,12 @@ import {
 import { escapeHtml } from '@workspace/lib/html';
 import { htmlToPlainText, readDominantTextAlign, sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
 import { OBJECT_FIELDS } from '@workspace/lib/slides';
-import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
+import type {
+    EigenClipboardData,
+    EigenClipboardImageItem,
+    EigenClipboardItem,
+    EigenClipboardTextItem,
+} from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
@@ -122,7 +127,10 @@ const PASTE_OFFSET = 24;
 // shipped paste-in-place UX survives: cross-slide paste lands at the source coordinates
 // (footer/logo workflows), same-slide paste offsets. Cross-app items have no meta.x/y and anchor
 // at the defaults. Typography is layered on top for text items by the caller.
-function clipboardItemOverrides(item: EigenClipboardItem, activeSlideId: string | null): Record<string, unknown> {
+function clipboardItemOverrides(
+    item: EigenClipboardImageItem | EigenClipboardTextItem,
+    activeSlideId: string | null,
+): Record<string, unknown> {
     const overrides: Record<string, unknown> = {};
     const box = readClipboardBox(item);
     overrides.width = box.width;

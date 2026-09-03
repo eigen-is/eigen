@@ -1,7 +1,7 @@
 import { useCollabDoc } from '@workspace/lib/collab';
 import {
     arrowsBoundTo,
-    DEFAULT_ELEMENT_PROPS,
+    baseDefaultsFor,
     DEFAULT_SCENE_META,
     ELEMENT_FIELDS,
     ELEMENT_KINDS,
@@ -10,18 +10,27 @@ import {
     generateNKeysBetween,
     isVectorElementType,
     readVectorFromDoc,
-    VECTOR_STYLE_DEFAULTS,
+    type StyleDefaults,
     type VectorArrowElement,
     type VectorElementType,
+    type VectorFrame,
     type VectorImageElement,
     type VectorLinearElement,
+    type VectorMeta,
     type VectorRichTextElement,
     type VectorScene,
     type VectorShapeElement,
 } from '@workspace/lib/vector';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import * as Y from 'yjs';
 import { duplicateElementsInDoc, hasSeed, newElementId, topmostIndex } from './element-writes';
+import {
+    addFrameInDoc,
+    deleteFrameInDoc,
+    duplicateFrameInDoc,
+    moveFrameInDoc,
+    updateFramesInDoc,
+} from './frame-writes';
 
 // Origin sentinel for writes the UndoManager must IGNORE. Its trackedOrigins defaults to {null}
 // (the ctor below passes none), so any non-null transaction origin escapes capture — while the sync
@@ -29,6 +38,17 @@ import { duplicateElementsInDoc, hasSeed, newElementId, topmostIndex } from './e
 // itself). Used for the pending→real image swap after a cross-mount paste, so the paste is ONE undo
 // step (⌘Z reverts the insert; peers converge via its inverse) instead of two.
 const UNTRACKED_ORIGIN = Symbol('vector-untracked-write');
+
+// One discrete op = one undo step. Y.UndoManager merges everything inside a 500ms capture window, so a
+// discrete op seals on BOTH sides: nothing that happened just before it (a nudge) and nothing that
+// follows joins its step. The canvas' element ops, the panel's writes and the frame ops all go through
+// this — a gesture that deliberately coalesces (a nudge, a keystroke) simply doesn't call it.
+export function sealed<T>(undoManager: Y.UndoManager | null, op: () => T): T {
+    undoManager?.stopCapturing();
+    const result = op();
+    undoManager?.stopCapturing();
+    return result;
+}
 
 // A partial patch over the write/read allow-list — every field optional, so a caller sets any
 // subset of any element variant's fields (the union members share the geometry base). id/type
@@ -44,16 +64,20 @@ export type VectorElementPatch = Partial<Omit<VectorShapeElement, 'id' | 'type'>
 export type NewVectorElement = { type: VectorElementType } & VectorElementPatch;
 
 // Per-type defaults: the geometry box, the shared base props, and the kind's own fields straight from
-// the registry — a new kind needs no entry here.
-function elementDefaults(type: VectorElementType): Record<string, unknown> {
+// the registry, styled by the HOST's table (vector draws rough and hatched, slides flat and solid) —
+// a new kind needs no entry here, and a new host only a table.
+function elementDefaults(type: VectorElementType, style: StyleDefaults): Record<string, unknown> {
     return {
         x: 0,
         y: 0,
         width: 0,
         height: 0,
         angle: 0,
-        ...DEFAULT_ELEMENT_PROPS,
-        ...ELEMENT_KINDS[type].defaults(VECTOR_STYLE_DEFAULTS),
+        // The shared base paint under the kind's overrides: rich text and images use the stroke as a
+        // border, so a fresh one is unframed until the user picks a stroke colour. The panel's reset
+        // rows read the same helper, so a reset restores what creation gave.
+        ...baseDefaultsFor(type),
+        ...ELEMENT_KINDS[type].defaults(style),
     };
 }
 
@@ -111,11 +135,15 @@ function followBoundArrows(doc: Y.Doc, elementsMap: Y.Map<unknown>, patchedIds: 
     }
 }
 
-export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) => {
+export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, defaults: StyleDefaults) => {
     const [scene, setScene] = useState<VectorScene>({ elements: [], frames: [], meta: DEFAULT_SCENE_META });
+    // The host's style table, read at write time so the add callbacks stay dependency-free.
+    const defaultsRef = useRef(defaults);
+    defaultsRef.current = defaults;
 
-    // Shared lifecycle: doc/provider/UndoManager creation + teardown. The UndoManager tracks the two
-    // element roots with default trackedOrigins, so UNTRACKED_ORIGIN writes escape capture (below).
+    // Shared lifecycle: doc/provider/UndoManager creation + teardown. The UndoManager tracks the three
+    // scene roots (elements, frames, meta) with default trackedOrigins, so UNTRACKED_ORIGIN writes
+    // escape capture (below).
     const {
         docRef,
         doc: yjsDoc,
@@ -130,18 +158,21 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         ownerId,
         mountId,
         pathId,
-        undoScope: (doc) => [doc.getMap('elements'), doc.getMap('meta')],
+        undoScope: (doc) => [doc.getMap('elements'), doc.getMap('frames'), doc.getMap('meta')],
         onInit: ({ doc }) => {
             const elementsMap = doc.getMap('elements');
+            const framesMap = doc.getMap('frames');
             const metaMap = doc.getMap('meta');
             // readVectorFromDoc materializes each per-element Y.Map through the ELEMENT_FIELDS
             // whitelist, orders by fractional index, and heals invalid runs — the whole read path.
             const updateReactState = () => setScene(readVectorFromDoc(doc));
             elementsMap.observeDeep(updateReactState);
+            framesMap.observeDeep(updateReactState);
             metaMap.observeDeep(updateReactState);
             updateReactState();
             return () => {
                 elementsMap.unobserveDeep(updateReactState);
+                framesMap.unobserveDeep(updateReactState);
                 metaMap.unobserveDeep(updateReactState);
             };
         },
@@ -156,7 +187,7 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         // seedless kind drops the key (the write loop skips undefined).
         const seed = hasSeed(partial.type) ? (partial.seed ?? Math.floor(Math.random() * 2 ** 31)) : undefined;
         const record: Record<string, unknown> = {
-            ...elementDefaults(partial.type),
+            ...elementDefaults(partial.type, defaultsRef.current),
             ...partial,
             id,
             type: partial.type,
@@ -193,7 +224,7 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
                 const id = newElementId();
                 const seed = hasSeed(partial.type) ? (partial.seed ?? Math.floor(Math.random() * 2 ** 31)) : undefined;
                 const record: Record<string, unknown> = {
-                    ...elementDefaults(partial.type),
+                    ...elementDefaults(partial.type, defaultsRef.current),
                     ...partial,
                     id,
                     type: partial.type,
@@ -229,7 +260,7 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
                     if (!(elMap instanceof Y.Map)) continue;
                     for (const [k, v] of Object.entries(fields)) {
                         if (k === 'id' || k === 'type' || v === undefined) continue;
-                        if ((ELEMENT_FIELDS as readonly string[]).includes(k)) elMap.set(k, v);
+                        if (ELEMENT_FIELDS.includes(k)) elMap.set(k, v);
                     }
                     patchedIds.add(id);
                 }
@@ -275,8 +306,66 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         [],
     );
 
+    // Frame ops: thin wrappers over frame-writes.ts, the way the element ops wrap element-writes.ts.
+    // Each is a discrete op, so each is `sealed` — adding a page then renaming it must be two undo
+    // steps. add/duplicate return the new frame id so the caller can activate it.
+    const addFrame = useCallback(
+        (afterId?: string) => {
+            const doc = docRef.current;
+            return doc ? sealed(undoManager, () => addFrameInDoc(doc, afterId)) : undefined;
+        },
+        [undoManager],
+    );
+
+    const deleteFrame = useCallback(
+        (id: string) => {
+            const doc = docRef.current;
+            if (doc) sealed(undoManager, () => deleteFrameInDoc(doc, id));
+        },
+        [undoManager],
+    );
+
+    const duplicateFrame = useCallback(
+        (id: string) => {
+            const doc = docRef.current;
+            return doc ? sealed(undoManager, () => duplicateFrameInDoc(doc, id)) : undefined;
+        },
+        [undoManager],
+    );
+
+    // `afterId` null moves the frame to the front.
+    const moveFrame = useCallback(
+        (id: string, afterId: string | null) => {
+            const doc = docRef.current;
+            if (doc) sealed(undoManager, () => moveFrameInDoc(doc, id, afterId));
+        },
+        [undoManager],
+    );
+
+    const updateFrames = useCallback((patches: { id: string; fields: Partial<VectorFrame> }[]) => {
+        if (docRef.current) updateFramesInDoc(docRef.current, patches);
+    }, []);
+
+    const updateFrame = useCallback(
+        (id: string, fields: Partial<VectorFrame>) => updateFrames([{ id, fields }]),
+        [updateFrames],
+    );
+
+    // The scene's own settings (background, grid). One sealed write, like every discrete panel op.
+    const updateMeta = useCallback((fields: Partial<VectorMeta>) => {
+        const doc = docRef.current;
+        if (!doc) return;
+        doc.transact(() => {
+            const metaMap = doc.getMap('meta');
+            for (const [key, value] of Object.entries(fields)) {
+                if (value !== undefined) metaMap.set(key, value);
+            }
+        });
+    }, []);
+
     return {
         elements: scene.elements,
+        frames: scene.frames,
         meta: scene.meta,
         addElement,
         addElements,
@@ -286,6 +375,13 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         deleteElements,
         deleteElementsUntracked,
         duplicateElements,
+        addFrame,
+        deleteFrame,
+        duplicateFrame,
+        moveFrame,
+        updateFrame,
+        updateFrames,
+        updateMeta,
         undoManager,
         // Exposed for awareness (cursors + remote selections).
         provider,
@@ -301,3 +397,7 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         unsyncedEdits,
     };
 };
+
+// Everything a canvas host owns of its document: the scene, every writer, the collab lifecycle. The
+// editor takes it whole rather than fifteen threaded props.
+export type CanvasDoc = ReturnType<typeof useCanvasDoc>;

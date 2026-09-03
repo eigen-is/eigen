@@ -1,14 +1,14 @@
+import { backgroundCss } from '../../background';
 import { getFontFamily } from '../../constants/fonts';
 import { stripTagsServer } from '../../core/html';
+import { isTransparentFill, parseFill } from '../fill';
 import { hitTestBox } from '../geometry';
 import { cornerRadius, rectOutline } from '../outline';
 import {
     CORNERS,
     DEFAULT_CORNERS,
     DEFAULT_ELEMENT_PROPS,
-    DEFAULT_FILL_STYLE,
     DEFAULT_RICHTEXT_PROPS,
-    FILL_STYLES,
     FONT_STYLES,
     FONT_WEIGHTS,
     TEXT_ALIGNS,
@@ -18,7 +18,7 @@ import {
 } from '../types';
 import { defineKind } from './kind';
 import { clampNum, color, fillField, fontFamily, fontSize, htmlField, oneOf } from './read-fields';
-import { round } from './render-utils';
+import { isBordered, round } from './render-utils';
 
 export const richTextKind = defineKind<VectorRichTextElement>({
     type: 'richtext',
@@ -27,7 +27,6 @@ export const richTextKind = defineKind<VectorRichTextElement>({
     fields: [
         'html',
         'fill',
-        'fillStyle',
         'corners',
         'fontFamily',
         'fontSize',
@@ -39,7 +38,6 @@ export const richTextKind = defineKind<VectorRichTextElement>({
         'color',
         'letterSpacing',
         'lineHeight',
-        'highlightColor',
         'padding',
     ],
     capabilities: {
@@ -47,6 +45,8 @@ export const richTextKind = defineKind<VectorRichTextElement>({
         fillStyle: false,
         roughness: false,
         corners: true,
+        stroke: true,
+        strokeOptional: true,
         bindable: false,
         silhouette: 'box',
         creation: 'box',
@@ -55,18 +55,18 @@ export const richTextKind = defineKind<VectorRichTextElement>({
         ...DEFAULT_RICHTEXT_PROPS,
         html: '',
         fill: style.fill,
-        fillStyle: style.fillStyle,
         corners: style.corners,
         fontFamily: style.fontFamily,
         fontSize: style.fontSize,
         color: style.color,
     }),
+    // The stroke is this kind's border, so a fresh box paints none until the user picks a colour.
+    baseDefaults: { strokeColor: 'transparent' },
     read: (src, base) => ({
         ...base,
         type: 'richtext',
         html: htmlField(src.get('html')),
         fill: fillField(src.get('fill')),
-        fillStyle: oneOf(src.get('fillStyle'), FILL_STYLES, DEFAULT_FILL_STYLE),
         corners: oneOf(src.get('corners'), CORNERS, DEFAULT_CORNERS),
         fontFamily: fontFamily(src.get('fontFamily')),
         fontSize: fontSize(src.get('fontSize')),
@@ -76,7 +76,6 @@ export const richTextKind = defineKind<VectorRichTextElement>({
         textAlign: oneOf(src.get('textAlign'), TEXT_ALIGNS, DEFAULT_RICHTEXT_PROPS.textAlign),
         verticalAlign: oneOf(src.get('verticalAlign'), VERTICAL_ALIGNS, DEFAULT_RICHTEXT_PROPS.verticalAlign),
         color: color(src.get('color'), DEFAULT_ELEMENT_PROPS.strokeColor),
-        highlightColor: color(src.get('highlightColor'), DEFAULT_RICHTEXT_PROPS.highlightColor),
         // Bounded so a hostile value can't blow every peer's layout: ±200px tracking, 0.5-10x leading,
         // 0-200px inset.
         letterSpacing: clampNum(src.get('letterSpacing'), -200, 200, DEFAULT_RICHTEXT_PROPS.letterSpacing),
@@ -86,16 +85,16 @@ export const richTextKind = defineKind<VectorRichTextElement>({
     hitTest: (el, point) => hitTestBox(el, point),
     outline: (el, inflate) =>
         rectOutline({ x: el.x, y: el.y, width: el.width, height: el.height }, cornerRadius(el, 'rectangle'), inflate),
-    render: (el) => ({ html: el.html, style: richTextStyle(el) }),
+    render: (el) => ({ html: el.html, style: richTextCssText(el) }),
     // The search collector and ⌘F both read plain text; stripTagsServer is the React/DOM-free stripper
     // (core/html.ts), so this works in the API Worker as well as the browser.
     searchText: (el) => stripTagsServer(el.html).trim(),
 });
 
-// The box's typography as CSS, the one body the foreignObject wrapper and the live layer renderer share.
-// `highlightColor` is deliberately absent: it is a text mark applied inside `html`, and painting it on the
-// box is what gave slides its full-width highlight bug.
-function richTextStyle(el: VectorRichTextElement): string {
+// The box's paint + typography as CSS, the one body the foreignObject wrapper, the live layer renderer
+// and the in-place editor share. There is no highlight colour: a marker highlight is a text mark applied inside `html`,
+// and painting one on the box is what gave slides its full-width highlight bug.
+export function richTextCssText(el: VectorRichTextElement): string {
     const justify =
         el.verticalAlign === 'center' ? 'center' : el.verticalAlign === 'bottom' ? 'flex-end' : 'flex-start';
     const style = [
@@ -117,8 +116,19 @@ function richTextStyle(el: VectorRichTextElement): string {
         `letter-spacing:${round(el.letterSpacing)}px`,
         `line-height:${round(el.lineHeight)}`,
     ];
-    // border-box so the inset eats into the stored width/height instead of growing the box. Both
-    // declarations are omitted at padding 0, so an unpadded box's style string is unchanged.
-    if (el.padding > 0) style.push(`padding:${round(el.padding)}px`, 'box-sizing:border-box');
+    // The box background: the same Fill codec and the same CSS the frame/scene backgrounds speak. A
+    // transparent fill is passed as "no fill" — `background-color:transparent` is a paint declaration
+    // for a colour that paints nothing.
+    const fill = parseFill(el.fill);
+    style.push(...backgroundCss(isTransparentFill(fill) ? null : fill));
+    // The stroke fields are this kind's BORDER (types.ts) — CSS border-style shares our vocabulary.
+    const bordered = isBordered(el);
+    if (bordered) style.push(`border:${round(el.strokeWidth)}px ${el.strokeStyle} ${el.strokeColor}`);
+    const radius = cornerRadius(el, 'rectangle');
+    if (radius > 0) style.push(`border-radius:${round(radius)}px`);
+    if (el.padding > 0) style.push(`padding:${round(el.padding)}px`);
+    // border-box once, whatever caused it: the inset and the border eat into the stored width/height
+    // instead of growing the box, so the layer box and the drawn box are the same rectangle.
+    if (bordered || el.padding > 0) style.push('box-sizing:border-box');
     return style.join(';');
 }

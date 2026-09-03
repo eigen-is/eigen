@@ -1,4 +1,6 @@
 export * from './arrange';
+export * from './clipboard';
+export * from './comments';
 export { elbowBindPoint, redockBindingsForElbow } from './elbow-heading';
 export * from './elbow-pins';
 export { arrowRoute, elbowRoute, elbowRoutingContext, sceneBounds } from './elbow-route';
@@ -14,6 +16,8 @@ export * from './outline';
 export * from './read-vector';
 export * from './scene-layers';
 export type { MediaResolver, SceneToSvgOptions } from './scene-to-svg';
-export { elementToSvg, sceneToSvg } from './scene-to-svg';
+export { elementToSvg, SVG_NS, sceneToSvg } from './scene-to-svg';
+export * from './search-scene';
 export * from './snap';
 export * from './types';
+export * from './viewport';

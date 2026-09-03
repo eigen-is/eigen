@@ -1,4 +1,4 @@
-// The text-editing SESSION model + its pure builders, factored out of vector-canvas.tsx so the canvas
+// The text-editing SESSION model + its pure builders, factored out of canvas-editor.tsx so the canvas
 // only DISPATCHES (the ground-rule that the canvas file must not grow). A session drives the TextOverlay
 // and is committed back by the canvas' commitEditing.
 //

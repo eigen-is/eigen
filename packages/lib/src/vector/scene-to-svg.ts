@@ -12,7 +12,9 @@ import { ELEMENT_KINDS } from './kinds';
 import { escapeXml, round } from './kinds/render-utils';
 import type { VectorElement, VectorScene } from './types';
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
+// The SVG namespace, one spelling for every surface that writes it: the documents this module
+// serializes and the live <svg> nodes the canvas mounts.
+export const SVG_NS = 'http://www.w3.org/2000/svg';
 const DEFAULT_PADDING = 10;
 
 // A foreignObject clips to its own rect, so text a hair wider than the box the client measured would
@@ -29,9 +31,6 @@ export type MediaResolver = (mediaName: string) => string | null;
 export type SceneToSvgOptions = {
     resolveMedia?: MediaResolver;
     padding?: number;
-    // elementToSvg only: false ⇒ the bare fragment, no translate/rotate/opacity, for a caller that places
-    // the element itself. No such caller yet — sceneLayers reads the kind's render directly.
-    positioned?: boolean;
 };
 
 export function sceneToSvg(scene: VectorScene, opts: SceneToSvgOptions = {}): string {
@@ -55,8 +54,7 @@ export function sceneToSvg(scene: VectorScene, opts: SceneToSvgOptions = {}): st
         body += `<rect x="${minX}" y="${minY}" width="${width}" height="${height}" fill="${escapeXml(scene.meta.background)}"/>`;
     }
     for (const el of ordered) {
-        // A scene always places its own elements, whatever the caller asked elementToSvg for.
-        body += elementToSvg(el, { ...opts, positioned: true }, byId);
+        body += elementToSvg(el, opts, byId);
     }
 
     return `<svg xmlns="${SVG_NS}" width="${width}" height="${height}" viewBox="${minX} ${minY} ${width} ${height}">${body}</svg>`;
@@ -81,7 +79,6 @@ export function elementToSvg(
             ? out.svg
             : `<foreignObject x="0" y="0" width="${round(el.width)}" height="${round(el.height)}" overflow="visible"><div xmlns="http://www.w3.org/1999/xhtml" class="${HTML_WRAPPER_CLASS}" style="${escapeXml(out.style)}">${HTML_WRAPPER_RESET}${out.html}</div></foreignObject>`;
     if (body === '') return '';
-    if (opts.positioned === false) return body;
     return `${groupOpen(el)}${body}</g>`;
 }
 

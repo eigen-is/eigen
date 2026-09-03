@@ -386,7 +386,7 @@ export const GOLDEN_VECTOR_LABEL = 'Bound label';
 export function buildGoldenVectorScene(): VectorScene {
     const base = { ...DEFAULT_ELEMENT_PROPS, angle: 0 };
     // The fill codec's transparent solid — what every element painted before `fill` existed.
-    const filled = { fill: solidFill('transparent'), fillStyle: 'solid' } as const;
+    const filled = { fill: solidFill('transparent') } as const;
     const elements: VectorElement[] = [
         {
             ...base,
@@ -439,7 +439,6 @@ export function buildGoldenVectorScene(): VectorScene {
             color: '#1e1e1e',
             letterSpacing: 0,
             lineHeight: 1.2,
-            highlightColor: 'transparent',
             padding: 0,
         },
         {
@@ -543,7 +542,7 @@ export function buildGoldenVectorScene(): VectorScene {
     return { elements, frames: [], meta: { background: 'transparent', gridSize: 20 } };
 }
 
-// Write a VectorScene into a Y.Doc the way use-vector-doc.ts persists one: a per-element
+// Write a VectorScene into a Y.Doc the way use-canvas-doc.ts persists one: a per-element
 // Y.Map under the `elements` root plus the `meta` root. read-vector reads only the
 // ELEMENT_FIELDS keys, so setting every own field is safe.
 export function seedVectorDoc(doc: Y.Doc, scene: VectorScene): void {

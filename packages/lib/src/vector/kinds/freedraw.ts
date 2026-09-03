@@ -4,6 +4,7 @@ import { isTransparentFill, parseFill } from '../fill';
 import {
     distanceToPolyline,
     FREEDRAW_SIZE_FACTOR,
+    isClosedLinear,
     isClosedPath,
     LINEAR_HIT_SCREEN_FACTOR,
     linearLocalToScene,
@@ -15,13 +16,7 @@ import {
     serializePressures,
 } from '../geometry';
 import { polylineOutline } from '../outline';
-import {
-    DEFAULT_FILL_STYLE,
-    DEFAULT_LINEAR_ROUNDNESS,
-    FILL_STYLES,
-    ROUNDNESS,
-    type VectorLinearElement,
-} from '../types';
+import { DEFAULT_LINEAR_ROUNDNESS, ROUNDNESS, type VectorLinearElement } from '../types';
 import { defineKind } from './kind';
 import { bool, clampCoord, fillField, oneOf, roughness, seed, str } from './read-fields';
 import { drawableToSvg, escapeXml, fillDefs, getSvgPathFromStroke, linearRoughOptions } from './render-utils';
@@ -29,19 +24,22 @@ import { drawableToSvg, escapeXml, fillDefs, getSvgPathFromStroke, linearRoughOp
 export const freedrawKind = defineKind<VectorLinearElement>({
     type: 'freedraw',
     is: (el): el is VectorLinearElement => el.type === 'freedraw',
-    fields: ['fill', 'fillStyle', 'roughness', 'seed', 'points', 'roundness', 'pressures', 'simulatePressure'],
+    fields: ['fill', 'roughness', 'seed', 'points', 'roundness', 'pressures', 'simulatePressure'],
     capabilities: {
         fill: true,
         fillStyle: true,
         roughness: true,
         corners: false,
+        stroke: true,
+        strokeOptional: false,
         bindable: false,
         silhouette: 'box',
         creation: 'freedraw',
     },
+    // An OPEN stroke paints no fill (render below), so it has none to offer.
+    capabilitiesOf: (el) => ({ fill: isClosedLinear(el) }),
     defaults: (style) => ({
         fill: style.fill,
-        fillStyle: style.fillStyle,
         roughness: style.roughness,
         seed: 0, // the writer replaces it with a random one; 0 keeps `defaults` pure
         points: '',
@@ -67,7 +65,6 @@ export const freedrawKind = defineKind<VectorLinearElement>({
             ...base,
             type: 'freedraw',
             fill: fillField(src.get('fill')),
-            fillStyle: oneOf(src.get('fillStyle'), FILL_STYLES, DEFAULT_FILL_STYLE),
             roughness: roughness(src.get('roughness')),
             seed: seed(src.get('seed')),
             roundness: oneOf(src.get('roundness'), ROUNDNESS, DEFAULT_LINEAR_ROUNDNESS),

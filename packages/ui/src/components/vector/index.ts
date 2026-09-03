@@ -1,8 +1,12 @@
+export { CanvasEditor, type CanvasImageInsert } from './canvas-editor';
+export { CanvasPropertiesPanel } from './canvas-properties-panel';
+export { useCanvasComments } from './hooks/use-canvas-comments';
+export type { NewVectorElement, VectorElementPatch } from './hooks/use-canvas-doc';
+export { useCanvasDoc } from './hooks/use-canvas-doc';
+export { useCanvasDocSearch } from './hooks/use-canvas-doc-search';
+export { type PublishCursor, useCanvasPresence } from './hooks/use-canvas-presence';
 export { useSelection } from './hooks/use-selection';
 export { useTool, VECTOR_TOOLS, type VectorTool } from './hooks/use-tool';
-export type { NewVectorElement, VectorElementPatch } from './hooks/use-vector-doc';
-export { useVectorDoc } from './hooks/use-vector-doc';
-export { type PublishCursor, useVectorPresence } from './hooks/use-vector-presence';
 export {
     isVectorFontLoaded,
     loadVectorFont,
@@ -10,5 +14,3 @@ export {
     type TextDimensions,
     vectorFontString,
 } from './text-measure';
-export { VectorCanvas, type VectorImageInsert } from './vector-canvas';
-export { VectorPropertiesPanel } from './vector-properties-panel';

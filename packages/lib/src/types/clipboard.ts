@@ -14,8 +14,9 @@
 // media listing captured before the paste's own re-upload, missed, and fell back to a 4:3 default.
 // Forged wires are filtered at the read seam (parseEigenJson), so consumers carry no fallbacks.
 //
-// No `x`/`y`: paste anchors at each app's own default/cursor/viewport-centre, so absolute scene
-// position is not carried.
+// No `x`/`y` on the image and text items: paste anchors at each app's own default/cursor/viewport-centre.
+// The `elements` item is the exception, and says why on itself — pasting a drawing back into a drawing is
+// a paste IN PLACE, so it carries the stored coordinates.
 
 // Best-effort cross-app text styling. Canonical names shared with slides/vector and the properties
 // panel; `fontFamily` is the EIGEN_FONTS name (per the fontFamily value canon), not a CSS stack.
@@ -66,7 +67,26 @@ export type EigenClipboardImageItem = {
     meta?: Record<string, unknown>; // app-private extras only (never geometry)
 };
 
-export type EigenClipboardItem = EigenClipboardTextItem | EigenClipboardImageItem;
+// A canvas selection as NATIVE elements: whole stored records (the ELEMENT_FIELDS scalars), so a
+// canvas→canvas paste restores exactly what was copied — including every field a future kind adds, which
+// the old per-kind `meta.vector` carrier had to re-list by hand and kept losing (rich text's colour, most
+// recently). Consumers that cannot place elements ignore this item and read the image / text items beside
+// it, or the `svg` flavour. Coordinates are the STORED ones (scene coordinates on an infinite canvas,
+// frame-relative inside a frame) — the one item type that carries position, because pasting a drawing back
+// into a drawing is a paste IN PLACE, not "at the app's default spot".
+export type EigenClipboardElementsItem = {
+    type: 'elements';
+    elements: Record<string, string | number | boolean>[];
+    // '' when the source was an infinite canvas. A paste into the SAME frame offsets the copy; one into a
+    // different frame lands in place.
+    sourceFrameId: string;
+    // The selection's bounding box, so every item on the wire carries both dimensions and
+    // `parseEigenJson`'s filter needs no special case.
+    width: number;
+    height: number;
+};
+
+export type EigenClipboardItem = EigenClipboardTextItem | EigenClipboardImageItem | EigenClipboardElementsItem;
 
 export type EigenClipboardData = {
     version: 1;

@@ -20,7 +20,7 @@ const CURSOR_THROTTLE_MS = 50;
 // Publishes the local user's presence onto the deck's Yjs awareness: the identity (name + color) once,
 // the selected object ids on change, the active slide id on change, and a throttled scene cursor via
 // the shared useThrottledAwarenessField (leading + trailing, null clears immediately). Mirrors vector's
-// use-vector-presence (`userColor(user.id)` + `user.name`) with one slides-only field — `slideId` — so
+// use-canvas-presence (`userColor(user.id)` + `user.name`) with one slides-only field — `slideId` — so
 // the shared CursorLayer can hide peers viewing a different slide (the host-side filter; the layer
 // itself stays scope-agnostic). Cursor lives in slide-unit space so a peer renders at the right spot on
 // any canvas size (the same units boxToStyle maps to percent). Not gated on write access: a read-only

@@ -9,15 +9,15 @@
 
 import { type Bounds, boxCenter, getElementBounds, type Point, rotatePoint } from '../geometry';
 import type { OutlineShape } from '../outline';
-import type { Corners, FillStyle, VectorElement, VectorElementBase } from '../types';
+import type { Corners, VectorElement, VectorElementBase } from '../types';
+import type { YMapLike } from './read-fields';
 
 // What a host's new elements look like: vector draws rough and hatched in Excalifont, slides flat and
 // solid in Inter. One table per app, not a per-kind fork.
 export type StyleDefaults = {
     strokeColor: string;
     strokeWidth: number;
-    fill: string; // a serialized Fill
-    fillStyle: FillStyle;
+    fill: string; // a serialized Fill — paint AND hatch style
     roughness: number;
     corners: Corners;
     fontFamily: string;
@@ -30,11 +30,24 @@ export type StyleDefaults = {
 // One entry per question something actually asks — a capability nothing reads is a second list waiting
 // to disagree with the code that does the work.
 export type Capabilities = {
+    // Whether the kind paints a Fill at all. GEOMETRY-DEPENDENT on the linear kinds (an open stroke has
+    // nothing to fill), so read it through capabilitiesOf(el), never off this table.
     fill: boolean;
+    // Whether the kind's renderer honours the hatch style HALF of that fill. Rich text paints its box
+    // background as CSS and an arrow's fill is its arrowheads', so neither hatches.
     fillStyle: boolean;
     // Also "is this kind drawn by roughjs at all": the sketch paint rows follow it.
     roughness: boolean;
     corners: boolean;
+    // The Stroke rows (colour / width / style). True on every kind today: shapes and linear elements
+    // draw the stroke, image and rich text use it as their border. It is a capability rather than an
+    // ungated panel section so a future kind that paints no stroke has one place to say so.
+    stroke: boolean;
+    // Whether the stroke may be switched OFF (the Stroke colour row offers a None swatch). True where
+    // the element still has a body without it — a shape's fill, an image's pixels, a text box's text.
+    // Not derivable from `fill`: a line fills only when its path closes yet IS its stroke, and an
+    // image's body is pixels rather than a Fill.
+    strokeOptional: boolean;
     bindable: boolean;
     // Which family the elbow router's heading heuristics follow — the silhouette, not the exact outline.
     // A new bindable kind picks one of the three instead of adding a branch to elbow-heading.
@@ -42,8 +55,8 @@ export type Capabilities = {
     creation: 'box' | 'polyline' | 'freedraw' | 'none';
 };
 
-// A per-element Y.Map, or anything else exposing its `get` (the reader's only requirement).
-export type FieldSource = { get(key: string): unknown };
+// The base fields a kind may start a new element with other than the shared table's value.
+export type BasePaintDefaults = Partial<Pick<VectorElementBase, 'strokeColor' | 'strokeWidth' | 'strokeStyle'>>;
 
 export type RenderContext = {
     resolveMedia?: (mediaName: string) => string | null;
@@ -67,7 +80,14 @@ export type KindSpec<T extends VectorElement> = {
     fields: readonly string[];
     capabilities: Capabilities;
     defaults(style: StyleDefaults): KindFields<T>;
-    read(src: FieldSource, base: VectorElementBase): T | null;
+    // Overrides of the shared base defaults for a NEW element of this kind. The DOM-box kinds use the
+    // stroke as a BORDER, and a fresh box paints none until the user picks a colour (slides' borderWidth
+    // 0, same intent). Omit where the base table already answers.
+    baseDefaults?: BasePaintDefaults;
+    // Capabilities that depend on the ELEMENT rather than the kind, layered over the static table.
+    // Omit where every element of the kind answers the same.
+    capabilitiesOf?(el: T): Partial<Capabilities>;
+    read(src: YMapLike, base: VectorElementBase): T | null;
     // Omit for the rotated-box default (only a routed arrow spills past its box).
     bounds?(el: T, route?: Point[]): Bounds;
     hitTest(el: T, point: Point, threshold: number, route?: Point[]): boolean;
@@ -88,8 +108,12 @@ export type ElementKind<T extends VectorElement = VectorElement> = {
     type: T['type'];
     fields: readonly string[];
     capabilities: Capabilities;
+    // The capabilities of ONE element — the static table with the kind's per-element overrides applied.
+    // capabilitiesOf(el) in kinds/index.ts is what consumers call.
+    capabilitiesOf(el: VectorElement): Capabilities;
     defaults(style: StyleDefaults): KindFields<T>;
-    read(src: FieldSource, base: VectorElementBase): T | null;
+    baseDefaults: BasePaintDefaults;
+    read(src: YMapLike, base: VectorElementBase): T | null;
     bounds(el: VectorElement, route?: Point[]): Bounds;
     hitTest(el: VectorElement, point: Point, threshold: number, route?: Point[]): boolean;
     outline(el: VectorElement, inflate: number): OutlineShape;
@@ -137,7 +161,12 @@ export function defineKind<T extends VectorElement>(spec: KindSpec<T>): ElementK
         type: spec.type,
         fields: spec.fields,
         capabilities: spec.capabilities,
+        capabilitiesOf: (el) =>
+            spec.is(el) && spec.capabilitiesOf
+                ? { ...spec.capabilities, ...spec.capabilitiesOf(el) }
+                : spec.capabilities,
         defaults: spec.defaults,
+        baseDefaults: spec.baseDefaults ?? {},
         read: spec.read,
         bounds: (el, route) => (spec.is(el) && spec.bounds ? spec.bounds(el, route) : getElementBounds(el)),
         hitTest: (el, point, threshold, route) => (spec.is(el) ? spec.hitTest(el, point, threshold, route) : false),

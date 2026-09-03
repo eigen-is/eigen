@@ -3,72 +3,68 @@ import { extractClipboardSvgMetadata } from '@workspace/lib/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     DEFAULT_ELEMENT_PROPS,
-    DEFAULT_RICHTEXT_PROPS,
-    DEFAULT_SKETCH_PROPS,
-    solidFill,
+    ELEMENT_KINDS,
+    readElementsClipboardItem,
+    VECTOR_STYLE_DEFAULTS,
     type VectorElement,
     type VectorMeta,
 } from '@workspace/lib/vector';
 import { buildSelectionData } from '../../../../components/vector/tools/clipboard';
 
-// The svg flavour policy: every selection ships a self-contained SVG (element JSON in <metadata>). An
+// A copy carries THREE things: the native `elements` item (whole stored records — a canvas→canvas
+// paste restores exactly what was copied), the typed image/text items every other app reads (also the
+// cross-mount re-upload manifest), and a self-contained SVG with the items in <metadata>. An
 // image-bearing selection references its images BY NAME — `href="eigen-media:<name>"`, never bytes —
 // so the sync copy path stays byte-free and the ref resolves against the target's media/ on paste. A
-// still-pending upload (no portable path) is omitted from BOTH the svg and the typed items.
+// still-pending upload (no portable path) is left out of the whole payload.
 
 const meta: VectorMeta = { background: 'transparent', gridSize: 20 };
 
+const BASE = { ...DEFAULT_ELEMENT_PROPS, x: 0, y: 0, width: 100, height: 60, angle: 0 };
+
 const rect = (id: string, index: string): VectorElement => ({
-    ...DEFAULT_ELEMENT_PROPS,
-    ...DEFAULT_SKETCH_PROPS,
+    ...BASE,
+    ...ELEMENT_KINDS.rectangle.defaults(VECTOR_STYLE_DEFAULTS),
     id,
     type: 'rectangle',
-    x: 0,
-    y: 0,
-    width: 100,
-    height: 60,
-    angle: 0,
-    seed: 1,
     index,
-    fill: solidFill('transparent'),
-    fillStyle: 'solid',
-    corners: 'straight',
+    seed: 1,
 });
 
-const image = (id: string, index: string): VectorElement => ({
-    ...DEFAULT_ELEMENT_PROPS,
+const image = (id: string, index: string, mediaName: string): VectorElement => ({
+    ...BASE,
+    ...ELEMENT_KINDS.image.defaults(VECTOR_STYLE_DEFAULTS),
     id,
     type: 'image',
-    x: 0,
-    y: 100,
-    width: 80,
-    height: 80,
-    angle: 0,
     index,
-    mediaName: 'photo.png',
-    corners: 'straight',
-    objectFit: 'contain',
+    y: 100,
+    mediaName,
 });
 
 const richtext = (id: string, index: string): VectorElement => ({
-    ...DEFAULT_ELEMENT_PROPS,
-    ...DEFAULT_RICHTEXT_PROPS,
+    ...BASE,
+    ...ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS),
     id,
     type: 'richtext',
-    x: 0,
-    y: 200,
-    width: 120,
-    height: 40,
-    angle: 0,
     index,
+    y: 200,
     html: '<p>hello</p>',
-    fill: solidFill('transparent'),
-    fillStyle: 'solid',
-    corners: 'straight',
     fontFamily: 'Excalifont',
     fontSize: 20,
     strokeColor: '#111111',
     color: '#e03131',
+});
+
+const elbowArrow = (id: string, index: string): VectorElement => ({
+    ...BASE,
+    ...ELEMENT_KINDS.arrow.defaults(VECTOR_STYLE_DEFAULTS),
+    id,
+    type: 'arrow',
+    index,
+    seed: 3,
+    points: '[[0,0],[100,80]]',
+    elbow: true,
+    startBinding: JSON.stringify({ elementId: 'r1', fixedPoint: [0.5, 0.5] }),
 });
 
 const mediaPath = {
@@ -79,80 +75,66 @@ const mediaPath = {
 } as DrivePath;
 
 describe('buildSelectionData', () => {
+    test('the selection round-trips losslessly through the elements item', () => {
+        // Whole stored records ride the wire, so every field of every kind comes back — including the
+        // rich-text colour and the arrow's bindings, which the paste remaps across the pasted set.
+        const selection = [rect('r1', 'a0'), richtext('t1', 'a1'), elbowArrow('a1', 'a2')];
+        const data = buildSelectionData(selection, ['r1', 't1', 'a1'], meta, '', () => undefined);
+        const read = readElementsClipboardItem(data.items);
+        expect(read?.elements).toEqual(selection);
+        expect(read?.sourceFrameId).toBe('');
+        // Through the svg's <metadata> block too — an SVG that travels alone still restores elements.
+        const restored = extractClipboardSvgMetadata(data.svg ?? '')?.items ?? [];
+        expect(readElementsClipboardItem(restored)?.elements).toEqual(selection);
+    });
+
+    test('the home frame rides along, so a paste knows whether it is landing where it came from', () => {
+        const data = buildSelectionData([rect('r1', 'a0')], ['r1'], meta, 'frame-1', () => undefined);
+        expect(readElementsClipboardItem(data.items)?.sourceFrameId).toBe('frame-1');
+    });
+
     test('a drawn-only selection carries the svg flavour with the items in <metadata>', () => {
-        const data = buildSelectionData([rect('r1', 'a0')], ['r1'], meta, () => undefined);
+        const data = buildSelectionData([rect('r1', 'a0')], ['r1'], meta, '', () => undefined);
         expect(data.items).toHaveLength(1);
         expect(data.svg?.startsWith('<svg')).toBe(true);
         expect(extractClipboardSvgMetadata(data.svg ?? '')?.items).toEqual(data.items);
     });
 
-    test('an image-bearing selection carries the svg flavour with an eigen-media href', () => {
-        const ordered = [rect('r1', 'a0'), image('i1', 'a1')];
-        const data = buildSelectionData(ordered, ['r1', 'i1'], meta, () => mediaPath);
-        expect(data.items).toHaveLength(2);
-        expect(data.svg?.startsWith('<svg')).toBe(true);
-        // The image rides by name, never by bytes — no data: URI, an eigen-media ref instead.
+    test('a rich-text box also ships a text item: flattened text, its typography and its html', () => {
+        // How a rich host outside the canvas pastes it styled — the canvas itself reads the elements item.
+        const data = buildSelectionData([richtext('t1', 'a0')], ['t1'], meta, '', () => undefined);
+        const text = data.items.find((i) => i.type === 'text');
+        expect(text?.text).toBe('hello');
+        expect(text?.typography).toEqual({
+            fontFamily: 'Excalifont',
+            fontSize: 20,
+            textAlign: 'left',
+            color: '#e03131',
+        });
+        expect(text?.meta).toEqual({ html: '<p>hello</p>' });
+    });
+
+    test('an image ships the image item beside the elements item, by name and never by bytes', () => {
+        const ordered = [rect('r1', 'a0'), image('i1', 'a1', 'photo.png')];
+        const data = buildSelectionData(ordered, ['r1', 'i1'], meta, '', () => mediaPath);
+        // The image item is the cross-mount re-upload manifest the paste keys on by mediaName.
+        const item = data.items.find((i) => i.type === 'image');
+        expect(item?.mediaName).toBe('photo.png');
+        expect(item?.sourcePathId).toBe('p1');
         expect(data.svg).toContain('href="eigen-media:photo.png"');
         expect(data.svg).not.toContain('data:');
         expect(extractClipboardSvgMetadata(data.svg ?? '')?.items).toEqual(data.items);
     });
 
-    test('a still-pending image is omitted from both the svg and the typed items', () => {
-        const pending = { ...image('i1', 'a1'), mediaName: 'pending.png' };
-        const settled = { ...image('i2', 'a2'), mediaName: 'photo.png' };
+    test('a still-pending image is omitted from the elements item, the typed items and the svg', () => {
+        const pending = image('i1', 'a1', 'pending.png');
+        const settled = image('i2', 'a2', 'photo.png');
         // Resolver mirrors the copy path: a settled upload has a portable path, a pending one doesn't.
         const resolve = (name: string): DrivePath | undefined => (name === 'photo.png' ? mediaPath : undefined);
-        const data = buildSelectionData([pending, settled], ['i1', 'i2'], meta, resolve);
-        expect(data.items).toHaveLength(1);
+        const data = buildSelectionData([pending, settled], ['i1', 'i2'], meta, '', resolve);
+        expect(readElementsClipboardItem(data.items)?.elements).toEqual([settled]);
+        expect(data.items.filter((i) => i.type === 'image')).toHaveLength(1);
         expect(data.svg).toContain('href="eigen-media:photo.png"');
         expect(data.svg).not.toContain('pending.png');
-    });
-
-    test('a rich-text box carries its text colour beside its border colour, svg round-trip too', () => {
-        // The text colour is `color`; `strokeColor` is the box border. Restoring the border as the text
-        // colour is what lost it — both ride meta.vector, distinctly.
-        const data = buildSelectionData([richtext('t1', 'a0')], ['t1'], meta, () => undefined);
-        const vector = data.items[0]?.meta?.vector as { color?: string; strokeColor?: string };
-        expect(vector.color).toBe('#e03131');
-        expect(vector.strokeColor).toBe('#111111');
-        const restored = extractClipboardSvgMetadata(data.svg ?? '')?.items[0]?.meta?.vector as {
-            color?: string;
-            strokeColor?: string;
-        };
-        expect(restored.color).toBe('#e03131');
-        expect(restored.strokeColor).toBe('#111111');
-    });
-
-    test('an elbow arrow carries its elbow flag in meta.vector, through the svg round-trip too', () => {
-        const arrow: VectorElement = {
-            ...DEFAULT_ELEMENT_PROPS,
-            ...DEFAULT_SKETCH_PROPS,
-            id: 'a1',
-            type: 'arrow',
-            x: 0,
-            y: 0,
-            width: 100,
-            height: 80,
-            angle: 0,
-            seed: 3,
-            index: 'a0',
-            roundness: 'sharp',
-            points: '[[0,0],[100,80]]',
-            elbow: true,
-            fixedSegments: '',
-            startArrowhead: 'none',
-            endArrowhead: 'arrow',
-            startBinding: '',
-            endBinding: '',
-            text: '',
-            fontSize: 20,
-            fontFamily: 'Excalifont',
-            labelWidth: 0,
-        };
-        const data = buildSelectionData([arrow], ['a1'], meta, () => undefined);
-        const vector = data.items[0]?.meta?.vector as { elbow?: boolean };
-        expect(vector.elbow).toBe(true);
-        const restored = extractClipboardSvgMetadata(data.svg ?? '')?.items[0]?.meta?.vector as { elbow?: boolean };
-        expect(restored.elbow).toBe(true);
     });
 });

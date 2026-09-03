@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { getBackgroundStyle, isSameFill } from '../../background/style';
+import { backgroundCss, getBackgroundStyle, isSameFill } from '../../background/style';
 
 describe('getBackgroundStyle', () => {
     test('null / undefined → empty style', () => {
@@ -83,5 +83,28 @@ describe('isSameFill', () => {
         expect(isSameFill(i, { ...i })).toBe(true);
         expect(isSameFill(i, { ...i, fit: 'contain' })).toBe(false);
         expect(isSameFill(i, { ...i, mediaName: 'b.png' })).toBe(false);
+    });
+});
+
+describe('backgroundCss', () => {
+    test('is getBackgroundStyle as declarations', () => {
+        expect(backgroundCss({ type: 'solid', color: '#ff0080' })).toEqual(['background-color:#ff0080']);
+        expect(backgroundCss({ type: 'gradient', from: '#fff', to: 'transparent', angle: 180 })).toEqual([
+            'background-image:linear-gradient(180deg, #fff, transparent)',
+        ]);
+    });
+
+    test('an image fill carries every declaration, camelCase hyphenated', () => {
+        expect(backgroundCss({ type: 'image', mediaName: 'p.png', fit: 'cover' }, (n) => `https://cdn/${n}`)).toEqual([
+            'background-image:url(https://cdn/p.png)',
+            'background-size:cover',
+            'background-position:center',
+            'background-repeat:no-repeat',
+        ]);
+    });
+
+    test('no fill is no declarations', () => {
+        expect(backgroundCss(null)).toEqual([]);
+        expect(backgroundCss(undefined)).toEqual([]);
     });
 });

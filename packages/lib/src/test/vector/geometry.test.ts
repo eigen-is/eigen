@@ -162,7 +162,6 @@ describe('hitTestElement', () => {
             angle: 0,
             index: 'a0',
             fill: solidFill('transparent'),
-            fillStyle: 'solid',
             corners: 'straight',
         } satisfies Omit<VectorRectangleElement, 'type' | 'roughness' | 'seed'>;
         if (type === 'richtext')
@@ -180,7 +179,6 @@ describe('hitTestElement', () => {
                 color: '#1e1e1e',
                 letterSpacing: 0,
                 lineHeight: 1.2,
-                highlightColor: 'transparent',
                 padding: 0,
             };
         if (type === 'image') return { ...base, type, mediaName: 'x.png', objectFit: 'contain' };
@@ -204,7 +202,6 @@ const linear = (over: Partial<VectorLinearElement> & { points: string }): Vector
     id: 'l',
     type: 'line',
     fill: solidFill('transparent'),
-    fillStyle: 'solid',
     roughness: 1,
     x: 0,
     y: 0,
@@ -642,7 +639,6 @@ const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
     angle: 0,
     index: 'a0',
     fill: solidFill('transparent'),
-    fillStyle: 'solid',
     roughness: 1,
     seed: 1,
     corners: 'straight',
