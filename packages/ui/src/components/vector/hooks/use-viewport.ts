@@ -1,4 +1,4 @@
-// Pan/zoom viewport for the vector canvas. scene = (client - offset)/zoom - scroll (Excalidraw's
+// Pan/zoom viewport for the canvas editor. scene = (client - offset)/zoom - scroll (Excalidraw's
 // convention; scroll is stored in SCENE units). The SVG zoom group and the screen-space chrome
 // overlay share the container origin, so viewport-relative px = (scene + scroll) * zoom.
 

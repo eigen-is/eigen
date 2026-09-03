@@ -1,5 +1,5 @@
 // The canvas surface cursor, resolved from the current pan/tool/hover state. Split out of
-// vector-canvas.tsx (the canvas only dispatches) so this file doesn't grow: pan wins (grabbing while
+// canvas-editor.tsx (the canvas only dispatches) so this file doesn't grow: pan wins (grabbing while
 // panning, grab in pan mode), then a drawing tool shows crosshair (text its own caret), then
 // select shows `move` over a draggable element (the suite convention) and `default` over empty canvas.
 

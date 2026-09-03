@@ -1,4 +1,4 @@
-// Vector clipboard PRODUCER — the element→item builders, moved out of vector-canvas.tsx (a self-
+// Vector clipboard PRODUCER — the element→item builders, moved out of canvas-editor.tsx (a self-
 // contained pure block) so the canvas stays a dispatcher. Images ride the typed image item, text the
 // typed text item; shapes and linear elements (freedraw/line) have no typed kind, so they ride a
 // text-item carrier and rebuild from `meta.vector` on a vector→vector paste. The paste CONSUMER

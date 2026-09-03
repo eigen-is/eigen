@@ -111,7 +111,7 @@ function followBoundArrows(doc: Y.Doc, elementsMap: Y.Map<unknown>, patchedIds: 
     }
 }
 
-export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) => {
+export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string) => {
     const [scene, setScene] = useState<VectorScene>({ elements: [], frames: [], meta: DEFAULT_SCENE_META });
 
     // Shared lifecycle: doc/provider/UndoManager creation + teardown. The UndoManager tracks the two

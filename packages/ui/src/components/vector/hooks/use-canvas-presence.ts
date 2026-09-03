@@ -16,7 +16,7 @@ const CURSOR_THROTTLE_MS = 50;
 // vector CursorLayer reads peers straight off awareness keyed by clientId, so sheets'
 // removed-then-rejoin re-feed quirk (a departed client sharing a user-identity presence key with a
 // live one) does not apply here: each clientId is its own cursor, removed independently.
-export function useVectorPresence(
+export function useCanvasPresence(
     provider: WebsocketProvider | null,
     user: AuthUser | null,
     selectedIds: string[],

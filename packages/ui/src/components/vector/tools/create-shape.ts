@@ -1,5 +1,5 @@
 // Shape drag-create geometry — the box math and the live preview element the canvas draws while a
-// rectangle/diamond/ellipse is being dragged out. Pulled out of vector-canvas.tsx (the canvas only
+// rectangle/diamond/ellipse is being dragged out. Pulled out of canvas-editor.tsx (the canvas only
 // dispatches) alongside the other gesture modules (line.ts, freedraw.ts, eraser.ts).
 
 import {

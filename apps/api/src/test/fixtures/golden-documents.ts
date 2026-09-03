@@ -543,7 +543,7 @@ export function buildGoldenVectorScene(): VectorScene {
     return { elements, frames: [], meta: { background: 'transparent', gridSize: 20 } };
 }
 
-// Write a VectorScene into a Y.Doc the way use-vector-doc.ts persists one: a per-element
+// Write a VectorScene into a Y.Doc the way use-canvas-doc.ts persists one: a per-element
 // Y.Map under the `elements` root plus the `meta` root. read-vector reads only the
 // ELEMENT_FIELDS keys, so setting every own field is safe.
 export function seedVectorDoc(doc: Y.Doc, scene: VectorScene): void {

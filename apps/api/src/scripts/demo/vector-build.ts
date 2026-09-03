@@ -1,6 +1,6 @@
 // Builds the site-plan drawing straight into a vector container's Y.Doc from the typed SITE_PLAN
 // spec (content.ts) — the stickies-board approach without a fixture. Every element carries the same
-// full field set an editor-authored element would (use-vector-doc's addElement), so the doc reads
+// full field set an editor-authored element would (use-canvas-doc's addElement), so the doc reads
 // back through read-vector unchanged. Text is sized from the Excalifont metrics table because the
 // seeder has no DOM to measure with. Deterministic ids + seeds: a reseed renders identical jitter.
 

@@ -54,8 +54,8 @@ import {
     ZOrderButtons,
 } from '@workspace/ui/components/properties-panel';
 import type * as Y from 'yjs';
-import type { VectorElementPatch } from './hooks/use-vector-doc';
-import { applyZOrder } from './hooks/use-vector-keyboard';
+import type { VectorElementPatch } from './hooks/use-canvas-doc';
+import { applyZOrder } from './hooks/use-canvas-keyboard';
 import { loadVectorFont, measureVectorText } from './text-measure';
 
 const TYPE_LABELS: Record<VectorElementType, string> = {
@@ -131,7 +131,7 @@ function resizeLinearTo(el: VectorLinearElement | VectorArrowElement, patch: Par
     });
 }
 
-type VectorPropertiesPanelProps = {
+type CanvasPropertiesPanelProps = {
     // All elements — z-order reorders the selection relative to the rest (computeZOrder needs both).
     elements: VectorElement[];
     selectedElements: VectorElement[];
@@ -143,14 +143,14 @@ type VectorPropertiesPanelProps = {
     onAspectLockChange: (locked: boolean) => void;
 };
 
-export function VectorPropertiesPanel({
+export function CanvasPropertiesPanel({
     elements,
     selectedElements,
     updateElements,
     undoManager,
     aspectLocked,
     onAspectLockChange,
-}: VectorPropertiesPanelProps) {
+}: CanvasPropertiesPanelProps) {
     const selectedIds = selectedElements.map((el) => el.id);
     const byId = new Map(selectedElements.map((el) => [el.id, el]));
     const has = selectedElements.length > 0;

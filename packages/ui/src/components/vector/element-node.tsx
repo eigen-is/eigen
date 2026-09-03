@@ -1,6 +1,6 @@
 // One scene element as its own memoized SVG node, rendered through the SAME lib render path as
 // previews, embeds and export — elementToSvg emits our own escaped `<g>` fragment. Split out of
-// vector-canvas.tsx (the canvas only dispatches; per-node rendering lives here).
+// canvas-editor.tsx (the canvas only dispatches; per-node rendering lives here).
 
 import {
     arrowRoute,

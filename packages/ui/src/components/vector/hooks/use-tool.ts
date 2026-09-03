@@ -24,7 +24,7 @@ export type VectorTool = 'select' | 'eraser' | VectorElementType;
 // Presentation only; the LIST and its ORDER come from the registry, so adding a kind adds a tool.
 // Keying by CreationToolType is what makes TypeScript demand an entry per creatable kind (and reject
 // one for image, which arrives by upload). Letters are Excalidraw's; `digit` is the same tool on the
-// number row, and useVectorKeyboard binds both straight off this table.
+// number row, and useCanvasKeyboard binds both straight off this table.
 const TOOL_UI: Record<CreationToolType, { icon: LucideIcon; label: string; shortcut: LetterKey; digit: NumberKey }> = {
     rectangle: { icon: Square, label: 'Rectangle', shortcut: 'R', digit: '2' },
     diamond: { icon: Diamond, label: 'Diamond', shortcut: 'D', digit: '3' },

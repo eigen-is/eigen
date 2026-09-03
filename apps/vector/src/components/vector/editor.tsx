@@ -10,13 +10,13 @@ import { useContextMenu } from '@workspace/ui/components/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { useAspectLock } from '@workspace/ui/components/properties-panel';
 import {
+    CanvasEditor,
+    type CanvasImageInsert,
+    CanvasPropertiesPanel,
+    useCanvasDoc,
+    useCanvasPresence,
     useSelection,
     useTool,
-    useVectorDoc,
-    useVectorPresence,
-    VectorCanvas,
-    type VectorImageInsert,
-    VectorPropertiesPanel,
 } from '@workspace/ui/components/vector';
 import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useMemo, useRef, useState } from 'react';
@@ -55,13 +55,13 @@ export function VectorEditor({
     // Small screens view the scene, never edit it (the slides canEdit split: file menu, share and
     // comments keep canWrite); tablets sit above the breakpoint.
     const canEdit = canWrite && !isMobile;
-    const doc = useVectorDoc(ownerId, path.mountId, path.id);
+    const doc = useCanvasDoc(ownerId, path.mountId, path.id);
     const { tool, setTool, toolLocked, setToolLocked } = useTool();
     const { selectedIds, setSelectedIds, toggle } = useSelection();
     // Awareness: publish this user's identity + selection, get a throttled cursor publisher for the
     // canvas. Selection is threaded from here (the editor owns selectedIds).
     const { user } = useAuth();
-    const publishCursor = useVectorPresence(doc.provider, user, selectedIds);
+    const publishCursor = useCanvasPresence(doc.provider, user, selectedIds);
 
     const selectedElements = useMemo(
         () => doc.elements.filter((el) => selectedIds.includes(el.id)),
@@ -116,7 +116,7 @@ export function VectorEditor({
     // Toolbar "Add image": the picker lives here, placement goes through the canvas' published
     // insert surface (placement needs the live viewport).
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
-    const imageInsertRef = useRef<VectorImageInsert | null>(null);
+    const imageInsertRef = useRef<CanvasImageInsert | null>(null);
 
     // Document-level create: the card anchors to the document (no anchor callback), so it lands in the
     // `comments` Y.Map and is active by construction.
@@ -207,7 +207,7 @@ export function VectorEditor({
                         ) : (
                             <div className="flex h-full w-full overflow-hidden">
                                 <div className="flex-1 min-w-0">
-                                    <VectorCanvas
+                                    <CanvasEditor
                                         elements={doc.elements}
                                         meta={doc.meta}
                                         tool={tool}
@@ -240,7 +240,7 @@ export function VectorEditor({
                                 {!isMobile && panel ? (
                                     <PanelColumn activePanel={panel} {...panelProps} />
                                 ) : showPanel ? (
-                                    <VectorPropertiesPanel
+                                    <CanvasPropertiesPanel
                                         elements={doc.elements}
                                         selectedElements={selectedElements}
                                         updateElements={doc.updateElements}

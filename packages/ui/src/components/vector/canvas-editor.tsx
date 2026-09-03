@@ -70,12 +70,12 @@ import { readImageSize, readImageSizeFromUrl } from '../media/read-image-size';
 import type { ZOp } from '../properties-panel/z-order';
 import { pointerCursor } from './cursor';
 import { ElementNode } from './element-node';
+import type { NewVectorElement, VectorElementPatch } from './hooks/use-canvas-doc';
+import { applyZOrder, deleteSelection, duplicateSelection, useCanvasKeyboard } from './hooks/use-canvas-keyboard';
+import type { PublishCursor } from './hooks/use-canvas-presence';
 import { hitTestTopmost, marqueeSelect } from './hooks/use-selection';
 import { useSpaceHeld } from './hooks/use-space-held';
 import type { VectorTool } from './hooks/use-tool';
-import type { NewVectorElement, VectorElementPatch } from './hooks/use-vector-doc';
-import { applyZOrder, deleteSelection, duplicateSelection, useVectorKeyboard } from './hooks/use-vector-keyboard';
-import type { PublishCursor } from './hooks/use-vector-presence';
 import { useViewport } from './hooks/use-viewport';
 import { arrowLabelEditing, type EditingState } from './text-editing';
 import { isVectorFontLoaded, loadVectorFont, measureVectorText } from './text-measure';
@@ -152,12 +152,12 @@ type Gesture = { pointerId: number } & (
 
 // Imperative image-insert surface the canvas publishes for the toolbar's Insert entries — the
 // editor owns the picker dialog, but placement needs the live viewport (centre + zoom).
-export type VectorImageInsert = {
+export type CanvasImageInsert = {
     insertFiles: (files: File[]) => void;
     insertDrivePaths: (paths: DrivePath[]) => Promise<void>;
 };
 
-type VectorCanvasProps = {
+type CanvasEditorProps = {
     elements: VectorElement[];
     meta: VectorMeta;
     tool: VectorTool;
@@ -192,18 +192,18 @@ type VectorCanvasProps = {
     // (Shift frees) when on, 'free' when off.
     aspectLocked: boolean;
     // Awareness: the provider drives the CursorLayer's own subscription; publishCursor pushes the
-    // local pointer's scene position (throttled in the editor's use-vector-presence).
+    // local pointer's scene position (throttled in the editor's use-canvas-presence).
     provider: WebsocketProvider | null;
     publishCursor: PublishCursor;
     // Published/cleared by the canvas itself; optional so read-only hosts can omit it.
-    imageInsertRef?: { current: VectorImageInsert | null };
+    imageInsertRef?: { current: CanvasImageInsert | null };
 };
 
 // The live, interactive SVG scene surface: pan/zoom viewport, tool-driven drag-create, selection,
 // move, and the shared ObjectTransform chrome. Every drag/resize/rotate preview is LOCAL state;
 // exactly one Yjs transact fires per completed gesture (UX-RULING 5), with stopCapturing() at each
 // gesture start so one gesture = one undo step.
-export function VectorCanvas({
+export function CanvasEditor({
     elements,
     meta,
     tool,
@@ -229,7 +229,7 @@ export function VectorCanvas({
     provider,
     publishCursor,
     imageInsertRef,
-}: VectorCanvasProps) {
+}: CanvasEditorProps) {
     const {
         containerRef,
         clientToScene,
@@ -375,7 +375,7 @@ export function VectorCanvas({
     // Every canvas hotkey (V/R/D/O/T, Delete/Backspace, arrows, ⌘A, ⌘D, ⌘Z/⌘⇧Z, z-order) is gated
     // off while a text overlay is open — the textarea's native undo/typing owns keys in-session; we
     // don't rely on the hotkey lib's input-target detection alone (UX-RULING, commit-trigger).
-    useVectorKeyboard({
+    useCanvasKeyboard({
         enabled: canEdit && !editing,
         elements,
         selectedIds,

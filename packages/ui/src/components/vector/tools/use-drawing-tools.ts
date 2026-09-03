@@ -1,4 +1,4 @@
-// The drawing tools (freehand, line, eraser) + line point-handles, factored out of vector-canvas.tsx
+// The drawing tools (freehand, line, eraser) + line point-handles, factored out of canvas-editor.tsx
 // so the canvas only DISPATCHES (the ground-rule that the canvas file must not grow).
 // This hook owns the local gesture state (never Yjs until finish), the live preview element rendered
 // through the SAME elementToSvg path as committed elements, the eraser's marked-set dimming, and the
@@ -34,8 +34,8 @@ import {
 import { createElement, Fragment, type MutableRefObject, type ReactNode, useEffect, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 import { isTypingTarget } from '../../../hooks/is-typing-target';
+import type { NewVectorElement, VectorElementPatch } from '../hooks/use-canvas-doc';
 import type { VectorTool } from '../hooks/use-tool';
-import type { NewVectorElement, VectorElementPatch } from '../hooks/use-vector-doc';
 import { FocusIndicators, FocusPointHandles, SnapDots } from './arrow-affordances';
 import {
     bindArrow,

@@ -17,8 +17,8 @@ import {
 } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import { useZOrderHotkeys, type ZOp } from '../../properties-panel/z-order';
+import type { VectorElementPatch } from './use-canvas-doc';
 import { VECTOR_TOOLS, type VectorTool } from './use-tool';
-import type { VectorElementPatch } from './use-vector-doc';
 
 // Fractional-index rewrites for a z-order change. The selection moves as a block relative to the
 // NON-selected elements, so a non-contiguous multi-selection collapses into one clean gap
@@ -115,7 +115,7 @@ type VectorKeyboardParams = {
     duplicateElements: (ids: string[], dx: number, dy: number) => string[];
 };
 
-export function useVectorKeyboard(params: VectorKeyboardParams) {
+export function useCanvasKeyboard(params: VectorKeyboardParams) {
     const { enabled, elements, selectedIds, setTool, toolLocked, setToolLocked, setSelection, undoManager } = params;
     const { deleteElements, updateElements, duplicateElements } = params;
     const hasSelection = selectedIds.length > 0;
