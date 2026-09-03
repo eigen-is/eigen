@@ -11,7 +11,7 @@ import { ELEMENT_KIND_UI } from '../kinds';
 
 export type VectorTool = 'select' | 'eraser' | VectorElementType;
 
-type VectorToolEntry = {
+export type VectorToolEntry = {
     tool: VectorTool;
     icon: LucideIcon;
     label: string;
