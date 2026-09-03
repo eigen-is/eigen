@@ -20,6 +20,7 @@ import type * as Y from 'yjs';
 type ToolbarProps = {
     canWrite: boolean;
     offline: boolean;
+    storageUnavailable: boolean;
     undoManager: Y.UndoManager | null;
     onAccessDialogOpen: () => void;
     onAddColumn: () => void;
@@ -34,6 +35,7 @@ type ToolbarProps = {
 export function Toolbar({
     canWrite,
     offline,
+    storageUnavailable,
     undoManager,
     onAccessDialogOpen,
     onAddColumn,
@@ -122,6 +124,7 @@ export function Toolbar({
                     <DocumentShareCluster
                         canWrite={canWrite}
                         offline={offline}
+                        storageUnavailable={storageUnavailable}
                         onAccessDialogOpen={onAccessDialogOpen}
                         onToggleActivityPanel={onToggleActivityPanel}
                         activityPanelOpen={activityPanelOpen}

@@ -22,19 +22,25 @@ type DocumentShareClusterProps = {
     activityPanelOpen?: boolean;
     // Collab socket down after first load: edits stay local until it reconnects.
     offline?: boolean;
+    // The server's storage is failing and the collab socket is retrying; edits stay local meanwhile.
+    storageUnavailable?: boolean;
 };
 
 export function DocumentShareCluster(props: DocumentShareClusterProps) {
     const isMobile = useIsMobile();
-    const offlineBadge = props.offline && (
+    // One icon for both ways edits can be stuck in the tab; the outage explains itself, so it wins.
+    const label = props.storageUnavailable ? 'Storage unavailable' : 'Offline';
+    const offlineBadge = (props.offline || props.storageUnavailable) && (
         <Popover>
             <PopoverTrigger asChild>
-                <Button variant="ghost" size="icon" aria-label="Offline" className="h-8 w-8 text-destructive">
+                <Button variant="ghost" size="icon" aria-label={label} className="h-8 w-8 text-destructive">
                     <WifiOff className="h-4 w-4" />
                 </Button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-auto text-sm">
-                Offline, will sync when back online
+                {props.storageUnavailable
+                    ? 'Storage is temporarily unavailable, retrying. Edits will sync when it is back.'
+                    : 'Offline, will sync when back online'}
             </PopoverContent>
         </Popover>
     );

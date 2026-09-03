@@ -3,7 +3,7 @@ import { useCommentCards, useCommentFilter, useCommentLifecycle, useDocumentPane
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import type { ActiveComments, CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { CollabLoadingState, Column, ColumnLayout, useLayout } from '@workspace/ui';
+import { CollabLoadingState, Column, ColumnLayout, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import { type CommentContextMenuItem, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
@@ -167,6 +167,7 @@ export function VectorEditor({
             chatFolderId={chatFolderId}
         >
             <ColumnLayout>
+                <UnsyncedEditsGuard active={doc.unsyncedEdits} />
                 {/* The comment/activity pane hides the canvas on mobile (a Column sibling below); keep
                     the canvas mounted (hidden wrapper) so Yjs state + selection survive a pane visit. */}
                 <div className={cn('flex-1 min-w-0 h-full', mobilePanelOpen && 'hidden')}>
@@ -180,6 +181,7 @@ export function VectorEditor({
                                 path={path}
                                 canWrite={canWrite}
                                 offline={doc.offline}
+                                storageUnavailable={doc.loaded && doc.storageUnavailable}
                                 undoManager={doc.undoManager}
                                 tool={tool}
                                 setTool={setTool}

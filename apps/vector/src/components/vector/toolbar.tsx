@@ -15,6 +15,7 @@ type ToolbarProps = {
     path: DrivePath;
     canWrite: boolean;
     offline: boolean;
+    storageUnavailable: boolean;
     // Exactly what useYjsUndoState consumes (Y.UndoManager | null) — named via the hook so the app
     // needn't take a direct yjs dependency just to type one prop.
     undoManager: Parameters<typeof useYjsUndoState>[0];
@@ -54,6 +55,7 @@ export function Toolbar({
     path,
     canWrite,
     offline,
+    storageUnavailable,
     undoManager,
     tool,
     setTool,
@@ -144,6 +146,7 @@ export function Toolbar({
                         <DocumentShareCluster
                             canWrite={canWrite}
                             offline={offline}
+                            storageUnavailable={storageUnavailable}
                             onAccessDialogOpen={onAccessDialogOpen}
                             watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
                             onToggleCommentPanel={onToggleCommentPanel}

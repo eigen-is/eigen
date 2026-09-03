@@ -151,6 +151,7 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         offline,
         loaded,
         storageUnavailable,
+        unsyncedEdits,
     } = useCollabDoc({
         ownerId,
         mountId,
@@ -370,5 +371,6 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         // WS blip never unmounts the canvas (transient selection/preview state survives).
         loaded,
         storageUnavailable,
+        unsyncedEdits,
     };
 };

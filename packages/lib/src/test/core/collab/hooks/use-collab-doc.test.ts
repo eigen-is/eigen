@@ -1,11 +1,13 @@
-import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, describe, expect, jest, mock, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import type * as Y from 'yjs';
+import { COLLAB_STORAGE_UNAVAILABLE_CLOSE } from '../../../../constants/collab';
 import type { CollabDoc, UseCollabDocOptions } from '../../../../core/collab/hooks/use-collab-doc';
 
 // The hook news up a WebsocketProvider itself, so the test swaps the module for a fake that never
 // opens a socket and lets each case drive the connection through the same events y-websocket emits,
-// in y-websocket's order: `status` flips on open/close, `sync` on handshake completion and on close.
+// in y-websocket's order: `connection-close` first, then `sync` false and `status` disconnected on a
+// drop; `status` connected on open and `sync` true when the handshake completes.
 type Listener = (...args: never[]) => void;
 
 class FakeProvider {
@@ -44,6 +46,10 @@ class FakeProvider {
         this.destroyed = true;
     }
 
+    // The hook drives these on a storage-unavailable close; the fake stays closed either way.
+    disconnect() {}
+    connect() {}
+
     open() {
         this.wsconnected = true;
         this.emit('status', [{ status: 'connected' }]);
@@ -54,7 +60,8 @@ class FakeProvider {
         this.emit('sync', [true]);
     }
 
-    close() {
+    close(code?: number) {
+        this.emit('connection-close', [code === undefined ? null : { code }]);
         this.wsconnected = false;
         this.synced = false;
         this.emit('sync', [false]);
@@ -62,11 +69,13 @@ class FakeProvider {
     }
 }
 
-// Process-global in bun: every later import of y-websocket in this test run gets the fake.
+// Process-global in bun: every later import of y-websocket in this test run gets the fake. The real
+// module is restored in afterAll so later files in the same run see the package they imported.
+const realWebsocketModule = await import('y-websocket');
 mock.module('y-websocket', () => ({ WebsocketProvider: FakeProvider }));
 
-// A real origin: api.ts resolves API_HOST from window.location at module load. The DOM globals
-// are removed again in afterAll so later test files see the plain bun environment.
+// react-dom needs a DOM to render the hook harness into. The globals are removed again in afterAll
+// so later test files see the plain bun environment.
 const window = new Window({ url: 'http://localhost:3000' });
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
 const g = globalThis as any;
@@ -79,6 +88,7 @@ afterAll(() => {
     g.document = undefined;
     g.navigator = undefined;
     g.IS_REACT_ACT_ENVIRONMENT = undefined;
+    mock.module('y-websocket', () => realWebsocketModule);
 });
 
 const { act, createElement } = await import('react');
@@ -119,23 +129,23 @@ function mount(options: UseCollabDocOptions) {
     };
 }
 
-function fireBeforeUnload() {
-    const event = new window.Event('beforeunload', { cancelable: true });
-    window.dispatchEvent(event);
-    return event.defaultPrevented;
-}
+// Comfortably past the hook's offline grace window, and short of its 5s storage retry.
+const PAST_GRACE_MS = 2_000;
+const passGraceWindow = () => act(() => void jest.advanceTimersByTime(PAST_GRACE_MS));
 
 const OPTIONS: UseCollabDocOptions = { ownerId: 'owner', mountId: 'mount', pathId: 'doc-1' };
 
 describe('useCollabDoc connection state', () => {
     beforeEach(() => {
         FakeProvider.instances = [];
+        jest.useFakeTimers();
     });
 
     let active: ReturnType<typeof mount> | null = null;
     afterEach(() => {
         active?.unmount();
         active = null;
+        jest.useRealTimers();
     });
 
     test('offline means a dropped socket after first load; loaded latches on first sync', () => {
@@ -155,8 +165,9 @@ describe('useCollabDoc connection state', () => {
         expect(h.state.offline).toBe(false);
 
         act(() => h.provider.close());
-        expect(h.state.offline).toBe(true);
         expect(h.state.synced).toBe(false);
+        passGraceWindow();
+        expect(h.state.offline).toBe(true);
         expect(h.state.loaded).toBe(true);
 
         // Reconnected but still resyncing: not offline, not yet synced.
@@ -165,7 +176,23 @@ describe('useCollabDoc connection state', () => {
         expect(h.state.synced).toBe(false);
     });
 
-    test('beforeunload is blocked only while offline edits are waiting to sync', () => {
+    test('a socket that reconnects within the grace window never reports offline', () => {
+        active = mount(OPTIONS);
+        const h = active;
+        act(() => {
+            h.provider.open();
+            h.provider.finishSync();
+        });
+
+        act(() => h.provider.close());
+        expect(h.state.offline).toBe(false);
+
+        act(() => h.provider.open());
+        passGraceWindow();
+        expect(h.state.offline).toBe(false);
+    });
+
+    test('unsyncedEdits arms on edits made while the socket is down and clears on the next sync', () => {
         active = mount(OPTIONS);
         const h = active;
         act(() => {
@@ -174,20 +201,49 @@ describe('useCollabDoc connection state', () => {
         });
         const doc = h.doc;
 
-        doc.getMap('items').set('a', 1);
-        expect(fireBeforeUnload()).toBe(false);
-
         act(() => h.provider.close());
-        expect(fireBeforeUnload()).toBe(false);
+        expect(h.state.unsyncedEdits).toBe(false);
 
-        doc.getMap('items').set('b', 2);
-        expect(fireBeforeUnload()).toBe(true);
+        act(() => doc.getMap('items').set('b', 2));
+        expect(h.state.unsyncedEdits).toBe(true);
 
+        // Reconnecting is not enough — the edit is only safe once the handshake completes.
         act(() => h.provider.open());
-        expect(fireBeforeUnload()).toBe(true);
+        expect(h.state.unsyncedEdits).toBe(true);
 
         act(() => h.provider.finishSync());
-        expect(fireBeforeUnload()).toBe(false);
+        expect(h.state.unsyncedEdits).toBe(false);
+    });
+
+    test('a silently dead socket arms unsyncedEdits once the close finally arrives', () => {
+        active = mount(OPTIONS);
+        const h = active;
+        act(() => {
+            h.provider.open();
+            h.provider.finishSync();
+        });
+
+        // wsconnected is still true: y-websocket has not noticed the socket is dead.
+        act(() => h.doc.getMap('items').set('a', 1));
+        expect(h.state.unsyncedEdits).toBe(false);
+
+        act(() => h.provider.close());
+        expect(h.state.unsyncedEdits).toBe(true);
+    });
+
+    test('a peer edit arriving over a live socket is not something this tab owes the server', () => {
+        active = mount(OPTIONS);
+        const h = active;
+        act(() => {
+            h.provider.open();
+            h.provider.finishSync();
+        });
+
+        // Provider-origin while connected: y-websocket applied it, this tab never sent it.
+        const doc = h.doc;
+        act(() => doc.transact(() => doc.getMap('items').set('peer', 1), h.provider));
+        act(() => h.provider.close());
+        expect(h.state.unsyncedEdits).toBe(false);
     });
 
     test('updates relayed by a sibling tab while the socket is down count as unsynced', () => {
@@ -200,11 +256,31 @@ describe('useCollabDoc connection state', () => {
         });
         // y-websocket applies BroadcastChannel edits with the provider as origin, like server ones.
         const doc = h.doc;
-        doc.transact(() => doc.getMap('items').set('relayed', 1), h.provider);
-        expect(fireBeforeUnload()).toBe(true);
+        act(() => doc.transact(() => doc.getMap('items').set('relayed', 1), h.provider));
+        expect(h.state.unsyncedEdits).toBe(true);
     });
 
-    test('teardown drops the beforeunload guard and provider listeners', () => {
+    test('a storage outage is reported as storageUnavailable, not as offline', () => {
+        active = mount(OPTIONS);
+        const h = active;
+        act(() => {
+            h.provider.open();
+            h.provider.finishSync();
+        });
+
+        act(() => h.provider.close(COLLAB_STORAGE_UNAVAILABLE_CLOSE));
+        passGraceWindow();
+        expect(h.state.storageUnavailable).toBe(true);
+        expect(h.state.offline).toBe(false);
+
+        act(() => {
+            h.provider.open();
+            h.provider.finishSync();
+        });
+        expect(h.state.storageUnavailable).toBe(false);
+    });
+
+    test('teardown drops the provider listeners and resets the flags', () => {
         active = mount(OPTIONS);
         const h = active;
         act(() => {
@@ -212,8 +288,10 @@ describe('useCollabDoc connection state', () => {
             h.provider.finishSync();
             h.provider.close();
         });
-        h.doc.getMap('items').set('b', 2);
-        expect(fireBeforeUnload()).toBe(true);
+        act(() => h.doc.getMap('items').set('b', 2));
+        passGraceWindow();
+        expect(h.state.offline).toBe(true);
+        expect(h.state.unsyncedEdits).toBe(true);
 
         const first = h.provider;
         h.rerender({ ...OPTIONS, pathId: 'doc-2' });
@@ -222,7 +300,7 @@ describe('useCollabDoc connection state', () => {
         expect(first.listenerCount('status')).toBe(0);
         expect(h.state.offline).toBe(false);
         expect(h.state.loaded).toBe(false);
-        expect(fireBeforeUnload()).toBe(false);
+        expect(h.state.unsyncedEdits).toBe(false);
 
         h.unmount();
         active = null;

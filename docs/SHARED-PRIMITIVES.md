@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1189 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1190 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (147)
+## Components (148)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -67,6 +67,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `TooltipButton` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/tooltip-button.tsx |
 | `Topbar` | `@workspace/ui` | packages/ui/src/components/layout/app/topbar.tsx |
 | `UnreadDot` | `@workspace/ui` | packages/ui/src/components/unread-dot.tsx |
+| `UnsyncedEditsGuard` | `@workspace/ui` | packages/ui/src/components/layout/app/unsynced-edits-guard.tsx |
 | `AttachmentChip` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/attachment-chip.tsx |
 | `AttachmentDraftChips` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/attachment-draft-chips.tsx |
 | `ReferenceAttachmentChip` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/reference-attachment-chip.tsx |

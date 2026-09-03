@@ -61,7 +61,7 @@ export function useSheet(
     // top via onInit/onSync. No UndoManager — the sheet engine's own op stack owns undo. The op-log
     // (readyForOps gating, echo suppression, flush-on-unmount, replay) is NOT collab-scaffold
     // duplication, so it stays here over the shared lifecycle.
-    const { docRef, provider, synced, offline, storageUnavailable } = useCollabDoc({
+    const { docRef, provider, synced, offline, storageUnavailable, unsyncedEdits } = useCollabDoc({
         ownerId,
         mountId,
         pathId,
@@ -179,6 +179,7 @@ export function useSheet(
         synced,
         offline,
         storageUnavailable,
+        unsyncedEdits,
         handleOp,
         onDataChange,
         docRef,

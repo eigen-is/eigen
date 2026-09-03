@@ -14,7 +14,14 @@ import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { CollabLoadingState, ColumnLayout, DeleteDialog, Column as LayoutColumn, useLayout } from '@workspace/ui';
+import {
+    CollabLoadingState,
+    ColumnLayout,
+    DeleteDialog,
+    Column as LayoutColumn,
+    UnsyncedEditsGuard,
+    useLayout,
+} from '@workspace/ui';
 import { useAttachmentMeta } from '@workspace/ui/components/attachment';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
@@ -90,6 +97,7 @@ export function StickiesBoard({
         offline,
         loaded,
         storageUnavailable,
+        unsyncedEdits,
         yjsDoc,
         undoManager,
         provider,
@@ -316,6 +324,7 @@ export function StickiesBoard({
             mediaFolderId={mediaFolderId}
             chatFolderId={chatFolderId}
         >
+            <UnsyncedEditsGuard active={unsyncedEdits} />
             <ColumnLayout>
                 <div className="flex-1 min-w-0 h-full">
                     <DocSearchProvider
@@ -333,6 +342,7 @@ export function StickiesBoard({
                                     path={path}
                                     canWrite={canWrite}
                                     offline={offline}
+                                    storageUnavailable={storageUnavailable}
                                     undoManager={undoManager}
                                     onAccessDialogOpen={onAccessDialogOpen}
                                     onAddColumn={() => setIsAddColumnDialogOpen(true)}

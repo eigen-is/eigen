@@ -4,15 +4,15 @@ import { type RefObject, useEffect, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 
-// Every collab editor (docs, slides, sheets, stickies, vector) opened the same Yjs scaffold by hand:
-// new Y.Doc → WebsocketProvider(getCollabWebSocketUrl(...)) → track `synced` → tear it all down
-// provider-before-doc. This hook owns that lifecycle once; hosts layer their own roots, observers,
-// seeding, and mutation API on top through the two callback seams. All five apps passed the SAME
-// provider options, so they live here as a constant (kept, not dropped, per the U6a brief).
+// All five hosts want the same provider behaviour, so the options live here rather than per app.
 const WS_PROVIDER_OPTIONS = { resyncInterval: 5000, connect: true } as const;
 
 // How long to stay disconnected after a storage-unavailable close before trying again.
 const STORAGE_RETRY_MS = 5_000;
+
+// A dropped socket normally reconnects within ~100ms, and the storage retry cycle reports
+// 'connected' for a tick every 5s. Hold the offline verdict this long so neither flashes the icon.
+const OFFLINE_GRACE_MS = 1_500;
 
 export type CollabDocContext = {
     doc: Y.Doc;
@@ -53,11 +53,7 @@ export type CollabDoc = {
     // Live sync state — flips true on every provider 'sync' and false on disconnect. Use for
     // presence, seed-if-empty, and other work that must track the actual connection.
     synced: boolean;
-    // Socket down after first load (`loaded && !connected`, from the provider's 'status' event —
-    // which, unlike `synced`, stays true through the resync handshake after a reconnect). Drives
-    // the toolbar pill: edits keep landing in the local doc and push on reconnect. Meanwhile the
-    // hook blocks `beforeunload`, since nothing persists them locally. Both trust y-websocket's
-    // view: a silently dead socket only counts once its 30s silence check fires.
+    // Socket down after first load and not a storage outage; drives the toolbar's offline icon.
     offline: boolean;
     // LATCHED first-load flag: false at doc creation, true after the FIRST synced=true for this doc
     // instance, and reset only on teardown / pathId swap. Gate the initial loading screen on THIS,
@@ -65,9 +61,10 @@ export type CollabDoc = {
     // (destroying y-prosemirror undo history / transient selection); the mounted doc converges on
     // reconnect. The pathId-swap loading gate still works: the cleanup resets it before the new doc.
     loaded: boolean;
-    // Set by a COLLAB_STORAGE_UNAVAILABLE_CLOSE close, cleared by the next sync; the hook keeps
-    // retrying, so this only changes what the loading screen says.
+    // The server closed with COLLAB_STORAGE_UNAVAILABLE_CLOSE and the hook is retrying; cleared on sync.
     storageUnavailable: boolean;
+    // Edits may not have reached the server; render `<UnsyncedEditsGuard active>` so leaving warns first.
+    unsyncedEdits: boolean;
 };
 
 export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
@@ -80,14 +77,14 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
     const [connected, setConnected] = useState(false);
     const [loaded, setLoaded] = useState(false);
     const [storageUnavailable, setStorageUnavailable] = useState(false);
+    const [unsyncedEdits, setUnsyncedEdits] = useState(false);
 
     const docRef = useRef<Y.Doc | null>(null);
-    // Doc updates applied while the socket was down, cleared once a sync handshake completes.
-    const unsyncedRef = useRef(false);
+    // A local update went out after the last completed handshake, so the server may still lack it.
+    const pendingUpdateRef = useRef(false);
 
     // Host config held in refs so its identity never re-runs the lifecycle effect: the doc/provider
-    // are keyed STRICTLY on (ownerId, mountId, pathId). This is also the fix for the stickies quirk,
-    // where an unstable seeding callback / `user.email` in the deps tore down and rebuilt the live doc.
+    // are keyed STRICTLY on (ownerId, mountId, pathId).
     const undoScopeRef = useRef(options.undoScope);
     undoScopeRef.current = options.undoScope;
     const onInitRef = useRef(options.onInit);
@@ -114,31 +111,40 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
             // later disconnect leaves `loaded` true and the editor stays mounted.
             if (isSynced) {
                 setLoaded(true);
-                unsyncedRef.current = false;
+                pendingUpdateRef.current = false;
+                setUnsyncedEdits(false);
                 setStorageUnavailable(false);
             }
             onSyncRef.current?.(ctx, isSynced);
         };
         provider.on('sync', handleSync);
 
-        const handleStatus = ({ status }: { status: 'connected' | 'disconnected' | 'connecting' }) =>
-            setConnected(status === 'connected');
+        let offlineTimer: ReturnType<typeof setTimeout> | undefined;
+        const handleStatus: Parameters<typeof provider.on<'status'>>[1] = ({ status }) => {
+            if (status === 'connected') {
+                clearTimeout(offlineTimer);
+                offlineTimer = undefined;
+                setConnected(true);
+                return;
+            }
+            if (status !== 'disconnected') return;
+            // A silently dead socket keeps `wsconnected` true until y-websocket's 30s silence check
+            // fires, so updates made meanwhile looked sent. The close is the first honest signal.
+            if (pendingUpdateRef.current) setUnsyncedEdits(true);
+            clearTimeout(offlineTimer);
+            offlineTimer = setTimeout(() => setConnected(false), OFFLINE_GRACE_MS);
+        };
         provider.on('status', handleStatus);
 
         // y-websocket only forwards local updates over an open socket, and nothing from the server
         // arrives while it is down — so every update applied meanwhile (local, or relayed by a
-        // sibling tab over BroadcastChannel) is one the server may still lack.
-        const handleUpdate = () => {
-            if (!provider.wsconnected) unsyncedRef.current = true;
+        // sibling tab over BroadcastChannel) is one the server may still lack. Provider-origin
+        // updates are ones y-websocket applied itself, so they are never ours to deliver.
+        const handleUpdate = (_update: Uint8Array, origin: unknown) => {
+            if (origin !== provider) pendingUpdateRef.current = true;
+            if (!provider.wsconnected) setUnsyncedEdits(true);
         };
         doc.on('update', handleUpdate);
-
-        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-            if (!unsyncedRef.current) return;
-            e.preventDefault();
-            e.returnValue = '';
-        };
-        window.addEventListener('beforeunload', handleBeforeUnload);
 
         // y-websocket only backs off for sockets that never opened; ours did (the route closes from
         // inside open()), so it would retry every 100ms against the failing storage. It emits this
@@ -164,12 +170,13 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
             // Reset the latch so a pathId swap re-shows the loading screen for the new doc.
             setLoaded(false);
             setStorageUnavailable(false);
-            unsyncedRef.current = false;
-            window.removeEventListener('beforeunload', handleBeforeUnload);
+            setUnsyncedEdits(false);
+            pendingUpdateRef.current = false;
             doc.off('update', handleUpdate);
             provider.off('status', handleStatus);
             provider.off('sync', handleSync);
             provider.off('connection-close', handleConnectionClose);
+            clearTimeout(offlineTimer);
             clearTimeout(retryTimer);
             // Host teardown first (unobserve, flush-on-unmount), then destroy the framework objects
             // provider→doc (provider.destroy detaches its own doc listener). The effect re-runs on a
@@ -185,5 +192,15 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
         };
     }, [ownerId, mountId, pathId]);
 
-    return { doc, docRef, provider, undoManager, synced, offline: loaded && !connected, loaded, storageUnavailable };
+    return {
+        doc,
+        docRef,
+        provider,
+        undoManager,
+        synced,
+        offline: loaded && !connected && !storageUnavailable,
+        loaded,
+        storageUnavailable,
+        unsyncedEdits,
+    };
 }

@@ -64,6 +64,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         offline,
         loaded,
         storageUnavailable,
+        unsyncedEdits,
     } = useCollabDoc({
         ownerId,
         mountId,
@@ -479,6 +480,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         offline,
         loaded,
         storageUnavailable,
+        unsyncedEdits,
         activeSlideId,
         setActiveSlideId,
         addSlide,
