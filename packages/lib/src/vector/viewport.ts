@@ -9,6 +9,19 @@ export type Extent = { width: number; height: number };
 // Screen px of breathing room around a fitted frame.
 export const FRAME_FIT_PADDING = 24;
 
+// The page card: the frame is drawn as a bordered, slightly rounded card, so the user sees where the
+// page ends. Both are SCREEN px. The ring is drawn in the screen-space chrome layer at exactly these
+// numbers — a border counter-scaled inside the SCALED scene layer would not hold its weight, because
+// the browser floors border-width to whole CSS px (at a 0.57 fit, 1/0.57 = 1.76px floors to 1px, a
+// blurry 0.57px hairline that drifts with the fit) — while the clip the card applies to overhanging
+// elements does live in the scene layer, and takes its radius in scene units from `frameClipRadius`.
+export const FRAME_CARD_BORDER = 1;
+export const FRAME_CARD_RADIUS = 8;
+
+export function frameClipRadius(zoom: number): number {
+    return FRAME_CARD_RADIUS / zoom;
+}
+
 // Centres `extent` in `visible` scene units, or clamps the pan to its edges when it is the larger of
 // the two — the visible window then stays inside the extent instead of running past it.
 function clampAxis(scroll: number, visible: number, extent: number): number {

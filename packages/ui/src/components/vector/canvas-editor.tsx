@@ -15,7 +15,10 @@ import {
     computeSnapTargets,
     elementBounds,
     elementsInFrame,
+    FRAME_CARD_BORDER,
+    FRAME_CARD_RADIUS,
     fitImageSize,
+    frameClipRadius,
     getElementsBounds,
     IMAGE_CASCADE_OFFSET,
     type ImageSize,
@@ -1269,8 +1272,11 @@ export function CanvasEditor({
         </>
     );
 
-    // A frame is a page: it paints its own background and CLIPS what overhangs it. The infinite canvas
-    // has no such box — its layers sit straight on the scene.
+    // A frame is a page, drawn as a CARD: its own background inside a slightly rounded box that CLIPS
+    // what overhangs it, so the user sees where the page ends. This half is the scene-layer half — the
+    // paint and the rounded clip, whose radius counter-scales the zoom (frameClipRadius); the card's
+    // border ring is drawn in the screen-space chrome layer below, where a 1px border is really 1px.
+    // The infinite canvas has no such box — its layers sit straight on the scene.
     const frameLayers = frame ? (
         <div
             className="absolute overflow-hidden"
@@ -1279,6 +1285,7 @@ export function CanvasEditor({
                 top: 0,
                 width: frame.width,
                 height: frame.height,
+                borderRadius: frameClipRadius(zoom),
                 ...getBackgroundStyle(parseBackgroundFill(frame.background), resolveMediaUrl),
             }}
         >
@@ -1333,6 +1340,18 @@ export function CanvasEditor({
             {/* Screen-space chrome, laid out by boxToStyle at the viewport React last rendered; a live
                 gesture moves the whole layer with one transform (chromeTransform) instead. */}
             <div ref={chromeRef} className="pointer-events-none absolute inset-0 origin-top-left">
+                {/* The page card's border, in SCREEN px (the scene layer paints and clips it) — first, so
+                    the selection chrome draws over it. */}
+                {frame && (
+                    <div
+                        className="pointer-events-none absolute border-border"
+                        style={{
+                            ...boxToStyle({ x: 0, y: 0, width: frame.width, height: frame.height, angle: 0 }),
+                            borderWidth: FRAME_CARD_BORDER,
+                            borderRadius: FRAME_CARD_RADIUS,
+                        }}
+                    />
+                )}
                 {/* Comment flags: screen-space like the selection ring, so they keep their size at any zoom. */}
                 {onOpenCard &&
                     commentedElements.map(({ id, cardId, corner }) => {
@@ -1475,10 +1494,13 @@ export function CanvasEditor({
                 </HintPill>
             )}
             {/* Zoom readout; click resets to 100% about the viewport centre. Bottom-RIGHT: the
-                router devtools badge owns the bottom-left corner in dev. */}
-            <HintPill className="bottom-3 right-3" title="Reset zoom" onClick={resetZoom}>
-                {Math.round(zoom * 100)}%
-            </HintPill>
+                router devtools badge owns the bottom-left corner in dev. A framed page has no zoom of
+                its own — it always shows the whole page — so it shows no pill. */}
+            {viewport === 'infinite' && (
+                <HintPill className="bottom-3 right-3" title="Reset zoom" onClick={resetZoom}>
+                    {Math.round(zoom * 100)}%
+                </HintPill>
+            )}
             <CanvasObjectMenu
                 contextMenu={objectContextMenu}
                 onArrange={onMenuArrange}
