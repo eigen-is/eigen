@@ -360,9 +360,17 @@ describe('seed-demo', () => {
             expect(scene.elements.length).toBeGreaterThanOrEqual(60);
 
             // The editor opens on the scene origin, so the drawing is stored centred on it.
-            const bounds = sceneBounds(scene.elements, new Map(scene.elements.map((el) => [el.id, el])));
+            const byId = new Map(scene.elements.map((el) => [el.id, el]));
+            const bounds = sceneBounds(scene.elements, byId);
             expect(bounds.minX + bounds.maxX).toBeCloseTo(0, 6);
             expect(bounds.minY + bounds.maxY).toBeCloseTo(0, 6);
+
+            // The crowd-flow arrow is the drawing's axis: it runs up the gate's centre to the main
+            // stage's centre, and the west margin is sized so that axis lands on the scene origin.
+            const crowdFlow = scene.elements.filter((el) => el.type === 'arrow' && el.text === 'crowd flow');
+            expect(crowdFlow.length).toBe(1);
+            const crowdBounds = sceneBounds(crowdFlow, byId);
+            expect(crowdBounds.minX + crowdBounds.maxX).toBeCloseTo(0, 6);
 
             // Z-order: the fence outline sits under everything (a click inside it lands on what it
             // encloses), and the wind-cover ring sits just under the stage it rings.

@@ -122,7 +122,7 @@ export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
         if ('seed' in el) el.seed = drawn;
     }
 
-    // The spec is authored top-left-positive; the editor opens on the scene origin, so shift the
+    // The spec is authored in its own top-left frame; the editor opens on the scene origin, so shift the
     // drawing to sit centred on it. Linear points and binding anchors are element-relative and ride along.
     const bounds = sceneBounds(ordered, new Map(ordered.map((el) => [el.id, el])));
     const dx = (bounds.minX + bounds.maxX) / 2;
