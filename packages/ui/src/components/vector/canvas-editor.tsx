@@ -828,18 +828,9 @@ export function CanvasEditor({
     // hook skips that, letting the BROWSER navigate to a file dropped while read-only or mid-text-edit
     // (destroying the editor + uncommitted text). The insertion gate lives in the callback instead;
     // the drag-over affordance shows only when insertion is actually possible.
-    const { targetProps: fileDropProps, isDragging } = useFileDropTarget((files, e) => {
-        if (!imagesEnabled) return;
-        void insertImageFiles(files, e ? clientToScene(e.clientX, e.clientY) : viewportCenterScene());
-    });
-    // Paste stays gated: its disabled default (no preventDefault) is harmless — text pastes flow on.
-    const { onPaste } = useFilePasteTarget((files) => {
-        void insertImageFiles(files, viewportCenterScene());
-    }, imagesEnabled);
-
     // ⌘C/⌘X/⌘V, the menu clipboard rows and the whole paste ladder live in the sibling hook (the
     // canvas only hands it the scene, the selection and the frame-stamped writers).
-    const { onMenuCopy, onMenuCut, onMenuPaste } = useCanvasClipboard({
+    const { onMenuCopy, onMenuCut, onMenuPaste, pasteSvgText } = useCanvasClipboard({
         canEdit,
         textEditingRef,
         viewport,
@@ -862,6 +853,29 @@ export function CanvasEditor({
         resolveMediaUrl,
         uploadFile: uploadFile.mutateAsync,
     });
+
+    const { targetProps: fileDropProps, isDragging } = useFileDropTarget((files, e) => {
+        if (!imagesEnabled) return;
+        const anchor = e ? clientToScene(e.clientX, e.clientY) : viewportCenterScene();
+        // An .svg WE exported carries its elements in a `<metadata>` block, so dropping one restores
+        // native elements exactly as pasting one does — drop and paste are the same ladder, or the same
+        // file behaves differently depending on how it arrived. Any other svg is just an image.
+        const svgFile = files.length === 1 && files[0].type === 'image/svg+xml' ? files[0] : null;
+        if (svgFile) {
+            void svgFile
+                .text()
+                .then((svg) => {
+                    if (!pasteSvgText(svg)) void insertImageFiles(files, anchor);
+                })
+                .catch(() => void insertImageFiles(files, anchor));
+            return;
+        }
+        void insertImageFiles(files, anchor);
+    });
+    // Paste stays gated: its disabled default (no preventDefault) is harmless — text pastes flow on.
+    const { onPaste } = useFilePasteTarget((files) => {
+        void insertImageFiles(files, viewportCenterScene());
+    }, imagesEnabled);
 
     // Text-edit entry shared by a mouse double-click and a touch double-tap (touch-gestures synthesizes
     // the tap-tap). frozenRef: no new session over a live gesture. An arrow opens the label overlay;

@@ -4,7 +4,13 @@
 // per-image and per-rich-text items every other app reads, plus the self-contained SVG flavour. The
 // paste CONSUMER is tools/paste-elements.ts.
 
-import { buildImageClipboardItem, buildTextClipboardItem, embedClipboardSvgMetadata } from '@workspace/lib/clipboard';
+import {
+    buildImageClipboardItem,
+    buildTextClipboardItem,
+    CLIPBOARD_SVG_MAX_BYTES,
+    CLIPBOARD_SVG_MAX_ELEMENTS,
+    embedClipboardSvgMetadata,
+} from '@workspace/lib/clipboard';
 import { stripTagsServer } from '@workspace/lib/html';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -12,14 +18,9 @@ import {
     buildElementsClipboardItem,
     eigenMediaHref,
     sceneToSvg,
-    type TextAlign,
     type VectorElement,
     type VectorMeta,
 } from '@workspace/lib/vector';
-
-export function toVectorTextAlign(v: string | undefined): TextAlign {
-    return v === 'center' || v === 'right' ? v : 'left';
-}
 
 // The items a foreign host reads: an image item per selected image (also the cross-mount re-upload
 // manifest a canvas→canvas paste keys on by `mediaName`), and a text item per rich-text box carrying
@@ -39,11 +40,20 @@ function foreignItems(
                 buildTextClipboardItem({
                     text: stripTagsServer(el.html),
                     box,
+                    // The whole modelled set, not a subset: these are exactly the fields a rich-text box
+                    // stores, and dropping six of them was how bold/italic/underline/spacing quietly
+                    // stopped surviving a copy into docs. Every one has a consumer (see the type).
                     typography: {
                         fontFamily: el.fontFamily,
                         fontSize: el.fontSize,
                         textAlign: el.textAlign,
                         color: el.color,
+                        fontWeight: el.fontWeight,
+                        fontStyle: el.fontStyle,
+                        textDecoration: el.textDecoration,
+                        verticalAlign: el.verticalAlign,
+                        letterSpacing: el.letterSpacing,
+                        lineHeight: el.lineHeight,
                     },
                     meta: { html: el.html },
                 }),
@@ -53,28 +63,31 @@ function foreignItems(
     return items;
 }
 
-// The full eigen payload for a selection: the native `elements` item (a canvas→canvas paste) and the
-// typed image/text items beside it (every other host) PLUS a self-contained SVG of the same selection
-// for hosts that can't place any of them — docs/sheets/slides render it as an image. The SVG carries
-// the items in a `<metadata>` block so it round-trips back to native elements if pasted into a canvas
-// without the eigen flavour. An image-bearing selection's SVG references its images BY NAME —
-// `href="eigen-media:<name>"`, never bytes — so the sync copy path stays byte-free and the ref resolves
-// against the target's own media/ on paste (materializeClipboardSvg re-uploads, then the display path
-// inlines, see CLIPBOARD.md). A still-pending upload has no portable path, so its element is left out
-// of the whole payload: nobody could fetch its bytes.
-export function buildSelectionData(
-    ordered: VectorElement[],
-    selectedIds: string[],
+// The SVG flavour for a selection, or undefined when it must not be written. Two gates:
+//
+// TEXT-ONLY selections skip it. Every foreign host runs its svg rung BEFORE the typed items, so a
+// drawing that is nothing but a rich-text box would land in a document as a flat picture of itself —
+// the typed text item, its typography and its HTML never read. An SVG conveys nothing about a text box
+// that the text item doesn't, so not writing it is what makes a copied text box paste as styled,
+// editable text.
+//
+// BIG selections skip it too (see the caps): the SVG is the expensive half of a copy and the typed
+// items are the lossless half.
+//
+// What it is otherwise: a self-contained render carrying the items in a `<metadata>` block, so it
+// round-trips back to native elements if pasted into a canvas without the eigen flavour. Images are
+// referenced BY NAME — `href="eigen-media:<name>"`, never bytes — so the sync copy path stays byte-free
+// and the ref resolves against the target's own media/ on paste (materializeClipboardSvg re-uploads,
+// then the display path inlines, see CLIPBOARD.md). An elbow arrow bound to an UNSELECTED shape draws
+// straight here: the render sees the selection alone, which is what a copy of the selection is.
+function selectionSvg(
+    selected: VectorElement[],
+    items: EigenClipboardItem[],
     meta: VectorMeta,
-    frameId: string,
     resolveMediaPath: (name: string) => DrivePath | undefined,
-): EigenClipboardData {
-    const selected = ordered.filter(
-        (el) => selectedIds.includes(el.id) && (el.type !== 'image' || resolveMediaPath(el.mediaName)),
-    );
-    const elementsItem = buildElementsClipboardItem(selected, frameId);
-    const items: EigenClipboardItem[] = elementsItem ? [elementsItem] : [];
-    items.push(...foreignItems(selected, resolveMediaPath));
+): string | undefined {
+    if (selected.length === 0 || selected.every((el) => el.type === 'richtext')) return undefined;
+    if (selected.length > CLIPBOARD_SVG_MAX_ELEMENTS) return undefined;
     const svg = embedClipboardSvgMetadata(
         sceneToSvg(
             { elements: selected, frames: [], meta },
@@ -82,7 +95,35 @@ export function buildSelectionData(
         ),
         { version: 1, items },
     );
-    return { version: 1, items, svg };
+    return svg.length > CLIPBOARD_SVG_MAX_BYTES ? undefined : svg;
+}
+
+// The full eigen payload for a selection: the native `elements` item (a canvas→canvas paste), the typed
+// image/text items beside it (every other host) and — unless a gate above says otherwise — the SVG
+// flavour for hosts that can place neither.
+//
+// It returns the ids it ACTUALLY serialized alongside the payload, and they are not always the
+// selection: an image whose media path doesn't resolve yet (a still-pending upload, or one whose folder
+// listing hasn't refreshed) has no portable reference, so nobody could fetch its bytes and it is left
+// out of the whole payload. CUT deletes these ids, never the selection — deleting an element the copy
+// silently dropped is data loss, and undo is not a substitute for not losing it.
+export function buildSelectionData(
+    ordered: VectorElement[],
+    selectedIds: string[],
+    meta: VectorMeta,
+    frameId: string,
+    resolveMediaPath: (name: string) => DrivePath | undefined,
+): { data: EigenClipboardData; serializedIds: string[] } {
+    const selected = ordered.filter(
+        (el) => selectedIds.includes(el.id) && (el.type !== 'image' || resolveMediaPath(el.mediaName)),
+    );
+    const elementsItem = buildElementsClipboardItem(selected, frameId);
+    const items: EigenClipboardItem[] = elementsItem ? [elementsItem] : [];
+    items.push(...foreignItems(selected, resolveMediaPath));
+    return {
+        data: { version: 1, items, svg: selectionSvg(selected, items, meta, resolveMediaPath) },
+        serializedIds: selected.map((el) => el.id),
+    };
 }
 
 // Concatenated plain text of the selected RICH TEXT elements — the only flavor written alongside eigen

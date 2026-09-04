@@ -3,7 +3,7 @@
 // hostile peer write — one validator, no second field list to drift.
 
 import type { EigenClipboardElementsItem, EigenClipboardItem } from '../types/clipboard';
-import { getElementsBounds } from './geometry';
+import { DUPLICATE_OFFSET, getElementsBounds, type Point } from './geometry';
 import { ELEMENT_FIELDS } from './kinds';
 import { readElementFromFields } from './read-vector';
 import type { VectorElement } from './types';
@@ -55,4 +55,37 @@ export function readElementsClipboardItem(
 export function reanchorElements(elements: VectorElement[], dx: number, dy: number): VectorElement[] {
     if (dx === 0 && dy === 0) return elements;
     return elements.map((el) => ({ ...el, x: el.x + dx, y: el.y + dy }));
+}
+
+// Where a pasted set lands, as one translation of the whole set. The wire carries the STORED
+// coordinates, so the decision is only ever "keep them, step off them, or re-anchor them".
+// `targetFrameId` is '' for an infinite canvas, which is also what `sourceFrameId` is for a copy taken
+// from one:
+//
+//   same frame          → the ⌘D step, so the copy is visibly a second copy
+//   a different frame   → in place: frame-relative coordinates mean the same spot on the new slide
+//   anything else       → re-anchor the bounding box on the viewport centre, so the paste lands where
+//                         the user is looking (the infinite canvas, and every crossing between the two)
+//
+// The last rule had a degenerate case that made ⌘V look like a dead key: a selection sitting AT the
+// viewport centre re-anchors by ~0, so the copy lands pixel-exactly on top of the original and the
+// canvas looks unchanged. A re-anchor smaller than one duplicate step IS that case, so it takes the
+// duplicate step instead — which is what the sibling gesture, ⌘D, does with the same selection.
+export function pasteAnchorOffset(
+    elements: VectorElement[],
+    sourceFrameId: string,
+    targetFrameId: string,
+    viewportCenter: Point,
+): { dx: number; dy: number } {
+    if (targetFrameId !== '' && sourceFrameId === targetFrameId) {
+        return { dx: DUPLICATE_OFFSET, dy: DUPLICATE_OFFSET };
+    }
+    if (targetFrameId !== '' && sourceFrameId !== '') return { dx: 0, dy: 0 };
+    const bounds = getElementsBounds(elements);
+    const dx = viewportCenter.x - (bounds.minX + bounds.maxX) / 2;
+    const dy = viewportCenter.y - (bounds.minY + bounds.maxY) / 2;
+    if (Math.abs(dx) < DUPLICATE_OFFSET && Math.abs(dy) < DUPLICATE_OFFSET) {
+        return { dx: DUPLICATE_OFFSET, dy: DUPLICATE_OFFSET };
+    }
+    return { dx, dy };
 }

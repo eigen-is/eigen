@@ -87,21 +87,52 @@ export function clipboardTextItemHasContent(item: EigenClipboardTextItem): boole
     return item.text.trim().length > 0;
 }
 
-function parseEigenJson(raw: string): EigenClipboardData | null {
-    try {
-        const data = JSON.parse(raw) as EigenClipboardData;
-        if (data.version !== 1 || !Array.isArray(data.items)) return null;
-        // The wire is forgeable by any web page, and consumers place items straight from the typed
-        // box with no fallbacks — so a missing/NaN dim must be dropped here, not written into a doc.
-        return {
-            version: 1,
-            items: data.items.filter((i) => Number.isFinite(i.width) && Number.isFinite(i.height)),
-            svg: typeof data.svg === 'string' ? data.svg : undefined,
-        };
-    } catch {
-        /* invalid data */
+function isRecord(v: unknown): v is Record<string, unknown> {
+    return typeof v === 'object' && v !== null;
+}
+
+// One forged item must not cost the whole paste. The wire is writable by any web page, and every
+// consumer reads the typed fields with no fallbacks — so an item that doesn't match its own variant is
+// dropped HERE. Validating only geometry was not enough: a `text` item with no `text` reached
+// `clipboardTextItemHasContent`, threw inside a paste handler that had already called preventDefault,
+// and the paste vanished with no error the user could see.
+function isValidItem(item: unknown): item is EigenClipboardItem {
+    if (!isRecord(item)) return false;
+    if (!Number.isFinite(item.width) || !Number.isFinite(item.height)) return false;
+    if (item.angle !== undefined && !Number.isFinite(item.angle)) return false;
+    switch (item.type) {
+        case 'text':
+            return typeof item.text === 'string';
+        case 'image':
+            return (
+                typeof item.mediaName === 'string' &&
+                typeof item.sourcePathId === 'string' &&
+                (item.sourceParentId === null || typeof item.sourceParentId === 'string') &&
+                typeof item.sourceOwnerId === 'string' &&
+                typeof item.sourceMountId === 'string'
+            );
+        case 'elements':
+            // The records themselves are re-validated per element by the document reader
+            // (readElementsClipboardItem → readElementFromFields), which clamps hostile values.
+            return Array.isArray(item.elements) && typeof item.sourceFrameId === 'string';
+        default:
+            return false;
     }
-    return null;
+}
+
+function parseEigenJson(raw: string): EigenClipboardData | null {
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(raw);
+    } catch {
+        return null; /* invalid data */
+    }
+    if (!isRecord(parsed) || parsed.version !== 1 || !Array.isArray(parsed.items)) return null;
+    return {
+        version: 1,
+        items: parsed.items.filter(isValidItem),
+        svg: typeof parsed.svg === 'string' ? parsed.svg : undefined,
+    };
 }
 
 // Embed an eigen payload into an SVG's `<metadata>` block (Excalidraw's svg-source pattern) so a
@@ -156,6 +187,16 @@ async function blobToDataUri(blob: Blob): Promise<string> {
 export async function svgToImageDataUri(svg: string): Promise<string> {
     return blobToDataUri(new Blob([svg], { type: 'image/svg+xml' }));
 }
+
+// Caps on the `svg` copy flavour, the expensive half of a canvas copy: the same records are serialized
+// once as typed items, again into the SVG's `<metadata>`, and the whole SVG is then URI-encoded into an
+// HTML attribute, so a 500-shape select-all put ~1.1MB on `text/html`. Over either cap the producer
+// SKIPS the flavour — the count is checked before the render so a huge selection never pays for it, the
+// byte budget catches the few-but-enormous case (long freedraw point lists). The failure mode is
+// deliberate and total: every eigen host still pastes losslessly from the typed items, and a foreign
+// host gets the text/plain fallback instead of an image (the same thing it gets for a shape-only copy).
+export const CLIPBOARD_SVG_MAX_ELEMENTS = 300;
+export const CLIPBOARD_SVG_MAX_BYTES = 512 * 1024;
 
 // Soft cap on the total inlined payload (the sum of the image data-URIs). Beyond it the async copy
 // path skips the foreign `<img>` flavour entirely rather than put a multi-MB, clipboard-rejectable

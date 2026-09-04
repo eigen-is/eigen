@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1303 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1307 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -776,7 +776,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorToolEntry` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (563)
+## Utilities & constants (567)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -896,6 +896,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `buildImageClipboardItem` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `buildTextClipboardItem` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `classifyPaste` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/classify.ts |
+| `CLIPBOARD_SVG_MAX_BYTES` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
+| `CLIPBOARD_SVG_MAX_ELEMENTS` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `clipboardTextItemHasContent` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `copyToClipboard` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `EIGEN_CLIPBOARD_RENDER_ATTR` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
@@ -1219,6 +1221,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `NUDGE_STEP` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `NUDGE_STEP_LARGE` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `OBJECT_FITS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `oneOf` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/read-fields.ts |
 | `orderByFractionalIndex` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `outlineContains` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `outlineDistance` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
@@ -1234,6 +1237,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `parseIdList` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `parsePoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `parsePressures` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `pasteAnchorOffset` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
 | `pointInPolygon` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `pointsBounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `polylineOutline` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
