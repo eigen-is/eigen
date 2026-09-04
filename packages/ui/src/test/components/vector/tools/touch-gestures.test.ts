@@ -170,3 +170,29 @@ describe('a swipe unwinds the pan it rode in on', () => {
         expect(gestures.onPointerUp(touchEvent({ pointerId: 1, clientX: 150, clientY: 405 }))).toBe(false);
     });
 });
+
+describe('a gesture that ever held two fingers is only a pinch', () => {
+    test('the last finger lifted out of a pinch cannot swipe on its pinch travel', () => {
+        const calls: string[] = [];
+        const gestures = renderTouchGestures({ onSwipe: () => calls.push('swipe') });
+        gestures.onPointerDown(touchEvent({ pointerId: 1, clientX: 300, clientY: 400 }));
+        gestures.onPointerDown(touchEvent({ pointerId: 2, clientX: 320, clientY: 400 }));
+        gestures.onPointerMove(touchEvent({ pointerId: 1, clientX: 150, clientY: 400 }));
+        gestures.onPointerMove(touchEvent({ pointerId: 2, clientX: 470, clientY: 400 }));
+        expect(gestures.onPointerUp(touchEvent({ pointerId: 1, clientX: 150, clientY: 400 }))).toBe(true);
+        gestures.onPointerUp(touchEvent({ pointerId: 2, clientX: 470, clientY: 400 }));
+        expect(calls).toEqual([]);
+    });
+
+    test('a stationary pinch release does not arm a double-tap', () => {
+        const calls: string[] = [];
+        const gestures = renderTouchGestures({ onDoubleTap: () => calls.push('double-tap') });
+        gestures.onPointerDown(touchEvent({ pointerId: 1, clientX: 100, clientY: 100 }));
+        gestures.onPointerDown(touchEvent({ pointerId: 2, clientX: 140, clientY: 100 }));
+        gestures.onPointerUp(touchEvent({ pointerId: 1, clientX: 100, clientY: 100 }));
+        gestures.onPointerUp(touchEvent({ pointerId: 2, clientX: 140, clientY: 100 }));
+        gestures.onPointerDown(touchEvent({ pointerId: 1, clientX: 140, clientY: 100 }));
+        gestures.onPointerUp(touchEvent({ pointerId: 1, clientX: 140, clientY: 100 }));
+        expect(calls).toEqual([]);
+    });
+});
