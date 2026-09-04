@@ -2,11 +2,10 @@ import { describe, expect, test } from 'bun:test';
 import {
     chromeTransform,
     clampFrameViewport,
-    FRAME_CARD_BORDER,
     FRAME_CARD_RADIUS,
     FRAME_FIT_PADDING,
     fitFrameViewport,
-    frameCardChrome,
+    frameClipRadius,
     groupTransform,
     sceneTransform,
 } from '../../vector/viewport';
@@ -67,15 +66,14 @@ describe('re-fitting on a container resize', () => {
     });
 });
 
-describe('frameCardChrome', () => {
-    test('holds the card border and radius at a constant SCREEN size', () => {
-        const c = frameCardChrome(0.5);
-        expect(c.borderWidth * 0.5).toBeCloseTo(FRAME_CARD_BORDER, 9);
-        expect(c.borderRadius * 0.5).toBeCloseTo(FRAME_CARD_RADIUS, 9);
+describe('frameClipRadius', () => {
+    test('holds the card corner at a constant SCREEN radius inside the scaled scene layer', () => {
+        expect(frameClipRadius(0.5) * 0.5).toBeCloseTo(FRAME_CARD_RADIUS, 9);
+        expect(frameClipRadius(2) * 2).toBeCloseTo(FRAME_CARD_RADIUS, 9);
     });
 
-    test('is the plain screen size at zoom 1', () => {
-        expect(frameCardChrome(1)).toEqual({ borderWidth: FRAME_CARD_BORDER, borderRadius: FRAME_CARD_RADIUS });
+    test('is the plain screen radius at zoom 1', () => {
+        expect(frameClipRadius(1)).toBe(FRAME_CARD_RADIUS);
     });
 });
 

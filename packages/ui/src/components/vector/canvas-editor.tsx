@@ -15,8 +15,10 @@ import {
     computeSnapTargets,
     elementBounds,
     elementsInFrame,
+    FRAME_CARD_BORDER,
+    FRAME_CARD_RADIUS,
     fitImageSize,
-    frameCardChrome,
+    frameClipRadius,
     getElementsBounds,
     IMAGE_CASCADE_OFFSET,
     type ImageSize,
@@ -1270,13 +1272,11 @@ export function CanvasEditor({
         </>
     );
 
-    // A frame is a page, drawn as a CARD: its own background inside a bordered, slightly rounded box
-    // that CLIPS what overhangs it, so the user sees where the page ends. The card sits in the scaled
-    // scene layer, so its border and radius are divided by the zoom to stay a constant screen size
-    // (frameCardChrome, one source with the letterbox padding); the ring is its own inset layer so the
-    // border can't offset the elements inside the box. The infinite canvas has no such box — its
-    // layers sit straight on the scene.
-    const card = frameCardChrome(zoom);
+    // A frame is a page, drawn as a CARD: its own background inside a slightly rounded box that CLIPS
+    // what overhangs it, so the user sees where the page ends. This half is the scene-layer half — the
+    // paint and the rounded clip, whose radius counter-scales the zoom (frameClipRadius); the card's
+    // border ring is drawn in the screen-space chrome layer below, where a 1px border is really 1px.
+    // The infinite canvas has no such box — its layers sit straight on the scene.
     const frameLayers = frame ? (
         <div
             className="absolute overflow-hidden"
@@ -1285,15 +1285,11 @@ export function CanvasEditor({
                 top: 0,
                 width: frame.width,
                 height: frame.height,
-                borderRadius: card.borderRadius,
+                borderRadius: frameClipRadius(zoom),
                 ...getBackgroundStyle(parseBackgroundFill(frame.background), resolveMediaUrl),
             }}
         >
             {layers}
-            <div
-                className="pointer-events-none absolute inset-0 border-border"
-                style={{ borderWidth: card.borderWidth, borderRadius: card.borderRadius }}
-            />
         </div>
     ) : (
         layers
@@ -1344,6 +1340,18 @@ export function CanvasEditor({
             {/* Screen-space chrome, laid out by boxToStyle at the viewport React last rendered; a live
                 gesture moves the whole layer with one transform (chromeTransform) instead. */}
             <div ref={chromeRef} className="pointer-events-none absolute inset-0 origin-top-left">
+                {/* The page card's border, in SCREEN px (the scene layer paints and clips it) — first, so
+                    the selection chrome draws over it. */}
+                {frame && (
+                    <div
+                        className="pointer-events-none absolute border-border"
+                        style={{
+                            ...boxToStyle({ x: 0, y: 0, width: frame.width, height: frame.height, angle: 0 }),
+                            borderWidth: FRAME_CARD_BORDER,
+                            borderRadius: FRAME_CARD_RADIUS,
+                        }}
+                    />
+                )}
                 {/* Comment flags: screen-space like the selection ring, so they keep their size at any zoom. */}
                 {onOpenCard &&
                     commentedElements.map(({ id, cardId, corner }) => {

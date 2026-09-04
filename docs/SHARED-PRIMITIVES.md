@@ -1168,7 +1168,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FRAME_FIT_PADDING` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `FRAME_HEIGHT` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `FRAME_WIDTH` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
-| `frameCardChrome` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
+| `frameClipRadius` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `framesFrom` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `FREEDRAW_SIZE_FACTOR` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `generateKeyBetween` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
