@@ -347,7 +347,7 @@ export function linearLocalToScene(box: Box, local: Point): Point {
 }
 
 // Even-odd ray cast, for inside-hits on a closed filled path.
-export function pointInPolygon(p: Point, points: Point[]): boolean {
+function pointInPolygon(p: Point, points: Point[]): boolean {
     let inside = false;
     for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
         const a = points[i];

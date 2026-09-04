@@ -30,7 +30,7 @@
 // The set is exactly what `VectorRichTextElement` models, which is also the widest thing any consumer
 // can place: vector's foreign-paste writes all ten onto the rich-text box it creates, and docs maps
 // the six it has nodes/marks for (family, colour, alignment, bold, italic, underline/strike). Nothing
-// goes on this wire that no consumer reads — `highlightColor` used to, and was orphaned for it.
+// goes on this wire that no consumer reads.
 export type EigenClipboardTypography = {
     fontFamily?: string;
     fontSize?: number;
@@ -48,8 +48,7 @@ export type EigenClipboardTextItem = {
     type: 'text';
     // PLAIN text, never HTML — consumers insert it literally (canvas text, sheet cells) or escape it
     // into markup. A rich-text producer flattens here; its per-run marks do not survive, and the
-    // whole-box styling that does rides `typography`. (A typed `html` field would carry the runs, but
-    // it needs a consumer first — nothing reads one today, and an unread wire field just rots.)
+    // whole-box styling that does rides `typography`.
     text: string;
     // Rendered box at copy time, source app's document-space units (best-effort cross-app fidelity).
     // `height` is informational for text: every consumer re-measures with its own font metrics.

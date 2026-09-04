@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { cssGradientStops, GRADIENT_STOP_COUNT, gradientStops, svgGradientStops } from '../../background/gradient';
+import { cssGradientStops, gradientStops, svgGradientStops } from '../../background/gradient';
 
 describe('gradientStops', () => {
     test('samples the ramp at one fixed count, monotone in offset', () => {
         const stops = gradientStops('#ff0000', '#0000ff');
-        expect(stops).toHaveLength(GRADIENT_STOP_COUNT);
+        expect(stops).toHaveLength(9);
         for (let i = 1; i < stops.length; i++) expect(stops[i].offset).toBeGreaterThan(stops[i - 1].offset);
         expect(stops[0].offset).toBe(0);
         expect(stops.at(-1)?.offset).toBe(1);

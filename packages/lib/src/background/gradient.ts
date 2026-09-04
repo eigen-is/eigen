@@ -15,7 +15,7 @@ import { round4 } from '../vector/outline';
 
 // Opacity rides beside the colour rather than inside an #rrggbbaa, because that is the shape SVG
 // wants: `stop-color` plus its own `stop-opacity` attribute.
-export type GradientStop = { offset: number; color: string; opacity: number };
+type GradientStop = { offset: number; color: string; opacity: number };
 
 type Paint = { color: string | null; alpha: number };
 type Lab = [number, number, number];
@@ -23,7 +23,7 @@ type Lab = [number, number, number];
 // Enough samples that the leftover per-segment sRGB error is invisible (OKLab deviates most in the
 // middle, where 8 segments leave well under a just-noticeable difference), few enough that the emitted
 // defs stay small.
-export const GRADIENT_STOP_COUNT = 9;
+const GRADIENT_STOP_COUNT = 9;
 
 // The stored gradient as sampled stops. A transparent end borrows its neighbour's colour, so an
 // alpha-0 stop never drags the ramp toward black and a plain lerp is all the alpha channel needs; a

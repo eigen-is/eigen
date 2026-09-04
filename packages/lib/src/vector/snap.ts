@@ -11,7 +11,7 @@ export const SNAP_SCREEN_THRESHOLD = 8;
 
 export type SnapLine = { orientation: 'horizontal' | 'vertical'; position: number };
 export type SnapTargets = { vSnaps: number[]; hSnaps: number[] };
-export type SnapResult = { box: Box; lines: SnapLine[] };
+type SnapResult = { box: Box; lines: SnapLine[] };
 
 function edgesOf(b: Box) {
     return {

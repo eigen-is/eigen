@@ -3,7 +3,6 @@ import {
     chromeTransform,
     clampFrameViewport,
     FRAME_CARD_RADIUS,
-    FRAME_FIT_PADDING,
     fitFrameViewport,
     frameClipRadius,
     groupTransform,
@@ -11,6 +10,10 @@ import {
 } from '../../vector/viewport';
 
 const FRAME = { width: 1920, height: 1080 };
+
+// fitFrameViewport's own default padding, stated here rather than imported: the constant is the
+// module's business, and a test that reads it back proves nothing about the framing.
+const FRAME_FIT_PADDING = 24;
 
 describe('fitFrameViewport', () => {
     test('letterboxes a wide container: the height is the binding constraint', () => {
