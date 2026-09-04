@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import type { ComponentType } from 'react';
 import type { VectorElementPatch } from '../hooks/use-canvas-doc';
+import { ArrowPanelSection } from './arrow';
 import { ImagePanelSection } from './image';
 import { RichTextInPlaceEditor, RichTextPanelSection } from './richtext';
 
@@ -30,11 +31,15 @@ export type InPlaceEditorProps = {
     onExit: () => void;
 };
 
-// Rows for a homogeneous selection of this kind. `onChange` applies the patch to every selected element
-// in one sealed transact (the panel owns the sealing).
+// Rows for a homogeneous selection of this kind. `onChange` applies ONE patch to every selected element
+// and `onChangeEach` a patch computed per element (a label's measured width, an arrow's re-docked
+// route), each in one sealed transact (the panel owns the sealing). `scene` resolves an element the
+// selection does not hold — an arrow's bound shape.
 export type KindPanelSectionProps = {
     elements: VectorElement[];
+    scene: Map<string, VectorElement>;
     onChange: (fields: VectorElementPatch) => void;
+    onChangeEach: (patch: (el: VectorElement) => VectorElementPatch) => void;
 };
 
 type ElementKindUi = {
@@ -51,7 +56,12 @@ export const ELEMENT_KIND_UI: Record<VectorElementType, ElementKindUi> = {
     rectangle: { icon: Square, label: 'Rectangle', shortcut: { letter: 'R', digit: '2' } },
     diamond: { icon: Diamond, label: 'Diamond', shortcut: { letter: 'D', digit: '3' } },
     ellipse: { icon: Circle, label: 'Ellipse', shortcut: { letter: 'O', digit: '4' } },
-    arrow: { icon: MoveUpRight, label: 'Arrow', shortcut: { letter: 'A', digit: '5' } },
+    arrow: {
+        icon: MoveUpRight,
+        label: 'Arrow',
+        shortcut: { letter: 'A', digit: '5' },
+        PanelSection: ArrowPanelSection,
+    },
     line: { icon: Minus, label: 'Line', shortcut: { letter: 'L', digit: '6' } },
     freedraw: { icon: Pencil, label: 'Draw', shortcut: { letter: 'P', digit: '7' } },
     richtext: {

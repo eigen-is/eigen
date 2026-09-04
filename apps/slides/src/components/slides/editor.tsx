@@ -348,9 +348,6 @@ function SlideEditorInner({
                     selectedElements={selectedElements}
                     updateElements={doc.updateElements}
                     undoManager={doc.undoManager}
-                    meta={doc.meta}
-                    updateMeta={doc.updateMeta}
-                    viewport="frame"
                     aspectLocked={aspectLocked}
                     onAspectLockChange={setAspectLocked}
                     emptyTitle="Slide"

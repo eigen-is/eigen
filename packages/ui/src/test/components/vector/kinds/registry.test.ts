@@ -43,11 +43,12 @@ describe('ELEMENT_KIND_UI', () => {
         }
     });
 
-    test('only rich text and the image carry their own panel rows', () => {
+    test('only the arrow, rich text and the image carry their own panel rows', () => {
         // The generic rows (fill, stroke, corners, opacity) gate on capabilities and are the panel's; a
-        // PanelSection exists only for what they cannot express — rich text's typography, the image's fit.
+        // PanelSection exists only for what they cannot express — the arrow's type/heads/label font,
+        // rich text's typography, the image's fit.
         for (const type of vectorElementTypes()) {
-            const own = type === 'richtext' || type === 'image';
+            const own = type === 'arrow' || type === 'richtext' || type === 'image';
             expect([type, Boolean(ELEMENT_KIND_UI[type].PanelSection)]).toEqual([type, own]);
         }
     });
