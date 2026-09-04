@@ -2,9 +2,6 @@
 // is still resolving or has failed, hand a denied reader the request-access screen, and otherwise
 // render the app's editor beside the share dialog. The five routes then differ only in which editor
 // they mount and what extra search params they thread into it.
-//
-// Deliberately NOT in the layout/app barrel: it reaches useEigenDocEditorRoute, whose `navigate` is
-// typed against a router that declares `?q=`, so barrelling it would break every app without one.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { ReactNode } from 'react';

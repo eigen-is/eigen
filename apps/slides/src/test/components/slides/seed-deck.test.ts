@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { readVectorFromDoc } from '@workspace/lib/vector';
+import { DEFAULT_FRAME_BACKGROUND, readVectorFromDoc } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import { seedDeck } from '../../../components/slides/seed-deck';
 
@@ -12,6 +12,9 @@ describe('seedDeck', () => {
         expect(scene.elements).toHaveLength(1);
         expect(scene.elements[0].frameId).toBe(scene.frames[0].id);
         expect(scene.elements[0].type).toBe('richtext');
+        // The seeded slide is a new page like any other: same background, so the welcome text is
+        // readable and the deck exports with a page rather than a hole.
+        expect(scene.frames[0].background).toBe(DEFAULT_FRAME_BACKGROUND);
     });
 
     test('a deck that already has a slide is left alone', () => {

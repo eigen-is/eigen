@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parseBinding, readVectorFromDoc, serializeBinding } from '@workspace/lib/vector';
+import { DEFAULT_FRAME_BACKGROUND, parseBinding, readVectorFromDoc, serializeBinding } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import {
     addFrameInDoc,
@@ -42,6 +42,19 @@ describe('frame writes', () => {
         const frames = readVectorFromDoc(doc).frames;
         expect(frames.map((f) => f.id)).toEqual(ids);
         expect(frames.every((f) => f.width === 1920 && f.height === 1080)).toBe(true);
+    });
+
+    test('a new frame is painted with the shared default, not left background-less', () => {
+        const { doc } = docWithFrames(1);
+        expect(readVectorFromDoc(doc).frames[0].background).toBe(DEFAULT_FRAME_BACKGROUND);
+        expect(DEFAULT_FRAME_BACKGROUND).not.toBe('');
+    });
+
+    test('duplicateFrame keeps a cleared background cleared rather than re-defaulting it', () => {
+        const { doc, ids } = docWithFrames(1);
+        updateFramesInDoc(doc, [{ id: ids[0], fields: { background: '' } }]);
+        const copy = duplicateFrameInDoc(doc, ids[0]);
+        expect(readVectorFromDoc(doc).frames.find((f) => f.id === copy)?.background).toBe('');
     });
 
     test('addFrame(afterId) inserts between its neighbours', () => {

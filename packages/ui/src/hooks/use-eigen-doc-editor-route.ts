@@ -1,4 +1,3 @@
-import { useNavigate } from '@tanstack/react-router';
 import { useCollabDocumentInfo } from '@workspace/lib/collab';
 import { usePaletteDocSelection } from '@workspace/lib/command-palette';
 import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
@@ -21,23 +20,6 @@ type EigenDocEditorRoute = {
     openAccessDialog: () => void;
     setAccessDialogOpen: (open: boolean) => void;
 };
-
-// The ?q= landing term for the in-document find bar, shared by the doc/slide/board/sheet routes. Latched once:
-// the editors defer their subtree until collab sync, so the DocSearchProvider mounts long after the
-// route resolves — a clear timed against the consumer's mount would race it and wipe q first.
-// Latched, the URL strip is timing-proof (replace: true → no history entry; the link still works on
-// the next visit). Latches per MOUNT: unreachable today (palette links full-reload via
-// window.location.href), but if CommandContext.navigate ever goes through the router, latch per pathId.
-export function useLatchedDocSearchTerm(q: string | undefined): string | undefined {
-    const navigate = useNavigate();
-    const [initialSearchTerm] = useState(q);
-    useEffect(() => {
-        if (q) {
-            navigate({ to: '.', search: (prev: { q?: string }) => ({ ...prev, q: undefined }), replace: true });
-        }
-    }, [q, navigate]);
-    return initialSearchTerm;
-}
 
 // Shared scaffold for the EigenDoc editor routes (docs/slides/sheets/stickies/vector).
 // Each route loads the same collab document info, mirrors the doc name into the

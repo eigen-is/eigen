@@ -4,14 +4,12 @@
 // non-null origin, so ⌘Z cannot empty it (docs/CANVAS.md § Sealing discipline). Ids and the frame
 // record go through the editor's own writers, so a seeded deck cannot drift from an authored one.
 
-import { DEFAULT_FILL_COLOR } from '@workspace/lib/background';
 import {
     baseDefaultsFor,
     ELEMENT_FIELDS,
     ELEMENT_KINDS,
     generateKeyBetween,
     SLIDES_STYLE_DEFAULTS,
-    serializeBackgroundFill,
 } from '@workspace/lib/vector';
 import { newElementId, newFrameId, writeFrameInDoc } from '@workspace/ui/components/vector';
 import * as Y from 'yjs';
@@ -26,7 +24,6 @@ const WELCOME = {
     height: 324,
     html: '<p>Welcome to Slides</p>',
     fontSize: 64,
-    color: '#ffffff',
     textAlign: 'center',
     verticalAlign: 'center',
 };
@@ -41,11 +38,9 @@ export function seedDeck(doc: Y.Doc): void {
         if (framesMap.size > 0) return;
         const index = generateKeyBetween(null, null);
         const frameId = newFrameId();
-        writeFrameInDoc(doc, {
-            id: frameId,
-            index,
-            background: serializeBackgroundFill({ type: 'solid', color: DEFAULT_FILL_COLOR }),
-        });
+        // No background here: writeFrame paints a new page with DEFAULT_FRAME_BACKGROUND, so the seeded
+        // slide and one added with + cannot differ.
+        writeFrameInDoc(doc, { id: frameId, index });
 
         const elementId = newElementId();
         const record: Record<string, unknown> = {

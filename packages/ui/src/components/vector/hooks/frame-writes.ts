@@ -3,6 +3,7 @@
 // way element-writes.ts is, so the hook stays the thin React surface.
 
 import {
+    DEFAULT_FRAME_BACKGROUND,
     elementsInFrame,
     FRAME_FIELDS,
     generateKeyBetween,
@@ -50,10 +51,11 @@ function keyAfter(framesMap: Y.Map<unknown>, afterId?: string | null, excludeId?
 }
 
 // One writer for the whole frame record, through the FRAME_FIELDS allow-list — width/height are
-// constants, so a stored size can never become a second source of truth for it.
+// constants, so a stored size can never become a second source of truth for it. An unstated background
+// is the shared DEFAULT_FRAME_BACKGROUND; a caller copying an existing frame passes its own.
 function writeFrame(framesMap: Y.Map<unknown>, frame: Partial<VectorFrame> & { id: string }): void {
     const map = new Y.Map();
-    const record: Record<string, unknown> = { name: '', background: '', ...frame };
+    const record: Record<string, unknown> = { name: '', background: DEFAULT_FRAME_BACKGROUND, ...frame };
     for (const field of FRAME_FIELDS) {
         const value = record[field];
         if (value !== undefined) map.set(field, value);

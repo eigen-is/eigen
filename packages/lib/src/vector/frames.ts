@@ -2,6 +2,8 @@
 // a drawing is the same canvas with no frames at all. Every frame in this program is 16:9 at
 // 1920x1080 — elements may overhang and the frame clips them.
 
+import { serializeBackgroundFill } from './fill';
+
 export const FRAME_WIDTH = 1920;
 export const FRAME_HEIGHT = 1080;
 export const FRAME_ASPECT_RATIO = FRAME_WIDTH / FRAME_HEIGHT;
@@ -20,6 +22,11 @@ export type VectorFrame = {
 // The stored keys a frame writer may set. `width`/`height` are constants, never stored, so a writer
 // that tried to persist them would be inventing a second source for the frame size.
 export const FRAME_FIELDS: readonly string[] = ['id', 'index', 'name', 'background'];
+
+// What a NEW page is painted with, for every writer that makes one (the editor's +, the deck seeder).
+// White, not '': a background-less frame is invisible against the present-mode backdrop and exports as
+// a hole. '' stays reachable — it is what the panel's None writes — but nothing defaults to it.
+export const DEFAULT_FRAME_BACKGROUND: string = serializeBackgroundFill({ type: 'solid', color: '#ffffff' });
 
 // The elements homed to one frame. '' selects the infinite canvas's own elements.
 export function elementsInFrame<T extends { frameId: string }>(elements: T[], frameId: string): T[] {
