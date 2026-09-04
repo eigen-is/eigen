@@ -10,6 +10,7 @@ import type { ClipboardBox } from '@workspace/lib/clipboard';
 import {
     buildImageClipboardItem,
     classifyPaste,
+    clipboardTextItemHasContent,
     hasRichHtmlBeyondMarker,
     materializeClipboardSvg,
     needsReUpload,
@@ -468,7 +469,7 @@ const TiptapEditor = ({
                         return true;
                     }
 
-                    if (paste.eigen && paste.eigen.items.length > 0) {
+                    if (paste.eigen) {
                         // Image payloads MUST take the eigen path (the cross-mount re-upload seam). A
                         // text-only payload is consumed directly only when text/html is marker-only —
                         // which is what a canvas text copy writes, and PM fallthrough there would paste
@@ -476,8 +477,16 @@ const TiptapEditor = ({
                         // parses as a real docs table. A canvas TEXT-ONLY copy reaches this rung at all
                         // only because the producer omits the svg flavour for it (see CLIPBOARD.md);
                         // anything with a shape or an image lands as a figure at the svg rung above.
+                        //
+                        // Claimed only when there is an item this editor can actually place, the way
+                        // sheets' rung guards: a big canvas selection can ride as its `elements` item
+                        // alone (the svg flavour is capped), and preventDefault on that would make ⌘V a
+                        // dead key.
                         const hasImage = paste.eigen.items.some((i) => i.type === 'image');
-                        if (hasImage || !hasRichHtmlBeyondMarker(event.clipboardData)) {
+                        const hasText = paste.eigen.items.some(
+                            (i) => i.type === 'text' && clipboardTextItemHasContent(i),
+                        );
+                        if (hasImage || (hasText && !hasRichHtmlBeyondMarker(event.clipboardData))) {
                             event.preventDefault();
                             handleEigenItemsPaste(paste.eigen.items).catch(() => {});
                             return true;

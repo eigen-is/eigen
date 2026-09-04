@@ -58,6 +58,10 @@ import { type PastePlan, planElementsPaste } from '../tools/paste-elements';
 import { deleteSelection } from './selection-ops';
 import { type NewVectorElement, sealed, type VectorElementPatch } from './use-canvas-doc';
 
+// How many cross-mount images re-upload at once. The wire is forgeable, so a paste must not turn into
+// hundreds of parallel fetch + upload round-trips; a handful keeps a normal multi-image paste quick.
+const REUPLOAD_CONCURRENCY = 4;
+
 // Foreign typography → the rich-text fields it names. This is the full set a rich-text box models, which
 // is also the full set the canvas producer writes: nothing on that wire goes unread. The fields below are
 // coerced with `oneOf`/`num`, the same clamps the document reader applies to a stored field, so a pasted
@@ -188,7 +192,9 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                     if (!mediaFolderId) continue;
                     const { width, height } = box;
                     const index = plan.partials.length;
-                    const crossMount = needsReUpload(item.sourceParentId, mediaFolderId);
+                    // No source folder on the wire is forged or incomplete: re-upload it like any
+                    // cross-mount item rather than trust a name that resolves against nothing here.
+                    const crossMount = !item.sourceParentId || needsReUpload(item.sourceParentId, mediaFolderId);
                     plan.partials.push({
                         type: 'image',
                         ...placeAt(width, height),
@@ -240,31 +246,33 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             setSelectedIds(ids);
 
             // Cross-mount images: fetch from source, re-upload into our media/, swap the pending name
-            // (late transact) or drop the element on failure — the shared optimistic-insert idiom.
-            for (const { index, item } of plan.crossMount) {
-                const id = ids[index];
-                if (!id || !mediaFolderId) continue;
-                reUploadImage(
-                    item.sourcePathId,
-                    item.sourceOwnerId,
-                    item.sourceMountId,
-                    mediaFolderId,
-                    uploadFile,
-                    item.mediaName,
-                )
-                    .then((result) => {
-                        if (!result) {
-                            deleteElementsUntracked([id]);
-                            return;
-                        }
-                        // Untracked: this technical swap is NOT its own undo step, so the whole
-                        // cross-mount paste is a single ⌘Z (reverts the insert; peers converge via its
-                        // inverse). Redo re-adds the element at its recorded pending name, the accepted
-                        // edge of every optimistic insert.
-                        updateElementUntracked(id, { mediaName: result.mediaName });
-                    })
-                    .catch(() => {});
-            }
+            // (late transact) or drop the element on failure — the shared optimistic-insert idiom. A
+            // forged wire can carry hundreds of image items, so a few drain at a time instead of firing
+            // every fetch + upload at once.
+            const pending = [...plan.crossMount];
+            const drain = async (): Promise<void> => {
+                const next = pending.shift();
+                if (!next) return;
+                const id = ids[next.index];
+                if (id && mediaFolderId) {
+                    const result = await reUploadImage(
+                        next.item.sourcePathId,
+                        next.item.sourceOwnerId,
+                        next.item.sourceMountId,
+                        mediaFolderId,
+                        uploadFile,
+                        next.item.mediaName,
+                    ).catch(() => null);
+                    // Untracked: this technical swap is NOT its own undo step, so the whole cross-mount
+                    // paste is a single ⌘Z (reverts the insert; peers converge via its inverse). Redo
+                    // re-adds the element at its recorded pending name, the accepted edge of every
+                    // optimistic insert.
+                    if (result) updateElementUntracked(id, { mediaName: result.mediaName });
+                    else deleteElementsUntracked([id]);
+                }
+                return drain();
+            };
+            for (let i = 0; i < Math.min(REUPLOAD_CONCURRENCY, pending.length); i += 1) drain().catch(() => {});
             return true;
         },
         [
@@ -496,20 +504,31 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
         if (!canEdit) return;
         (async () => {
             const data = await readEigenClipboardAsync();
-            if (data) {
-                pasteEigenItems(data.items);
-                return;
-            }
-            // Non-eigen clipboard: mirror the keyboard path's plain-text fallback (same
-            // pasteNonEigenText policy). OS-file image paste stays ⌘V-only (the async API exposes no
-            // File objects for the drop pipeline).
+            if (data && pasteEigenItems(data.items)) return;
+            // Nothing placed yet: walk the SAME ladder ⌘V does, over the same classifier, so the menu
+            // row and the keystroke are one behaviour — an SVG restores our elements or lands as an
+            // image, anything else becomes a rich-text box. OS-file image paste stays ⌘V-only (the async
+            // API exposes no File objects for the drop pipeline).
             let html = '';
             let text = '';
             for (const clip of await navigator.clipboard.read()) {
                 if (!html && clip.types.includes('text/html')) html = await (await clip.getType('text/html')).text();
                 if (!text && clip.types.includes('text/plain')) text = await (await clip.getType('text/plain')).text();
             }
-            pasteNonEigenText(html, text);
+            const transfer = new DataTransfer();
+            if (html) transfer.setData('text/html', html);
+            if (text) transfer.setData('text/plain', text);
+            const paste = classifyPaste(transfer);
+            if (paste.svg) {
+                if (!pasteSvgText(paste.svg.svg)) {
+                    await insertImageFiles([svgToImageFile(paste.svg.svg)], viewportCenterScene());
+                }
+                return;
+            }
+            if (pasteNonEigenText(paste.html, paste.text)) return;
+            // An eigen payload was there and no rung could place any of it — the keyboard path's toast,
+            // for the same reason: ⌘V doing nothing silently is indistinguishable from a broken menu.
+            if (data) toast.info('Nothing in this paste could be placed on the canvas');
         })().catch(() => {
             /* clipboard read denied or unavailable */
         });

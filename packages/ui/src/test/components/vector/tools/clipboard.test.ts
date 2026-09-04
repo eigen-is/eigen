@@ -9,7 +9,17 @@ import {
     type VectorElement,
     type VectorMeta,
 } from '@workspace/lib/vector';
+import { Window } from 'happy-dom';
 import { buildSelectionData } from '../../../../components/vector/tools/clipboard';
+
+// The rich-text sanitizer parses with DOMParser and builds through document.createElement, so the
+// svg-flavour test below needs a DOM at module scope (the element-layer tests' recipe).
+const window = new Window();
+// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
+const g = globalThis as any;
+g.DOMParser = window.DOMParser;
+g.document = window.document;
+g.Node = window.Node;
 
 // A copy carries THREE things: the native `elements` item (whole stored records — a canvas→canvas
 // paste restores exactly what was copied), the typed image/text items every other app reads (also the
@@ -164,6 +174,17 @@ describe('buildSelectionData', () => {
         const { data, pendingImages } = buildSelectionData([pending], ['i1', 'gone'], meta, '', resolve);
         expect(pendingImages).toBe(1);
         expect(data.items).toEqual([]);
+    });
+
+    test('the svg flavour sanitizes rich text, so a hostile peer write cannot ride out on a copy', () => {
+        const hostile = richtext('t1', 'a1', '<p onclick="steal()">hi<img src=x onerror="alert(1)"></p>');
+        const { data } = buildSelectionData([rect('r1', 'a0'), hostile], ['r1', 't1'], meta, '', () => undefined);
+        // The DRAWN body only: the <metadata> block carries the stored records verbatim by design, and
+        // every reader of those runs them back through the sanitizer.
+        const drawn = (data.svg ?? '').split('</metadata>')[1] ?? '';
+        expect(drawn).toContain('hi');
+        expect(drawn).not.toContain('onerror');
+        expect(drawn).not.toContain('onclick');
     });
 
     test('a text-only selection ships NO svg, so it lands in a document as text and not as a picture', () => {

@@ -12,6 +12,7 @@ import {
     embedClipboardSvgMetadata,
 } from '@workspace/lib/clipboard';
 import { stripTagsServer } from '@workspace/lib/html';
+import { sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
@@ -87,9 +88,14 @@ function selectionSvg(
 ): string | undefined {
     if (selected.length === 0 || selected.every((el) => el.type === 'richtext')) return undefined;
     if (selected.length > CLIPBOARD_SVG_MAX_ELEMENTS) return undefined;
+    // Rich text's `html` is a stored scalar, so it arrives verbatim from any peer with write access —
+    // sanitized here as at every other seam that renders it (the layer mount, the paste planner).
+    const elements = selected.map((el) =>
+        el.type === 'richtext' ? { ...el, html: sanitizeToLightEditorHtml(el.html) } : el,
+    );
     const svg = embedClipboardSvgMetadata(
         sceneToSvg(
-            { elements: selected, frames: [], meta },
+            { elements, frames: [], meta },
             { resolveMedia: (name) => (resolveMediaPath(name) ? eigenMediaHref(name) : null) },
         ),
         { version: 1, items },
