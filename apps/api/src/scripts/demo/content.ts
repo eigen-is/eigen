@@ -188,7 +188,7 @@ export const BUDGET = {
 // --- Sponsor deck (a slide deck the seeder builds straight into the container's Y.Doc from this
 // spec — no fixture bytes; see deck-build.ts). A deck is a canvas of frames: one slide per frame,
 // pinned 1920x1080, its elements positioned relative to the frame's top-left corner. Slide keys are
-// stable so element ids stay the same across reseeds, and shape keys let an arrow bind by name. ---
+// stable so element ids stay the same across reseeds. ---
 
 // A text box, authored as the TipTap HTML the editor itself stores (paragraphs, <strong>, lists).
 export type DeckText = {
@@ -198,29 +198,11 @@ export type DeckText = {
     width: number;
     height: number;
     fontSize: number;
+    font?: string; // an EIGEN_FONTS name; default the deck's Inter
     color?: string; // default the deck ink
     bold?: boolean;
     align?: TextAlign; // default left
     valign?: VerticalAlign; // default top
-};
-
-export type DeckShape = {
-    key: string;
-    kind: 'rectangle' | 'ellipse';
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    fill?: string; // default transparent
-    stroke?: string;
-    strokeWidth?: number;
-};
-
-// Both ends dock on a named shape's side midpoint, so the arrow carries a real binding.
-export type DeckArrow = {
-    from: { shape: string; side: CanvasSide };
-    to: { shape: string; side: CanvasSide };
-    stroke?: string;
 };
 
 export type DeckImage = {
@@ -231,33 +213,46 @@ export type DeckImage = {
     height: number;
 };
 
-// Drawn bottom-up: shapes, images, arrows, then every text on top.
+// Drawn bottom-up: images, then every text on top.
 export type DeckSlide = {
     key: string;
     name: string; // the slide's name in the rail
     background: FillPaint;
     texts: DeckText[];
-    shapes?: DeckShape[];
-    arrows?: DeckArrow[];
     images?: DeckImage[];
 };
 
 // The deck's ink: every text box that does not name its own colour is built in this.
-export const DECK_INK = '#1b1b1f';
-const DECK_PAPER = { type: 'solid', color: '#fffdfa' } as const;
-const DECK_ACCENT = '#e8590c';
-const DECK_HEADING = { x: 160, y: 110, width: 1600, height: 130, fontSize: 88, bold: true } as const;
-
-// The "numbers" slide is one card repeated on a 560px pitch — only x and the copy differ; the text
-// box sits 30px inside its card.
-const STAT_X = [160, 720, 1280] as const;
-const STAT_CARD = { kind: 'rectangle', y: 380, width: 480, height: 320, fill: '#ffe8d5', stroke: DECK_ACCENT } as const;
-const STAT_TEXT = { y: 410, width: 420, height: 260, fontSize: 44, align: 'center', valign: 'center' } as const;
-const STAT_COPY = [
-    '<p><strong>4,200</strong></p><p>visitors over two days</p>',
-    '<p><strong>26</strong></p><p>acts on two stages</p>',
-    '<p><strong>80</strong></p><p>volunteers on the crew</p>',
-] as const;
+export const DECK_INK = '#111111';
+// Body copy sits one shade back from the heading above it.
+const DECK_MUTED = '#444444';
+// Headings are hand-drawn, the way the festival's own signage is; body copy stays in the deck's Inter.
+const DECK_HAND = 'Excalifont';
+// The same sunrise behind every slide.
+const DECK_BACKGROUND: FillPaint = { type: 'gradient', from: '#fff085', to: '#e17100', angle: 180 };
+// After the title, every slide is one layout: a heading over a single line of body copy, both centred
+// in a 1536px column. Only the words change.
+const DECK_HEADING = {
+    x: 192,
+    y: 340,
+    width: 1536,
+    height: 200,
+    fontSize: 72,
+    font: DECK_HAND,
+    bold: true,
+    align: 'center',
+    valign: 'center',
+} as const;
+const DECK_BODY = {
+    x: 192,
+    y: 560,
+    width: 1536,
+    height: 180,
+    fontSize: 40,
+    color: DECK_MUTED,
+    align: 'center',
+    valign: 'center',
+} as const;
 
 export const SPONSOR_DECK = {
     folder: 'marketing' as TeamFolder,
@@ -267,218 +262,72 @@ export const SPONSOR_DECK = {
         {
             key: 'title',
             name: 'Title',
-            background: { type: 'gradient', from: '#2b1055', to: '#c2410c', angle: 160 },
-            images: [{ file: 'branding/logo.webp', x: 160, y: 150, width: 150, height: 150 }],
+            background: DECK_BACKGROUND,
+            // The festival mark between the title and the strapline, letterboxed inside its box.
+            images: [{ file: 'branding/logo.svg', x: 706, y: 373, width: 509, height: 334 }],
             texts: [
                 {
                     html: '<p>Tuimel Festival</p>',
-                    x: 160,
-                    y: 400,
-                    width: 1600,
-                    height: 170,
+                    x: 192,
+                    y: 173,
+                    width: 1536,
+                    height: 200,
                     fontSize: 120,
-                    bold: true,
-                    color: '#ffffff',
-                },
-                {
-                    html: '<p>Sponsor pitch, 2026 edition</p>',
-                    x: 160,
-                    y: 590,
-                    width: 1600,
-                    height: 90,
-                    fontSize: 48,
-                    color: '#ffd8a8',
-                },
-                {
-                    html: '<p>A volunteer-run arts and music festival on the coast</p>',
-                    x: 160,
-                    y: 860,
-                    width: 1600,
-                    height: 70,
-                    fontSize: 32,
-                    color: '#ffe8d5',
-                },
-            ],
-        },
-        {
-            key: 'agenda',
-            name: 'Agenda',
-            background: DECK_PAPER,
-            texts: [
-                { ...DECK_HEADING, html: '<p>Agenda</p>' },
-                {
-                    html:
-                        '<ul>' +
-                        '<li><p>Who we are</p></li>' +
-                        '<li><p>Last edition in numbers</p></li>' +
-                        '<li><p>What a sponsor gets</p></li>' +
-                        '<li><p>Packages</p></li>' +
-                        '<li><p>Next steps</p></li>' +
-                        '</ul>',
-                    x: 200,
-                    y: 320,
-                    width: 1500,
-                    height: 580,
-                    fontSize: 48,
-                },
-            ],
-        },
-        {
-            key: 'who',
-            name: 'Who we are',
-            background: DECK_PAPER,
-            images: [{ file: 'images/crowd-arriving.webp', x: 1040, y: 300, width: 720, height: 480 }],
-            texts: [
-                { ...DECK_HEADING, html: '<p>Who we are</p>' },
-                {
-                    html:
-                        '<p>Tuimel is a two-day festival in the dunes, run by 80 volunteers on a shoestring.</p>' +
-                        '<p>Two stages, a workshop tent, a camping field, and a crowd that comes back every year.</p>',
-                    x: 160,
-                    y: 320,
-                    width: 800,
-                    height: 460,
-                    fontSize: 40,
-                },
-            ],
-        },
-        {
-            key: 'numbers',
-            name: 'Last edition in numbers',
-            background: DECK_PAPER,
-            shapes: STAT_X.map((x, i) => ({ ...STAT_CARD, key: `stat-${i + 1}`, x })),
-            texts: [
-                { ...DECK_HEADING, html: '<p>Last edition in numbers</p>' },
-                ...STAT_X.map((x, i) => ({ ...STAT_TEXT, x: x + 30, html: STAT_COPY[i] })),
-            ],
-        },
-        {
-            key: 'offer',
-            name: 'What a sponsor gets',
-            background: DECK_PAPER,
-            shapes: [
-                {
-                    key: 'you-back',
-                    kind: 'rectangle',
-                    x: 200,
-                    y: 460,
-                    width: 620,
-                    height: 260,
-                    fill: '#e7f5ff',
-                    stroke: '#1c7ed6',
-                },
-                {
-                    key: 'we-name',
-                    kind: 'rectangle',
-                    x: 1100,
-                    y: 460,
-                    width: 620,
-                    height: 260,
-                    fill: '#fff0f6',
-                    stroke: '#c2255c',
-                },
-            ],
-            arrows: [{ from: { shape: 'you-back', side: 'right' }, to: { shape: 'we-name', side: 'left' } }],
-            texts: [
-                { ...DECK_HEADING, html: '<p>What a sponsor gets</p>' },
-                {
-                    html: '<p>You back a stage or the camping field</p>',
-                    x: 230,
-                    y: 490,
-                    width: 560,
-                    height: 200,
-                    fontSize: 40,
+                    font: DECK_HAND,
                     align: 'center',
                     valign: 'center',
                 },
                 {
-                    html: '<p>Your name on it, on site and in every announcement</p>',
-                    x: 1130,
-                    y: 490,
-                    width: 560,
-                    height: 200,
-                    fontSize: 40,
-                    align: 'center',
-                    valign: 'center',
-                },
-                {
-                    html: '<p>No pop-up banners, no logo soup. One partner per stage.</p>',
-                    x: 200,
-                    y: 810,
-                    width: 1520,
-                    height: 80,
-                    fontSize: 36,
-                    color: DECK_ACCENT,
-                    align: 'center',
+                    ...DECK_BODY,
+                    y: 765,
+                    font: DECK_HAND,
+                    html: '<p>A small coastal festival for emerging music and art</p>',
                 },
             ],
         },
         {
-            key: 'packages',
-            name: 'Packages',
-            background: DECK_PAPER,
+            key: 'who-comes',
+            name: 'Who comes',
+            background: DECK_BACKGROUND,
             texts: [
-                { ...DECK_HEADING, html: '<p>Packages</p>' },
+                { ...DECK_HEADING, html: '<p>Who comes</p>' },
                 {
-                    html:
-                        '<p><strong>Friend, 500 euro</strong></p>' +
-                        '<ul><li><p>Name on the site page</p></li><li><p>Two weekend tickets</p></li></ul>',
-                    x: 160,
-                    y: 340,
-                    width: 480,
-                    height: 520,
-                    fontSize: 34,
-                },
-                {
-                    html:
-                        '<p><strong>Partner, 2,500 euro</strong></p>' +
-                        '<ul><li><p>Logo on the programme and posters</p></li>' +
-                        '<li><p>A stand by the workshop tent</p></li>' +
-                        '<li><p>Six weekend tickets</p></li></ul>',
-                    x: 720,
-                    y: 340,
-                    width: 480,
-                    height: 520,
-                    fontSize: 34,
-                },
-                {
-                    html:
-                        '<p><strong>Main partner, 7,500 euro</strong></p>' +
-                        '<ul><li><p>Your name on the second stage</p></li>' +
-                        '<li><p>Everything in Partner</p></li>' +
-                        '<li><p>Twelve weekend tickets</p></li></ul>',
-                    x: 1280,
-                    y: 340,
-                    width: 480,
-                    height: 520,
-                    fontSize: 34,
+                    ...DECK_BODY,
+                    html: '<p>A couple thousand curious people, two stages, camping under big skies</p>',
                 },
             ],
         },
         {
-            key: 'next',
-            name: 'Next steps',
-            background: { type: 'solid', color: '#1b1b2f' },
+            key: 'why-partner',
+            name: 'Why partner with us',
+            background: DECK_BACKGROUND,
             texts: [
+                { ...DECK_HEADING, html: '<p>Why partner with us</p>' },
                 {
-                    html: '<p>Let us talk</p>',
-                    x: 160,
-                    y: 380,
-                    width: 1600,
-                    height: 160,
-                    fontSize: 96,
-                    bold: true,
-                    color: '#ffffff',
+                    ...DECK_BODY,
+                    html: '<p>Warm, local, and independent: your name next to a much-loved weekend</p>',
                 },
+            ],
+        },
+        {
+            key: 'what-you-get',
+            name: 'What you get',
+            background: DECK_BACKGROUND,
+            texts: [
+                { ...DECK_HEADING, html: '<p>What you get</p>' },
                 {
-                    html: '<p>Reply to this deck, or walk the field with us at the site visit on 12 June.</p>',
-                    x: 160,
-                    y: 580,
-                    width: 1600,
-                    height: 200,
-                    fontSize: 44,
-                    color: '#ffd8a8',
+                    ...DECK_BODY,
+                    html: '<p>Stage credit, on-site presence, and a mention in every announcement</p>',
                 },
+            ],
+        },
+        {
+            key: 'lets-talk',
+            name: "Let's talk",
+            background: DECK_BACKGROUND,
+            texts: [
+                { ...DECK_HEADING, html: "<p>Let's talk</p>" },
+                { ...DECK_BODY, html: '<p>Reach out to the crew and join this edition</p>' },
             ],
         },
     ] satisfies DeckSlide[],

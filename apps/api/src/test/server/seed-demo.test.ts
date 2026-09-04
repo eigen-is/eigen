@@ -252,7 +252,9 @@ describe('seed-demo', () => {
             );
             const deckScene = readVectorFromDoc(deckDoc);
             expect(deckScene.frames.length).toBe(SPONSOR_DECK.slides.length);
-            expect(deckScene.elements.length).toBeGreaterThanOrEqual(20);
+            expect(deckScene.elements.length).toBe(
+                SPONSOR_DECK.slides.reduce((n, slide) => n + slide.texts.length + (slide.images?.length ?? 0), 0),
+            );
             const deckFrameIds = new Set(deckScene.frames.map((frame) => frame.id));
             for (const element of deckScene.elements) {
                 for (const field of ['x', 'y', 'width', 'height', 'angle'] as const) {
@@ -271,7 +273,7 @@ describe('seed-demo', () => {
             for (const frame of deckFrames) expect(parseBackgroundFill(frame.background)).not.toBeNull();
 
             // Every slide holds text, every text box holds a body, and each image names a media file
-            // that landed. The arrow's binding survived the read, so its target shape is present.
+            // that landed.
             const deckMediaNames = new Set(deckImages.map((img) => img.name));
             for (const frame of deckFrames) {
                 const onFrame = elementsInFrame(deckScene.elements, frame.id);
@@ -282,13 +284,6 @@ describe('seed-demo', () => {
                 if (element.type === 'image') expect(deckMediaNames.has(element.mediaName)).toBe(true);
             }
             expect(deckScene.elements.filter((el) => el.type === 'image').length).toBe(deckImageSpecs.length);
-            const deckElementIds = new Set(deckScene.elements.map((el) => el.id));
-            const deckArrows = deckScene.elements.filter((el) => {
-                if (el.type !== 'arrow') return false;
-                const binding = parseBinding(el.endBinding);
-                return binding !== null && deckElementIds.has(binding.elementId);
-            });
-            expect(deckArrows.length).toBeGreaterThanOrEqual(1);
 
             // Team calendar: seeded events exist on the enabled team calendar.
             const calendarDb = join(root, 'team', teamId!, 'eigen.calendar', 'calendar.db');
