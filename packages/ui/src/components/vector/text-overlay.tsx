@@ -12,7 +12,7 @@
 // a newline (never commits). The textarea is uncontrolled so its native ⌘Z owns in-session undo.
 
 import { getFontFamily } from '@workspace/lib/constants/fonts';
-import { type Box, getLineHeightPx, type TextAlign } from '@workspace/lib/vector';
+import { type Box, getLineHeightPx, MAX_ARROW_LABEL_BYTES, type TextAlign } from '@workspace/lib/vector';
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { loadVectorFont } from './text-measure';
 
@@ -131,6 +131,8 @@ export function TextOverlay({
         <textarea
             ref={taRef}
             defaultValue={initialText}
+            // The reader truncates a longer label anyway; capping the input keeps typed and stored equal.
+            maxLength={MAX_ARROW_LABEL_BYTES}
             wrap="off"
             spellCheck={false}
             className="pointer-events-auto absolute"

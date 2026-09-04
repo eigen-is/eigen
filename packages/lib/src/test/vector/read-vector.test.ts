@@ -2,8 +2,15 @@ import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
 import { isValidFractionalIndex } from '../../vector/fractional-index';
 import { ELEMENT_FIELDS } from '../../vector/kinds';
+import { MAX_ARROW_LABEL_BYTES, MAX_ARROW_LABEL_LINES } from '../../vector/kinds/read-fields';
 import { readVectorFromDoc } from '../../vector/read-vector';
-import { DEFAULT_CORNERS, DEFAULT_ELEMENT_PROPS, DEFAULT_FONT_FAMILY, DEFAULT_SCENE_META } from '../../vector/types';
+import {
+    DEFAULT_CORNERS,
+    DEFAULT_ELEMENT_PROPS,
+    DEFAULT_FONT_FAMILY,
+    DEFAULT_SCENE_META,
+    parseFixedSegments,
+} from '../../vector/types';
 
 function writeElement(map: Y.Map<unknown>, id: string, fields: Record<string, unknown>) {
     const m = new Y.Map();
@@ -325,6 +332,22 @@ describe('readVectorFromDoc', () => {
             endBinding: '',
             labelWidth: 0,
         });
+    });
+
+    test('caps a hostile label at MAX_ARROW_LABEL_BYTES and MAX_ARROW_LABEL_LINES', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'ar', {
+                type: 'arrow',
+                index: 'a0',
+                points: '[[0,0],[50,0]]',
+                // A label's height is its line count times the line height, so lines are the second cap.
+                text: 'x\r\n'.repeat(200_000),
+            });
+        });
+        const [el] = readVectorFromDoc(doc).elements;
+        const text = el.type === 'arrow' ? el.text : '';
+        expect(new TextEncoder().encode(text).length).toBeLessThanOrEqual(MAX_ARROW_LABEL_BYTES);
+        expect(text.split('\n')).toHaveLength(MAX_ARROW_LABEL_LINES);
     });
 
     test('caps a hostile labelWidth at MAX_COORD (protects the shared viewBox)', () => {
@@ -707,6 +730,24 @@ describe('readVectorFromDoc — pinned elbow validation', () => {
         expect(el.type === 'arrow' && el.fixedSegments).toBe(
             '{"segments":[{"index":2,"start":[40,0],"end":[40,60]}],"startIsSpecial":false,"endIsSpecial":false}',
         );
+    });
+
+    test('pins are rebuilt from the ROUNDED polyline, so the two copies cannot drift', () => {
+        const doc = docWith((elements) =>
+            writeElement(
+                elements,
+                'ar',
+                arrowFields({
+                    points: '[[0,0],[0,10.005],[20.006,10.005],[20.006,30]]',
+                    fixedSegments: '{"segments":[{"index":2,"start":[0,10.005],"end":[20.006,10.005]}]}',
+                }),
+            ),
+        );
+        const [el] = readVectorFromDoc(doc).elements;
+        expect(el.type === 'arrow' && el.points).toBe('[[0,0],[0,10.01],[20.01,10.01],[20.01,30]]');
+        expect(el.type === 'arrow' && parseFixedSegments(el.fixedSegments).segments).toEqual([
+            { index: 2, start: [0, 10.01], end: [20.01, 10.01] },
+        ]);
     });
 
     test('pins are DROPPED (arrow stays a derived elbow) when the polyline is too short for them', () => {

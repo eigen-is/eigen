@@ -33,9 +33,9 @@ import { defineKind } from './kind';
 import {
     bool,
     clampCoord,
-    cleanStr,
     fontFamily,
     fontSize,
+    labelText,
     MAX_COORD,
     num,
     oneOf,
@@ -74,7 +74,10 @@ export const arrowKind = defineKind<VectorArrowElement>({
     read: (src, base) => {
         const points = parsePoints(str(src.get('points'), ''));
         if (points.length === 0) return null;
-        const clamped = points.map((p) => ({ x: clampCoord(p.x), y: clampCoord(p.y) }));
+        // Re-read through the stored form: `points` is 2-dp rounded on the way out, and the pins below
+        // are rebuilt from it, so both copies must be the coordinates every consumer sees.
+        const stored = serializePoints(points.map((p) => ({ x: clampCoord(p.x), y: clampCoord(p.y) })));
+        const clamped = parsePoints(stored);
         const elbow = bool(src.get('elbow'), DEFAULT_ARROW_PROPS.elbow);
         return {
             ...base,
@@ -85,7 +88,7 @@ export const arrowKind = defineKind<VectorArrowElement>({
             roughness: roughness(src.get('roughness')),
             seed: seed(src.get('seed')),
             roundness: oneOf(src.get('roundness'), ROUNDNESS, DEFAULT_LINEAR_ROUNDNESS),
-            points: serializePoints(clamped),
+            points: stored,
             elbow,
             // Pinned route segments live only on an elbow arrow — a straight arrow ignores them (its
             // route is the raw chord). Re-serialized through the canonical form: garbage and non
@@ -95,7 +98,7 @@ export const arrowKind = defineKind<VectorArrowElement>({
             endArrowhead: oneOf(src.get('endArrowhead'), ARROWHEADS, DEFAULT_ARROW_PROPS.endArrowhead),
             startBinding: binding(src.get('startBinding')),
             endBinding: binding(src.get('endBinding')),
-            text: cleanStr(src.get('text'), DEFAULT_ARROW_PROPS.text),
+            text: labelText(src.get('text')),
             fontSize: fontSize(src.get('fontSize')),
             fontFamily: fontFamily(src.get('fontFamily')),
             // Non-negative and capped at MAX_COORD like the spatial fields — a hostile 1e9 would
