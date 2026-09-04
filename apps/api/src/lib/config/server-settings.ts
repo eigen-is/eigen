@@ -28,7 +28,7 @@ const settingsStore = new JsonStore<ServerSettings>(serverFs, 'settings.json', {
         welcomeMail: {
             enabled: true,
             subject: 'Welcome to {orgName}!',
-            body: '<p>Hi {name},</p><p>A personal workspace in the cloud. Simple and secure. You control your data.</p>',
+            body: '<p>Hi {name},</p><p>Welcome to your new workspace: a self-hosted alternative to Google Workspace. Simple and secure. You control your data.</p>',
         },
         inviteEmail: {
             subject: "You're invited to {orgName}",

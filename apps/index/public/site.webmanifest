@@ -2,7 +2,7 @@
   "id": "/",
   "name": "Eigen",
   "short_name": "Eigen",
-  "description": "Your personal workspace in the cloud.",
+  "description": "Eigen is a self-hosted alternative to Google Workspace. Simple and secure. You control your data.",
   "start_url": "/space/",
   "scope": "/",
   "display": "standalone",

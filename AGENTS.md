@@ -1,6 +1,6 @@
 # AGENTS.md — Eigen Project Context
 
-Eigen is a self-hosted Google Workspace alternative. Monorepo with integrated apps sharing a single API server, UI
+Eigen is a self-hosted alternative to Google Workspace. Monorepo with integrated apps sharing a single API server, UI
 library, and business logic layer.
 
 Layout, stack, and scripts are derivable — read `package.json` (scripts + workspaces) and `ls apps packages`.

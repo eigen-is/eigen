@@ -22,9 +22,9 @@ export function AboutDialog({ open, onOpenChange }: AboutDialogProps) {
                         eigen
                     </div>
                     <p className="text-sm text-muted-foreground text-center">
-                        Your personal workspace in the cloud.
+                        A self-hosted alternative to Google Workspace.
                         <br />
-                        Simple and secure. You control your own data.
+                        Simple and secure. You control your data.
                     </p>
                 </DialogHeader>
 

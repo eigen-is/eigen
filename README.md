@@ -4,7 +4,7 @@
 
 **Try the live demo at [demo.eigen.is](https://demo.eigen.is).** It is a shared workspace that resets every hour.
 
-Eigen is a self-hosted alternative to Google Workspace. It runs as a single server with integrated apps for email, file storage, documents, spreadsheets, presentations, kanban boards, calendar, contacts, and real-time chat — all sharing one API, one auth system, and one UI.
+Eigen is a self-hosted alternative to Google Workspace. It runs as a single server with integrated apps for email, file storage, documents, spreadsheets, presentations, drawings, kanban boards, calendar, contacts, and real-time chat — all sharing one API, one auth system, and one UI.
 
 The name *Eigen* is Dutch and German for "own." You own your data, you own your infrastructure, you own your workspace.
 
@@ -72,6 +72,8 @@ Eigen ships as a monorepo with a single API server and a set of tightly integrat
   Concurrent edits on different cells merge cleanly.
 - **Slides** — Collaborative presentations with a pixel-based canvas (1920×1080), resolution-independent rendering,
   drag-and-drop objects, background images, and a presentation mode.
+- **Vector** — Collaborative drawings on an infinite canvas: sketchy shapes, freehand strokes, arrows that dock to
+  shapes, rich text, and images. Export to SVG.
 - **Stickies** — Kanban boards with real-time collaboration via Yjs. Drag-and-drop cards and columns. Each card has
   its own embedded chat room for discussion.
 - **Calendar** — Full calendar with recurring events (RFC 5545 RRULE), invitations with RSVP, shared calendars, and
@@ -195,7 +197,7 @@ Architecture docs live in `docs/`:
 | Deployment | [Docker Setup](docker/SETUP-GUIDE.md), [Local Testing](docker/LOCAL-TESTING.md), [S3 Sync](docs/SYNC.md), [Demo Mode](docs/DEMO_MODE.md), [Testing](docs/TESTING.md) |
 | Frontend | [Layout](docs/LAYOUT.md), [Clipboard](docs/CLIPBOARD.md), [Previews](docs/PREVIEWS.md) |
 | Features | [Mail](docs/MAIL.md), [Calendar](docs/CALENDAR.md), [Contacts](docs/CONTACTS.md), [Chat](docs/CHAT.md), [Notifications](docs/NOTIFICATION-CENTER.md), [IMAP](docs/IMAP.md), [WebDAV](docs/WEBDAV.md) |
-| Apps | [Sheets](docs/SHEETS.md), [Slides](docs/SLIDES.md), [Stickies](docs/STICKIES.md), [Comments](docs/COMMENTS.md) |
+| Apps | [Sheets](docs/SHEETS.md), [Slides](docs/SLIDES.md), [Canvas engine (Vector + Slides)](docs/CANVAS.md), [Stickies](docs/STICKIES.md), [Comments](docs/COMMENTS.md) |
 | Operations | [Quota](docs/QUOTA.md), [Server Settings](docs/SERVER-SETTINGS.md), [Export](docs/EXPORT.md), [Organizations](docs/ORGANISATIONS-AND-TEAMS.md) |
 
 ## Contact

@@ -31,7 +31,7 @@ const apps = [
         color: 'var(--app-space-color)',
         href: getSpaceAppUrl(),
         icon: LayoutDashboard,
-        description: 'Your personal workspace in the cloud',
+        description: 'Your workspace home',
     },
     {
         name: 'Mail',
