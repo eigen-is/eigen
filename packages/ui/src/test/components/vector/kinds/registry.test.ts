@@ -67,7 +67,7 @@ describe('ELEMENT_KIND_UI', () => {
     });
 
     test('a drag-create preview is styled by the HOST table, so it cannot pop on release', () => {
-        // The deck's table is flat and solid in Inter; the drawing canvas' is sketchy and hachured in
+        // The deck's table is flat and solid in Inter; the drawing canvas' is sketchy and cross-hatched in
         // Excalifont. A preview built from the wrong one changes look the moment the pointer lifts.
         const box = { x: 0, y: 0, width: 10, height: 10, angle: 0 };
         const rect = creatingElement({ type: 'rectangle', seed: 1, box }, SLIDES_STYLE_DEFAULTS);

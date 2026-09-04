@@ -161,13 +161,13 @@ function boxAimLines(el: VectorElement): [[Point, Point], [Point, Point]] {
 // says), so there is nothing per-app to say about it.
 export const NEW_TEXT_BOX_SIZE = { width: 320, height: 48 };
 
-// The vector app's style table: roughness 1, hachure, Excalifont, curved corners (SLIDES_STYLE_DEFAULTS
+// The vector app's style table: roughness 1, cross-hatch, Excalifont, curved corners (SLIDES_STYLE_DEFAULTS
 // is the deck's flat counterpart). A fresh element starts unpainted but hatched — the hatch style rides
-// the fill, so the first colour the user picks lands as hachure.
+// the fill, so the first colour the user picks lands as cross-hatch.
 export const VECTOR_STYLE_DEFAULTS: StyleDefaults = {
     strokeColor: DEFAULT_ELEMENT_PROPS.strokeColor,
     strokeWidth: DEFAULT_ELEMENT_PROPS.strokeWidth,
-    fill: serializeFill({ ...TRANSPARENT_FILL, style: 'hachure' }),
+    fill: serializeFill({ ...TRANSPARENT_FILL, style: 'cross-hatch' }),
     roughness: 1,
     corners: 'curved',
     fontFamily: 'Excalifont',
