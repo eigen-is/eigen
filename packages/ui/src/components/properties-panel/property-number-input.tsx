@@ -43,8 +43,11 @@ export function PropertyNumberInput({
                 if (raw !== '' && raw !== '-') {
                     const v = Number(raw);
                     // Clamped BEFORE it is written: the input's own min/max only drive the spinner and
-                    // validity styling, so typing 0 into a width would otherwise reach the document.
-                    if (!Number.isNaN(v)) onChange(Math.min(max ?? v, Math.max(min ?? v, v)));
+                    // validity styling, so typing 0 into a width would otherwise reach the document. An
+                    // absent bound is no bound; a row wanting out-of-range entry (Angle) passes neither.
+                    const lo = min ?? Number.NEGATIVE_INFINITY;
+                    const hi = max ?? Number.POSITIVE_INFINITY;
+                    if (!Number.isNaN(v)) onChange(Math.min(hi, Math.max(lo, v)));
                 }
             }}
             onFocus={() => setFocused(true)}
