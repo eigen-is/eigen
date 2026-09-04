@@ -25,7 +25,8 @@ function edgesOf(b: Box) {
 }
 
 // Candidate snap coordinates from the other objects (excludeIds skips the ones being dragged) plus any
-// host guide lines in `extraV`/`extraH` (slides: canvas edges + centre; vector: none — infinite canvas).
+// host guide lines in `extraV`/`extraH` (frame mode: the frame's edges + centre; the infinite canvas
+// has none).
 // A rotated target contributes centre only.
 export function computeSnapTargets(
     boxes: { id: string; box: Box }[],
