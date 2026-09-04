@@ -66,7 +66,7 @@ describe('FrameView', () => {
 });
 
 describe('sameThumbnail', () => {
-    const base = { frame: frame(), elements: [rect()], index: 0, active: false, onClick: () => undefined };
+    const base = { frame: frame(), elements: [rect()], index: 0, active: false, onSelect: () => undefined };
 
     test('the same slice and the same frame skip the re-render', () => {
         expect(sameThumbnail(base, { ...base, elements: [...base.elements] })).toBe(true);
@@ -90,7 +90,7 @@ describe('sameThumbnail', () => {
         expect(sameThumbnail(base, { ...base, frame: frame({ background: solidFill('#123456') }) })).toBe(false);
     });
 
-    test('a fresh click handler re-renders, so the row cannot activate a stale slide', () => {
-        expect(sameThumbnail(base, { ...base, onClick: () => undefined })).toBe(false);
+    test('a fresh select handler re-renders, so the row cannot activate a stale slide', () => {
+        expect(sameThumbnail(base, { ...base, onSelect: () => undefined })).toBe(false);
     });
 });
