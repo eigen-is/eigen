@@ -100,7 +100,7 @@ describe('buildSelectionData', () => {
         expect(extractClipboardSvgMetadata(data.svg ?? '')?.items).toEqual(data.items);
     });
 
-    test('a rich-text box also ships a text item: flattened text, its typography and its html', () => {
+    test('a rich-text box also ships a text item: flattened text and its typography', () => {
         // How a rich host outside the canvas pastes it styled — the canvas itself reads the elements item.
         const { data } = buildSelectionData([richtext('t1', 'a0')], ['t1'], meta, '', () => undefined);
         expect(data.items.some((i) => i.type === 'text')).toBe(true);
@@ -120,7 +120,6 @@ describe('buildSelectionData', () => {
             letterSpacing: 0,
             lineHeight: 1.2,
         });
-        expect(text?.meta).toEqual({ html: '<p>hello</p>' });
     });
 
     test('an image ships the image item beside the elements item, by name and never by bytes', () => {

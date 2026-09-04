@@ -3,8 +3,9 @@
 
 import type { Drawable, OpSet, Options } from 'roughjs/bin/core';
 import { RoughGenerator } from 'roughjs/bin/generator';
+import { escapeXml } from '../../core/html';
 import { gradientVector, isTransparentColor, isTransparentFill, parseFill } from '../fill';
-import { isClosedPath, type Point } from '../geometry';
+import { isClosedPath, type Point, round } from '../geometry';
 import { cornerRadius, diamondOutline, outlinePath, rectOutline, sharpDiamondOffset } from '../outline';
 import {
     type FillStyle,
@@ -204,18 +205,4 @@ function opsToPath(opset: OpSet): string {
             );
     }
     return parts.join(' ');
-}
-
-export function round(n: number): number {
-    const r = Math.round(n * 100) / 100;
-    return r === 0 ? 0 : r;
-}
-
-export function escapeXml(value: string): string {
-    return value
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&apos;');
 }

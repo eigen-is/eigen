@@ -5,11 +5,12 @@
 import type { Options } from 'roughjs/bin/core';
 import type { RoughGenerator } from 'roughjs/bin/generator';
 import { getFontFamily } from '../../constants/fonts';
+import { escapeXml } from '../../core/html';
 import { headingIsHorizontal, vectorToHeading } from '../elbow-heading';
 import { getLineHeightPx, getVerticalOffset } from '../font-metrics';
-import { arrowheadGeometry, type Point } from '../geometry';
+import { arrowheadGeometry, type Point, round } from '../geometry';
 import type { Arrowhead, VectorArrowElement } from '../types';
-import { baseRoughOptions, drawableToSvg, escapeXml, round } from './render-utils';
+import { baseRoughOptions, drawableToSvg } from './render-utils';
 
 // The label rect in the arrow's local frame, as arrowLabelBox returns it.
 type LabelBox = { center: Point; width: number; height: number };

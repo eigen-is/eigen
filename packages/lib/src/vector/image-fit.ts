@@ -7,7 +7,7 @@
 export type ImageSize = { width: number; height: number };
 
 // A placed image fits within this fraction of the visible viewport by default.
-export const DEFAULT_IMAGE_FIT = 0.8;
+const DEFAULT_IMAGE_FIT = 0.8;
 
 // Fallback box for an image whose intrinsic size can't be read (e.g. an SVG with no intrinsic
 // dimensions) — sized as this box, still run through the viewport cap below.

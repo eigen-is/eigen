@@ -283,6 +283,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
     // Element clipboard CONSUMER. Our own payload restores NATIVE elements — whole stored records
     // through the reader, re-anchored as a set — and its image items are only the re-upload manifest.
     // A foreign payload falls back to the cross-app items.
+    //
     // Returns whether anything was actually placed. A payload can be non-empty and still place nothing —
     // every item dropped as forged at the read seam, or images with no media/ folder to upload into — and
     // the caller must not claim the event for a paste that did nothing (the rungs below it, and the

@@ -1,5 +1,6 @@
 import { getStroke } from 'perfect-freehand';
 import { RoughGenerator } from 'roughjs/bin/generator';
+import { escapeXml } from '../../core/html';
 import { isTransparentFill, parseFill } from '../fill';
 import {
     FREEDRAW_SIZE_FACTOR,
@@ -16,7 +17,7 @@ import { polylineOutline } from '../outline';
 import { DEFAULT_LINEAR_ROUNDNESS, ROUNDNESS, type VectorLinearElement } from '../types';
 import { defineKind } from './kind';
 import { bool, clampCoord, fillField, oneOf, roughness, seed, str } from './read-fields';
-import { drawableToSvg, escapeXml, fillDefs, getSvgPathFromStroke, linearRoughOptions } from './render-utils';
+import { drawableToSvg, fillDefs, getSvgPathFromStroke, linearRoughOptions } from './render-utils';
 
 export const freedrawKind = defineKind<VectorLinearElement>({
     type: 'freedraw',

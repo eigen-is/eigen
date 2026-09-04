@@ -1,4 +1,4 @@
-import { escapeXml } from '../shared/xml';
+import { escapeXml } from '@workspace/lib/html';
 
 export const XML_CONTENT_TYPE = 'application/xml; charset=utf-8';
 

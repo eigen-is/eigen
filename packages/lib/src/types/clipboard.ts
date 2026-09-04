@@ -2,11 +2,10 @@
 // HTML-marker fallback, read/written in core/clipboard) — there are no persisted instances, so the
 // shape is a clean break with zero backwards-compatibility concern.
 //
-// Geometry and typography are FIRST-CLASS TYPED fields, not entries in the untyped `meta` bag. That
-// is the one-source-of-truth fix: before this, slides stashed size as `meta.w/h` and docs as
-// `meta.width`, so an image lost its size crossing between the two apps. Consumers read the typed
-// fields and NEVER sniff `meta` for size/rotation/typography. `meta` survives only for app-private
-// extras a given app carries opaquely (slides borders + objectFit + text-box background).
+// Geometry and typography are FIRST-CLASS TYPED fields. That is the one-source-of-truth fix: before
+// this, the apps stashed size in an untyped `meta` bag — one as `meta.w/h`, another as `meta.width` —
+// so an image lost its size crossing between them. There is no `meta` bag any more: every field here
+// has a producer AND a consumer, and anything an app wants to carry across earns a typed field.
 //
 // `width`/`height` are MANDATORY on every item — the producer measures its own rendered box (docs
 // measures the figure's <img>, which stores width only) so no consumer ever probes the pixels to
@@ -47,10 +46,10 @@ export type EigenClipboardTypography = {
 
 export type EigenClipboardTextItem = {
     type: 'text';
-    // PLAIN text, never HTML — consumers insert it literally (vector canvas text, sheet cells) or
-    // escape it into markup. A rich-text producer flattens here and carries its HTML in its own
-    // `meta` (the canvas: `meta.html`), and MUST sanitize that HTML again on consumption: the wire is
-    // forgeable by any web page via the text/html marker.
+    // PLAIN text, never HTML — consumers insert it literally (canvas text, sheet cells) or escape it
+    // into markup. A rich-text producer flattens here; its per-run marks do not survive, and the
+    // whole-box styling that does rides `typography`. (A typed `html` field would carry the runs, but
+    // it needs a consumer first — nothing reads one today, and an unread wire field just rots.)
     text: string;
     // Rendered box at copy time, source app's document-space units (best-effort cross-app fidelity).
     // `height` is informational for text: every consumer re-measures with its own font metrics.
@@ -58,7 +57,6 @@ export type EigenClipboardTextItem = {
     height: number;
     angle?: number; // degrees, clockwise
     typography?: EigenClipboardTypography;
-    meta?: Record<string, unknown>; // app-private extras only (never geometry/typography)
 };
 
 export type EigenClipboardImageItem = {
@@ -75,7 +73,6 @@ export type EigenClipboardImageItem = {
     width: number;
     height: number;
     angle?: number; // degrees, clockwise
-    meta?: Record<string, unknown>; // app-private extras only (never geometry)
 };
 
 // A canvas selection as NATIVE elements: whole stored records (the ELEMENT_FIELDS scalars), so a

@@ -4,12 +4,13 @@
 // elementLayer per element (ElementLayer); sceneLayers is the same pass over a whole scene, for a host
 // that lays a whole page out at once.
 
+import { escapeXml } from '../core/html';
 import { arrowRoute } from './elbow-route';
 import { orderByFractionalIndex } from './fractional-index';
 import { elementsInFrame } from './frames';
-import type { Point } from './geometry';
+import { type Point, round } from './geometry';
 import { ELEMENT_KINDS, type RenderOutput } from './kinds';
-import { escapeXml, round } from './kinds/render-utils';
+
 import type { MediaResolver } from './scene-to-svg';
 import type { VectorElement, VectorScene } from './types';
 

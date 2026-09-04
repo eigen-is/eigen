@@ -24,7 +24,7 @@ import {
 
 // The items a foreign host reads: an image item per selected image (also the cross-mount re-upload
 // manifest a canvas→canvas paste keys on by `mediaName`), and a text item per rich-text box carrying
-// the flattened text plus its HTML under `meta.html` (the slides idiom, so a rich host pastes styled).
+// the flattened text and the box's typography, which is what makes it paste styled.
 function foreignItems(
     selected: VectorElement[],
     resolveMediaPath: (name: string) => DrivePath | undefined,
@@ -55,7 +55,6 @@ function foreignItems(
                         letterSpacing: el.letterSpacing,
                         lineHeight: el.lineHeight,
                     },
-                    meta: { html: el.html },
                 }),
             );
         }
@@ -67,7 +66,7 @@ function foreignItems(
 //
 // TEXT-ONLY selections skip it. Every foreign host runs its svg rung BEFORE the typed items, so a
 // drawing that is nothing but a rich-text box would land in a document as a flat picture of itself —
-// the typed text item, its typography and its HTML never read. An SVG conveys nothing about a text box
+// the typed text item and its typography never read. An SVG conveys nothing about a text box
 // that the text item doesn't, so not writing it is what makes a copied text box paste as styled,
 // editable text.
 //

@@ -286,13 +286,6 @@ export const EIGEN_STICKIES_INDICATOR_MAP: Map<string, string> = new Map(
     ]),
 );
 
-export function hexToRgba(hex: string, alpha: number): string {
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
 export function isLightColor(hex: string): boolean {
     const r = parseInt(hex.slice(1, 3), 16);
     const g = parseInt(hex.slice(3, 5), 16);

@@ -45,7 +45,6 @@ import {
     resizeLinear,
     resizeRotatedRect,
     rotatePoint,
-    sampleArrowCurve,
     serializePoints,
     shapeAnchorPoints,
     snapAngle,
@@ -876,7 +875,7 @@ describe('boundEndpoint', () => {
     });
 });
 
-describe('arrowCurveBeziers / sampleArrowCurve', () => {
+describe('arrowCurveBeziers', () => {
     // The geometry-side curve is golden-locked to roughjs's `gen.curve` control points at roughness 0 —
     // the exact spline the renderer draws (Catmull-Rom, curveTightness 0, endpoints duplicated).
     const pts: Point[] = [
@@ -901,16 +900,6 @@ describe('arrowCurveBeziers / sampleArrowCurve', () => {
         for (let i = 0; i < beziers.length; i++) {
             const [, c1, c2, c3] = beziers[i];
             expect(bcurves[i].data).toEqual([c1.x, c1.y, c2.x, c2.y, c3.x, c3.y]);
-        }
-    });
-
-    test('sampleArrowCurve passes through every vertex and never yields NaN', () => {
-        const poly = sampleArrowCurve(pts, 8);
-        expect(poly[0]).toEqual(pts[0]);
-        expect(poly[poly.length - 1]).toEqual(pts[pts.length - 1]);
-        for (const p of poly) {
-            expect(Number.isFinite(p.x)).toBe(true);
-            expect(Number.isFinite(p.y)).toBe(true);
         }
     });
 

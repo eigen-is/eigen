@@ -2,7 +2,7 @@ import { escapeHtml } from '@workspace/lib/html';
 
 // A TipTap figure node can carry a mediaName, an external `src`, or both; the caller decides which
 // wins. Canvas documents resolve their media through MediaResolver (packages/lib) instead.
-export type FigureImgSrcResolver = (mediaName: string | null, src: string | null) => string | null;
+type FigureImgSrcResolver = (mediaName: string | null, src: string | null) => string | null;
 
 type Lowlight = {
     registered(lang: string): boolean;

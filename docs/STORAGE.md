@@ -97,7 +97,7 @@ A Mount bundles Drive file storage (`apps/api/src/lib/mount/mount.ts`):
 Eigen containers keep one more directory of their own: `versions/`, inside the container, holding the
 file-level snapshots described below. Both collab docs and chats opt into it.
 
-**Document types**: `folder`, `file`, `doc`, `stickies`, `slides`, `sheets`, `chat`
+**Document types**: `folder`, `file`, `doc`, `stickies`, `slides`, `sheets`, `vector`, `chat`
 
 **Thumbnails** (`apps/api/src/lib/shared/thumbnails.ts`): Generated on upload for images **and videos** (video
 frame grab), each in a Worker that loads sharp, capped by a semaphore so a large export can't spawn one worker

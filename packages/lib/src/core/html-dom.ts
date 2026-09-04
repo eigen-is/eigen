@@ -30,8 +30,8 @@ const HEADING_TAGS = new Set(['H1', 'H2', 'H3', 'H4', 'H5', 'H6']);
 const DROP_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'IFRAME', 'OBJECT', 'EMBED', 'TEMPLATE', 'HEAD', 'TITLE']);
 
 // Only http(s)/mailto links survive — a javascript:/data:/vbscript: href is an XSS vector (the
-// sanitized HTML is rendered via dangerouslySetInnerHTML by slide-object). An unsafe href unwraps
-// the anchor to its text.
+// sanitized HTML is rendered via dangerouslySetInnerHTML by the canvas' rich-text layer). An unsafe
+// href unwraps the anchor to its text.
 function safeHref(href: string | null): string | null {
     if (!href) return null;
     const trimmed = href.trim();

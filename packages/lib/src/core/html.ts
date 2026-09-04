@@ -7,6 +7,19 @@ export function escapeHtml(text: string): string {
         .replace(/>/g, '&gt;');
 }
 
+// XML text/attribute escaping, for everything that writes XML by hand: the SVG the canvas kinds
+// serialize, and the API's WebDAV/CalDAV response builders and S3 bucket-configuration bodies. It is
+// NOT escapeHtml — XML's five predefined entities include `&apos;`, where HTML wants the numeric
+// `&#39;` — so the two live side by side rather than one pretending to be the other.
+export function escapeXml(value: string): string {
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+}
+
 // Exact inverse of escapeHtml, for the one case that needs it: code that measures or
 // inspects escaped text and must see what the browser renders rather than the markup.
 // `&amp;` decodes last so an escaped `&amp;lt;` comes back as the literal `&lt;` it was,

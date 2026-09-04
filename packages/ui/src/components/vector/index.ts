@@ -18,7 +18,5 @@ export {
     isVectorFontLoaded,
     loadVectorFont,
     measureVectorText,
-    type TextDimensions,
-    vectorFontString,
 } from './text-measure';
 export { EDIT_TOOLS, INSERT_TOOLS, ToolButtons, ToolMenuItems } from './toolbar-tools';

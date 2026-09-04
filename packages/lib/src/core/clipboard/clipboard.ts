@@ -29,15 +29,14 @@ export const EIGEN_CLIPBOARD_RENDER_ATTR = 'data-eigen-clipboard-render';
 // the other before it writes.
 export type ClipboardBox = { width: number; height: number; angle?: number };
 
-// Build an image item so producers never hand-assemble the five source-path fields (slides + docs
-// wrote the same block verbatim) and geometry lands on the typed fields, never in `meta`. `source`
-// is the media file's DrivePath; `meta` is app-private extras only (borders, objectFit).
+// Build an image item so producers never hand-assemble the five source-path fields (three producers
+// wrote the same block verbatim) and geometry lands on the typed fields. `source` is the media file's
+// DrivePath.
 export function buildImageClipboardItem(args: {
     mediaName: string;
     source: DrivePath;
     box: ClipboardBox;
     caption?: string;
-    meta?: Record<string, unknown>;
 }): EigenClipboardImageItem {
     return {
         type: 'image',
@@ -50,17 +49,15 @@ export function buildImageClipboardItem(args: {
         width: args.box.width,
         height: args.box.height,
         angle: args.box.angle,
-        meta: args.meta,
     };
 }
 
 // Build a text item with geometry + typography on typed fields. `text` is plain text (see the type's
-// contract note); `meta` is app-private extras only (slides borders + text-box background + rich html).
+// contract note).
 export function buildTextClipboardItem(args: {
     text: string;
     box: ClipboardBox;
     typography?: EigenClipboardTypography;
-    meta?: Record<string, unknown>;
 }): EigenClipboardTextItem {
     return {
         type: 'text',
@@ -69,7 +66,6 @@ export function buildTextClipboardItem(args: {
         height: args.box.height,
         angle: args.box.angle,
         typography: args.typography,
-        meta: args.meta,
     };
 }
 
@@ -163,7 +159,7 @@ export function extractClipboardSvgMetadata(svg: string): EigenClipboardData | n
 
 // Wrap an SVG string as an `image/svg+xml` File so a paste consumer can feed it straight into its
 // existing OS-image upload path (previews serve SVG as-is; `<image href>` renders it). One home for
-// the conversion, shared by docs/sheets/slides/vector.
+// the conversion, shared by docs, sheets and the canvas.
 export function svgToImageFile(svg: string, name = 'drawing.svg'): File {
     return new File([svg], name, { type: 'image/svg+xml' });
 }

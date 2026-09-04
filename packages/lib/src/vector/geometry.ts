@@ -208,7 +208,7 @@ export function parsePoints(points: string): Point[] {
 }
 
 export function serializePoints(points: Point[]): string {
-    return JSON.stringify(points.map((p) => [round2(p.x), round2(p.y)]));
+    return JSON.stringify(points.map((p) => [round(p.x), round(p.y)]));
 }
 
 // Per-point pen pressure, the parallel array to a freedraw's points (Excalidraw's `pressures`). Any
@@ -371,7 +371,11 @@ export function pointsBounds(points: Point[]): Bounds {
     return { minX, minY, maxX, maxY };
 }
 
-function round2(n: number): number {
+// 2-decimal rounding, the precision every serialized length uses: the stored point lists here and the
+// SVG path data the kinds emit (Excalidraw's TO_FIXED_PRECISION, without the regex). `-0` collapses to
+// `0` so two identical geometries can't serialize differently. The 3- and 4-decimal siblings below are
+// deliberately different precisions, not copies of this one.
+export function round(n: number): number {
     const r = Math.round(n * 100) / 100;
     return r === 0 ? 0 : r;
 }
@@ -604,18 +608,6 @@ function cubicAt(bez: CubicBezier, t: number): Point {
     };
 }
 
-// Polyline approximation of the arrow curve (`samplesPerSegment` points per bezier), through the first and
-// last vertex. Used by the golden lock test and the curved bound-endpoint dock.
-export function sampleArrowCurve(points: Point[], samplesPerSegment: number): Point[] {
-    if (points.length < 2) return points.map((p) => ({ ...p }));
-    const beziers = arrowCurveBeziers(points);
-    const out: Point[] = [beziers[0][0]];
-    for (const bez of beziers) {
-        for (let s = 1; s <= samplesPerSegment; s++) out.push(cubicAt(bez, s / samplesPerSegment));
-    }
-    return out;
-}
-
 // Sample count per terminal bezier when docking a curved arrow's bound end onto the outline.
 const CURVE_DOCK_SAMPLES = 24;
 
@@ -682,7 +674,7 @@ export function boundEndpoint(arrow: VectorArrowElement, end: 'start' | 'end', s
             // serializePoints' round2), return the exact stored point so followBindings sees no change.
             const dockLocal = linearSceneToLocal(arrow, dock);
             endpoint =
-                round2(dockLocal.x) === thisLocal.x && round2(dockLocal.y) === thisLocal.y
+                round(dockLocal.x) === thisLocal.x && round(dockLocal.y) === thisLocal.y
                     ? linearLocalToScene(arrow, thisLocal)
                     : dock;
         }
@@ -836,9 +828,8 @@ function extendPast(a: Point, b: Point, ext: number): Point {
 }
 
 // --- Resize / rotate transform math ---------------------------------------------------
-// Ported verbatim from slides' app-local transform-geometry.ts (Rect{x,y,w,h} → canonical
-// Box), with slides' module-level MIN_SIZE threaded as a `minSize` parameter so the same
-// math serves a fixed-unit deck (slides passes 30) and a zoomable canvas (vector passes ~1).
+// The resize floor is a `minSize` PARAMETER rather than a module constant, so the same math serves a
+// fixed-unit deck and a zoomable canvas (which passes ~1).
 // Angle is DEGREES throughout — no radian value escapes a function body (rotatePoint owns it).
 
 const ORIGIN: Point = { x: 0, y: 0 };

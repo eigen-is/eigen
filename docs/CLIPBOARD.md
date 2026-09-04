@@ -48,7 +48,6 @@ type EigenClipboardTextItem = {
     height: number;
     angle?: number;
     typography?: EigenClipboardTypography;
-    meta?: Record<string, unknown>;
 };
 
 type EigenClipboardImageItem = {
@@ -62,7 +61,6 @@ type EigenClipboardImageItem = {
     width: number;
     height: number;
     angle?: number;
-    meta?: Record<string, unknown>;
 };
 
 type EigenClipboardElementsItem = {
@@ -81,8 +79,10 @@ type EigenClipboardData = { version: 1; items: EigenClipboardItem[]; svg?: strin
 Image items carry the file **name** (for Yjs storage on paste) plus source identifiers (for re-upload detection and
 downloading). See [MEDIA-REFERENCES.md](MEDIA-REFERENCES.md) for the full name-based reference design.
 
-Geometry (`width`/`height`/`angle`) and text `typography` are **first-class typed fields** — never entries in the
-untyped `meta` bag, which carries app-private extras only. Build items via `buildImageClipboardItem` /
+Geometry (`width`/`height`/`angle`) and text `typography` are **first-class typed fields**. There is no untyped
+`meta` bag: it existed for app-private extras, ended up write-only (one producer stuffed a rich-text `html` into it
+that no consumer ever read), and is gone. Every field on this wire has a producer AND a consumer; anything an app
+wants to carry across earns a typed field with a reader. Build items via `buildImageClipboardItem` /
 `buildTextClipboardItem` and read the box via `readClipboardBox`; the builders take a `box` and put it on the typed
 fields, so no producer hand-assembles an item.
 
@@ -128,7 +128,7 @@ A canvas selection rides as ONE `elements` item: the whole stored record of ever
 
 It is the one item type that carries **position**: the coordinates are the stored ones (scene coordinates on an infinite canvas, frame-relative inside a frame), because pasting a drawing back into a drawing is a paste in place, not "at the app's default spot". `sourceFrameId` is what lets the paste tell those apart, in `pasteAnchorOffset` (`packages/lib/src/vector/clipboard.ts`): a paste into the frame it was copied from offsets the copy by the duplicate step, one into a different frame lands in place, and anything else — the infinite canvas, and every crossing between the two — re-anchors the bounding box on the viewport centre so the paste lands where the user is looking. That last rule has one degenerate case, which is why the rule is not simply "re-anchor": a selection sitting AT the viewport centre re-anchors by ~0, so the copy lands pixel-exactly on top of the original and ⌘V looks like a dead key. A re-anchor smaller than one duplicate step IS that case, so it takes the duplicate step instead — the same thing ⌘D does with the same selection. `width`/`height` are the selection's bounding box, so the mandatory-dimensions contract above holds with no special case.
 
-**A canvas copy writes the other items too**: an `image` item per copied image (the cross-mount re-upload manifest, keyed by `mediaName`, and the payload a foreign host places) and a `text` item per rich-text box (flattened text, its typography, the HTML under `meta.html`). Hosts that cannot place native elements ignore the `elements` item and read those, or the `svg` flavour below.
+**A canvas copy writes the other items too**: an `image` item per copied image (the cross-mount re-upload manifest, keyed by `mediaName`, and the payload a foreign host places) and a `text` item per rich-text box (flattened text plus the box's typography — per-run marks do not survive the flattening). Hosts that cannot place native elements ignore the `elements` item and read those, or the `svg` flavour below.
 
 ### Empty text carriers
 

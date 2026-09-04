@@ -10,7 +10,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@tanstack/react-hotkeys": "^0.1.1",
     "@workspace/lib": "workspace:*",
     "@workspace/ui": "workspace:*",
     "@dnd-kit/core": "^6.3.1",
