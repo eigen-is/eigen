@@ -2,8 +2,11 @@ import { describe, expect, test } from 'bun:test';
 import {
     chromeTransform,
     clampFrameViewport,
+    FRAME_CARD_BORDER,
+    FRAME_CARD_RADIUS,
     FRAME_FIT_PADDING,
     fitFrameViewport,
+    frameCardChrome,
     groupTransform,
     sceneTransform,
 } from '../../vector/viewport';
@@ -30,6 +33,49 @@ describe('fitFrameViewport', () => {
 
     test('a degenerate container never produces a zero or negative zoom', () => {
         expect(fitFrameViewport({ width: 0, height: 0 }, FRAME).zoom).toBeGreaterThan(0);
+    });
+});
+
+describe('re-fitting on a container resize', () => {
+    // The deck canvas holds no zoom of its own: every resize re-fits, so the page is always the
+    // largest one the new container can show with padding, and always centred in it.
+    const fitsExactly = (container: { width: number; height: number }) => {
+        const v = fitFrameViewport(container, FRAME);
+        const shown = { width: FRAME.width * v.zoom, height: FRAME.height * v.zoom };
+        expect(shown.width).toBeLessThanOrEqual(container.width - FRAME_FIT_PADDING * 2 + 1e-9);
+        expect(shown.height).toBeLessThanOrEqual(container.height - FRAME_FIT_PADDING * 2 + 1e-9);
+        // One axis is binding: the page touches the padding on it.
+        const slackX = container.width - FRAME_FIT_PADDING * 2 - shown.width;
+        const slackY = container.height - FRAME_FIT_PADDING * 2 - shown.height;
+        expect(Math.min(slackX, slackY)).toBeCloseTo(0, 9);
+        // Centred on both axes.
+        expect((v.scrollX + FRAME.width / 2) * v.zoom).toBeCloseTo(container.width / 2, 6);
+        expect((v.scrollY + FRAME.height / 2) * v.zoom).toBeCloseTo(container.height / 2, 6);
+        return v;
+    };
+
+    test('a shrunk container re-fits to a smaller zoom, still centred', () => {
+        const big = fitsExactly({ width: 1600, height: 1000 });
+        const small = fitsExactly({ width: 1200, height: 700 });
+        expect(small.zoom).toBeLessThan(big.zoom);
+    });
+
+    test('the fit depends only on the container, not on the viewport it replaces', () => {
+        expect(fitFrameViewport({ width: 1200, height: 700 }, FRAME)).toEqual(
+            fitFrameViewport({ width: 1200, height: 700 }, FRAME),
+        );
+    });
+});
+
+describe('frameCardChrome', () => {
+    test('holds the card border and radius at a constant SCREEN size', () => {
+        const c = frameCardChrome(0.5);
+        expect(c.borderWidth * 0.5).toBeCloseTo(FRAME_CARD_BORDER, 9);
+        expect(c.borderRadius * 0.5).toBeCloseTo(FRAME_CARD_RADIUS, 9);
+    });
+
+    test('is the plain screen size at zoom 1', () => {
+        expect(frameCardChrome(1)).toEqual({ borderWidth: FRAME_CARD_BORDER, borderRadius: FRAME_CARD_RADIUS });
     });
 });
 

@@ -9,6 +9,16 @@ export type Extent = { width: number; height: number };
 // Screen px of breathing room around a fitted frame.
 export const FRAME_FIT_PADDING = 24;
 
+// The page card: the frame is drawn as a bordered, slightly rounded card, so the user sees where the
+// page ends. Both are SCREEN px — the card lives inside the scaled scene layer, so `frameCardChrome`
+// converts them to scene units, and the border ring and the clip radius read the same two numbers.
+export const FRAME_CARD_BORDER = 1;
+export const FRAME_CARD_RADIUS = 8;
+
+export function frameCardChrome(zoom: number): { borderWidth: number; borderRadius: number } {
+    return { borderWidth: FRAME_CARD_BORDER / zoom, borderRadius: FRAME_CARD_RADIUS / zoom };
+}
+
 // Centres `extent` in `visible` scene units, or clamps the pan to its edges when it is the larger of
 // the two — the visible window then stays inside the extent instead of running past it.
 function clampAxis(scroll: number, visible: number, extent: number): number {

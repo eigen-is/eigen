@@ -16,6 +16,7 @@ import {
     elementBounds,
     elementsInFrame,
     fitImageSize,
+    frameCardChrome,
     getElementsBounds,
     IMAGE_CASCADE_OFFSET,
     type ImageSize,
@@ -1269,8 +1270,13 @@ export function CanvasEditor({
         </>
     );
 
-    // A frame is a page: it paints its own background and CLIPS what overhangs it. The infinite canvas
-    // has no such box — its layers sit straight on the scene.
+    // A frame is a page, drawn as a CARD: its own background inside a bordered, slightly rounded box
+    // that CLIPS what overhangs it, so the user sees where the page ends. The card sits in the scaled
+    // scene layer, so its border and radius are divided by the zoom to stay a constant screen size
+    // (frameCardChrome, one source with the letterbox padding); the ring is its own inset layer so the
+    // border can't offset the elements inside the box. The infinite canvas has no such box — its
+    // layers sit straight on the scene.
+    const card = frameCardChrome(zoom);
     const frameLayers = frame ? (
         <div
             className="absolute overflow-hidden"
@@ -1279,10 +1285,15 @@ export function CanvasEditor({
                 top: 0,
                 width: frame.width,
                 height: frame.height,
+                borderRadius: card.borderRadius,
                 ...getBackgroundStyle(parseBackgroundFill(frame.background), resolveMediaUrl),
             }}
         >
             {layers}
+            <div
+                className="pointer-events-none absolute inset-0 border-border"
+                style={{ borderWidth: card.borderWidth, borderRadius: card.borderRadius }}
+            />
         </div>
     ) : (
         layers
@@ -1475,10 +1486,13 @@ export function CanvasEditor({
                 </HintPill>
             )}
             {/* Zoom readout; click resets to 100% about the viewport centre. Bottom-RIGHT: the
-                router devtools badge owns the bottom-left corner in dev. */}
-            <HintPill className="bottom-3 right-3" title="Reset zoom" onClick={resetZoom}>
-                {Math.round(zoom * 100)}%
-            </HintPill>
+                router devtools badge owns the bottom-left corner in dev. A framed page has no zoom of
+                its own — it always shows the whole page — so it shows no pill. */}
+            {viewport === 'infinite' && (
+                <HintPill className="bottom-3 right-3" title="Reset zoom" onClick={resetZoom}>
+                    {Math.round(zoom * 100)}%
+                </HintPill>
+            )}
             <CanvasObjectMenu
                 contextMenu={objectContextMenu}
                 onArrange={onMenuArrange}

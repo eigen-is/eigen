@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1297 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1300 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -773,7 +773,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorToolEntry` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (560)
+## Utilities & constants (563)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1162,10 +1162,13 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FONT_STYLES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `FONT_WEIGHTS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `FRAME_ASPECT_RATIO` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
+| `FRAME_CARD_BORDER` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
+| `FRAME_CARD_RADIUS` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `FRAME_FIELDS` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `FRAME_FIT_PADDING` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `FRAME_HEIGHT` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `FRAME_WIDTH` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
+| `frameCardChrome` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `framesFrom` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `FREEDRAW_SIZE_FACTOR` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `generateKeyBetween` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |

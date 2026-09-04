@@ -38,11 +38,13 @@ const zoomAt = (v: CanvasViewport, nextZoom: number, px: number, py: number): Ca
     scrollY: v.scrollY + py / nextZoom - py / v.zoom,
 });
 
-type UseViewportOptions = {
-    // 'frame' bounds the canvas to one page: it opens fitted and pans are clamped to its edges.
+export type UseViewportOptions = {
+    // 'frame' bounds the canvas to one page: it always shows the whole page — fitted on open, re-fitted
+    // on every container resize and frame switch — with the zoom LOCKED to that fit, so there is no
+    // user zoom and, following from the clamp, no free pan either.
     mode?: 'infinite' | 'frame';
     frame?: Extent;
-    // Re-fit when this changes (the active frame's id) — a frame switch resets the pan.
+    // Re-fit when this changes (the active frame's id).
     resetKey?: string;
 };
 
@@ -74,12 +76,17 @@ export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseView
         return { width: rect?.width ?? 0, height: rect?.height ?? 0 };
     }, []);
 
-    // Every viewport write goes through here, so "a pan may never push the frame off screen" is one
-    // rule in one place instead of a clamp at each callsite.
+    // Every viewport write goes through here, so the two rules of a bounded page live in one place
+    // instead of at each callsite: its ZOOM is the fit's answer, never the user's — a ctrl-wheel, a
+    // pinch or a zoom shortcut keeps the zoom it came in with — and a pan may never push the page off
+    // screen. Holding the zoom is what makes the pan moot too: at the fit, the clamp pins the scroll to
+    // the centred value on both axes, so a pan settles back to where it started. Only `set` (the fit
+    // itself) bypasses this.
     const settle = useCallback(
         (next: CanvasViewport): CanvasViewport => {
             const bounds = boundsRef.current;
-            return bounds ? clampFrameViewport(next, containerExtent(), bounds) : next;
+            if (!bounds) return next;
+            return clampFrameViewport({ ...next, zoom: viewportRef.current.zoom }, containerExtent(), bounds);
         },
         [containerExtent],
     );
@@ -235,11 +242,13 @@ export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseView
         [write],
     );
 
-    // Zoom-pill reset: back to 100%, keeping the scene point at the container centre fixed.
+    // Zoom-pill reset: back to 100%, keeping the scene point at the container centre fixed. A bounded
+    // page has no zoom of its own, so it re-fits instead (the pill is hidden there anyway).
     const resetZoom = useCallback(() => {
+        if (fitFrame()) return;
         const { width, height } = containerExtent();
         set(settle(zoomAt(viewportRef.current, 1, width / 2, height / 2)));
-    }, [containerExtent, settle, set]);
+    }, [fitFrame, containerExtent, settle, set]);
 
     // Non-passive wheel: pan by default, zoom-at-cursor on ctrl/meta (trackpad pinch sends ctrl).
     // Bound once; reads the live viewport through `write` and the container rect at call time.
