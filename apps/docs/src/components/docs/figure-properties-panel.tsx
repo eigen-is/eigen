@@ -10,8 +10,8 @@ import {
     PropertiesPanel,
     PropertyRow,
     PropertySection,
+    PropertyToggle,
 } from '@workspace/ui/components/properties-panel';
-import { Toggle } from '@workspace/ui/components/toggle';
 import { ImagePlus, PanelLeft, PanelRight, Rows3 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -45,27 +45,24 @@ export function FigurePropertiesPanel({ editor, onReplaceImage, onReplaceImageFr
             <PropertySection title="Layout">
                 <PropertyRow label="Style">
                     <div className="flex items-center gap-1">
-                        <Toggle
-                            size="sm"
+                        <PropertyToggle
                             pressed={layout === 'block'}
                             onPressedChange={() => editor.commands.updateAttributes('figure', { layout: 'block' })}
                         >
                             <Rows3 className="h-4 w-4" />
-                        </Toggle>
-                        <Toggle
-                            size="sm"
+                        </PropertyToggle>
+                        <PropertyToggle
                             pressed={layout === 'wrap-left'}
                             onPressedChange={() => editor.commands.updateAttributes('figure', { layout: 'wrap-left' })}
                         >
                             <PanelLeft className="h-4 w-4" />
-                        </Toggle>
-                        <Toggle
-                            size="sm"
+                        </PropertyToggle>
+                        <PropertyToggle
                             pressed={layout === 'wrap-right'}
                             onPressedChange={() => editor.commands.updateAttributes('figure', { layout: 'wrap-right' })}
                         >
                             <PanelRight className="h-4 w-4" />
-                        </Toggle>
+                        </PropertyToggle>
                     </div>
                 </PropertyRow>
                 {layout === 'block' && (

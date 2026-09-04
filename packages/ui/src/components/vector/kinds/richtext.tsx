@@ -4,24 +4,23 @@
 // generic Stroke row; this section is the text itself.
 
 import {
-    DEFAULT_FONT_FAMILY,
     ELEMENT_KINDS,
     richTextCssText,
     VECTOR_STYLE_DEFAULTS,
     type VectorRichTextElement,
 } from '@workspace/lib/vector';
 import { LightEditor } from '@workspace/ui/components/editor/light-editor';
-import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import {
     AlignmentPicker,
     ColorRow,
+    FontRow,
     getMergedValue,
     isMixed,
     MergedNumberInput,
     PropertyRow,
     PropertySection,
+    PropertyToggle,
 } from '@workspace/ui/components/properties-panel';
-import { Toggle } from '@workspace/ui/components/toggle';
 import {
     AlignJustify,
     AlignVerticalJustifyCenter,
@@ -102,13 +101,7 @@ export function RichTextPanelSection({ elements, onChange }: KindPanelSectionPro
     return (
         <>
             <PropertySection title="Text">
-                <PropertyRow label="Font">
-                    <FontPicker
-                        value={isMixed(fontFamily) ? DEFAULT_FONT_FAMILY : (fontFamily ?? DEFAULT_FONT_FAMILY)}
-                        onChange={(f) => onChange({ fontFamily: f })}
-                        className="h-7 w-full text-xs"
-                    />
-                </PropertyRow>
+                <FontRow value={fontFamily} onChange={(f) => onChange({ fontFamily: f })} />
                 <PropertyRow label="Size">
                     <MergedNumberInput
                         value={fontSize}
@@ -118,112 +111,110 @@ export function RichTextPanelSection({ elements, onChange }: KindPanelSectionPro
                         step={1}
                     />
                 </PropertyRow>
-
-                <div className="flex items-center gap-1 pt-1">
-                    <Toggle
-                        size="sm"
-                        aria-label="Bold"
-                        pressed={fontWeight === 'bold'}
-                        onPressedChange={(p) => onChange({ fontWeight: p ? 'bold' : 'normal' })}
-                        data-mixed={isMixed(fontWeight) ? '' : undefined}
-                    >
-                        <Bold className="h-4 w-4" />
-                    </Toggle>
-                    <Toggle
-                        size="sm"
-                        aria-label="Italic"
-                        pressed={fontStyle === 'italic'}
-                        onPressedChange={(p) => onChange({ fontStyle: p ? 'italic' : 'normal' })}
-                        data-mixed={isMixed(fontStyle) ? '' : undefined}
-                    >
-                        <Italic className="h-4 w-4" />
-                    </Toggle>
-                    <Toggle
-                        size="sm"
-                        aria-label="Underline"
-                        pressed={textDecoration === 'underline'}
-                        onPressedChange={(p) => onChange({ textDecoration: p ? 'underline' : 'none' })}
-                        data-mixed={isMixed(textDecoration) ? '' : undefined}
-                    >
-                        <Underline className="h-4 w-4" />
-                    </Toggle>
-                    <Toggle
-                        size="sm"
-                        aria-label="Strikethrough"
-                        pressed={textDecoration === 'line-through'}
-                        onPressedChange={(p) => onChange({ textDecoration: p ? 'line-through' : 'none' })}
-                    >
-                        <Strikethrough className="h-4 w-4" />
-                    </Toggle>
-                </div>
-
-                <div className="flex items-center gap-1 pt-1">
-                    <AlignmentPicker
-                        value={isMixed(textAlign) || textAlign === 'justify' ? undefined : textAlign}
-                        onChange={(a) => onChange({ textAlign: a })}
-                    />
-                    {/* AlignmentPicker only handles left/center/right, so justify stays inline. */}
-                    <Toggle
-                        size="sm"
-                        aria-label="Justify"
-                        pressed={textAlign === 'justify'}
-                        onPressedChange={() => onChange({ textAlign: 'justify' })}
-                    >
-                        <AlignJustify className="h-4 w-4" />
-                    </Toggle>
-                </div>
-
-                <div className="flex items-center gap-1 pt-1">
-                    <Toggle
-                        size="sm"
-                        aria-label="Align top"
-                        pressed={verticalAlign === 'top'}
-                        onPressedChange={() => onChange({ verticalAlign: 'top' })}
-                    >
-                        <AlignVerticalJustifyStart className="h-4 w-4" />
-                    </Toggle>
-                    <Toggle
-                        size="sm"
-                        aria-label="Align middle"
-                        pressed={verticalAlign === 'center'}
-                        onPressedChange={() => onChange({ verticalAlign: 'center' })}
-                    >
-                        <AlignVerticalJustifyCenter className="h-4 w-4" />
-                    </Toggle>
-                    <Toggle
-                        size="sm"
-                        aria-label="Align bottom"
-                        pressed={verticalAlign === 'bottom'}
-                        onPressedChange={() => onChange({ verticalAlign: 'bottom' })}
-                    >
-                        <AlignVerticalJustifyEnd className="h-4 w-4" />
-                    </Toggle>
-                </div>
+                <ColorRow
+                    label="Color"
+                    value={color}
+                    onChange={(c) => onChange({ color: c || RICHTEXT_DEFAULTS.color })}
+                />
+                <PropertyRow label="Style">
+                    <div className="flex items-center gap-1">
+                        <PropertyToggle
+                            aria-label="Bold"
+                            pressed={fontWeight === 'bold'}
+                            onPressedChange={(p) => onChange({ fontWeight: p ? 'bold' : 'normal' })}
+                            data-mixed={isMixed(fontWeight) ? '' : undefined}
+                        >
+                            <Bold className="h-4 w-4" />
+                        </PropertyToggle>
+                        <PropertyToggle
+                            aria-label="Italic"
+                            pressed={fontStyle === 'italic'}
+                            onPressedChange={(p) => onChange({ fontStyle: p ? 'italic' : 'normal' })}
+                            data-mixed={isMixed(fontStyle) ? '' : undefined}
+                        >
+                            <Italic className="h-4 w-4" />
+                        </PropertyToggle>
+                        <PropertyToggle
+                            aria-label="Underline"
+                            pressed={textDecoration === 'underline'}
+                            onPressedChange={(p) => onChange({ textDecoration: p ? 'underline' : 'none' })}
+                            data-mixed={isMixed(textDecoration) ? '' : undefined}
+                        >
+                            <Underline className="h-4 w-4" />
+                        </PropertyToggle>
+                        <PropertyToggle
+                            aria-label="Strikethrough"
+                            pressed={textDecoration === 'line-through'}
+                            onPressedChange={(p) => onChange({ textDecoration: p ? 'line-through' : 'none' })}
+                        >
+                            <Strikethrough className="h-4 w-4" />
+                        </PropertyToggle>
+                    </div>
+                </PropertyRow>
+                <PropertyRow label="Align">
+                    <div className="flex items-center gap-1">
+                        <AlignmentPicker
+                            value={isMixed(textAlign) || textAlign === 'justify' ? undefined : textAlign}
+                            onChange={(a) => onChange({ textAlign: a })}
+                        />
+                        {/* AlignmentPicker only handles left/center/right, so justify stays inline. */}
+                        <PropertyToggle
+                            aria-label="Justify"
+                            pressed={textAlign === 'justify'}
+                            onPressedChange={() => onChange({ textAlign: 'justify' })}
+                        >
+                            <AlignJustify className="h-4 w-4" />
+                        </PropertyToggle>
+                    </div>
+                </PropertyRow>
+                <PropertyRow label="Vertical">
+                    <div className="flex items-center gap-1">
+                        <PropertyToggle
+                            aria-label="Align top"
+                            pressed={verticalAlign === 'top'}
+                            onPressedChange={() => onChange({ verticalAlign: 'top' })}
+                        >
+                            <AlignVerticalJustifyStart className="h-4 w-4" />
+                        </PropertyToggle>
+                        <PropertyToggle
+                            aria-label="Align middle"
+                            pressed={verticalAlign === 'center'}
+                            onPressedChange={() => onChange({ verticalAlign: 'center' })}
+                        >
+                            <AlignVerticalJustifyCenter className="h-4 w-4" />
+                        </PropertyToggle>
+                        <PropertyToggle
+                            aria-label="Align bottom"
+                            pressed={verticalAlign === 'bottom'}
+                            onPressedChange={() => onChange({ verticalAlign: 'bottom' })}
+                        >
+                            <AlignVerticalJustifyEnd className="h-4 w-4" />
+                        </PropertyToggle>
+                    </div>
+                </PropertyRow>
             </PropertySection>
 
             <PropertySection title="Spacing">
-                <div className="grid grid-cols-2 gap-2">
-                    <PropertyRow label="Letter">
-                        <MergedNumberInput
-                            value={letterSpacing}
-                            onChange={(v) => onChange({ letterSpacing: v })}
-                            step={0.5}
-                            min={-10}
-                            max={50}
-                        />
-                    </PropertyRow>
-                    <PropertyRow label="Line">
-                        <MergedNumberInput
-                            value={lineHeight}
-                            onChange={(v) => onChange({ lineHeight: v })}
-                            step={0.1}
-                            min={0.5}
-                            max={5}
-                        />
-                    </PropertyRow>
-                </div>
+                <PropertyRow label="Letter">
+                    <MergedNumberInput
+                        value={letterSpacing}
+                        onChange={(v) => onChange({ letterSpacing: v })}
+                        step={0.5}
+                        min={-10}
+                        max={50}
+                    />
+                </PropertyRow>
+                <PropertyRow label="Line">
+                    <MergedNumberInput
+                        value={lineHeight}
+                        onChange={(v) => onChange({ lineHeight: v })}
+                        step={0.1}
+                        min={0.5}
+                        max={5}
+                    />
+                </PropertyRow>
                 {/* The inset between the box edge and the text; the box keeps its stored size. */}
-                <PropertyRow label="Pad">
+                <PropertyRow label="Padding">
                     <MergedNumberInput
                         value={padding}
                         onChange={(v) => onChange({ padding: v })}
@@ -232,14 +223,6 @@ export function RichTextPanelSection({ elements, onChange }: KindPanelSectionPro
                         max={200}
                     />
                 </PropertyRow>
-            </PropertySection>
-
-            <PropertySection title="Color">
-                <ColorRow
-                    label="Text"
-                    value={color}
-                    onChange={(c) => onChange({ color: c || RICHTEXT_DEFAULTS.color })}
-                />
             </PropertySection>
         </>
     );
