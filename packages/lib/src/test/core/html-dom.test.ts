@@ -11,14 +11,16 @@ describe('sanitizeToLightEditorHtml — links', () => {
     test('a safe link opens in a new tab with the opener sealed', () => {
         // Present mode renders this markup inside the deck; a bare anchor would navigate the presenting
         // tab away from the presentation.
+        // Attribute ORDER is Tiptap's own (Link merges its configured HTMLAttributes before href), so a
+        // pasted box is already in canonical form and the first keystroke is not a whole-html rewrite.
         expect(sanitizeToLightEditorHtml('<p><a href="https://eigen.is">go</a></p>')).toBe(
-            '<p><a href="https://eigen.is" target="_blank" rel="noopener noreferrer">go</a></p>',
+            '<p><a target="_blank" rel="noopener noreferrer" href="https://eigen.is">go</a></p>',
         );
     });
 
     test('the new-tab pair is forced, never trusted from the source markup', () => {
         expect(sanitizeToLightEditorHtml('<a href="https://eigen.is" target="_self" rel="opener">x</a>')).toBe(
-            '<a href="https://eigen.is" target="_blank" rel="noopener noreferrer">x</a>',
+            '<a target="_blank" rel="noopener noreferrer" href="https://eigen.is">x</a>',
         );
     });
 
