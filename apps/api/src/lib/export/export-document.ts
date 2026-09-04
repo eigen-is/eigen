@@ -1,5 +1,5 @@
 import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES, DRIVE_MIME_VECTOR } from '@workspace/lib/types';
-import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
+import { type DrivePath, isCollabType, stripEigenExtension } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
 import type {
     DocumentExportFormat,
@@ -56,11 +56,14 @@ export async function exportDocument(
     format: string,
     signal?: AbortSignal,
 ): Promise<ExportResult> {
-    if (path.mimeType === DRIVE_MIME_DOC && (format === 'html' || format === 'pdf' || format === 'docx')) {
+    // The container TYPE gates the dispatch: mimeType is caller-controlled on upload, so a plain
+    // file wearing an eigen mime falls through to the 400 rather than into a render with no data.db.
+    const containerMime = isCollabType(path.type) ? path.mimeType : '';
+    if (containerMime === DRIVE_MIME_DOC && (format === 'html' || format === 'pdf' || format === 'docx')) {
         const envelope = EXPORT_ENVELOPES[format];
         return serveExport({ documentType: 'eigendoc', format: envelope.workerFormat }, envelope, mount, path, signal);
     }
-    if (path.mimeType === DRIVE_MIME_SHEETS && (format === 'html' || format === 'pdf' || format === 'xlsx')) {
+    if (containerMime === DRIVE_MIME_SHEETS && (format === 'html' || format === 'pdf' || format === 'xlsx')) {
         const envelope = EXPORT_ENVELOPES[format];
         return serveExport(
             { documentType: 'eigensheets', format: envelope.workerFormat },
@@ -70,7 +73,7 @@ export async function exportDocument(
             signal,
         );
     }
-    if (path.mimeType === DRIVE_MIME_SLIDES && (format === 'html' || format === 'pdf')) {
+    if (containerMime === DRIVE_MIME_SLIDES && (format === 'html' || format === 'pdf')) {
         const envelope = EXPORT_ENVELOPES[format];
         return serveExport(
             { documentType: 'eigenslides', format: envelope.workerFormat },
@@ -80,7 +83,7 @@ export async function exportDocument(
             signal,
         );
     }
-    if (path.mimeType === DRIVE_MIME_VECTOR && (format === 'svg' || format === 'pdf')) {
+    if (containerMime === DRIVE_MIME_VECTOR && (format === 'svg' || format === 'pdf')) {
         const envelope = EXPORT_ENVELOPES[format];
         return serveExport(
             { documentType: 'eigenvector', format: envelope.workerFormat },
