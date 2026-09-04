@@ -17,11 +17,11 @@ import {
     type Corners,
     capabilitiesOf,
     computeArrange,
+    EDGES_OPTIONS,
     type FillStyle,
     isLinearElement,
     isTransparentFill,
     parseFill,
-    type Roundness,
     resizeLinear,
     STROKE_WIDTH_OPTIONS,
     type StrokeStyle,
@@ -60,10 +60,6 @@ const ROUGHNESS_OPTIONS: { value: string; label: string }[] = [
     { value: '0', label: 'Architect' },
     { value: '1', label: 'Artist' },
     { value: '2', label: 'Cartoonist' },
-];
-const EDGES_OPTIONS: { value: Roundness; label: string }[] = [
-    { value: 'sharp', label: 'Sharp' },
-    { value: 'round', label: 'Rounded' },
 ];
 // The box kinds' corner treatment — a different question from a shaft's curvature, hence its own row.
 const CORNERS_OPTIONS: { value: Corners; label: string }[] = [

@@ -8,9 +8,9 @@ import {
     type ArrowShape,
     arrowShapeFields,
     arrowShapeOf,
+    EDGES_OPTIONS,
     normalizeLinear,
     parsePoints,
-    type Roundness,
     redockBindingsForElbow,
     type VectorArrowElement,
 } from '@workspace/lib/vector';
@@ -31,12 +31,6 @@ const ARROW_SHAPE_OPTIONS: { value: ArrowShape; label: string }[] = ARROW_SHAPES
     value,
     label: ARROW_SHAPE_LABELS[value],
 }));
-// An elbow reuses Edges as its CORNER style (sharp bends vs round arcs) — its shaft is always
-// orthogonal, so roundness is free to mean the corners. A sharp/curved arrow's Type already says it.
-const EDGES_OPTIONS: { value: Roundness; label: string }[] = [
-    { value: 'sharp', label: 'Sharp' },
-    { value: 'round', label: 'Rounded' },
-];
 const ARROWHEAD_OPTIONS: { value: Arrowhead; label: string }[] = [
     { value: 'none', label: 'None' },
     { value: 'arrow', label: 'Arrow' },
@@ -122,6 +116,9 @@ export function ArrowPanelSection({ elements, scene, onChange, onChangeEach }: K
                 <PropertyRow label="Type">
                     <MergedSelect value={shape} onChange={applyShape} options={ARROW_SHAPE_OPTIONS} />
                 </PropertyRow>
+                {/* An elbow reuses Edges as its CORNER style (sharp bends vs round arcs) — its shaft is
+                    always orthogonal, so roundness is free to mean the corners. A sharp/curved arrow's
+                    Type already says it. */}
                 {allElbow && (
                     <PropertyRow label="Edges">
                         <MergedSelect

@@ -323,6 +323,13 @@ export const STROKE_WIDTH_OPTIONS: { value: string; label: string }[] = [
     { value: '4', label: 'Bold' },
 ];
 
+// The ONE labelling of the Roundness vocabulary, consumed by the panel's Edges row for boxes and
+// lines and by the arrow section (where an elbow's roundness means its corner style).
+export const EDGES_OPTIONS: { value: Roundness; label: string }[] = [
+    { value: 'sharp', label: 'Sharp' },
+    { value: 'round', label: 'Rounded' },
+];
+
 // Read a property off a parsed-JSON object without a cast (Reflect.get is typed to accept any object).
 // The one idiom every decoder in the vector model uses.
 export function prop(target: object, key: string): unknown {
