@@ -3,6 +3,7 @@
 
 import type { Drawable, OpSet, Options } from 'roughjs/bin/core';
 import { RoughGenerator } from 'roughjs/bin/generator';
+import { svgGradientStops } from '../../background/gradient';
 import { gradientVector, isTransparentColor, isTransparentFill, parseFill } from '../fill';
 import { isClosedPath, type Point } from '../geometry';
 import { cornerRadius, diamondOutline, outlinePath, rectOutline, sharpDiamondOffset } from '../outline';
@@ -109,7 +110,7 @@ export function fillDefs(el: FillSource): string {
     const fill = parseFill(el.fill);
     if (fill.type !== 'gradient') return '';
     const { x1, y1, x2, y2 } = gradientVector(fill.angle);
-    return `<defs><linearGradient id="${svgId('fill', el.id)}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"><stop offset="0" stop-color="${escapeXml(fill.from)}"/><stop offset="1" stop-color="${escapeXml(fill.to)}"/></linearGradient></defs>`;
+    return `<defs><linearGradient id="${svgId('fill', el.id)}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}">${svgGradientStops(fill.from, fill.to)}</linearGradient></defs>`;
 }
 
 // The stored Fill as roughjs options: what to paint with, and the hatch style it carries. drawableToSvg

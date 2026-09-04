@@ -663,13 +663,16 @@ describe('document transform (xlsx import)', () => {
 // export hashes legitimately. The deck hashes were re-recorded when the deck moved onto the canvas
 // compositor: a slide is a `canvas-page` of scene layers now, so the bytes differ by construction —
 // and again when every screen-rendered page gained the shared `.page-fit` wrapper, which the preview
-// body now carries too so the lightbox and the drive hero can scale a page below its own width.
+// body now carries too so the lightbox and the drive hero can scale a page below its own width. The three
+// deck hashes moved again when gradient stops gained explicit positions: the deck's one slide-background
+// gradient reads `#ffffff 0%, #dbe7ff 100%` now, and substituting that stop list back reproduces the
+// previous hashes byte-for-byte, so nothing else in the deck bytes moved.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'f61e8785cd4e3b3872e5fcf6ee817abdae5e2ed4119a113dc17342fd922e6b44';
 const GOLDEN_DOC_EXPORT_HTML_SHA256 = 'f4b1308435d2d2f9d140c4ed62b81a1e9cb281dee8d68aee3a880258e87edf3b';
 const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'f4b1308435d2d2f9d140c4ed62b81a1e9cb281dee8d68aee3a880258e87edf3b';
-const GOLDEN_DECK_PREVIEW_SHA256 = '311befb5e41d44764a652b426ce83f96293ccccb9adffe14e16412c50b0c5c50';
-const GOLDEN_DECK_EXPORT_HTML_SHA256 = '90aedd5ee8392ed455dcd90d8ad069b0c4c16c5866879f8c03614a54e0e76c4c';
-const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = '1f82eecdcf9b60057fbcba2eec06355945d869676f947b80a59ca05bf4f8659e';
+const GOLDEN_DECK_PREVIEW_SHA256 = '13c097f15c3859718a498e1f2f49161c0fc72a6846d7f320661578c5ad330c0f';
+const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'e94c234b31a3a81020455227936ad0709c59b7c4f9bfb23a172e2a6d194c4f8e';
+const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = '66caa207354c508e4e854868f524f0edff06d899db871a5e8d6b3020c6881ea6';
 
 // Preview media is embedded as an absolute API URL carrying per-run owner/path ids —
 // normalize them out so the golden pins the rendering, not the fixture's uuids.
