@@ -304,26 +304,36 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         [undoManager],
     );
 
-    const updateFrames = useCallback((patches: { id: string; fields: Partial<VectorFrame> }[]) => {
-        if (docRef.current) updateFramesInDoc(docRef.current, patches);
-    }, []);
+    const updateFrames = useCallback(
+        (patches: { id: string; fields: Partial<VectorFrame> }[]) => {
+            const doc = docRef.current;
+            if (doc) sealed(undoManager, () => updateFramesInDoc(doc, patches));
+        },
+        [undoManager],
+    );
 
     const updateFrame = useCallback(
         (id: string, fields: Partial<VectorFrame>) => updateFrames([{ id, fields }]),
         [updateFrames],
     );
 
-    // The scene's own settings (background, grid).
-    const updateMeta = useCallback((fields: Partial<VectorMeta>) => {
-        const doc = docRef.current;
-        if (!doc) return;
-        doc.transact(() => {
-            const metaMap = doc.getMap('meta');
-            for (const [key, value] of Object.entries(fields)) {
-                if (value !== undefined) metaMap.set(key, value);
-            }
-        });
-    }, []);
+    // The scene's own settings. Sealed like the frame ops: picking a background is a discrete op, and
+    // unsealed it would merge into whatever the user did in the half second before it.
+    const updateMeta = useCallback(
+        (fields: Partial<VectorMeta>) => {
+            const doc = docRef.current;
+            if (!doc) return;
+            sealed(undoManager, () =>
+                doc.transact(() => {
+                    const metaMap = doc.getMap('meta');
+                    for (const [key, value] of Object.entries(fields)) {
+                        if (value !== undefined) metaMap.set(key, value);
+                    }
+                }),
+            );
+        },
+        [undoManager],
+    );
 
     return {
         elements: scene.elements,
