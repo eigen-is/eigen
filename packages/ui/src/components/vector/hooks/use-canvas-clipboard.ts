@@ -91,6 +91,22 @@ function warnPartialCut(pendingImages: number) {
     );
 }
 
+// A non-collapsed text selection OUTSIDE the canvas, if there is one: the run a copy would carry.
+function outsideTextSelection(container: HTMLElement | null): Selection | null {
+    const selection = container?.ownerDocument.getSelection() ?? null;
+    if (!selection || selection.isCollapsed || selection.toString().trim() === '') return null;
+    const node = selection.anchorNode;
+    return node && container?.contains(node) ? null : selection;
+}
+
+// The canvas drops such a run when the pointer lands on it. The surface is `select-none` and the
+// in-place editor swallows its own pointerdown, so nothing else ever collapses a selection made in the
+// comments pane or the properties panel — it would survive the click that selects an element and keep
+// owning ⌘C/⌘X, copying that text and cutting nothing.
+export function dropOutsideTextSelection(container: HTMLElement | null): void {
+    outsideTextSelection(container)?.removeAllRanges();
+}
+
 type CanvasClipboardParams = {
     canEdit: boolean;
     // Read from listeners bound once, so the live "a text surface owns the keyboard" answer rides a
@@ -397,16 +413,11 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
 
     useEffect(() => {
         const blocked = () => isTypingTarget() || !live.current.canEdit || textEditingRef.current;
-        // A non-collapsed text selection OUTSIDE the canvas owns copy/cut: the user is copying that run
-        // (a comment, an activity row), and writing the element payload would take the clipboard from
-        // them with nothing on screen to explain it. Inside the canvas there is no text to copy — the
-        // in-place editor is `blocked()` above — so only the outside case bails.
-        const textSelectedOutside = () => {
-            const selection = window.getSelection();
-            if (!selection || selection.isCollapsed || selection.toString().trim() === '') return false;
-            const node = selection.anchorNode;
-            return !(node && containerRef.current?.contains(node));
-        };
+        // Such a run owns copy/cut: the user is copying that text (a comment, an activity row), and
+        // writing the element payload would take the clipboard from them with nothing on screen to
+        // explain it. Inside the canvas there is no text to copy — the in-place editor is `blocked()`
+        // above — so only the outside case bails.
+        const textSelectedOutside = () => outsideTextSelection(containerRef.current) !== null;
         const onCopyEvent = (e: ClipboardEvent) => {
             const { selectedIds, buildData, plainText } = live.current;
             if (blocked() || textSelectedOutside() || selectedIds.length === 0) return;

@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { decodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_SHEETS, type DrivePath } from '@workspace/lib/types/drive';
 import { update } from '@workspace/sheet/engine';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
@@ -421,6 +421,29 @@ describe('Sheets xlsx import/convert', () => {
         } finally {
             await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 35);
         }
+    });
+
+    test('import into a plain file wearing an eigen mime is refused before the transform', async () => {
+        // mimeType is caller-controlled on upload (the multipart part's Content-Type lands in the row
+        // verbatim), so the container TYPE gates the dispatch, exactly as it does for export and
+        // extraction: without it the xlsx Worker runs over the caller's bytes before the collab
+        // lookup can 404 on the missing data.db.
+        const spoofed = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            new File(['not a container'], 'spoof-import.txt', { type: DRIVE_MIME_SHEETS }),
+        );
+        expect(spoofed.type).toBe('file');
+
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${spoofed.id}/import`,
+            { method: 'POST', body: await buildXlsxBuffer([{ a1: 'A1', value: 'payload' }]) },
+        );
+        expect(res.status).toBe(400);
+        expect(await res.text()).toContain('not supported');
     });
 
     test('import into another user document without write permission returns 403', async () => {

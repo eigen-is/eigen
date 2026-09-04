@@ -61,6 +61,30 @@ describe('renderEigenslidesPreviewBody', () => {
         expect(body).not.toContain('Preview truncated');
     });
 
+    test('a slide crowded with elements renders a bounded number of them, and the marker says so', () => {
+        // The slide cap bounds pages, not work: a deck whose first slide carries tens of thousands
+        // of boxes would still compose every one of them inside the Worker, exactly the cost the
+        // drawing preview's element budget exists to refuse.
+        const scene = buildGoldenDeckScene();
+        const frames = scene.frames.slice(0, 2);
+        const template = scene.elements.find((el) => el.type === 'richtext');
+        if (!template) throw new Error('the golden deck lost its rich-text boxes');
+        const elements = Array.from({ length: 520 }, (_, i) => ({
+            ...template,
+            id: `crowd-${i}`,
+            index: `b${i.toString().padStart(4, '0')}`,
+            frameId: frames[0].id,
+            html: `<p>box ${i}</p>`,
+            x: (i % 20) * 90,
+            y: Math.floor(i / 20) * 60,
+            width: 80,
+            height: 50,
+        }));
+        const body = previewOfScene({ ...scene, frames, elements });
+        expect(body.match(/<p>box /g)).toHaveLength(500);
+        expect(body).toContain('Preview truncated');
+    });
+
     test('a deck with no frames previews as one blank slide, so the artifact is cacheable', () => {
         // getOrCacheText stores only a non-empty body: an empty one re-runs the whole document
         // transform (Yjs load + Worker) on every single request, forever, and never settles.

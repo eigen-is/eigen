@@ -62,7 +62,7 @@ import { ElementLayer } from './element-layer';
 import { EmptyOutlines } from './empty-outline';
 import { randomSeed } from './hooks/element-writes';
 import { applyZOrder, deleteSelection, duplicateSelection } from './hooks/selection-ops';
-import { useCanvasClipboard } from './hooks/use-canvas-clipboard';
+import { dropOutsideTextSelection, useCanvasClipboard } from './hooks/use-canvas-clipboard';
 import { type CanvasDoc, type NewVectorElement, sealed, type VectorElementPatch } from './hooks/use-canvas-doc';
 import { useCanvasKeyboard } from './hooks/use-canvas-keyboard';
 import { type CanvasPeerState, type PublishCursor, peerOnFrame } from './hooks/use-canvas-presence';
@@ -971,6 +971,9 @@ export function CanvasEditor({
         // it ends the session; the session's viewport freeze is lifted by its effect on the next render,
         // so this click only closes — the following one selects or draws.
         if (richTextEditRef.current) closeRichText();
+        // The surface is select-none, so a run selected elsewhere would survive this click and keep
+        // owning ⌘C/⌘X instead of the element it selects.
+        dropOutsideTextSelection(containerRef.current);
         if (frozenRef.current) return; // a gesture is already active (defensive)
         if (panMode || e.button === 1) {
             e.preventDefault();

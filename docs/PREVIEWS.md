@@ -3,7 +3,7 @@
 > **TLDR**: Server-side preview generation, cached per file version in a tmp dir. Images become
 > screen-res WebP (max 2560px). Text, code, markdown and eigen-native files become a small HTML body
 > served as JSON and rendered client-side with shared `eigen-prose` styles. Eigen-native previews render
-> off-thread in a one-shot document-transform Worker (bounded first-sheet / 20-block / 8-slide budgets);
+> off-thread in a one-shot document-transform Worker (bounded first-sheet / 20-block / 8-slide / 500-element budgets);
 > text previews serve stale-while-revalidate. Video, audio and PDF redirect to the embed URL. The overlay
 > lives in `packages/ui`, with keyboard and sibling nav.
 
@@ -87,11 +87,11 @@ document. The cap keeps the cached preview body small. Each type compacts by its
 | Type        | Preview cap               | Mechanism                                                                 |
 |-------------|---------------------------|---------------------------------------------------------------------------|
 | eigensheets | first sheet, ≤ 200 rows × 50 cols / 10,000 cells | `renderSheetsPreviewHtml(sheets)` clips from the top-left of the used range — the CF resolver still spans every sheet so cross-sheet formula refs resolve |
-| eigenslides | first 8 slides            | `renderEigenslidesPreviewBody` composes `framePages` and slices the page list (the scene stays whole) |
+| eigenslides | first 8 slides, ≤ 500 elements | `renderEigenslidesPreviewBody` slices the frame list, then the shown frames' elements through `capPreviewElements` |
 | eigendoc    | first 20 top-level blocks | `renderEigendocPreviewBody` slices `json.content` before rendering        |
-| eigenvector | the whole drawing         | one page sized to the content bounds; the shared 8 MB byte guard is the only ceiling |
+| eigenvector | ≤ 500 elements            | one page sized to the content bounds, its elements sliced by the same `capPreviewElements` |
 
-Each capped preview render module slices its own input (`renderSheetsPreviewHtml` for sheets, the render modules themselves for slides/eigendoc), leaving the full-document export renderers untouched. A drawing has no natural unit to cap on — its layers are one page — so `renderEigenvectorPreviewBody` composes all of them; a deck still has one, so the slides body keeps the 8-page cap and the truncation marker. When content is actually dropped, each render module appends a shared `renderPreviewTruncatedMarker()` (`apps/api/src/lib/preview/preview-marker.ts`) — inline-styled because preview HTML is embedded without the document `<head>`.
+Each capped preview render module slices its own input (`renderSheetsPreviewHtml` for sheets, the render modules themselves for slides/eigendoc), leaving the full-document export renderers untouched. The two canvas types cap on elements through one shared budget (`capPreviewElements` in `preview/preview-scene.ts`, kept in reading order — frame by frame, then z-order inside a frame), and a deck caps on frames first. When content is actually dropped, each render module appends a shared `renderPreviewTruncatedMarker()` (`apps/api/src/lib/preview/preview-marker.ts`) — inline-styled because preview HTML is embedded without the document `<head>`.
 
 The sheet window bounds *declared* spans too, not just emitted cells — one legal merge or conditional-format
 range can name millions of cells. Merge `colspan`/`rowspan` clip to the window edge (sets the truncated
@@ -101,7 +101,7 @@ the editor canvas remains the fidelity reference. Formula rules keep their range
 relative references) with ends clipped, and a rule whose kept area still exceeds 50,000 cells is dropped from
 the preview outright. Exports render declarations in full.
 
-All four then run their body through `applyPreviewByteGuard()` from that same module: the caps count blocks, slides and cells, so one enormous block sails through all of them, and a drawing has no cap at all. A body over 8MB is replaced by the truncated marker — never a partially sliced string — and surfaces a `byte-guard-truncated` warning.
+All four then run their body through `applyPreviewByteGuard()` from that same module: the caps count blocks, slides, elements and cells, so one enormous block sails through all of them. A body over 8MB is replaced by the truncated marker — never a partially sliced string — and surfaces a `byte-guard-truncated` warning.
 
 ## Off-thread Collab Previews (document-transform Worker)
 
@@ -112,7 +112,7 @@ Eigensheets, eigendoc, eigenslides and eigenvector preview generation runs in a 
    16 with foreground (first cache miss) and background (stale regeneration) priorities, foreground admission
    additionally bounded by predicted wait. Overload rejects with `503` (surfaced to the client); background
    overflow is dropped — a later request re-enqueues it. There is **never** a main-thread fallback.
-3. The Worker (`lib/document/transform/worker.ts`) materializes the payload and dispatches on document type through dynamic imports into the Worker-pure render modules (`preview/eigen{doc,slides,sheets,vector}-render.ts`, which reach neither the Mount nor the transform seam), so a doc preview never evaluates the sheet engine: sheets replay ops — never recalc: stored values render as-is and a valueless formula cell stays blank, because a legacy never-computed workbook can cost an unbounded recalc (~39s measured) that the 30s deadline would kill on every attempt; only the export read recalcs (SHEETS.md § Server-side recalc) — and render the bounded first-sheet view; doc, slides and vector convert the Yjs roots and render with media resolved from a name → URL map the main thread prepared (`buildPreviewUrlMap` — the Worker never sees a Mount). Doc and sheets sanitize their assembled body with DOMPurify (`FORCE_BODY` only — the preview config, distinct from `sanitizeExportHtml`); both canvas types sanitize *per element* first — `sanitizeSceneHtml` (`preview/sanitize-scene.ts`) filters each rich-text `html` before the compositor runs, so the page's own generated markup survives the pass that follows (the reader is the trust boundary for a scene's scalar fields, but not for a rich-text body, which it caps and cleans without filtering tags). All four return the body plus warnings over a typed, closed protocol (`protocol.ts`). Corrupt blobs are skipped with warnings, matching the live-read behavior.
+3. The Worker (`lib/document/transform/worker.ts`) materializes the payload and dispatches on document type through dynamic imports into the Worker-pure render modules (`preview/eigen{doc,slides,sheets,vector}-render.ts`, which reach neither the Mount nor the transform seam), so a doc preview never evaluates the sheet engine: sheets replay ops — never recalc: stored values render as-is and a valueless formula cell stays blank, because a legacy never-computed workbook can cost an unbounded recalc (~39s measured) that the 30s deadline would kill on every attempt; only the export read recalcs (SHEETS.md § Server-side recalc) — and render the bounded first-sheet view; doc, slides and vector convert the Yjs roots and render with media resolved from a name → URL map the main thread prepared (`buildPreviewUrlMap` — the Worker never sees a Mount). Doc and sheets sanitize their assembled body with DOMPurify (`FORCE_BODY` only — the preview config, distinct from `sanitizeExportHtml`); both canvas types sanitize *per element* first — `sanitizeSceneHtml` (`preview/preview-scene.ts`) filters each rich-text `html` before the compositor runs, so the page's own generated markup survives the pass that follows (the reader is the trust boundary for a scene's scalar fields, but not for a rich-text body, which it caps and cleans without filtering tags). All four return the body plus warnings over a typed, closed protocol (`protocol.ts`). Corrupt blobs are skipped with warnings, matching the live-read behavior.
 4. The main thread writes the usual `{ body, mode }` cache envelope. One-shot Workers are terminated after
    every outcome (success, timeout at the 30s preview deadline in `TRANSFORM_LIMITS`, crash, cancellation, shutdown);
    `gracefulShutdown` (`src/index.ts`) closes the runner before mount teardown.
@@ -214,11 +214,11 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 | `packages/lib/src/core/drive/hooks/reads.ts`                              | `useTextPreview()` hook                          |
 | `packages/lib/src/core/drive/media-resolver.tsx`                          | Uses `getDrivePreviewUrl` for editor images      |
 | `apps/drive/src/components/editor/native-file-editor.tsx`                 | Inline editor with text preview in read-only     |
-| `apps/api/src/lib/preview/eigen{doc,slides,sheets,vector}-render.ts`      | Worker-side body renderers (first 20 blocks / 8 slides / budgeted first sheet / the whole drawing) |
+| `apps/api/src/lib/preview/eigen{doc,slides,sheets,vector}-render.ts`      | Worker-side body renderers (first 20 blocks / 8 slides / budgeted first sheet / 500 elements) |
 | `apps/api/src/lib/preview/preview-document.ts`                            | Main-thread orchestration for every collab type: media prep + the transform seam |
 | `apps/api/src/lib/document/media.ts`                                      | Document media helpers: listing, preview URLs, Worker-side data URIs |
 | `apps/api/src/lib/export/canvas/render.ts`                                | Worker-pure compositor shared with the PDF export (see [EXPORT.md](EXPORT.md)) |
-| `apps/api/src/lib/preview/sanitize-scene.ts`                              | `sanitizeSceneHtml`: the per-element rich-text filter both canvas previews run |
+| `apps/api/src/lib/preview/preview-scene.ts`                               | `capPreviewElements` + `sanitizeSceneHtml`: the element budget and the per-element rich-text filter both canvas previews run |
 | `apps/api/src/lib/preview/preview-marker.ts`                              | `renderPreviewTruncatedMarker()` appended on truncation |
 | `apps/api/src/lib/document/transform/protocol.ts`                         | Clone-safe transform job/request/response unions    |
 | `apps/api/src/lib/document/transform/run-transform.ts`                    | Shared main-thread seam: capture → run → map        |
@@ -252,9 +252,9 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 | Type | Status | Approach |
 |------|--------|----------|
 | eigendoc | **Done** | `renderEigendocPreviewBody` in the transform Worker (`readEigendocFromDoc` → tiptap static renderer with `doc/render.ts` node mappings), first 20 blocks |
-| eigenslides | **Done** | `renderEigenslidesPreviewBody` in the transform Worker (`readVectorFromDoc` → `framePages` → `renderCanvasPage`), first 8 slides |
+| eigenslides | **Done** | `renderEigenslidesPreviewBody` in the transform Worker (`readVectorFromDoc` → `framePages` → `renderCanvasPage`), first 8 slides and 500 elements |
 | eigensheets | **Done** | `renderEigensheetsPreviewBody` in the transform Worker (`readSheetsFromDoc` → `renderSheetsPreviewHtml`), budgeted first sheet |
-| eigenvector | **Done** | `renderEigenvectorPreviewBody` in the transform Worker (`readVectorFromDoc` → `drawingPage` → `renderCanvasPage`), the whole drawing as one page |
+| eigenvector | **Done** | `renderEigenvectorPreviewBody` in the transform Worker (`readVectorFromDoc` → `drawingPage` → `renderCanvasPage`), first 500 elements as one page |
 | eigenstickies | Future | Load stickies JSON, render simplified kanban columns as HTML |
 
 ---

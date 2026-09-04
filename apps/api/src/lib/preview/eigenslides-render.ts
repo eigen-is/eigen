@@ -13,7 +13,7 @@ import type { TransformWarning } from '../document/transform/protocol';
 import { emptyPage, framePages, renderFittedPage } from '../export/canvas/render';
 import { sanitizeExportHtml } from '../export/sanitize';
 import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-marker';
-import { sanitizeSceneHtml } from './sanitize-scene';
+import { capPreviewElements, sanitizeSceneHtml } from './preview-scene';
 
 // Materialized doc → the deck's first slides as compositor pages, the same HTML the PDF export
 // prints. Runs inside the transform Worker (worker.ts owns execution; the main-thread orchestration
@@ -33,14 +33,16 @@ export function renderEigenslidesPreviewBody(
     const full = readVectorFromDoc(doc);
     const warnings: TransformWarning[] = [];
     // Sliced BEFORE composing: framePages renders every frame's layers, so a 200-slide deck would pay
-    // for 200 pages to serve 8 of them. Only the elements the shown frames hold need sanitizing too.
+    // for 200 pages to serve 8 of them. The shown frames' elements then go through the budget the
+    // drawing preview shares, so one crowded slide cannot cost what 200 slides were refused.
     const frames = orderByFractionalIndex(full.frames).slice(0, PREVIEW_MAX_SLIDES);
     const shown = new Set(frames.map((frame) => frame.id));
-    const scene = sanitizeSceneHtml({
+    const capped = capPreviewElements({
         ...full,
         frames,
         elements: full.elements.filter((el) => shown.has(el.frameId)),
     });
+    const scene = sanitizeSceneHtml({ ...full, frames, elements: capped.elements });
     const pages = framePages(scene, resolveMedia);
     const scale = CANVAS_PREVIEW_WIDTH / FRAME_WIDTH;
     // A deck with no frames still previews as one blank slide: getOrCacheText caches only a non-empty
@@ -50,7 +52,7 @@ export function renderEigenslidesPreviewBody(
         return { body: renderFittedPage(blank, scale), warnings };
     }
 
-    const truncated = full.frames.length > PREVIEW_MAX_SLIDES;
+    const truncated = full.frames.length > PREVIEW_MAX_SLIDES || capped.truncated;
     // Fitted, not bare: the lightbox and the drive hero are narrower than the composed page, and the
     // shared .page-fit box is what scales it down for them.
     const html = pages.map((page) => renderFittedPage(page, scale, resolveMedia)).join('');

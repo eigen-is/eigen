@@ -1,4 +1,4 @@
-import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, type DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, type DrivePath, isCollabType } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
 import { writeEigendocUpdateToYjs } from '../document/doc';
 import { writeSheetsSnapshotToYjs } from '../document/sheets';
@@ -113,7 +113,11 @@ export async function importIntoDocument(
     user: User,
     signal?: AbortSignal,
 ): Promise<void> {
-    if (path.mimeType === DRIVE_MIME_SHEETS) {
+    // The container TYPE gates the dispatch: mimeType is caller-controlled on upload, so a plain
+    // file wearing an eigen mime falls through to the 400 rather than into a Worker transform over
+    // the caller's bytes — the same gate exportDocument applies.
+    const containerMime = isCollabType(path.type) ? path.mimeType : '';
+    if (containerMime === DRIVE_MIME_SHEETS) {
         const snapshotJson = await importXlsxSnapshot(buffer, signal);
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
         await requireWritePermission(drive, path, user);
@@ -121,7 +125,7 @@ export async function importIntoDocument(
         return;
     }
 
-    if (path.mimeType === DRIVE_MIME_DOC) {
+    if (containerMime === DRIVE_MIME_DOC) {
         const { update, images } = await importDocxUpdate(buffer, signal);
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
         await requireWritePermission(drive, path, user);
