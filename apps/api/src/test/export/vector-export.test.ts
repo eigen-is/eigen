@@ -106,7 +106,7 @@ describe('Eigenvector export — empty drawing', () => {
     test('pdf export of an empty drawing is rejected with 400', async () => {
         const home = await getHome(ctx.alice.user.id);
         const { mount, path } = await home.drive.resolveFile(mountId, emptyPath.id);
-        expect(exportDocument(mount, path, 'pdf')).rejects.toThrow('The drawing is empty');
+        await expect(exportDocument(mount, path, 'pdf')).rejects.toThrow('The drawing is empty');
     }, 60_000);
 });
 
