@@ -1,7 +1,14 @@
 import { beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { decodeSheetsSnapshot, encodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
-import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
+import {
+    DRIVE_MIME_DOC,
+    DRIVE_MIME_SHEETS,
+    DRIVE_TYPE_DOC,
+    DRIVE_TYPE_SHEETS,
+    type DrivePath,
+    stripEigenExtension,
+} from '@workspace/lib/types/drive';
 import * as engine from '@workspace/sheet/engine';
 import { eq } from 'drizzle-orm';
 import ExcelJS from 'exceljs';
@@ -1120,11 +1127,14 @@ describe('document transform (admission)', () => {
         const mount = {} as unknown as Mount;
         const user = {} as unknown as User;
 
-        for (const mimeType of [DRIVE_MIME_SHEETS, DRIVE_MIME_DOC]) {
+        for (const target of [
+            { type: DRIVE_TYPE_SHEETS, mimeType: DRIVE_MIME_SHEETS },
+            { type: DRIVE_TYPE_DOC, mimeType: DRIVE_MIME_DOC },
+        ]) {
             const refuse = refuseAdmissionOnce();
             let error: unknown;
             try {
-                await importIntoDocument(drive, mount, { id: 'refused', mimeType } as DrivePath, upload, user);
+                await importIntoDocument(drive, mount, { id: 'refused', ...target } as DrivePath, upload, user);
             } catch (err) {
                 error = err;
             } finally {
