@@ -11,6 +11,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     arrowRoute,
     type Box,
+    boxCenter,
     computeSnapTargets,
     elementBounds,
     elementsInFrame,
@@ -30,6 +31,7 @@ import {
     parseIdList,
     parsePoints,
     resizeLinear,
+    rotatePoint,
     SNAP_SCREEN_THRESHOLD,
     type SnapLine,
     type SnapTargets,
@@ -319,12 +321,15 @@ export function CanvasEditor({
                 const [cardId] = parseIdList(el.commentCardIds);
                 if (!cardId) return [];
                 const box = elementBox(el);
+                // The corner travels with the element's rotation, like every other chrome layer, so the
+                // mark stays on a rotated shape instead of floating beside it.
+                const { x, y } = rotatePoint({ x: box.x + box.width, y: box.y }, boxCenter(box), box.angle);
                 return [
                     {
                         id: el.id,
                         cardId,
                         color: commentCards?.[cardId]?.color,
-                        corner: { x: box.x + box.width, y: box.y, width: 0, height: 0, angle: 0 },
+                        corner: { x, y, width: 0, height: 0, angle: 0 },
                     },
                 ];
             }),
@@ -507,20 +512,22 @@ export function CanvasEditor({
     // Layered Escape (bubble phase): ObjectTransform claims mid-resize/rotate Escapes in the capture
     // phase and stops them, so this never fires during a grip drag. It cancels an in-progress
     // canvas gesture, else deselects, else returns to the select tool.
-    const escRef = useRef({ hasSelection: false, tool });
-    escRef.current = { hasSelection: selectedIds.length > 0, tool };
+    const escRef = useRef({ hasSelection: false, tool, toolLocked });
+    escRef.current = { hasSelection: selectedIds.length > 0, tool, toolLocked };
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
             // A dialog/palette input owns its own Escape (close, clear); no gesture can be active
             // while one has focus, so skipping the whole handler is safe.
             if (e.key !== 'Escape' || isTypingTarget()) return;
             const g = gestureRef.current;
+            const s = escRef.current;
             if (g) {
                 gestureRef.current = null;
                 frozenRef.current = false;
                 if (g.kind === 'create') {
                     setCreating(null);
-                    setTool('select');
+                    // The padlock survives a CANCELLED placement exactly as it survives a completed one.
+                    if (!s.toolLocked) setTool('select');
                 } else if (g.kind === 'marquee') {
                     setMarquee(null);
                     // Cancel restores the gesture's base: the prior set for additive marquees,
@@ -535,7 +542,6 @@ export function CanvasEditor({
                 }
                 return;
             }
-            const s = escRef.current;
             if (s.hasSelection) setSelectedIds([]);
             else if (s.tool !== 'select') setTool('select');
         };
