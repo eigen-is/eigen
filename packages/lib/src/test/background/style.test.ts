@@ -15,7 +15,7 @@ describe('getBackgroundStyle', () => {
 
     test('gradient → linear-gradient backgroundImage', () => {
         expect(getBackgroundStyle({ type: 'gradient', from: '#ffffff', to: 'transparent', angle: 180 })).toEqual({
-            backgroundImage: 'linear-gradient(180deg, #ffffff 0%, #ffffff00 100%)',
+            backgroundImage: `linear-gradient(180deg, #ffffff 0%, #ffffffdf 12.5%, #ffffffbf 25%, #ffffff9f 37.5%, #ffffff80 50%, #ffffff60 62.5%, #ffffff40 75%, #ffffff20 87.5%, #ffffff00 100%)`,
         });
     });
 
@@ -97,7 +97,7 @@ describe('backgroundCss', () => {
     test('is getBackgroundStyle as declarations', () => {
         expect(backgroundCss({ type: 'solid', color: '#ff0080' })).toEqual(['background-color:#ff0080']);
         expect(backgroundCss({ type: 'gradient', from: '#fff', to: 'transparent', angle: 180 })).toEqual([
-            'background-image:linear-gradient(180deg, #ffffff 0%, #ffffff00 100%)',
+            `background-image:linear-gradient(180deg, #ffffff 0%, #ffffffdf 12.5%, #ffffffbf 25%, #ffffff9f 37.5%, #ffffff80 50%, #ffffff60 62.5%, #ffffff40 75%, #ffffff20 87.5%, #ffffff00 100%)`,
         ]);
     });
 
