@@ -3,13 +3,7 @@
 // shell and the drawing app cannot drift. The box background is the generic Fill row, its border the
 // generic Stroke row; this section is the text itself.
 
-import {
-    ELEMENT_KINDS,
-    RICH_TEXT_CLASS,
-    richTextCssText,
-    VECTOR_STYLE_DEFAULTS,
-    type VectorRichTextElement,
-} from '@workspace/lib/vector';
+import { RICH_TEXT_CLASS, richTextCssText, type VectorRichTextElement } from '@workspace/lib/vector';
 import { LightEditor } from '@workspace/ui/components/editor/light-editor';
 import {
     AlignmentPicker,
@@ -84,9 +78,6 @@ export function RichTextInPlaceEditor({ element, onChange, onExit }: InPlaceEdit
     );
 }
 
-// What a reset restores: the values CREATING a box would have given it, never a literal typed here.
-const RICHTEXT_DEFAULTS = ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS);
-
 export function RichTextPanelSection({ elements, onChange }: KindPanelSectionProps) {
     // The panel mounts a kind's section only for a SOLE-kind selection, so this narrows rather than filters.
     const boxes = elements.filter((el): el is VectorRichTextElement => el.type === 'richtext');
@@ -115,11 +106,7 @@ export function RichTextPanelSection({ elements, onChange }: KindPanelSectionPro
                         step={1}
                     />
                 </PropertyRow>
-                <ColorRow
-                    label="Color"
-                    value={color}
-                    onChange={(c) => onChange({ color: c || RICHTEXT_DEFAULTS.color })}
-                />
+                <ColorRow label="Color" value={color} onChange={(c) => onChange({ color: c })} />
                 <PropertyRow label="Style">
                     <div className="flex items-center gap-1">
                         <PropertyToggle
