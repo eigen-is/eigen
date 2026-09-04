@@ -33,7 +33,6 @@ import {
     linearSceneToLocal,
     marqueeHits,
     marqueeMode,
-    normalizeAngle,
     normalizeFixedPoint,
     normalizeLinear,
     outlinePoint,
@@ -584,17 +583,6 @@ describe('snapAngle', () => {
     test('honors a custom step', () => {
         expect(snapAngle(50, 90)).toBe(90);
         expect(snapAngle(44, 90)).toBe(0);
-    });
-});
-
-describe('normalizeAngle', () => {
-    test('wraps into [0, 360)', () => {
-        expect(normalizeAngle(0)).toBe(0);
-        expect(normalizeAngle(360)).toBe(0);
-        expect(normalizeAngle(370)).toBe(10);
-        expect(normalizeAngle(720)).toBe(0);
-        expect(normalizeAngle(-10)).toBe(350);
-        expect(normalizeAngle(-370)).toBe(350);
     });
 });
 

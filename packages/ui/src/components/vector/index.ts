@@ -3,7 +3,7 @@ export { CanvasEditor, type CanvasImageInsert } from './canvas-editor';
 export { CanvasPropertiesPanel } from './canvas-properties-panel';
 export { CanvasToolbar } from './canvas-toolbar';
 export { FrameThumbnail, FrameView } from './frame-view';
-export { newElementId } from './hooks/element-writes';
+export { newElementId, writeElementInDoc } from './hooks/element-writes';
 export { newFrameId, writeFrameInDoc } from './hooks/frame-writes';
 export { useActiveFrame } from './hooks/use-active-frame';
 export { useCanvasCommentHost } from './hooks/use-canvas-comment-host';

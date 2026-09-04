@@ -11,6 +11,7 @@ import {
     orderByFractionalIndex,
     parseBackgroundFill,
     round,
+    SVG_NS,
     sceneBounds,
     sceneLayers,
     type VectorScene,
@@ -24,8 +25,6 @@ import {
 // image with `clip-path="url(#…)"` — SVG ATTRIBUTES, never a CSS declaration. That is load-bearing
 // on the export path: sanitize.ts rewrites every non-data url() found in a `style` attribute or a
 // <style> block to `url()`, so a gradient moved into CSS would silently stop painting in the PDF.
-
-const SVG_NS = 'http://www.w3.org/2000/svg';
 
 // A page in SCENE units plus the offset that brings its top-left to (0,0): a frame is (0,0)-based
 // so its origin is zero, a frameless drawing's content bounds start wherever the user drew.

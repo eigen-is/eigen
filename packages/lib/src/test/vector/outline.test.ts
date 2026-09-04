@@ -6,11 +6,13 @@ import {
     cornerRadius,
     diamondOutline,
     ellipseOutline,
+    normalizeAngle,
     outlineDistance,
     outlineHits,
     outlinePath,
     polylineOutline,
     rectOutline,
+    round4,
     sharpDiamondOffset,
 } from '../../vector/outline';
 import { DEFAULT_ELEMENT_PROPS, type VectorRectangleElement, type VectorShapeElement } from '../../vector/types';
@@ -515,5 +517,24 @@ describe('outlineDistance', () => {
         ]);
         expect(outlineDistance(path, { x: 5, y: 4 })).toBeCloseTo(4, 9);
         expect(outlineDistance(polylineOutline([]), { x: 5, y: 4 })).toBe(0);
+    });
+});
+
+describe('normalizeAngle', () => {
+    test('wraps into [0, 360)', () => {
+        expect(normalizeAngle(0)).toBe(0);
+        expect(normalizeAngle(360)).toBe(0);
+        expect(normalizeAngle(370)).toBe(10);
+        expect(normalizeAngle(720)).toBe(0);
+        expect(normalizeAngle(-10)).toBe(350);
+        expect(normalizeAngle(-370)).toBe(350);
+    });
+});
+
+describe('round4', () => {
+    test('keeps four decimals, the precision every gradient value carries', () => {
+        expect(round4(0.123456)).toBe(0.1235);
+        expect(round4(1)).toBe(1);
+        expect(round4(-0.00004)).toBe(-0);
     });
 });

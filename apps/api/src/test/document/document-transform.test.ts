@@ -666,12 +666,14 @@ describe('document transform (xlsx import)', () => {
 // body now carries too so the lightbox and the drive hero can scale a page below its own width. The three
 // deck hashes moved again when gradients started sampling in OKLab: the deck's one slide-background
 // gradient now emits nine stops instead of two, and substituting that stop list back reproduces the
-// previous hashes byte-for-byte, so nothing else in the deck bytes moved.
+// previous hashes byte-for-byte, so nothing else in the deck bytes moved. The deck's html hash moved
+// once more when the fallback ladder's bottom step was sized for the narrowest viewport it serves
+// rather than for its own breakpoint: one CSS scale value in the wrapping document, nothing else.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'f61e8785cd4e3b3872e5fcf6ee817abdae5e2ed4119a113dc17342fd922e6b44';
 const GOLDEN_DOC_EXPORT_HTML_SHA256 = 'f4b1308435d2d2f9d140c4ed62b81a1e9cb281dee8d68aee3a880258e87edf3b';
 const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'f4b1308435d2d2f9d140c4ed62b81a1e9cb281dee8d68aee3a880258e87edf3b';
 const GOLDEN_DECK_PREVIEW_SHA256 = 'eba20dee7d5ebd1d33532e0f709043abdafd9ea2cfa9368faca534713debe50c';
-const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'e0bc528f6d5fdd3fe0a670d5636eeb857dfc79c0ab6af0a899a7ec05c45da7dc';
+const GOLDEN_DECK_EXPORT_HTML_SHA256 = '8d911f7eac1de5a920305052a8090abdc3496a5051e476baf1e0144c166018ea';
 const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = 'c39038b392dace0f779232e2aef84fe1e19f108596d8c0e3815f2fa5c57bbc36';
 
 // Preview media is embedded as an absolute API URL carrying per-run owner/path ids —

@@ -4,6 +4,8 @@
 // corrupt peer write can never throw on a render path.
 
 import type { BackgroundFill, Fill, FillPaint } from '../types/background';
+import { isSafeMediaName } from './media-refs';
+import { normalizeAngle, round4 } from './outline';
 import { DEFAULT_FILL_STYLE, FILL_STYLES, type FillStyle, prop } from './types';
 
 // "Paint nothing" as a bare colour: a fill with no paint, a scene with no background, a shape or box
@@ -118,20 +120,5 @@ export function gradientVector(angle: number): { x1: number; y1: number; x2: num
 }
 
 function normalizeDegrees(value: unknown): number {
-    if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
-    return ((value % 360) + 360) % 360;
-}
-
-// The media-name guard listEigenMediaRefs already enforces: no traversal, no control characters.
-function isSafeMediaName(name: string): boolean {
-    if (name === '' || name.includes('/') || name.includes('\\')) return false;
-    for (let i = 0; i < name.length; i++) {
-        const code = name.charCodeAt(i);
-        if (code < 0x20 || code === 0x7f) return false;
-    }
-    return true;
-}
-
-function round4(n: number): number {
-    return Math.round(n * 10_000) / 10_000;
+    return typeof value === 'number' && Number.isFinite(value) ? normalizeAngle(value) : 0;
 }

@@ -932,8 +932,3 @@ export function resizeRotatedRect(
 export function snapAngle(deg: number, step = 15): number {
     return Math.round(deg / step) * step;
 }
-
-// Normalize degrees into [0, 360) for storage.
-export function normalizeAngle(deg: number): number {
-    return ((deg % 360) + 360) % 360;
-}

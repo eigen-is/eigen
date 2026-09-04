@@ -4,16 +4,14 @@
 // non-null origin, so ⌘Z cannot empty it (docs/CANVAS.md § Sealing discipline). Ids and the frame
 // record go through the editor's own writers, so a seeded deck cannot drift from an authored one.
 
+import { generateKeyBetween, SLIDES_STYLE_DEFAULTS, serializeBackgroundFill } from '@workspace/lib/vector';
 import {
-    baseDefaultsFor,
-    ELEMENT_FIELDS,
-    ELEMENT_KINDS,
-    generateKeyBetween,
-    SLIDES_STYLE_DEFAULTS,
-    serializeBackgroundFill,
-} from '@workspace/lib/vector';
-import { newElementId, newFrameId, writeFrameInDoc } from '@workspace/ui/components/vector';
-import * as Y from 'yjs';
+    newFrameId,
+    type VectorElementPatch,
+    writeElementInDoc,
+    writeFrameInDoc,
+} from '@workspace/ui/components/vector';
+import type * as Y from 'yjs';
 
 const SEED_ORIGIN = Symbol('deck-seed');
 
@@ -22,7 +20,7 @@ const SEED_ORIGIN = Symbol('deck-seed');
 const SEED_BACKGROUND_COLOR = '#f6339a';
 
 // The centred title band a deck has always opened with, in frame coordinates (0,0 → 1920,1080).
-const WELCOME = {
+const WELCOME: VectorElementPatch = {
     x: 192,
     y: 378,
     width: 1536,
@@ -47,23 +45,6 @@ export function seedDeck(doc: Y.Doc): void {
         const frameId = newFrameId();
         const background = serializeBackgroundFill({ type: 'solid', color: SEED_BACKGROUND_COLOR });
         writeFrameInDoc(doc, { id: frameId, index, background });
-
-        const elementId = newElementId();
-        const record: Record<string, unknown> = {
-            ...baseDefaultsFor('richtext'),
-            ...ELEMENT_KINDS.richtext.defaults(SLIDES_STYLE_DEFAULTS),
-            id: elementId,
-            type: 'richtext',
-            index,
-            frameId,
-            angle: 0,
-            ...WELCOME,
-        };
-        const element = new Y.Map<unknown>();
-        for (const field of ELEMENT_FIELDS) {
-            const value = record[field];
-            if (value !== undefined) element.set(field, value);
-        }
-        doc.getMap('elements').set(elementId, element);
+        writeElementInDoc(doc, { type: 'richtext', frameId, ...WELCOME }, index, SLIDES_STYLE_DEFAULTS);
     }, SEED_ORIGIN);
 }

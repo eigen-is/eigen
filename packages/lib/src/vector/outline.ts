@@ -428,6 +428,18 @@ export function clamp(v: number, lo: number, hi: number): number {
     return Math.min(hi, Math.max(lo, v));
 }
 
+// Normalize degrees into [0, 360) for storage — the one angle convention, for the element model and
+// for a gradient's own angle.
+export function normalizeAngle(deg: number): number {
+    return ((deg % 360) + 360) % 360;
+}
+
+// 4-decimal rounding, the precision every gradient value carries: a stop offset, a stop opacity and
+// the unit-square vector a linearGradient runs along.
+export function round4(n: number): number {
+    return Math.round(n * 10_000) / 10_000;
+}
+
 function n(v: number): number {
     return Math.round(v * 1000) / 1000;
 }

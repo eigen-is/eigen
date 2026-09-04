@@ -3,15 +3,20 @@
 // functions over the scene, so the hook stays the thin React surface.
 
 import {
+    baseDefaultsFor,
     ELEMENT_FIELDS,
     ELEMENT_KINDS,
     generateNKeysBetween,
     isValidFractionalIndex,
     isVectorElementType,
     remapBinding,
+    type StyleDefaults,
+    storedFields,
+    type VectorElementType,
 } from '@workspace/lib/vector';
 import { nanoid } from 'nanoid';
 import * as Y from 'yjs';
+import type { NewVectorElement } from './use-canvas-doc';
 
 export function newElementId(): string {
     return `el-${nanoid(10)}`;
@@ -27,6 +32,39 @@ export function randomSeed(): number {
 // drift the ELEMENT_FIELDS whitelist exists to prevent.
 export function hasSeed(type: unknown): boolean {
     return isVectorElementType(type) && ELEMENT_KINDS[type].fields.includes('seed');
+}
+
+// Per-type defaults: the geometry box, the shared base props, and the kind's own fields straight from
+// the registry, styled by the HOST's table (vector draws rough and hatched, slides flat and solid) —
+// a new kind needs no entry here, and a new host only a table.
+function elementDefaults(type: VectorElementType, style: StyleDefaults): Record<string, unknown> {
+    return {
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+        angle: 0,
+        // The shared base paint under the kind's overrides: rich text and images use the stroke as a
+        // border, so a fresh one is unframed until the user picks a stroke colour. The panel's reset
+        // rows read the same helper, so a reset restores what creation gave.
+        ...baseDefaultsFor(type),
+        ...ELEMENT_KINDS[type].defaults(style),
+    };
+}
+
+// One element into the doc's `elements` map at the given fractional index, under the kind's defaults
+// and the host's style table — THE element writer, shared by the editor's add path and the deck
+// seeder. Honors a caller-supplied seed so a drag-create preview and its committed element share the
+// same roughjs jitter (no visual pop on release); a seedless kind stores none. Nested in a live
+// transact it joins that one, so a caller's origin and single-atom guarantee both survive.
+export function writeElementInDoc(doc: Y.Doc, partial: NewVectorElement, index: string, style: StyleDefaults): string {
+    const id = newElementId();
+    const seed = hasSeed(partial.type) ? (partial.seed ?? randomSeed()) : undefined;
+    const record = { ...elementDefaults(partial.type, style), ...partial, id, type: partial.type, seed, index };
+    const element = new Y.Map<unknown>();
+    for (const [field, value] of storedFields(record, ELEMENT_FIELDS)) element.set(field, value);
+    doc.transact(() => doc.getMap('elements').set(id, element));
+    return id;
 }
 
 // Live topmost fractional index in the map. Skips non-map entries and malformed index strings —
@@ -75,7 +113,7 @@ export function duplicateElementsInDoc(doc: Y.Doc, ids: string[], dx: number, dy
             if (typeof oldId === 'string') idMap.set(oldId, id);
             newIds.push(id);
         }
-        sources.forEach((src, i) => {
+        for (const [i, src] of sources.entries()) {
             const id = newIds[i];
             const clone = new Y.Map();
             for (const field of ELEMENT_FIELDS) {
@@ -99,7 +137,7 @@ export function duplicateElementsInDoc(doc: Y.Doc, ids: string[], dx: number, dy
             if (typeof x === 'number') clone.set('x', x + dx);
             if (typeof y === 'number') clone.set('y', y + dy);
             elementsMap.set(id, clone);
-        });
+        }
     });
     return newIds;
 }

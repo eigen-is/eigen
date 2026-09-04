@@ -11,6 +11,7 @@
 // OTHER end's colour at opacity 0 — the ramp keeps its hue and only fades out.
 
 import { TRANSPARENT_COLOR } from '../vector/fill';
+import { round4 } from '../vector/outline';
 
 // Opacity rides beside the colour rather than inside an #rrggbbaa, because that is the shape SVG
 // wants: `stop-color` plus its own `stop-opacity` attribute.
@@ -129,8 +130,4 @@ function byteAt(hex: string, index: number): number {
 
 function hex2(value: number): string {
     return Math.round(value).toString(16).padStart(2, '0');
-}
-
-function round4(n: number): number {
-    return Math.round(n * 10_000) / 10_000;
 }
