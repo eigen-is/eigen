@@ -801,6 +801,15 @@ describe('readVectorFromDoc — the canvas model', () => {
         expect(stored instanceof Y.Map && stored.get('frameId')).toBe('ghost');
     });
 
+    test('an empty frameId is dangling too in a frame document', () => {
+        // An element on no slide is invisible in every one, yet still hits in the deck's search and
+        // still anchors its comments — unreachable and undeletable.
+        const doc = new Y.Doc();
+        doc.transact(() => writeElement(doc.getMap('elements'), 'a', { type: 'rectangle', index: 'a0' }));
+        writeFrame(doc, 'f1', 'a0');
+        expect(readVectorFromDoc(doc).elements[0].frameId).toBe('f1');
+    });
+
     test('with no frames at all a dangling frameId falls back to the infinite canvas', () => {
         const doc = new Y.Doc();
         doc.transact(() =>
