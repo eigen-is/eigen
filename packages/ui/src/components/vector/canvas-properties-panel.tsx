@@ -1,8 +1,9 @@
 // The right-side w-64 properties panel for the canvas engine. It is mounted whenever the user can edit
 // — with nothing selected it edits the canvas itself (the background row). It edits every selected
 // element through the shared MIXED conventions: '—' in number inputs / color swatches / select
-// placeholders and a data-mixed attribute on toggles. Each control change is one updateElements transact
-// across the selection (one undo step, stopCapturing sealed on both sides).
+// placeholders and a data-mixed attribute on toggles. Each discrete control change is one updateElements
+// transact across the selection (one undo step, stopCapturing sealed on both sides); the one continuous
+// control, the Opacity slider, writes live inside a holdCapture gesture so one drag is one undo step.
 //
 // Every row gates on a CAPABILITY, never on a type list: `fill` opens the Fill block, `stroke` the Stroke
 // section, `roughness` the Sketch section, `corners` the Shape section. What a capability cannot express
@@ -49,6 +50,7 @@ import {
     isMixed,
     MergedNumberInput,
     MergedSelect,
+    MergedSlider,
     type MergedValue,
     numToStr,
     PropertiesPanel,
@@ -61,7 +63,7 @@ import {
 import type { ReactNode } from 'react';
 import type * as Y from 'yjs';
 import { applyZOrder } from './hooks/selection-ops';
-import type { VectorElementPatch } from './hooks/use-canvas-doc';
+import { holdCapture, type VectorElementPatch } from './hooks/use-canvas-doc';
 import { ELEMENT_KIND_UI } from './kinds';
 import { loadVectorFont, measureVectorText } from './text-measure';
 
@@ -205,6 +207,16 @@ export function CanvasPropertiesPanel({
         updateElements(selectedIds.map((id) => ({ id, fields })));
         undoManager?.stopCapturing();
     };
+
+    // The same write UNSEALED, for a continuous control: MergedSlider seals at both ends of a drag itself,
+    // so the moves in between coalesce into one undo step instead of one per pixel.
+    const applyToAllLive = (fields: VectorElementPatch) => {
+        if (!selectedIds.length) return;
+        updateElements(selectedIds.map((id) => ({ id, fields })));
+    };
+
+    // One drag = one undo step: holdCapture opens the window, MergedSlider releases it on commit.
+    const beginOpacityGesture = () => holdCapture(undoManager);
 
     // The arrow-type row. arrowShapeFields owns the stored fields each shape writes back. Switching
     // TO elbow first collapses the arrow to its two endpoints — an elbow route is DERIVED from them, so
@@ -500,12 +512,14 @@ export function CanvasPropertiesPanel({
             {has && (
                 <PropertySection title="Appearance">
                     <PropertyRow label="Opacity">
-                        <MergedNumberInput
+                        <MergedSlider
+                            aria-label="Opacity"
                             value={opacity}
-                            onChange={(v) => applyToAll({ opacity: v })}
+                            onChange={(v) => applyToAllLive({ opacity: v })}
+                            beginGesture={beginOpacityGesture}
                             min={0}
                             max={100}
-                            step={10}
+                            step={1}
                         />
                     </PropertyRow>
                 </PropertySection>

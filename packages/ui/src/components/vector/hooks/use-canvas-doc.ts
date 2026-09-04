@@ -49,6 +49,22 @@ export function sealed<T>(undoManager: Y.UndoManager | null, op: () => T): T {
     return result;
 }
 
+// The continuous counterpart of `sealed`: one GESTURE = one undo step, however long it lasts. A
+// slider drag writes live so the canvas updates under the pointer, and merely leaving those writes
+// unsealed is not enough — Y.UndoManager only merges changes that land within `captureTimeout` of
+// each other, so a slow drag, or a pause to look at the result, silently splits into several steps.
+// Hold the window open for the gesture instead, and seal at both ends. Returns the release.
+export function holdCapture(undoManager: Y.UndoManager | null): () => void {
+    if (!undoManager) return () => {};
+    const previous = undoManager.captureTimeout;
+    undoManager.stopCapturing();
+    undoManager.captureTimeout = Number.POSITIVE_INFINITY;
+    return () => {
+        undoManager.captureTimeout = previous;
+        undoManager.stopCapturing();
+    };
+}
+
 // A partial patch over the write/read allow-list — every field optional, so a caller sets any
 // subset of any element variant's fields (the union members share the geometry base). id/type
 // are never patched; z-order changes rewrite `index`.

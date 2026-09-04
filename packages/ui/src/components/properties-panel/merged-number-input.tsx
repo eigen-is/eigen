@@ -8,9 +8,10 @@ type MergedNumberInputProps = {
     max?: number;
     step?: number;
     disabled?: boolean;
+    className?: string;
 };
 
-export function MergedNumberInput({ value, onChange, min, max, step, disabled }: MergedNumberInputProps) {
+export function MergedNumberInput({ value, onChange, min, max, step, disabled, className }: MergedNumberInputProps) {
     const mixed = isMixed(value);
     return (
         <PropertyNumberInput
@@ -20,6 +21,7 @@ export function MergedNumberInput({ value, onChange, min, max, step, disabled }:
             max={max}
             step={step}
             disabled={disabled}
+            className={className}
             placeholder={mixed ? '—' : undefined}
         />
     );
