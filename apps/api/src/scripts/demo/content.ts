@@ -971,7 +971,7 @@ export const SITE_PLAN = {
         },
     ] satisfies SitePlanShape[],
     images: [
-        { file: 'branding/logo.webp', x: 20, y: 940, width: 96, height: 96 },
+        { file: 'branding/logo.svg', x: 20, y: 940, width: 96, height: 63 },
         { file: 'images/camping-field.webp', x: 1340, y: 550, width: 200, height: 150 },
     ] satisfies SitePlanImage[],
     arrows: [
