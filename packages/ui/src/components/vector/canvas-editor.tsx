@@ -1,4 +1,3 @@
-import { getBackgroundStyle } from '@workspace/lib/background';
 import {
     isPendingMediaName,
     useCopyToMediaFolder,
@@ -19,7 +18,6 @@ import {
     FRAME_CARD_BORDER,
     FRAME_CARD_RADIUS,
     fitImageSize,
-    frameClipRadius,
     getElementsBounds,
     IMAGE_CASCADE_OFFSET,
     type ImageSize,
@@ -29,7 +27,6 @@ import {
     marqueeMode,
     NEW_TEXT_BOX_SIZE,
     orderByFractionalIndex,
-    parseBackgroundFill,
     parseIdList,
     parsePoints,
     resizeLinear,
@@ -71,6 +68,7 @@ import { useSpaceHeld } from './hooks/use-space-held';
 import type { VectorTool } from './hooks/use-tool';
 import { useViewport } from './hooks/use-viewport';
 import { ELEMENT_KIND_UI } from './kinds';
+import { CANVAS_PAPER_CLASS, canvasSurfaceClass, FramePage } from './paper';
 import { arrowLabelEditing, type EditingState } from './text-editing';
 import { isVectorFontLoaded, loadVectorFont, measureVectorText } from './text-measure';
 import { TextOverlay } from './text-overlay';
@@ -1295,42 +1293,30 @@ export function CanvasEditor({
         </>
     );
 
-    // A frame is a page, drawn as a CARD: its own background inside a slightly rounded box that CLIPS
-    // what overhangs it, so the user sees where the page ends. This half is the scene-layer half — the
-    // paint and the rounded clip, whose radius counter-scales the zoom (frameClipRadius); the card's
-    // border ring is drawn in the screen-space chrome layer below, where a 1px border is really 1px.
-    // The infinite canvas has no such box — its layers sit straight on the scene.
+    // A frame is a page, drawn as a CARD (FramePage: the paint, the rounded clip and the light-pinned
+    // paper). Its border ring is drawn in the screen-space chrome layer below, where a 1px border is
+    // really 1px. The infinite canvas has no such box — its layers sit straight on the scene.
     const frameLayers = frame ? (
-        <div
-            // overflow-CLIP, not hidden: `hidden` makes the page a scroll container, and the browser
-            // scrolls one to reveal a focused contenteditable's caret — which slid the whole page up
-            // under the screen-space chrome, leaving the selection ring behind (the probe measured
-            // 123.5px). `clip` clips identically and cannot be scrolled by anyone.
-            className="absolute overflow-clip"
-            style={{
-                left: 0,
-                top: 0,
-                width: frame.width,
-                height: frame.height,
-                borderRadius: frameClipRadius(zoom),
-                ...getBackgroundStyle(parseBackgroundFill(frame.background), resolveMediaUrl),
-            }}
-        >
+        <FramePage frame={frame} zoom={zoom} resolveMediaUrl={resolveMediaUrl}>
             {layers}
-        </div>
+        </FramePage>
     ) : (
         layers
     );
 
     return (
-        // eigen-paper: the drawing surface always renders light, in dark mode too (globals.css). Its
-        // paint must stay OPAQUE — a translucent tint lets the dark app surface bleed through it.
+        // The surface: the paper itself on the infinite canvas (always light, dark mode too — and its
+        // paint must stay OPAQUE, a translucent tint lets the dark app surface bleed through), the
+        // themed backdrop AROUND the page in frame mode. See canvasSurfaceClass.
         <div
             ref={containerRef}
             tabIndex={-1}
             // overflow-clip for the same reason the page below uses it: the infinite canvas is not a
             // scroll container, so a caret scroll must not be able to slide the scene under the chrome.
-            className="eigen-paper relative h-full w-full select-none overflow-clip bg-background touch-none outline-none"
+            className={cn(
+                'relative h-full w-full select-none overflow-clip touch-none outline-none',
+                canvasSurfaceClass(frame !== undefined),
+            )}
             style={{ cursor, backgroundColor: background }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
@@ -1358,7 +1344,10 @@ export function CanvasEditor({
                 {frameLayers}
             </div>
             {/* Scene-space chrome stays SVG: guides and bind affordances ride rotation/zoom for free. */}
-            <svg className="pointer-events-none absolute inset-0 h-full w-full" xmlns={SVG_NS}>
+            <svg
+                className={cn(CANVAS_PAPER_CLASS, 'pointer-events-none absolute inset-0 h-full w-full')}
+                xmlns={SVG_NS}
+            >
                 <g ref={overlayRef}>
                     <SnapGuides lines={snapLines} />
                     {drawing.bindingOutline}
@@ -1367,8 +1356,13 @@ export function CanvasEditor({
                 </g>
             </svg>
             {/* Screen-space chrome, laid out by boxToStyle at the viewport React last rendered; a live
-                gesture moves the whole layer with one transform (chromeTransform) instead. */}
-            <div ref={chromeRef} className="pointer-events-none absolute inset-0 origin-top-left">
+                gesture moves the whole layer with one transform (chromeTransform) instead. It dresses the
+                PAGE, so it reads the page's palette and not the app's: the paper pin keeps a resize grip
+                white on a white slide in dark mode (a no-op on the infinite canvas, already paper). */}
+            <div
+                ref={chromeRef}
+                className={cn(CANVAS_PAPER_CLASS, 'pointer-events-none absolute inset-0 origin-top-left')}
+            >
                 {/* The page card's border, in SCREEN px (the scene layer paints and clips it) — first, so
                     the selection chrome draws over it. */}
                 {frame && (
@@ -1528,7 +1522,7 @@ export function CanvasEditor({
                 hook stays enabled even when it wouldn't — see above). */}
             <FileDropOverlay visible={isDragging && imagesEnabled} label="Drop images to add" icon={ImageIcon} />
             {/* Finish hint for a multi-point line/arrow draft: the finish triggers aren't discoverable, so
-                surface them while collecting clicks. Tokens resolve light inside .eigen-paper. */}
+                surface them while collecting clicks. */}
             {drawing.multiPointDraft && (
                 <HintPill className="bottom-3 left-1/2 -translate-x-1/2">
                     Enter or double-click to finish · Esc to cancel
