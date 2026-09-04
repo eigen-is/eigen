@@ -1,5 +1,10 @@
 {
   "includeCoAuthoredBy": false,
+  "attribution": {
+    "commit": "",
+    "pr": "",
+    "sessionUrl": false
+  },
   "enabledPlugins": {
     "pr-review-toolkit@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
