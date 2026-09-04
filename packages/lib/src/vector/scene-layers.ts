@@ -35,7 +35,8 @@ type ElementLayerOptions = {
     route?: Point[];
 };
 
-// One element as a placed layer, or null when it draws nothing (unresolvable media). The live canvas
+// One element as a placed layer, or null when the kind draws nothing at all (an image with no media
+// name and no border is the only such element today). The live canvas
 // renders per element with local preview overrides, so it calls this directly; sceneLayers is the same
 // function over a whole scene.
 export function elementLayer(el: VectorElement, opts: ElementLayerOptions = {}): Layer | null {

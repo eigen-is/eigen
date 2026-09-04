@@ -68,7 +68,7 @@ describe('sceneLayers', () => {
         expect(layers.map((l) => l.id)).toEqual(['framed', 'loose']);
     });
 
-    test('an image is a layer only once its media resolves', () => {
+    test('an image is a layer with or without its media — unresolved it draws a placeholder', () => {
         const img: VectorImageElement = {
             ...DEFAULT_ELEMENT_PROPS,
             id: 'img',
@@ -83,7 +83,9 @@ describe('sceneLayers', () => {
             objectFit: 'contain',
             mediaName: 'pic.png',
         };
-        expect(sceneLayers(scene([img]))).toEqual([]);
+        const pending = sceneLayers(scene([img]));
+        expect(pending.map((l) => l.id)).toEqual(['img']);
+        expect('svg' in pending[0].content && pending[0].content.svg).not.toContain('<image');
         const resolved = sceneLayers(scene([img]), { resolveMedia: () => 'data:image/png;base64,AAA' });
         expect(resolved.map((l) => l.id)).toEqual(['img']);
         expect('svg' in resolved[0].content && resolved[0].content.svg).toContain('href="data:image/png;base64,AAA"');
@@ -149,7 +151,8 @@ describe('elementLayer', () => {
             height: 40,
             angle: 0,
             index: 'a0',
-            mediaName: 'missing.png',
+            mediaName: '',
+            strokeColor: 'transparent',
         };
         expect(elementLayer(img, { resolveMedia: () => null })).toBeNull();
     });
