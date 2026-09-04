@@ -209,6 +209,15 @@ describe('capabilities agree with the stored fields', () => {
         expect(hatched.sort()).toEqual(['diamond', 'ellipse', 'freedraw', 'line', 'rectangle']);
     });
 
+    test('every kind but freedraw honours the stroke dash style', () => {
+        // A freehand stroke is a filled outline rather than a drawn line, so dashes mean nothing to it —
+        // which is why the panel's Style row asks the capability instead of the kind's name.
+        const dashable = Object.entries(ELEMENT_KINDS)
+            .filter(([, kind]) => kind.capabilities.strokeStyle)
+            .map(([type]) => type);
+        expect(dashable.sort()).toEqual(['arrow', 'diamond', 'ellipse', 'image', 'line', 'rectangle', 'richtext']);
+    });
+
     test('the stroke is optional exactly on the kinds that still have a body without it', () => {
         // NOT derivable from `fill`: a line and a freedraw stroke fill when their path closes (fill:
         // true) yet ARE their stroke, and an image's body is pixels rather than a Fill (fill: false).
@@ -218,12 +227,11 @@ describe('capabilities agree with the stored fields', () => {
         expect(optional.sort()).toEqual(['diamond', 'ellipse', 'image', 'rectangle', 'richtext']);
     });
 
-    test('every kind paints a stroke', () => {
-        // strokeColor/Width/Style are BASE fields, so there is nothing to derive this from — it is
-        // pinned instead: shapes and linear elements draw the stroke, image and rich text use it as a
-        // border. A kind that answers false here must have a renderer that ignores the fields.
+    test('only a bindable kind declares a silhouette', () => {
+        // The elbow router's heading heuristics are the one reader, and they only ever see a shape an
+        // arrow can dock to; a linear kind answering 'box' would be an answer nobody asks for.
         for (const [type, kind] of Object.entries(ELEMENT_KINDS)) {
-            expect([type, kind.capabilities.stroke]).toEqual([type, true]);
+            expect([type, kind.capabilities.silhouette !== undefined]).toEqual([type, kind.capabilities.bindable]);
         }
     });
 });

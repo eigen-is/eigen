@@ -5,9 +5,10 @@
 // transact across the selection (one undo step, `sealed` on both sides); the one continuous
 // control, the Opacity slider, writes live inside a holdCapture gesture so one drag is one undo step.
 //
-// Every row gates on a CAPABILITY, never on a type list: `fill` opens the Fill block, `stroke` the Stroke
-// section, `roughness` the Sketch section, `corners` the Shape section. What a capability cannot express
-// — rich text's typography, the image's fit — comes from the kind's own PanelSection in ELEMENT_KIND_UI.
+// Every row gates on a CAPABILITY, never on a type list: `fill` opens the Fill block, `strokeStyle` its
+// dash row, `roughness` the Sketch section, `corners` the Shape section. The Stroke section itself needs
+// no gate — every kind paints one. What a capability cannot express — rich text's typography, the
+// image's fit — comes from the kind's own PanelSection in ELEMENT_KIND_UI.
 
 import type { Fill, FillPaint } from '@workspace/lib/types/background';
 import {
@@ -163,7 +164,6 @@ export function CanvasPropertiesPanel({
     // Every row gates on capabilitiesOf(el) — per ELEMENT, never off the kind's static table, because an
     // open freedraw paints no fill and so offers none.
     const showFill = all((el) => capabilitiesOf(el).fill);
-    const showStroke = all((el) => capabilitiesOf(el).stroke);
     // A border can be switched off only where the element still has a body without it; a line or an
     // arrow IS its stroke, so its colour row offers no None swatch.
     const strokeOptional = all((el) => capabilitiesOf(el).strokeOptional);
@@ -178,8 +178,9 @@ export function CanvasPropertiesPanel({
     const soleKind =
         has && selectedElements.every((el) => el.type === selectedElements[0].type) ? selectedElements[0].type : null;
     const KindSection = soleKind ? ELEMENT_KIND_UI[soleKind].PanelSection : undefined;
-    // Stroke Style (dashed/dotted) is meaningless for a freehand stroke — hide it if any is selected.
-    const anyFreedraw = selectedElements.some((el) => el.type === 'freedraw');
+    // Stroke Style (dashed/dotted) is meaningless for a freehand stroke: it is a filled outline, not a
+    // drawn line, and the capability is what says so.
+    const showStrokeStyle = all((el) => capabilitiesOf(el).strokeStyle);
     const allRoundable = all((el) => el.type === 'line' || el.type === 'arrow');
     // Arrowheads apply to arrows only (both ends selectable per selection).
     const arrowEls = selectedElements.filter((el): el is VectorArrowElement => el.type === 'arrow');
@@ -410,7 +411,7 @@ export function CanvasPropertiesPanel({
                 </BackgroundFillBlock>
             )}
 
-            {showStroke && (
+            {has && (
                 <PropertySection title="Stroke">
                     <ColorRow
                         label="Color"
@@ -425,8 +426,7 @@ export function CanvasPropertiesPanel({
                             options={STROKE_WIDTH_OPTIONS}
                         />
                     </PropertyRow>
-                    {/* A freehand stroke is a filled outline, not a dashable line — hide Style. */}
-                    {!anyFreedraw && (
+                    {showStrokeStyle && (
                         <PropertyRow label="Style">
                             <MergedSelect
                                 value={strokeStyle}

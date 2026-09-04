@@ -37,13 +37,12 @@ export type Capabilities = {
     // Whether the kind's renderer honours the hatch style HALF of that fill. Rich text paints its box
     // background as CSS and an arrow's fill is its arrowheads', so neither hatches.
     fillStyle: boolean;
+    // Whether the kind's renderer honours the dash style of that stroke. A freehand stroke is a filled
+    // outline rather than a drawn line, so dashes mean nothing to it.
+    strokeStyle: boolean;
     // Also "is this kind drawn by roughjs at all": the sketch paint rows follow it.
     roughness: boolean;
     corners: boolean;
-    // The Stroke rows (colour / width / style). True on every kind today: shapes and linear elements
-    // draw the stroke, image and rich text use it as their border. It is a capability rather than an
-    // ungated panel section so a future kind that paints no stroke has one place to say so.
-    stroke: boolean;
     // Whether the stroke may be switched OFF (the Stroke colour row offers a None swatch). True where
     // the element still has a body without it — a shape's fill, an image's pixels, a text box's text.
     // Not derivable from `fill`: a line fills only when its path closes yet IS its stroke, and an
@@ -51,8 +50,9 @@ export type Capabilities = {
     strokeOptional: boolean;
     bindable: boolean;
     // Which family the elbow router's heading heuristics follow — the silhouette, not the exact outline.
-    // A new bindable kind picks one of the three instead of adding a branch to elbow-heading.
-    silhouette: 'box' | 'diamond' | 'ellipse';
+    // A new BINDABLE kind picks one of the three instead of adding a branch to elbow-heading; nothing
+    // asks a kind an arrow cannot dock to, so those declare none.
+    silhouette?: 'box' | 'diamond' | 'ellipse';
     creation: 'box' | 'polyline' | 'freedraw' | 'none';
 };
 
