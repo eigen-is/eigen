@@ -32,8 +32,9 @@ Two guarantees make this safe:
 
 The eigendoc image node is `figure` (`packages/lib/src/docs/eigendoc/nodes/figure.ts`) — an inline
 atom whose `mediaName` attribute is the only durable reference; `src` is filled in at render time.
-A canvas frame background (one slide) and a scene background are a `BackgroundFill` union (`packages/lib/src/types/background.ts`)
-of `solid` / `gradient` / `image`, and only the `image` variant carries a `mediaName`. Comment
+A canvas frame background (one slide) is a `BackgroundFill` union (`packages/lib/src/types/background.ts`)
+of `solid` / `gradient` / `image`, and only the `image` variant carries a `mediaName`; the infinite
+canvas' own `meta.background` is a plain colour token and never names media. Comment
 anchors are the exception to the name rule: the eigendoc `comment` mark stores a `cardId`, and the
 card itself (in the doc's Yjs `comments` map) carries the `chatName`.
 

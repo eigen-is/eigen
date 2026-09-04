@@ -1,8 +1,9 @@
 // Pure scene → SVG string. No DOM, no measurement: roughjs's RoughGenerator yields path
 // ops as plain data (DOM-free), we serialize them ourselves instead of using RoughSVG,
-// and text trusts client-measured width/height so the server never measures. Shared verbatim
-// by the frontend (previews/embeds/thumbnails/export) and the API transform Worker. Every per-kind
-// body lives in the registry (kinds/); this module places what a kind draws.
+// and text trusts client-measured width/height so the server never measures. Shared verbatim by the
+// clipboard's SVG flavour and the API transform Worker's svg export — the two places a scene leaves
+// the app as one standalone file. Every per-kind body lives in the registry (kinds/); this module
+// places what a kind draws.
 
 import { escapeXml } from '../core/html';
 import { arrowRoute, sceneBounds } from './elbow-route';

@@ -383,7 +383,7 @@ Optional `onResolve`/`onAssign` for apps that surface resolve/assign at the dial
 - `VectorElementBase.commentCardIds` is a JSON id string on the element (`parseIdList` / `serializeIdList`); the host adds and removes an id inline through those two. `elementForCommentCard` (`packages/lib/src/vector/comments.ts`) resolves a card back to its anchor element.
 - `useCanvasComments(elements, cards)` builds the `ActiveComments` projection: every card is active, and `commentAnchorTexts` gives each anchored card the element's own `searchText` (first anchor wins, falling back to the kind's UI label).
 - A commented element flags its top-right corner on the canvas; clicking the flag opens its first card, and opening a card from the panel selects its anchor element.
-- On Add Comment from the canvas object menu the anchor callback appends the card id to that element; from the pane the card stays document-level.
+- On Add Comment from the canvas object menu the host appends the card id to that element once `createCard` has resolved — a separate `updateElement`, not `useCreateCommentCard`'s in-transaction anchor, because the card only exists after an awaited server call. The append is idempotent, so a double submit lists the card once. From the pane the card stays document-level.
 
 ## Active vs orphaned comments
 
