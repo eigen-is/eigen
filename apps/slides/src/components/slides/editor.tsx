@@ -2,6 +2,7 @@ import { useAuth } from '@workspace/lib/auth';
 import { MediaResolverProvider, useCopyToMediaFolder, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
+    elementsInFrame,
     parseBackgroundFill,
     SLIDES_STYLE_DEFAULTS,
     serializeBackgroundFill,
@@ -102,6 +103,9 @@ function SlideEditorInner({
     }, [doc.loaded, canWrite, doc.yjsDoc]);
 
     const frame = doc.frames.find((f) => f.id === frameId);
+    // The slide's own elements: the z-order arithmetic behind the panel's Arrange row must see the
+    // same list the canvas and the keymap do, because indices are allocated across the whole deck.
+    const frameElements = useMemo(() => elementsInFrame(doc.elements, frameId), [doc.elements, frameId]);
     const selectedElements = useMemo(
         () => doc.elements.filter((el) => selectedIds.includes(el.id)),
         [doc.elements, selectedIds],
@@ -340,7 +344,7 @@ function SlideEditorInner({
             }
             propertiesPanel={
                 <CanvasPropertiesPanel
-                    elements={doc.elements}
+                    elements={frameElements}
                     selectedElements={selectedElements}
                     updateElements={doc.updateElements}
                     undoManager={doc.undoManager}

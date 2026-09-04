@@ -120,7 +120,8 @@ function resizeLinearTo(el: VectorLinearElement | VectorArrowElement, patch: Par
 }
 
 type CanvasPropertiesPanelProps = {
-    // All elements — z-order reorders the selection relative to the rest (computeZOrder needs both).
+    // The elements the canvas shows — z-order reorders the selection relative to the rest
+    // (computeZOrder needs both), so in frame mode this is that frame's elements, not the whole scene.
     elements: VectorElement[];
     selectedElements: VectorElement[];
     updateElements: (patches: { id: string; fields: VectorElementPatch }[]) => void;
