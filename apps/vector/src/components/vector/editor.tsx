@@ -160,6 +160,7 @@ export function VectorEditor({
                 <div className="flex-1 min-w-0">
                     <CanvasEditor
                         doc={doc}
+                        styleDefaults={VECTOR_STYLE_DEFAULTS}
                         viewport="infinite"
                         canEdit={canEdit}
                         ownerId={ownerId}

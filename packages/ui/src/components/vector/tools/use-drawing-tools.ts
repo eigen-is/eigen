@@ -23,9 +23,9 @@ import {
     parseBinding,
     parsePoints,
     renormalize,
+    type StyleDefaults,
     serializePressures,
     unpinSegment,
-    VECTOR_STYLE_DEFAULTS,
     type VectorArrowElement,
     type VectorBindableElement,
     type VectorElement,
@@ -86,9 +86,15 @@ function previewBase(origin: Point, points: Point[], seed: number) {
     };
 }
 
-function previewElement(type: 'freedraw' | 'line', origin: Point, points: Point[], seed: number): VectorLinearElement {
+function previewElement(
+    type: 'freedraw' | 'line',
+    origin: Point,
+    points: Point[],
+    seed: number,
+    style: StyleDefaults,
+): VectorLinearElement {
     return {
-        ...ELEMENT_KINDS[type].defaults(VECTOR_STYLE_DEFAULTS),
+        ...ELEMENT_KINDS[type].defaults(style),
         ...previewBase(origin, points, seed),
         type,
         // The live preview always simulates; real per-point pressure is written on commit (finishFreedraw).
@@ -99,9 +105,9 @@ function previewElement(type: 'freedraw' | 'line', origin: Point, points: Point[
 
 // An arrow preview/commit template — the line geometry plus the default heads and an empty binding/label
 // (a draft binds only at commit through bindArrow). Reused as the provisional element bindArrow snaps.
-function arrowElement(origin: Point, points: Point[], seed: number): VectorArrowElement {
+function arrowElement(origin: Point, points: Point[], seed: number, style: StyleDefaults): VectorArrowElement {
     return {
-        ...ELEMENT_KINDS.arrow.defaults(VECTOR_STYLE_DEFAULTS),
+        ...ELEMENT_KINDS.arrow.defaults(style),
         ...previewBase(origin, points, seed),
         type: 'arrow',
     };
@@ -121,6 +127,9 @@ type DrawingToolsParams = {
     viewportRef: MutableRefObject<CanvasViewport>;
     // The active pointer is coarse (finger/stylus) → the eraser and hit paths use a fatter screen slop.
     coarse: boolean;
+    // The host's style table — the live preview is built from the same defaults the commit writes, so a
+    // dragged shape can't preview in the other app's look and pop on release.
+    styleDefaults: StyleDefaults;
     ordered: VectorElement[];
     // The committed scene by id — lets the eraser hit-test an elbow arrow on its DERIVED route.
     byId: Map<string, VectorElement>;
@@ -179,6 +188,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         zoom,
         viewportRef,
         coarse,
+        styleDefaults,
         ordered,
         byId,
         selectedIds,
@@ -311,8 +321,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         const pts = previewPoints(draft);
         setPreviewEl(
             draft.type === 'arrow'
-                ? arrowElement(draft.origin, pts, seedRef.current)
-                : previewElement(draft.type, draft.origin, pts, seedRef.current),
+                ? arrowElement(draft.origin, pts, seedRef.current, styleDefaults)
+                : previewElement(draft.type, draft.origin, pts, seedRef.current, styleDefaults),
         );
     };
 
@@ -336,7 +346,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         const id = sealed(undoManager, () => {
             if (draft.type === 'arrow') {
                 const bound = bindArrow(
-                    arrowElement(draft.origin, points, seedRef.current),
+                    arrowElement(draft.origin, points, seedRef.current, styleDefaults),
                     { start: true, end: true },
                     ordered,
                     liveZoom(),
@@ -413,7 +423,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             drawPointerTypeRef.current = e.pointerType;
             strokeRef.current = startFreedrawStroke(scene, e.pressure);
             setActiveKind('freedraw');
-            setPreviewEl(previewElement('freedraw', scene, strokeRef.current.points, seedRef.current));
+            setPreviewEl(previewElement('freedraw', scene, strokeRef.current.points, seedRef.current, styleDefaults));
             return true;
         }
         if (tool === 'eraser') {
@@ -471,7 +481,13 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             const pressures = src.map((ce) => ce.pressure);
             extendFreedrawStroke(strokeRef.current, pts, pressures, FREEDRAW_MIN_STEP_SCREEN / liveZoom());
             setPreviewEl(
-                previewElement('freedraw', strokeRef.current.origin, strokeRef.current.points, seedRef.current),
+                previewElement(
+                    'freedraw',
+                    strokeRef.current.origin,
+                    strokeRef.current.points,
+                    seedRef.current,
+                    styleDefaults,
+                ),
             );
             return true;
         }

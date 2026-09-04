@@ -33,6 +33,7 @@ import {
     SNAP_SCREEN_THRESHOLD,
     type SnapLine,
     type SnapTargets,
+    type StyleDefaults,
     SVG_NS,
     sceneBounds,
     snapBoxToTargets,
@@ -126,6 +127,9 @@ type CanvasEditorProps = {
     viewport: 'infinite' | 'frame';
     // The active frame, '' on the infinite canvas — the home stamped on every new element.
     frameId?: string;
+    // The host's style table (the same one its useCanvasDoc writes through), so a drag-create preview
+    // looks exactly like the element that lands.
+    styleDefaults: StyleDefaults;
     tool: VectorTool;
     setTool: (t: VectorTool) => void;
     // Tool lock (Q / padlock): a placement keeps the current tool active; threaded like `tool`, toggled here on Q.
@@ -171,6 +175,7 @@ export function CanvasEditor({
     doc,
     viewport,
     frameId = '',
+    styleDefaults,
     tool,
     setTool,
     toolLocked,
@@ -374,6 +379,7 @@ export function CanvasEditor({
         zoom,
         viewportRef,
         coarse,
+        styleDefaults,
         ordered,
         byId: committedById,
         selectedIds,
@@ -1299,7 +1305,7 @@ export function CanvasEditor({
                 }
                 return node(renderEl(el));
             })}
-            {creating && node(creatingElement(creating))}
+            {creating && node(creatingElement(creating, styleDefaults))}
             {/* Live freehand/line draft, or a point-edit reshape — the SAME render path. */}
             {drawing.previewElement && node(drawing.previewElement)}
         </>

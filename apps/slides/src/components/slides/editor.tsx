@@ -393,6 +393,7 @@ function SlideEditorInner({
                     <div className="flex-1 min-h-0">
                         <CanvasEditor
                             doc={doc}
+                            styleDefaults={SLIDES_STYLE_DEFAULTS}
                             viewport="frame"
                             frameId={frameId}
                             canEdit={canEdit}
