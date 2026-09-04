@@ -259,11 +259,7 @@ value in it fails the rule — why. Both render through one React card,
 
 ## Cell corner indicators
 
-Three marks can sit in a cell's corners: a comment (top-right), an invalid value and a forced string
-(top-left). One painter, `drawCellIndicator` in `state/render/cells.ts`, and one geometry,
-`cellIndicatorRect` / `CELL_INDICATOR_SIZE` in `state/modules/cell-glyph.ts` — they used to be 11px, 5px
-and 6px of inline magic numbers, with the comment block copied verbatim between `nullCellRender` and
-`cellRender`. Colours are hardcoded light like every other canvas colour (RENDERING.md § Theming).
+Three marks can sit in a cell's corners: a comment (top-right), an invalid value and a forced string (top-left). One painter, `drawCellIndicator` in `state/render/cells.ts`, and one geometry, `cellIndicatorRect` in `state/modules/cell-glyph.ts` over the shared `CELL_INDICATOR_SIZE` (`packages/lib/src/constants/comment-indicator.ts`, which the canvas apps' `CommentIndicator` reads too). `nullCellRender` and `cellRender` both reach the same painter, so a commented empty cell and a commented filled one draw one mark. A comment triangle takes its card's colour; a card with no colour of its own falls back to the default red. Colours are hardcoded light like every other canvas colour (RENDERING.md § Theming).
 
 ## Cell glyphs outrank the drag handles
 

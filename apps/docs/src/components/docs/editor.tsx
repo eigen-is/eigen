@@ -10,6 +10,7 @@ import type { ClipboardBox } from '@workspace/lib/clipboard';
 import {
     buildImageClipboardItem,
     classifyPaste,
+    clipboardTextItemHasContent,
     hasRichHtmlBeyondMarker,
     materializeClipboardSvg,
     needsReUpload,
@@ -468,13 +469,24 @@ const TiptapEditor = ({
                         return true;
                     }
 
-                    if (paste.eigen && paste.eigen.items.length > 0) {
+                    if (paste.eigen) {
                         // Image payloads MUST take the eigen path (the cross-mount re-upload seam). A
-                        // text-only payload is consumed directly only when text/html is marker-only
-                        // (slides — PM fallthrough there pastes nothing); a rich-HTML producer (sheets
-                        // tables) is left to PM so its <table> parses as a real docs table.
+                        // text-only payload is consumed directly only when text/html is marker-only —
+                        // which is what a canvas text copy writes, and PM fallthrough there would paste
+                        // nothing. A rich-HTML producer (sheets tables) is left to PM so its <table>
+                        // parses as a real docs table. A canvas TEXT-ONLY copy reaches this rung at all
+                        // only because the producer omits the svg flavour for it (see CLIPBOARD.md);
+                        // anything with a shape or an image lands as a figure at the svg rung above.
+                        //
+                        // Claimed only when there is an item this editor can actually place, the way
+                        // sheets' rung guards: a big canvas selection can ride as its `elements` item
+                        // alone (the svg flavour is capped), and preventDefault on that would make ⌘V a
+                        // dead key.
                         const hasImage = paste.eigen.items.some((i) => i.type === 'image');
-                        if (hasImage || !hasRichHtmlBeyondMarker(event.clipboardData)) {
+                        const hasText = paste.eigen.items.some(
+                            (i) => i.type === 'text' && clipboardTextItemHasContent(i),
+                        );
+                        if (hasImage || (hasText && !hasRichHtmlBeyondMarker(event.clipboardData))) {
                             event.preventDefault();
                             handleEigenItemsPaste(paste.eigen.items).catch(() => {});
                             return true;
@@ -585,12 +597,13 @@ const TiptapEditor = ({
         }
     };
 
-    // A text item (from slides/vector) lands as a single paragraph at the caret. Docs models
-    // fontFamily (name, per the fontFamily value canon — getFontName tolerates a name or a legacy
-    // stack) and color as textStyle attrs, and textAlign as a block attr; fontSize and the rest of the
-    // slides typography superset drop gracefully (docs has no fontSize control by design). `text` is
-    // plain on the wire (slides keeps its rich HTML in private meta); htmlToPlainText guards against a
-    // non-conforming payload — item-level typography is the best-effort fidelity the wire block carries.
+    // A text item (from the canvas, or a sheets cell range) lands as a single paragraph at the caret.
+    // Docs models fontFamily (name, per the fontFamily value canon — getFontName tolerates a name or a
+    // legacy stack) and color as textStyle attrs, textAlign as a block attr, and the three the canvas
+    // carries as whole-box styling as real marks: bold, italic, underline/strike. The rest of the
+    // typography superset drops gracefully (docs has no fontSize, letter-spacing or line-height control
+    // by design). `text` is plain on the wire; htmlToPlainText guards against a non-conforming payload —
+    // item-level typography is the best-effort fidelity the wire block carries.
     const insertEigenTextItem = (item: EigenClipboardTextItem) => {
         if (!editorRef.current) return;
         const text = htmlToPlainText(item.text);
@@ -600,12 +613,16 @@ const TiptapEditor = ({
         const textStyleAttrs: Record<string, string> = {};
         if (typo?.fontFamily) textStyleAttrs.fontFamily = getFontName(typo.fontFamily);
         if (typo?.color) textStyleAttrs.color = typo.color;
-        const marks =
-            Object.keys(textStyleAttrs).length > 0 ? [{ type: 'textStyle', attrs: textStyleAttrs }] : undefined;
+        const marks: { type: string; attrs?: Record<string, string> }[] = [];
+        if (Object.keys(textStyleAttrs).length > 0) marks.push({ type: 'textStyle', attrs: textStyleAttrs });
+        if (typo?.fontWeight === 'bold') marks.push({ type: 'bold' });
+        if (typo?.fontStyle === 'italic') marks.push({ type: 'italic' });
+        if (typo?.textDecoration === 'underline') marks.push({ type: 'underline' });
+        if (typo?.textDecoration === 'line-through') marks.push({ type: 'strike' });
         const paragraph = {
             type: 'paragraph',
             ...(typo?.textAlign && TEXT_ALIGNS.has(typo.textAlign) ? { attrs: { textAlign: typo.textAlign } } : {}),
-            content: [{ type: 'text', text, ...(marks ? { marks } : {}) }],
+            content: [{ type: 'text', text, ...(marks.length > 0 ? { marks } : {}) }],
         };
         editorRef.current.chain().focus().insertContent(paragraph).run();
     };
@@ -617,7 +634,7 @@ const TiptapEditor = ({
         for (const item of items) {
             if (item.type === 'text') {
                 insertEigenTextItem(item);
-            } else {
+            } else if (item.type === 'image') {
                 const { width } = readClipboardBox(item);
                 await handleEigenImagePaste(item, width);
             }

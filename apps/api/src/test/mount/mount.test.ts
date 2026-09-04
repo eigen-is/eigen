@@ -255,12 +255,12 @@ describe('Mount (local-key storage)', () => {
 
     test('duplicate name throws 409', async () => {
         await mount.createFolder(rootId, 'UniqueFolder');
-        expect(mount.createFolder(rootId, 'UniqueFolder')).rejects.toThrow();
+        await expect(mount.createFolder(rootId, 'UniqueFolder')).rejects.toThrow();
     });
 
     test('case-insensitive duplicate name throws', async () => {
         await mount.createFolder(rootId, 'CaseSensitive');
-        expect(mount.createFolder(rootId, 'casesensitive')).rejects.toThrow();
+        await expect(mount.createFolder(rootId, 'casesensitive')).rejects.toThrow();
     });
 
     // Id-keyed backends keep SQLite's ASCII-only fold: non-ASCII case pairs are distinct
@@ -433,7 +433,7 @@ describe('Mount (local path-based storage)', () => {
 
     test('duplicate name in same folder throws', async () => {
         await mount.createFolder(rootId, 'Unique');
-        expect(mount.createFolder(rootId, 'Unique')).rejects.toThrow();
+        await expect(mount.createFolder(rootId, 'Unique')).rejects.toThrow();
     });
 
     test('same name in different folders is allowed', async () => {
@@ -454,7 +454,7 @@ describe('Mount (local path-based storage)', () => {
     test('non-ASCII case pair in same folder throws 409', async () => {
         const folderId = await mount.createFolder(rootId, 'UnicodeCase');
         await mount.createFile(folderId, 'Ärger.txt', 'text/plain', 1, Buffer.from('a'));
-        expect(mount.createFile(folderId, 'ärger.txt', 'text/plain', 1, Buffer.from('b'))).rejects.toThrow(
+        await expect(mount.createFile(folderId, 'ärger.txt', 'text/plain', 1, Buffer.from('b'))).rejects.toThrow(
             'already exists',
         );
     });
@@ -481,66 +481,66 @@ describe('Name validation', () => {
     });
 
     test('rejects .. as folder name', async () => {
-        expect(mount.createFolder(rootId, '..')).rejects.toThrow('Invalid file or folder name');
+        await expect(mount.createFolder(rootId, '..')).rejects.toThrow('Invalid file or folder name');
     });
 
     test('rejects . as folder name', async () => {
-        expect(mount.createFolder(rootId, '.')).rejects.toThrow('Invalid file or folder name');
+        await expect(mount.createFolder(rootId, '.')).rejects.toThrow('Invalid file or folder name');
     });
 
     test('rejects empty name', async () => {
-        expect(mount.createFolder(rootId, '')).rejects.toThrow('Invalid file or folder name');
+        await expect(mount.createFolder(rootId, '')).rejects.toThrow('Invalid file or folder name');
     });
 
     test('rejects name with slash', async () => {
-        expect(mount.createFolder(rootId, 'a/b')).rejects.toThrow('Invalid file or folder name');
+        await expect(mount.createFolder(rootId, 'a/b')).rejects.toThrow('Invalid file or folder name');
     });
 
     test('rejects name with backslash', async () => {
-        expect(mount.createFolder(rootId, 'a\\b')).rejects.toThrow('Invalid file or folder name');
+        await expect(mount.createFolder(rootId, 'a\\b')).rejects.toThrow('Invalid file or folder name');
     });
 
     test('rejects name with null byte', async () => {
-        expect(mount.createFolder(rootId, 'a\0b')).rejects.toThrow('Invalid file or folder name');
+        await expect(mount.createFolder(rootId, 'a\0b')).rejects.toThrow('Invalid file or folder name');
     });
 
     test('rejects name with control character', async () => {
-        expect(mount.createFolder(rootId, 'a\x01b')).rejects.toThrow('Invalid file or folder name');
+        await expect(mount.createFolder(rootId, 'a\x01b')).rejects.toThrow('Invalid file or folder name');
     });
 
     test('rejects .. as file name', async () => {
-        expect(mount.createFile(rootId, '..', 'text/plain', 0, undefined)).rejects.toThrow(
+        await expect(mount.createFile(rootId, '..', 'text/plain', 0, undefined)).rejects.toThrow(
             'Invalid file or folder name',
         );
     });
 
     test('rejects .. on rename', async () => {
         const id = await mount.createFolder(rootId, 'ValidName');
-        expect(mount.updatePath(id, { name: '..' })).rejects.toThrow('Invalid file or folder name');
+        await expect(mount.updatePath(id, { name: '..' })).rejects.toThrow('Invalid file or folder name');
     });
 
     test('rejects .trash as folder name', async () => {
-        expect(mount.createFolder(rootId, '.trash')).rejects.toThrow('reserved name');
+        await expect(mount.createFolder(rootId, '.trash')).rejects.toThrow('reserved name');
     });
 
     test('rejects .trash case-insensitively', async () => {
-        expect(mount.createFolder(rootId, '.TRASH')).rejects.toThrow('reserved name');
-        expect(mount.createFolder(rootId, '.Trash')).rejects.toThrow('reserved name');
+        await expect(mount.createFolder(rootId, '.TRASH')).rejects.toThrow('reserved name');
+        await expect(mount.createFolder(rootId, '.Trash')).rejects.toThrow('reserved name');
     });
 
     test('rejects .trash compatibility-character aliases', async () => {
         // U+017F LATIN SMALL LETTER LONG S: '.traſh' IS the '.trash' dir under APFS case folding,
         // but survives NFC + toLowerCase. NFKC maps ſ→s.
-        expect(mount.createFolder(rootId, '.traſh')).rejects.toThrow('reserved name');
+        await expect(mount.createFolder(rootId, '.traſh')).rejects.toThrow('reserved name');
     });
 
     test('rejects .trash as file name', async () => {
-        expect(mount.createFile(rootId, '.trash', 'text/plain', 0, undefined)).rejects.toThrow('reserved name');
+        await expect(mount.createFile(rootId, '.trash', 'text/plain', 0, undefined)).rejects.toThrow('reserved name');
     });
 
     test('rejects .trash on rename', async () => {
         const id = await mount.createFolder(rootId, 'NotTrash');
-        expect(mount.updatePath(id, { name: '.trash' })).rejects.toThrow('reserved name');
+        await expect(mount.updatePath(id, { name: '.trash' })).rejects.toThrow('reserved name');
     });
 
     // A legacy pre-guard row named .trash could otherwise be MOVED to the mount root,
@@ -552,21 +552,21 @@ describe('Name validation', () => {
         await mount.db.update(paths).set({ name: '.trash', file: '.trash' }).where(eq(paths.id, folderId));
         renameSync(join(mount.dataDir, 'LegacyHome', 'PreGuard'), join(mount.dataDir, 'LegacyHome', '.trash'));
 
-        expect(mount.updatePath(folderId, { parentId: rootId })).rejects.toThrow('reserved name');
+        await expect(mount.updatePath(folderId, { parentId: rootId })).rejects.toThrow('reserved name');
         // The real trash dir must still be the mount's own, not the user folder.
         expect(existsSync(join(mount.dataDir, 'LegacyHome', '.trash'))).toBe(true);
     });
 
     test('rejects name longer than 255 bytes', async () => {
         // Must be the 400 guard, not a raw fs ENAMETOOLONG 500.
-        expect(mount.createFolder(rootId, 'a'.repeat(300))).rejects.toThrow(
+        await expect(mount.createFolder(rootId, 'a'.repeat(300))).rejects.toThrow(
             'File or folder name too long (max 255 bytes)',
         );
     });
 
     test('length cap counts bytes, not characters', async () => {
         // 130 chars but 260 UTF-8 bytes — over the ENAMETOOLONG byte limit.
-        expect(mount.createFolder(rootId, 'ä'.repeat(130))).rejects.toThrow(
+        await expect(mount.createFolder(rootId, 'ä'.repeat(130))).rejects.toThrow(
             'File or folder name too long (max 255 bytes)',
         );
     });
@@ -708,7 +708,7 @@ describe('Trash query filtering', () => {
 
         await mount.updatePath(fileId, { trashedAt: new Date() });
 
-        expect(mount.getActivePath(fileId)).rejects.toThrow('File is in trash');
+        await expect(mount.getActivePath(fileId)).rejects.toThrow('File is in trash');
     });
 
     test('getActivePath returns active items normally', async () => {
@@ -722,11 +722,11 @@ describe('Trash query filtering', () => {
     });
 
     test('getActivePath throws 404 for non-existent path', async () => {
-        expect(mount.getActivePath('nonexistent-id')).rejects.toThrow('Path not found');
+        await expect(mount.getActivePath('nonexistent-id')).rejects.toThrow('Path not found');
     });
 
     test('deletePath throws 400 when trying to delete root folder', async () => {
-        expect(mount.deletePath(rootId)).rejects.toThrow('Cannot delete root folder');
+        await expect(mount.deletePath(rootId)).rejects.toThrow('Cannot delete root folder');
     });
 
     test('assertUniqueName allows creating file with same name as trashed file', async () => {
@@ -842,11 +842,11 @@ describe('trashPath (local-key storage)', () => {
     });
 
     test('trash root folder throws 400', async () => {
-        expect(mount.trashPath(rootId)).rejects.toThrow('Cannot trash root folder');
+        await expect(mount.trashPath(rootId)).rejects.toThrow('Cannot trash root folder');
     });
 
     test('trash non-existent path throws 404', async () => {
-        expect(mount.trashPath('nonexistent-id')).rejects.toThrow('Path not found');
+        await expect(mount.trashPath('nonexistent-id')).rejects.toThrow('Path not found');
     });
 
     test('listTrash returns only trashedFrom IS NOT NULL items, ordered by trashedAt desc', async () => {
@@ -982,8 +982,8 @@ describe('trashPath (local path-based storage)', () => {
         const trashKey = buildStorageKey(fileId, 'survive.txt');
         expect(existsSync(join(mount.dataDir, '.trash', trashKey))).toBe(true);
 
-        expect(mount.createFolder(rootId, '.trash')).rejects.toThrow('reserved name');
-        expect(mount.createFolder(rootId, '.Trash')).rejects.toThrow('reserved name');
+        await expect(mount.createFolder(rootId, '.trash')).rejects.toThrow('reserved name');
+        await expect(mount.createFolder(rootId, '.Trash')).rejects.toThrow('reserved name');
 
         expect(existsSync(join(mount.dataDir, '.trash', trashKey))).toBe(true);
         const restored = await mount.restorePath(fileId);
@@ -1109,7 +1109,7 @@ describe('restorePath (local-key storage)', () => {
         const data = Buffer.from('not-trashed');
         const fileId = await mount.createFile(rootId, 'not-trashed.txt', 'text/plain', data.length, data);
 
-        expect(mount.restorePath(fileId)).rejects.toThrow('Item is not in trash');
+        await expect(mount.restorePath(fileId)).rejects.toThrow('Item is not in trash');
     });
 });
 
@@ -1588,7 +1588,7 @@ describe('Managed-db open vs create', () => {
         // touchFile created the metadata row but no actual storage object — the
         // exact state the old openDatabase would have masked by silently
         // creating a fresh DB.
-        expect(mount.openDatabase(minimalConfig, dataDbId)).rejects.toThrow('not available');
+        await expect(mount.openDatabase(minimalConfig, dataDbId)).rejects.toThrow('not available');
     });
 
     test('createDatabase provisions a real storage object', async () => {
@@ -1597,7 +1597,7 @@ describe('Managed-db open vs create', () => {
 
         // Pre-condition: touchFile creates the metadata row but no storage
         // object — openDatabase must reject.
-        expect(mount.openDatabase(minimalConfig, dataDbId)).rejects.toThrow('not available');
+        await expect(mount.openDatabase(minimalConfig, dataDbId)).rejects.toThrow('not available');
 
         await mount.createDatabase(minimalConfig, dataDbId);
         await mount.closeDatabase(dataDbId);
@@ -1619,7 +1619,7 @@ describe('Managed-db open vs create', () => {
         const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
 
         await mount.createDatabase(minimalConfig, dataDbId);
-        expect(mount.createDatabase(minimalConfig, dataDbId)).rejects.toThrow('already in cache');
+        await expect(mount.createDatabase(minimalConfig, dataDbId)).rejects.toThrow('already in cache');
         await mount.closeDatabase(dataDbId);
     });
 
@@ -1660,7 +1660,7 @@ describe('LocalStorage safety', () => {
     });
 
     test('rename throws when source does not exist', async () => {
-        expect(storage.rename('nonexistent', 'target')).rejects.toThrow('source path not found');
+        await expect(storage.rename('nonexistent', 'target')).rejects.toThrow('source path not found');
     });
 });
 

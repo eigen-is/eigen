@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @import "./fonts.css";
 @import "./eigen-prose.css";
-@import "./slide-text.css";
+@import "./canvas-text.css";
 
 /* @source is relative to THIS file — the repo root is four levels up, not three.
    The old three-up globs pointed at nonexistent dirs, so classes used ONLY in
@@ -399,10 +399,28 @@
         padding-inline: var(--app-gutter-x);
     }
 
+    /* The fit box a server-composed canvas page is scaled in. renderFittedPage
+       (apps/api/src/lib/export/canvas/render.ts) emits the wrapper and its size as
+       custom properties, so a 16:9 slide and a drawing of any ratio fit the same
+       way; the standalone HTML export mirrors these rules in its own <style>. */
+    .page-fit {
+        container-type: inline-size;
+        width: 100%;
+        max-width: var(--page-w);
+        aspect-ratio: var(--page-ar);
+        overflow: hidden;
+    }
+    .page-fit > .canvas-page {
+        transform-origin: top left;
+        transform: scale(calc(100cqw / var(--page-w)));
+    }
+
     /* DrivePreview hero: scaled-down server-rendered HTML preview for an
        eigendoc/slides/sheet/text file. The component wraps innerHTML in this
-       class; rules below tame the wrapped body. */
-    .drive-preview-hero .slide:not(:first-child) {
+       class; rules below tame the wrapped body. The hero shows page one only —
+       a canvas preview's pages are fit boxes, so hide the boxes, not the pages
+       inside them. */
+    .drive-preview-hero .page-fit:not(:first-child) {
         display: none;
     }
     .drive-preview-hero .eigen-prose {
@@ -623,6 +641,15 @@
     position: absolute;
     top: -1.4em;
     left: -1px;
+}
+
+/* An element that paints nothing (an empty text box, a shape with neither fill nor border, an image
+   with no picture) is invisible on the page. While the canvas is editable it rings each one faintly so
+   it can still be found and selected; the ring is chrome, so nothing printed or exported carries it. */
+.eigen-empty-outline {
+    /* Hardcoded rather than a theme token, like the comment mark's red: the page under it is a canvas
+       surface, pinned light in both themes, so --border's dark-mode white would be invisible on it. */
+    outline: 1px dashed oklch(0 0 0 / 25%);
 }
 
 /* Selected-object chrome (shared: docs figure, slides, vector, and sheets' floating

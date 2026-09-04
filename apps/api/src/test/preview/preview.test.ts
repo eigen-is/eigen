@@ -1,12 +1,20 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { DRIVE_MIME_SLIDES } from '@workspace/lib/types/drive';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
+import { getHome } from '../../lib/home/get-home';
 import { Mount } from '../../lib/mount/mount';
 import { isExiftoolCandidate } from '../../lib/preview/exiftool-preview';
 import { getTextPreview } from '../../lib/preview/preview-cache';
 import { isVideoCandidate } from '../../lib/preview/video-preview';
 import { generateImagePreview, saveThumbnail } from '../../lib/shared/thumbnails';
+import {
+    buildGoldenVectorScene,
+    GOLDEN_MEDIA_NAME,
+    seedDocumentMedia,
+    seedVectorDoc,
+} from '../fixtures/golden-documents';
 import { createTestMountConfig } from '../mount-test-helpers';
-import { authedRequest, driveGet, driveUpload, getTestContext, TEST_PNG_BYTES } from '../setup';
+import { authedRequest, driveGet, drivePost, driveUpload, getTestContext, TEST_PNG_BYTES } from '../setup';
 
 describe('Preview', () => {
     let token: string;
@@ -420,4 +428,109 @@ describe('getTextPreview (stale-while-revalidate)', () => {
         expect(fresh?.stale).toBe(false);
         expect(fresh?.value.body).toContain('version two');
     });
+
+    test('a body a previous renderer version cached is never served stale', async () => {
+        // TEXT_FORMAT names the shape the CURRENT consumers scale and lay out. Serving a prior
+        // format's body would hand every post-deploy reader of an untouched document a body its
+        // own CSS mis-sizes, until an edit finally regenerated it.
+        const { mkdirSync, writeFileSync } = await import('node:fs');
+        const tmpDir = `/tmp/eigen-stale-format-test-${Date.now()}`;
+        mkdirSync(tmpDir, { recursive: true });
+
+        const config = createTestMountConfig('test-stale-format', 'local-key');
+        const mount = new Mount('test-owner-id', tmpDir, config, createGetLocalDatabase(tmpDir));
+        await mount.init();
+        const rootId = (await mount.getRootFolder())!.id;
+
+        const bytes = Buffer.from('current content');
+        const fileId = await mount.createFile(rootId, 'notes.txt', 'text/plain', bytes.length, bytes);
+        const path = await mount.getActivePath(fileId);
+
+        mkdirSync(mount.previewsDir, { recursive: true });
+        writeFileSync(
+            `${mount.previewsDir}/${fileId}-1000.f4.json`,
+            JSON.stringify({ mode: 'text', body: 'a body of the previous shape' }),
+        );
+
+        const served = await getTextPreview(mount, { ...path, updatedAt: new Date(2000) });
+        expect(served?.stale).toBe(false);
+        expect(served?.value.body).toContain('current content');
+    });
+
+    test('an uploaded file wearing a collab mime still previews as the file it is', async () => {
+        // mimeType is caller-controlled on upload; only the CONTAINER type says a path is a collab
+        // document. Dispatching on the mime alone sent a plain text file into the Yjs preview path,
+        // where it fails and loses the plaintext preview it should have had.
+        const { mkdirSync } = await import('node:fs');
+        const tmpDir = `/tmp/eigen-mime-spoof-test-${Date.now()}`;
+        mkdirSync(tmpDir, { recursive: true });
+
+        const config = createTestMountConfig('test-mime-spoof', 'local-key');
+        const mount = new Mount('test-owner-id', tmpDir, config, createGetLocalDatabase(tmpDir));
+        await mount.init();
+        const rootId = (await mount.getRootFolder())!.id;
+
+        const bytes = Buffer.from('plain text pretending to be a deck');
+        const fileId = await mount.createFile(rootId, 'deck.txt', 'text/plain', bytes.length, bytes);
+        const path = await mount.getActivePath(fileId);
+
+        const served = await getTextPreview(mount, { ...path, mimeType: DRIVE_MIME_SLIDES });
+        expect(served?.value.body).toContain('plain text pretending to be a deck');
+    });
+});
+
+// A drawing previews as a compositor HTML body, not as an image: it rides the text-preview
+// cache like every other eigen container, and the screen-preview route no longer answers for it.
+describe('Vector previews are text previews', () => {
+    const mountId = 'default';
+    let token: string;
+    let ownerId: string;
+    let vectorPathId: string;
+    let emptyVectorPathId: string;
+
+    beforeAll(async () => {
+        const ctx = await getTestContext();
+        token = ctx.alice.user.sessionToken;
+        ownerId = ctx.alice.user.id;
+        const root = await driveGet(token, ownerId, mountId, 'root');
+
+        const created = await drivePost(token, ownerId, mountId, `folder/${root.id}/create/vector`, {
+            fileName: 'Preview Drawing',
+        });
+        const home = await getHome(ownerId);
+        const collab = await home.drive.getCollabDocument(mountId, created.id);
+        seedVectorDoc(collab.doc, buildGoldenVectorScene());
+        const resolved = await home.drive.resolveFile(mountId, created.id);
+        await seedDocumentMedia(resolved.mount, resolved.path, GOLDEN_MEDIA_NAME, TEST_PNG_BYTES);
+        vectorPathId = created.id;
+
+        const empty = await drivePost(token, ownerId, mountId, `folder/${root.id}/create/vector`, {
+            fileName: 'Empty Preview Drawing',
+        });
+        emptyVectorPathId = empty.id;
+    });
+
+    test('the text-preview route serves a compositor body under the eigenvector mode', async () => {
+        const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${vectorPathId}/text-preview`);
+        expect(res.status).toBe(200);
+        const value = await res.json();
+        expect(value.mode).toBe('eigenvector');
+        expect(value.body).toContain('<div class="canvas-page"');
+    }, 120_000);
+
+    test('the screen-preview route no longer serves a drawing as an image', async () => {
+        const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${vectorPathId}/preview`);
+        expect(res.status).toBe(404);
+    }, 120_000);
+
+    test('an empty drawing previews as an empty page, not as a 404', async () => {
+        // getOrCacheText caches only a non-empty body, so a bodyless empty drawing would keep
+        // serving the preview it had before it was emptied.
+        const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${emptyVectorPathId}/text-preview`);
+        expect(res.status).toBe(200);
+        const value = await res.json();
+        expect(value.mode).toBe('eigenvector');
+        expect(value.body).toContain('<div class="canvas-page"');
+        expect(value.body).not.toContain('<svg');
+    }, 120_000);
 });

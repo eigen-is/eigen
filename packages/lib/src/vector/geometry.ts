@@ -1,21 +1,25 @@
-// Pure scene-space geometry for eigen|vector>. Angle is DEGREES at every boundary;
-// radian math never escapes a function body. `Box` is the canonical transform core shared
-// by hit-testing, bounds, the properties bar, and (later) the shared ObjectTransform
-// primitive.
+// Pure scene-space geometry for the canvas. Angle is DEGREES at every boundary; radian math never
+// escapes a function body. `Box` is the canonical transform core shared by hit-testing, bounds, the
+// properties bar and the shared ObjectTransform primitive.
 
 import { moveEndpoints, renormalize } from './elbow-pins';
 import { elbowRoutingContext } from './elbow-route';
+import { isTransparentFill, parseFill } from './fill';
 import { getLineHeightPx } from './font-metrics';
+// The registry imports geometry's box primitives and geometry dispatches through the registry: one
+// deliberate cycle. Safe because every export on both sides is a hoisted `function` declaration and no
+// module body calls across the cycle while either is still evaluating (test/vector/kinds/cycle.test.ts
+// pins both entry orders).
+import { ELEMENT_KINDS, isBindable } from './kinds';
+import { clamp, distanceToSegment, nearestPoint, outlineHits, segSegIntersect } from './outline';
 import {
     type Arrowhead,
-    isBindable,
-    isTransparent,
     parseBinding,
     serializeBinding,
     type VectorArrowElement,
+    type VectorBindableElement,
     type VectorElement,
     type VectorLinearElement,
-    type VectorShapeElement,
 } from './types';
 
 export type Point = { x: number; y: number };
@@ -33,6 +37,9 @@ const DEG_TO_RAD = Math.PI / 180;
 export const NUDGE_STEP = 1;
 export const NUDGE_STEP_LARGE = 5;
 export const DUPLICATE_OFFSET = 10;
+// A multi-image drop/paste staggers by this much instead, so a stack of natural-size images stays
+// visible (the duplicate step is for identical copies; images need more).
+export const IMAGE_CASCADE_OFFSET = 20;
 
 export function boxCenter(box: Box): Point {
     return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
@@ -109,31 +116,11 @@ export function getElementsBounds(boxes: Box[]): Bounds {
     return boxes.map(getElementBounds).reduce(unionBounds);
 }
 
-// Element bounds, arrow-aware: an arrow unions its rotated label rect into the box bounds, so a
-// wide label on a short arrow is not clipped by the viewBox nor missed by marquee/ring. Every other
-// element is exactly its box AABB. `arrowRoute` (the derived elbow polyline) replaces the stored box for an
-// elbow arrow, whose bends spill outside the 2-endpoint box.
+// Element bounds, kind-aware: an arrow unions its rotated label rect into the box bounds; every other
+// element is exactly its box AABB. `arrowRoute` (the derived elbow polyline) replaces the stored box for
+// an elbow arrow, whose bends spill outside the 2-endpoint box.
 export function elementBounds(el: VectorElement, arrowRoute?: Point[]): Bounds {
-    if (el.type !== 'arrow') return getElementBounds(el);
-    const base = arrowRoute ? pointsBounds(arrowRoute.map((p) => linearLocalToScene(el, p))) : getElementBounds(el);
-    const label = arrowLabelBox(el, arrowRoute);
-    if (!label) return base;
-    const hw = label.width / 2;
-    const hh = label.height / 2;
-    const corners: Point[] = [
-        { x: label.center.x - hw, y: label.center.y - hh },
-        { x: label.center.x + hw, y: label.center.y - hh },
-        { x: label.center.x + hw, y: label.center.y + hh },
-        { x: label.center.x - hw, y: label.center.y + hh },
-    ].map((c) => linearLocalToScene(el, c));
-    const xs = corners.map((c) => c.x);
-    const ys = corners.map((c) => c.y);
-    return unionBounds(base, {
-        minX: Math.min(...xs),
-        minY: Math.min(...ys),
-        maxX: Math.max(...xs),
-        maxY: Math.max(...ys),
-    });
+    return ELEMENT_KINDS[el.type].bounds(el, arrowRoute);
 }
 
 // Map a scene point into the box's unrotated local frame, so every hit-test works on an
@@ -181,7 +168,7 @@ const CLOSE_PATH_THRESHOLD = 8;
 // Excalidraw's getElementHitThreshold: a linear/arrow element is grabbed within the LARGER of the
 // zoom-scaled screen threshold (0.85× — Excalidraw's tested floor; lower gets FP-flaky at high zoom)
 // and half the drawn ink width plus 0.1. Replaces an additive threshold+ink that grew both together.
-const LINEAR_HIT_SCREEN_FACTOR = 0.85;
+export const LINEAR_HIT_SCREEN_FACTOR = 0.85;
 
 // Hit tolerance in screen px (Excalidraw's DEFAULT_COLLISION_THRESHOLD); hosts divide by zoom so an
 // element's grab radius is a constant on-screen distance at any zoom. One source so hover/hit-testing
@@ -221,7 +208,7 @@ export function parsePoints(points: string): Point[] {
 }
 
 export function serializePoints(points: Point[]): string {
-    return JSON.stringify(points.map((p) => [round2(p.x), round2(p.y)]));
+    return JSON.stringify(points.map((p) => [round(p.x), round(p.y)]));
 }
 
 // Per-point pen pressure, the parallel array to a freedraw's points (Excalidraw's `pressures`). Any
@@ -301,6 +288,12 @@ export function resizeLinear(
     return normalizeLinear(box, rescalePoints(parsePoints(el.points), el, box));
 }
 
+// Distance between two points. Every tool that measures a drag, a grab radius or a segment length
+// asks this rather than spelling out its own Math.hypot.
+export function distance(a: Point, b: Point): number {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
 // Nearest distance from a point to a polyline (min over its segments). A single point degrades to the
 // distance to that point; an empty path is unreachable.
 export function distanceToPolyline(points: Point[], point: Point): number {
@@ -314,6 +307,18 @@ export function distanceToPolyline(points: Point[], point: Point): number {
     return min;
 }
 
+// The polyline kinds' hit test: the probe unrotated into the element's local frame, measured to the
+// polyline within the LARGER of the scaled screen threshold and the drawn ink half-width (+0.1); a
+// closed, filled path is also hit anywhere inside. `inkHalf` differs per kind — freedraw's stroke is
+// FREEDRAW_SIZE_FACTOR wider than its strokeWidth.
+export function hitTestLinear(el: VectorLinearElement, point: Point, threshold: number, inkHalf: number): boolean {
+    const points = parsePoints(el.points);
+    if (points.length === 0) return false;
+    const p = linearSceneToLocal(el, point);
+    if (distanceToPolyline(points, p) <= Math.max(threshold * LINEAR_HIT_SCREEN_FACTOR, inkHalf + 0.1)) return true;
+    return isClosedPath(points) && !isTransparentFill(parseFill(el.fill)) && pointInPolygon(p, points);
+}
+
 export function isClosedPath(points: Point[]): boolean {
     if (points.length < 3) return false;
     const first = points[0];
@@ -321,24 +326,18 @@ export function isClosedPath(points: Point[]): boolean {
     return Math.hypot(first.x - last.x, first.y - last.y) <= CLOSE_PATH_THRESHOLD;
 }
 
+// Does this freedraw/line paint a fill at all? Only a looping path does — the rule the renderers apply
+// (freedraw's render arm and linearRoughOptions, both on the points they already hold), so the kind's
+// per-element `fill` capability answers through the same predicate and the panel offers the Fill block
+// exactly when the paint would land.
+export function isClosedLinear(el: VectorLinearElement): boolean {
+    return isClosedPath(parsePoints(el.points));
+}
+
 // `arrowRoute` is the derived elbow polyline (local frame); pass it for an elbow arrow so the hit-test runs
 // against the routed segments, not the straight 2-point line. Ignored for every other element.
 export function hitTestElement(element: VectorElement, point: Point, threshold: number, arrowRoute?: Point[]): boolean {
-    switch (element.type) {
-        case 'ellipse':
-            return hitTestEllipse(element, point);
-        case 'diamond':
-            return hitTestDiamond(element, point);
-        case 'rectangle':
-        case 'text':
-        case 'image':
-            return hitTestBox(element, point);
-        case 'freedraw':
-        case 'line':
-            return hitTestLinear(element, point, threshold);
-        case 'arrow':
-            return hitTestArrow(element, point, threshold, arrowRoute);
-    }
+    return ELEMENT_KINDS[element.type].hitTest(element, point, threshold, arrowRoute);
 }
 
 // A linear element's local frame ↔ scene mapping. The renderer places every vertex at
@@ -353,47 +352,6 @@ export function linearLocalToScene(box: Box, local: Point): Point {
     return rotatePoint({ x: box.x + local.x, y: box.y + local.y }, boxCenter(box), box.angle);
 }
 
-// Unrotate the probe into the element's local frame, then measure to the polyline. Tolerance is the
-// larger of the 0.85-scaled screen threshold and the drawn ink half-width (+0.1) per LINEAR_HIT_SCREEN_FACTOR;
-// a closed, filled path is also hit anywhere inside.
-function hitTestLinear(element: VectorLinearElement, point: Point, threshold: number): boolean {
-    const points = parsePoints(element.points);
-    if (points.length === 0) return false;
-    const p = linearSceneToLocal(element, point);
-
-    const inkHalf =
-        element.type === 'freedraw' ? (element.strokeWidth * FREEDRAW_SIZE_FACTOR) / 2 : element.strokeWidth / 2;
-    if (distanceToPolyline(points, p) <= Math.max(threshold * LINEAR_HIT_SCREEN_FACTOR, inkHalf + 0.1)) return true;
-    return isClosedPath(points) && !isTransparent(element.backgroundColor) && pointInPolygon(p, points);
-}
-
-// An arrow is hit on its polyline (like a line) OR inside its label rect — both measured in the arrow's
-// local frame (the label rotates with the arrow), so a wide label on a short arrow is still selectable.
-// `route` is the derived elbow polyline; when given the hit runs against it instead of the stored points.
-function hitTestArrow(el: VectorArrowElement, point: Point, threshold: number, route?: Point[]): boolean {
-    const points = route ?? parsePoints(el.points);
-    if (points.length === 0) return false;
-    const p = linearSceneToLocal(el, point);
-    if (distanceToPolyline(points, p) <= Math.max(threshold * LINEAR_HIT_SCREEN_FACTOR, el.strokeWidth / 2 + 0.1))
-        return true;
-    const label = arrowLabelBox(el, route);
-    return (
-        label !== null &&
-        Math.abs(p.x - label.center.x) <= label.width / 2 &&
-        Math.abs(p.y - label.center.y) <= label.height / 2
-    );
-}
-
-// Point-to-segment distance (Excalidraw's distanceToLineSegment): project onto the segment, clamp the
-// parameter to [0,1], measure to the clamped foot.
-export function distanceToSegment(p: Point, a: Point, b: Point): number {
-    const cx = b.x - a.x;
-    const cy = b.y - a.y;
-    const lenSq = cx * cx + cy * cy;
-    const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * cx + (p.y - a.y) * cy) / lenSq));
-    return Math.hypot(p.x - (a.x + t * cx), p.y - (a.y + t * cy));
-}
-
 // Even-odd ray cast, for inside-hits on a closed filled path.
 function pointInPolygon(p: Point, points: Point[]): boolean {
     let inside = false;
@@ -405,7 +363,7 @@ function pointInPolygon(p: Point, points: Point[]): boolean {
     return inside;
 }
 
-function pointsBounds(points: Point[]): Bounds {
+export function pointsBounds(points: Point[]): Bounds {
     let minX = Number.POSITIVE_INFINITY;
     let minY = Number.POSITIVE_INFINITY;
     let maxX = Number.NEGATIVE_INFINITY;
@@ -419,7 +377,11 @@ function pointsBounds(points: Point[]): Bounds {
     return { minX, minY, maxX, maxY };
 }
 
-function round2(n: number): number {
+// 2-decimal rounding, the precision every serialized length uses: the stored point lists here and the
+// SVG path data the kinds emit (Excalidraw's TO_FIXED_PRECISION, without the regex). `-0` collapses to
+// `0` so two identical geometries can't serialize differently. The 3- and 4-decimal siblings below are
+// deliberately different precisions, not copies of this one.
+export function round(n: number): number {
     const r = Math.round(n * 100) / 100;
     return r === 0 ? 0 : r;
 }
@@ -446,23 +408,20 @@ const FIXED_POINT_BOUND = 10;
 const FIXED_POINT_EPSILON = 0.0001;
 const ARROWHEAD_SIZE = 15;
 const ARROWHEAD_SIZE_LONG = 25; // the plain 'arrow' head is longer
-// Excalidraw shrinks a rectangle's projection diagonals by 15px at each end (getDiagonalsForBindableElement)
-// — the focus points behave oddly right at the corners. Ellipse/diamond use un-shrunk centre lines.
-const DIAGONAL_SHRINK = 15;
 // A bind-time arrow this small (both extents < 3) is too degenerate to project a natural aim from — bind
 // to the raw cursor instead (Excalidraw's projectFixedPointOntoDiagonal early-out).
 const MIN_PROJECTABLE_ARROW = 3;
 
 // The outward inflation of a shape's outline when snapping an endpoint to it, and the divide-by-zero
 // floor for the anchor ratio: 5 + half the stroke, so a thicker border pushes the arrow out further.
-export function bindingGap(shape: VectorShapeElement): number {
+export function bindingGap(shape: VectorBindableElement): number {
     return BASE_BINDING_GAP + shape.strokeWidth / 2;
 }
 
 // The proportional anchor for a scene point on a shape (bind time): unrotate the point into the shape's
 // local frame, then take the ratio over max(size, gap) so a near-zero dimension can't divide to Infinity.
 // Not clamped here — a point outside the shape yields a ratio outside [0,1]; anchorToScene clamps on use.
-export function bindingAnchor(shape: VectorShapeElement, point: Point): [number, number] {
+export function bindingAnchor(shape: VectorBindableElement, point: Point): [number, number] {
     const local = rotatePoint(point, boxCenter(shape), -shape.angle);
     const gap = bindingGap(shape);
     return [(local.x - shape.x) / Math.max(shape.width, gap), (local.y - shape.y) / Math.max(shape.height, gap)];
@@ -471,37 +430,17 @@ export function bindingAnchor(shape: VectorShapeElement, point: Point): [number,
 // Is a SCENE point inside a shape's exact fill (by type, unrotated about the centre) — the "focus point
 // sits inside the box" test Excalidraw's projection uses to accept a diagonal hit (isPointInElement) and to
 // suppress the side-midpoint snap when the cursor is buried inside (hitElementItself).
-function pointInShape(shape: VectorShapeElement, point: Point): boolean {
-    if (shape.type === 'ellipse') return hitTestEllipse(shape, point);
-    if (shape.type === 'diamond') return hitTestDiamond(shape, point);
-    return hitTestBox(shape, point);
+function pointInShape(shape: VectorBindableElement, point: Point): boolean {
+    return ELEMENT_KINDS[shape.type].hitTest(shape, point, 0);
 }
 
-// The four side midpoints of a shape in SCENE space, rotated by its angle: rect/ellipse → the right/bottom/
-// left/top edge midpoints (an ellipse's are its axis extremes); diamond → the midpoints of its four slanted
-// edges. Excalidraw's getSnapOutlineMidPoint order (right, bottom, left, top) so a bind-time midpoint snap
-// resolves the same side on a tie. The one owner of this geometry — both the snap-to-midpoint bind and the
-// snap-dot overlay read it, so the dots sit exactly where the dock lands.
-export function shapeSideMidpoints(shape: VectorShapeElement): Point[] {
-    const { x, y, width: w, height: h } = shape;
-    const local: Point[] =
-        shape.type === 'diamond'
-            ? [
-                  // The diamond's four VERTICES (its tips — getDiamondBaseCorners), where a bound arrow docks,
-                  // NOT the slanted-edge midpoints. Same order as the rect sides: right, bottom, left, top.
-                  { x: x + w, y: y + h / 2 }, // right tip
-                  { x: x + w / 2, y: y + h }, // bottom tip
-                  { x, y: y + h / 2 }, // left tip
-                  { x: x + w / 2, y }, // top tip
-              ]
-            : [
-                  { x: x + w, y: y + h / 2 }, // right
-                  { x: x + w / 2, y: y + h }, // bottom
-                  { x, y: y + h / 2 }, // left
-                  { x: x + w / 2, y }, // top
-              ];
-    const center = boxCenter(shape);
-    return local.map((p) => rotatePoint(p, center, shape.angle));
+// The four dock anchors of a shape in SCENE space, rotated by its angle — the registry's anchorPoints
+// (rect/ellipse: the right/bottom/left/top edge midpoints; diamond: its four tips). Excalidraw's
+// getSnapOutlineMidPoint order, so a bind-time midpoint snap resolves the same side on a tie. The one owner
+// of this geometry — both the snap-to-midpoint bind and the snap-dot overlay read it, so the dots sit
+// exactly where the dock lands.
+export function shapeAnchorPoints(shape: VectorBindableElement): Point[] {
+    return ELEMENT_KINDS[shape.type].anchorPoints(shape);
 }
 
 // The nearest focus SNAP target for a dragged aim — one of the shape's four side midpoints or its centre,
@@ -509,9 +448,9 @@ export function shapeSideMidpoints(shape: VectorShapeElement): Point[] {
 // stores the RAW pointer ratio and lights no dots — arrows/focus.ts handleFocusPointDrag; Reinder wants the
 // aim to snap to and light the shape's snap points, so this magnet mirrors SnapDots' side-midpoint set plus
 // the centre). Scene coordinates throughout; the caller suppresses it on Ctrl/Cmd like every other snap.
-export function focusSnapPoint(shape: VectorShapeElement, point: Point, zoom: number): Point | null {
+export function focusSnapPoint(shape: VectorBindableElement, point: Point, zoom: number): Point | null {
     const within = bindingDistance(zoom) + shape.strokeWidth / 2;
-    const targets = [...shapeSideMidpoints(shape), boxCenter(shape)];
+    const targets = [...shapeAnchorPoints(shape), boxCenter(shape)];
     let best: Point | null = null;
     let bestDist = within;
     for (const t of targets) {
@@ -527,67 +466,13 @@ export function focusSnapPoint(shape: VectorShapeElement, point: Point, zoom: nu
 // The nearest side midpoint the bind-time snap docks onto, or null: the FIRST midpoint within
 // bindingDistance + strokeWidth/2 of `point`, and only when the cursor sits OUTSIDE the shape's fill
 // (Excalidraw's getSnapOutlineMidPoint — buried-inside cursors fall through to the diagonal projection).
-function snapOutlineMidPoint(shape: VectorShapeElement, point: Point, zoom: number): Point | null {
+function snapOutlineMidPoint(shape: VectorBindableElement, point: Point, zoom: number): Point | null {
     if (pointInShape(shape, point)) return null;
     const within = bindingDistance(zoom) + shape.strokeWidth / 2;
-    for (const mid of shapeSideMidpoints(shape)) {
+    for (const mid of shapeAnchorPoints(shape)) {
         if (Math.hypot(point.x - mid.x, point.y - mid.y) <= within) return mid;
     }
     return null;
-}
-
-// Shrink a segment inward by `offset` at each end (along its own direction). A zero offset / degenerate
-// segment is returned unchanged.
-function shrinkSegment(a: Point, b: Point, offset: number): [Point, Point] {
-    if (offset === 0) return [a, b];
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const len = Math.hypot(dx, dy);
-    if (len === 0) return [a, b];
-    const ox = (dx / len) * offset;
-    const oy = (dy / len) * offset;
-    return [
-        { x: a.x + ox, y: a.y + oy },
-        { x: b.x - ox, y: b.y - oy },
-    ];
-}
-
-// The two lines a straight arrow's bind-time aim projects onto (Excalidraw's getDiagonalsForBindableElement),
-// in SCENE space rotated by the shape's angle: a rectangle uses its two corner diagonals (shrunk 15px at each
-// end); an ellipse/diamond uses its vertical + horizontal centre lines (un-shrunk).
-function shapeDiagonals(shape: VectorShapeElement): [[Point, Point], [Point, Point]] {
-    const { x, y, width: w, height: h } = shape;
-    const offset = shape.type === 'rectangle' ? DIAGONAL_SHRINK : 0;
-    const [one, two]: [[Point, Point], [Point, Point]] =
-        shape.type === 'rectangle'
-            ? [
-                  [
-                      { x, y },
-                      { x: x + w, y: y + h },
-                  ],
-                  [
-                      { x: x + w, y },
-                      { x, y: y + h },
-                  ],
-              ]
-            : [
-                  [
-                      { x: x + w / 2, y },
-                      { x: x + w / 2, y: y + h },
-                  ],
-                  [
-                      { x, y: y + h / 2 },
-                      { x: x + w, y: y + h / 2 },
-                  ],
-              ];
-    const center = boxCenter(shape);
-    const rot = (p: Point): Point => rotatePoint(p, center, shape.angle);
-    const s1 = shrinkSegment(one[0], one[1], offset);
-    const s2 = shrinkSegment(two[0], two[1], offset);
-    return [
-        [rot(s1[0]), rot(s1[1])],
-        [rot(s2[0]), rot(s2[1])],
-    ];
 }
 
 // Project a straight arrow's bind-time aim onto a natural line of the shape (Excalidraw's
@@ -600,7 +485,7 @@ function shapeDiagonals(shape: VectorShapeElement): [[Point, Point], [Point, Poi
 // dragging the focus dot stores the raw aim, never re-projected (handleFocusPointDrag). Elbow arrows never
 // call this — their dock is resolved from the outline, not a diagonal.
 export function projectFixedPointOntoDiagonal(
-    shape: VectorShapeElement,
+    shape: VectorBindableElement,
     point: Point,
     otherEnd: Point,
     arrowSize: { width: number; height: number },
@@ -609,7 +494,7 @@ export function projectFixedPointOntoDiagonal(
     if (arrowSize.width < MIN_PROJECTABLE_ARROW && arrowSize.height < MIN_PROJECTABLE_ARROW) return null;
     const mid = snapOutlineMidPoint(shape, point, zoom);
     if (mid) return mid;
-    const [diag1, diag2] = shapeDiagonals(shape);
+    const [diag1, diag2] = ELEMENT_KINDS[shape.type].aimLines(shape);
     const a = otherEnd;
     // A point far along a → point (past `point`), long enough for the ray to cross both diagonals: their
     // combined reach is 2·|a→point| + the longer diagonal, so segSegIntersect always catches the crossing.
@@ -634,8 +519,12 @@ export function projectFixedPointOntoDiagonal(
 // by its angle. The ratio is clamped to [0,1] here (clampUnit) so a shrunk shape can't fling a straight
 // arrow's chord anchor off the box. An elbow end reads through elbowAnchorScene instead — its stored
 // fixedPoint is the outline+gap dock, deliberately a little outside [0,1], so it must NOT be unit-clamped.
-export function anchorToScene(shape: VectorShapeElement, fixedPoint: [number, number]): Point {
-    const [fx, fy] = clampUnit(fixedPoint);
+export function anchorToScene(shape: VectorBindableElement, fixedPoint: [number, number]): Point {
+    return ratioToScene(shape, clampUnit(fixedPoint));
+}
+
+// A [0,1]-ish ratio pair placed on the shape's current box and rotated with it.
+function ratioToScene(shape: VectorBindableElement, [fx, fy]: [number, number]): Point {
     return rotatePoint(
         { x: shape.x + shape.width * fx, y: shape.y + shape.height * fy },
         boxCenter(shape),
@@ -654,10 +543,7 @@ function clampUnit([fx, fy]: [number, number]): [number, number] {
 export function normalizeFixedPoint([fx, fy]: [number, number]): [number, number] {
     const cx = clamp(fx, -FIXED_POINT_BOUND, FIXED_POINT_BOUND);
     const cy = clamp(fy, -FIXED_POINT_BOUND, FIXED_POINT_BOUND);
-    if (Math.abs(cx - 0.5) < FIXED_POINT_EPSILON || Math.abs(cy - 0.5) < FIXED_POINT_EPSILON) {
-        return [dodgeHalf(cx), dodgeHalf(cy)];
-    }
-    return [cx, cy];
+    return [dodgeHalf(cx), dodgeHalf(cy)];
 }
 
 function dodgeHalf(ratio: number): number {
@@ -668,50 +554,31 @@ function dodgeHalf(ratio: number): number {
 // other end never enters), bounded exactly as Excalidraw's getGlobalFixedPointForBindableElement. The stored
 // fixedPoint already encodes the outline+gap dock (elbowBindPoint), so this sits the endpoint on the
 // anchor's own side and holds it there no matter where the other end moves.
-export function elbowAnchorScene(shape: VectorShapeElement, fixedPoint: [number, number]): Point {
-    const [fx, fy] = normalizeFixedPoint(fixedPoint);
-    return rotatePoint(
-        { x: shape.x + shape.width * fx, y: shape.y + shape.height * fy },
-        boxCenter(shape),
-        shape.angle,
-    );
+export function elbowAnchorScene(shape: VectorBindableElement, fixedPoint: [number, number]): Point {
+    return ratioToScene(shape, normalizeFixedPoint(fixedPoint));
 }
 
 // Where the segment from → anchor crosses the shape's outline inflated by `gap`, nearest to `from`; the
-// anchor itself when it never crosses. Everything happens in the shape's unrotated local
-// frame (rect: sharp inflated sides even for round rects — accepted drift; diamond: inflated edges;
-// ellipse: radii + gap), then the hit rotates back by the shape's angle.
-export function outlinePoint(shape: VectorShapeElement, from: Point, anchor: Point, gap: number): Point {
-    const center = boxCenter(shape);
-    const a = rotatePoint(from, center, -shape.angle);
-    const b = rotatePoint(anchor, center, -shape.angle);
+// anchor itself when it never crosses. Everything happens in the shape's unrotated local frame — the
+// registry's outline, corner arcs and all — then the hit rotates back by the shape's angle.
+export function outlinePoint(shape: VectorBindableElement, from: Point, anchor: Point, gap: number): Point {
     // Extend past the anchor so a far endpoint still reaches the inflated outline.
-    const far = extendPast(a, b, Math.max(shape.width, shape.height) + 2 * gap);
-    const hits = outlineHits(shape, a, far, gap);
-    if (hits.length === 0) return anchor;
-    let best = hits[0];
-    let bestDist = distSq(a, best);
-    for (const h of hits) {
-        const d = distSq(a, h);
-        if (d < bestDist) {
-            bestDist = d;
-            best = h;
-        }
-    }
-    return rotatePoint(best, center, shape.angle);
+    const far = extendPast(from, anchor, Math.max(shape.width, shape.height) + 2 * gap);
+    const hits = outlineIntersections(shape, from, far, gap);
+    return hits.length === 0 ? anchor : nearestPoint(hits, from);
 }
 
 // All intersections of the SCENE segment a→b with `shape`'s outline inflated outward by `gap`, in scene
-// space (outlineHits works in the shape's unrotated local frame; this rotates in and back out). One source
-// for the outline geometry the elbow dock (elbowBindPoint) and outlinePoint both consume.
-export function outlineIntersections(shape: VectorShapeElement, a: Point, b: Point, gap: number): Point[] {
+// space (shapeOutlineHits works in the shape's unrotated local frame; this rotates in and back out). One
+// source for the outline geometry the elbow dock (elbowBindPoint) and outlinePoint both consume.
+export function outlineIntersections(shape: VectorBindableElement, a: Point, b: Point, gap: number): Point[] {
     const center = boxCenter(shape);
     const la = rotatePoint(a, center, -shape.angle);
     const lb = rotatePoint(b, center, -shape.angle);
-    return outlineHits(shape, la, lb, gap).map((h) => rotatePoint(h, center, shape.angle));
+    return shapeOutlineHits(shape, la, lb, gap).map((h) => rotatePoint(h, center, shape.angle));
 }
 
-export type CubicBezier = [Point, Point, Point, Point];
+type CubicBezier = [Point, Point, Point, Point];
 
 // The arrow curve's parametric form — the ONE geometry-side owner of the shape roughjs's `gen.curve`
 // draws for a round (non-elbow) arrow. Golden-locked by test to roughjs's `_curve` control points at
@@ -747,18 +614,6 @@ function cubicAt(bez: CubicBezier, t: number): Point {
     };
 }
 
-// Polyline approximation of the arrow curve (`samplesPerSegment` points per bezier), through the first and
-// last vertex. Used by the golden lock test and the curved bound-endpoint dock.
-export function sampleArrowCurve(points: Point[], samplesPerSegment: number): Point[] {
-    if (points.length < 2) return points.map((p) => ({ ...p }));
-    const beziers = arrowCurveBeziers(points);
-    const out: Point[] = [beziers[0][0]];
-    for (const bez of beziers) {
-        for (let s = 1; s <= samplesPerSegment; s++) out.push(cubicAt(bez, s / samplesPerSegment));
-    }
-    return out;
-}
-
 // Sample count per terminal bezier when docking a curved arrow's bound end onto the outline.
 const CURVE_DOCK_SAMPLES = 24;
 
@@ -771,7 +626,7 @@ const CURVE_DOCK_SAMPLES = 24;
 function curveOutlineDock(
     arrow: VectorArrowElement,
     end: 'start' | 'end',
-    shape: VectorShapeElement,
+    shape: VectorBindableElement,
     points: Point[],
     anchor: Point,
     gap: number,
@@ -788,16 +643,7 @@ function curveOutlineDock(
             const pt = cubicAt(bez, s / CURVE_DOCK_SAMPLES);
             if (prev) {
                 const hits = outlineIntersections(shape, prev, pt, gap);
-                let best: Point | null = null;
-                let bestDist = Number.POSITIVE_INFINITY;
-                for (const h of hits) {
-                    const d = distSq(prev, h);
-                    if (d < bestDist) {
-                        bestDist = d;
-                        best = h;
-                    }
-                }
-                if (best) return best;
+                if (hits.length > 0) return nearestPoint(hits, prev);
             }
             prev = pt;
         }
@@ -810,7 +656,7 @@ function curveOutlineDock(
 // anchor instead (a degenerate arrow would otherwise flip inside the shape). A curved (round, ≥3-point)
 // arrow docks on the CURVE∩outline crossing instead of the straight chord, so the drawn shaft meets the
 // outline exactly at the head; a strict fixed point at stored precision keeps a settled arrow from redirtying.
-export function boundEndpoint(arrow: VectorArrowElement, end: 'start' | 'end', shape: VectorShapeElement): Point {
+export function boundEndpoint(arrow: VectorArrowElement, end: 'start' | 'end', shape: VectorBindableElement): Point {
     const points = parsePoints(arrow.points);
     if (points.length < 2) return linearLocalToScene(arrow, points[0] ?? ORIGIN);
     const thisLocal = end === 'start' ? points[0] : points[points.length - 1];
@@ -834,7 +680,7 @@ export function boundEndpoint(arrow: VectorArrowElement, end: 'start' | 'end', s
             // serializePoints' round2), return the exact stored point so followBindings sees no change.
             const dockLocal = linearSceneToLocal(arrow, dock);
             endpoint =
-                round2(dockLocal.x) === thisLocal.x && round2(dockLocal.y) === thisLocal.y
+                round(dockLocal.x) === thisLocal.x && round(dockLocal.y) === thisLocal.y
                     ? linearLocalToScene(arrow, thisLocal)
                     : dock;
         }
@@ -857,44 +703,35 @@ export function followBindings(
     if (!start && !end) return null;
     const points = parsePoints(arrow.points);
     if (points.length < 2) return null;
+    let patch: { x: number; y: number; width: number; height: number; points: string; fixedSegments: string };
     // PINNED: keep the interior polyline + pins verbatim, move only the bound endpoints and re-drop
     // their connector pairs (moveEndpoints), then renormalize as the sealed write. The A* router never runs.
     if (arrow.fixedSegments !== '') {
         const newStart = start ? boundEndpoint(arrow, 'start', start) : null;
         const newEnd = end ? boundEndpoint(arrow, 'end', end) : null;
         const moved = moveEndpoints(arrow, newStart, newEnd, elbowRoutingContext(arrow, byId));
-        const patch = renormalize({ ...arrow, ...moved });
-        if (
-            patch.points === arrow.points &&
-            patch.x === arrow.x &&
-            patch.y === arrow.y &&
-            patch.width === arrow.width &&
-            patch.height === arrow.height &&
-            patch.fixedSegments === arrow.fixedSegments
-        ) {
-            return null;
-        }
-        return patch;
+        patch = renormalize({ ...arrow, ...moved });
+    } else {
+        // DERIVED: recompute the two endpoints and re-normalize (unchanged pre-pin behaviour).
+        const next = points.map((p) => ({ ...p }));
+        if (start) next[0] = linearSceneToLocal(arrow, boundEndpoint(arrow, 'start', start));
+        if (end) next[next.length - 1] = linearSceneToLocal(arrow, boundEndpoint(arrow, 'end', end));
+        patch = { ...normalizeLinear(arrow, next), fixedSegments: '' };
     }
-
-    // DERIVED: recompute the two endpoints and re-normalize (unchanged pre-pin behaviour).
-    const next = points.map((p) => ({ ...p }));
-    if (start) next[0] = linearSceneToLocal(arrow, boundEndpoint(arrow, 'start', start));
-    if (end) next[next.length - 1] = linearSceneToLocal(arrow, boundEndpoint(arrow, 'end', end));
-    const result = normalizeLinear(arrow, next);
     if (
-        result.points === arrow.points &&
-        result.x === arrow.x &&
-        result.y === arrow.y &&
-        result.width === arrow.width &&
-        result.height === arrow.height
+        patch.points === arrow.points &&
+        patch.x === arrow.x &&
+        patch.y === arrow.y &&
+        patch.width === arrow.width &&
+        patch.height === arrow.height &&
+        patch.fixedSegments === arrow.fixedSegments
     ) {
         return null;
     }
-    return { ...result, fixedSegments: '' };
+    return patch;
 }
 
-export function boundShape(binding: string, byId: Map<string, VectorElement>): VectorShapeElement | null {
+export function boundShape(binding: string, byId: Map<string, VectorElement>): VectorBindableElement | null {
     const b = parseBinding(binding);
     if (!b) return null;
     const el = byId.get(b.elementId);
@@ -917,7 +754,7 @@ export function remapBinding(binding: string, idMap: Map<string, string>): strin
     return mapped ? serializeBinding({ elementId: mapped, fixedPoint: b.fixedPoint }) : '';
 }
 
-export type ArrowheadGeometry =
+type ArrowheadGeometry =
     | { kind: 'barbs'; tip: Point; barb1: Point; barb2: Point }
     | { kind: 'circle'; center: Point; diameter: number };
 
@@ -980,84 +817,11 @@ export function arrowLabelCenter(el: VectorArrowElement, route?: Point[]): Point
     return { x: (points[i - 1].x + points[i].x) / 2, y: (points[i - 1].y + points[i].y) / 2 };
 }
 
-// Intersections of the query segment a→b with a shape's outline inflated outward by `gap`, in the
-// shape's unrotated local frame. Sharp corners throughout (accepted drift).
-function outlineHits(shape: VectorShapeElement, a: Point, b: Point, gap: number): Point[] {
-    const cx = shape.x + shape.width / 2;
-    const cy = shape.y + shape.height / 2;
-    if (shape.type === 'ellipse') {
-        return segEllipseHits(a, b, cx, cy, shape.width / 2 + gap, shape.height / 2 + gap);
-    }
-    const corners =
-        shape.type === 'diamond'
-            ? inflatedDiamondCorners(shape, gap)
-            : [
-                  { x: shape.x - gap, y: shape.y - gap },
-                  { x: shape.x + shape.width + gap, y: shape.y - gap },
-                  { x: shape.x + shape.width + gap, y: shape.y + shape.height + gap },
-                  { x: shape.x - gap, y: shape.y + shape.height + gap },
-              ];
-    if (!corners) return [];
-    const hits: Point[] = [];
-    for (let i = 0; i < corners.length; i++) {
-        const hit = segSegIntersect(a, b, corners[i], corners[(i + 1) % corners.length]);
-        if (hit) hits.push(hit);
-    }
-    return hits;
-}
-
-// The four corners of a diamond whose edges are each pushed out by `gap` along their normal (parallel
-// offset, sharp corners). Null for a degenerate (zero-extent) diamond — it can't meaningfully bind.
-function inflatedDiamondCorners(shape: VectorShapeElement, gap: number): Point[] | null {
-    const ax = shape.width / 2;
-    const ay = shape.height / 2;
-    if (ax === 0 || ay === 0) return null;
-    const diag = Math.hypot(ax, ay);
-    const aInf = ax + (gap * diag) / ay;
-    const bInf = ay + (gap * diag) / ax;
-    const cx = shape.x + ax;
-    const cy = shape.y + ay;
-    return [
-        { x: cx, y: cy - bInf },
-        { x: cx + aInf, y: cy },
-        { x: cx, y: cy + bInf },
-        { x: cx - aInf, y: cy },
-    ];
-}
-
-// Segment ∩ segment, both bounded — the intersection point or null when parallel / not overlapping.
-function segSegIntersect(p1: Point, p2: Point, p3: Point, p4: Point): Point | null {
-    const d1x = p2.x - p1.x;
-    const d1y = p2.y - p1.y;
-    const d2x = p4.x - p3.x;
-    const d2y = p4.y - p3.y;
-    const denom = d1x * d2y - d1y * d2x;
-    if (denom === 0) return null;
-    const t = ((p3.x - p1.x) * d2y - (p3.y - p1.y) * d2x) / denom;
-    const u = ((p3.x - p1.x) * d1y - (p3.y - p1.y) * d1x) / denom;
-    if (t < 0 || t > 1 || u < 0 || u > 1) return null;
-    return { x: p1.x + t * d1x, y: p1.y + t * d1y };
-}
-
-// Segment ∩ axis-aligned ellipse (center c, radii rx/ry): the real roots of the quadratic in the
-// segment parameter that land within the segment.
-function segEllipseHits(a: Point, b: Point, cx: number, cy: number, rx: number, ry: number): Point[] {
-    if (rx === 0 || ry === 0) return [];
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const fx = a.x - cx;
-    const fy = a.y - cy;
-    const A = (dx * dx) / (rx * rx) + (dy * dy) / (ry * ry);
-    const B = 2 * ((fx * dx) / (rx * rx) + (fy * dy) / (ry * ry));
-    const C = (fx * fx) / (rx * rx) + (fy * fy) / (ry * ry) - 1;
-    const disc = B * B - 4 * A * C;
-    if (A === 0 || disc < 0) return [];
-    const sq = Math.sqrt(disc);
-    const hits: Point[] = [];
-    for (const t of [(-B - sq) / (2 * A), (-B + sq) / (2 * A)]) {
-        if (t >= 0 && t <= 1) hits.push({ x: a.x + t * dx, y: a.y + t * dy });
-    }
-    return hits;
+// Intersections of the query segment a→b with the shape's outline inflated outward by `gap`, in the
+// shape's unrotated frame. The registry owns the outline, so what the renderer draws is what an arrow
+// docks to.
+function shapeOutlineHits(shape: VectorBindableElement, a: Point, b: Point, gap: number): Point[] {
+    return outlineHits(ELEMENT_KINDS[shape.type].outline(shape, gap), a, b);
 }
 
 // Extend the ray a→b past b by `ext` scene units (a === b is left as-is).
@@ -1069,20 +833,9 @@ function extendPast(a: Point, b: Point, ext: number): Point {
     return { x: b.x + (dx / len) * ext, y: b.y + (dy / len) * ext };
 }
 
-function distSq(a: Point, b: Point): number {
-    const dx = a.x - b.x;
-    const dy = a.y - b.y;
-    return dx * dx + dy * dy;
-}
-
-function clamp(v: number, lo: number, hi: number): number {
-    return Math.min(hi, Math.max(lo, v));
-}
-
 // --- Resize / rotate transform math ---------------------------------------------------
-// Ported verbatim from slides' app-local transform-geometry.ts (Rect{x,y,w,h} → canonical
-// Box), with slides' module-level MIN_SIZE threaded as a `minSize` parameter so the same
-// math serves a fixed-unit deck (slides passes 30) and a zoomable canvas (vector passes ~1).
+// The resize floor is a `minSize` PARAMETER rather than a module constant, so the same math serves a
+// fixed-unit deck and a zoomable canvas (which passes ~1).
 // Angle is DEGREES throughout — no radian value escapes a function body (rotatePoint owns it).
 
 const ORIGIN: Point = { x: 0, y: 0 };
@@ -1184,9 +937,4 @@ export function resizeRotatedRect(
 // Snap an angle (degrees) to the nearest `step` — used for Shift → 15° rotation.
 export function snapAngle(deg: number, step = 15): number {
     return Math.round(deg / step) * step;
-}
-
-// Normalize degrees into [0, 360) for storage.
-export function normalizeAngle(deg: number): number {
-    return ((deg % 360) + 360) % 360;
 }

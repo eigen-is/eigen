@@ -9,49 +9,50 @@ import {
     type Box,
     bindingAnchor,
     bindingDistance,
+    boxCenter,
+    ELEMENT_KINDS,
     elbowAnchorScene,
     elbowRoutingContext,
     followBindings,
-    hitTestBox,
-    hitTestDiamond,
-    hitTestEllipse,
     isBindable,
-    isTransparent,
+    isTransparentFill,
     linearLocalToScene,
     moveEndpoints,
+    outlineContains,
+    outlinePath,
     type PinPatch,
     type Point,
     parseBinding,
+    parseFill,
     parsePoints,
     projectFixedPointOntoDiagonal,
     remapBinding,
+    rotatePoint,
     serializeBinding,
     type VectorArrowElement,
+    type VectorBindableElement,
     type VectorElement,
-    type VectorShapeElement,
 } from '@workspace/lib/vector';
 
-// Is `point` within `pad` of the shape's outline in the shape's own frame — the shape's box grown (or,
-// with a negative pad, shrunk) uniformly on all sides, hit-tested by type. The centre is unchanged, so a
-// rotated shape stays correct (the type hit-tests unrotate about the centre).
-function insideShape(shape: VectorShapeElement, point: Point, pad: number): boolean {
-    const box: Box = {
-        x: shape.x - pad,
-        y: shape.y - pad,
-        width: shape.width + 2 * pad,
-        height: shape.height + 2 * pad,
-        angle: shape.angle,
-    };
-    if (shape.type === 'ellipse') return hitTestEllipse(box, point);
-    if (shape.type === 'diamond') return hitTestDiamond(box, point);
-    return hitTestBox(box, point);
+// Is `point` inside the shape's own outline grown by `pad` (shrunk, for a negative pad)? The kind owns
+// the curve, so a rounded corner binds where it is drawn rather than out at the sharp box. The outline
+// lives in the shape's unrotated frame, so the query point is unrotated about the centre to match.
+function insideShape(shape: VectorBindableElement, point: Point, pad: number): boolean {
+    const local = rotatePoint(point, boxCenter(shape), -shape.angle);
+    return outlineContains(ELEMENT_KINDS[shape.type].outline(shape, pad), local);
 }
 
-// Whether a dragged endpoint at `point` should bind to a shape: a filled shape binds anywhere inside or
-// within the reach band outside; a transparent one binds only in the band AROUND its outline.
-function reaches(shape: VectorShapeElement, point: Point, distance: number): boolean {
-    if (!isTransparent(shape.backgroundColor)) return insideShape(shape, point, distance);
+// Whether a dragged endpoint at `point` should bind to a shape: one with a body binds anywhere inside or
+// within the reach band outside; a see-through one binds only in the band AROUND its outline.
+function reaches(shape: VectorBindableElement, point: Point, distance: number): boolean {
+    if (!isSeeThrough(shape)) return insideShape(shape, point, distance);
     return insideShape(shape, point, distance) && !insideShape(shape, point, -distance);
+}
+
+// Can the endpoint be dropped THROUGH this shape's middle? Its Fill answers for every kind that paints
+// one; an image's body is its pixels, so it has no `fill` field and never reads as see-through.
+function isSeeThrough(shape: VectorBindableElement): boolean {
+    return 'fill' in shape && isTransparentFill(parseFill(shape.fill));
 }
 
 // The bindable shape a dragged endpoint would bind to: the SMALLEST candidate whose reach band contains
@@ -61,32 +62,28 @@ export function bindingCandidate(
     point: Point,
     zoom: number,
     suppressed: boolean,
-): string | null {
+): VectorBindableElement | null {
     if (suppressed) return null;
     const distance = bindingDistance(zoom);
-    let best: VectorShapeElement | null = null;
+    let best: VectorBindableElement | null = null;
     for (const el of ordered) {
         if (!isBindable(el) || !reaches(el, point, distance)) continue;
         if (!best || el.width * el.height < best.width * best.height) best = el;
     }
-    return best ? best.id : null;
+    return best;
 }
 
-// The shape-following highlight over a bindable target: the shape re-stroked in the selection
-// colour with a clean 2px screen line and no fill, reusing the SAME per-shape geometry the renderer uses
-// (rect roundness / diamond / ellipse, rotated), so no shape math is duplicated here. `currentColor`
-// lets the caller tint it via a `text-selection-handle` group; strokeWidth ÷ zoom keeps it 2px on screen
-// at any zoom (the scene group scales). Rendered through elementToSvg like every other scene node.
-export function bindingOutlineElement(shape: VectorShapeElement, zoom: number): VectorShapeElement {
-    return {
-        ...shape,
-        strokeColor: 'currentColor',
-        strokeWidth: 2 / zoom,
-        strokeStyle: 'solid',
-        backgroundColor: 'transparent',
-        roughness: 0,
-        opacity: 100,
-    };
+// The shape-following highlight over a bindable target: the kind's OWN outline — the one the dock is
+// resolved against — stroked in the selection colour, rotated about the shape's centre the way every
+// caller of `outline()` rotates. Drawn from the outline rather than by re-rendering the element, so a
+// rich text box or an image is traced without its words or its pixels being painted a second time.
+// `currentColor` lets the caller tint it via a `text-selection-handle` group; the width ÷ zoom keeps it
+// 2px on screen at any zoom (the scene group scales).
+export function bindingOutlineSvg(shape: VectorBindableElement, zoom: number): string {
+    const d = outlinePath(ELEMENT_KINDS[shape.type].outline(shape, 0));
+    const c = boxCenter(shape);
+    const rotate = shape.angle === 0 ? '' : ` transform="rotate(${shape.angle} ${c.x} ${c.y})"`;
+    return `<path d="${d}" fill="none" stroke="currentColor" stroke-width="${2 / zoom}"${rotate}/>`;
 }
 
 // The aim the OTHER end holds while `end` binds — the point projectFixedPointOntoDiagonal casts its ray
@@ -121,10 +118,8 @@ function bindingFor(
     zoom: number,
     suppressed: boolean,
 ): string {
-    const id = bindingCandidate(ordered, scene, zoom, suppressed);
-    if (!id) return '';
-    const shape = ordered.find((el) => el.id === id);
-    if (!shape || !isBindable(shape)) return '';
+    const shape = bindingCandidate(ordered, scene, zoom, suppressed);
+    if (!shape) return '';
     // Straight arrows aim the stored ratio through a natural line — project the raw endpoint onto the shape's
     // diagonals / centre lines (or snap to a side midpoint), Excalidraw's bind-time nicety that makes fresh
     // arrows point through the middle rather than at wherever the cursor landed. But that projection is the
@@ -137,7 +132,7 @@ function bindingFor(
         arrow.elbow || pointInsideShape(shape, scene)
             ? scene
             : (projectFixedPointOntoDiagonal(shape, scene, otherEnd, arrow, zoom) ?? scene);
-    return serializeBinding({ elementId: id, fixedPoint: bindingAnchor(shape, focus) });
+    return serializeBinding({ elementId: shape.id, fixedPoint: bindingAnchor(shape, focus) });
 }
 
 // Resolve an arrow's bindings on commit (creation or an endpoint-handle drag). For each end flagged in
@@ -280,7 +275,7 @@ export function followOtherEnd(
 // Whether a scene point sits within a shape's exact outline (no reach band) — the deep-inside test used
 // to suppress the side-midpoint snap dots for a NON-elbow arrow (Excalidraw shows them only around the
 // outline, not when the cursor is buried inside the shape).
-export function pointInsideShape(shape: VectorShapeElement, point: Point): boolean {
+export function pointInsideShape(shape: VectorBindableElement, point: Point): boolean {
     return insideShape(shape, point, 0);
 }
 

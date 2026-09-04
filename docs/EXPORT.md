@@ -1,8 +1,9 @@
 # Document Export: DOCX, PDF, HTML
 
 > **TLDR**: One route exports eigendocs, slides, sheets and vector drawings. Each type renders standalone
-> HTML (vector: its own SVG) with embedded fonts and base64 images; PDF is that document through a
-> WeasyPrint subprocess, DOCX through `@turbodocx/html-to-docx`, XLSX straight from `Sheet[]` via ExcelJS.
+> HTML (vector: its own SVG, or its scene layers composed as an HTML page for PDF) with embedded fonts and
+> base64 images; PDF is that document through a WeasyPrint subprocess, DOCX through
+> `@turbodocx/html-to-docx`, XLSX straight from `Sheet[]` via ExcelJS.
 > Every rendered body goes through `sanitizeExportHtml` — DOMPurify plus a data-URI-only rule that closes
 > SSRF against WeasyPrint — and SVG media bytes get the same pass before they are embedded.
 
@@ -15,14 +16,9 @@ fonts, base64 images, and flattened eigen-prose CSS. DOCX and PDF are derived fr
 - **DOCX**: HTML fed to `@turbodocx/html-to-docx`
 - **PDF**: HTML fed to WeasyPrint subprocess
 
-Eigenslides and eigensheets reuse the same HTML→PDF pipeline (sheets also export native XLSX), and
-eigenvector exports its own SVG (PDF = that SVG on a WeasyPrint page) — see their sections below.
+Eigenslides and eigensheets reuse the same HTML→PDF pipeline (sheets also export native XLSX), and eigenvector exports its own SVG (PDF = the same drawing recomposed as HTML layers on a WeasyPrint page) — see their sections below.
 
-Every eigendoc/eigenslides/eigensheets export runs its Yjs reconstruction, rendering and sanitization in the
-one-shot document-transform Worker ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)): the
-main thread prepares media, the Worker returns the finished document bytes. The DOCX conversion runs there too
-— the Worker loads the externalized `@turbodocx/html-to-docx` from runtime `node_modules`. WeasyPrint stays a
-main-thread subprocess on top of the Worker's HTML.
+Every eigendoc/eigenslides/eigensheets/eigenvector export runs its Yjs reconstruction, rendering and sanitization in the one-shot document-transform Worker ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)): the main thread prepares media, the Worker returns the finished document bytes. The DOCX conversion runs there too — the Worker loads the externalized `@turbodocx/html-to-docx` from runtime `node_modules`. WeasyPrint stays a main-thread subprocess on top of the Worker's HTML.
 
 ## File Structure
 
@@ -33,17 +29,16 @@ apps/api/src/lib/export/
   weasyprint.ts                  # Generic: htmlToPdf(html | UTF-8 bytes) -> Buffer via subprocess
   sanitize.ts                    # sanitizeExportHtml: DOMPurify + the call-scoped data-refs-only SSRF hook
   modules.d.ts                   # Type declarations for untyped npm packages
-  render-types.ts                # Shared contracts: SizeUnit, *ImgSrcResolver
   fonts.ts                       # Embedded WOFF2 @font-face CSS (Inter, Source Serif 4, JetBrains Mono, Excalifont)
   media.ts                       # collectExportMedia: screen previews -> transferable buffers (main thread)
   doc/
-    render.ts                    # Pure node renderers: renderFigureNode, renderCodeBlockNode, renderTaskItemNode
+    render.ts                    # Pure node renderers + the FigureImgSrcResolver contract they take
     transform.ts                 # Worker-side: materialized doc + media -> HTML bytes, or docx via html-to-docx
 
-# Content loaders (Yjs -> PM JSON / DeckData / Sheet[] + media map) live in
-# apps/api/src/lib/document/{doc,slides,sheets}.ts — shared by export AND preview; their
-# media-free halves (readEigendocFromDoc, readDeckFromDoc, readSheetsFromDoc) are what the
-# Worker calls. Media helpers live in apps/api/src/lib/document/media.ts.
+# Content loaders (Yjs -> PM JSON / Sheet[] / VectorScene) live in
+# apps/api/src/lib/document/{doc,sheets}.ts and packages/lib/src/vector/read-vector.ts —
+# shared by export AND preview; readEigendocFromDoc, readSheetsFromDoc and readVectorFromDoc
+# are what the Worker calls. Media helpers live in apps/api/src/lib/document/media.ts.
 ```
 
 ### Architecture
@@ -51,18 +46,8 @@ apps/api/src/lib/export/
 - **`render.ts`**: pure utility functions with zero side effects — no imports from tiptap, lowlight, or
   any heavy library. Callers pass their own lowlight instance. Shared by both `doc/transform.ts` (export) and
   `preview/eigendoc-render.ts` (quick preview)
-- **Worker side vs main-thread side**: `{doc,slides,sheets}/transform.ts` assemble the document — over the pure
-  renderers in `*/render.ts` and `sheets/to-xlsx.ts` — and are imported *inside* the Worker; `export-document.ts`
-  is the whole main-thread side, preparing media and calling the seam through one `runDocumentExport`. The split
-  is load-bearing: a module the Worker imports must
-  never reach `preview/preview-cache.ts` (it would drag the screen-preview pipeline, sharp and the sheet engine
-  into every document Worker), which is why `document/media.ts` (light) and `export/media.ts` (screen previews)
-  are separate
-- **content loaders** (`apps/api/src/lib/document/{doc,slides,sheets}.ts`): every type ships a media-free reader
-  over an already-materialized `Y.Doc` (`readEigendocFromDoc`, `readDeckFromDoc`, `readSheetsFromDoc`) — that is
-  what export, preview and search extraction (`lib/search/extract-render.ts`, the `extract-text` op) call inside
-  the Worker. There is no Mount-side read path: callers capture compressed blobs (`captureCollabSource`) and the
-  Worker materializes them; media maps come from `document/media.ts` on the main thread
+- **Worker side vs main-thread side**: `{doc,canvas,vector,sheets}/transform.ts` assemble the document — over the pure renderers in `*/render.ts` and `sheets/to-xlsx.ts` — and are imported *inside* the Worker; `export-document.ts` is the whole main-thread side, preparing media and calling the seam through one `runDocumentExport`. The split is load-bearing: a module the Worker imports must never reach `preview/preview-cache.ts` (it would drag the screen-preview pipeline, sharp and the sheet engine into every document Worker), which is why `document/media.ts` (light) and `export/media.ts` (screen previews) are separate
+- **content loaders** (`apps/api/src/lib/document/{doc,sheets}.ts`, plus `read-vector.ts` in `packages/lib` for both canvas types): every type ships a media-free reader over an already-materialized `Y.Doc` (`readEigendocFromDoc`, `readSheetsFromDoc`, `readVectorFromDoc`) — that is what export, preview and search extraction (`lib/search/extract-render.ts`, the `extract-text` op) call inside the Worker. There is no Mount-side read path: callers capture compressed blobs (`captureCollabSource`) and the Worker materializes them; media maps come from `document/media.ts` on the main thread
 - **`export-document.ts`**: routes `(mount, path, format)` through the format->envelope table to one
   `runDocumentExport`. Imported by the drive route, NOT by Drive class — export is not Drive's responsibility
 - **`doc/transform.ts`**: standalone HTML with base64 data URIs, embedded WOFF2 fonts (via Bun `import ... with
@@ -135,36 +120,13 @@ bytes transferred back to the main thread
         +-> PDF export (feed to WeasyPrint subprocess)
 ```
 
-`runDocumentExport(job, mount, path, signal?)` (`export-document.ts`) is the single main-thread entry every
-type and format shares: it derives the title, prepares the media for doc and slides (sheets embed none), then
-calls `runTransformToBytes` — the same seam the previews use. `html` and `pdf-html` produce the identical
-document today (WeasyPrint renders exactly what the download serves), and `docx` is that same document
-converted in the Worker. The `<title>` keeps the UNstripped
-container name (`Report.eigendoc`) — frozen output, pinned by `document-export-route.test.ts`; the docx
-document property keeps the stripped name (`Report`).
+`runDocumentExport(job, mount, path, signal?)` (`export-document.ts`) is the single main-thread entry every type and format shares: it derives the title, prepares the media for doc, slides and vector (sheets embed none), then calls `runTransformToBytes` — the same seam the previews use. `html` and `pdf-html` produce the identical document today (WeasyPrint renders exactly what the download serves), and `docx` is that same document converted in the Worker. The `<title>` keeps the UNstripped container name (`Report.eigendoc`) — frozen output, pinned by `document-export-route.test.ts`; the docx document property keeps the stripped name (`Report`).
 
 ### Sanitization and SSRF
 
-Every HTML pipeline — doc and slides (`{doc,slides}/transform.ts`) and the sheets document builders
-(`sheets/render.ts`) — routes its assembled body through `sanitizeExportHtml()`
-(`apps/api/src/lib/export/sanitize.ts`) inside the Worker, before it is wrapped or handed to a
-converter. DOCX and the PDFs inherit it, because they are built from that same sanitized HTML.
+Every HTML pipeline — doc (`doc/transform.ts`), the canvas documents (`canvas/transform.ts`, `vector/transform.ts`) and the sheets document builders (`sheets/render.ts`) — routes its assembled body through `sanitizeExportHtml()` (`apps/api/src/lib/export/sanitize.ts`) inside the Worker, before it is wrapped or handed to a converter. DOCX and the PDFs inherit it, because they are built from that same sanitized HTML.
 
-On top of DOMPurify it adds one rule: **every `url()` in a `style` attribute or `<style>` element,
-every `<img src>`, and every SVG `href`/`xlink:href` must be a `data:` URI**; anything else is
-stripped, and `@import` (whose string form fetches without any `url()`, and which can only exist
-in element CSS) is removed from style-element text. Backslashes are dropped from CSS before that
-scan, because a CSS escape spells the same token invisibly to a regex — `\75 rl(…)` and
-`@\69 mport` are `url(…)` and `@import` to the parser that does the fetching. SVG `<image href>`
-is covered because DOMPurify keeps it by default and it is a fetch just like `<img src>`;
-`<a href>` is explicitly exempt. That is the SSRF guard. Export embeds all its
-resources as data URIs, so a remote reference can only have come from an attacker-controlled CRDT
-string (a slide text run, a sheet cell). WeasyPrint fetches such references server-side while
-rendering, from the API host, and its CLI has no way to restrict fetch protocols — so the
-restriction has to happen here. The style-element coverage exists for the sheets exports, which
-emit their interned class rules in a body `<style>` (SHEETS.md § HTML/PDF export). `<a href>` is
-deliberately left alone: link targets are not fetched
-during render, and docs and sheets carry legitimate http(s) hyperlinks.
+On top of DOMPurify it adds one rule: **every `url()` in a `style` attribute or `<style>` element, every `<img src>`, and every SVG `href`/`xlink:href` must be a `data:` URI**; anything else is stripped, and `@import` (whose string form fetches without any `url()`, and which can only exist in element CSS) is removed from style-element text. Backslashes are dropped from CSS before that scan, because a CSS escape spells the same token invisibly to a regex — `\75 rl(…)` and `@\69 mport` are `url(…)` and `@import` to the parser that does the fetching. SVG `<image href>` is covered because DOMPurify keeps it by default and it is a fetch just like `<img src>`; `<a href>` is explicitly exempt. That is the SSRF guard. Export embeds all its resources as data URIs, so a remote reference can only have come from an attacker-controlled CRDT string (a rich-text box's HTML, a sheet cell). WeasyPrint fetches such references server-side while rendering, from the API host, and its CLI has no way to restrict fetch protocols — so the restriction has to happen here. The style-element coverage exists for the sheets exports, which emit their interned class rules in a body `<style>` (SHEETS.md § HTML/PDF export). The same rule is why the vector compositor keeps a gradient or clip reference in an SVG `fill`/`stroke`/`clip-path` attribute and never in CSS — attributes are not scanned, a `style` `url(#…)` would be stripped. `<a href>` is deliberately left alone: link targets are not fetched during render, and docs and sheets carry legitimate http(s) hyperlinks.
 
 The hook is added and removed around each synchronous `DOMPurify.sanitize()` call, so it never leaks
 to other DOMPurify users in the process. Regression tests: `apps/api/src/test/export/export-pdf-ssrf.test.ts`.
@@ -205,7 +167,7 @@ New document > Open > Rename > Export > [separator] > Share > ... > Print > Dele
 
 ### Drive Context Menu (`packages/ui/src/components/drive/drive-table.tsx`)
 
-Export submenu for eigendoc, eigenslides, and eigensheets files, driven by `onExport` callback.
+Export submenu for eigendoc, eigenslides, eigensheets and eigenvector files, driven by `onExport` callback. The offered formats follow the type: `docx/pdf/html` for a doc, `xlsx/pdf/html` for a sheet, `svg/pdf` for a drawing, `pdf/html` for everything else.
 
 ## Dependencies
 
@@ -239,28 +201,24 @@ Eigenslides (`.eigenslides`) support HTML and PDF export via the same route:
 GET /drive/:ownerId/:mountId/file/:pathId/export/:format
 ```
 
+A deck is a canvas of frames, so both formats are the canvas compositor's pages — `framePages(scene, resolveMedia)`, one page per frame in deck order, each `renderCanvasPage`d at scale 0.5. A frame is 1920×1080 and the sheet has always been 16:9 landscape at 960 × 540 px (254mm × 142.875mm at 96 dpi); a `@page` of 1920px would be a 20-inch sheet.
+
 | Format | Pipeline |
 |--------|----------|
-| `html` | Standalone HTML with container queries (`cqh`/`cqw`) for responsive font sizing |
-| `pdf`  | HTML with fixed `px` values → WeasyPrint (254mm × 142.875mm landscape pages) |
+| `html` | A centred column of fixed 960 × 540 pages, each wrapped in a container-sized fit box that scales it to the width available (`container-type: inline-size` + `transform: scale(calc(100cqw / 960px))` about the top-left corner, the wrapper's height from `aspect-ratio`), plus a `<meta name="viewport">` — so a downloaded deck reads on a phone. A named `@media` ladder is declared first, for a browser that cannot parse the length division. Printing the page column breaks after each slide |
+| `pdf`  | The same pages unscaled inside `@page { size: 960px 540px; margin: 0 }` → WeasyPrint. WeasyPrint gives each page its own sheet and has no viewport to be responsive to, so the fit box is a screen-only wrapper |
 
-Both formats embed WOFF2 fonts (via shared `export/fonts.ts`) and base64 images. The `SizeUnit` abstraction
-in `render.ts` lets the same render functions produce either responsive or fixed-size output. Both run in the
-document-transform Worker through `runDocumentExport` (`export-document.ts`), which prepares the media on the
-main thread and hands the deck to `renderEigenslidesExport` (`slides/transform.ts`).
+Both formats embed WOFF2 fonts (via shared `export/fonts.ts`) and base64 images, and both leave through `canvasHtmlDocument` in `export/canvas/transform.ts` — one `<html>` wrapper, one `@page` rule, one font block and one reset for both canvas document types, so the deck's HTML/PDF and the drawing's PDF cannot drift. `renderEigenslidesExport` is the deck's entry; it runs in the document-transform Worker through `runDocumentExport` (`export-document.ts`), which prepares the media on the main thread. An empty deck (no frames) is a 400.
 
-Text objects store HTML (TipTap output). `render.ts` runs `obj.text` through `DOMPurify` and `escapeHtml`s
-the highlight color before embedding, so the same value that's safely shown by the FE canvas is also safe
-inside the export. The `.slide-text` typography rules live in `packages/ui/src/styles/slide-text.css` and
-are imported via `with { type: 'text' }` from `transform.ts` so canvas and export render identically.
+A rich-text element stores TipTap HTML, which a collaborator controls, so the assembled body runs through `sanitizeExportHtml` inside the Worker. The `.eigen-canvas-text` typography rules — the list markers, blockquote rule and link underline an element's inline style cannot reach — live in `packages/ui/src/styles/canvas-text.css` and are embedded via `with { type: 'text' }` by the canvas export document, so canvas and export render identically.
 
 ### File Structure
 
 ```
-apps/api/src/lib/export/slides/
-  render.ts      # Slide/object → HTML strings (SizeUnit abstraction), shared with the preview
-  transform.ts   # Worker-side: materialized deck + media → standalone HTML bytes (screen or PDF mode)
-# content loader: apps/api/src/lib/document/slides.ts (readDeckFromDoc)
+apps/api/src/lib/export/canvas/
+  render.ts      # Worker-pure compositor: framePages / drawingPage / renderCanvasPage
+  transform.ts   # Worker-side: canvasHtmlDocument + renderEigenslidesExport (screen or PDF mode)
+# content loader: packages/lib/src/vector/read-vector.ts (readVectorFromDoc)
 ```
 
 ## Vector Export
@@ -270,13 +228,28 @@ Eigenvector (`.eigenvector`) drawings export as SVG and PDF via the same route:
 | Format | Pipeline |
 |--------|----------|
 | `svg`  | `sceneToSvg` (the shared `packages/lib/src/vector` serializer previews/embeds also use), media as `data:` URIs, the used `@font-face` blocks spliced into `<defs><style>`, then `sanitizeExportHtml` |
-| `pdf`  | The same SVG (fonts in the wrapping page's `<style>` instead) on a minimal white page sized `@page` to the drawing → WeasyPrint. An empty drawing is a 400 |
+| `pdf`  | The drawing as compositor layers (`export/canvas/render.ts` — `drawingPage` + `renderCanvasPage`) inside the shared `canvasHtmlDocument` (`export/canvas/transform.ts`), which owns the `@page` rule — sized to the artwork — the fonts and the reset → WeasyPrint. Rich text prints because it is an HTML div here; WeasyPrint ignores the `<foreignObject>` the svg arm uses. An empty drawing is a 400 |
 
-`renderEigenvectorExport` lives in `export/vector/transform.ts` and runs in the document-transform Worker like the other types; `collectExportMedia` prepares the media on the main thread. Media previews serve SVG bytes as-is, so `prepareMedia` (`export/media.ts`) passes `image/svg+xml` media through `sanitizeExportHtml` before it is embedded — a nested `<image href>` inside an SVG data: URI reaches WeasyPrint's fetcher, the same SSRF the assembled document already closes. A transparent drawing keeps its transparency in the SVG download and exports on white paper for PDF.
+`renderEigenvectorExport` lives in `export/vector/transform.ts` and runs in the document-transform Worker like the other types; `collectExportMedia` prepares the media on the main thread. Both arms run their assembled output through `sanitizeExportHtml` inside the Worker — the svg arm with `ADD_TAGS: ['foreignObject']` plus an HTML integration point so the rich-text `<div>` nested in the SVG survives, the compositor arm with the default config, because it emits ordinary HTML and never a `foreignObject`. Media previews serve SVG bytes as-is, so `prepareMedia` (`export/media.ts`) passes `image/svg+xml` media through `sanitizeExportHtml` before it is embedded — a nested `<image href>` inside an SVG data: URI reaches WeasyPrint's fetcher, the same SSRF the assembled document already closes. A transparent drawing keeps its transparency in the SVG download and exports on white paper for PDF.
+
+### The Canvas Compositor
+
+`export/canvas/render.ts` is the one definition of "a page of `sceneLayers` as HTML", shared by all four canvas pipelines: the deck's HTML and PDF exports, the drawing's PDF export, and both previews ([PREVIEWS.md](PREVIEWS.md)). It is Worker-pure — no Mount, no preview cache, no DOM — and it restates no geometry, typography or fill CSS: it calls `layerInnerHtml`, the kind's own `render` (which supplies `richTextCssText`) and `backgroundCss` from `packages/lib`.
+
+- `drawingPage(scene, { resolveMedia })` → one `CanvasPage` sized to the drawing's content bounds plus 10px of padding — the same margin a standalone `sceneToSvg` leaves, absorbing roughjs's overshoot past the geometric bounds — carrying the scene background and the scene's `sceneLayers`. A drawing with no elements has nothing to size a page from and returns `null`: the export answers 400, the preview serves an empty body.
+- `framePages(scene, resolveMedia)` → one `CanvasPage` per frame in deck order. A frame IS the page — 0,0-based and a fixed size — so there is no content-bounds arithmetic and no origin offset, and an element that overhangs is clipped by the page box exactly as the live canvas clips it. The resolver is passed because a frame background may be an image; a drawing's background is a colour token.
+- `renderCanvasPage(page, scale, resolveMedia?)` → a clipped page div holding the scene at 1:1, with the whole scene scaled **once** (`transform: scale(k)` + `transform-origin: 0 0`) rather than re-unitising each length, because a layer's body is authored in scene pixels by `packages/lib`. Each layer is an absolutely-positioned box at `translate(x,y) rotate(a)` — exactly the box the live canvas uses (`packages/ui` `element-layer.tsx`), so what a user sees is what prints. A rich-text layer *is* its styled div; every other kind is a fragment inside an `overflow="visible"` `<svg>` viewport, because roughjs overshoots its box and an elbow route spills past it.
+
+**A kind's gradient and clip references must stay SVG attributes, pointing inside the layer's own `<svg>`.** A sketchy fill names its own `<defs>` with `fill="url(#…)"` / `stroke="url(#…)"` and a rounded image clips with `clip-path="url(#…)"` — never a CSS declaration. Both halves are load-bearing. `sanitize.ts` rewrites every non-`data:` `url()` it finds in a `style` attribute or a `<style>` block to `url()` (the SSRF rule above), so a gradient moved into CSS silently stops painting in the PDF; and WeasyPrint resolves `url(#id)` only within the same `<svg>` element — a cross-`<svg>` reference renders nothing, silently — so per-element `<defs>` are mandatory.
+
+**Known limitation.** WeasyPrint ignores `clip-rule="evenodd"`, so in a PDF an arrow's shaft strikes through its bound label: the hole punched around the label is an even-odd `clipPath`. The SVG export and the live canvas are correct.
 
 ```
+apps/api/src/lib/export/canvas/
+  render.ts      # Worker-pure compositor: a CanvasPage of sceneLayers → absolutely-positioned HTML
+  transform.ts   # Worker-side: canvasHtmlDocument (both canvas types) + renderEigenslidesExport
 apps/api/src/lib/export/vector/
-  transform.ts   # Worker-side: materialized scene + media → SVG bytes, or the PDF wrapper HTML
+  transform.ts   # Worker-side: materialized scene + media → SVG bytes, or the PDF arm over canvasHtmlDocument
 # serializer: packages/lib/src/vector/scene-to-svg.ts (sceneToSvg, shared FE/BE)
 # content loader: packages/lib/src/vector/read-vector.ts (readVectorFromDoc)
 ```

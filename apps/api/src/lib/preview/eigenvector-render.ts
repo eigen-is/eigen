@@ -1,24 +1,61 @@
-import { readVectorFromDoc, sceneToSvg } from '@workspace/lib/vector';
+import { CANVAS_PREVIEW_HEIGHT, CANVAS_PREVIEW_WIDTH } from '@workspace/lib/constants/preview';
+import { readVectorFromDoc, sceneReadingOrder } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import type { TransformWarning } from '../document/transform/protocol';
+import { type CanvasPage, drawingPage, emptyPage, renderFittedPage, sceneBackground } from '../export/canvas/render';
+import { sanitizeExportHtml } from '../export/sanitize';
+import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-marker';
+import { sanitizeSceneHtml } from './sanitize-scene';
 
-// Materialized doc → the drawing's own SVG, served as-is like any other SVG preview
-// (getScreenPreview keeps SVGs unrasterized). Runs inside the transform Worker
-// (worker.ts owns execution; the main-thread orchestration lives in preview-document.ts).
-// This module must not reach the Mount or the transform seam — the Worker imports it, and
-// sceneToSvg's roughjs/perfect-freehand deps stay DOM-free. Media resolves through the URL
-// map the main thread prepared (the Worker has no Mount).
+const EMPTY_PREVIEW_HEIGHT = 120;
+
+// A glance, not the drawing: like the doc's 20 blocks and the deck's 8 slides, so a scene with tens
+// of thousands of elements cannot make the Worker generate a roughjs path for every one of them.
+// The kept elements are the first in reading order — frame by frame, then z-order inside a frame.
+// A drawing has no frames, so what survives is its bottom 500 in stacking order.
+const PREVIEW_MAX_ELEMENTS = 500;
+
+// Materialized doc → the drawing as one compositor page, the same HTML the PDF export prints.
+// Runs inside the transform Worker (worker.ts owns execution; the main-thread orchestration lives
+// in preview-document.ts). This module must not reach the Mount or the transform seam — the Worker
+// imports it, and the compositor's roughjs/perfect-freehand deps stay DOM-free. Media resolves
+// through the URL map the main thread prepared (the Worker has no Mount).
 //
-// No DOMPurify and no byte guard here, unlike the HTML previews: this body is not HTML
-// pasted into a page, it is an SVG image the serializer builds itself from fields
-// read-vector already validated (XML-invalid characters stripped, colours reduced to hex
-// or 'transparent', coordinates clamped), and injecting a truncated-HTML marker would
-// only corrupt the SVG. The reader is the trust boundary for every consumer.
-export function renderEigenvectorPreview(
+// The body renders as live DOM in the drive hero and the preview pane, so it is filtered twice. The
+// reader is the trust boundary for every scalar field (XML-invalid characters stripped, colours
+// reduced to hex or 'transparent', coordinates clamped) but NOT for a rich-text box's `html`, which
+// it caps and cleans without filtering tags: each of those goes through the shared ref restriction
+// first, so a collaborator's `<img src=https://…>` or `background:url(https://…)` cannot beacon
+// every viewer. The assembled page then goes through DOMPurify as a whole, after the compositor has
+// added the media hrefs and `url(#…)` gradient refs of its own that must survive.
+export function renderEigenvectorPreviewBody(
     doc: Y.Doc,
     mediaUrls: Map<string, string>,
 ): { body: string; warnings: TransformWarning[] } {
-    const scene = readVectorFromDoc(doc);
-    const body = sceneToSvg(scene, { resolveMedia: (mediaName) => mediaUrls.get(mediaName) ?? null });
-    return { body, warnings: [] };
+    const full = readVectorFromDoc(doc);
+    const truncated = full.elements.length > PREVIEW_MAX_ELEMENTS;
+    // sceneLayers paints in z-order whatever it is given, so the slice needs no re-sorting.
+    const kept = truncated ? sceneReadingOrder(full).slice(0, PREVIEW_MAX_ELEMENTS) : full.elements;
+    const scene = sanitizeSceneHtml({ ...full, elements: kept });
+    const page = drawingPage(scene, (mediaName) => mediaUrls.get(mediaName) ?? null);
+    // An empty drawing still previews as a page: getOrCacheText stores only a non-empty body, so
+    // nothing here would leave an emptied drawing serving the preview it had when it had content.
+    const html = page
+        ? renderPreviewPage(page)
+        : renderFittedPage(emptyPage(sceneBackground(scene), CANVAS_PREVIEW_WIDTH, EMPTY_PREVIEW_HEIGHT), 1);
+    const warnings: TransformWarning[] = [];
+    const sanitized = sanitizeExportHtml(truncated ? `${html}${renderPreviewTruncatedMarker()}` : html, {
+        allowedRefs: new Set(mediaUrls.values()),
+    });
+    return { body: applyPreviewByteGuard(sanitized, warnings), warnings };
+}
+
+function renderPreviewPage(page: CanvasPage): string {
+    // Fit the whole page: scaled on width alone, a tall narrow drawing magnifies unboundedly.
+    const scale = Math.min(CANVAS_PREVIEW_WIDTH / page.width, CANVAS_PREVIEW_HEIGHT / page.height);
+    // A page fitted by height composes narrower than CANVAS_PREVIEW_WIDTH, and drive-preview.tsx
+    // scales the body from exactly that intrinsic width. Widen the page in SCENE units and shift its
+    // origin by half the difference: the box comes out full width with the drawing centred in it.
+    const width = CANVAS_PREVIEW_WIDTH / scale;
+    return renderFittedPage({ ...page, width, originX: page.originX - (width - page.width) / 2 }, scale);
 }

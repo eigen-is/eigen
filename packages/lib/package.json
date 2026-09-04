@@ -74,7 +74,6 @@
     "./doc-search": "./src/doc-search/index.ts",
     "./sheets": "./src/sheets/index.ts",
     "./sheets/*": "./src/sheets/*.ts",
-    "./slides": "./src/slides/index.ts",
     "./vector": "./src/vector/index.ts",
     "./vector/*": "./src/vector/*.ts",
     "./background": "./src/background/index.ts"

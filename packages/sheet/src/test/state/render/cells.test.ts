@@ -5,7 +5,8 @@
 // three, so a warning triangle reads as the same mark as a comment triangle.
 
 import { describe, expect, test } from 'bun:test';
-import { CELL_INDICATOR_SIZE, cellIndicatorRect } from '../../../state/modules/cell-glyph';
+import { CELL_INDICATOR_SIZE } from '@workspace/lib/constants/comment-indicator';
+import { cellIndicatorRect } from '../../../state/modules/cell-glyph';
 import { drawCellIndicator } from '../../../state/render/cells';
 
 function recordingCanvas() {

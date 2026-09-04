@@ -30,8 +30,8 @@ const HEADING_TAGS = new Set(['H1', 'H2', 'H3', 'H4', 'H5', 'H6']);
 const DROP_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'IFRAME', 'OBJECT', 'EMBED', 'TEMPLATE', 'HEAD', 'TITLE']);
 
 // Only http(s)/mailto links survive — a javascript:/data:/vbscript: href is an XSS vector (the
-// sanitized HTML is rendered via dangerouslySetInnerHTML by slide-object). An unsafe href unwraps
-// the anchor to its text.
+// sanitized HTML is rendered via dangerouslySetInnerHTML by the canvas' rich-text layer). An unsafe
+// href unwraps the anchor to its text.
 function safeHref(href: string | null): string | null {
     if (!href) return null;
     const trimmed = href.trim();
@@ -79,6 +79,13 @@ function appendSanitized(node: Node, parent: HTMLElement): void {
         const href = safeHref(el.getAttribute('href'));
         if (href) {
             const clean = document.createElement('a');
+            // A link always opens in a new tab, with the opener sealed. Forced here rather than trusted
+            // from the source markup: this is the one seam every rendered surface passes through, and a
+            // canvas link that navigates in place would take a presenter out of their own deck. Written
+            // in Tiptap's own serialisation order (Link merges its configured HTMLAttributes before
+            // href), so a pasted link is already canonical and the first keystroke rewrites nothing.
+            clean.setAttribute('target', '_blank');
+            clean.setAttribute('rel', 'noopener noreferrer');
             clean.setAttribute('href', href);
             recurseInto(clean);
             parent.appendChild(clean);
@@ -108,7 +115,7 @@ export function readDominantTextAlign(html: string): (typeof TEXT_ALIGN_VALUES)[
 
 // Map arbitrary pasted HTML onto the LightEditor tag set (see the sets above): structural formatting
 // and inline marks are kept, headings become paragraphs, everything else is unwrapped or dropped, and
-// ALL attributes except a safe `<a href>` are stripped. DOM-based so escaping is automatic and there
+// ALL attributes are stripped bar a safe `<a href>` and the new-tab pair forced onto it. DOM-based so escaping is automatic and there
 // is no regex-parsing hazard. Returns '' when nothing survives (caller falls back to plain text).
 export function sanitizeToLightEditorHtml(html: string): string {
     const doc = new DOMParser().parseFromString(html, 'text/html');

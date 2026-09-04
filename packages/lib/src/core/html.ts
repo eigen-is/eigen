@@ -7,6 +7,19 @@ export function escapeHtml(text: string): string {
         .replace(/>/g, '&gt;');
 }
 
+// XML text/attribute escaping, for everything that writes XML by hand: the SVG the canvas kinds
+// serialize, and the API's WebDAV/CalDAV response builders and S3 bucket-configuration bodies. It is
+// NOT escapeHtml — XML's five predefined entities include `&apos;`, where HTML wants the numeric
+// `&#39;` — so the two live side by side rather than one pretending to be the other.
+export function escapeXml(value: string): string {
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+}
+
 // Exact inverse of escapeHtml, for the one case that needs it: code that measures or
 // inspects escaped text and must see what the browser renders rather than the markup.
 // `&amp;` decodes last so an escaped `&amp;lt;` comes back as the literal `&lt;` it was,
@@ -18,6 +31,15 @@ export function unescapeHtml(html: string): string {
         .replace(/&lt;/g, '<')
         .replace(/&gt;/g, '>')
         .replace(/&amp;/g, '&');
+}
+
+// Plain text → paragraph HTML, the inverse of stripTagsServer: one <p> per line, escaped. The one
+// builder for "this text becomes a rich-text body" (the canvas' text paste, the demo builder).
+export function textToParagraphHtml(text: string): string {
+    return text
+        .split('\n')
+        .map((line) => `<p>${escapeHtml(line)}</p>`)
+        .join('');
 }
 
 // Server-side HTML → plain-text. Browser code should use `htmlToPlainText` from

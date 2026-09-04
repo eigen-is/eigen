@@ -3,13 +3,13 @@ import * as Y from 'yjs';
 import { extractCollabText } from '../../lib/search/extract-render';
 import { CONTENT_INDEX_MAX_BYTES } from '../../lib/search/limits';
 import {
-    buildGoldenDeck,
+    buildGoldenDeckScene,
     buildGoldenDocJson,
     buildGoldenVectorScene,
     GOLDEN_VECTOR_LABEL,
     GOLDEN_VECTOR_TEXT,
+    seedDeckDoc,
     seedEigendoc,
-    seedSlidesDoc,
     seedVectorDoc,
 } from '../fixtures/golden-documents';
 import {
@@ -42,16 +42,36 @@ describe('extractCollabText', () => {
         doc.destroy();
     });
 
-    test('eigenslides: text objects in slide order, image objects skipped', async () => {
+    test('eigenslides: rich text in slide order, tag-free, image elements skipped', async () => {
         const doc = new Y.Doc();
-        seedSlidesDoc(doc, buildGoldenDeck());
+        seedDeckDoc(doc, buildGoldenDeckScene());
 
         const { text, warnings } = await extractCollabText('eigenslides', doc);
-        expect(text).toContain('Deck <strong>title</strong>');
-        expect(text).toContain('Background image');
+        // Reading order is the deck's, and the collector strips tags — the old one indexed raw HTML.
+        expect(text.indexOf('Deck title')).toBeLessThan(text.indexOf('Background image'));
+        expect(text).not.toContain('<strong>');
+        expect(text).toContain('Deck title');
+        // The image element carries no words — its media name is not indexable text.
         expect(text).not.toContain('pixel.png');
         expect(warnings).toEqual([]);
         doc.destroy();
+    });
+
+    // The reader orders elements by fractional index across the whole scene, so a deck whose
+    // z-indices run against its frame order is the only thing that proves the collector reads
+    // frame by frame rather than trusting the reader's array.
+    test('eigenslides: frame order wins over scene-wide z-order', async () => {
+        const scene = buildGoldenDeckScene();
+        const reversed = [...scene.elements].reverse();
+        const doc = new Y.Doc();
+        seedDeckDoc(doc, {
+            ...scene,
+            elements: scene.elements.map((el, i) => ({ ...el, index: reversed[i].index })),
+        });
+
+        const { text } = await extractCollabText('eigenslides', doc);
+        expect(text.indexOf('Deck title')).toBeLessThan(text.indexOf('Background image'));
+        expect(text.startsWith('Deck title\n')).toBe(true);
     });
 
     test('eigensheets: replayed ops and stored values are indexed — formulas stay uncomputed', async () => {
@@ -76,14 +96,14 @@ describe('extractCollabText', () => {
         doc.destroy();
     });
 
-    test('eigenvector: text elements and arrow labels are indexed, media names are not', async () => {
+    test('eigenvector: rich text and arrow labels are indexed, media names are not', async () => {
         const doc = new Y.Doc();
         seedVectorDoc(doc, buildGoldenVectorScene());
 
         const { text, warnings } = await extractCollabText('eigenvector', doc);
         expect(text).toContain(GOLDEN_VECTOR_TEXT);
         expect(text).toContain(GOLDEN_VECTOR_LABEL);
-        // The text element sits before the arrow in z-order, joined by a newline.
+        // The rich-text element sits before the arrow in z-order, joined by a newline.
         expect(text).toBe(`${GOLDEN_VECTOR_TEXT}\n${GOLDEN_VECTOR_LABEL}`);
         // The image element carries no words — its media name is not indexable text.
         expect(text).not.toContain('pixel.png');
@@ -93,11 +113,38 @@ describe('extractCollabText', () => {
 
     test('eigenvector: an empty drawing extracts to the empty string', async () => {
         const doc = new Y.Doc();
-        seedVectorDoc(doc, { elements: [], meta: { background: 'transparent', gridSize: 20 } });
+        seedVectorDoc(doc, { elements: [], frames: [], meta: { background: 'transparent' } });
 
         const { text, warnings } = await extractCollabText('eigenvector', doc);
         expect(text).toBe('');
         expect(warnings).toEqual([]);
+        doc.destroy();
+    });
+
+    // Yjs maps iterate in insertion order, so seeding the scene backwards is the only way to
+    // prove the body follows the fractional index rather than however the doc happened to grow.
+    test('eigenvector: rich text and arrow labels come out in z-order, tags stripped', async () => {
+        const scene = buildGoldenVectorScene();
+        const doc = new Y.Doc();
+        seedVectorDoc(doc, { ...scene, elements: [...scene.elements].reverse() });
+
+        const { text } = await extractCollabText('eigenvector', doc);
+        // v-text (index a2) sits below v-arrow (a5), so its body comes first whatever the map order was.
+        expect(text).toBe(`${GOLDEN_VECTOR_TEXT}\n${GOLDEN_VECTOR_LABEL}`);
+        // The index carries plain text: the stored `<p>Vector &lt;sketch&gt;</p>` arrives unwrapped
+        // and unescaped, so a search for "sketch" matches.
+        expect(text).not.toContain('<p>');
+        expect(text).not.toContain('&lt;');
+        doc.destroy();
+    });
+
+    test('eigenvector: a shape with no text contributes nothing at all', async () => {
+        const scene = buildGoldenVectorScene();
+        const doc = new Y.Doc();
+        seedVectorDoc(doc, { ...scene, elements: scene.elements.filter((el) => el.type === 'rectangle') });
+
+        const { text } = await extractCollabText('eigenvector', doc);
+        expect(text).toBe('');
         doc.destroy();
     });
 

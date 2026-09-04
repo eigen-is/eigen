@@ -1,191 +1,157 @@
-// Vector clipboard PRODUCER — the element→item builders, moved out of vector-canvas.tsx (a self-
-// contained pure block) so the canvas stays a dispatcher. Images ride the typed image item, text the
-// typed text item; shapes and linear elements (freedraw/line) have no typed kind, so they ride a
-// text-item carrier and rebuild from `meta.vector` on a vector→vector paste. The paste CONSUMER
-// (pasteEigenItems) stays in the canvas and reads the same `meta.vector` shape.
+// Vector clipboard PRODUCER — the selection→payload builder, moved out of canvas-editor.tsx (a self-
+// contained pure block) so the canvas stays a dispatcher. A selection rides as ONE typed `elements`
+// item (whole stored records, so a canvas→canvas paste restores exactly what was copied), plus the
+// per-image and per-rich-text items every other app reads, plus the self-contained SVG flavour. The
+// paste CONSUMER is tools/paste-elements.ts.
 
-import { buildImageClipboardItem, buildTextClipboardItem, embedClipboardSvgMetadata } from '@workspace/lib/clipboard';
+import {
+    buildImageClipboardItem,
+    buildTextClipboardItem,
+    CLIPBOARD_SVG_MAX_BYTES,
+    CLIPBOARD_SVG_MAX_ELEMENTS,
+    embedClipboardSvgMetadata,
+} from '@workspace/lib/clipboard';
+import { stripTagsServer } from '@workspace/lib/html';
+import { sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
-    type Arrowhead,
+    buildElementsClipboardItem,
     eigenMediaHref,
-    type FillStyle,
-    isLinearElement,
-    type Roundness,
-    type StrokeStyle,
     sceneToSvg,
-    type TextAlign,
     type VectorElement,
     type VectorMeta,
 } from '@workspace/lib/vector';
 
-// Vector-private clipboard meta, carried under `item.meta.vector`. Absolute scene x/y ride here (NOT
-// the typed contract fields, which forbid x/y) so a vector→vector paste preserves the selection's
-// relative layout before it is re-anchored on the viewport. `type` present ⇒ restore a shape or a
-// linear element (which then also carries `points` + `roundness`), else a text element. `id` is the
-// element's own id so a paste can remap arrow bindings across the pasted set; an arrow also
-// carries its heads, bindings, label and elbow flag.
-export type VectorClipMeta = {
-    x: number;
-    y: number;
-    id?: string;
-    type?: 'rectangle' | 'diamond' | 'ellipse' | 'freedraw' | 'line' | 'arrow';
-    strokeColor?: string;
-    backgroundColor?: string;
-    fillStyle?: FillStyle;
-    strokeStyle?: StrokeStyle;
-    strokeWidth?: number;
-    roughness?: number;
-    opacity?: number;
-    roundness?: Roundness;
-    points?: string;
-    pressures?: string;
-    simulatePressure?: boolean;
-    startArrowhead?: Arrowhead;
-    endArrowhead?: Arrowhead;
-    startBinding?: string;
-    endBinding?: string;
-    elbow?: boolean;
-    fixedSegments?: string;
-    text?: string;
-    fontSize?: number;
-    fontFamily?: string;
-    labelWidth?: number;
-};
-
-export function readVectorMeta(item: EigenClipboardItem): VectorClipMeta | null {
-    const v = item.meta?.vector as VectorClipMeta | undefined;
-    return v && typeof v.x === 'number' && typeof v.y === 'number' ? v : null;
-}
-
-export function toVectorTextAlign(v: string | undefined): TextAlign {
-    return v === 'center' || v === 'right' ? v : 'left';
-}
-
-// Produce a clipboard item for one element: images → typed mediaName + geometry (+ a portable source
-// path via the resolver); text → typed text + typography (vector's three canonical fields); shapes and
-// linear elements → a text-item carrier rebuilt from meta.vector on a vector→vector paste. Every item
-// also carries the element's scene x/y (+ vector-private fields) under meta.vector. Returns null when
-// an image's media can't be resolved to a portable path (a still-pending upload).
-function buildElementClipboardItem(
-    el: VectorElement,
-    resolveMediaPath: (name: string) => DrivePath | undefined,
-): EigenClipboardItem | null {
-    const box = { width: el.width, height: el.height, angle: el.angle };
-    if (el.type === 'image') {
-        const source = resolveMediaPath(el.mediaName);
-        if (!source) return null;
-        return buildImageClipboardItem({
-            mediaName: el.mediaName,
-            source,
-            box,
-            meta: { vector: { x: el.x, y: el.y } },
-        });
-    }
-    if (el.type === 'text') {
-        return buildTextClipboardItem({
-            text: el.text,
-            box,
-            typography: { fontFamily: el.fontFamily, fontSize: el.fontSize, textAlign: el.textAlign },
-            meta: {
-                vector: {
-                    x: el.x,
-                    y: el.y,
-                    strokeColor: el.strokeColor,
-                    backgroundColor: el.backgroundColor,
-                    opacity: el.opacity,
-                },
-            },
-        });
-    }
-    // shape (rectangle/diamond/ellipse) or linear (freedraw/line/arrow) — all ride the text carrier; a
-    // linear element additionally carries its `points` so the exact geometry round-trips a vector→vector
-    // paste, and its `id` so a paste can remap arrow bindings across the pasted set.
-    const vector: VectorClipMeta = {
-        x: el.x,
-        y: el.y,
-        id: el.id,
-        type: el.type,
-        strokeColor: el.strokeColor,
-        backgroundColor: el.backgroundColor,
-        fillStyle: el.fillStyle,
-        strokeStyle: el.strokeStyle,
-        strokeWidth: el.strokeWidth,
-        roughness: el.roughness,
-        opacity: el.opacity,
-        roundness: el.roundness,
-    };
-    if (isLinearElement(el)) vector.points = el.points;
-    if (el.type === 'freedraw') {
-        vector.pressures = el.pressures;
-        vector.simulatePressure = el.simulatePressure;
-    }
-    if (el.type === 'arrow') {
-        vector.startArrowhead = el.startArrowhead;
-        vector.endArrowhead = el.endArrowhead;
-        vector.startBinding = el.startBinding;
-        vector.endBinding = el.endBinding;
-        vector.elbow = el.elbow;
-        vector.fixedSegments = el.fixedSegments;
-        vector.text = el.text;
-        vector.fontSize = el.fontSize;
-        vector.fontFamily = el.fontFamily;
-        vector.labelWidth = el.labelWidth;
-    }
-    return buildTextClipboardItem({ text: '', box, meta: { vector } });
-}
-
-// One eigen item per selected element, in z-order (so a paste keeps the relative stacking). Images
-// with unresolved (still-uploading) media are skipped. Local: buildSelectionData is the only caller.
-function buildSelectionItems(
-    ordered: VectorElement[],
-    selectedIds: string[],
+// The items a foreign host reads: an image item per selected image (also the cross-mount re-upload
+// manifest a canvas→canvas paste keys on by `mediaName`), and a text item per rich-text box carrying
+// the flattened text and the box's typography, which is what makes it paste styled.
+function foreignItems(
+    selected: VectorElement[],
     resolveMediaPath: (name: string) => DrivePath | undefined,
 ): EigenClipboardItem[] {
     const items: EigenClipboardItem[] = [];
-    for (const el of ordered) {
-        if (!selectedIds.includes(el.id)) continue;
-        const item = buildElementClipboardItem(el, resolveMediaPath);
-        if (item) items.push(item);
+    for (const el of selected) {
+        const box = { width: el.width, height: el.height, angle: el.angle };
+        if (el.type === 'image') {
+            const source = resolveMediaPath(el.mediaName);
+            if (source) items.push(buildImageClipboardItem({ mediaName: el.mediaName, source, box }));
+        } else if (el.type === 'richtext') {
+            items.push(
+                buildTextClipboardItem({
+                    text: stripTagsServer(el.html),
+                    box,
+                    // The whole modelled set, not a subset: these are exactly the fields a rich-text box
+                    // stores, and dropping six of them was how bold/italic/underline/spacing quietly
+                    // stopped surviving a copy into docs. Every one has a consumer (see the type).
+                    typography: {
+                        fontFamily: el.fontFamily,
+                        fontSize: el.fontSize,
+                        textAlign: el.textAlign,
+                        color: el.color,
+                        fontWeight: el.fontWeight,
+                        fontStyle: el.fontStyle,
+                        textDecoration: el.textDecoration,
+                        verticalAlign: el.verticalAlign,
+                        letterSpacing: el.letterSpacing,
+                        lineHeight: el.lineHeight,
+                    },
+                }),
+            );
+        }
     }
     return items;
 }
 
-// The full eigen payload for a selection: the typed items (vector→vector paste, unchanged) PLUS a
-// self-contained SVG of the same selection for hosts that can't place the typed carriers —
-// docs/sheets/slides render it as an image. The SVG carries the element JSON in a `<metadata>` block so
-// it round-trips back to native elements if pasted into vector without the eigen flavour. An
-// image-bearing selection's SVG references its images BY NAME — `href="eigen-media:<name>"`, never
-// bytes — so the sync copy path stays byte-free and the ref resolves against the target's own media/
-// on paste (materializeClipboardSvg re-uploads, then the display path inlines, see CLIPBOARD.md). A
-// still-pending upload has no portable path, so it's omitted from the svg (sceneToSvg's null-media
-// contract) exactly as it's omitted from the typed items.
-export function buildSelectionData(
-    ordered: VectorElement[],
-    selectedIds: string[],
+// The SVG flavour for a selection, or undefined when it must not be written. Two gates:
+//
+// TEXT-ONLY selections skip it. Every foreign host runs its svg rung BEFORE the typed items, so a
+// drawing that is nothing but a rich-text box would land in a document as a flat picture of itself —
+// the typed text item and its typography never read. An SVG conveys nothing about a text box
+// that the text item doesn't, so not writing it is what makes a copied text box paste as styled,
+// editable text.
+//
+// BIG selections skip it too (see the caps): the SVG is the expensive half of a copy and the typed
+// items are the lossless half.
+//
+// What it is otherwise: a self-contained render carrying the items in a `<metadata>` block, so it
+// round-trips back to native elements if pasted into a canvas without the eigen flavour. Images are
+// referenced BY NAME — `href="eigen-media:<name>"`, never bytes — so the sync copy path stays byte-free
+// and the ref resolves against the target's own media/ on paste (materializeClipboardSvg re-uploads,
+// then the display path inlines, see CLIPBOARD.md). An elbow arrow bound to an UNSELECTED shape draws
+// straight here: the render sees the selection alone, which is what a copy of the selection is.
+function selectionSvg(
+    selected: VectorElement[],
+    items: EigenClipboardItem[],
     meta: VectorMeta,
     resolveMediaPath: (name: string) => DrivePath | undefined,
-): EigenClipboardData {
-    const items = buildSelectionItems(ordered, selectedIds, resolveMediaPath);
-    const selected = ordered.filter((el) => selectedIds.includes(el.id));
+): string | undefined {
+    if (selected.length === 0 || selected.every((el) => el.type === 'richtext')) return undefined;
+    if (selected.length > CLIPBOARD_SVG_MAX_ELEMENTS) return undefined;
+    // Rich text's `html` is a stored scalar, so it arrives verbatim from any peer with write access —
+    // sanitized here as at every other seam that renders it (the layer mount, the paste planner).
+    const elements = selected.map((el) =>
+        el.type === 'richtext' ? { ...el, html: sanitizeToLightEditorHtml(el.html) } : el,
+    );
     const svg = embedClipboardSvgMetadata(
         sceneToSvg(
-            { elements: selected, meta },
+            { elements, frames: [], meta },
             { resolveMedia: (name) => (resolveMediaPath(name) ? eigenMediaHref(name) : null) },
         ),
         { version: 1, items },
     );
-    return { version: 1, items, svg };
+    return svg.length > CLIPBOARD_SVG_MAX_BYTES ? undefined : svg;
 }
 
-// Concatenated plain text of the selected TEXT elements — the only flavor written alongside eigen JSON
-// (text copies carry text/plain, image/shape/linear copies carry neither). undefined when the
-// selection has no text element.
+// The full eigen payload for a selection: the native `elements` item (a canvas→canvas paste), the typed
+// image/text items beside it (every other host) and — unless a gate above says otherwise — the SVG
+// flavour for hosts that can place neither.
+//
+// It returns the ids it ACTUALLY serialized alongside the payload, and they are not always the
+// selection: an image whose media path doesn't resolve yet (a still-pending upload, or one whose folder
+// listing hasn't refreshed) has no portable reference, so nobody could fetch its bytes and it is left
+// out of the whole payload. CUT deletes these ids, never the selection — deleting an element the copy
+// silently dropped is data loss, and undo is not a substitute for not losing it.
+//
+// `pendingImages` counts exactly those dropped images, which is what the cut paths tell the user about.
+// It is NOT `selectedIds.length - serializedIds.length`: a selected id that no longer exists in the
+// scene (a peer deleted it) is also missing from the payload, and is nothing to report.
+export function buildSelectionData(
+    ordered: VectorElement[],
+    selectedIds: string[],
+    meta: VectorMeta,
+    frameId: string,
+    resolveMediaPath: (name: string) => DrivePath | undefined,
+): { data: EigenClipboardData; serializedIds: string[]; pendingImages: number } {
+    const selected: VectorElement[] = [];
+    let pendingImages = 0;
+    for (const el of ordered) {
+        if (!selectedIds.includes(el.id)) continue;
+        if (el.type === 'image' && !resolveMediaPath(el.mediaName)) {
+            pendingImages += 1;
+            continue;
+        }
+        selected.push(el);
+    }
+    const elementsItem = buildElementsClipboardItem(selected, frameId);
+    const items: EigenClipboardItem[] = elementsItem ? [elementsItem] : [];
+    items.push(...foreignItems(selected, resolveMediaPath));
+    return {
+        data: { version: 1, items, svg: selectionSvg(selected, items, meta, resolveMediaPath) },
+        serializedIds: selected.map((el) => el.id),
+        pendingImages,
+    };
+}
+
+// Concatenated plain text of the selected RICH TEXT elements — the only flavor written alongside eigen
+// JSON (text copies carry text/plain, image/shape/linear copies carry neither). undefined when the
+// selection has no rich-text element.
 export function selectionPlainText(ordered: VectorElement[], selectedIds: string[]): string | undefined {
     const texts: string[] = [];
     for (const el of ordered) {
-        if (selectedIds.includes(el.id) && el.type === 'text' && el.text.length > 0) texts.push(el.text);
+        if (!selectedIds.includes(el.id) || el.type !== 'richtext') continue;
+        const text = stripTagsServer(el.html);
+        if (text.length > 0) texts.push(text);
     }
     return texts.length ? texts.join('\n') : undefined;
 }

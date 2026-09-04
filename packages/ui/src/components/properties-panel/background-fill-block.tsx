@@ -1,10 +1,7 @@
 import { DEFAULT_FILL_COLOR } from '@workspace/lib/background';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import { Button } from '@workspace/ui/components/button';
-import { ColorPicker } from '@workspace/ui/components/media/color-picker';
-import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import { Tabs, TabsList, TabsTrigger } from '@workspace/ui/components/tabs';
-import { ToggleGroup, ToggleGroupItem } from '@workspace/ui/components/toggle-group';
 import { cn } from '@workspace/ui/lib/utils';
 import {
     ArrowDown,
@@ -20,8 +17,10 @@ import {
     Palette,
     Trash2,
 } from 'lucide-react';
-import { useState } from 'react';
-import { PropertySection } from './properties-panel';
+import type { ReactNode } from 'react';
+import { ColorRow } from './color-row';
+import { MergedSelect } from './merged-select';
+import { PropertyRow, PropertySection } from './properties-panel';
 
 type FillType = BackgroundFill['type'];
 type Segment = 'none' | FillType;
@@ -54,6 +53,9 @@ type BackgroundFillBlockProps = {
     mixed?: boolean;
     onPickImage?: () => void;
     imagePreviewUrl?: string | null;
+    // Extra rows for this block, rendered under the paint body while a paint is set — the vector Fill's
+    // hatch-style row lives here, because the hatch is half of the same stored fill.
+    children?: ReactNode;
 };
 
 export function BackgroundFillBlock({
@@ -65,6 +67,7 @@ export function BackgroundFillBlock({
     mixed = false,
     onPickImage,
     imagePreviewUrl,
+    children,
 }: BackgroundFillBlockProps) {
     const current: Segment | '' = mixed ? '' : value === null ? 'none' : value.type;
 
@@ -125,6 +128,8 @@ export function BackgroundFillBlock({
                     onPick={onPickImage}
                 />
             )}
+
+            {(mixed || value !== null) && children}
         </PropertySection>
     );
 }
@@ -136,33 +141,7 @@ function SolidBody({
     value: Extract<BackgroundFill, { type: 'solid' }>;
     onChange: (next: BackgroundFill) => void;
 }) {
-    const [open, setOpen] = useState(false);
-    return (
-        <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-                <button
-                    type="button"
-                    className="flex items-center gap-2 h-8 px-2 rounded hover:bg-accent text-sm w-full"
-                >
-                    <div
-                        className="h-5 w-5 rounded border border-border shrink-0"
-                        style={{ backgroundColor: value.color }}
-                    />
-                    <span className="text-xs text-muted-foreground">{value.color}</span>
-                </button>
-            </PopoverTrigger>
-            <PopoverContent side="left" align="start" className="w-auto">
-                <ColorPicker
-                    value={value.color}
-                    onChange={(color) => {
-                        onChange({ type: 'solid', color });
-                        setOpen(false);
-                    }}
-                    showReset={false}
-                />
-            </PopoverContent>
-        </Popover>
-    );
+    return <ColorRow label="Color" value={value.color} onChange={(color) => onChange({ type: 'solid', color })} />;
 }
 
 function GradientBody({
@@ -173,11 +152,22 @@ function GradientBody({
     onChange: (next: BackgroundFill) => void;
 }) {
     return (
-        <div className="space-y-2">
-            <GradientStop label="From" color={value.from} onChange={(from) => onChange({ ...value, from })} />
-            <GradientStop label="To" color={value.to} onChange={(to) => onChange({ ...value, to })} />
-            <div className="pt-1">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Direction</div>
+        <>
+            <ColorRow
+                label="From"
+                value={value.from}
+                onChange={(from) => onChange({ ...value, from })}
+                allowNone
+                noneLabel="Transparent"
+            />
+            <ColorRow
+                label="To"
+                value={value.to}
+                onChange={(to) => onChange({ ...value, to })}
+                allowNone
+                noneLabel="Transparent"
+            />
+            <PropertyRow label="Direction" className="items-start">
                 <div className="grid grid-cols-3 gap-1 w-fit">
                     {DIRECTIONS.map((d, i) => {
                         if (!d) return <div key={`center-${i}`} className="h-6 w-6" />;
@@ -198,64 +188,15 @@ function GradientBody({
                         );
                     })}
                 </div>
-            </div>
-        </div>
+            </PropertyRow>
+        </>
     );
 }
 
-function GradientStop({ label, color, onChange }: { label: string; color: string; onChange: (next: string) => void }) {
-    const [open, setOpen] = useState(false);
-    const isTransparent = color === 'transparent';
-    const checker =
-        'bg-[conic-gradient(at_top_left,#ccc_25%,white_0,white_50%,#ccc_0,#ccc_75%,white_0)] bg-[length:8px_8px]';
-    return (
-        <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground w-9 shrink-0">{label}</span>
-            <Popover open={open} onOpenChange={setOpen}>
-                <PopoverTrigger asChild>
-                    <button
-                        type="button"
-                        className="flex items-center gap-2 h-7 px-1.5 rounded hover:bg-accent text-xs flex-1"
-                    >
-                        <div
-                            className={cn('h-4 w-4 rounded border border-border shrink-0', isTransparent && checker)}
-                            style={isTransparent ? undefined : { backgroundColor: color }}
-                        />
-                        <span className="text-xs text-muted-foreground truncate">
-                            {isTransparent ? 'Transparent' : color}
-                        </span>
-                    </button>
-                </PopoverTrigger>
-                <PopoverContent side="left" align="start" className="w-auto">
-                    <div className="flex flex-col gap-2">
-                        <button
-                            type="button"
-                            onClick={() => {
-                                onChange('transparent');
-                                setOpen(false);
-                            }}
-                            className={cn(
-                                'flex items-center gap-2 px-2 py-1.5 -mx-1 rounded-md text-sm hover:bg-accent transition-colors',
-                                isTransparent && 'bg-accent',
-                            )}
-                        >
-                            <div className={cn('h-4 w-4 rounded border border-border', checker)} />
-                            <span>Transparent</span>
-                        </button>
-                        <ColorPicker
-                            value={isTransparent ? '#ffffff' : color}
-                            onChange={(c) => {
-                                onChange(c);
-                                setOpen(false);
-                            }}
-                            showReset={false}
-                        />
-                    </div>
-                </PopoverContent>
-            </Popover>
-        </div>
-    );
-}
+const FIT_OPTIONS: { value: 'cover' | 'contain'; label: string }[] = [
+    { value: 'cover', label: 'Cover' },
+    { value: 'contain', label: 'Contain' },
+];
 
 function ImageBody({
     value,
@@ -270,42 +211,36 @@ function ImageBody({
 }) {
     if (!value.mediaName) {
         return (
-            <Button variant="outline" size="sm" className="w-full" onClick={onPick}>
-                <ImageIcon className="h-3.5 w-3.5 mr-1.5" />
+            <Button variant="outline" size="sm" className="h-7 w-full text-xs" onClick={onPick}>
+                <ImageIcon className="h-3.5 w-3.5" />
                 Choose image
             </Button>
         );
     }
     return (
-        <div className="space-y-2">
+        <>
             {previewUrl && (
                 <div className="rounded border overflow-hidden">
                     <img src={previewUrl} alt="" className="w-full h-20 object-cover" />
                 </div>
             )}
-            <ToggleGroup
-                type="single"
-                variant="outline"
-                size="sm"
-                value={value.fit}
-                onValueChange={(v) => v && onChange({ ...value, fit: v as 'cover' | 'contain' })}
-                className="w-full"
-            >
-                <ToggleGroupItem value="cover" className="flex-1 text-xs">
-                    Cover
-                </ToggleGroupItem>
-                <ToggleGroupItem value="contain" className="flex-1 text-xs">
-                    Contain
-                </ToggleGroupItem>
-            </ToggleGroup>
+            <PropertyRow label="Fit">
+                <MergedSelect value={value.fit} onChange={(fit) => onChange({ ...value, fit })} options={FIT_OPTIONS} />
+            </PropertyRow>
             <div className="flex gap-1">
-                <Button variant="outline" size="sm" className="flex-1" onClick={onPick}>
+                <Button variant="outline" size="sm" className="h-7 flex-1 text-xs" onClick={onPick}>
                     Replace
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => onChange(null)} aria-label="Remove image">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 w-7"
+                    onClick={() => onChange(null)}
+                    aria-label="Remove image"
+                >
                     <Trash2 className="h-3.5 w-3.5" />
                 </Button>
             </div>
-        </div>
+        </>
     );
 }

@@ -111,13 +111,12 @@ demo settings (`guests.openSignup: false`, `defaultMountMaxSizeMB: 50`, `maxUplo
   (`createTeam` + `addTeamMember` per persona) with an explicit shared mount.
 - **Docs through the shipped importer.** Docs are HTML → `.docx` (`@turbodocx/html-to-docx`) →
   `convertToDocument(..., 'eigendoc')`. The demo dogfoods import on every reset; no bespoke Y.Doc builder.
-- **Slides, sheets, and stickies from fixture containers.** `demo/fixtures/{sponsor-pitch.eigenslides,
-  festival-budget.eigensheets, festival-kanban.eigenstickies}` (`data.db` + `comments.db`, plus a
-  `media/` folder for any embedded images) are byte-copied in via `placeFixture` — legal because
-  eigen-doc containers reference their internals (including media) by name, not pathId.
-  - The **slides deck and budget sheet are hand-maintained**: edit them in a live demo, then copy the
-    container's `data.db`/`comments.db`/`media/*` back into `fixtures/` (the content lives in `data.db`,
-    not in `content.ts`). `author-fixtures.ts` must NOT regenerate them.
+- **Sheets and stickies from fixture containers.** `demo/fixtures/{festival-budget.eigensheets,
+  festival-kanban.eigenstickies}` (`data.db` + `comments.db`) are byte-copied in via `placeFixture` —
+  legal because eigen-doc containers reference their internals (including media) by name, not pathId.
+  - The **budget sheet is hand-maintained**: edit it in a live demo, then copy the container's
+    `data.db`/`comments.db` back into `fixtures/` (the content lives in `data.db`, not in `content.ts`).
+    `author-fixtures.ts` must NOT regenerate it.
   - The **stickies board is content-driven**: `author-fixtures.ts` regenerates it from `KANBAN` when the
     board's title/description/column/creator content changes (the exact Y.Doc shapes the editors read
     live in `demo/fixtures-build.ts` `buildStickiesDoc`, which `author-fixtures.ts` calls). Its `creator`
@@ -125,6 +124,7 @@ demo settings (`guests.openSignup: false`, `defaultMountMaxSizeMB: 50`, `maxUplo
     `chatText`/`chatReplies` become a live chat
     (real personas, same as doc comments) with `color`/`chatName` patched onto the placed board's `tasks`
     Y.Map — so that part needs no fixture regen.
+- **Sponsor deck is content-driven, no fixture.** `content.ts` `SPONSOR_DECK` is a typed slide spec (per slide: a background, text boxes of TipTap HTML, shapes, arrows, images); `demo/deck-build.ts` `buildDeckDoc` writes it straight into a freshly created `sponsor pitch.eigenslides` container's Y.Doc (authored by Mees in `marketing/`), the way the site plan is. A deck is a canvas of frames — one frame per slide, pinned 1920x1080, elements positioned relative to their frame — so it shares the site plan's model and its builder shape: full editor-parity field sets through `baseDefaultsFor` + `ELEMENT_KINDS[...].defaults(SLIDES_STYLE_DEFAULTS)`, deterministic ids, fractional indices and seeds, arrows bound to shapes by key and settled through the lib's own `followBindings`. The referenced images upload into the container's `media/` subfolder via `createFileFromData`, matching each image element's `mediaName`. The deck carries no comment threads yet.
 - **Site plan is content-driven, no fixture.** `content.ts` `SITE_PLAN` is a typed spec (shapes, arrows, lines, images, texts); `demo/vector-build.ts` `buildVectorDoc` writes it straight into a freshly created `site plan.eigenvector` container's Y.Doc (authored by Saar in `production/`), the way the stickies board is authored but without any byte-copied fixture to migrate. Text is sized from the `demo/excalifont-metrics.ts` advance table (the seeder has no DOM to `measureText` with); ids and roughjs seeds are deterministic so every reseed renders identical jitter. The two referenced images upload into the container's `media/` subfolder via `createFileFromData`, matching each image element's `mediaName`. Arrows bind to shapes by key (`{ shape, side, along? }`) and settle through the lib's own `followBindings`, so they read back exactly as an editor would store them; shapes take an `angle`, lines a `freedraw` flag. The spec is authored top-left-positive; the builder shifts the finished drawing so its bounding box is centred on the scene origin, where the editor opens. To eyeball a layout change without a browser, build a fresh Y.Doc with `buildVectorDoc`, run it through `readVectorFromDoc` + `sceneToSvg` (the same renderer the app and previews use), and open the SVG.
 - **Site photos in `images/`.** `demo/fixtures/images/*.webp` (five of the maintainer's own
   coastal/festival photos, two Unsplash) are uploaded into an `images/` team-drive folder through
@@ -227,11 +227,12 @@ See the **Demo instance** section of `docker/SETUP-GUIDE.md` for the operator wa
 | `apps/api/src/lib/mail/mail-domain.ts` | `messageSend` compose-send guard (403 + toast in demo) |
 | `apps/api/src/scripts/seed-demo.ts` | Offline in-process seeder (mechanics) |
 | `apps/api/src/scripts/demo/content.ts` | Tuimel Festival content (data only) |
-| `apps/api/src/scripts/demo/author-fixtures.ts` | Regenerates the stickies board fixture (slides/sheets are hand-maintained) |
+| `apps/api/src/scripts/demo/author-fixtures.ts` | Regenerates the stickies board fixture (the budget sheet is hand-maintained) |
 | `apps/api/src/scripts/demo/fixtures-build.ts` | `buildStickiesDoc` — the Y.Doc shapes `author-fixtures.ts` writes |
 | `apps/api/src/scripts/demo/vector-build.ts` | `buildVectorDoc` — writes the `SITE_PLAN` spec into the site plan's Y.Doc at seed time |
+| `apps/api/src/scripts/demo/deck-build.ts` | `buildDeckDoc` — writes the `SPONSOR_DECK` slide spec into the deck's Y.Doc at seed time |
 | `apps/api/src/scripts/demo/excalifont-metrics.ts` | Generated Excalifont advance/kerning table the builder sizes text with |
-| `apps/api/src/scripts/demo/fixtures/` | Byte-copied `.eigenslides` / `.eigensheets` / `.eigenstickies` containers + `images/` site photos + `branding/` logo + `avatars/` portraits (`images/` and `avatars/` carry their own `CREDITS.md`) |
+| `apps/api/src/scripts/demo/fixtures/` | Byte-copied `.eigensheets` / `.eigenstickies` containers + `images/` site photos + `branding/` logo + `avatars/` portraits (`images/` and `avatars/` carry their own `CREDITS.md`) |
 | `scripts/demo-reset.sh` | Hourly wipe + reseed (hard `EIGEN_DEMO=1` gate) |
 | `scripts/snapshot.sh` / `scripts/restore.sh` | General offline backup/restore |
 | `scripts/systemd/eigen-demo-reset.{service,timer}` | Hourly timer units |

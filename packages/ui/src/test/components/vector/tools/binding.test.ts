@@ -6,16 +6,22 @@ import {
     boundEndpoint,
     DEFAULT_ARROW_PROPS,
     DEFAULT_ELEMENT_PROPS,
+    DEFAULT_SKETCH_PROPS,
+    ELEMENT_KINDS,
     parseBinding,
     projectFixedPointOntoDiagonal,
     rotatePoint,
     serializeBinding,
-    shapeSideMidpoints,
+    shapeAnchorPoints,
+    solidFill,
+    VECTOR_STYLE_DEFAULTS,
     type VectorArrowElement,
     type VectorElement,
+    type VectorImageElement,
+    type VectorRichTextElement,
     type VectorShapeElement,
 } from '@workspace/lib/vector';
-import { bindArrow, bindFocusPoint } from '../../../../components/vector/tools/binding';
+import { bindArrow, bindFocusPoint, bindingCandidate } from '../../../../components/vector/tools/binding';
 
 function dist(a: { x: number; y: number }, b: { x: number; y: number }): number {
     return Math.hypot(a.x - b.x, a.y - b.y);
@@ -27,10 +33,11 @@ function dist(a: { x: number; y: number }, b: { x: number; y: number }): number 
 
 const rect = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id'>): VectorShapeElement => ({
     ...DEFAULT_ELEMENT_PROPS,
+    ...DEFAULT_SKETCH_PROPS,
     type: 'rectangle',
     // A filled shape binds anywhere inside (a transparent one binds only in the outline band), so a
     // dropped-inside endpoint reaches it.
-    backgroundColor: '#dddddd',
+    fill: solidFill('#dddddd'),
     x: 0,
     y: 0,
     width: 200,
@@ -38,12 +45,13 @@ const rect = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id'>
     angle: 0,
     seed: 1,
     index: 'a0',
-    roundness: 'sharp',
+    corners: 'straight',
     ...over,
 });
 
 const arrow = (over: Partial<VectorArrowElement> & { points: string }): VectorArrowElement => ({
     ...DEFAULT_ELEMENT_PROPS,
+    ...DEFAULT_SKETCH_PROPS,
     ...DEFAULT_ARROW_PROPS,
     id: 'ar',
     type: 'arrow',
@@ -125,7 +133,7 @@ describe('bindArrow — outside side-midpoint drop snaps the anchor onto the dot
         for (const angle of [0, 30]) {
             test(`${end} end, ${angle}° rect: anchor rests on the right-edge midpoint`, () => {
                 const shape = rect({ id: 'shape', angle });
-                const rightMid = shapeSideMidpoints(shape)[0]; // right, bottom, left, top order
+                const rightMid = shapeAnchorPoints(shape)[0]; // right, bottom, left, top order
                 // 5px outside the right edge (local (205,50)) — outside the fill, within the snap band.
                 const drop = rotatePoint({ x: 205, y: 50 }, { x: 100, y: 50 }, angle);
                 // The free end sits far along the right edge's outward normal, so the chord crosses the right
@@ -230,5 +238,56 @@ describe('bindFocusPoint — focus-dot drag stores the raw aim', () => {
         expect(bound.points).not.toBe(el.points);
         // The anchor the arrow now aims at is the new ratio mapped onto the shape.
         expect(anchorToScene(shape, aim)).toEqual({ x: 80, y: 70 });
+    });
+});
+
+// Rich text and images dock like any other closed box (they carry the registry's `bindable` capability),
+// so the candidate search has to find them under a dragged endpoint the way it finds a rectangle.
+describe('bindingCandidate / bindArrow — the DOM boxes are targets too', () => {
+    const BOX = { x: 0, y: 0, width: 200, height: 100, angle: 0, index: 'a0' };
+
+    const textBox = (
+        over: Partial<VectorRichTextElement> & Pick<VectorRichTextElement, 'id'>,
+    ): VectorRichTextElement => ({
+        ...DEFAULT_ELEMENT_PROPS,
+        ...ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS),
+        ...BOX,
+        type: 'richtext',
+        fill: solidFill('#dddddd'),
+        ...over,
+    });
+
+    const picture = (over: Partial<VectorImageElement> & Pick<VectorImageElement, 'id'>): VectorImageElement => ({
+        ...DEFAULT_ELEMENT_PROPS,
+        ...ELEMENT_KINDS.image.defaults(VECTOR_STYLE_DEFAULTS),
+        ...BOX,
+        type: 'image',
+        ...over,
+    });
+
+    const dropping = (target: VectorElement) => {
+        const el = arrow({ points: '[[0,0],[60,30]]', x: 0, y: 0, width: 60, height: 30 });
+        return { el, ordered: [target, el] };
+    };
+
+    test('a dragged endpoint over a rich text box finds it', () => {
+        const box = textBox({ id: 'txt' });
+        const { el, ordered } = dropping(box);
+        expect(bindingCandidate(ordered, { x: 60, y: 30 }, 1, false)?.id).toBe('txt');
+        const bound = bindArrow(el, { start: false, end: true }, ordered, 1, false);
+        const stored = parseBinding(bound.endBinding);
+        expect(stored?.elementId).toBe('txt');
+        expect(stored?.fixedPoint).toEqual(bindingAnchor(box, { x: 60, y: 30 }));
+    });
+
+    test('an image has no Fill to read, and still binds anywhere inside its pixels', () => {
+        const { ordered } = dropping(picture({ id: 'img' }));
+        expect(bindingCandidate(ordered, { x: 60, y: 30 }, 1, false)?.id).toBe('img');
+    });
+
+    test('a see-through text box binds only in the band around its outline, like a transparent shape', () => {
+        const { ordered } = dropping(textBox({ id: 'txt', fill: solidFill('transparent') }));
+        expect(bindingCandidate(ordered, { x: 60, y: 30 }, 1, false)).toBeNull();
+        expect(bindingCandidate(ordered, { x: 60, y: 2 }, 1, false)?.id).toBe('txt');
     });
 });

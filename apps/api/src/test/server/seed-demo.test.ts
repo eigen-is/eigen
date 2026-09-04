@@ -7,13 +7,19 @@ import type { JSONContent } from '@tiptap/core';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
-import { orderByFractionalIndex, parseBinding, readVectorFromDoc, sceneBounds } from '@workspace/lib/vector';
+import {
+    elementsInFrame,
+    orderByFractionalIndex,
+    parseBackgroundFill,
+    parseBinding,
+    readVectorFromDoc,
+    sceneBounds,
+} from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import { loadYjsState } from '../../lib/collab/yjs-loader';
 import { openLocalDatabase } from '../../lib/core';
 import { readSheetsFromDoc } from '../../lib/document/sheets';
-import { readDeckFromDoc } from '../../lib/document/slides';
 import {
     BRANDING,
     BUDGET,
@@ -214,8 +220,8 @@ describe('seed-demo', () => {
             expect(sheets.length).toBeGreaterThanOrEqual(1);
             expect(sheets[0].celldata?.length ?? 0).toBeGreaterThan(0);
 
-            // Sponsor deck: its embedded image (media/logo.svg) landed as a real blob, so the
-            // byte-copied deck stays whole (the deck references it by name).
+            // Sponsor deck: built from code out of SPONSOR_DECK (no fixture bytes; see demo/deck-build.ts).
+            // Its images are uploaded into the container's media/ folder, which the deck references by name.
             const deck = query<{ id: string }>(
                 metadataDb,
                 `SELECT id FROM paths WHERE name = '${SPONSOR_DECK.name}.eigenslides' AND trashedAt IS NULL`,
@@ -230,39 +236,59 @@ describe('seed-demo', () => {
                 metadataDb,
                 `SELECT name, file FROM paths WHERE parentId = '${deckMedia[0].id}' AND trashedAt IS NULL`,
             );
-            expect(deckImages.length).toBeGreaterThanOrEqual(1);
+            const deckImageSpecs = SPONSOR_DECK.slides.flatMap((slide) => slide.images ?? []);
+            expect(deckImages.length).toBe(deckImageSpecs.length);
             for (const img of deckImages) {
                 const blob = join(mountsDir, mountId, 'data', img.file);
                 expect(existsSync(blob)).toBe(true);
                 expect(statSync(blob).size).toBeGreaterThan(0);
             }
 
-            // ...and the deck itself reads back through the shipped reader with canonical geometry on
-            // every object. yMapToObject materializes only OBJECT_FIELDS, so a fixture still carrying
-            // pre-rename keys (w/h/rotation) yields undefined width/height/angle rather than throwing —
-            // it would silently render collapsed in the demo. Assert the numbers, not just the read.
+            // ...and the deck reads back through the shipped canvas reader: one frame per slide, every
+            // element homed to a frame that exists (a dangling frameId re-homes on read and would
+            // silently move a slide's content) and canonical geometry on every one of them.
             const deckDoc = await loadCollabDoc(
                 findContainerDataDb(metadataDb, mountsDir, mountId, `${SPONSOR_DECK.name}.eigenslides`),
             );
-            const deckData = readDeckFromDoc(deckDoc);
-            expect(deckData.slideOrder.length).toBeGreaterThanOrEqual(1);
-            const deckObjects = Object.values(deckData.objects);
-            expect(deckObjects.length).toBeGreaterThanOrEqual(1);
-            for (const obj of deckObjects) {
+            const deckScene = readVectorFromDoc(deckDoc);
+            expect(deckScene.frames.length).toBe(SPONSOR_DECK.slides.length);
+            expect(deckScene.elements.length).toBeGreaterThanOrEqual(20);
+            const deckFrameIds = new Set(deckScene.frames.map((frame) => frame.id));
+            for (const element of deckScene.elements) {
                 for (const field of ['x', 'y', 'width', 'height', 'angle'] as const) {
-                    expect(Number.isFinite(obj[field])).toBe(true);
+                    expect(Number.isFinite(element[field])).toBe(true);
                 }
-                expect(obj.width).toBeGreaterThan(0);
-                expect(obj.height).toBeGreaterThan(0);
+                // A horizontal arrow's box is zero-height by construction, so it is the larger side
+                // that must be real — a collapsed element would render as nothing.
+                expect(Math.max(element.width, element.height)).toBeGreaterThan(0);
+                expect(deckFrameIds.has(element.frameId)).toBe(true);
             }
-            // Every slide's objectIds resolve, and each image object points at a media file that landed.
+
+            // Slide order is the authored order, and the title slide carries the gradient background.
+            const deckFrames = orderByFractionalIndex(deckScene.frames);
+            expect(deckFrames.map((frame) => frame.name)).toEqual(SPONSOR_DECK.slides.map((slide) => slide.name));
+            expect(parseBackgroundFill(deckFrames[0].background)?.type).toBe('gradient');
+            for (const frame of deckFrames) expect(parseBackgroundFill(frame.background)).not.toBeNull();
+
+            // Every slide holds text, every text box holds a body, and each image names a media file
+            // that landed. The arrow's binding survived the read, so its target shape is present.
             const deckMediaNames = new Set(deckImages.map((img) => img.name));
-            for (const slide of Object.values(deckData.slides)) {
-                for (const objId of slide.objectIds) expect(deckData.objects[objId]).toBeDefined();
+            for (const frame of deckFrames) {
+                const onFrame = elementsInFrame(deckScene.elements, frame.id);
+                expect(onFrame.filter((el) => el.type === 'richtext').length).toBeGreaterThanOrEqual(1);
             }
-            for (const obj of deckObjects) {
-                if (obj.type === 'image') expect(deckMediaNames.has(obj.mediaName)).toBe(true);
+            for (const element of deckScene.elements) {
+                if (element.type === 'richtext') expect(element.html.length).toBeGreaterThan(0);
+                if (element.type === 'image') expect(deckMediaNames.has(element.mediaName)).toBe(true);
             }
+            expect(deckScene.elements.filter((el) => el.type === 'image').length).toBe(deckImageSpecs.length);
+            const deckElementIds = new Set(deckScene.elements.map((el) => el.id));
+            const deckArrows = deckScene.elements.filter((el) => {
+                if (el.type !== 'arrow') return false;
+                const binding = parseBinding(el.endBinding);
+                return binding !== null && deckElementIds.has(binding.elementId);
+            });
+            expect(deckArrows.length).toBeGreaterThanOrEqual(1);
 
             // Team calendar: seeded events exist on the enabled team calendar.
             const calendarDb = join(root, 'team', teamId!, 'eigen.calendar', 'calendar.db');
@@ -329,7 +355,7 @@ describe('seed-demo', () => {
 
             // Site plan: a vector drawing built straight into the container's Y.Doc from SITE_PLAN
             // (no fixture). It reads back through the shipped reader with surviving shape bindings,
-            // elbow arrows, measured text, and every image pointing at a media file that landed.
+            // elbow arrows, measured rich text, and every image pointing at a media file that landed.
             const vectorName = `${SITE_PLAN.name}.eigenvector`;
             const vectorDataDb = findContainerDataDb(metadataDb, mountsDir, mountId, vectorName);
             const scene = readVectorFromDoc(await loadCollabDoc(vectorDataDb));
@@ -355,9 +381,17 @@ describe('seed-demo', () => {
             expect(pinned.some((a) => a.type === 'reference' && a.name === 'crew roster.eigendoc')).toBe(true);
 
             // The editor opens on the scene origin, so the drawing is stored centred on it.
-            const bounds = sceneBounds(scene.elements, new Map(scene.elements.map((el) => [el.id, el])));
+            const byId = new Map(scene.elements.map((el) => [el.id, el]));
+            const bounds = sceneBounds(scene.elements, byId);
             expect(bounds.minX + bounds.maxX).toBeCloseTo(0, 6);
             expect(bounds.minY + bounds.maxY).toBeCloseTo(0, 6);
+
+            // The crowd-flow arrow is the drawing's axis: it runs up the gate's centre to the main
+            // stage's centre, and the west margin is sized so that axis lands on the scene origin.
+            const crowdFlow = scene.elements.filter((el) => el.type === 'arrow' && el.text === 'crowd flow');
+            expect(crowdFlow.length).toBe(1);
+            const crowdBounds = sceneBounds(crowdFlow, byId);
+            expect(crowdBounds.minX + crowdBounds.maxX).toBeCloseTo(0, 6);
 
             // Z-order: the fence outline sits under everything (a click inside it lands on what it
             // encloses), and the wind-cover ring sits just under the stage it rings.
@@ -374,7 +408,11 @@ describe('seed-demo', () => {
             });
             expect(boundArrows.length).toBeGreaterThanOrEqual(6);
             expect(scene.elements.filter((el) => el.type === 'arrow' && el.elbow).length).toBeGreaterThanOrEqual(3);
-            for (const text of scene.elements.filter((el) => el.type === 'text')) {
+            // Every label is a measured rich-text box. The count floor keeps the size loop honest —
+            // a builder that stopped emitting text would otherwise iterate nothing and pass.
+            const richText = scene.elements.filter((el) => el.type === 'richtext');
+            expect(richText.length).toBeGreaterThanOrEqual(40);
+            for (const text of richText) {
                 expect(text.width).toBeGreaterThan(0);
                 expect(text.height).toBeGreaterThan(0);
             }

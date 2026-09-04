@@ -1,9 +1,9 @@
 import { createHash, createHmac } from 'node:crypto';
 import { S3_ABORT_INCOMPLETE_UPLOAD_DAYS, S3_LIFECYCLE_RULE_ID } from '@workspace/lib/constants/s3';
+import { escapeXml } from '@workspace/lib/html';
 import type { S3CheckResult, S3HardenResult, S3LifecycleState, S3VersioningState } from '@workspace/lib/types/settings';
 import { type BunFile, S3Client, type S3File } from 'bun';
 import { ApiError } from '../core';
-import { escapeXml } from '../shared/xml';
 import type { S3Config, StorageBackend } from './types';
 
 export async function checkS3Connection(config: S3Config): Promise<S3CheckResult> {

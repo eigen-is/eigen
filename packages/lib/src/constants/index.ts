@@ -1,5 +1,6 @@
 export * from './collab';
 export * from './colors';
+export * from './comment-indicator';
 export * from './contact';
 export * from './fonts';
 export * from './mail';

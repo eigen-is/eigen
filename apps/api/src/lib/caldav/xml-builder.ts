@@ -1,7 +1,7 @@
+import { escapeXml } from '@workspace/lib/html';
 import type { CalendarItem } from '@workspace/lib/types/calendar';
 import type { PropMap } from '../dav/propfind';
 import { ownershipEntries } from '../dav/xml';
-import { escapeXml } from '../shared/xml';
 
 export { PROPFIND_BODY_MAX_BYTES, parsePropfind, selectProps, wantsBrief } from '../dav/propfind';
 export {

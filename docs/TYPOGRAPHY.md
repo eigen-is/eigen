@@ -2,7 +2,7 @@
 
 > **TLDR**: Four self-hosted variable font families (Inter, Source Serif 4, JetBrains Mono, Excalifont) served as
 > Vite assets via `@font-face` declarations. A shared `EIGEN_FONTS` registry and `FontPicker` component provide
-> font selection in docs, slides, and sheets. No external CDNs.
+> font selection in docs, the canvas apps, and sheets. No external CDNs.
 
 ## Font Families
 
@@ -50,7 +50,7 @@ Each item previews in its own typeface. Props: `value` (font name), `onChange` (
 
 Used in:
 - **Docs** (`apps/docs/src/components/docs/editor-toolbar.tsx`) -- via Tiptap `FontFamily` extension
-- **Slides** (`apps/slides/src/components/slides/slide-properties-panel.tsx`) -- via `fontFamily` on `TextObject`
+- **Canvas (slides + vector)** (`packages/ui/src/components/vector/canvas-properties-panel.tsx` and the rich-text kind's own section, `kinds/richtext.tsx`) -- via `fontFamily` on the element
 - **Sheets** (`packages/sheet/src/components/MenuBar/format-toolbar.tsx`) -- the same `FontPicker`, straight
   in the engine's toolbar. The engine's own font lists are derived, not hand-written:
   `packages/sheet/src/state/modules/fonts.ts` builds `FONT_ARRAY` and `FONT_INDEX_BY_NAME` from `EIGEN_FONTS`

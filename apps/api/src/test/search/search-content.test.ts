@@ -102,23 +102,21 @@ describe('Drive content-index', () => {
     test('SLIDES body is searchable', async () => {
         const slidesPath = await home.drive.create(mountId, rootId, 'rt-slides', 'slides');
         const collab = await home.drive.getCollabDocument(mountId, slidesPath.id);
+        // A deck is a canvas: one frame, one rich-text element homed to it.
         collab.doc.transact(() => {
-            const objects = collab.doc.getMap('objects');
-            const slides = collab.doc.getMap('slides');
-            const order = collab.doc.getArray('slideOrder');
-            const o = new Y.Map();
-            o.set('id', 'o1');
-            o.set('slideId', 's1');
-            o.set('type', 'text');
-            o.set('text', 'flibberslide deck');
-            objects.set('o1', o);
-            const s = new Y.Map();
-            s.set('id', 's1');
-            const ids = new Y.Array();
-            ids.push(['o1']);
-            s.set('objectIds', ids);
-            slides.set('s1', s);
-            order.push(['s1']);
+            const frame = new Y.Map();
+            frame.set('id', 'f1');
+            frame.set('index', 'a0');
+            frame.set('name', 'Slide 1');
+            frame.set('background', '');
+            collab.doc.getMap('frames').set('f1', frame);
+            const el = new Y.Map();
+            el.set('id', 'el1');
+            el.set('type', 'richtext');
+            el.set('index', 'a0');
+            el.set('frameId', 'f1');
+            el.set('html', '<p>flibberslide deck</p>');
+            collab.doc.getMap('elements').set('el1', el);
         });
         await home.drive.flushContainerDb(mountId, slidesPath.id);
         await home.drive.flushContentReindex();

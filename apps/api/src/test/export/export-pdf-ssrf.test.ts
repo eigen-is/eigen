@@ -13,6 +13,41 @@ import { htmlToPdf, isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 const DATA_PNG =
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
+// The other half of a sanitizer contract: what it must NOT eat. Every rule above is a strip, and a
+// strip that over-reaches silently exports a document missing its formatting, its links or its
+// pictures — a failure no hostile-input test can see.
+describe('export sanitize — legitimate markup survives', () => {
+    test('inline marks, headings, lists and quotes come through unchanged', () => {
+        const html =
+            '<h2>Title</h2><p><strong>bold</strong> <em>italic</em> <s>struck</s> <code>code</code></p>' +
+            '<ul><li>one</li><li>two</li></ul><ol><li>first</li></ol><blockquote><p>quoted</p></blockquote>' +
+            '<table><tbody><tr><th>h</th><td>c</td></tr></tbody></table>';
+        expect(sanitizeExportHtml(html)).toBe(html);
+    });
+
+    test('a hyperlink keeps its href, and its target when the caller allows the attribute', () => {
+        const out = sanitizeExportHtml('<a href="https://example.com/report" target="_blank">r</a>', {
+            ADD_ATTR: ['target'],
+        });
+        expect(out).toContain('href="https://example.com/report"');
+        expect(out).toContain('target="_blank"');
+    });
+
+    test('a data: image survives as src, in a CSS url() and in a <style> block', () => {
+        const out = sanitizeExportHtml(
+            `<img src="${DATA_PNG}" alt="pixel"><div style="background-image:url(${DATA_PNG})">x</div>` +
+                `<style>.s0{background:url(${DATA_PNG})}</style>`,
+        );
+        expect(out.match(new RegExp(DATA_PNG.replace(/[+/]/g, '\\$&'), 'g'))).toHaveLength(3);
+        expect(out).toContain('alt="pixel"');
+    });
+
+    test('presentational style declarations that fetch nothing are left alone', () => {
+        const style = 'color:#101010;font-weight:bold;text-align:center;line-height:1.2';
+        expect(sanitizeExportHtml(`<p style="${style}">x</p>`)).toContain(style);
+    });
+});
+
 describe('export sanitize — SSRF surface', () => {
     test('an injected remote url() in a style is neutralized', () => {
         const out = sanitizeExportHtml(
@@ -95,6 +130,62 @@ describe('export sanitize — style elements', () => {
         const out = sanitizeExportHtml('<div style="background:\\75 rl(http://evil.test/c.png)">x</div>');
         expect(out).not.toMatch(/\burl\(\s*['"]?https?:/i);
         expect(out).not.toContain('\\');
+    });
+});
+
+// `src` is not an <img>-only attribute, and it is not the only attribute that fetches: srcset
+// candidate lists, <video poster> and the legacy `background` all resolve with no click. DOMPurify
+// keeps every one of them, so the restriction is on the attribute, not the tag.
+describe('export sanitize — media reference attributes', () => {
+    test('a remote srcset on an img is dropped', () => {
+        const out = sanitizeExportHtml('<img srcset="http://evil.test/pixel.png 1x">');
+        expect(out).not.toContain('evil.test');
+    });
+
+    test('a remote src and poster on a video are dropped', () => {
+        const out = sanitizeExportHtml('<video src="http://evil.test/v.mp4" poster="http://evil.test/p.png"></video>');
+        expect(out).not.toContain('evil.test');
+    });
+
+    test('a remote src on an audio element is dropped', () => {
+        const out = sanitizeExportHtml('<audio src="http://evil.test/a.mp3"></audio>');
+        expect(out).not.toContain('evil.test');
+    });
+
+    test('a remote srcset on a picture source is dropped', () => {
+        const out = sanitizeExportHtml('<picture><source srcset="http://evil.test/s.png"><img alt=""></picture>');
+        expect(out).not.toContain('evil.test');
+    });
+
+    test('a remote src on an image input is dropped', () => {
+        const out = sanitizeExportHtml('<input type="image" src="http://evil.test/i.png">');
+        expect(out).not.toContain('evil.test');
+    });
+
+    test('a remote background attribute is dropped', () => {
+        const out = sanitizeExportHtml('<table background="http://evil.test/bg.png"><tr><td>x</td></tr></table>');
+        expect(out).not.toContain('evil.test');
+    });
+});
+
+// Preview bodies embed the /file/<id>/preview media URLs the main thread resolved — http(s), not
+// data:. Those exact URLs pass; nothing else off-origin does, not even another path on the API host.
+describe('export sanitize — allowed refs', () => {
+    const MEDIA_URL = 'http://localhost:8000/drive/o/m/file/f/preview';
+    const allowedRefs = new Set([MEDIA_URL]);
+
+    test('an allowed media URL survives as src and in a CSS url()', () => {
+        const out = sanitizeExportHtml(
+            `<img src="${MEDIA_URL}"><div style="background-image:url('${MEDIA_URL}')">x</div>`,
+            { allowedRefs },
+        );
+        expect(out).toContain(`src="${MEDIA_URL}"`);
+        expect(out).toContain(`url('${MEDIA_URL}')`);
+    });
+
+    test('another URL on the same host is still dropped', () => {
+        const out = sanitizeExportHtml('<img src="http://localhost:8000/admin/secret">', { allowedRefs });
+        expect(out).not.toContain('/admin/secret');
     });
 });
 

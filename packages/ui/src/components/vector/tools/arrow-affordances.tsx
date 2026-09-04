@@ -1,5 +1,5 @@
 // Drag-time attach affordances for arrows, drawn in the scene group next to the bind-target outline
-// (the snap dots and the straight-arrow focus point). Pulled out of vector-canvas.tsx and use-drawing-tools
+// (the snap dots and the straight-arrow focus point). Pulled out of canvas-editor.tsx and use-drawing-tools
 // (the canvas only dispatches; this unit owns its own render) so neither file grows. All geometry is SCENE
 // space — the group scales by zoom, so screen-constant sizes divide by zoom and stroke widths ride
 // `vectorEffect="non-scaling-stroke"`, exactly as SnapGuides does. Colours are ours (the selection-handle
@@ -11,18 +11,21 @@ import {
     bindingAnchor,
     bindingDistance,
     boundEndpoint,
+    distance,
     focusSnapPoint,
+    isBindable,
     type Point,
     parseBinding,
     parsePoints,
-    shapeSideMidpoints,
+    shapeAnchorPoints,
     type VectorArrowElement,
+    type VectorBindableElement,
     type VectorElement,
-    type VectorShapeElement,
 } from '@workspace/lib/vector';
 import type { MutableRefObject } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { pointInsideShape } from './binding';
+import { useHandleDrag } from './use-handle-drag';
 
 // Screen radius of a side-midpoint snap dot (Excalidraw's 4 / zoom).
 const SNAP_DOT_SCREEN_R = 4;
@@ -38,16 +41,8 @@ const FOCUS_GRAB_MIN_SCREEN_GAP = 22;
 // Screen radius of the solid dock dot at a bound straight endpoint.
 const FOCUS_DOCK_SCREEN_R = 4;
 
-function dist(a: Point, b: Point): number {
-    return Math.hypot(a.x - b.x, a.y - b.y);
-}
-
 function clampUnit(n: number): number {
     return Math.min(1, Math.max(0, n));
-}
-
-function isBindableShape(el: VectorElement | undefined): el is VectorShapeElement {
-    return el !== undefined && (el.type === 'rectangle' || el.type === 'diamond' || el.type === 'ellipse');
 }
 
 // The side-midpoint snap dots over a bind candidate: all four rendered, the one nearest the pointer
@@ -60,7 +55,7 @@ export function SnapDots({
     zoom,
     elbow,
 }: {
-    shape: VectorShapeElement;
+    shape: VectorBindableElement;
     pointer: Point;
     zoom: number;
     elbow: boolean;
@@ -68,14 +63,14 @@ export function SnapDots({
     // Excalidraw draws nothing when the cursor is buried inside a NON-elbow bindable (interactiveScene's
     // `!cursorIsInsideBindable || isElbow` gate); an elbow always draws.
     if (!elbow && pointInsideShape(shape, pointer)) return null;
-    const mids = shapeSideMidpoints(shape);
+    const mids = shapeAnchorPoints(shape);
     const r = SNAP_DOT_SCREEN_R / zoom;
     const highlightWithin = bindingDistance(zoom) + shape.strokeWidth / 2;
     // The dot nearest the pointer is the one the dock will snap to.
     let nearest = -1;
     let nearestDist = Number.POSITIVE_INFINITY;
     for (let i = 0; i < mids.length; i++) {
-        const d = dist(mids[i], pointer);
+        const d = distance(mids[i], pointer);
         if (d < nearestDist) {
             nearestDist = d;
             nearest = i;
@@ -107,7 +102,7 @@ export function SnapDots({
 // One bound end worth showing a focus affordance for: the anchor the arrow aims at (inside the shape) and
 // the endpoint it docks to (on the outline). `anchor` is read from the LIVE arrow (the preview element while
 // a focus drag re-aims it), so the dashed line + dot track the drag.
-type FocusEnd = { end: 'start' | 'end'; shape: VectorShapeElement; anchor: Point; endpoint: Point };
+type FocusEnd = { end: 'start' | 'end'; shape: VectorBindableElement; anchor: Point; endpoint: Point };
 
 // The bound ends of a straight 2-point arrow that should show a focus point, skipping `hideEnd` (the end
 // being endpoint-dragged) and any end whose anchor has all but collapsed onto its endpoint
@@ -127,10 +122,10 @@ function focusEnds(
         const binding = parseBinding(end === 'start' ? arrow.startBinding : arrow.endBinding);
         if (!binding) continue;
         const shape = byId.get(binding.elementId);
-        if (!isBindableShape(shape)) continue;
+        if (!shape || !isBindable(shape)) continue;
         const anchor = anchorToScene(shape, binding.fixedPoint);
         const endpoint = boundEndpoint(arrow, end, shape);
-        if (dist(anchor, endpoint) * zoom < minScreenGap) continue;
+        if (distance(anchor, endpoint) * zoom < minScreenGap) continue;
         out.push({ end, shape, anchor, endpoint });
     }
     return out;
@@ -226,65 +221,39 @@ export function FocusPointHandles({
     // The end being dragged and its live anchor position, so the grabbed dot follows the cursor without
     // waiting on the parent's preview round-trip (mirrors LinePointHandles' `drag.local`).
     const [drag, setDrag] = useState<{ end: 'start' | 'end'; anchor: Point } | null>(null);
-    const abortRef = useRef<AbortController | null>(null);
-    useEffect(() => () => abortRef.current?.abort(), []);
+    const startHandleDrag = useHandleDrag(frozenRef);
 
     // Grab handles claim the pointer only past the wider gap, so the endpoint wins the 15-22px overlap zone.
     const ends = focusEnds(arrow, byId, zoom, hideEnd, FOCUS_GRAB_MIN_SCREEN_GAP);
     if (ends.length === 0) return null;
 
-    const startDrag = (e: React.PointerEvent, end: 'start' | 'end', shape: VectorShapeElement) => {
-        e.preventDefault();
-        // Claim the gesture before the canvas hit-test so the shape under the dot isn't dragged instead.
-        e.stopPropagation();
-        if (abortRef.current && !abortRef.current.signal.aborted) return;
-        e.currentTarget.setPointerCapture(e.pointerId);
-        frozenRef.current = true;
-        const controller = new AbortController();
-        abortRef.current = controller;
-        const { signal } = controller;
-        const pointerId = e.pointerId;
+    const startDrag = (e: React.PointerEvent, end: 'start' | 'end', shape: VectorBindableElement) => {
         let latest: [number, number] | null = null;
-
-        const update = (clientX: number, clientY: number, suppressed: boolean) => {
-            const scene = clientToScene(clientX, clientY);
-            // Eigen extension: magnet the aim onto the shape's snap points (side midpoints + centre),
-            // unless Ctrl/Cmd suppresses it — consistent with every other bind/snap here. The raw pointer is
-            // still handed up so the host lights the SnapDots (the nearest side-midpoint highlights).
-            const snapped = suppressed ? scene : (focusSnapPoint(shape, scene, zoom) ?? scene);
-            const [rx, ry] = bindingAnchor(shape, snapped);
-            const fixedPoint: [number, number] = [clampUnit(rx), clampUnit(ry)];
-            latest = fixedPoint;
-            setDrag({ end, anchor: anchorToScene(shape, fixedPoint) });
-            onPreview(end, fixedPoint, scene);
-        };
-        const teardown = () => {
-            setDrag(null);
-            frozenRef.current = false;
-            controller.abort();
-        };
-        const onMove = (me: PointerEvent) => {
-            if (me.pointerId !== pointerId) return;
-            update(me.clientX, me.clientY, me.ctrlKey || me.metaKey);
-        };
-        const onUp = (pe: PointerEvent) => {
-            if (pe.pointerId !== pointerId) return;
-            teardown();
-            // A click that never moved leaves `latest` null → commit nothing (no spurious re-bind).
-            if (latest) onCommit(end, latest);
-            else onPreview(end, null);
-        };
-        const onKey = (ke: KeyboardEvent) => {
-            if (ke.key !== 'Escape') return;
-            ke.preventDefault();
-            ke.stopPropagation();
-            teardown();
-            onPreview(end, null);
-        };
-        document.addEventListener('pointermove', onMove, { signal });
-        document.addEventListener('pointerup', onUp, { signal });
-        document.addEventListener('pointercancel', onUp, { signal });
-        document.addEventListener('keydown', onKey, { signal, capture: true });
+        startHandleDrag(e, {
+            move: (me) => {
+                const scene = clientToScene(me.clientX, me.clientY);
+                // Eigen extension: magnet the aim onto the shape's snap points (side midpoints + centre),
+                // unless Ctrl/Cmd suppresses it — consistent with every other bind/snap here. The raw pointer
+                // is still handed up so the host lights the SnapDots (the nearest side-midpoint highlights).
+                const suppressed = me.ctrlKey || me.metaKey;
+                const snapped = suppressed ? scene : (focusSnapPoint(shape, scene, zoom) ?? scene);
+                const [rx, ry] = bindingAnchor(shape, snapped);
+                const fixedPoint: [number, number] = [clampUnit(rx), clampUnit(ry)];
+                latest = fixedPoint;
+                setDrag({ end, anchor: anchorToScene(shape, fixedPoint) });
+                onPreview(end, fixedPoint, scene);
+            },
+            end: () => {
+                setDrag(null);
+                // A click that never moved leaves `latest` null → commit nothing (no spurious re-bind).
+                if (latest) onCommit(end, latest);
+                else onPreview(end, null);
+            },
+            cancel: () => {
+                setDrag(null);
+                onPreview(end, null);
+            },
+        });
     };
 
     const dotStyle = (scene: Point): React.CSSProperties => {

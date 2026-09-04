@@ -15,7 +15,7 @@ import {
 // response, and is terminated by the runner. Operation dispatch stays a closed
 // switch over the request union — nothing from the message can select a module
 // or path. Format-specific modules load via dynamic import so a doc preview never
-// evaluates the sheet engine, and a slides export never loads lowlight.
+// evaluates the sheet engine, and a deck export never loads lowlight.
 
 async function renderPreview(
     request: PreviewTransformJob,
@@ -35,8 +35,8 @@ async function renderPreview(
             return renderEigenslidesPreviewBody(doc, request.mediaUrls);
         }
         case 'eigenvector': {
-            const { renderEigenvectorPreview } = await import('../../preview/eigenvector-render');
-            return renderEigenvectorPreview(doc, request.mediaUrls);
+            const { renderEigenvectorPreviewBody } = await import('../../preview/eigenvector-render');
+            return renderEigenvectorPreviewBody(doc, request.mediaUrls);
         }
     }
 }
@@ -55,7 +55,7 @@ async function renderExport(
             return renderEigendocExport(doc, request.format, request.title, request.media);
         }
         case 'eigenslides': {
-            const { renderEigenslidesExport } = await import('../../export/slides/transform');
+            const { renderEigenslidesExport } = await import('../../export/canvas/transform');
             return renderEigenslidesExport(doc, request.format, request.title, request.media);
         }
         case 'eigenvector': {

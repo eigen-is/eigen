@@ -1,5 +1,11 @@
-import { escapeHtml } from '@workspace/lib/html';
-import { isTransparent, readVectorFromDoc, sceneToSvg, type VectorScene } from '@workspace/lib/vector';
+import {
+    isTransparentColor,
+    readVectorFromDoc,
+    sceneFontFamilies,
+    sceneToSvg,
+    type VectorScene,
+} from '@workspace/lib/vector';
+import { JSDOM } from 'jsdom';
 import type * as Y from 'yjs';
 import { ApiError } from '../../core/errors';
 import { spliceAfterSvgOpenTag, toDataUriMap } from '../../document/media';
@@ -9,8 +15,17 @@ import {
     toTransferableText,
     type VectorExportFormat,
 } from '../../document/transform/protocol';
-import { getFontCSS, getFontFaceCSSForFamilies } from '../fonts';
+import { drawingPage } from '../canvas/render';
+import { canvasHtmlDocument } from '../canvas/transform';
+import { getFontFaceCSSForFamilies } from '../fonts';
 import { sanitizeExportHtml } from '../sanitize';
+
+// A rich-text box renders as an HTML <div> inside <foreignObject>, and DOMPurify drops both by
+// default: foreignObject is not in its SVG allowlist, and HTML nested in SVG survives only under a
+// declared integration point. Allowing the pair keeps the box; its markup still goes through the
+// ordinary HTML pass, so scripts, event handlers and non-data: refs come out exactly as they do in
+// the doc and slides exports.
+const RICH_TEXT_TAGS = { ADD_TAGS: ['foreignObject'], HTML_INTEGRATION_POINTS: { foreignobject: true } };
 
 // A transparent drawing keeps its transparency in the SVG download but exports as white
 // paper for PDF — WeasyPrint has no canvas behind the page.
@@ -29,76 +44,46 @@ export function renderEigenvectorExport(
     const dataUriMap = toDataUriMap(media);
 
     if (format === 'svg') {
-        // A collaborator can put arbitrary strings in the schemaless scene, so the assembled
-        // SVG runs through the shared export sanitizer (the documented SSRF closure) exactly
-        // like slides/sheets — even though the preview surface trusts the serializer.
-        const svg = sanitizeExportHtml(renderSceneSvg(scene, dataUriMap, { inlineFonts: true }));
-        return { data: toTransferableText(svg), warnings: [] };
+        // A collaborator can put arbitrary strings in the schemaless scene — including a rich-text
+        // box's raw HTML — so the assembled SVG runs through the shared sanitizer (the documented
+        // SSRF closure) exactly like slides/sheets and the preview.
+        const svg = sanitizeExportHtml(renderSceneSvg(scene, dataUriMap), RICH_TEXT_TAGS);
+        return { data: toTransferableText(toXmlDocument(svg)), warnings: [] };
     }
 
-    // pdf-html: nothing to print from an empty scene (the SVG has a zero-size viewBox).
-    if (scene.elements.length === 0) throw new ApiError(400, 'The drawing is empty');
-    const paperScene = isTransparent(scene.meta.background)
+    // pdf-html: the drawing as compositor layers on a page sized to the artwork. Rich text prints
+    // because it is an HTML div here — WeasyPrint ignores the foreignObject the svg arm uses.
+    const paperScene = isTransparentColor(scene.meta.background)
         ? { ...scene, meta: { ...scene.meta, background: PDF_PAPER } }
         : scene;
-    // The page is sized off the serializer's own width/height, read before sanitizing (the
-    // sanitizer may reorder attributes). Fonts ride in the wrapping document's <style>
-    // (getFontCSS, whole faces), so the SVG itself carries only the sanitized drawing.
-    const rawSvg = renderSceneSvg(paperScene, dataUriMap, { inlineFonts: false });
-    const { width, height } = svgDimensions(rawSvg);
-    const html = wrapInPdfDocument(title, sanitizeExportHtml(rawSvg), width, height);
+    const page = drawingPage(paperScene, (mediaName) => dataUriMap.get(mediaName) ?? null);
+    // Nothing to print, and nothing to size a page from.
+    if (!page) throw new ApiError(400, 'The drawing is empty');
+    // The shared canvas document sanitizes the assembled body and owns the @page rule, the fonts and
+    // the reset — a deck's pages and a drawing's single page leave through the same wrapper.
+    const html = canvasHtmlDocument({ title, pages: [page], scale: 1, mode: 'pdf' });
     return { data: toTransferableText(html), warnings: [] };
+}
+
+// An .svg file is read by an XML parser, and a rich-text box's HTML is not XML: an unclosed <br>/<img>
+// or a named entity is a fatal parse error that renders the whole drawing as nothing. DOMPurify hands
+// back HTML serialisation, so take its markup through the DOM once more and serialise it as XML. The
+// literal xmlns attributes go first — the serializer writes the namespace declarations itself, and a
+// second one on the same element is a duplicate attribute.
+function toXmlDocument(svg: string): string {
+    const dom = new JSDOM(svg, { contentType: 'text/html' });
+    const root = dom.window.document.querySelector('svg');
+    if (!root) return svg;
+    for (const el of root.querySelectorAll('[xmlns]')) el.removeAttribute('xmlns');
+    return new dom.window.XMLSerializer().serializeToString(root);
 }
 
 // The drawing's own SVG, with the @font-face blocks its text uses injected into a <defs>
 // <style> for the standalone (svg) download. sceneToSvg emits no top-level <defs>, so the
 // style is spliced in right after the opening <svg> tag.
-function renderSceneSvg(scene: VectorScene, dataUriMap: Map<string, string>, opts: { inlineFonts: boolean }): string {
+function renderSceneSvg(scene: VectorScene, dataUriMap: Map<string, string>): string {
     const svg = sceneToSvg(scene, { resolveMedia: (mediaName) => dataUriMap.get(mediaName) ?? null });
-    if (!opts.inlineFonts) return svg;
-
-    const faceCSS = getFontFaceCSSForFamilies(usedFontFamilies(scene));
+    const faceCSS = getFontFaceCSSForFamilies(sceneFontFamilies(scene.elements));
     if (!faceCSS) return svg;
-
     return spliceAfterSvgOpenTag(svg, `<defs><style>${faceCSS}</style></defs>`);
-}
-
-// The EIGEN_FONTS families the drawing's text actually uses — text elements and the labels
-// bound to arrows. An element with no text contributes no family, so the SVG inlines only
-// the faces it renders with.
-function usedFontFamilies(scene: VectorScene): Set<string> {
-    const families = new Set<string>();
-    for (const el of scene.elements) {
-        if ((el.type === 'text' || el.type === 'arrow') && el.text !== '') families.add(el.fontFamily);
-    }
-    return families;
-}
-
-// A minimal page sized to the drawing so WeasyPrint prints one PDF page the size of the
-// artwork, with the same inlined-font set the screen uses. The SVG arrives already
-// sanitized; the wrapper and its fonts are ours.
-function wrapInPdfDocument(title: string, svg: string, width: number, height: number): string {
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <title>${escapeHtml(title)}</title>
-    <style>${getFontCSS()}
-@page { size: ${width}px ${height}px; margin: 0; }
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body { margin: 0; }
-svg { display: block; }</style>
-</head>
-<body>
-    ${svg}
-</body>
-</html>`;
-}
-
-// The drawing's pixel size, read off the width/height sceneToSvg wrote on the root <svg>.
-// An empty scene never reaches here (pdf rejects it), so the attributes are always present.
-function svgDimensions(svg: string): { width: number; height: number } {
-    const width = Number(svg.match(/^<svg[^>]*\bwidth="([\d.]+)"/)?.[1] ?? 0);
-    const height = Number(svg.match(/^<svg[^>]*\bheight="([\d.]+)"/)?.[1] ?? 0);
-    return { width, height };
 }

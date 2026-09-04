@@ -5,7 +5,7 @@ import { CollabPointer } from './collab-pointer';
 import { RemoteSelectionRing } from './remote-selection-ring';
 import { useAwarenessPeers } from './use-awareness-peers';
 
-// The awareness state a collaborating client publishes (see use-vector-presence / use-slides-presence).
+// The awareness state a collaborating client publishes (see use-canvas-presence / use-slides-presence).
 // One documented convention shape — every host writes a subset; `slideId` scopes a peer to a
 // sub-surface (slides publishes it so peers on other slides can be hidden; vector omits it). This is
 // NOT a shared union imported everywhere: it is the concrete shape the shared cursor layer projects,

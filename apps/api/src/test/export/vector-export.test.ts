@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { exportDocument } from '../../lib/export/export-document';
+import { JSDOM } from 'jsdom';
+import { exportDocument, runDocumentExport } from '../../lib/export/export-document';
 import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { getHome } from '../../lib/home/get-home';
 import {
@@ -66,7 +67,16 @@ describe('Eigenvector export route — response contract', () => {
 
         const svg = await res.text();
         expect(svg.startsWith('<svg')).toBe(true);
-        // The text element and the bound arrow label both render, XML-escaped by the serializer.
+        // A rich-text box rides in a <foreignObject>, which the export sanitizer keeps only because
+        // the vector transform declares it an HTML integration point — without that the box's markup
+        // is dropped and the drawing exports wordless.
+        expect(svg).toContain('<foreignObject');
+        // Not just present somewhere: the box's MARKUP survives inside the foreignObject. Drop the
+        // integration-point declaration and DOMPurify keeps the element while emptying its HTML body.
+        const body = svg.slice(svg.indexOf('<foreignObject'), svg.indexOf('</foreignObject>'));
+        expect(body).toContain('<p>');
+        expect(body).toContain(GOLDEN_VECTOR_TEXT.replace('<', '&lt;').replace('>', '&gt;'));
+        // The rich-text box and the bound arrow label both render, the payload still escaped.
         expect(svg).toContain(GOLDEN_VECTOR_TEXT.replace('<', '&lt;').replace('>', '&gt;'));
         expect(svg).toContain(GOLDEN_VECTOR_LABEL);
         // Fonts are inlined for the families the text actually uses (Excalifont here).
@@ -96,7 +106,7 @@ describe('Eigenvector export — empty drawing', () => {
     test('pdf export of an empty drawing is rejected with 400', async () => {
         const home = await getHome(ctx.alice.user.id);
         const { mount, path } = await home.drive.resolveFile(mountId, emptyPath.id);
-        expect(exportDocument(mount, path, 'pdf')).rejects.toThrow('The drawing is empty');
+        await expect(exportDocument(mount, path, 'pdf')).rejects.toThrow('The drawing is empty');
     }, 60_000);
 });
 
@@ -134,6 +144,153 @@ describe('Eigenvector export — SVG media sanitization', () => {
     }, 120_000);
 });
 
+describe('Eigenvector export — rich-text HTML sanitization', () => {
+    test('a hostile rich-text body exports with scripts, handlers and external refs stripped', async () => {
+        // `html` is raw TipTap markup any collaborator can write, and the reader only caps and cleans it
+        // (no tag filtering), so the assembled SVG must go through DOMPurify before it is served.
+        const created = await seedVector('Evil Text', false);
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, created.id);
+        const scene = buildGoldenVectorScene();
+        seedVectorDoc(collab.doc, {
+            ...scene,
+            elements: scene.elements.map((el) =>
+                el.type === 'richtext'
+                    ? {
+                          ...el,
+                          html:
+                              '<p onclick="alert(1)">safe<img src=x onerror="alert(2)">' +
+                              '<script>alert(3)</script><a href="javascript:alert(4)">link</a></p>',
+                      }
+                    : el,
+            ),
+        });
+
+        const res = await exportRequest(created.id, 'svg');
+        expect(res.status).toBe(200);
+        const svg = await res.text();
+        expect(svg).toContain('safe');
+        expect(svg).not.toContain('<script');
+        expect(svg).not.toContain('onerror');
+        expect(svg).not.toContain('onclick');
+        expect(svg).not.toContain('javascript:');
+    }, 120_000);
+});
+
+describe('Eigenvector export — the .svg download is XML', () => {
+    test('void tags and entities in a rich-text box come out as well-formed XML', async () => {
+        // A .svg file is parsed by an XML parser (browser, Inkscape, librsvg), where an unclosed <br>
+        // or a bare &nbsp; is a FATAL error: the whole drawing renders as nothing. LightEditor writes
+        // both, so the SVG arm must serialise the foreignObject body as XHTML.
+        const created = await seedVector('XML Text', false);
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, created.id);
+        const scene = buildGoldenVectorScene();
+        seedVectorDoc(collab.doc, {
+            ...scene,
+            elements: scene.elements.map((el) =>
+                el.type === 'richtext'
+                    ? {
+                          ...el,
+                          html: '<p>line&nbsp;one<br>line two</p><p><img src="data:image/gif;base64,R0lGOD"></p>',
+                      }
+                    : el,
+            ),
+        });
+
+        const res = await exportRequest(created.id, 'svg');
+        expect(res.status).toBe(200);
+        const svg = await res.text();
+        expect(svg).toContain('line two');
+        // The oracle: an XML parser accepts the bytes we serve. jsdom throws on a malformed document.
+        expect(() => new JSDOM(svg, { contentType: 'application/xml' })).not.toThrow();
+    }, 120_000);
+});
+
+describe('Eigenvector export — the pdf-html document (what WeasyPrint is handed)', () => {
+    // One render for every assertion below: the document is deterministic, and a transform Worker
+    // per test would be seven more spawns for the same bytes.
+    let rendered: Promise<string> | null = null;
+    function pdfHtml(): Promise<string> {
+        rendered ??= (async () => {
+            const home = await getHome(ctx.alice.user.id);
+            const { mount, path } = await home.drive.resolveFile(mountId, vectorPath.id);
+            const bytes = await runDocumentExport({ documentType: 'eigenvector', format: 'pdf-html' }, mount, path);
+            return bytes.toString('utf-8');
+        })();
+        return rendered;
+    }
+
+    test('the drawing prints as compositor layers, not as one inline svg', async () => {
+        const html = await pdfHtml();
+        // The page is the document body's only child, and every <svg> in it is one layer's own
+        // viewport — the old arm put the whole drawing in a single root <svg> with a viewBox.
+        expect(html).toContain('<body>\n    <div class="canvas-page"');
+        expect(html).toContain('transform-origin:0 0');
+        const svgs = (html.match(/<svg\b/g) ?? []).length;
+        const layerViewports = (html.match(/<div style="position:absolute[^"]*"><svg\b/g) ?? []).length;
+        expect(svgs).toBeGreaterThan(1);
+        expect(layerViewports).toBe(svgs);
+    }, 120_000);
+
+    test('rich text prints as HTML — the thing foreignObject could never give WeasyPrint', async () => {
+        const html = await pdfHtml();
+        expect(html).toContain('<p>Vector &lt;sketch&gt;</p>');
+        expect(html).not.toContain('<foreignObject');
+    }, 120_000);
+
+    test('a gradient fill carries its own <defs> inside its own element svg', async () => {
+        const html = await pdfHtml();
+        expect(html).toContain('<linearGradient');
+        expect(html).toContain('#e60076');
+        // Phase 0: url(#id) across two <svg> elements renders NOTHING in WeasyPrint. Each gradient
+        // must therefore be defined in the same <svg> that references it.
+        const svgs = html.split('<svg ');
+        const withGradient = svgs.filter((chunk) => chunk.includes('<linearGradient'));
+        expect(withGradient.length).toBeGreaterThan(0);
+        for (const chunk of withGradient) expect(chunk).toContain('url(#');
+    }, 120_000);
+
+    test('paint references survive the sanitizer because they are attributes, not CSS', async () => {
+        const html = await pdfHtml();
+        // sanitize.ts rewrites every non-data url() it finds in a `style` attribute or a <style>
+        // block to `url()`. A gradient or a clip expressed in CSS would therefore reach WeasyPrint
+        // as `url()` and paint nothing — silently. These attribute forms are what keeps that safe.
+        expect(html).toMatch(/(?:fill|stroke)="url\(#/);
+        expect(html).toContain('clip-path="url(#');
+        expect(html).not.toContain('url()');
+    }, 120_000);
+
+    test('a round-cornered image clips through the shared outline path', async () => {
+        const html = await pdfHtml();
+        expect(html).toContain('<clipPath');
+        // Mime-agnostic on purpose: collectExportMedia embeds the SCREEN PREVIEW of each media
+        // child (webp today), not the stored bytes. What matters is that it is a data: URI.
+        expect(html).toMatch(/href="data:image\/[a-z+]+;base64,/);
+    }, 120_000);
+
+    test('fonts ride the wrapping document and every reference is a data: URI', async () => {
+        const html = await pdfHtml();
+        expect(html).toContain('@font-face');
+        expect(html).toContain('data:font/woff2;base64,');
+        expect(html).not.toContain('href="http');
+        expect(html).not.toContain('src="http');
+    }, 120_000);
+
+    test('the page is sized to the drawing', async () => {
+        const html = await pdfHtml();
+        expect(html).toMatch(/@page \{ size: [\d.]+px [\d.]+px; margin: 0; \}/);
+    }, 120_000);
+
+    test('an empty drawing is still a 400', async () => {
+        const home = await getHome(ctx.alice.user.id);
+        const { mount, path } = await home.drive.resolveFile(mountId, emptyPath.id);
+        await expect(
+            runDocumentExport({ documentType: 'eigenvector', format: 'pdf-html' }, mount, path),
+        ).rejects.toThrow('The drawing is empty');
+    }, 60_000);
+});
+
 const suite = (await isWeasyPrintAvailable()) ? describe : describe.skip;
 
 suite('Eigenvector export route — PDF (WeasyPrint end-to-end)', () => {
@@ -144,5 +301,10 @@ suite('Eigenvector export route — PDF (WeasyPrint end-to-end)', () => {
         expect(res.headers.get('content-disposition')).toBe('attachment; filename="Vector Contract.pdf"');
         const pdf = Buffer.from(await res.arrayBuffer());
         expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+        // A page WeasyPrint renders nothing onto is ~770 bytes (measured); this drawing's page —
+        // roughjs paths, a subsetted Excalifont and the raster image — is ~9.5 kB. The floor is what
+        // stops "renders nothing" from passing; the structural assertions above are what pin the
+        // content, since the exact byte count moves with the host's WeasyPrint and font stack.
+        expect(pdf.byteLength).toBeGreaterThan(5_000);
     }, 120_000);
 });

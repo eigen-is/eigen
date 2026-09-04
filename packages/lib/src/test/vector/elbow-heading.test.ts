@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { elbowBindPoint, redockBindingsForElbow } from '../../vector/elbow-heading';
+import { distanceToElement, elbowBindPoint, redockBindingsForElbow } from '../../vector/elbow-heading';
 import { elbowRoute } from '../../vector/elbow-route';
+import { solidFill } from '../../vector/fill';
 import {
     bindingAnchor,
     boundEndpoint,
@@ -12,25 +13,34 @@ import {
     parsePoints,
 } from '../../vector/geometry';
 import {
+    type Corners,
     DEFAULT_ELEMENT_PROPS,
     parseBinding,
     serializeBinding,
     type VectorArrowElement,
     type VectorElement,
+    type VectorRectangleElement,
     type VectorShapeElement,
 } from '../../vector/types';
 
-const shapeEl = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id' | 'type'>): VectorShapeElement => ({
+// Spread-only so the ellipse case doesn't trip the excess-property check on `corners`.
+const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
     ...DEFAULT_ELEMENT_PROPS,
     x: 0,
     y: 0,
     width: 100,
     height: 100,
     angle: 0,
-    seed: 1,
     index: 'a0',
-    roundness: 'sharp',
+    fill: solidFill('transparent'),
+    roughness: 1,
+    seed: 1,
+    corners: 'straight',
     strokeWidth: 2,
+};
+
+const shapeEl = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id' | 'type'>): VectorShapeElement => ({
+    ...SHAPE_BASE,
     ...over,
 });
 
@@ -40,6 +50,7 @@ const elbowArrow = (start: Point, end: Point, endBinding: string): VectorArrowEl
     ...DEFAULT_ELEMENT_PROPS,
     id: 'ar',
     type: 'arrow',
+    roughness: 1,
     x: 0,
     y: 0,
     width: Math.abs(end.x - start.x),
@@ -159,6 +170,9 @@ describe('elbowRoute — pre-dock origPoint seam', () => {
 
         // The seam is threaded: a far pre-dock point is accepted and steers the heading, so the routes differ.
         expect(preDock).not.toEqual(atRest);
+        // Distance exactly 0 (an endpoint sitting ON the outline) is as NEAR as it gets, so it takes the
+        // cone branch like the resting point — not the far branch a falsy test would send it down.
+        expect(elbowRoute(arrow, byId, { start: { x: 10, y: 0 } })).toEqual(atRest);
         // Sanity: both still begin exactly on the stored start (unchanged).
         expect(atRest[0]).toEqual(start);
         expect(preDock[0]).toEqual(start);
@@ -233,5 +247,31 @@ describe('redockBindingsForElbow — to-elbow re-docks a raw-cursor bound end', 
         const { startBinding, endBinding } = redockBindingsForElbow(arrow, new Map([[rect.id, rect]]));
         expect(startBinding).toBe('');
         expect(endBinding).toBe('');
+    });
+});
+
+describe('distanceToElement', () => {
+    // The base fixture is a 100×100 square: `round` makes its outline the inscribed circle (r 50).
+    const square = (corners: Corners) => shapeEl({ id: 's', type: 'rectangle', corners });
+
+    test('measures against the rounded edge, not the sharp corner', () => {
+        const diagonal = { x: 140, y: 140 };
+        expect(distanceToElement(square('round'), diagonal)).toBeGreaterThan(
+            distanceToElement(square('straight'), diagonal),
+        );
+        expect(distanceToElement(square('round'), { x: 150, y: 50 })).toBeCloseTo(50, 6);
+    });
+
+    test('a straight rectangle keeps the sharp-edge answers', () => {
+        expect(distanceToElement(square('straight'), { x: 150, y: 50 })).toBeCloseTo(50, 6);
+        expect(distanceToElement(square('straight'), { x: 140, y: 140 })).toBeCloseTo(Math.hypot(40, 40), 6);
+    });
+
+    // The centre sits INSIDE a curved rect's inset core, where the outline distance is the core distance
+    // PLUS the radius — a core distance clamped at 0 would answer the radius (25) instead.
+    test('a point inside the shape measures out to the edge', () => {
+        expect(distanceToElement(square('straight'), { x: 50, y: 50 })).toBeCloseTo(50, 6);
+        expect(distanceToElement(square('curved'), { x: 50, y: 50 })).toBeCloseTo(50, 6);
+        expect(distanceToElement(square('round'), { x: 50, y: 50 })).toBeCloseTo(50, 6);
     });
 });

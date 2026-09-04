@@ -21,7 +21,7 @@ import {
     type VectorArrowElement,
 } from '@workspace/lib/vector';
 import type { MutableRefObject } from 'react';
-import { useEffect, useRef } from 'react';
+import { useHandleDrag } from './use-handle-drag';
 
 // A pin drag stays inert until the pointer travels this many CLIENT px (a click never pins).
 const PIN_DRAG_THRESHOLD_PX = 2;
@@ -62,8 +62,7 @@ export function ElbowPinHandles({
     selectedPinIndex,
     onSelectPin,
 }: ElbowPinHandlesProps) {
-    const abortRef = useRef<AbortController | null>(null);
-    useEffect(() => () => abortRef.current?.abort(), []);
+    const startHandleDrag = useHandleDrag(frozenRef);
 
     const pins: FixedSegment[] = parseFixedSegments(arrow.fixedSegments).segments;
     const isPinned = (index: number): boolean => pins.some((p) => p.index === index);
@@ -71,57 +70,23 @@ export function ElbowPinHandles({
     // Begin pinning/moving the segment at polyline `index`. The first drag on an unpinned arrow freezes the
     // current route into points (materializeFirstPin); later drags slide the stored segment (moveSegment).
     const startDrag = (e: React.PointerEvent, index: number) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (abortRef.current && !abortRef.current.signal.aborted) return;
-        e.currentTarget.setPointerCapture(e.pointerId);
-        frozenRef.current = true;
-        const controller = new AbortController();
-        abortRef.current = controller;
-        const { signal } = controller;
-        const pointerId = e.pointerId;
-        const startX = e.clientX;
-        const startY = e.clientY;
-        let active = false;
         let latest: PinPatch | null = null;
-
-        const update = (clientX: number, clientY: number) => {
-            const cursor = clientToScene(clientX, clientY);
-            latest =
-                arrow.fixedSegments === ''
-                    ? materializeFirstPin(arrow, route, index, cursor, context)
-                    : moveSegment(arrow, index, cursor, context);
-            onPreview(latest);
-        };
-        const teardown = () => {
-            frozenRef.current = false;
-            controller.abort();
-        };
-        const onMove = (me: PointerEvent) => {
-            if (me.pointerId !== pointerId) return;
-            if (!active) {
-                if (Math.hypot(me.clientX - startX, me.clientY - startY) < PIN_DRAG_THRESHOLD_PX) return;
-                active = true;
-            }
-            update(me.clientX, me.clientY);
-        };
-        const onUp = (pe: PointerEvent) => {
-            if (pe.pointerId !== pointerId) return;
-            teardown();
-            if (latest !== null) onCommit(latest);
-            else onPreview(null);
-        };
-        const onKey = (ke: KeyboardEvent) => {
-            if (ke.key !== 'Escape') return;
-            ke.preventDefault();
-            ke.stopPropagation();
-            teardown();
-            onPreview(null);
-        };
-        document.addEventListener('pointermove', onMove, { signal });
-        document.addEventListener('pointerup', onUp, { signal });
-        document.addEventListener('pointercancel', onUp, { signal });
-        document.addEventListener('keydown', onKey, { signal, capture: true });
+        startHandleDrag(e, {
+            threshold: PIN_DRAG_THRESHOLD_PX,
+            move: (me) => {
+                const cursor = clientToScene(me.clientX, me.clientY);
+                latest =
+                    arrow.fixedSegments === ''
+                        ? materializeFirstPin(arrow, route, index, cursor, context)
+                        : moveSegment(arrow, index, cursor, context);
+                onPreview(latest);
+            },
+            end: () => {
+                if (latest !== null) onCommit(latest);
+                else onPreview(null);
+            },
+            cancel: () => onPreview(null),
+        });
     };
 
     // Remove the pin at `index` (double-click or Delete on a selected pinned dot).

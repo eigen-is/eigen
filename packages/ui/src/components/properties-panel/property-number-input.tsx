@@ -1,4 +1,5 @@
 import { Input } from '@workspace/ui/components/input';
+import { cn } from '@workspace/ui/lib/utils';
 import { useState } from 'react';
 
 type PropertyNumberInputProps = {
@@ -9,6 +10,7 @@ type PropertyNumberInputProps = {
     step?: number;
     placeholder?: string;
     disabled?: boolean;
+    className?: string;
 };
 
 export function PropertyNumberInput({
@@ -19,6 +21,7 @@ export function PropertyNumberInput({
     step,
     placeholder,
     disabled,
+    className,
 }: PropertyNumberInputProps) {
     const [localValue, setLocalValue] = useState(() => String(value ?? ''));
     const [focused, setFocused] = useState(false);
@@ -31,7 +34,7 @@ export function PropertyNumberInput({
     return (
         <Input
             type="number"
-            className="h-7 text-xs"
+            className={cn('h-7 text-xs', className)}
             value={focused ? localValue : externalStr}
             placeholder={placeholder}
             onChange={(e) => {
@@ -39,7 +42,12 @@ export function PropertyNumberInput({
                 setLocalValue(raw);
                 if (raw !== '' && raw !== '-') {
                     const v = Number(raw);
-                    if (!Number.isNaN(v)) onChange(v);
+                    // Clamped BEFORE it is written: the input's own min/max only drive the spinner and
+                    // validity styling, so typing 0 into a width would otherwise reach the document. An
+                    // absent bound is no bound; a row wanting out-of-range entry (Angle) passes neither.
+                    const lo = min ?? Number.NEGATIVE_INFINITY;
+                    const hi = max ?? Number.POSITIVE_INFINITY;
+                    if (!Number.isNaN(v)) onChange(Math.min(hi, Math.max(lo, v)));
                 }
             }}
             onFocus={() => setFocused(true)}

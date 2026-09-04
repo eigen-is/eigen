@@ -1,18 +1,25 @@
 import { describe, expect, mock, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import {
+    clipboardTextItemHasContent,
     EIGEN_CLIPBOARD_RENDER_ATTR,
     embedClipboardSvgMetadata,
     extractClipboardSvgMetadata,
     hasRichHtmlBeyondMarker,
     inlineClipboardSvgMedia,
     materializeClipboardSvg,
+    readEigenClipboard,
     readSvgClipboardWithItems,
     svgToImageDataUri,
     svgToImageFile,
     writeEigenClipboardAsync,
 } from '../../../core/clipboard/clipboard';
-import type { EigenClipboardData, EigenClipboardImageItem, EigenClipboardItem } from '../../../types/clipboard';
+import type {
+    EigenClipboardData,
+    EigenClipboardImageItem,
+    EigenClipboardItem,
+    EigenClipboardTextItem,
+} from '../../../types/clipboard';
 import type { DrivePath } from '../../../types/drive';
 import { eigenMediaHref } from '../../../vector/media-refs';
 
@@ -371,5 +378,60 @@ describe('writeEigenClipboardAsync', () => {
         } finally {
             gg.navigator = origNavigator;
         }
+    });
+});
+
+describe('readEigenClipboard — the forged-wire seam', () => {
+    // Any web page can write this MIME. Every consumer reads the typed fields with no fallbacks and
+    // does so INSIDE a paste handler that has already called preventDefault, so an item that survives
+    // validation and then throws doesn't just fail — it eats the user's paste with no error anywhere.
+    const raw = (payload: unknown): DataTransfer => stubClipboard({ [EIGEN_MIME]: JSON.stringify(payload) });
+
+    test('a text item with no `text` is dropped, and never reaches the consumer that would throw', () => {
+        const cd = raw({ version: 1, items: [{ type: 'text', width: 10, height: 10 }] });
+        const data = readEigenClipboard(cd);
+        expect(data?.items).toEqual([]);
+        // The pre-fix crash: the item passed the geometry-only filter and `item.text.trim()` threw.
+        for (const item of data?.items ?? []) {
+            if (item.type === 'text') expect(() => clipboardTextItemHasContent(item)).not.toThrow();
+        }
+    });
+
+    test('an unknown item type is dropped', () => {
+        const cd = raw({ version: 1, items: [{ type: 'script', width: 10, height: 10 }] });
+        expect(readEigenClipboard(cd)?.items).toEqual([]);
+    });
+
+    test('an image item missing its source identifiers is dropped', () => {
+        const cd = raw({
+            version: 1,
+            items: [{ type: 'image', mediaName: 'a.png', width: 10, height: 10 }],
+        });
+        expect(readEigenClipboard(cd)?.items).toEqual([]);
+    });
+
+    test('an elements item whose `elements` is not an array is dropped', () => {
+        const cd = raw({
+            version: 1,
+            items: [{ type: 'elements', elements: 'x', sourceFrameId: '', width: 1, height: 1 }],
+        });
+        expect(readEigenClipboard(cd)?.items).toEqual([]);
+    });
+
+    test('a non-finite angle is dropped rather than written onto a document', () => {
+        const cd = raw({ version: 1, items: [{ type: 'text', text: 'hi', width: 10, height: 10, angle: null }] });
+        expect(readEigenClipboard(cd)?.items).toEqual([]);
+    });
+
+    test('one bad item does not take the good ones with it', () => {
+        // The old filter ran inside the try, so a null entry threw and nulled the WHOLE payload.
+        const good: EigenClipboardTextItem = { type: 'text', text: 'keep me', width: 10, height: 10 };
+        const cd = raw({ version: 1, items: [null, { type: 'text', width: 1, height: 1 }, good] });
+        expect(readEigenClipboard(cd)?.items).toEqual([good]);
+    });
+
+    test('a valid payload still round-trips whole', () => {
+        const data = sampleData();
+        expect(readEigenClipboard(stubClipboard({ [EIGEN_MIME]: JSON.stringify(data) }))).toEqual(data);
     });
 });

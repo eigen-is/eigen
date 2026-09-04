@@ -4,11 +4,12 @@
 // scripts/demo/fixtures/. The seeder byte-copies those into the demo world — legal because eigen-doc
 // containers reference their internals by name, not pathId.
 //
-// The slides deck (`sponsor-pitch.eigenslides`) and budget sheet (`festival-budget.eigensheets`)
-// fixtures are NOT authored here — they are hand-maintained (edited in a live demo and copied back),
-// so this script must never regenerate them or it would clobber those edits. Their frozen bytes make
-// them the oldest stored shapes we ship: rename a persisted field and they need migrating too (the
-// seed-demo contract test reads all three back through the shipped readers to catch it).
+// The budget sheet fixture (`festival-budget.eigensheets`) is NOT authored here — it is
+// hand-maintained (edited in a live demo and copied back), so this script must never regenerate it or
+// it would clobber those edits. Its frozen bytes are the oldest stored shape we ship: rename a
+// persisted field and it needs migrating too (the seed-demo contract test reads it back through the
+// shipped reader to catch that). The deck and the site plan are built from content.ts at seed time
+// (`demo/deck-build.ts`, `demo/vector-build.ts`), so they need no fixture bytes at all.
 //
 // Re-run whenever the board content (KANBAN) in content.ts changes:
 //   cd apps/api && bun run src/scripts/demo/author-fixtures.ts

@@ -22,7 +22,8 @@ import {
     type VectorLinearElement,
 } from '@workspace/lib/vector';
 import type { MutableRefObject } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
+import { useHandleDrag } from './use-handle-drag';
 
 // A midpoint drag only inserts once the pointer travels past this many CLIENT px — below it the gesture
 // is a plain click that adds nothing (Excalidraw's DRAG_THRESHOLD for the midpoint handle).
@@ -73,10 +74,7 @@ export function LinePointHandles({
     // original set with the inserted vertex for a midpoint drag), the moving index, and its live local
     // position so the grabbed handle follows the cursor.
     const [drag, setDrag] = useState<{ base: Point[]; index: number; local: Point } | null>(null);
-    const abortRef = useRef<AbortController | null>(null);
-    // If the element is deleted (e.g. a remote peer) mid-drag, the component unmounts before pointerup —
-    // tear the document listeners down so they don't linger. The host clears its own draft state (below).
-    useEffect(() => () => abortRef.current?.abort(), []);
+    const startHandleDrag = useHandleDrag(frozenRef);
     const points = parsePoints(line.points);
     // Elbow arrows store only the two endpoints and derive their bends — no midpoint insert here.
     const isElbow = line.type === 'arrow' && line.elbow;
@@ -84,64 +82,33 @@ export function LinePointHandles({
     // Begin dragging `index` through `base`. `insert` gates the drag behind a small travel threshold
     // (a midpoint that must not fire on a plain click); an existing-vertex drag is live from move one.
     const startDrag = (e: React.PointerEvent, base: Point[], index: number, insert: boolean) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (abortRef.current && !abortRef.current.signal.aborted) return;
-        e.currentTarget.setPointerCapture(e.pointerId);
-        frozenRef.current = true;
-        const controller = new AbortController();
-        abortRef.current = controller;
-        const { signal } = controller;
-        const pointerId = e.pointerId;
-        const startX = e.clientX;
-        const startY = e.clientY;
-        // A midpoint drag stays inert until the pointer travels; then it becomes a live vertex drag.
-        let active = !insert;
         let latest: Point[] | null = null;
-
-        const update = (clientX: number, clientY: number) => {
-            const local = linearSceneToLocal(line, clientToScene(clientX, clientY));
-            const next = base.map((p, i) => (i === index ? local : p));
-            latest = next;
-            setDrag({ base, index, local });
-            onPreview(next, index);
-        };
-        const teardown = () => {
-            setDrag(null);
-            frozenRef.current = false;
-            controller.abort();
-        };
-        const onMove = (me: PointerEvent) => {
-            if (me.pointerId !== pointerId) return;
-            if (!active) {
-                if (Math.hypot(me.clientX - startX, me.clientY - startY) < MIDPOINT_DRAG_THRESHOLD_PX) return;
-                active = true;
-            }
-            update(me.clientX, me.clientY);
-        };
-        const onUp = (pe: PointerEvent) => {
-            if (pe.pointerId !== pointerId) return;
-            teardown();
-            // A midpoint click that never travelled leaves `latest` null → nothing is inserted.
-            if (latest) {
-                onCommit(latest, index);
-                // Leave the dragged vertex selected on release (a midpoint drag selects the vertex it
-                // just inserted), so Delete pressed immediately after acts on THIS point.
-                onSelect(index);
-            } else onPreview(null, index);
-        };
-        const onKey = (ke: KeyboardEvent) => {
-            if (ke.key !== 'Escape') return;
-            ke.preventDefault();
-            ke.stopPropagation();
-            teardown();
+        startHandleDrag(e, {
+            // A midpoint drag stays inert until the pointer travels; then it becomes a live vertex drag.
+            threshold: insert ? MIDPOINT_DRAG_THRESHOLD_PX : 0,
+            move: (me) => {
+                const local = linearSceneToLocal(line, clientToScene(me.clientX, me.clientY));
+                const next = base.map((p, i) => (i === index ? local : p));
+                latest = next;
+                setDrag({ base, index, local });
+                onPreview(next, index);
+            },
+            end: () => {
+                setDrag(null);
+                // A midpoint click that never travelled leaves `latest` null → nothing is inserted.
+                if (latest) {
+                    onCommit(latest, index);
+                    // Leave the dragged vertex selected on release (a midpoint drag selects the vertex it
+                    // just inserted), so Delete pressed immediately after acts on THIS point.
+                    onSelect(index);
+                } else onPreview(null, index);
+            },
             // Cancels the whole gesture — a mid-insert drag drops the inserted vertex too.
-            onPreview(null, index);
-        };
-        document.addEventListener('pointermove', onMove, { signal });
-        document.addEventListener('pointerup', onUp, { signal });
-        document.addEventListener('pointercancel', onUp, { signal });
-        document.addEventListener('keydown', onKey, { signal, capture: true });
+            cancel: () => {
+                setDrag(null);
+                onPreview(null, index);
+            },
+        });
     };
 
     // During a drag the base set (with any inserted vertex) is the source of truth; idle, it's the

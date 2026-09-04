@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { isSearchableTextFile } from '../../constants/preview';
+import { getTextPreviewMode, isSearchableTextFile } from '../../constants/preview';
 
 describe('isSearchableTextFile', () => {
     test('plaintext + markdown + code are searchable', () => {
@@ -10,8 +10,15 @@ describe('isSearchableTextFile', () => {
     test('eigen container mimes are NOT plaintext-searchable (handled via onSync)', () => {
         expect(isSearchableTextFile('application/eigendoc', 'doc.eigendoc')).toBe(false);
         expect(isSearchableTextFile('application/eigensheets', 's.eigensheets')).toBe(false);
+        expect(isSearchableTextFile('application/eigenvector', 'plan.eigenvector')).toBe(false);
     });
     test('binary is not searchable', () => {
         expect(isSearchableTextFile('image/png', 'photo.png')).toBe(false);
+    });
+});
+
+describe('getTextPreviewMode', () => {
+    test('a vector drawing is a text preview — its body is the compositor page', () => {
+        expect(getTextPreviewMode('application/eigenvector', 'plan.eigenvector')).toBe('eigenvector');
     });
 });

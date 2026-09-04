@@ -1,4 +1,4 @@
-// The drawing tools (freehand, line, eraser) + line point-handles, factored out of vector-canvas.tsx
+// The drawing tools (freehand, line, eraser) + line point-handles, factored out of canvas-editor.tsx
 // so the canvas only DISPATCHES (the ground-rule that the canvas file must not grow).
 // This hook owns the local gesture state (never Yjs until finish), the live preview element rendered
 // through the SAME elementToSvg path as committed elements, the eraser's marked-set dimming, and the
@@ -9,14 +9,12 @@
 import {
     arrowRoute,
     type Box,
-    DEFAULT_ARROW_PROPS,
+    type CanvasViewport,
     DEFAULT_ELEMENT_PROPS,
-    DEFAULT_LINE_ROUNDNESS,
-    DEFAULT_LINEAR_ROUNDNESS,
-    DEFAULT_TEXT_PROPS,
+    distance,
+    ELEMENT_KINDS,
     elbowBindPoint,
     elbowRoutingContext,
-    elementToSvg,
     hitThresholdScreen,
     isBindable,
     linearLocalToScene,
@@ -26,25 +24,27 @@ import {
     parseBinding,
     parsePoints,
     renormalize,
+    type StyleDefaults,
     serializePressures,
     unpinSegment,
     type VectorArrowElement,
+    type VectorBindableElement,
     type VectorElement,
     type VectorLinearElement,
-    type VectorShapeElement,
 } from '@workspace/lib/vector';
 import { createElement, Fragment, type MutableRefObject, type ReactNode, useEffect, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 import { isTypingTarget } from '../../../hooks/is-typing-target';
+import { randomSeed } from '../hooks/element-writes';
+import { type NewVectorElement, sealed, type VectorElementPatch } from '../hooks/use-canvas-doc';
 import type { VectorTool } from '../hooks/use-tool';
-import type { NewVectorElement, VectorElementPatch } from '../hooks/use-vector-doc';
 import { FocusIndicators, FocusPointHandles, SnapDots } from './arrow-affordances';
 import {
     bindArrow,
     bindElbowEnd,
     bindFocusPoint,
     bindingCandidate,
-    bindingOutlineElement,
+    bindingOutlineSvg,
     bindPinnedElbowEnd,
     followOtherEnd,
 } from './binding';
@@ -55,10 +55,11 @@ import { distinctCount, type LineDraft, previewPoints, snapSegment, startLineDra
 import { LinePointHandles } from './point-handles';
 import { isFreedrawSpike } from './touch-gestures';
 
-// Screen-px thresholds (÷ zoom → constant on-screen distance): the eraser sample step (Excalidraw's
-// eraser trail), the freehand minimum sample spacing that thins sub-pixel points, the multi-point
-// line's confirm/close radius (LINE_CONFIRM_THRESHOLD), and the drag-vs-click threshold that splits a
-// 2-point line from a multi-point one. Hit tolerance is the shared hitThresholdScreen (coarse-aware).
+// Screen-px thresholds (÷ the LIVE zoom → constant on-screen distance): the eraser sample step
+// (Excalidraw's eraser trail), the freehand minimum sample spacing that thins sub-pixel points, the
+// multi-point line's confirm/close radius (LINE_CONFIRM_THRESHOLD), and the drag-vs-click threshold that
+// splits a 2-point line from a multi-point one. Hit tolerance is the shared hitThresholdScreen
+// (coarse-aware).
 const ERASER_STEP_SCREEN = 4;
 const FREEDRAW_MIN_STEP_SCREEN = 1;
 const LINE_CONFIRM_SCREEN = 8;
@@ -67,35 +68,32 @@ const LINE_DRAG_SCREEN = 4;
 const PREVIEW_ID = '__drawing__';
 const EMPTY_IDS: Set<string> = new Set();
 
-function randomSeed(): number {
-    return Math.floor(Math.random() * 2 ** 31);
-}
-
-function dist(a: Point, b: Point): number {
-    return Math.hypot(a.x - b.x, a.y - b.y);
-}
-
-// The shared geometry of a live preview element (draw draft), built from the create defaults and the
-// same normalizeLinear pass as the commit, so it matches the element that will be written exactly (the
-// renderer scales roughness by the box, so a 0×0 box would pop on release).
-function linearBase(origin: Point, points: Point[], seed: number) {
+// The geometry + base props every live preview element (draw draft) shares. Its callers spread the kind's
+// own create defaults under it — the same table the commit writes through addElement, so a preview can
+// never drift from the element that lands. normalizeLinear runs here because the renderer scales roughness
+// by the box, so a 0×0 box would pop on release.
+function previewBase(origin: Point, points: Point[], seed: number) {
     return {
         id: PREVIEW_ID,
         angle: 0,
-        ...DEFAULT_ELEMENT_PROPS,
-        roundness: DEFAULT_LINEAR_ROUNDNESS,
-        seed,
         index: 'a0',
+        seed,
+        ...DEFAULT_ELEMENT_PROPS,
         ...normalizeLinear({ x: origin.x, y: origin.y, width: 0, height: 0, angle: 0 }, points),
     };
 }
 
-function previewElement(type: 'freedraw' | 'line', origin: Point, points: Point[], seed: number): VectorLinearElement {
-    // linearBase is sharp (freedraw's default, and arrowElement overrides it); a new line curves by default.
+function previewElement(
+    type: 'freedraw' | 'line',
+    origin: Point,
+    points: Point[],
+    seed: number,
+    style: StyleDefaults,
+): VectorLinearElement {
     return {
-        ...linearBase(origin, points, seed),
+        ...ELEMENT_KINDS[type].defaults(style),
+        ...previewBase(origin, points, seed),
         type,
-        roundness: type === 'line' ? DEFAULT_LINE_ROUNDNESS : DEFAULT_LINEAR_ROUNDNESS,
         // The live preview always simulates; real per-point pressure is written on commit (finishFreedraw).
         pressures: '',
         simulatePressure: true,
@@ -104,16 +102,11 @@ function previewElement(type: 'freedraw' | 'line', origin: Point, points: Point[
 
 // An arrow preview/commit template — the line geometry plus the default heads and an empty binding/label
 // (a draft binds only at commit through bindArrow). Reused as the provisional element bindArrow snaps.
-function arrowElement(origin: Point, points: Point[], seed: number): VectorArrowElement {
+function arrowElement(origin: Point, points: Point[], seed: number, style: StyleDefaults): VectorArrowElement {
     return {
-        ...linearBase(origin, points, seed),
+        ...ELEMENT_KINDS.arrow.defaults(style),
+        ...previewBase(origin, points, seed),
         type: 'arrow',
-        ...DEFAULT_ARROW_PROPS,
-        // The label fields the reader reaches out of DEFAULT_TEXT_PROPS (never its textAlign, which the
-        // arrow model has no field for) — so the provisional can't drift from read-vector's defaults.
-        text: DEFAULT_TEXT_PROPS.text,
-        fontSize: DEFAULT_TEXT_PROPS.fontSize,
-        fontFamily: DEFAULT_TEXT_PROPS.fontFamily,
     };
 }
 
@@ -123,9 +116,17 @@ type DrawingToolsParams = {
     // When the tool lock is on, a finished line/arrow keeps its tool active (freedraw/eraser always do).
     toolLocked: boolean;
     canEdit: boolean;
+    // The COMMITTED viewport's zoom — what the screen-space handles/outlines/dots are laid out at, the
+    // same value the canvas lays its own chrome out at. Never a gesture threshold; those read the ref.
     zoom: number;
+    // The LIVE viewport. A pan/zoom writes it without a React render, so every threshold a pointer
+    // handler measures reads its zoom from here or it lags the gesture by a whole pinch.
+    viewportRef: MutableRefObject<CanvasViewport>;
     // The active pointer is coarse (finger/stylus) → the eraser and hit paths use a fatter screen slop.
     coarse: boolean;
+    // The host's style table — the live preview is built from the same defaults the commit writes, so a
+    // dragged shape can't preview in the other app's look and pop on release.
+    styleDefaults: StyleDefaults;
     ordered: VectorElement[];
     // The committed scene by id — lets the eraser hit-test an elbow arrow on its DERIVED route.
     byId: Map<string, VectorElement>;
@@ -144,7 +145,7 @@ type DrawingToolsParams = {
     undoManager: Y.UndoManager | null;
 };
 
-export type DrawingTools = {
+type DrawingTools = {
     // A freehand/line/eraser gesture is in flight (chrome is suppressed for it, like create/marquee).
     active: boolean;
     // A multi-point line/arrow draft is collecting clicks — drives the finish hint.
@@ -182,7 +183,9 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         toolLocked,
         canEdit,
         zoom,
+        viewportRef,
         coarse,
+        styleDefaults,
         ordered,
         byId,
         selectedIds,
@@ -197,6 +200,10 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         setSelectedIds,
         undoManager,
     } = params;
+
+    // Every screen-px threshold below divides by this, never by the `zoom` prop: that one is the last
+    // COMMITTED viewport (published on a trailing timer), so mid-gesture it can be a whole pinch stale.
+    const liveZoom = () => viewportRef.current.zoom;
 
     // Gesture state lives in refs (read synchronously in the pointer handlers, before the next render
     // flushes); the mirroring React state drives what the canvas renders.
@@ -247,18 +254,15 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     // vertex/endpoint handles are suppressed for the drag so a re-orbiting endpoint dot can't mislead.
     const [focusDragEnd, setFocusDragEnd] = useState<'start' | 'end' | null>(null);
 
-    const setBindShape = (shape: VectorShapeElement | undefined, pointer: Point, elbow: boolean) =>
+    const setBindShape = (shape: VectorBindableElement | undefined, pointer: Point, elbow: boolean) =>
         setBindHint(shape ? { shapeId: shape.id, pointer, elbow } : null);
     // The bindable shape an endpoint at `scene` reaches (null when nothing reaches / binding is suppressed).
-    const candidateShape = (scene: Point, suppressed: boolean): VectorShapeElement | undefined => {
-        const id = bindingCandidate(ordered, scene, zoom, suppressed);
-        const shape = id ? ordered.find((el) => el.id === id) : undefined;
-        return shape && isBindable(shape) ? shape : undefined;
-    };
+    const candidateShape = (scene: Point, suppressed: boolean): VectorBindableElement | undefined =>
+        bindingCandidate(ordered, scene, liveZoom(), suppressed) ?? undefined;
     // The elbow dock ratio to store at an endpoint (the point-handle path, event-less → reads suppressRef).
     const elbowBindFor = (
         scene: Point,
-    ): { candidate: string | null; fixedPoint: [number, number] | null; shape: VectorShapeElement | undefined } => {
+    ): { candidate: string | null; fixedPoint: [number, number] | null; shape: VectorBindableElement | undefined } => {
         const shape = candidateShape(scene, suppressRef.current);
         if (!shape) return { candidate: null, fixedPoint: null, shape: undefined };
         return { candidate: shape.id, fixedPoint: elbowBindPoint(shape, scene).fixedPoint, shape };
@@ -289,23 +293,23 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         const stroke = strokeRef.current;
         cancelFreedraw();
         if (!stroke) return;
-        undoManager?.stopCapturing();
         // Real pen pressure iff any sample left the 0.5 no-pressure sentinel (Excalidraw's test — a mouse
         // reports a flat 0.5). normalizeLinear preserves point order and count, so stroke.pressures stays
         // index-aligned with the written points. Simulate ⇒ pressures '' + true ⇒ byte-identical legacy ink.
         const realPressure = stroke.pressures.some((p) => p !== 0.5);
         // Tool stays freedraw (Excalidraw keeps the pencil active); one addElement per stroke.
-        const id = addElement({
-            type: 'freedraw',
-            seed: seedRef.current,
-            ...normalizeLinear(
-                { x: stroke.origin.x, y: stroke.origin.y, width: 0, height: 0, angle: 0 },
-                stroke.points,
-            ),
-            pressures: realPressure ? serializePressures(stroke.pressures) : '',
-            simulatePressure: !realPressure,
-        });
-        undoManager?.stopCapturing();
+        const id = sealed(undoManager, () =>
+            addElement({
+                type: 'freedraw',
+                seed: seedRef.current,
+                ...normalizeLinear(
+                    { x: stroke.origin.x, y: stroke.origin.y, width: 0, height: 0, angle: 0 },
+                    stroke.points,
+                ),
+                pressures: realPressure ? serializePressures(stroke.pressures) : '',
+                simulatePressure: !realPressure,
+            }),
+        );
         if (id) setSelectedIds([id]);
     };
 
@@ -314,8 +318,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         const pts = previewPoints(draft);
         setPreviewEl(
             draft.type === 'arrow'
-                ? arrowElement(draft.origin, pts, seedRef.current)
-                : previewElement(draft.type, draft.origin, pts, seedRef.current),
+                ? arrowElement(draft.origin, pts, seedRef.current, styleDefaults)
+                : previewElement(draft.type, draft.origin, pts, seedRef.current, styleDefaults),
         );
     };
 
@@ -336,25 +340,23 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         const draft = lineRef.current;
         clearLine();
         if (!draft || distinctCount(points) < 2) return;
-        undoManager?.stopCapturing();
-        let id: string | undefined;
-        if (draft.type === 'arrow') {
-            const bound = bindArrow(
-                arrowElement(draft.origin, points, seedRef.current),
-                { start: true, end: true },
-                ordered,
-                zoom,
-                suppressRef.current,
-            );
-            id = addElement({ type: 'arrow', seed: seedRef.current, ...bound });
-        } else {
-            id = addElement({
+        const id = sealed(undoManager, () => {
+            if (draft.type === 'arrow') {
+                const bound = bindArrow(
+                    arrowElement(draft.origin, points, seedRef.current, styleDefaults),
+                    { start: true, end: true },
+                    ordered,
+                    liveZoom(),
+                    suppressRef.current,
+                );
+                return addElement({ type: 'arrow', seed: seedRef.current, ...bound });
+            }
+            return addElement({
                 type: draft.type,
                 seed: seedRef.current,
                 ...normalizeLinear({ x: draft.origin.x, y: draft.origin.y, width: 0, height: 0, angle: 0 }, points),
             });
-        }
-        undoManager?.stopCapturing();
+        });
         if (id) setSelectedIds([id]);
     };
 
@@ -372,9 +374,9 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         const rel = { x: scene.x - draft.origin.x, y: scene.y - draft.origin.y };
         const last = draft.committed[draft.committed.length - 1];
         const first = draft.committed[0];
-        const confirm = LINE_CONFIRM_SCREEN / zoom;
-        if (draft.committed.length >= 2 && dist(rel, last) <= confirm) return finishLineWith(draft.committed);
-        if (draft.type === 'line' && draft.committed.length >= 3 && dist(rel, first) <= confirm) {
+        const confirm = LINE_CONFIRM_SCREEN / liveZoom();
+        if (draft.committed.length >= 2 && distance(rel, last) <= confirm) return finishLineWith(draft.committed);
+        if (draft.type === 'line' && draft.committed.length >= 3 && distance(rel, first) <= confirm) {
             // Close the loop on the first point so the fill (isClosedPath) reads a closed path.
             return finishLineWith([...draft.committed, { x: 0, y: 0 }]);
         }
@@ -397,9 +399,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         const er = eraserRef.current;
         cancelEraser();
         if (!er?.marked.size) return;
-        undoManager?.stopCapturing();
-        deleteElements([...er.marked]);
-        undoManager?.stopCapturing();
+        sealed(undoManager, () => deleteElements([...er.marked]));
         // Tool stays eraser.
     };
 
@@ -420,7 +420,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             drawPointerTypeRef.current = e.pointerType;
             strokeRef.current = startFreedrawStroke(scene, e.pressure);
             setActiveKind('freedraw');
-            setPreviewEl(previewElement('freedraw', scene, strokeRef.current.points, seedRef.current));
+            setPreviewEl(previewElement('freedraw', scene, strokeRef.current.points, seedRef.current, styleDefaults));
             return true;
         }
         if (tool === 'eraser') {
@@ -433,8 +433,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 ordered,
                 scene,
                 scene,
-                hitThresholdScreen(coarse) / zoom,
-                ERASER_STEP_SCREEN / zoom,
+                hitThresholdScreen(coarse) / liveZoom(),
+                ERASER_STEP_SCREEN / liveZoom(),
                 e.altKey,
                 marked,
                 byId,
@@ -476,9 +476,15 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             const src = coalesced.length ? coalesced : [native];
             const pts = src.map((ce) => clientToScene(ce.clientX, ce.clientY));
             const pressures = src.map((ce) => ce.pressure);
-            extendFreedrawStroke(strokeRef.current, pts, pressures, FREEDRAW_MIN_STEP_SCREEN / zoom);
+            extendFreedrawStroke(strokeRef.current, pts, pressures, FREEDRAW_MIN_STEP_SCREEN / liveZoom());
             setPreviewEl(
-                previewElement('freedraw', strokeRef.current.origin, strokeRef.current.points, seedRef.current),
+                previewElement(
+                    'freedraw',
+                    strokeRef.current.origin,
+                    strokeRef.current.points,
+                    seedRef.current,
+                    styleDefaults,
+                ),
             );
             return true;
         }
@@ -490,8 +496,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 ordered,
                 er.last,
                 scene,
-                hitThresholdScreen(coarse) / zoom,
-                ERASER_STEP_SCREEN / zoom,
+                hitThresholdScreen(coarse) / liveZoom(),
+                ERASER_STEP_SCREEN / liveZoom(),
                 e.altKey,
                 er.marked,
                 byId,
@@ -506,7 +512,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             const rel = { x: scene.x - draft.origin.x, y: scene.y - draft.origin.y };
             const last = draft.committed[draft.committed.length - 1];
             draft.trailing = e.shiftKey ? snapSegment(last, rel) : rel;
-            if (draft.mode === 'pending' && dist(scene, draft.origin) >= LINE_DRAG_SCREEN / zoom)
+            if (draft.mode === 'pending' && distance(scene, draft.origin) >= LINE_DRAG_SCREEN / liveZoom())
                 lineMovedRef.current = true;
             // The moving endpoint (origin + trailing) drives the binding highlight for an arrow draft.
             // Read Ctrl/Cmd off the live pointer event here — a keyup missed during a window blur can
@@ -694,59 +700,62 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             setPointDraft(null);
             return;
         }
-        undoManager?.stopCapturing();
-        if (
-            selectedLine.type === 'arrow' &&
-            selectedLine.elbow &&
-            selectedLine.fixedSegments !== '' &&
-            isEndpoint(index, points.length)
-        ) {
-            // Pinned elbow endpoint commit: thread the dock (bindPinnedElbowEnd, replaying the cached
-            // preview frame so release === last frame) then the renormalization pass, one sealed write. When
-            // the endpoint collapses back to derived (fixedSegments ''), skip the renormalize wrap so the
-            // canonical origin survives; the binding fields ride through either way.
-            const arrow = selectedLine;
-            const end = index === 0 ? 'start' : 'end';
-            const endScene = linearLocalToScene(arrow, points[index]);
-            const frame = cached && cached.end === end ? cached : elbowBindFor(endScene);
-            const bound = bindPinnedElbowEnd(arrow, end, frame.candidate, frame.fixedPoint, endScene, byId);
-            updateElement(
-                arrow.id,
-                bound.fixedSegments === ''
-                    ? bound
-                    : {
-                          ...renormalize({ ...arrow, ...bound }),
-                          startBinding: bound.startBinding,
-                          endBinding: bound.endBinding,
-                      },
-            );
-        } else if (selectedLine.type === 'arrow') {
-            const reshaped = { ...selectedLine, ...normalizeLinear(selectedLine, points) };
-            if (selectedLine.elbow && isEndpoint(index, points.length)) {
-                // Replay the last preview frame's cached dock — never re-run the candidate search from the
-                // release cursor. Recompute only in the degenerate no-move case (no preview frame ran).
+        sealed(undoManager, () => {
+            if (
+                selectedLine.type === 'arrow' &&
+                selectedLine.elbow &&
+                selectedLine.fixedSegments !== '' &&
+                isEndpoint(index, points.length)
+            ) {
+                // Pinned elbow endpoint commit: thread the dock (bindPinnedElbowEnd, replaying the cached
+                // preview frame so release === last frame) then the renormalization pass, one sealed write. When
+                // the endpoint collapses back to derived (fixedSegments ''), skip the renormalize wrap so the
+                // canonical origin survives; the binding fields ride through either way.
+                const arrow = selectedLine;
                 const end = index === 0 ? 'start' : 'end';
-                const frame =
-                    cached && cached.end === end
-                        ? cached
-                        : elbowBindFor(linearLocalToScene(selectedLine, points[index]));
-                updateElement(selectedLine.id, bindElbowEnd(reshaped, end, frame.candidate, frame.fixedPoint, byId));
-            } else {
-                // Straight (or a middle vertex): the dragged endpoint (re)binds/unbinds via the chord model,
-                // the other end keeps its binding, every bound end re-snaps through bindArrow.
-                const bound = bindArrow(
-                    reshaped,
-                    { start: index === 0, end: index === points.length - 1 },
-                    ordered,
-                    zoom,
-                    suppressRef.current,
+                const endScene = linearLocalToScene(arrow, points[index]);
+                const frame = cached && cached.end === end ? cached : elbowBindFor(endScene);
+                const bound = bindPinnedElbowEnd(arrow, end, frame.candidate, frame.fixedPoint, endScene, byId);
+                updateElement(
+                    arrow.id,
+                    bound.fixedSegments === ''
+                        ? bound
+                        : {
+                              ...renormalize({ ...arrow, ...bound }),
+                              startBinding: bound.startBinding,
+                              endBinding: bound.endBinding,
+                          },
                 );
-                updateElement(selectedLine.id, bound);
+            } else if (selectedLine.type === 'arrow') {
+                const reshaped = { ...selectedLine, ...normalizeLinear(selectedLine, points) };
+                if (selectedLine.elbow && isEndpoint(index, points.length)) {
+                    // Replay the last preview frame's cached dock — never re-run the candidate search from the
+                    // release cursor. Recompute only in the degenerate no-move case (no preview frame ran).
+                    const end = index === 0 ? 'start' : 'end';
+                    const frame =
+                        cached && cached.end === end
+                            ? cached
+                            : elbowBindFor(linearLocalToScene(selectedLine, points[index]));
+                    updateElement(
+                        selectedLine.id,
+                        bindElbowEnd(reshaped, end, frame.candidate, frame.fixedPoint, byId),
+                    );
+                } else {
+                    // Straight (or a middle vertex): the dragged endpoint (re)binds/unbinds via the chord model,
+                    // the other end keeps its binding, every bound end re-snaps through bindArrow.
+                    const bound = bindArrow(
+                        reshaped,
+                        { start: index === 0, end: index === points.length - 1 },
+                        ordered,
+                        liveZoom(),
+                        suppressRef.current,
+                    );
+                    updateElement(selectedLine.id, bound);
+                }
+            } else {
+                updateElement(selectedLine.id, normalizeLinear(selectedLine, points));
             }
-        } else {
-            updateElement(selectedLine.id, normalizeLinear(selectedLine, points));
-        }
-        undoManager?.stopCapturing();
+        });
         setPointDraft(null);
     };
 
@@ -763,10 +772,14 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     };
     const onElbowPinCommit = (patch: PinPatch) => {
         if (selectedLine?.type !== 'arrow') return;
-        undoManager?.stopCapturing();
         // Unpinning the last pin returns the arrow to derived mode with a canonical origin — skip the
         // renormalize wrap there, which would re-run it over a now-derived 2-point arrow.
-        updateElement(selectedLine.id, patch.fixedSegments === '' ? patch : renormalize({ ...selectedLine, ...patch }));
+        sealed(undoManager, () =>
+            updateElement(
+                selectedLine.id,
+                patch.fixedSegments === '' ? patch : renormalize({ ...selectedLine, ...patch }),
+            ),
+        );
         setSelectedPinIndex(null);
         setPointDraft(null);
     };
@@ -803,9 +816,9 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         }
         const binding = parseBinding(end === 'start' ? selectedLine.startBinding : selectedLine.endBinding);
         if (binding) {
-            undoManager?.stopCapturing();
-            updateElement(selectedLine.id, bindFocusPoint(selectedLine, end, binding.elementId, fixedPoint, byId));
-            undoManager?.stopCapturing();
+            sealed(undoManager, () =>
+                updateElement(selectedLine.id, bindFocusPoint(selectedLine, end, binding.elementId, fixedPoint, byId)),
+            );
         }
         setPointDraft(null);
     };
@@ -883,15 +896,15 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             : null;
 
     // The shape-following outline over the shape a dragged/hovered arrow endpoint reaches (creation, a
-    // point-handle drag, or the pre-click hover). An SVG `<g>` for the scene group: `elementToSvg`
-    // re-strokes the shape's own geometry in the selection colour (`currentColor`, tinted by the
-    // `text-selection-handle` group), so no shape math is duplicated here.
+    // point-handle drag, or the pre-click hover). An SVG `<g>` for the scene group: the kind's own outline
+    // stroked in the selection colour (`currentColor`, tinted by the `text-selection-handle` group), so no
+    // shape math is duplicated here.
     const candidate = bindHint ? ordered.find((el) => el.id === bindHint.shapeId) : undefined;
     const bindingOutline =
         candidate && isBindable(candidate)
             ? createElement('g', {
                   className: 'text-selection-handle',
-                  dangerouslySetInnerHTML: { __html: elementToSvg(bindingOutlineElement(candidate, zoom)) },
+                  dangerouslySetInnerHTML: { __html: bindingOutlineSvg(candidate, zoom) },
               })
             : null;
 
@@ -911,19 +924,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             : null;
 
     // --- Escape / Enter / double-click / blur (capture phase, latest closures via a ref) ----------
-    const apiRef = useRef<{
-        escape: () => boolean;
-        finish: () => boolean;
-        deleteSelectedPoint: () => boolean;
-        blur: () => void;
-    }>({
-        escape: () => false,
-        finish: () => false,
-        deleteSelectedPoint: () => false,
-        blur: () => {},
-    });
-    apiRef.current = {
-        escape: () => {
+    const api = {
+        escape: (): boolean => {
             if (strokeRef.current) {
                 cancelFreedraw();
                 return true;
@@ -950,7 +952,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             }
             return false;
         },
-        finish: () => {
+        finish: (): boolean => {
             if (!lineRef.current) return false;
             finishLineWith(lineRef.current.committed);
             return true;
@@ -961,7 +963,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         // arrow (route derived, no editable interior) is a no-op — but we STILL consume the key so it
         // cannot fall through and delete the element out from under a selected point. With no point
         // selected we return false and selection-delete removes the whole element as usual.
-        deleteSelectedPoint: () => {
+        deleteSelectedPoint: (): boolean => {
             // A selected PIN unpins — precedence over vertex/element delete, one sealed step.
             if (
                 selectedPinIndex !== null &&
@@ -969,13 +971,14 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 selectedLine.elbow &&
                 selectedLine.fixedSegments !== ''
             ) {
-                undoManager?.stopCapturing();
                 // Dropping the last pin returns to derived mode with a canonical origin — skip the
                 // renormalize wrap there so that origin survives.
                 const patch = unpinSegment(selectedLine, selectedPinIndex);
-                updateElement(
-                    selectedLine.id,
-                    patch.fixedSegments === '' ? patch : renormalize({ ...selectedLine, ...patch }),
+                sealed(undoManager, () =>
+                    updateElement(
+                        selectedLine.id,
+                        patch.fixedSegments === '' ? patch : renormalize({ ...selectedLine, ...patch }),
+                    ),
                 );
                 setSelectedPinIndex(null);
                 return true;
@@ -986,15 +989,15 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             const interior =
                 !(selectedLine.type === 'arrow' && selectedLine.elbow) && index > 0 && index < pts.length - 1;
             if (!interior) return true; // endpoint / elbow → no-op, but consume (never delete the element)
-            undoManager?.stopCapturing();
-            updateElement(
-                selectedLine.id,
-                normalizeLinear(
-                    selectedLine,
-                    pts.filter((_, i) => i !== index),
+            sealed(undoManager, () =>
+                updateElement(
+                    selectedLine.id,
+                    normalizeLinear(
+                        selectedLine,
+                        pts.filter((_, i) => i !== index),
+                    ),
                 ),
             );
-            undoManager?.stopCapturing();
             // After removing an interior point, keep editing the previous point IF it is still interior
             // (i.e. the removed one wasn't the first interior point); otherwise clear the point selection.
             // Points before the removed index keep their index, so `index - 1` still addresses that point.
@@ -1009,6 +1012,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             else if (lineRef.current) finishLineWith(lineRef.current.committed);
         },
     };
+    const apiRef = useRef(api);
+    apiRef.current = api;
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {

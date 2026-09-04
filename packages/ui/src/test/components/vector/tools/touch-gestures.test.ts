@@ -1,14 +1,47 @@
 import { describe, expect, test } from 'bun:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import {
     isDoubleTap,
     isFreedrawSpike,
     pinchFrame,
     SPIKE_MAX_POINTS,
+    swipeFrameDelta,
     type Tap,
+    type TouchGestures,
+    type TouchGesturesParams,
+    type TouchPointerEvent,
     type TouchXY,
     touchAllowedInPenMode,
     touchIgnoredDuringPen,
+    useTouchGestures,
 } from '../../../../components/vector/tools/touch-gestures';
+
+// The pure decisions below need no harness, but the swipe's abort-then-page ORDER is a property of the
+// hook. One static render captures the handlers; they close over the hook's state ref and keep working.
+function renderTouchGestures(overrides: Partial<TouchGesturesParams>): TouchGestures {
+    const held: { gestures: TouchGestures | null } = { gestures: null };
+    const Probe = () => {
+        held.gestures = useTouchGestures({
+            tool: 'select',
+            containerRef: { current: null },
+            frozenRef: { current: false },
+            pinch: () => undefined,
+            abortActiveGesture: () => undefined,
+            isPenDrawing: () => false,
+            onDoubleTap: () => undefined,
+            ...overrides,
+        });
+        return null;
+    };
+    renderToStaticMarkup(createElement(Probe));
+    if (!held.gestures) throw new Error('the probe never rendered');
+    return held.gestures;
+}
+
+function touchEvent(e: { pointerId: number; clientX: number; clientY: number }): TouchPointerEvent {
+    return { pointerType: 'touch', ...e };
+}
 
 describe('isFreedrawSpike', () => {
     test('a short live stroke (< 10 points) is a spike → discard', () => {
@@ -25,7 +58,7 @@ describe('isFreedrawSpike', () => {
 describe('touchAllowedInPenMode', () => {
     test('a finger still selects and types while a pen is in use', () => {
         expect(touchAllowedInPenMode('select')).toBe(true);
-        expect(touchAllowedInPenMode('text')).toBe(true);
+        expect(touchAllowedInPenMode('richtext')).toBe(true);
     });
 
     test('a finger is locked out of every draw/create tool in penMode', () => {
@@ -93,5 +126,73 @@ describe('isDoubleTap', () => {
 
     test('a far-away second tap is not a double-tap', () => {
         expect(isDoubleTap(tap(0, 10, 10), tap(100, 100, 100))).toBe(false);
+    });
+});
+
+describe('swipeFrameDelta', () => {
+    test('a long leftward drag steps to the next frame', () => {
+        expect(swipeFrameDelta(-120, 10)).toBe(1);
+    });
+
+    test('a long rightward drag steps back', () => {
+        expect(swipeFrameDelta(120, -10)).toBe(-1);
+    });
+
+    test('a short drag is not a swipe', () => {
+        expect(swipeFrameDelta(-40, 0)).toBe(0);
+    });
+
+    test('a mostly vertical drag is not a swipe', () => {
+        expect(swipeFrameDelta(-100, 80)).toBe(0);
+    });
+});
+
+describe('a swipe unwinds the pan it rode in on', () => {
+    // A view-only canvas pans on any primary drag, so the swipe's own finger already started one. If
+    // the hook claims the pointerup without aborting it, the canvas never runs finishGesture and the
+    // viewport freeze survives — every later touch is dead. Mirrors the double-tap branch's contract.
+    test('abortActiveGesture runs before onSwipe', () => {
+        const calls: string[] = [];
+        const gestures = renderTouchGestures({
+            onSwipe: () => calls.push('swipe'),
+            abortActiveGesture: () => calls.push('abort'),
+        });
+        gestures.onPointerDown(touchEvent({ pointerId: 1, clientX: 300, clientY: 400 }));
+        gestures.onPointerMove(touchEvent({ pointerId: 1, clientX: 150, clientY: 405 }));
+        expect(gestures.onPointerUp(touchEvent({ pointerId: 1, clientX: 150, clientY: 405 }))).toBe(true);
+        expect(calls).toEqual(['abort', 'swipe']);
+    });
+
+    test('without onSwipe the same drag is left to the canvas as a plain pan', () => {
+        const gestures = renderTouchGestures({});
+        gestures.onPointerDown(touchEvent({ pointerId: 1, clientX: 300, clientY: 400 }));
+        gestures.onPointerMove(touchEvent({ pointerId: 1, clientX: 150, clientY: 405 }));
+        expect(gestures.onPointerUp(touchEvent({ pointerId: 1, clientX: 150, clientY: 405 }))).toBe(false);
+    });
+});
+
+describe('a gesture that ever held two fingers is only a pinch', () => {
+    test('the last finger lifted out of a pinch cannot swipe on its pinch travel', () => {
+        const calls: string[] = [];
+        const gestures = renderTouchGestures({ onSwipe: () => calls.push('swipe') });
+        gestures.onPointerDown(touchEvent({ pointerId: 1, clientX: 300, clientY: 400 }));
+        gestures.onPointerDown(touchEvent({ pointerId: 2, clientX: 320, clientY: 400 }));
+        gestures.onPointerMove(touchEvent({ pointerId: 1, clientX: 150, clientY: 400 }));
+        gestures.onPointerMove(touchEvent({ pointerId: 2, clientX: 470, clientY: 400 }));
+        expect(gestures.onPointerUp(touchEvent({ pointerId: 1, clientX: 150, clientY: 400 }))).toBe(true);
+        gestures.onPointerUp(touchEvent({ pointerId: 2, clientX: 470, clientY: 400 }));
+        expect(calls).toEqual([]);
+    });
+
+    test('a stationary pinch release does not arm a double-tap', () => {
+        const calls: string[] = [];
+        const gestures = renderTouchGestures({ onDoubleTap: () => calls.push('double-tap') });
+        gestures.onPointerDown(touchEvent({ pointerId: 1, clientX: 100, clientY: 100 }));
+        gestures.onPointerDown(touchEvent({ pointerId: 2, clientX: 140, clientY: 100 }));
+        gestures.onPointerUp(touchEvent({ pointerId: 1, clientX: 100, clientY: 100 }));
+        gestures.onPointerUp(touchEvent({ pointerId: 2, clientX: 140, clientY: 100 }));
+        gestures.onPointerDown(touchEvent({ pointerId: 1, clientX: 140, clientY: 100 }));
+        gestures.onPointerUp(touchEvent({ pointerId: 1, clientX: 140, clientY: 100 }));
+        expect(calls).toEqual([]);
     });
 });

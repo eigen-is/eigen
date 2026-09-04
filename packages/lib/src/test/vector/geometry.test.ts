@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { RoughGenerator } from 'roughjs/bin/generator';
 import { elbowRoute } from '../../vector/elbow-route';
+import { solidFill } from '../../vector/fill';
 import {
     anchorToScene,
     applyResize,
@@ -32,7 +33,6 @@ import {
     linearSceneToLocal,
     marqueeHits,
     marqueeMode,
-    normalizeAngle,
     normalizeFixedPoint,
     normalizeLinear,
     outlinePoint,
@@ -44,21 +44,25 @@ import {
     resizeLinear,
     resizeRotatedRect,
     rotatePoint,
-    sampleArrowCurve,
     serializePoints,
-    shapeSideMidpoints,
+    shapeAnchorPoints,
     snapAngle,
     unionBounds,
 } from '../../vector/geometry';
 import {
     arrowsBoundTo,
+    type Corners,
     DEFAULT_ELEMENT_PROPS,
     serializeBinding,
     type VectorArrowElement,
+    type VectorBindableElement,
     type VectorElement,
     type VectorLinearElement,
+    type VectorRectangleElement,
+    type VectorRichTextElement,
     type VectorShapeElement,
 } from '../../vector/types';
+import { richtext } from './element-factories';
 
 const box = (over: Partial<Box>): Box => ({ x: 0, y: 0, width: 100, height: 60, angle: 0, ...over });
 
@@ -148,7 +152,7 @@ describe('hitTestDiamond', () => {
 });
 
 describe('hitTestElement', () => {
-    const make = (type: 'rectangle' | 'diamond' | 'ellipse' | 'text' | 'image'): VectorElement => {
+    const make = (type: 'rectangle' | 'diamond' | 'ellipse' | 'richtext' | 'image'): VectorElement => {
         const base = {
             ...DEFAULT_ELEMENT_PROPS,
             id: 'e',
@@ -157,13 +161,29 @@ describe('hitTestElement', () => {
             width: 100,
             height: 60,
             angle: 0,
-            seed: 1,
             index: 'a0',
-        };
-        if (type === 'text')
-            return { ...base, type, text: 'hi', fontSize: 20, fontFamily: 'Excalifont', textAlign: 'left' };
-        if (type === 'image') return { ...base, type, mediaName: 'x.png' };
-        return { ...base, type, roundness: 'sharp' };
+            fill: solidFill('transparent'),
+            corners: 'straight',
+        } satisfies Omit<VectorRectangleElement, 'type' | 'roughness' | 'seed'>;
+        if (type === 'richtext')
+            return {
+                ...base,
+                type,
+                html: '<p>hi</p>',
+                fontFamily: 'Excalifont',
+                fontSize: 20,
+                fontWeight: 'normal',
+                fontStyle: 'normal',
+                textDecoration: 'none',
+                textAlign: 'left',
+                verticalAlign: 'top',
+                color: '#1e1e1e',
+                letterSpacing: 0,
+                lineHeight: 1.2,
+                padding: 0,
+            };
+        if (type === 'image') return { ...base, type, mediaName: 'x.png', objectFit: 'contain' };
+        return { ...base, type, roughness: 1, seed: 1 };
     };
 
     test('dispatches shape geometry per type — corner hits a rectangle but not an ellipse', () => {
@@ -171,7 +191,7 @@ describe('hitTestElement', () => {
         expect(hitTestElement(make('rectangle'), { x: 0, y: 0 }, 0)).toBe(true);
         expect(hitTestElement(make('ellipse'), { x: 0, y: 0 }, 0)).toBe(false);
         expect(hitTestElement(make('diamond'), { x: 0, y: 0 }, 0)).toBe(false);
-        expect(hitTestElement(make('text'), { x: 0, y: 0 }, 0)).toBe(true);
+        expect(hitTestElement(make('richtext'), { x: 0, y: 0 }, 0)).toBe(true);
         expect(hitTestElement(make('image'), { x: 0, y: 0 }, 0)).toBe(true);
     });
 });
@@ -182,6 +202,8 @@ const linear = (over: Partial<VectorLinearElement> & { points: string }): Vector
     ...DEFAULT_ELEMENT_PROPS,
     id: 'l',
     type: 'line',
+    fill: solidFill('transparent'),
+    roughness: 1,
     x: 0,
     y: 0,
     width: 100,
@@ -416,8 +438,8 @@ describe('hitTestElement — linear', () => {
 
     test('a closed, filled line is hit inside the polygon; transparent is outline-only', () => {
         const points = '[[0,0],[100,0],[50,80],[0,0]]';
-        const filled = linear({ points, backgroundColor: '#ff0000', width: 100, height: 80 });
-        const open = linear({ points, backgroundColor: 'transparent', width: 100, height: 80 });
+        const filled = linear({ points, fill: solidFill('#ff0000'), width: 100, height: 80 });
+        const open = linear({ points, fill: solidFill('transparent'), width: 100, height: 80 });
         expect(hitTestElement(filled, { x: 50, y: 30 }, 1)).toBe(true);
         expect(hitTestElement(open, { x: 50, y: 30 }, 1)).toBe(false);
     });
@@ -564,17 +586,6 @@ describe('snapAngle', () => {
     });
 });
 
-describe('normalizeAngle', () => {
-    test('wraps into [0, 360)', () => {
-        expect(normalizeAngle(0)).toBe(0);
-        expect(normalizeAngle(360)).toBe(0);
-        expect(normalizeAngle(370)).toBe(10);
-        expect(normalizeAngle(720)).toBe(0);
-        expect(normalizeAngle(-10)).toBe(350);
-        expect(normalizeAngle(-370)).toBe(350);
-    });
-});
-
 describe('marqueeMode', () => {
     test('rightward drag is contain, leftward is intersect', () => {
         expect(marqueeMode(10, 50)).toBe('contain');
@@ -608,16 +619,23 @@ describe('marqueeHits', () => {
 
 // --- Arrows: bindings, endpoints, heads, labels ---------------------------------------
 
-const shapeEl = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id' | 'type'>): VectorShapeElement => ({
+// Spread-only so the ellipse case doesn't trip the excess-property check on `corners`.
+const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
     ...DEFAULT_ELEMENT_PROPS,
     x: 0,
     y: 0,
     width: 100,
     height: 60,
     angle: 0,
-    seed: 1,
     index: 'a0',
-    roundness: 'sharp',
+    fill: solidFill('transparent'),
+    roughness: 1,
+    seed: 1,
+    corners: 'straight',
+};
+
+const shapeEl = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id' | 'type'>): VectorShapeElement => ({
+    ...SHAPE_BASE,
     ...over,
 });
 
@@ -625,6 +643,7 @@ const arrowEl = (over: Partial<VectorArrowElement> & { points: string }): Vector
     ...DEFAULT_ELEMENT_PROPS,
     id: 'ar',
     type: 'arrow',
+    roughness: 1,
     x: 0,
     y: 0,
     width: 100,
@@ -646,7 +665,7 @@ const arrowEl = (over: Partial<VectorArrowElement> & { points: string }): Vector
     ...over,
 });
 
-const bind = (shape: VectorShapeElement, fixedPoint: [number, number]): string =>
+const bind = (shape: VectorBindableElement, fixedPoint: [number, number]): string =>
     serializeBinding({ elementId: shape.id, fixedPoint });
 
 describe('bindingGap', () => {
@@ -739,6 +758,38 @@ describe('outlinePoint', () => {
     });
 });
 
+describe('docking on the true outline', () => {
+    // 100×100, so `round` collapses the core to a point and the outline IS the inscribed circle (r 50).
+    const rounded = (corners: Corners) =>
+        shapeEl({ id: 's', type: 'rectangle', x: 0, y: 0, width: 100, height: 100, corners });
+
+    test('a diagonal ray lands on the corner arc, inside the sharp corner', () => {
+        const sharp = outlinePoint(rounded('straight'), { x: 300, y: 300 }, { x: 50, y: 50 }, 0);
+        const round = outlinePoint(rounded('round'), { x: 300, y: 300 }, { x: 50, y: 50 }, 0);
+        expect(sharp.x).toBeCloseTo(100, 6);
+        expect(round.x).toBeLessThan(sharp.x);
+        expect(Math.hypot(round.x - 50, round.y - 50)).toBeCloseTo(50, 6);
+    });
+
+    test('an axis-aligned ray is unchanged by rounding', () => {
+        const sharp = outlinePoint(rounded('straight'), { x: 50, y: -100 }, { x: 50, y: 50 }, 0);
+        const round = outlinePoint(rounded('round'), { x: 50, y: -100 }, { x: 50, y: 50 }, 0);
+        expect(sharp).toEqual({ x: 50, y: 0 });
+        expect(round).toEqual(sharp);
+    });
+
+    test('the binding gap still applies on a rounded shape', () => {
+        const hit = outlinePoint(rounded('round'), { x: 50, y: -100 }, { x: 50, y: 50 }, 8);
+        expect(hit.y).toBeCloseTo(-8, 6);
+    });
+
+    test('a rotated rounded shape docks in its own frame', () => {
+        const el = { ...rounded('round'), angle: 45 };
+        const hit = outlinePoint(el, { x: 50, y: -200 }, { x: 50, y: 50 }, 0);
+        expect(Math.hypot(hit.x - 50, hit.y - 50)).toBeCloseTo(50, 6);
+    });
+});
+
 describe('boundEndpoint', () => {
     // A rectangle to the right of the arrow; its left inflated side sits at x = 5 - gap(6) = -1.
     const shape = shapeEl({ id: 'rect', type: 'rectangle', x: 5, y: -20, width: 40, height: 40, strokeWidth: 2 });
@@ -812,7 +863,7 @@ describe('boundEndpoint', () => {
     });
 });
 
-describe('arrowCurveBeziers / sampleArrowCurve', () => {
+describe('arrowCurveBeziers', () => {
     // The geometry-side curve is golden-locked to roughjs's `gen.curve` control points at roughness 0 —
     // the exact spline the renderer draws (Catmull-Rom, curveTightness 0, endpoints duplicated).
     const pts: Point[] = [
@@ -837,16 +888,6 @@ describe('arrowCurveBeziers / sampleArrowCurve', () => {
         for (let i = 0; i < beziers.length; i++) {
             const [, c1, c2, c3] = beziers[i];
             expect(bcurves[i].data).toEqual([c1.x, c1.y, c2.x, c2.y, c3.x, c3.y]);
-        }
-    });
-
-    test('sampleArrowCurve passes through every vertex and never yields NaN', () => {
-        const poly = sampleArrowCurve(pts, 8);
-        expect(poly[0]).toEqual(pts[0]);
-        expect(poly[poly.length - 1]).toEqual(pts[pts.length - 1]);
-        for (const p of poly) {
-            expect(Number.isFinite(p.x)).toBe(true);
-            expect(Number.isFinite(p.y)).toBe(true);
         }
     });
 
@@ -970,6 +1011,62 @@ describe('boundEndpoint — curve-exact docking', () => {
         const p = boundEndpoint(arrow, 'end', far);
         expect(Number.isFinite(p.x)).toBe(true);
         expect(Number.isFinite(p.y)).toBe(true);
+    });
+});
+
+describe('binding a rich text box', () => {
+    // Rich text is a DOM box, but an arrow docks on it exactly as on a rectangle: the outline the kind
+    // declares (rounded by `corners`), the gap its stroke width sets, the follow every bound end gets.
+    // Same box as followBindings' rectangle, so the two are directly comparable.
+    const box = richtext({ id: 'txt', x: 150, y: -30, width: 60, height: 60, corners: 'curved' });
+    const byId = new Map<string, VectorElement>([[box.id, box]]);
+    const toward = arrowEl({ points: '[[0,0],[100,0]]', width: 100, endBinding: bind(box, [0, 0.5]) });
+
+    test('an arrow docks on the box outline, gap and all', () => {
+        // the left inflated side sits at 150 - gap(6) = 144
+        expect(followBindings(toward, byId)).toEqual({
+            x: 0,
+            y: 0,
+            width: 144,
+            height: 0,
+            points: '[[0,0],[144,0]]',
+            fixedSegments: '',
+        });
+    });
+
+    test('the dock is the same one a rectangle of that box would give', () => {
+        const rect = shapeEl({
+            id: box.id,
+            type: 'rectangle',
+            x: box.x,
+            y: box.y,
+            width: box.width,
+            height: box.height,
+            corners: box.corners,
+            strokeWidth: box.strokeWidth,
+        });
+        expect(followBindings(toward, byId)).toEqual(followBindings(toward, new Map([[rect.id, rect]])));
+    });
+
+    test('the bound arrow follows the box when it moves', () => {
+        const moved = new Map<string, VectorElement>([[box.id, { ...box, x: 250 }]]);
+        expect(followBindings(toward, moved)).toMatchObject({ width: 244, points: '[[0,0],[244,0]]' });
+    });
+
+    test('the dock honours the rounded corner the box is drawn with', () => {
+        const sharp: VectorRichTextElement = { ...box, corners: 'straight' };
+        // aimed diagonally at the top-left corner anchor, where a rounded outline and a sharp one differ
+        const atCorner = arrowEl({
+            points: '[[0,0],[50,50]]',
+            x: 100,
+            y: -80,
+            width: 50,
+            height: 50,
+            endBinding: bind(box, [0, 0]),
+        });
+        const curvedDock = boundEndpoint(atCorner, 'end', box);
+        const sharpDock = boundEndpoint(atCorner, 'end', sharp);
+        expect(Math.hypot(curvedDock.x - sharpDock.x, curvedDock.y - sharpDock.y)).toBeGreaterThan(0.1);
     });
 });
 
@@ -1204,6 +1301,13 @@ describe('elementBounds', () => {
         expect(b.maxX).not.toBe(stale2.maxX);
     });
 
+    // render and hitTest both guard an empty route; bounds must too, or ±Infinity reaches the shared
+    // viewBox and the whole document exports blank.
+    test('an empty route falls back to the stored box instead of ±Infinity', () => {
+        const el = arrowEl({ points: '[[0,0],[100,0]]', width: 100, height: 0 });
+        expect(elementBounds(el, [])).toEqual(getElementBounds(el));
+    });
+
     test('a wide label unions its rect into the bounds', () => {
         const el = arrowEl({ points: '[[0,0],[100,0]]', width: 100, height: 0, text: 'wide', labelWidth: 200 });
         const b = elementBounds(el);
@@ -1392,10 +1496,10 @@ describe('projectFixedPointOntoDiagonal', () => {
     });
 });
 
-describe('shapeSideMidpoints', () => {
+describe('shapeAnchorPoints', () => {
     test('rect/ellipse → right, bottom, left, top edge midpoints (Excalidraw order)', () => {
         const rect = shapeEl({ id: 'r', type: 'rectangle', x: 0, y: 0, width: 200, height: 100 });
-        expect(shapeSideMidpoints(rect)).toEqual([
+        expect(shapeAnchorPoints(rect)).toEqual([
             { x: 200, y: 50 },
             { x: 100, y: 100 },
             { x: 0, y: 50 },
@@ -1405,7 +1509,7 @@ describe('shapeSideMidpoints', () => {
 
     test('diamond → its four vertices/tips (right, bottom, left, top)', () => {
         const dia = shapeEl({ id: 'd', type: 'diamond', x: 0, y: 0, width: 200, height: 100 });
-        expect(shapeSideMidpoints(dia)).toEqual([
+        expect(shapeAnchorPoints(dia)).toEqual([
             { x: 200, y: 50 },
             { x: 100, y: 100 },
             { x: 0, y: 50 },

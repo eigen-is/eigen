@@ -1,184 +1,37 @@
-import { useHotkey } from '@tanstack/react-hotkeys';
 import { useAuth } from '@workspace/lib/auth';
-import { getBackgroundStyle } from '@workspace/lib/background';
-import {
-    buildImageClipboardItem,
-    buildTextClipboardItem,
-    classifyPaste,
-    materializeClipboardSvg,
-    needsReUpload,
-    readClipboardBox,
-    readEigenClipboardAsync,
-    reUploadImage,
-    writeEigenClipboard,
-    writeEigenClipboardAsync,
-} from '@workspace/lib/clipboard';
-import { getItemMapRoot, useYjsUndoHotkeys } from '@workspace/lib/collab';
-import { useCommentFilter, useCommentLifecycle, useDocumentPanels } from '@workspace/lib/comments';
-import {
-    isPendingMediaName,
-    MediaResolverProvider,
-    useCopyToMediaFolder,
-    useMediaResolver,
-    useUploadFile,
-    useZombieMediaSweep,
-} from '@workspace/lib/drive';
-import { escapeHtml } from '@workspace/lib/html';
-import { htmlToPlainText, readDominantTextAlign, sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
-import { OBJECT_FIELDS } from '@workspace/lib/slides';
-import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
-import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
+import { MediaResolverProvider, useCopyToMediaFolder, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
-    type ArrangeOp,
-    computeArrange,
-    DUPLICATE_OFFSET,
-    fitImageSize,
-    type ImageSize,
-    NUDGE_STEP,
-    NUDGE_STEP_LARGE,
+    elementsInFrame,
+    parseBackgroundFill,
+    SLIDES_STYLE_DEFAULTS,
+    serializeBackgroundFill,
+    type VectorElement,
 } from '@workspace/lib/vector';
-import { CollabLoadingState, Column, ColumnLayout, EmptyState, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
-import { CardFormDialog } from '@workspace/ui/components/cards';
-import { type CommentContextMenuItem, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
-import { useContextMenu } from '@workspace/ui/components/context-menu';
-import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
-import { readImageSize, readImageSizeFromUrl } from '@workspace/ui/components/media';
-import { useAspectLock, useZOrderHotkeys, type ZOp } from '@workspace/ui/components/properties-panel';
-import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
-import { isTypingTarget } from '@workspace/ui/hooks/is-typing-target';
-import { cn } from '@workspace/ui/lib/utils';
-import { X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useActiveComments } from './hooks/use-active-comments';
-import { useDeck } from './hooks/use-deck';
-import { useSlideDnd } from './hooks/use-slide-dnd';
-import { useSlidesDocSearch } from './hooks/use-slides-doc-search';
-import { useSlidesPresence } from './hooks/use-slides-presence';
-import { SlideCanvas } from './slide-canvas';
-import { ReadOnlySlideObject } from './slide-object';
-import { SlidePanel } from './slide-panel';
-import { SlideBackgroundPanel, SlidePropertiesPanel } from './slide-properties-panel';
-import { Toolbar } from './toolbar';
+import { EmptyState, TooltipButton, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
+import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
+import { useAspectLock } from '@workspace/ui/components/properties-panel';
 import {
-    DEFAULT_IMAGE_OBJECT,
-    DEFAULT_TEXT_OBJECT,
-    type ImageObject,
-    SLIDE_BASE_HEIGHT,
-    SLIDE_BASE_WIDTH,
-    type SlideObject,
-} from './types';
-
-// Size a placed image via the shared fit (intrinsic px = slide units 1:1 per AUDIT-f; natural size
-// where it fits within 80% of the 1920×1080 slide, never upscaled; unreadable → the shared default
-// box), then CENTER it. DEFAULT_IMAGE_OBJECT's fixed x/y centered its fixed box — this keeps that
-// placement rule and changes only the size.
-function centeredImageProps(intrinsic: ImageSize | null): Pick<ImageObject, 'x' | 'y' | 'width' | 'height'> {
-    const { width, height } = fitImageSize(intrinsic, { width: SLIDE_BASE_WIDTH, height: SLIDE_BASE_HEIGHT });
-    return { x: (SLIDE_BASE_WIDTH - width) / 2, y: (SLIDE_BASE_HEIGHT - height) / 2, width, height };
-}
-
-// App-private object fields a pasted item restores from its (untyped) meta via this loop. Geometry
-// (width/height/angle) and typography ride typed clipboard fields; text/mediaName come off the item
-// itself; x/y/slideId are slides-private meta restored separately below (paste-in-place) — so this
-// list holds only borders, objectFit, and the text-box background. Derived from the canonical
-// registry minus everything carried elsewhere, so the consumer can never drift from the producer.
-const PASTE_META_FIELDS = OBJECT_FIELDS.filter(
-    (f) =>
-        !(
-            [
-                'id',
-                'slideId',
-                'type',
-                'x',
-                'y',
-                'width',
-                'height',
-                'angle',
-                'text',
-                'mediaName',
-                'commentCardIds',
-                'fontFamily',
-                'fontSize',
-                'fontWeight',
-                'fontStyle',
-                'textDecoration',
-                'textAlign',
-                'verticalAlign',
-                'color',
-                'letterSpacing',
-                'lineHeight',
-                'highlightColor',
-            ] as readonly string[]
-        ).includes(f),
-);
-
-// Same-slide pastes shift by this so the copy is visibly distinct (cross-slide lands in place).
-const PASTE_OFFSET = 24;
-
-// Overrides a pasted item restores onto a DEFAULT_*_OBJECT: typed geometry + app-private meta
-// extras (borders/objectFit/background) + slides-private position. x/y are deliberately NOT in the
-// shared typed contract (no cross-app meaning) — slides carries them in its own meta so the
-// shipped paste-in-place UX survives: cross-slide paste lands at the source coordinates
-// (footer/logo workflows), same-slide paste offsets. Cross-app items have no meta.x/y and anchor
-// at the defaults. Typography is layered on top for text items by the caller.
-function clipboardItemOverrides(item: EigenClipboardItem, activeSlideId: string | null): Record<string, unknown> {
-    const overrides: Record<string, unknown> = {};
-    const box = readClipboardBox(item);
-    overrides.width = box.width;
-    overrides.height = box.height;
-    if (box.angle != null) overrides.angle = box.angle;
-    const m = item.meta ?? {};
-    for (const k of PASTE_META_FIELDS) {
-        if (m[k] != null) overrides[k] = m[k];
-    }
-    if (typeof m.x === 'number' && typeof m.y === 'number') {
-        const offset = m.slideId === activeSlideId ? PASTE_OFFSET : 0;
-        overrides.x = m.x + offset;
-        overrides.y = m.y + offset;
-    }
-    return overrides;
-}
-
-function buildClipboardItem(
-    obj: SlideObject,
-    resolveMediaPath: (name: string) => DrivePath | undefined,
-): EigenClipboardItem | null {
-    const box = { width: obj.width, height: obj.height, angle: obj.angle };
-    const border = { borderColor: obj.borderColor, borderWidth: obj.borderWidth, borderRadius: obj.borderRadius };
-    if (obj.type === 'image') {
-        const mediaPath = resolveMediaPath(obj.mediaName);
-        if (!mediaPath) return null;
-        return buildImageClipboardItem({
-            mediaName: obj.mediaName,
-            source: mediaPath,
-            box,
-            meta: { ...border, objectFit: obj.objectFit, x: obj.x, y: obj.y, slideId: obj.slideId },
-        });
-    }
-    // The typed `text` field is PLAIN text (the cross-app contract — vector/sheets/docs consume it
-    // literally); slides' own rich LightEditor HTML rides slides-private meta.html and is
-    // re-sanitized on consumption (the marker wire is forgeable by any web page, and object text
-    // renders via dangerouslySetInnerHTML).
-    return buildTextClipboardItem({
-        text: htmlToPlainText(obj.text),
-        box,
-        typography: {
-            fontFamily: obj.fontFamily,
-            fontSize: obj.fontSize,
-            fontWeight: obj.fontWeight,
-            fontStyle: obj.fontStyle,
-            textDecoration: obj.textDecoration,
-            textAlign: obj.textAlign,
-            verticalAlign: obj.verticalAlign,
-            color: obj.color,
-            letterSpacing: obj.letterSpacing,
-            lineHeight: obj.lineHeight,
-            highlightColor: obj.highlightColor,
-        },
-        meta: { ...border, background: obj.background, html: obj.text, x: obj.x, y: obj.y, slideId: obj.slideId },
-    });
-}
+    CanvasDocumentShell,
+    CanvasEditor,
+    type CanvasImageInsert,
+    CanvasPropertiesPanel,
+    CanvasToolbar,
+    useActiveFrame,
+    useCanvasCommentHost,
+    useCanvasDoc,
+    useCanvasDocSearch,
+    useCanvasPresence,
+    useSelection,
+    useTool,
+} from '@workspace/ui/components/vector';
+import { Play, Plus, Presentation } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSlideDnd } from './hooks/use-slide-dnd';
+import { PresentMode, presentStep } from './present-mode';
+import { seedDeck } from './seed-deck';
+import { SlideBackgroundPanel } from './slide-background-panel';
+import { SlidePanel } from './slide-panel';
 
 type SlideEditorProps = {
     ownerId: string;
@@ -191,16 +44,11 @@ type SlideEditorProps = {
     initialSearchTerm?: string;
 };
 
-export function SlideEditor({
-    ownerId,
-    path,
-    canWrite,
-    mediaFolderId,
-    chatFolderId,
-    onAccessDialogOpen,
-    initialChatName,
-    initialSearchTerm,
-}: SlideEditorProps) {
+// The media provider wraps the deck rather than living inside it: the editor itself calls
+// useMediaResolver (for the slide background's preview URL), and a hook cannot read a context its own
+// component provides. `key` remounts the whole editor when the route swaps documents.
+export function SlideEditor(props: SlideEditorProps) {
+    const { ownerId, path, mediaFolderId, chatFolderId } = props;
     return (
         <MediaResolverProvider
             ownerId={ownerId}
@@ -208,21 +56,14 @@ export function SlideEditor({
             mediaFolderId={mediaFolderId}
             chatFolderId={chatFolderId}
         >
-            <SlideEditorInner
-                key={path.id}
-                ownerId={ownerId}
-                path={path}
-                canWrite={canWrite}
-                mediaFolderId={mediaFolderId}
-                chatFolderId={chatFolderId}
-                onAccessDialogOpen={onAccessDialogOpen}
-                initialChatName={initialChatName}
-                initialSearchTerm={initialSearchTerm}
-            />
+            <SlideEditorInner key={path.id} {...props} />
         </MediaResolverProvider>
     );
 }
 
+// The deck: a canvas of 1920x1080 frames, one per slide. Tool, selection and the active frame are
+// lifted here so the toolbar, rail, canvas and panel share one source; the viewport, gestures,
+// keymap, clipboard and in-place editing are all the engine's.
 function SlideEditorInner({
     ownerId,
     path,
@@ -233,79 +74,148 @@ function SlideEditorInner({
     initialChatName,
     initialSearchTerm,
 }: SlideEditorProps) {
-    const {
-        deck,
-        isSynced,
-        offline,
-        loaded,
-        storageUnavailable,
-        unsyncedEdits,
-        activeSlideId,
-        setActiveSlideId,
-        addSlide,
-        deleteSlide,
-        duplicateSlide,
-        updateSlideBackground,
-        addObject,
-        duplicateObjects,
-        updateObject,
-        updateObjects,
-        deleteObject,
-        deleteObjects,
-        yjsDoc,
-        undoManager,
-        provider,
-        moveObjectUp,
-        moveObjectDown,
-        moveObjectToFront,
-        moveObjectToBack,
-        moveObjectsZOrder,
-        addCommentToObject,
-        removeCommentFromObject,
-    } = useDeck(ownerId, path.mountId, path.id);
-
     const { isMobile } = useLayout();
-    const { resolveMediaUrl, resolveMediaUrlByPath, resolveMediaPath, startUpload } = useMediaResolver();
-    const { dragState, handleDragStart, handleDragEnd } = useSlideDnd({ yjsDoc });
+    // Phones view the deck, never edit it (the shared canEdit split: the file menu, share cluster and
+    // comments keep canWrite); tablets sit above the breakpoint.
+    const canEdit = canWrite && !isMobile;
+    const doc = useCanvasDoc(ownerId, path.mountId, path.id, SLIDES_STYLE_DEFAULTS);
+    const { frameId, setFrameId, index: frameIndex, step: stepFrame } = useActiveFrame(doc.frames);
+    const { dragActiveId, handleDragStart, handleDragEnd } = useSlideDnd({
+        frames: doc.frames,
+        moveFrame: doc.moveFrame,
+    });
+    const { tool, setTool, toolLocked, setToolLocked } = useTool();
+    const { selectedIds, setSelectedIds, toggle } = useSelection();
+    const { user } = useAuth();
+    // Presence carries the frame, so a peer's cursor shows only on the slide they are on.
+    const publishCursor = useCanvasPresence(doc.provider, user, selectedIds, frameId);
+    const { resolveMediaUrl } = useMediaResolver();
+    const uploadFile = useUploadFile(ownerId, path.mountId);
+    const { mutateAsync: copyToMediaFolder } = useCopyToMediaFolder(ownerId, path.mountId);
 
-    const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>([]);
-    const [editingObjectId, setEditingObjectId] = useState<string | null>(null);
-    const [isPresenting, setIsPresenting] = useState(false);
-    const [imagePickerOpen, setImagePickerOpen] = useState(false);
-    const [searchOpen, setSearchOpen] = useState(false);
+    const { addFrame, deleteFrame, duplicateFrame, updateFrame, updateFrames } = doc;
+
+    // The first writer to open an empty deck seeds its one slide (seed-deck.ts owns the why).
+    useEffect(() => {
+        const yjsDoc = doc.yjsDoc;
+        if (!doc.loaded || !canWrite || !yjsDoc) return;
+        seedDeck(yjsDoc);
+    }, [doc.loaded, canWrite, doc.yjsDoc]);
+
+    const frame = doc.frames.find((f) => f.id === frameId);
+    // The slide's own elements: the z-order arithmetic behind the panel's Arrange row must see the
+    // same list the canvas and the keymap do, because indices are allocated across the whole deck.
+    const frameElements = useMemo(() => elementsInFrame(doc.elements, frameId), [doc.elements, frameId]);
+    const selectedElements = useMemo(
+        () => doc.elements.filter((el) => selectedIds.includes(el.id)),
+        [doc.elements, selectedIds],
+    );
+    // Aspect lock, lifted so the panel checkbox and the canvas' ObjectTransform share one setting.
+    const allImageSelected = selectedElements.length > 0 && selectedElements.every((el) => el.type === 'image');
+    const [aspectLocked, setAspectLocked] = useAspectLock(selectedIds.join(','), allImageSelected);
+
+    // Revealing an element means going to its slide FIRST — ⌘F and the comment pane both span the
+    // whole deck, so either can land on an element the canvas is not currently showing.
+    const revealElement = useCallback(
+        (el: VectorElement) => {
+            // An element homed on no live slide (a peer deleted it, or the record never carried one) is
+            // still searchable and still carries comments; going to its frame would empty the canvas, so
+            // it is selected where we are instead.
+            if (doc.frames.some((f) => f.id === el.frameId)) setFrameId(el.frameId);
+            setSelectedIds([el.id]);
+        },
+        [doc.frames, setFrameId, setSelectedIds],
+    );
+
+    const comments = useCanvasCommentHost({
+        ownerId,
+        path,
+        canWrite,
+        mediaFolderId,
+        chatFolderId,
+        initialChatName,
+        doc,
+        isMobile,
+        onReveal: revealElement,
+    });
+
+    // "Slide 3" — where a match is, in the deck's words. Frame order is the stored order.
+    const frameNumbers = useMemo(() => new Map(doc.frames.map((f, i) => [f.id, i + 1])), [doc.frames]);
+    const contextOf = useCallback(
+        (el: VectorElement) => {
+            const number = frameNumbers.get(el.frameId);
+            return number === undefined ? undefined : `Slide ${number}`;
+        },
+        [frameNumbers],
+    );
+
     const {
         controller: docSearchController,
-        highlightedSlideIds,
-        matchedObjectIds,
-        searchActiveObjectId,
-        clearHighlights,
-    } = useSlidesDocSearch({ deck, setActiveSlideId });
+        matchedIds: searchMatchedIds,
+        activeId: searchActiveId,
+    } = useCanvasDocSearch({
+        elements: doc.elements,
+        frames: doc.frames,
+        meta: doc.meta,
+        onReveal: revealElement,
+        contextOf,
+    });
 
-    // Entering present unmounts the DocSearchProvider subtree without closing the bar, so its rings
-    // would survive an exit-with-bar-closed. Drop them on enter.
-    useEffect(() => {
-        if (isPresenting) clearHighlights();
-    }, [isPresenting, clearHighlights]);
+    // A rail thumbnail rings when the slide holds a match: ⌘F spans the whole deck, so most hits are
+    // on slides the canvas is not showing.
+    const matchedFrameIds = useMemo(() => {
+        const ids = new Set<string>();
+        for (const el of doc.elements) if (searchMatchedIds.has(el.id)) ids.add(el.frameId);
+        return ids;
+    }, [doc.elements, searchMatchedIds]);
 
-    // Present chrome: the exit X shows on entry and on any pointer activity, then fades away again.
-    const [presentControlsVisible, setPresentControlsVisible] = useState(false);
-    const presentControlsTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-    const revealPresentControls = useCallback(() => {
-        setPresentControlsVisible(true);
-        clearTimeout(presentControlsTimerRef.current);
-        presentControlsTimerRef.current = setTimeout(() => setPresentControlsVisible(false), 2000);
-    }, []);
-    useEffect(() => {
-        if (isPresenting) revealPresentControls();
-        return () => clearTimeout(presentControlsTimerRef.current);
-    }, [isPresenting, revealPresentControls]);
+    const [isPresenting, setIsPresenting] = useState(false);
+
+    // Adding a slide activates it, the way inserting one always has. Duplicate and delete are the
+    // rail's own rows and arrive with it.
+    const addSlide = useCallback(() => {
+        const id = addFrame(frameId);
+        if (id) setFrameId(id);
+    }, [addFrame, frameId, setFrameId]);
+
+    const duplicateSlide = useCallback(
+        (id: string) => {
+            const copyId = duplicateFrame(id);
+            if (copyId) setFrameId(copyId);
+        },
+        [duplicateFrame, setFrameId],
+    );
+
+    // No fallback to pick here: useActiveFrame hands over to whatever now holds the deleted slide's
+    // position. The rail disables the row for a one-slide deck, and this guards the keyboard path.
+    const deleteSlide = useCallback(
+        (id: string) => {
+            if (doc.frames.length <= 1) return;
+            deleteFrame(id);
+        },
+        [deleteFrame, doc.frames.length],
+    );
+
+    const enterPresent = useCallback(() => {
+        // Nothing to show on a frameless deck, and latching isPresenting there would take fullscreen
+        // for an empty screen with no canvas keymap left to leave it.
+        if (doc.frames.length === 0) return;
+        setSelectedIds([]);
+        // Present unmounts the find-bar subtree without closing the session, so its rings would outlive
+        // the exit — drop them on the way in.
+        docSearchController.highlightAll([]);
+        setIsPresenting(true);
+        // No API (iOS Safari) or a rejected request still presents: the overlay is fixed inset-0.
+        document.documentElement.requestFullscreen?.().catch(() => {});
+    }, [doc.frames.length, setSelectedIds, docSearchController]);
 
     const exitPresent = useCallback(() => {
         setIsPresenting(false);
         if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     }, []);
 
-    // Fullscreen also ends outside our control (Esc, Android back gesture) — leave present with it.
+    // Fullscreen also ends outside our control (the browser's own Esc, an Android back gesture) —
+    // leave present with it.
     useEffect(() => {
         const onFullscreenChange = () => {
             if (!document.fullscreenElement) setIsPresenting(false);
@@ -314,578 +224,41 @@ function SlideEditorInner({
         return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
     }, []);
 
-    const auth = useAuth();
-    // Awareness: publish this user's identity + selection + active slide, get a throttled cursor
-    // publisher for the canvas. Read-only viewers publish too (a viewer is a visible peer).
-    const publishCursor = useSlidesPresence(provider, auth.user, selectedObjectIds, activeSlideId);
-    const {
-        panel,
-        commentPanelOpen,
-        activityPanelOpen,
-        mobilePanelOpen,
-        toggleComments,
-        toggleActivity,
-        closePanels,
-        onSearchOpenChange,
-    } = useDocumentPanels(isMobile);
-    // The layered Escape below still needs the plain open flag.
-    const handleSearchOpenChange = useCallback(
-        (open: boolean) => {
-            setSearchOpen(open);
-            onSearchOpenChange(open);
+    const presentTo = useCallback(
+        (delta: number) => {
+            const next = presentStep(frameIndex, doc.frames.length, delta);
+            if (next === -1) exitPresent();
+            else setFrameId(doc.frames[next].id);
         },
-        [onSearchOpenChange],
+        [frameIndex, doc.frames, exitPresent, setFrameId],
     );
-    const [addOpen, setAddOpen] = useState(false);
-    const [addInitialTitle, setAddInitialTitle] = useState('');
-    const [addTargetObjId, setAddTargetObjId] = useState<string | null>(null);
 
-    const activeComments = useActiveComments(deck);
-    const lifecycle = useCommentLifecycle({
-        ownerId,
-        mountId: path.mountId,
-        pathId: path.id,
-        chatFolderId,
-        mediaFolderId,
-        doc: yjsDoc,
-        activeCardIds: activeComments.ids,
-        initialChatName,
-        ready: isSynced,
-    });
-    const { allComments, cards, createCard, assignComment, members, assignedCount, setOpenCardId } = lifecycle;
-
-    // Opening a comment card also reveals its slide + selects the anchored object (panel + activity share this).
-    const openCommentCard = (cardId: string) => {
-        for (const obj of Object.values(deck.objects)) {
-            if (obj.commentCardIds?.includes(cardId)) {
-                setActiveSlideId(obj.slideId);
-                setSelectedObjectIds([obj.id]);
-                setEditingObjectId(null);
-                break;
-            }
-        }
-        setOpenCardId(cardId);
-    };
-
-    // Host-owned so the filter survives panel close/reopen.
-    const commentFilter = useCommentFilter();
-    const commentContextMenu = useContextMenu<CommentContextMenuItem>();
-
-    const panelProps = {
-        onClose: closePanels,
-        path,
-        cards,
-        entries: allComments,
-        members,
-        currentUserEmail: auth.user!.email,
-        filter: commentFilter,
-        activeComments,
-        commentContextMenu,
-        // The mobile pane hides the canvas, so its slide + object reveal would go unseen there.
-        onOpenCard: isMobile ? setOpenCardId : openCommentCard,
-    };
-
-    const uploadFile = useUploadFile(ownerId, path.mountId);
-    const copyToMediaFolder = useCopyToMediaFolder(ownerId, path.mountId);
-
-    const hasSelection = selectedObjectIds.length > 0;
-    const isEditing = editingObjectId !== null;
-
-    // Present is a read-only view of a live deck, or a stray key mutates the slide the audience sees.
-    const canEdit = canWrite && !isPresenting;
-
-    useYjsUndoHotkeys(undoManager, canEdit);
-    useHotkey(
-        'Delete',
-        () => {
-            deleteObjects(selectedObjectIds);
-            setSelectedObjectIds([]);
-        },
-        { enabled: canEdit && hasSelection && !isEditing },
-    );
-    useHotkey(
-        'Backspace',
-        () => {
-            deleteObjects(selectedObjectIds);
-            setSelectedObjectIds([]);
-        },
-        { enabled: canEdit && hasSelection && !isEditing },
-    );
-    // Layered Escape (amendment 12): present → text-edit → bar → deselect. This is a capture-phase
-    // document listener (NOT useHotkey): the find bar's own Escape runs in the bubble phase and closes
-    // the bar before any bubble handler here could tell it had been open, and useHotkey's callback sync
-    // goes stale once a second document Escape (the bar's) is registered. Capturing lets us read the
-    // live state first: when the bar is open we do nothing and let Escape bubble to the bar (close
-    // without deselecting); present/text-edit claim Escape and stop it; otherwise deselect (no
-    // stopPropagation, so dialogs and other layers still receive Escape). State is read from a ref so
-    // this listener never goes stale.
-    const escStateRef = useRef({ isPresenting, isEditing, searchOpen });
-    escStateRef.current = { isPresenting, isEditing, searchOpen };
-    // True while an ObjectTransform grip drag is live. That gesture owns Escape in the capture phase
-    // (to cancel itself) but registers its listener AFTER this one, so this capture listener would
-    // otherwise deselect first and unmount the transform mid-drag. Bail while it's active and let the
-    // transform's own capture listener handle the Escape.
-    const transformActiveRef = useRef(false);
-    const setTransformActive = useCallback((active: boolean) => {
-        transformActiveRef.current = active;
-    }, []);
+    // Layered Escape, capture phase (docs/CANVAS.md § Layered Escape): present is the OUTERMOST layer
+    // and claims Escape before anything else sees it; the find bar's own bubble-phase handler and the
+    // canvas' text-edit / gesture / deselect layers keep the rest. A capture listener is required
+    // because the bar closes itself on bubble, so a bubble handler here could never tell it had been
+    // open. State rides a ref so the listener never goes stale.
+    const presentingRef = useRef(false);
+    presentingRef.current = isPresenting;
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
-            if (e.key !== 'Escape') return;
-            if (transformActiveRef.current) return;
-            const { isPresenting: presenting, isEditing: editing, searchOpen: barOpen } = escStateRef.current;
-            if (presenting) {
-                e.stopPropagation();
-                exitPresent();
-            } else if (editing) {
-                e.stopPropagation();
-                setEditingObjectId(null);
-            } else if (!barOpen) {
-                // bar open ⇒ let Escape bubble to the find bar so it closes without deselecting
-                setSelectedObjectIds([]);
-            }
+            if (e.key !== 'Escape' || !presentingRef.current) return;
+            e.stopPropagation();
+            exitPresent();
         };
         document.addEventListener('keydown', onKeyDown, true);
         return () => document.removeEventListener('keydown', onKeyDown, true);
     }, [exitPresent]);
-    const moveSelected = useCallback(
-        (dx: number, dy: number) => {
-            if (!yjsDoc) return;
-            yjsDoc.transact(() => {
-                const objectsMap = getItemMapRoot(yjsDoc, 'objects');
-                for (const id of selectedObjectIds) {
-                    const obj = deck.objects[id];
-                    if (!obj) continue;
-                    const objMap = objectsMap.get(id);
-                    if (!objMap) continue;
-                    objMap.set('x', obj.x + dx);
-                    objMap.set('y', obj.y + dy);
-                }
-            });
-        },
-        [selectedObjectIds, deck.objects, yjsDoc],
-    );
-    const alignSelected = useCallback(
-        (op: ArrangeOp) => {
-            if (!yjsDoc) return;
-            const objects = selectedObjectIds.map((id) => deck.objects[id]).filter(Boolean);
-            const patches = computeArrange(objects, op);
-            if (patches.length === 0) return;
-            // Arrange is a discrete op — seal it as its own undo step.
-            undoManager?.stopCapturing();
-            yjsDoc.transact(() => {
-                const objectsMap = getItemMapRoot(yjsDoc, 'objects');
-                for (const patch of patches) {
-                    const objMap = objectsMap.get(patch.id);
-                    if (!objMap) continue;
-                    if (patch.x !== undefined) objMap.set('x', patch.x);
-                    if (patch.y !== undefined) objMap.set('y', patch.y);
-                    if (patch.width !== undefined) objMap.set('width', patch.width);
-                    if (patch.height !== undefined) objMap.set('height', patch.height);
-                }
-            });
-            undoManager?.stopCapturing();
-        },
-        [selectedObjectIds, deck.objects, yjsDoc, undoManager],
-    );
-    // Z-order over the current selection — panel Arrange buttons + ⌘[/⌘] brackets share one path.
-    const zOrderSelected = useCallback(
-        (op: ZOp) => moveObjectsZOrder(op, selectedObjectIds),
-        [moveObjectsZOrder, selectedObjectIds],
-    );
-    useZOrderHotkeys(canEdit && hasSelection && !isEditing, zOrderSelected);
-    // Arrow nudge (1px) + Shift-nudge (large step, shared with vector), one factory + guard for both.
-    const nudgeEnabled = { enabled: canEdit && hasSelection && !isEditing };
-    const nudge = (dx: number, dy: number) => (e: KeyboardEvent) => {
-        e.preventDefault();
-        moveSelected(dx, dy);
-    };
-    useHotkey('ArrowLeft', nudge(-NUDGE_STEP, 0), nudgeEnabled);
-    useHotkey('ArrowRight', nudge(NUDGE_STEP, 0), nudgeEnabled);
-    useHotkey('ArrowUp', nudge(0, -NUDGE_STEP), nudgeEnabled);
-    useHotkey('ArrowDown', nudge(0, NUDGE_STEP), nudgeEnabled);
-    useHotkey('Shift+ArrowLeft', nudge(-NUDGE_STEP_LARGE, 0), nudgeEnabled);
-    useHotkey('Shift+ArrowRight', nudge(NUDGE_STEP_LARGE, 0), nudgeEnabled);
-    useHotkey('Shift+ArrowUp', nudge(0, -NUDGE_STEP_LARGE), nudgeEnabled);
-    useHotkey('Shift+ArrowDown', nudge(0, NUDGE_STEP_LARGE), nudgeEnabled);
-    // ⌘A select-all (active slide's objects) and ⌘D duplicate (shared DUPLICATE_OFFSET, same as vector).
-    // Mod combos default ignoreInputs off, so opt in — ⌘A must not hijack select-all in a text input.
-    useHotkey(
-        'Mod+A',
-        (e) => {
-            e.preventDefault();
-            const ids = activeSlideId ? (deck.slides[activeSlideId]?.objectIds ?? []) : [];
-            if (ids.length) setSelectedObjectIds(ids);
-        },
-        { enabled: canEdit && !isEditing && !!activeSlideId, ignoreInputs: true },
-    );
-    useHotkey(
-        'Mod+D',
-        (e) => {
-            e.preventDefault();
-            const placements = selectedObjectIds
-                .map((id) => deck.objects[id])
-                .filter((o): o is SlideObject => !!o)
-                .map((o) => ({ id: o.id, x: o.x + DUPLICATE_OFFSET, y: o.y + DUPLICATE_OFFSET }));
-            if (!placements.length) return;
-            const ids = duplicateObjects(placements);
-            if (ids.length) setSelectedObjectIds(ids);
-        },
-        { enabled: canEdit && hasSelection && !isEditing, ignoreInputs: true },
-    );
-    const handleImageFile = useCallback(
-        async (file: File) => {
-            if (!activeSlideId || !mediaFolderId || !file.type.startsWith('image/')) return;
-            const { pendingName, promise } = startUpload(file);
-            const intrinsic = await readImageSize(file);
-            const objId = addObject(activeSlideId, {
-                ...DEFAULT_IMAGE_OBJECT,
-                ...centeredImageProps(intrinsic),
-                mediaName: pendingName,
-            } as Omit<SlideObject, 'id' | 'slideId'>);
-            if (!objId) return;
-            const result = await promise;
-            if (result) updateObject(objId, { mediaName: result.name });
-            else deleteObject(objId);
-        },
-        [activeSlideId, mediaFolderId, startUpload, addObject, updateObject, deleteObject],
-    );
 
-    const handleImageFromDevice = useCallback(
-        (files: File[]) => {
-            const file = files[0];
-            if (file) handleImageFile(file);
-        },
-        [handleImageFile],
-    );
+    // Toolbar "Add image": the picker lives here, placement goes through the canvas' published insert
+    // surface (placement needs the live viewport).
+    const [imagePickerOpen, setImagePickerOpen] = useState(false);
+    const imageInsertRef = useRef<CanvasImageInsert | null>(null);
 
-    const handleImagePickFromDrive = useCallback(
-        async (paths: DrivePath[]) => {
-            if (!activeSlideId || !mediaFolderId) return;
-            const results = await copyToMediaFolder.mutateAsync({ paths, mediaFolderId }).catch(() => null);
-            if (!results) return;
-            // Independent loads — measure in parallel, then add in one tight synchronous run. The URL
-            // comes from the copy result's own path: by NAME it would miss the pre-copy media listing.
-            const measured = await Promise.all(
-                results.map(async (result) => ({
-                    name: result.name,
-                    intrinsic: await readImageSizeFromUrl(resolveMediaUrlByPath(result)),
-                })),
-            );
-            for (const { name, intrinsic } of measured) {
-                addObject(activeSlideId, {
-                    ...DEFAULT_IMAGE_OBJECT,
-                    ...centeredImageProps(intrinsic),
-                    mediaName: name,
-                } as Omit<SlideObject, 'id' | 'slideId'>);
-            }
-        },
-        [activeSlideId, mediaFolderId, copyToMediaFolder, addObject, resolveMediaUrlByPath],
-    );
+    const background = frame ? parseBackgroundFill(frame.background) : null;
+    const backgroundImageUrl = background?.type === 'image' ? resolveMediaUrl(background.mediaName) : null;
 
-    // Consume eigen clipboard items into new objects on the active slide — shared by the paste event
-    // listener and the object-menu Paste row. Text sanitises/escapes into LightEditor HTML;
-    // images place at the wire's exact box; cross-mount images re-upload, skip-on-failure.
-    const pasteEigenData = useCallback(
-        (data: EigenClipboardData) => {
-            if (!activeSlideId) return;
-            for (const item of data.items) {
-                if (item.type === 'text') {
-                    const richHtml =
-                        typeof item.meta?.html === 'string' ? sanitizeToLightEditorHtml(item.meta.html).trim() : '';
-                    const plain = item.text.trim();
-                    if (!richHtml && !plain) continue;
-                    const text = richHtml || `<p>${escapeHtml(plain).replace(/\n/g, '<br>')}</p>`;
-                    const overrides = clipboardItemOverrides(item, activeSlideId);
-                    if (item.typography) {
-                        for (const [k, v] of Object.entries(item.typography)) {
-                            if (v != null) overrides[k] = v;
-                        }
-                    }
-                    addObject(activeSlideId, {
-                        ...DEFAULT_TEXT_OBJECT,
-                        text,
-                        ...overrides,
-                    } as Omit<SlideObject, 'id' | 'slideId'>);
-                } else if (item.type === 'image') {
-                    const imageProps = { ...DEFAULT_IMAGE_OBJECT, ...clipboardItemOverrides(item, activeSlideId) };
-                    const insertAt = (mediaName: string) => {
-                        addObject(activeSlideId, {
-                            ...imageProps,
-                            mediaName,
-                        } as Omit<ImageObject, 'id' | 'slideId'>);
-                    };
-                    if (needsReUpload(item.sourceParentId, mediaFolderId) && mediaFolderId) {
-                        reUploadImage(
-                            item.sourcePathId,
-                            item.sourceOwnerId,
-                            item.sourceMountId,
-                            mediaFolderId,
-                            uploadFile.mutateAsync,
-                            item.mediaName,
-                        ).then((result) => {
-                            if (result) insertAt(result.mediaName);
-                        });
-                    } else {
-                        insertAt(item.mediaName);
-                    }
-                }
-            }
-        },
-        [activeSlideId, addObject, mediaFolderId, uploadFile.mutateAsync],
-    );
-
-    useEffect(() => {
-        if (isPresenting) return;
-        const handleCopy = (e: ClipboardEvent) => {
-            if (isTypingTarget()) return;
-            if (selectedObjectIds.length === 0) return;
-            const items = selectedObjectIds
-                .map((id) => deck.objects[id])
-                .filter(Boolean)
-                .map((obj) => buildClipboardItem(obj, resolveMediaPath))
-                .filter(Boolean) as EigenClipboardItem[];
-            if (items.length === 0) return;
-            e.preventDefault();
-            const data: EigenClipboardData = { version: 1, items };
-            const firstObj = selectedObjectIds.length === 1 ? deck.objects[selectedObjectIds[0]] : undefined;
-            const textPreview = firstObj?.type === 'text' ? htmlToPlainText(firstObj.text) : undefined;
-            writeEigenClipboard(e, data, textPreview);
-        };
-        const handlePaste = (e: ClipboardEvent) => {
-            if (isTypingTarget()) return;
-            if (!activeSlideId || !canWrite) return;
-            if (!e.clipboardData) return;
-            const paste = classifyPaste(e.clipboardData);
-
-            const imageFile = paste.imageFiles[0];
-            if (imageFile) {
-                e.preventDefault();
-                handleImageFile(imageFile);
-                return;
-            }
-
-            // A vector SVG payload (or a pasted SVG document) becomes an image object through the
-            // exact image-file path — stored in media/, served as-is, rendered by <image>. Ahead of
-            // the eigen-items branch so a vector selection lands as one image, not its shape carriers. Its
-            // images are name-referenced (eigen-media:); materialize re-uploads each into our media/ and
-            // rewrites the svg's refs before it's stored.
-            if (paste.svg && mediaFolderId) {
-                e.preventDefault();
-                materializeClipboardSvg(paste.svg.svg, paste.svg.items, mediaFolderId, uploadFile.mutateAsync)
-                    .then(handleImageFile)
-                    .catch(() => {});
-                return;
-            }
-
-            if (paste.eigen) {
-                e.preventDefault();
-                pasteEigenData(paste.eigen);
-                return;
-            }
-
-            // Rich HTML (docs → slides): keep bold/italic/lists by mapping onto LightEditor's schema.
-            // This branch is already post-eigen, so any HTML here is external. One text object holds all
-            // paragraphs (LightEditor is multi-block). fontSize 16 = docs body px mapped 1:1 into slide
-            // units (1 unit = 1px @1080p), NOT DEFAULT_TEXT_OBJECT's 48 — same prose, same size whether
-            // or not it carried formatting.
-            const html = paste.html;
-            const richHtml = html ? sanitizeToLightEditorHtml(html).trim() : '';
-            // Only take the rich branch when a block element survived. Div-structured clipboards (VS
-            // Code, terminals) unwrap to merged inline text with no <p>, losing line breaks — those fall
-            // through to the text/plain path, which preserves lines as <br>.
-            const hasBlock = /<(?:p|ul|ol|blockquote)[\s>]/i.test(richHtml);
-            if (richHtml && hasBlock) {
-                e.preventDefault();
-                // Prose alignment rides in the RAW html as a block text-align (stripped by the
-                // sanitizer); carry it onto the object field. slides accepts all four values, so no map.
-                // null means implicit left (Tiptap only emits styles for non-default alignments) — the
-                // centered DEFAULT_TEXT_OBJECT is a title affordance, wrong for pasted prose.
-                const align = readDominantTextAlign(html);
-                addObject(activeSlideId, {
-                    ...DEFAULT_TEXT_OBJECT,
-                    text: richHtml,
-                    fontSize: 16,
-                    textAlign: align ?? 'left',
-                } as Omit<SlideObject, 'id' | 'slideId'>);
-                return;
-            }
-
-            const text = paste.text;
-            if (text.trim()) {
-                e.preventDefault();
-                addObject(activeSlideId, {
-                    ...DEFAULT_TEXT_OBJECT,
-                    text: `<p>${escapeHtml(text.trim()).replace(/\n/g, '<br>')}</p>`,
-                    fontSize: 16,
-                    textAlign: 'left',
-                } as Omit<SlideObject, 'id' | 'slideId'>);
-            }
-        };
-        document.addEventListener('copy', handleCopy);
-        document.addEventListener('paste', handlePaste);
-        return () => {
-            document.removeEventListener('copy', handleCopy);
-            document.removeEventListener('paste', handlePaste);
-        };
-    }, [
-        selectedObjectIds,
-        deck.objects,
-        activeSlideId,
-        canWrite,
-        isPresenting,
-        addObject,
-        handleImageFile,
-        resolveMediaPath,
-        pasteEigenData,
-    ]);
-
-    // Sweep zombie placeholders left behind by a tab close or reload mid-upload. Snapshot object ids
-    // and re-check pending at removal — a since-completed upload has swapped its mediaName, so it is
-    // skipped (ids, not names, because slides deletes by object id).
-    const deckRef = useRef(deck);
-    deckRef.current = deck;
-    useZombieMediaSweep({
-        ready: isSynced,
-        scan: () => {
-            const ids: string[] = [];
-            for (const obj of Object.values(deckRef.current.objects)) {
-                if (obj.type === 'image' && isPendingMediaName(obj.mediaName)) ids.push(obj.id);
-            }
-            return ids;
-        },
-        remove: (ids) => {
-            for (const objId of ids) {
-                const obj = deckRef.current.objects[objId];
-                if (obj?.type === 'image' && isPendingMediaName(obj.mediaName)) deleteObject(objId);
-            }
-        },
-    });
-
-    const handleAddText = useCallback(() => {
-        if (!activeSlideId) return;
-        addObject(activeSlideId, DEFAULT_TEXT_OBJECT);
-    }, [activeSlideId, addObject]);
-
-    // Double-click on empty canvas: a new text object centred on the click, clamped on-slide, then
-    // selected and opened for editing immediately (vector's openNewText idiom). Sealed as its own
-    // undo step so it never merges into a preceding op; the first keystrokes coalesce into it.
-    const handleCreateTextAt = useCallback(
-        (x: number, y: number) => {
-            if (!activeSlideId || !canWrite) return;
-            const { width, height } = DEFAULT_TEXT_OBJECT;
-            undoManager?.stopCapturing();
-            const objId = addObject(activeSlideId, {
-                ...DEFAULT_TEXT_OBJECT,
-                x: Math.min(Math.max(x - width / 2, 0), SLIDE_BASE_WIDTH - width),
-                y: Math.min(Math.max(y - height / 2, 0), SLIDE_BASE_HEIGHT - height),
-            });
-            if (objId) {
-                setSelectedObjectIds([objId]);
-                setEditingObjectId(objId);
-            }
-        },
-        [activeSlideId, canWrite, addObject, undoManager],
-    );
-
-    const handleStartEditing = useCallback((objId: string) => {
-        setSelectedObjectIds([objId]);
-        setEditingObjectId(objId);
-    }, []);
-
-    // Returns null when nothing was copied (missing object / unresolvable media) so Cut can bail
-    // instead of deleting content that never reached the clipboard.
-    const handleCopyObject = useCallback(
-        (objId: string): Promise<void> | null => {
-            const obj = deck.objects[objId];
-            if (!obj) return null;
-            const item = buildClipboardItem(obj, resolveMediaPath);
-            if (!item) return null;
-            const data: EigenClipboardData = { version: 1, items: [item] };
-            return writeEigenClipboardAsync(data, obj.type === 'text' ? htmlToPlainText(obj.text) : undefined);
-        },
-        [deck.objects, resolveMediaPath],
-    );
-
-    const handleDeleteObject = useCallback(
-        (objId: string) => {
-            deleteObject(objId);
-            setSelectedObjectIds((prev) => prev.filter((id) => id !== objId));
-            setEditingObjectId((prev) => (prev === objId ? null : prev));
-        },
-        [deleteObject],
-    );
-
-    const handleDeleteSelectedObjects = useCallback(
-        (ids: string[]) => {
-            deleteObjects(ids);
-            setSelectedObjectIds([]);
-            setEditingObjectId((prev) => (prev && ids.includes(prev) ? null : prev));
-        },
-        [deleteObjects],
-    );
-
-    // Object-menu clipboard rows, at parity with the keyboard handlers. Copy/Cut act on the right-clicked object; Paste
-    // reads the async clipboard (a menu click carries no ClipboardEvent). Duplicate offsets by DUPLICATE_OFFSET.
-    // Delete only after the async write resolves — a denied clipboard write must not destroy
-    // content that would then exist nowhere but the undo stack (vector's cut discipline).
-    const handleCutObject = useCallback(
-        (objId: string) => {
-            handleCopyObject(objId)
-                ?.then(() => handleDeleteObject(objId))
-                .catch(() => {});
-        },
-        [handleCopyObject, handleDeleteObject],
-    );
-    const handlePasteFromMenu = useCallback(() => {
-        readEigenClipboardAsync()
-            .then((data) => data && pasteEigenData(data))
-            .catch(() => {});
-    }, [pasteEigenData]);
-    const handleDuplicateObject = useCallback(
-        (objId: string) => {
-            const o = deck.objects[objId];
-            if (!o) return;
-            const ids = duplicateObjects([{ id: objId, x: o.x + DUPLICATE_OFFSET, y: o.y + DUPLICATE_OFFSET }]);
-            if (ids.length) setSelectedObjectIds(ids);
-        },
-        [deck.objects, duplicateObjects],
-    );
-
-    const handleSelectObject = useCallback(
-        (id: string | null, additive?: boolean) => {
-            if (!id) {
-                setSelectedObjectIds([]);
-                setEditingObjectId(null);
-                return;
-            }
-            if (additive) {
-                setSelectedObjectIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-                setEditingObjectId(null);
-            } else {
-                setSelectedObjectIds([id]);
-                if (id !== editingObjectId) setEditingObjectId(null);
-            }
-        },
-        [editingObjectId],
-    );
-
-    const handleDuplicateObjects = useCallback(
-        (placements: { id: string; x: number; y: number }[]) => {
-            const ids = duplicateObjects(placements);
-            if (ids.length) setSelectedObjectIds(ids);
-        },
-        [duplicateObjects],
-    );
-
-    const handleDropImage = useCallback(
-        (file: File) => {
-            handleImageFile(file);
-        },
-        [handleImageFile],
-    );
-
-    const handleBackgroundImageUpload = useCallback(
+    const uploadBackgroundImage = useCallback(
         async (file: File): Promise<string | null> => {
             if (!mediaFolderId || !file.type.startsWith('image/')) return null;
             const result = await uploadFile.mutateAsync({ parentId: mediaFolderId, file }).catch(() => null);
@@ -894,318 +267,169 @@ function SlideEditorInner({
         [mediaFolderId, uploadFile],
     );
 
-    const handleBackgroundImagePickFromDrive = useCallback(
+    const pickBackgroundImage = useCallback(
         async (paths: DrivePath[]) => {
-            if (!mediaFolderId || !activeSlideId || paths.length === 0) return;
-            const result = await copyToMediaFolder.mutateAsync({ paths: [paths[0]], mediaFolderId }).catch(() => null);
-            if (result?.[0]) {
-                updateSlideBackground(
-                    activeSlideId,
-                    { type: 'image', mediaName: result[0].name, fit: 'cover' },
-                    'this',
-                );
+            if (!mediaFolderId || paths.length === 0 || !frame) return;
+            const copied = await copyToMediaFolder({ paths: [paths[0]], mediaFolderId }).catch(() => null);
+            const name = copied?.[0]?.name;
+            if (name) {
+                updateFrame(frame.id, {
+                    background: serializeBackgroundFill({ type: 'image', mediaName: name, fit: 'cover' }),
+                });
             }
         },
-        [mediaFolderId, activeSlideId, copyToMediaFolder, updateSlideBackground],
+        [mediaFolderId, frame, copyToMediaFolder, updateFrame],
     );
 
-    const handlePresent = useCallback(() => {
-        setEditingObjectId(null);
-        setIsPresenting(true);
-        // No API (iOS Safari) or a rejected request still presents: the overlay is fixed inset-0.
-        document.documentElement.requestFullscreen?.().catch(() => {});
-    }, []);
-
-    const handleAddComment = useCallback(
-        (objId: string) => {
-            const obj = deck.objects[objId];
-            if (!obj) return;
-            setAddTargetObjId(objId);
-            setAddInitialTitle(obj.type === 'text' ? htmlToPlainText(obj.text).slice(0, 100) : 'Image');
-            setAddOpen(true);
-        },
-        [deck.objects],
-    );
-
-    const handleSaveNew = useCallback(
-        async (
-            patch: { title?: string; description?: string; color?: string },
-            attachments?: CardAttachmentDraft[],
-            assignee?: string | null,
-        ) => {
-            if (!addTargetObjId) return;
-            const objId = addTargetObjId;
-            const card = await createCard({ title: addInitialTitle, ...patch, attachments }, (card) => {
-                addCommentToObject(objId, card.id);
-            });
-            if (assignee !== undefined && card?.chatName) {
-                assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });
-            }
-            setAddTargetObjId(null);
-            setAddOpen(false);
-        },
-        [addTargetObjId, addInitialTitle, createCard, assignComment, addCommentToObject],
-    );
-
-    const activeSlide = activeSlideId ? deck.slides[activeSlideId] : null;
-    const activeObjects = activeSlide ? activeSlide.objectIds.map((id) => deck.objects[id]).filter(Boolean) : [];
-    const selectedObjects = useMemo(
-        () => selectedObjectIds.map((id) => deck.objects[id]).filter(Boolean),
-        [selectedObjectIds, deck.objects],
-    );
-
-    // Aspect lock, lifted here so the panel checkbox and the canvas' ObjectTransform
-    // resizeMode share one ephemeral setting. Default ON for image-only selections.
-    const allImageSelected = selectedObjects.length > 0 && selectedObjects.every((o) => o.type === 'image');
-    const [aspectLocked, setAspectLocked] = useAspectLock(selectedObjectIds.join(','), allImageSelected);
-
-    const slideBackgroundImageUrl =
-        activeSlide?.background?.type === 'image' && activeSlide.background.mediaName
-            ? resolveMediaUrl(activeSlide.background.mediaName)
-            : null;
-
-    // The properties/background/comment panel is a w-64 flex sibling on the right whenever there's an
-    // active slide and the user can write (or comments are open) — inset the find bar clear of it.
-    const rightPanelShown = !isMobile && !!activeSlide && (commentPanelOpen || activityPanelOpen || canWrite);
-
-    // Latched: a WS blip keeps the editor mounted (transient selection/preview state survives) — see
-    // useCollabDoc. `isSynced` still drives presence + seed-on-sync, unchanged.
-    if (!loaded) return <CollabLoadingState storageUnavailable={storageUnavailable} />;
-
-    if (isPresenting && activeSlide) {
+    // Present mode replaces the editor outright: no tools, no rail, no panels. The doc hook stays
+    // mounted above it, so leaving present returns to the same slide with the same selection state —
+    // and so does the leave guard, which must outlive the swap or a presenter's unsynced edits would
+    // navigate away unwarned.
+    if (isPresenting && frame) {
         return (
-            <div
-                // Full-screen present sits at the documented full-screen tier (z-100, like FilePreview),
-                // not the portal tier, so it covers the app chrome instead of tying with it.
-                className={cn(
-                    'fixed inset-0 z-[100] flex items-center justify-center bg-black',
-                    !presentControlsVisible && 'cursor-none',
-                )}
-                onPointerMove={revealPresentControls}
-                onClick={() => {
-                    revealPresentControls();
-                    const currentIdx = deck.slideOrder.indexOf(activeSlideId!);
-                    if (currentIdx < deck.slideOrder.length - 1) {
-                        setActiveSlideId(deck.slideOrder[currentIdx + 1]);
-                    } else {
-                        exitPresent();
-                    }
-                }}
-                onContextMenu={(e) => {
-                    e.preventDefault();
-                    const currentIdx = deck.slideOrder.indexOf(activeSlideId!);
-                    if (currentIdx > 0) {
-                        setActiveSlideId(deck.slideOrder[currentIdx - 1]);
-                    }
-                }}
-            >
-                <div
-                    className="relative w-full overflow-hidden"
-                    style={{
-                        aspectRatio: '16/9',
-                        maxHeight: '100%',
-                        containerType: 'size',
-                        ...getBackgroundStyle(activeSlide.background, resolveMediaUrl),
-                    }}
-                >
-                    {activeObjects.map((obj) => (
-                        <ReadOnlySlideObject key={obj.id} obj={obj} />
-                    ))}
-                </div>
-                <button
-                    type="button"
-                    title="Exit present (Esc)"
-                    aria-label="Exit present"
-                    tabIndex={presentControlsVisible ? undefined : -1}
-                    // Hidden means gone, so a tap in this corner still advances the deck.
-                    className={cn(
-                        'absolute top-4 right-4 rounded-full bg-black/50 p-2.5 pointer-coarse:p-3 text-white transition-opacity hover:bg-black/70',
-                        !presentControlsVisible && 'pointer-events-none opacity-0',
-                    )}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        exitPresent();
-                    }}
-                >
-                    <X className="size-5" />
-                </button>
-            </div>
+            <>
+                <UnsyncedEditsGuard active={doc.unsyncedEdits} />
+                <PresentMode
+                    frame={frame}
+                    elements={doc.elements}
+                    onNext={() => presentTo(1)}
+                    onPrev={() => presentTo(-1)}
+                    onExit={exitPresent}
+                />
+            </>
         );
     }
 
     return (
-        <ColumnLayout>
-            <UnsyncedEditsGuard active={unsyncedEdits} />
-            {/* Hiding takes the find bar with it: it floats in this wrapper, outside the pane's Column. */}
-            <div className={cn('flex-1 min-w-0 h-full', mobilePanelOpen && 'hidden')}>
-                <DocSearchProvider
-                    controller={docSearchController}
-                    initialSearchTerm={initialSearchTerm}
-                    onOpenChange={handleSearchOpenChange}
-                    // right-68 = panel width + the bar's own gutter.
-                    barClassName={cn('top-14', rightPanelShown && 'right-68')}
-                >
-                    <Column
-                        id={'editor'}
-                        width={'w-full'}
-                        className="flex-1 h-full"
-                        toolbarBorder="always"
-                        toolbar={
-                            <Toolbar
-                                path={path}
-                                canWrite={canWrite}
-                                offline={offline}
-                                storageUnavailable={storageUnavailable}
-                                undoManager={undoManager}
-                                onAccessDialogOpen={onAccessDialogOpen}
-                                onAddText={handleAddText}
-                                onAddImage={() => setImagePickerOpen(true)}
-                                onAddSlide={() => addSlide()}
-                                onPresent={handlePresent}
-                                // Always offered: desktop draws the side panel, mobile the Column.
-                                onToggleCommentPanel={toggleComments}
-                                commentPanelOpen={commentPanelOpen}
-                                onToggleActivityPanel={toggleActivity}
-                                activityPanelOpen={activityPanelOpen}
-                                assignedCommentCount={assignedCount}
-                            />
-                        }
-                    >
-                        <div className="flex-1 flex overflow-hidden h-full">
-                            <SlidePanel
-                                deck={deck}
-                                highlightedSlideIds={highlightedSlideIds}
-                                activeSlideId={activeSlideId}
-                                onSelectSlide={(id) => {
-                                    setActiveSlideId(id);
-                                    setSelectedObjectIds([]);
-                                    setEditingObjectId(null);
-                                }}
-                                onDragStart={handleDragStart}
-                                onDragEnd={handleDragEnd}
-                                dragActiveId={dragState.activeId}
-                                onDeleteSlide={canWrite ? deleteSlide : undefined}
-                                onDuplicateSlide={canWrite ? duplicateSlide : undefined}
-                                mobile={isMobile}
-                            />
-                            {!isMobile &&
-                                (activeSlide ? (
-                                    <div className="flex-1 flex overflow-hidden">
-                                        <div className="flex-1 flex flex-col overflow-hidden">
-                                            <SlideCanvas
-                                                slide={activeSlide}
-                                                objects={activeObjects}
-                                                searchActiveObjectId={searchActiveObjectId}
-                                                searchMatchedObjectIds={matchedObjectIds}
-                                                selectedObjectIds={selectedObjectIds}
-                                                editingObjectId={editingObjectId}
-                                                onSelectObject={handleSelectObject}
-                                                onSelectObjects={setSelectedObjectIds}
-                                                onStartEditing={handleStartEditing}
-                                                onUpdateObject={updateObject}
-                                                onDuplicateObjects={canWrite ? handleDuplicateObjects : undefined}
-                                                onCreateTextAt={canWrite ? handleCreateTextAt : undefined}
-                                                onTransformActiveChange={setTransformActive}
-                                                aspectLocked={aspectLocked}
-                                                provider={provider}
-                                                publishCursor={publishCursor}
-                                                onDropImage={canWrite ? handleDropImage : undefined}
-                                                onCopyObject={handleCopyObject}
-                                                onCutObject={canWrite ? handleCutObject : undefined}
-                                                onPasteObject={canWrite ? handlePasteFromMenu : undefined}
-                                                onDuplicateObject={canWrite ? handleDuplicateObject : undefined}
-                                                onDeleteObject={canWrite ? handleDeleteObject : undefined}
-                                                onMoveUp={canWrite ? moveObjectUp : undefined}
-                                                onMoveDown={canWrite ? moveObjectDown : undefined}
-                                                onMoveToFront={canWrite ? moveObjectToFront : undefined}
-                                                onMoveToBack={canWrite ? moveObjectToBack : undefined}
-                                                canWrite={canWrite}
-                                                lifecycle={lifecycle}
-                                                onAddComment={canWrite && chatFolderId ? handleAddComment : undefined}
-                                                onCommentClick={setOpenCardId}
-                                                onCommentDelete={removeCommentFromObject}
-                                            />
-                                            <div className="h-8 bg-muted border-t flex items-center justify-between px-4 text-xs text-muted-foreground">
-                                                <span>
-                                                    Slide {deck.slideOrder.indexOf(activeSlideId!) + 1} of{' '}
-                                                    {deck.slideOrder.length}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        {panel ? (
-                                            <PanelColumn activePanel={panel} {...panelProps} />
-                                        ) : selectedObjects.length > 0 && canWrite ? (
-                                            <SlidePropertiesPanel
-                                                objects={selectedObjects}
-                                                onUpdate={updateObjects}
-                                                onDelete={handleDeleteSelectedObjects}
-                                                onAlign={alignSelected}
-                                                onZOrder={zOrderSelected}
-                                                aspectLocked={aspectLocked}
-                                                onAspectLockChange={setAspectLocked}
-                                            />
-                                        ) : canWrite && activeSlideId ? (
-                                            <SlideBackgroundPanel
-                                                background={activeSlide.background}
-                                                backgroundImageUrl={slideBackgroundImageUrl}
-                                                onUpdateBackground={(background, applyTo) =>
-                                                    updateSlideBackground(activeSlideId!, background, applyTo)
-                                                }
-                                                onUploadImage={handleBackgroundImageUpload}
-                                                onPickImageFromDrive={handleBackgroundImagePickFromDrive}
-                                            />
-                                        ) : null}
-                                    </div>
-                                ) : (
-                                    <EmptyState message="No slides yet" />
-                                ))}
-                        </div>
-
-                        {mediaFolderId && (
-                            <DrivePickerWithUpload
-                                open={imagePickerOpen}
-                                onOpenChange={setImagePickerOpen}
-                                title="Add image"
-                                mimeFilter={['image/*']}
-                                onPickFromDrive={handleImagePickFromDrive}
-                                onPickFromDevice={handleImageFromDevice}
-                                accept="image/*"
-                            />
-                        )}
-                    </Column>
-                </DocSearchProvider>
-            </div>
-
-            {mobilePanelOpen && panel && <PanelColumn activePanel={panel} {...panelProps} />}
-
-            <CardFormDialog
-                open={addOpen}
-                onOpenChange={(o) => {
-                    setAddOpen(o);
-                    if (!o) setAddTargetObjId(null);
-                }}
-                initialTitle={addInitialTitle}
-                onSave={handleSaveNew}
-                allowAttachments={!!mediaFolderId}
-                members={members}
-                currentUserEmail={auth.user?.email}
-                dialogTitle="New comment"
-                submitLabel="Add comment"
-            />
-
-            <CommentLifecycleDialogs
-                lifecycle={lifecycle}
-                path={path}
-                canWrite={canWrite}
-                commentContextMenu={commentContextMenu}
-                onDelete={(cardId) => {
-                    for (const obj of Object.values(deck.objects)) {
-                        if (obj.commentCardIds?.includes(cardId)) {
-                            removeCommentFromObject(obj.id, cardId);
-                        }
+        <CanvasDocumentShell
+            doc={doc}
+            comments={comments}
+            path={path}
+            canWrite={canWrite}
+            canEdit={canEdit}
+            mediaFolderId={mediaFolderId}
+            searchController={docSearchController}
+            initialSearchTerm={initialSearchTerm}
+            imagePickerOpen={imagePickerOpen}
+            onImagePickerOpenChange={setImagePickerOpen}
+            imageInsertRef={imageInsertRef}
+            toolbar={
+                <CanvasToolbar
+                    path={path}
+                    canWrite={canWrite}
+                    canEdit={canEdit}
+                    offline={doc.offline}
+                    storageUnavailable={doc.loaded && doc.storageUnavailable}
+                    undoManager={doc.undoManager}
+                    tool={tool}
+                    setTool={setTool}
+                    toolLocked={toolLocked}
+                    setToolLocked={setToolLocked}
+                    onInsertImage={canEdit && mediaFolderId ? () => setImagePickerOpen(true) : undefined}
+                    onAccessDialogOpen={onAccessDialogOpen}
+                    exportFormats={['pdf', 'html']}
+                    createLabel="New slides"
+                    createIcon={Presentation}
+                    createType="slides"
+                    insertItems={
+                        <DropdownMenuItem onClick={addSlide}>
+                            <Plus className="h-4 w-4 mr-2" /> Slide
+                        </DropdownMenuItem>
                     }
-                }}
-            />
-        </ColumnLayout>
+                    toolItems={<TooltipButton icon={Plus} tooltipText="Add slide" onClick={addSlide} />}
+                    centerItems={<TooltipButton icon={Play} tooltipText="Present" onClick={enterPresent} />}
+                    onToggleCommentPanel={comments.toggleComments}
+                    commentPanelOpen={comments.commentPanelOpen}
+                    assignedCommentCount={comments.assignedCount}
+                    onToggleActivityPanel={comments.toggleActivity}
+                    activityPanelOpen={comments.activityPanelOpen}
+                />
+            }
+            propertiesPanel={
+                <CanvasPropertiesPanel
+                    elements={frameElements}
+                    selectedElements={selectedElements}
+                    updateElements={doc.updateElements}
+                    undoManager={doc.undoManager}
+                    aspectLocked={aspectLocked}
+                    onAspectLockChange={setAspectLocked}
+                    emptyTitle="Slide"
+                    emptySection={
+                        frame ? (
+                            <SlideBackgroundPanel
+                                frames={doc.frames}
+                                frameId={frame.id}
+                                background={background}
+                                backgroundImageUrl={backgroundImageUrl}
+                                updateFrames={updateFrames}
+                                onUploadImage={uploadBackgroundImage}
+                                onPickImageFromDrive={(paths) => {
+                                    void pickBackgroundImage(paths);
+                                }}
+                            />
+                        ) : null
+                    }
+                />
+            }
+        >
+            {/* The rail is desktop-only: a phone pages with a swipe (spec D8), and a 52-wide column
+                would take a third of the screen. */}
+            {!isMobile && (
+                <SlidePanel
+                    frames={doc.frames}
+                    elements={doc.elements}
+                    activeFrameId={frameId}
+                    onSelectFrame={setFrameId}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
+                    dragActiveId={dragActiveId}
+                    onDeleteSlide={canEdit ? deleteSlide : undefined}
+                    onDuplicateSlide={canEdit ? duplicateSlide : undefined}
+                    matchedFrameIds={matchedFrameIds}
+                />
+            )}
+            {frame ? (
+                <div className="flex-1 min-w-0 flex flex-col">
+                    <div className="flex-1 min-h-0">
+                        <CanvasEditor
+                            doc={doc}
+                            styleDefaults={SLIDES_STYLE_DEFAULTS}
+                            viewport="frame"
+                            frameId={frameId}
+                            canEdit={canEdit}
+                            ownerId={ownerId}
+                            mountId={path.mountId}
+                            tool={tool}
+                            setTool={setTool}
+                            toolLocked={toolLocked}
+                            setToolLocked={setToolLocked}
+                            selectedIds={selectedIds}
+                            setSelectedIds={setSelectedIds}
+                            toggle={toggle}
+                            aspectLocked={aspectLocked}
+                            publishCursor={publishCursor}
+                            imageInsertRef={imageInsertRef}
+                            onOpenCard={comments.openCard}
+                            commentCards={comments.lifecycle.cards}
+                            onAddComment={canWrite && chatFolderId ? comments.addCommentTo : undefined}
+                            searchMatchedIds={searchMatchedIds}
+                            searchActiveId={searchActiveId}
+                            // A view-only deck pages on a one-finger swipe; an editable one keeps
+                            // that finger for the canvas (D4.13).
+                            onSwipeFrame={canEdit ? undefined : stepFrame}
+                        />
+                    </div>
+                    <div className="h-8 bg-muted border-t flex items-center justify-between px-4 text-xs text-muted-foreground">
+                        <span>
+                            Slide {frameIndex + 1} of {doc.frames.length}
+                        </span>
+                    </div>
+                </div>
+            ) : (
+                <div className="flex-1 min-w-0">
+                    <EmptyState icon={<Presentation className="h-8 w-8" />} message="No slides yet" />
+                </div>
+            )}
+        </CanvasDocumentShell>
     );
 }

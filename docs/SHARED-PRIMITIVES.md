@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1193 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1314 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (148)
+## Components (158)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -37,6 +37,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EditMenu` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/edit-menu.tsx |
 | `EigenApp` | `@workspace/ui` | packages/ui/src/components/layout/app/eigen-app.tsx |
 | `EigenCyclingLogo` | `@workspace/ui` | packages/ui/src/components/braket/eigen-cycling-logo.tsx |
+| `EigenDocEditorRoute` | `@workspace/ui` | packages/ui/src/components/layout/app/eigen-doc-editor-route.tsx |
 | `EigenDocRouteStatus` | `@workspace/ui` | packages/ui/src/components/layout/app/eigen-doc-route-status.tsx |
 | `EigenLoader` | `@workspace/ui` | packages/ui/src/components/braket/eigen-loader.tsx |
 | `EigenLogo` | `@workspace/ui` | packages/ui/src/components/braket/eigen-logo.tsx |
@@ -89,6 +90,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `AssigneePicker` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/assignee-picker.tsx |
 | `CommentContextMenu` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-context-menu.tsx |
 | `CommentFilterMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-filter-menu-items.tsx |
+| `CommentIndicator` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-indicator.tsx |
 | `CommentLifecycleDialogs` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-lifecycle-dialogs.tsx |
 | `CommentLifecycleMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-lifecycle-menu-items.tsx |
 | `CommentMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-menu-items.tsx |
@@ -142,12 +144,14 @@ rather than inlining `queryClient.invalidateQueries`.
 | `AlignSection` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/align-section.tsx |
 | `BackgroundFillBlock` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/background-fill-block.tsx |
 | `ColorRow` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/color-row.tsx |
+| `FontRow` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/font-row.tsx |
 | `MergedNumberInput` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-number-input.tsx |
 | `MergedSelect` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-select.tsx |
+| `MergedSlider` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-slider.tsx |
 | `PropertiesPanel` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/properties-panel.tsx |
-| `PropertyNumberInput` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-number-input.tsx |
 | `PropertyRow` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/properties-panel.tsx |
 | `PropertySection` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/properties-panel.tsx |
+| `PropertyToggle` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-toggle.tsx |
 | `TransformSection` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/transform-section.tsx |
 | `ZOrderButtons` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/z-order.tsx |
 | `FindInDocumentButton` | `@workspace/ui/components/search` | packages/ui/src/components/search/find-in-document-button.tsx |
@@ -161,8 +165,14 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserItem` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-item.tsx |
 | `UserName` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name.tsx |
 | `UserNameCard` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name-card.tsx |
-| `VectorCanvas` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/vector-canvas.tsx |
-| `VectorPropertiesPanel` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/vector-properties-panel.tsx |
+| `CanvasDocumentShell` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/canvas-document-shell.tsx |
+| `CanvasEditor` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/canvas-editor.tsx |
+| `CanvasPropertiesPanel` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/canvas-properties-panel.tsx |
+| `CanvasToolbar` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/canvas-toolbar.tsx |
+| `FrameThumbnail` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/frame-view.tsx |
+| `FrameView` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/frame-view.tsx |
+| `ToolButtons` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/toolbar-tools.tsx |
+| `ToolMenuItems` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/toolbar-tools.tsx |
 
 ## Providers (6)
 
@@ -189,7 +199,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (243)
+## Hooks (247)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -418,17 +428,21 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useOptionalDocSearchBar` | `@workspace/ui/components/search` | packages/ui/src/components/search/doc-search-provider.tsx |
 | `useProseMirrorSearchController` | `@workspace/ui/components/search/prosemirror-search-controller` | packages/ui/src/components/search/prosemirror-search-controller.ts |
 | `useUpload` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-provider.tsx |
+| `useActiveFrame` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-active-frame.ts |
+| `useCanvasCommentHost` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-comment-host.ts |
+| `useCanvasComments` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-comments.ts |
+| `useCanvasDoc` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-doc.ts |
+| `useCanvasDocSearch` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-doc-search.ts |
+| `useCanvasPresence` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-presence.ts |
 | `useSelection` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-selection.ts |
 | `useTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
-| `useVectorDoc` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-vector-doc.ts |
-| `useVectorPresence` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-vector-presence.ts |
 | `useDialogPending` | `@workspace/ui/hooks/use-dialog-pending` | packages/ui/src/hooks/use-dialog-pending.ts |
 | `useEigenDocEditorRoute` | `@workspace/ui/hooks/use-eigen-doc-editor-route` | packages/ui/src/hooks/use-eigen-doc-editor-route.ts |
-| `useLatchedDocSearchTerm` | `@workspace/ui/hooks/use-eigen-doc-editor-route` | packages/ui/src/hooks/use-eigen-doc-editor-route.ts |
 | `useFileDropTarget` | `@workspace/ui/hooks/use-file-drop-target` | packages/ui/src/hooks/use-file-drop-target.ts |
 | `useFilePasteTarget` | `@workspace/ui/hooks/use-file-paste-target` | packages/ui/src/hooks/use-file-paste-target.ts |
 | `useFocusTrap` | `@workspace/ui/hooks/use-focus-trap` | packages/ui/src/hooks/use-focus-trap.ts |
 | `useKeyboardListNavigation` | `@workspace/ui/hooks/use-keyboard-list-navigation` | packages/ui/src/hooks/use-keyboard-list-navigation.ts |
+| `useLatchedDocSearchTerm` | `@workspace/ui/hooks/use-latched-doc-search-term` | packages/ui/src/hooks/use-latched-doc-search-term.ts |
 | `useListDrag` | `@workspace/ui/hooks/use-list-drag` | packages/ui/src/hooks/use-list-drag.ts |
 | `useListDropTarget` | `@workspace/ui/hooks/use-list-drop-target` | packages/ui/src/hooks/use-list-drop-target.ts |
 | `useListSelection` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
@@ -437,7 +451,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (309)
+## Types (317)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -490,11 +504,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Sheet` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SheetConfig` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SingleRange` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
-| `DeckData` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
-| `ImageObject` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
-| `SlideItem` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
-| `SlideObject` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
-| `TextObject` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
 | `ActivityLines` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `Address` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `AddressObject` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
@@ -553,6 +562,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EditorSaveResult` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EffectiveMember` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EigenClipboardData` | `@workspace/lib/types` | packages/lib/src/types/clipboard.ts |
+| `EigenClipboardElementsItem` | `@workspace/lib/types` | packages/lib/src/types/clipboard.ts |
 | `EigenClipboardImageItem` | `@workspace/lib/types` | packages/lib/src/types/clipboard.ts |
 | `EigenClipboardItem` | `@workspace/lib/types` | packages/lib/src/types/clipboard.ts |
 | `EigenClipboardTextItem` | `@workspace/lib/types` | packages/lib/src/types/clipboard.ts |
@@ -634,6 +644,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `WebdavDeadProp` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `YjsRootKind` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `BackgroundFill` | `@workspace/lib/types/background` | packages/lib/src/types/background.ts |
+| `Fill` | `@workspace/lib/types/background` | packages/lib/src/types/background.ts |
+| `FillPaint` | `@workspace/lib/types/background` | packages/lib/src/types/background.ts |
 | `Command` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `CommandContext` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `PaletteResult` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
@@ -660,39 +672,49 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ArrangeOp` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
 | `ArrangePatch` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
 | `Arrowhead` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `ArrowheadGeometry` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `ArrowShape` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `Binding` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `Bounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `Box` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
-| `CubicBezier` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `CanvasViewport` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
+| `Corners` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `ElementKindRegistry` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
+| `ElementOfType` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `Extent` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `FillStyle` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `FixedSegment` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `FontMetrics` | `@workspace/lib/vector` | packages/lib/src/vector/font-metrics.ts |
 | `ImageSize` | `@workspace/lib/vector` | packages/lib/src/vector/image-fit.ts |
+| `Layer` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `MarqueeMode` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `MediaResolver` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
-| `ParsedFixedSegments` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `ObjectFit` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `OutlineShape` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `PinPatch` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `PinRoutingContext` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `Point` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `RenderOutput` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
 | `Roundness` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `SceneToSvgOptions` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
 | `SnapLine` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
-| `SnapResult` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `SnapTargets` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `StrokeStyle` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `StyleDefaults` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
 | `TextAlign` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorArrowElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `VectorBindableElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `VectorDiamondElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorElementBase` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorElementType` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `VectorEllipseElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `VectorFrame` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `VectorImageElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorLinearElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorMeta` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `VectorRectangleElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `VectorRichTextElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorScene` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorShapeElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `VectorTextElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `VerticalAlign` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `ActivityRowProps` | `@workspace/ui` | packages/ui/src/components/activity-row.tsx |
 | `AvatarEditorProps` | `@workspace/ui` | packages/ui/src/components/avatar-editor.tsx |
 | `ColumnProps` | `@workspace/ui` | packages/ui/src/components/layout/app/column-layout.tsx |
@@ -743,15 +765,15 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserItemProps` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-item.tsx |
 | `UserNameCardProps` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name-card.tsx |
 | `UserNameProps` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name.tsx |
-| `NewVectorElement` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-vector-doc.ts |
-| `PublishCursor` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-vector-presence.ts |
-| `TextDimensions` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |
-| `VectorElementPatch` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-vector-doc.ts |
-| `VectorImageInsert` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/vector-canvas.tsx |
+| `CanvasImageInsert` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/canvas-editor.tsx |
+| `NewVectorElement` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-doc.ts |
+| `PublishCursor` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-presence.ts |
+| `VectorElementPatch` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-doc.ts |
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
+| `VectorToolEntry` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (478)
+## Utilities & constants (577)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -835,9 +857,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `wasToasted` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `apps` | `@workspace/lib/apps` | packages/lib/src/core/apps.ts |
 | `authClient` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-auth-client.ts |
+| `backgroundCss` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
 | `DEFAULT_FILL_COLOR` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
 | `getBackgroundStyle` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
-| `isSameFill` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
 | `formatEventTime` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `formatEventWhen` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `formatFreeBusyTitle` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
@@ -870,6 +892,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `buildImageClipboardItem` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `buildTextClipboardItem` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `classifyPaste` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/classify.ts |
+| `CLIPBOARD_SVG_MAX_BYTES` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
+| `CLIPBOARD_SVG_MAX_ELEMENTS` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `clipboardTextItemHasContent` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `copyToClipboard` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `EIGEN_CLIPBOARD_RENDER_ATTR` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
@@ -903,7 +927,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `matchesCommentFilter` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
 | `readCards` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-cards.ts |
 | `writeCardToDoc` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
+| `CANVAS_PREVIEW_HEIGHT` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
+| `CANVAS_PREVIEW_WIDTH` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
+| `CELL_INDICATOR_SIZE` | `@workspace/lib/constants` | packages/lib/src/constants/comment-indicator.ts |
 | `COLLAB_STORAGE_UNAVAILABLE_CLOSE` | `@workspace/lib/constants` | packages/lib/src/constants/collab.ts |
+| `commentIndicatorColor` | `@workspace/lib/constants` | packages/lib/src/constants/comment-indicator.ts |
 | `DOCX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
 | `EIGEN_ACCENT_COLOR_ROW` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EIGEN_ACCENT_COLORS` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
@@ -912,6 +940,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EIGEN_COLOR_STEPS` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EIGEN_COLORS` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EIGEN_COLORS_MAP` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
+| `EIGEN_FONT_NAMES` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `EIGEN_FONTS` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `EIGEN_STICKIES_COLOR_ROW` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EIGEN_STICKIES_COLORS` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
@@ -922,7 +951,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getFontFamily` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `getFontName` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `getTextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
-| `hexToRgba` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
+| `INDICATOR_RED` | `@workspace/lib/constants` | packages/lib/src/constants/comment-indicator.ts |
 | `isExiftoolExtension` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `isLightColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `isSearchableTextFile` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
@@ -962,12 +991,15 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isPendingMediaName` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
 | `mimeContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `mountMimeContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
+| `PENDING_PREFIX` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
 | `EIGEN_DOC_ICONS` | `@workspace/lib/eigendoc-icons` | packages/lib/src/core/eigendoc-icons.ts |
 | `getFileIconComponent` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
 | `getFilePresentation` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
 | `formatFileSize` | `@workspace/lib/format` | packages/lib/src/core/format.ts |
 | `escapeHtml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
+| `escapeXml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `stripTagsServer` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
+| `textToParagraphHtml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `unescapeHtml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `htmlToPlainText` | `@workspace/lib/html-dom` | packages/lib/src/core/html-dom.ts |
 | `readDominantTextAlign` | `@workspace/lib/html-dom` | packages/lib/src/core/html-dom.ts |
@@ -998,13 +1030,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `mergedBorderSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `mergeEdgeSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `parseCellKey` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
-| `BORDER_RADIUS_ROUND` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
-| `OBJECT_FIELDS` | `@workspace/lib/slides` | packages/lib/src/slides/fields.ts |
-| `pxToPercent` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
-| `SLIDE_ASPECT_RATIO` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
-| `SLIDE_BASE_HEIGHT` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
-| `SLIDE_BASE_WIDTH` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
-| `yMapToObject` | `@workspace/lib/slides` | packages/lib/src/slides/fields.ts |
 | `CHATS_FOLDER_NAME` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `CLIENT_FILE_EVENT_TYPES` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `CODE_EXTENSIONS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -1079,43 +1104,76 @@ rather than inlining `queryClient.invalidateQueries`.
 | `arrowShapeFields` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `arrowShapeOf` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `BASE_62_DIGITS` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
+| `BASE_ELEMENT_FIELDS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `baseDefaultsFor` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `bindingAnchor` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `bindingDistance` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `bindingGap` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `boundEndpoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `boundShape` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `boxCenter` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `buildElementsClipboardItem` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
+| `capabilitiesOf` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
+| `chromeTransform` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
+| `clamp` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
+| `clampFrameViewport` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `COARSE_HIT_SLOP_MULTIPLIER` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `commentAnchorTexts` | `@workspace/lib/vector` | packages/lib/src/vector/comments.ts |
 | `computeArrange` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
 | `computeSnapTargets` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
+| `cornerRadius` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
+| `CORNERS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `CREATION_TOOL_TYPES` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `DEFAULT_ARROW_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `DEFAULT_ARROW_ROUNDNESS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `DEFAULT_CORNERS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_ELEMENT_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `DEFAULT_FILL_STYLE` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_FONT_FAMILY` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_FONT_SIZE` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `DEFAULT_FRAME_BACKGROUND` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `DEFAULT_IMAGE_BOX` | `@workspace/lib/vector` | packages/lib/src/vector/image-fit.ts |
-| `DEFAULT_IMAGE_FIT` | `@workspace/lib/vector` | packages/lib/src/vector/image-fit.ts |
 | `DEFAULT_LINE_ROUNDNESS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_LINEAR_ROUNDNESS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `DEFAULT_OBJECT_FIT` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `DEFAULT_PADDING` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
+| `DEFAULT_RICHTEXT_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_SCENE_META` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `DEFAULT_SHAPE_ROUNDNESS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `DEFAULT_TEXT_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `DEFAULT_SKETCH_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `diamondOutline` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
+| `distance` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `distanceToPolyline` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
-| `distanceToSegment` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `distanceToSegment` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `DUPLICATE_OFFSET` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `EDGES_OPTIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `EIGEN_MEDIA_SCHEME` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
 | `eigenMediaHref` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
 | `elbowAnchorScene` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `elbowBindPoint` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-heading.ts |
 | `elbowRoute` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-route.ts |
 | `elbowRoutingContext` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-route.ts |
-| `ELEMENT_FIELDS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `ELEMENT_FIELDS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
+| `ELEMENT_KINDS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `elementBounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `elementForCommentCard` | `@workspace/lib/vector` | packages/lib/src/vector/comments.ts |
+| `elementLayer` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
+| `elementsInFrame` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `elementToSvg` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
+| `ellipseOutline` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `FILL_STYLES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `fitFrameViewport` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `fitImageSize` | `@workspace/lib/vector` | packages/lib/src/vector/image-fit.ts |
 | `focusSnapPoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `followBindings` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `FONT_STYLES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `FONT_WEIGHTS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `FRAME_ASPECT_RATIO` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
+| `FRAME_CARD_BORDER` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
+| `FRAME_CARD_RADIUS` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
+| `FRAME_FIELDS` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
+| `FRAME_HEIGHT` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
+| `FRAME_WIDTH` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
+| `frameClipRadius` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
+| `framesFrom` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `FREEDRAW_SIZE_FACTOR` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `generateKeyBetween` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `generateNKeysBetween` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
@@ -1124,41 +1182,76 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getFontMetrics` | `@workspace/lib/vector` | packages/lib/src/vector/font-metrics.ts |
 | `getLineHeightPx` | `@workspace/lib/vector` | packages/lib/src/vector/font-metrics.ts |
 | `getVerticalOffset` | `@workspace/lib/vector` | packages/lib/src/vector/font-metrics.ts |
+| `gradientVector` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
+| `groupTransform` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `HIT_THRESHOLD_SCREEN` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `hitTestBox` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `hitTestDiamond` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `hitTestElement` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `hitTestEllipse` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `hitTestLinear` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `hitThresholdScreen` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
-| `isBindable` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `IMAGE_CASCADE_OFFSET` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `isBindable` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
+| `isClosedLinear` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `isClosedPath` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `isColorToken` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `isLinearElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `isTransparent` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `isSafeMediaName` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
+| `isTransparentColor` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
+| `isTransparentFill` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `isValidFractionalIndex` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
-| `isVectorElementType` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `isVectorElementType` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
+| `labelText` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/read-fields.ts |
+| `layerBoxCss` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
+| `layerInnerHtml` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
+| `LINEAR_HIT_SCREEN_FACTOR` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `linearLocalToScene` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `linearSceneToLocal` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `listEigenMediaRefs` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
 | `marqueeHits` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `marqueeMode` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `materializeFirstPin` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
+| `MAX_ARROW_LABEL_BYTES` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/read-fields.ts |
 | `moveEndpoints` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `moveSegment` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
-| `normalizeAngle` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `nearestFrameId` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
+| `nearestPoint` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
+| `NEW_TEXT_BOX_SIZE` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
+| `normalizeAngle` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `normalizeFixedPoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `normalizeLinear` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `NUDGE_STEP` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `NUDGE_STEP_LARGE` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `num` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/read-fields.ts |
+| `OBJECT_FITS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `oneOf` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/read-fields.ts |
 | `orderByFractionalIndex` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
+| `outlineContains` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
+| `outlineDistance` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
+| `outlineHits` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `outlineIntersections` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `outlinePath` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `outlinePoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `paintsNothing` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
+| `parseBackgroundFill` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `parseBinding` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `parseEigenMediaHref` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
+| `parseFill` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `parseFixedSegments` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `parseIdList` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `parsePoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `parsePressures` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `pasteAnchorOffset` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
+| `pointsBounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `polylineOutline` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `projectFixedPointOntoDiagonal` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `prop` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `readElementFromFields` | `@workspace/lib/vector` | packages/lib/src/vector/read-vector.ts |
+| `readElementsClipboardItem` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
 | `readVectorFromDoc` | `@workspace/lib/vector` | packages/lib/src/vector/read-vector.ts |
+| `reanchorElements` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
+| `rectOutline` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `redockBindingsForElbow` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-heading.ts |
 | `remapBinding` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `renormalize` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
@@ -1167,29 +1260,52 @@ rather than inlining `queryClient.invalidateQueries`.
 | `resizeLinear` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `resizeRotatedRect` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `rewriteEigenMediaRefs` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
+| `RICH_TEXT_CLASS` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
+| `richTextCssText` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/richtext.ts |
+| `richTextFitHeight` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/richtext.ts |
 | `rotatePoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `round` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `round4` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `ROUNDNESS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `sampleArrowCurve` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `sceneBounds` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-route.ts |
+| `sceneFontFamilies` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
+| `sceneLayers` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
+| `sceneReadingOrder` | `@workspace/lib/vector` | packages/lib/src/vector/search-scene.ts |
 | `sceneToSvg` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
+| `sceneTransform` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
+| `searchScene` | `@workspace/lib/vector` | packages/lib/src/vector/search-scene.ts |
+| `segSegIntersect` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
+| `serializeBackgroundFill` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `serializeBinding` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `serializeFill` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `serializeFixedSegments` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `serializeIdList` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `serializePoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `serializePressures` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
-| `shapeSideMidpoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `shapeAnchorPoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `sharpDiamondOffset` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
+| `SLIDES_STYLE_DEFAULTS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
 | `SNAP_SCREEN_THRESHOLD` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `snapAngle` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `snapBoxToTargets` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
+| `solidFill` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
+| `storedFields` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `stripEigenMediaRefs` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
 | `STROKE_STYLES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `STROKE_WIDTH_OPTIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `SVG_NS` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
 | `syncInvalidIndices` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `TEXT_ALIGNS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `TEXT_DECORATIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `TRANSPARENT_COLOR` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
+| `TRANSPARENT_FILL` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `UNBOUND_PIN_CONTEXT` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `unionBounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `unpinSegment` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `validateElbowPoints` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `validateOrderKey` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
+| `VECTOR_STYLE_DEFAULTS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
+| `VERTICAL_ALIGNS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `alphaGroupKey` | `@workspace/ui` | packages/ui/src/components/alphabetical-list.tsx |
 | `FILTER_LABELS` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
 | `formatDownloadLabel` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/file-menu.tsx |
@@ -1224,11 +1340,16 @@ rather than inlining `queryClient.invalidateQueries`.
 | `buildDocSearchQuery` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 | `searchFlashKey` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 | `uploadWithProgress` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-with-progress.tsx |
+| `EDIT_TOOLS` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/toolbar-tools.tsx |
+| `INSERT_TOOLS` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/toolbar-tools.tsx |
 | `isVectorFontLoaded` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |
 | `loadVectorFont` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |
 | `measureVectorText` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |
+| `newElementId` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/element-writes.ts |
+| `newFrameId` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/frame-writes.ts |
 | `VECTOR_TOOLS` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
-| `vectorFontString` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |
+| `writeElementInDoc` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/element-writes.ts |
+| `writeFrameInDoc` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/frame-writes.ts |
 | `isTypingTarget` | `@workspace/ui/hooks/is-typing-target` | packages/ui/src/hooks/is-typing-target.ts |
 | `isFilesOnlyClipboard` | `@workspace/ui/hooks/use-file-paste-target` | packages/ui/src/hooks/use-file-paste-target.ts |
 | `createEigenAppRouter` | `@workspace/ui/lib/eigenAppRouter` | packages/ui/src/lib/eigenAppRouter.tsx |

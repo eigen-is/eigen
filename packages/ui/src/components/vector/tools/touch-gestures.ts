@@ -1,14 +1,7 @@
-// Touch / stylus gesture policy for the vector canvas, ported from Excalidraw (App.tsx:8398-8432 spike
+// Touch / stylus gesture policy for the canvas editor, ported from Excalidraw (App.tsx:8398-8432 spike
 // discard, 8446-8453 penMode latch, 8578-8588 palm-rejection allowlist, 9061 pinch-pin-mid-freedraw).
 // The canvas only DISPATCHES into these handlers; all touch LOGIC lives here so the canvas file stays
-// flat (CANVAS.md's rule that vector-canvas.tsx must not grow). Three behaviors:
-//   - penMode latch: the first stylus pointerdown flips a session-scoped penMode; while it's on a finger
-//     can no longer draw/create (palm rejection) but still selects and pans. A mouse is never affected.
-//   - two-finger pan + pinch-zoom: a second touch aborts the one-finger gesture (a freehand spike is
-//     discarded, a real stroke finalizes) and both fingers then drive pan/pinch through the viewport,
-//     which stays the single zoom owner.
-//   - double-tap: two quick stationary taps enter text editing via the SAME entry a mouse double-click
-//     uses; a touch that DRAGS never taps, so a drag can never enter text editing.
+// flat. The behaviours are documented in docs/CANVAS.md § Touch / stylus policy.
 
 import { type MutableRefObject, useRef } from 'react';
 import type { VectorTool } from '../hooks/use-tool';
@@ -30,16 +23,16 @@ export function touchIgnoredDuringPen(penDrawing: boolean): boolean {
 }
 
 // A finger keeps operating these tools even after a pen has latched penMode (Excalidraw's allowlist,
-// App.tsx:8580-8585 — selection/lasso/text/image; ours is select + text). Every other tool draws or
+// App.tsx:8580-8585 — selection/lasso/text/image; ours is select + rich text). Every other tool draws or
 // creates, so a finger is locked out of it while a pen is in use.
-const PEN_MODE_TOUCH_ALLOWED: ReadonlySet<VectorTool> = new Set<VectorTool>(['select', 'text']);
+const PEN_MODE_TOUCH_ALLOWED: ReadonlySet<VectorTool> = new Set<VectorTool>(['select', 'richtext']);
 export function touchAllowedInPenMode(tool: VectorTool): boolean {
     return PEN_MODE_TOUCH_ALLOWED.has(tool);
 }
 
 // Incremental pan+pinch from one two-finger frame: `scale` is the finger-spread ratio, the pan is the
 // midpoint's screen travel, both applied about the current midpoint. Pure so the math is unit-tested.
-export type PinchFrame = { scale: number; midX: number; midY: number; panDx: number; panDy: number };
+type PinchFrame = { scale: number; midX: number; midY: number; panDx: number; panDy: number };
 export function pinchFrame(prevA: TouchXY, prevB: TouchXY, currA: TouchXY, currB: TouchXY): PinchFrame {
     const prevMidX = (prevA.x + prevB.x) / 2;
     const prevMidY = (prevA.y + prevB.y) / 2;
@@ -71,6 +64,17 @@ export function isDoubleTap(prev: Tap | null, curr: Tap): boolean {
     );
 }
 
+// A one-finger horizontal drag pages through the frames on a view-only phone. Distance keeps a slow
+// scroll from paging; the 2:1 ratio keeps a diagonal drag out — a finger that is mostly panning
+// vertically is not asking for the next slide. The result is an INDEX delta for useActiveFrame.step,
+// so dragging left (content moves left under the finger, as every carousel does) is +1: the next
+// slide.
+const SWIPE_MIN_DISTANCE = 60;
+export function swipeFrameDelta(dx: number, dy: number): number {
+    if (Math.abs(dx) < SWIPE_MIN_DISTANCE || Math.abs(dx) <= Math.abs(dy) * 2) return 0;
+    return dx < 0 ? 1 : -1;
+}
+
 type DownInfo = { t: number; x: number; y: number; moved: boolean };
 type TouchState = {
     // Active touch pointers by id, in client coords (updated every move so a late second finger has the
@@ -83,6 +87,10 @@ type TouchState = {
     downInfo: Map<number, DownInfo>;
     lastTap: Tap | null;
 };
+
+// Everything the policy reads off a pointer event. The canvas hands it a real React.PointerEvent; naming
+// the subset keeps the hook driveable without a DOM.
+export type TouchPointerEvent = Pick<React.PointerEvent, 'pointerType' | 'pointerId' | 'clientX' | 'clientY'>;
 
 export type TouchGesturesParams = {
     tool: VectorTool;
@@ -101,12 +109,15 @@ export type TouchGesturesParams = {
     isPenDrawing: () => boolean;
     // Enter text editing at a client point — the SAME entry a mouse double-click uses.
     onDoubleTap: (clientX: number, clientY: number) => void;
+    // Page through frames on a one-finger swipe. Present only where a swipe means something (a
+    // frame-mode canvas the user cannot edit); omitted, a swipe is just a pan.
+    onSwipe?: (delta: number) => void;
 };
 
 export type TouchGestures = {
-    onPointerDown: (e: React.PointerEvent) => boolean;
-    onPointerMove: (e: React.PointerEvent) => boolean;
-    onPointerUp: (e: React.PointerEvent) => boolean;
+    onPointerDown: (e: TouchPointerEvent) => boolean;
+    onPointerMove: (e: TouchPointerEvent) => boolean;
+    onPointerUp: (e: TouchPointerEvent) => boolean;
     // Tear down all transient touch state (pointers, two-finger, tap tracking) — the canvas calls it
     // from its blur/pointercancel safety net so a torn-down gesture can't wedge later touches.
     reset: () => void;
@@ -123,7 +134,7 @@ export function useTouchGestures(params: TouchGesturesParams): TouchGestures {
     const st = stateRef.current;
     const { tool, containerRef, frozenRef } = params;
 
-    const onPointerDown = (e: React.PointerEvent): boolean => {
+    const onPointerDown = (e: TouchPointerEvent): boolean => {
         // First stylus contact latches penMode for the session; the pen itself draws normally.
         if (e.pointerType === 'pen') {
             st.penMode = true;
@@ -136,12 +147,14 @@ export function useTouchGestures(params: TouchGesturesParams): TouchGestures {
         if (touchIgnoredDuringPen(params.isPenDrawing())) return true;
 
         st.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-        st.downInfo.set(e.pointerId, { t: performance.now(), x: e.clientX, y: e.clientY, moved: false });
 
         // Second finger → abort the one-finger gesture and hand both pointers to pan/pinch.
         if (st.pointers.size === 2) {
             const [a, b] = [...st.pointers.keys()];
             params.abortActiveGesture();
+            // A gesture that ever held two fingers is a pinch and nothing else: dropping the down info
+            // keeps the LAST finger lifted from reading its pinch travel as a swipe or a tap.
+            st.downInfo.clear();
             st.twoFinger = { a, b };
             frozenRef.current = true;
             containerRef.current?.setPointerCapture(e.pointerId);
@@ -150,12 +163,14 @@ export function useTouchGestures(params: TouchGesturesParams): TouchGestures {
         // Third+ finger: ignore extras while a pinch runs.
         if (st.pointers.size > 2) return true;
 
+        st.downInfo.set(e.pointerId, { t: performance.now(), x: e.clientX, y: e.clientY, moved: false });
+
         // First finger. Palm rejection: while a pen is in use a finger can't drive a draw/create tool.
         if (st.penMode && !touchAllowedInPenMode(tool)) return true;
         return false;
     };
 
-    const onPointerMove = (e: React.PointerEvent): boolean => {
+    const onPointerMove = (e: TouchPointerEvent): boolean => {
         if (e.pointerType !== 'touch') return false;
         if (!st.pointers.has(e.pointerId)) return false;
 
@@ -184,7 +199,7 @@ export function useTouchGestures(params: TouchGesturesParams): TouchGestures {
         return false;
     };
 
-    const onPointerUp = (e: React.PointerEvent): boolean => {
+    const onPointerUp = (e: TouchPointerEvent): boolean => {
         if (e.pointerType !== 'touch') return false;
         const wasTwoFinger = st.twoFinger !== null;
         st.pointers.delete(e.pointerId);
@@ -197,6 +212,21 @@ export function useTouchGestures(params: TouchGesturesParams): TouchGestures {
             st.twoFinger = null;
             frozenRef.current = false;
             return true;
+        }
+
+        // Single-finger swipe: pages the deck before the tap logic, because a swipe has moved and so
+        // could never have been a tap anyway. The gesture MUST be aborted first — a view-only canvas
+        // starts a pan on the same pointerdown (canvas-editor.tsx's panMode sets frozenRef and
+        // captures the pointer), and claiming the up here means the canvas' own onPointerUp returns
+        // early, so an un-aborted pan would keep the freeze and wedge every later touch. The
+        // double-tap branch below does exactly this for the same reason.
+        if (di && params.onSwipe) {
+            const delta = swipeFrameDelta(e.clientX - di.x, e.clientY - di.y);
+            if (delta !== 0) {
+                params.abortActiveGesture();
+                params.onSwipe(delta);
+                return true;
+            }
         }
 
         // Single-finger tap → double-tap detection for text-edit entry. A moved (dragged) or long press

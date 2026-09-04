@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@workspace/sheet": "workspace:*",
-    "@tanstack/react-hotkeys": "^0.1.1",
     "@workspace/lib": "workspace:*",
     "@workspace/ui": "workspace:*",
     "y-websocket": "^3.0.0",

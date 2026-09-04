@@ -25,15 +25,16 @@ Two guarantees make this safe:
 |-----|-----------------|--------|---------|
 | **eigendoc** | `figure.mediaName` | Image file name | `photo.png` |
 | **eigendoc** | `comments` card `.chatName` | Chat folder name | `comment-1710523456.eigenchat` |
-| **eigenslides** | `ImageObject.mediaName` | Image file name | `photo.png` |
-| **eigenslides** | `SlideItem.background` (image variant) | Background image name | `{ type: 'image', mediaName: 'bg.jpg', fit: 'cover' }` |
+| **eigenslides / eigenvector** | `image` element `.mediaName` | Image file name | `photo.png` |
+| **eigenslides / eigenvector** | frame `.background` (image variant) | Background image name | `{ type: 'image', mediaName: 'bg.jpg', fit: 'cover' }` |
 | **eigenstickies** | `tasks` card `.chatName` | Chat folder name | `task-1710523456.eigenchat` |
 | **eigenchat** | `messages.attachments` | JSON array of file names | `["photo.png","doc.pdf"]` |
 
 The eigendoc image node is `figure` (`packages/lib/src/docs/eigendoc/nodes/figure.ts`) — an inline
 atom whose `mediaName` attribute is the only durable reference; `src` is filled in at render time.
-Slide and slide-text backgrounds are a `BackgroundFill` union (`packages/lib/src/types/background.ts`)
-of `solid` / `gradient` / `image`, and only the `image` variant carries a `mediaName`. Comment
+A canvas frame background (one slide) is a `BackgroundFill` union (`packages/lib/src/types/background.ts`)
+of `solid` / `gradient` / `image`, and only the `image` variant carries a `mediaName`; the infinite
+canvas' own `meta.background` is a plain colour token and never names media. Comment
 anchors are the exception to the name rule: the eigendoc `comment` mark stores a `cardId`, and the
 card itself (in the doc's Yjs `comments` map) carries the `chatName`.
 
@@ -61,7 +62,7 @@ writes that name into Yjs immediately, so `resolveMediaUrl()` returns the blob U
 renders on the very next frame. This is how insert and paste feel instant.
 
 When the upload settles, the caller swaps every node still holding the pending name over to the real
-file name (`swapFigureMediaName` in the docs editor, its equivalents in slides and sheets); a failed
+file name (`swapFigureMediaName` in the docs editor, the canvas engine's untracked element swap, its equivalent in sheets); a failed
 upload resolves to `null` and the caller removes the node instead. The provider preloads the server
 preview URL (`probe.decode()`) before revoking the blob and defers the revoke by a macrotask, so the
 `<img src>` swap has no flash. Pending entries live in a ref, not state — the context value stays

@@ -1,3 +1,4 @@
+import { CELL_INDICATOR_SIZE } from '@workspace/lib/constants/comment-indicator';
 import { type Context, getFlowdata } from '../context';
 import { getRealCellValue, isForcedStringNumber, mergeBorder } from './cell';
 import {
@@ -19,8 +20,8 @@ import { colLocation, rowLocation } from './location';
 export type CellGlyph = 'dropdown' | 'checkbox' | 'comment' | 'invalid' | 'forced-string';
 
 // Corner indicators: a comment top-right, an invalid value or a forced string
-// top-left. One size for all three so they read as one family of marks.
-export const CELL_INDICATOR_SIZE = 11;
+// top-left. One size for all three so they read as one family of marks — the
+// shared CELL_INDICATOR_SIZE, which the canvas apps paint their mark at too.
 
 // The square the corner triangle is drawn in, anchored on the cell corner itself
 // (the 1px is the grid line): one leg along the top edge, one down the side.

@@ -1,24 +1,34 @@
 import { describe, expect, test } from 'bun:test';
 import { elbowRoute } from '../../vector/elbow-route';
+import { solidFill } from '../../vector/fill';
 import type { Bounds, Point } from '../../vector/geometry';
 import {
     DEFAULT_ELEMENT_PROPS,
     serializeBinding,
     type VectorArrowElement,
     type VectorElement,
+    type VectorRectangleElement,
     type VectorShapeElement,
 } from '../../vector/types';
+import { richtext } from './element-factories';
 
-const shapeEl = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id' | 'type'>): VectorShapeElement => ({
+// Spread-only so the ellipse case doesn't trip the excess-property check on `corners`.
+const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
     ...DEFAULT_ELEMENT_PROPS,
     x: 0,
     y: 0,
     width: 100,
     height: 100,
     angle: 0,
-    seed: 1,
     index: 'a0',
-    roundness: 'sharp',
+    fill: solidFill('transparent'),
+    roughness: 1,
+    seed: 1,
+    corners: 'straight',
+};
+
+const shapeEl = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id' | 'type'>): VectorShapeElement => ({
+    ...SHAPE_BASE,
     ...over,
 });
 
@@ -26,6 +36,7 @@ const arrowEl = (over: Partial<VectorArrowElement> & { points: string }): Vector
     ...DEFAULT_ELEMENT_PROPS,
     id: 'ar',
     type: 'arrow',
+    roughness: 1,
     x: 0,
     y: 0,
     width: 100,
@@ -96,6 +107,28 @@ describe('elbowRoute', () => {
             const mid = { x: (route[i - 1].x + route[i].x) / 2, y: (route[i - 1].y + route[i].y) / 2 };
             expect(strictlyInside(mid, aabbA)).toBe(false);
             expect(strictlyInside(mid, aabbB)).toBe(false);
+        }
+    });
+
+    test('a rich text box is an obstacle and a dock exactly like the rectangle of the same box', () => {
+        // The router works off the kind's silhouette and padded AABB, so a text box routes and docks the
+        // way a rectangle of that box does — nothing about the elbow path knows it holds words.
+        const a = shapeEl({ id: 'A', type: 'rectangle', x: 0, y: 0, width: 100, height: 100 });
+        const geom = { x: 200, y: 200, width: 100, height: 100, corners: 'straight' as const };
+        const rect = shapeEl({ id: 'B', type: 'rectangle', ...geom });
+        const text = richtext({ id: 'B', ...geom });
+        const arrow = arrowEl({
+            points: '[[100,50],[250,200]]',
+            startBinding: bind(a, [1, 0.5]),
+            endBinding: bind(rect, [0.5, 0]),
+        });
+        const route = elbowRoute(arrow, byIdOf(a, text, arrow));
+        expect(route).toEqual(elbowRoute(arrow, byIdOf(a, rect, arrow)));
+        expect(isOrthogonal(route)).toBe(true);
+        const aabb: Bounds = { minX: 200, minY: 200, maxX: 300, maxY: 300 };
+        for (let i = 1; i < route.length; i++) {
+            const mid = { x: (route[i - 1].x + route[i].x) / 2, y: (route[i - 1].y + route[i].y) / 2 };
+            expect(strictlyInside(mid, aabb)).toBe(false);
         }
     });
 
