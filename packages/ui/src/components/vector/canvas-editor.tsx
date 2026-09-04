@@ -1229,10 +1229,20 @@ export function CanvasEditor({
     // the surface around it stays the app's, so a letterboxed page reads as a page.
     const background = viewport === 'infinite' && !isTransparentColor(meta.background) ? meta.background : undefined;
 
+    // Rich text's height is DERIVED from the text in it, so the layer that renders a box measures it and
+    // writes the fit back here — untracked, because a derived size is bookkeeping and not the user's own
+    // undo step. Withheld while a gesture is live: a resize preview owns the box it is dragging, and the
+    // committed width re-fits it the moment the drag ends.
+    const fitElementHeight = useCallback(
+        (id: string, height: number) => updateElementUntracked(id, { height }),
+        [updateElementUntracked],
+    );
+    const onFitHeight = canEdit && !hasPreviews && !creating ? fitElementHeight : undefined;
+
     // One scene node — every render path routes through here so `byId` (an elbow arrow's route context) is
     // threaded in one place, not per callsite.
     const node = (el: VectorElement, children?: ReactNode) => (
-        <ElementLayer key={el.id} el={el} resolveMedia={resolveMediaUrl} byId={renderById}>
+        <ElementLayer key={el.id} el={el} resolveMedia={resolveMediaUrl} byId={renderById} onFitHeight={onFitHeight}>
             {children}
         </ElementLayer>
     );

@@ -116,3 +116,14 @@ export function richTextCssText(el: VectorRichTextElement): string {
     if (bordered || el.padding > 0) style.push('box-sizing:border-box');
     return style.join(';');
 }
+
+// A box's height is DERIVED from the text in it: whatever renders it measures its body and writes the
+// fit back, so a box never clips or trails empty space (Google Slides' policy — grow AND shrink, no
+// stored minimum). `contentHeight` is the body's own extent; the stored height is the border box, so
+// the inset and the border ride inside it. null = the stored value already fits, which is also the
+// loop guard: every peer measures the same box, and only a real (>= 1px) difference is ever written.
+export function richTextFitHeight(el: VectorRichTextElement, contentHeight: number): number | null {
+    const chrome = 2 * el.padding + (isBordered(el) ? 2 * el.strokeWidth : 0);
+    const fitted = Math.ceil(contentHeight + chrome);
+    return Math.abs(fitted - el.height) >= 1 ? fitted : null;
+}

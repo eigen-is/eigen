@@ -23,7 +23,7 @@ import { richTextKind } from './richtext';
 export type { RenderOutput, StyleDefaults } from './kind';
 export { SLIDES_STYLE_DEFAULTS, VECTOR_STYLE_DEFAULTS } from './kind';
 // The in-place editor paints its box with the SAME string the renderer emits, so the two cannot drift.
-export { richTextCssText } from './richtext';
+export { richTextCssText, richTextFitHeight } from './richtext';
 
 // Each entry keeps its own element type, so `ELEMENT_KINDS.richtext.defaults(style)` is rich text's
 // field set and a generic `ELEMENT_KINDS[el.type]` lookup still answers with the union.
