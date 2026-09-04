@@ -892,14 +892,20 @@ export function CanvasEditor({
 
     // Text-edit entry shared by a mouse double-click and a touch double-tap (touch-gestures synthesizes
     // the tap-tap). frozenRef: no new session over a live gesture. An arrow opens the label overlay;
-    // any kind with an in-place editor opens that instead, inside its own layer.
+    // any kind with an in-place editor opens that instead, inside its own layer; empty canvas starts a
+    // new box there (Excalidraw's openNewText — rich text is the only text kind, so nothing to choose),
+    // placed like the text tool's own click: the starting box with its corner on the point.
     const openTextAtClient = (clientX: number, clientY: number) => {
         if (!canEdit || tool !== 'select' || textEditing || frozenRef.current) return;
         const p = clientToScene(clientX, clientY);
         const hit = hitTestTopmost(ordered, p, viewportRef.current.zoom, committedById, coarse);
         const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
-        if (hitEl?.type === 'arrow') openEditArrowLabel(hitEl);
-        else if (hitEl && ELEMENT_KIND_UI[hitEl.type].InPlaceEditor) openRichText(hitEl.id);
+        if (hitEl?.type === 'arrow') return openEditArrowLabel(hitEl);
+        if (hitEl && !ELEMENT_KIND_UI[hitEl.type].InPlaceEditor) return;
+        const id = hitEl
+            ? hitEl.id
+            : sealed(undoManager, () => addElement({ type: 'richtext', x: p.x, y: p.y, ...NEW_TEXT_BOX_SIZE }));
+        if (id) openRichText(id);
     };
     const onDoubleClick = (e: React.MouseEvent) => openTextAtClient(e.clientX, e.clientY);
 
