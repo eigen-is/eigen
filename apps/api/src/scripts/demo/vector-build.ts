@@ -134,6 +134,7 @@ export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
     doc.transact(() => {
         const map = doc.getMap('elements');
         for (const el of ordered) map.set(el.id, toYMap(el, ELEMENT_FIELDS));
+        doc.getMap('meta').set('background', plan.background);
     });
 }
 

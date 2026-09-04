@@ -355,6 +355,7 @@ describe('seed-demo', () => {
             const vectorDataDb = findContainerDataDb(metadataDb, mountsDir, mountId, vectorName);
             const scene = readVectorFromDoc(await loadCollabDoc(vectorDataDb));
             expect(scene.elements.length).toBeGreaterThanOrEqual(60);
+            expect(scene.meta.background).toBe(SITE_PLAN.background);
 
             // Chat lines with `attach` post the seeded document as a drive-reference attachment
             // that points at the real container (the site plan, in #production).

@@ -566,6 +566,7 @@ export const SITE_PLAN = {
     folder: 'production' as TeamFolder,
     name: 'site plan', // lowercase, no extension
     author: 'production' as LeadRole,
+    background: '#fffbeb', // the scene's paper; the fence fill is the meadow on it
     // Drawn bottom-up: lines (ground), shapes, images, arrows, then every text on top.
     lines: [
         // The dune ridge west of the field, the sea just behind it. It sits a walk away from the fence:
@@ -636,6 +637,7 @@ export const SITE_PLAN = {
             y: 150,
             width: 1180,
             height: 720,
+            fill: '#ecfcca',
             stroke: '#868e96',
             strokeStyle: 'dashed',
             ground: true,
