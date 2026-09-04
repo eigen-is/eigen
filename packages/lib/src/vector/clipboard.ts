@@ -35,6 +35,11 @@ export function buildElementsClipboardItem(
     };
 }
 
+// A forged wire can claim any number of elements, and every one of them is read, validated and written
+// into the doc inside a single transact. Far past any real selection — the svg flavour stops rendering
+// at 300 — so nothing a user can actually copy is truncated.
+const MAX_PASTED_ELEMENTS = 10_000;
+
 export function readElementsClipboardItem(
     items: EigenClipboardItem[],
 ): { elements: VectorElement[]; sourceFrameId: string } | null {
@@ -42,6 +47,7 @@ export function readElementsClipboardItem(
     if (!item || !Array.isArray(item.elements)) return null;
     const elements: VectorElement[] = [];
     for (const record of item.elements) {
+        if (elements.length === MAX_PASTED_ELEMENTS) break;
         // A forged wire can hold anything, including a null entry — `record[key]` would throw inside the
         // host's paste handler, after its preventDefault, and swallow the paste silently.
         if (!record || typeof record !== 'object') continue;
@@ -57,20 +63,10 @@ export function reanchorElements(elements: VectorElement[], dx: number, dy: numb
     return elements.map((el) => ({ ...el, x: el.x + dx, y: el.y + dy }));
 }
 
-// Where a pasted set lands, as one translation of the whole set. The wire carries the STORED
-// coordinates, so the decision is only ever "keep them, step off them, or re-anchor them".
-// `targetFrameId` is '' for an infinite canvas, which is also what `sourceFrameId` is for a copy taken
-// from one:
-//
-//   same frame          → the ⌘D step, so the copy is visibly a second copy
-//   a different frame   → in place: frame-relative coordinates mean the same spot on the new slide
-//   anything else       → re-anchor the bounding box on the viewport centre, so the paste lands where
-//                         the user is looking (the infinite canvas, and every crossing between the two)
-//
-// The last rule had a degenerate case that made ⌘V look like a dead key: a selection sitting AT the
-// viewport centre re-anchors by ~0, so the copy lands pixel-exactly on top of the original and the
-// canvas looks unchanged. A re-anchor smaller than one duplicate step IS that case, so it takes the
-// duplicate step instead — which is what the sibling gesture, ⌘D, does with the same selection.
+// Where a pasted set lands, as one translation of the whole set: the ⌘D step within one frame, in
+// place across two frames (frame-relative coordinates mean the same spot on the new slide), and
+// otherwise the bounding box re-anchored on the viewport centre — falling back to the ⌘D step when
+// that re-anchor is under one step, or the copy would land exactly on top of the original.
 export function pasteAnchorOffset(
     elements: VectorElement[],
     sourceFrameId: string,

@@ -83,6 +83,22 @@ describe('the elements clipboard item', () => {
         expect(readElementsClipboardItem([item])?.elements.map((el) => el.id)).toEqual(['r']);
     });
 
+    test('a wire claiming more elements than any selection holds is capped', () => {
+        // Every accepted record is read, validated and written into the doc in one transact, so the
+        // count a forged wire declares has to have a ceiling.
+        const one = buildElementsClipboardItem([shape({ id: 'r', type: 'rectangle' })], '');
+        const record = one?.elements[0];
+        if (!record) throw new Error('expected a stored record');
+        const item: EigenClipboardElementsItem = {
+            type: 'elements',
+            width: 1,
+            height: 1,
+            sourceFrameId: '',
+            elements: Array.from({ length: 12_000 }, () => ({ ...record })),
+        };
+        expect(readElementsClipboardItem([item])?.elements).toHaveLength(10_000);
+    });
+
     test('a hostile field value is clamped by the reader, not trusted', () => {
         const item = buildElementsClipboardItem(
             [shape({ id: 'r', type: 'rectangle' })],
