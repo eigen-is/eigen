@@ -10,11 +10,16 @@ import {
     ELEMENT_KINDS,
     generateKeyBetween,
     SLIDES_STYLE_DEFAULTS,
+    serializeBackgroundFill,
 } from '@workspace/lib/vector';
 import { newElementId, newFrameId, writeFrameInDoc } from '@workspace/ui/components/vector';
 import * as Y from 'yjs';
 
 const SEED_ORIGIN = Symbol('deck-seed');
+
+// The colour a brand-new deck opens on — the title slide only. Every later page, including one added
+// with +, is painted with the shared DEFAULT_FRAME_BACKGROUND by writeFrame.
+const SEED_BACKGROUND_COLOR = '#f6339a';
 
 // The centred title band a deck has always opened with, in frame coordinates (0,0 → 1920,1080).
 const WELCOME = {
@@ -26,6 +31,8 @@ const WELCOME = {
     fontSize: 64,
     textAlign: 'center',
     verticalAlign: 'center',
+    // White reads on SEED_BACKGROUND_COLOR; the kind's default (near-black) would not.
+    color: '#ffffff',
 };
 
 export function seedDeck(doc: Y.Doc): void {
@@ -38,9 +45,8 @@ export function seedDeck(doc: Y.Doc): void {
         if (framesMap.size > 0) return;
         const index = generateKeyBetween(null, null);
         const frameId = newFrameId();
-        // No background here: writeFrame paints a new page with DEFAULT_FRAME_BACKGROUND, so the seeded
-        // slide and one added with + cannot differ.
-        writeFrameInDoc(doc, { id: frameId, index });
+        const background = serializeBackgroundFill({ type: 'solid', color: SEED_BACKGROUND_COLOR });
+        writeFrameInDoc(doc, { id: frameId, index, background });
 
         const elementId = newElementId();
         const record: Record<string, unknown> = {
