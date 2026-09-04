@@ -38,7 +38,7 @@ const zoomAt = (v: CanvasViewport, nextZoom: number, px: number, py: number): Ca
     scrollY: v.scrollY + py / nextZoom - py / v.zoom,
 });
 
-export type UseViewportOptions = {
+type UseViewportOptions = {
     // 'frame' bounds the canvas to one page: it always shows the whole page — fitted on open, re-fitted
     // on every container resize and frame switch — with the zoom LOCKED to that fit, so there is no
     // user zoom and, following from the clamp, no free pan either.
@@ -70,6 +70,11 @@ export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseView
     // the infinite canvas, which has no edges to hold a pan inside.
     const boundsRef = useRef<Extent | null>(null);
     boundsRef.current = mode === 'frame' && frame ? frame : null;
+    // Frame mode is the lock, not the extent: a deck whose frames have not loaded yet is still a bounded
+    // page, and the zoom pill is already hidden on the same fact. Read by `settle`, which freezes rather
+    // than letting a wheel zoom the page free while there is nothing to clamp against.
+    const framedRef = useRef(false);
+    framedRef.current = mode === 'frame';
 
     const containerExtent = useCallback((): Extent => {
         const rect = containerRef.current?.getBoundingClientRect();
@@ -85,7 +90,7 @@ export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseView
     const settle = useCallback(
         (next: CanvasViewport): CanvasViewport => {
             const bounds = boundsRef.current;
-            if (!bounds) return next;
+            if (!bounds) return framedRef.current ? viewportRef.current : next;
             return clampFrameViewport({ ...next, zoom: viewportRef.current.zoom }, containerExtent(), bounds);
         },
         [containerExtent],

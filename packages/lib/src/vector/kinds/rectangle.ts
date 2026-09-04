@@ -53,7 +53,6 @@ export const rectangleKind = defineKind<VectorRectangleElement>({
             [rot(up[0]), rot(up[1])],
         ];
     },
-    // Nothing painted at all — no fill and no stroke — is invisible but real; the canvas rings it.
     paintsNothing: isUnpainted,
     render: (el) => ({ svg: renderRoughShape(el) }),
 });

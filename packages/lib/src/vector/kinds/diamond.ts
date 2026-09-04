@@ -36,7 +36,6 @@ export const diamondKind = defineKind<VectorDiamondElement>({
     hitTest: (el, point) => hitTestDiamond(el, point),
     outline: (el, inflate) =>
         diamondOutline({ x: el.x, y: el.y, width: el.width, height: el.height }, cornerRadius(el, 'diamond'), inflate),
-    // Nothing painted at all — no fill and no stroke — is invisible but real; the canvas rings it.
     paintsNothing: isUnpainted,
     render: (el) => ({ svg: renderRoughShape(el) }),
 });

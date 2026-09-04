@@ -10,7 +10,7 @@
 import { serializeFill, TRANSPARENT_FILL } from '../fill';
 import { type Bounds, boxCenter, getElementBounds, type Point, rotatePoint } from '../geometry';
 import type { OutlineShape } from '../outline';
-import type { Corners, VectorElement, VectorElementBase } from '../types';
+import { type Corners, DEFAULT_ELEMENT_PROPS, type VectorElement, type VectorElementBase } from '../types';
 import type { YMapLike } from './read-fields';
 
 // What a host's new elements look like: vector draws rough and hatched in Excalifont, slides flat and
@@ -165,22 +165,22 @@ export const NEW_TEXT_BOX_SIZE = { width: 320, height: 48 };
 // is the deck's flat counterpart). A fresh element starts unpainted but hatched — the hatch style rides
 // the fill, so the first colour the user picks lands as hachure.
 export const VECTOR_STYLE_DEFAULTS: StyleDefaults = {
-    strokeColor: '#1e1e1e',
-    strokeWidth: 2,
+    strokeColor: DEFAULT_ELEMENT_PROPS.strokeColor,
+    strokeWidth: DEFAULT_ELEMENT_PROPS.strokeWidth,
     fill: serializeFill({ ...TRANSPARENT_FILL, style: 'hachure' }),
     roughness: 1,
     corners: 'curved',
     fontFamily: 'Excalifont',
     fontSize: 20,
-    color: '#1e1e1e',
+    color: DEFAULT_ELEMENT_PROPS.strokeColor,
 };
 
 // The deck's style table: flat and solid in Inter, the way a presentation reads. Same keys, same
 // meaning — a host's table decides how a NEW element looks, never which kinds exist. There is no text
 // alignment here because StyleDefaults has none: a fresh box starts top-left in both apps.
 export const SLIDES_STYLE_DEFAULTS: StyleDefaults = {
-    strokeColor: '#1e1e1e',
-    strokeWidth: 2,
+    strokeColor: DEFAULT_ELEMENT_PROPS.strokeColor,
+    strokeWidth: DEFAULT_ELEMENT_PROPS.strokeWidth,
     fill: serializeFill({ ...TRANSPARENT_FILL, style: 'solid' }),
     roughness: 0,
     corners: 'curved',

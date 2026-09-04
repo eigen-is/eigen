@@ -1,11 +1,10 @@
-// The comment mark, one fact for every surface that paints one: a right-angled triangle in the
-// top-right corner of whatever carries a card. A sheet cell draws it on canvas, a canvas object as
-// CSS borders — same size, same colour rules, so the two read as one mark.
+// The corner triangle, one fact for every surface that paints one: a sheet cell draws it on canvas
+// (a comment top-right, an invalid value or a forced string top-left), a canvas object as CSS
+// borders. One size for all of them, so they read as one family of marks.
 
 import { EIGEN_STICKIES_INDICATOR_MAP } from './colors';
 
-// Sheets' corner-triangle size, adopted whole: a cell's mark and an object's mark are the same glyph.
-export const COMMENT_INDICATOR_SIZE = 11;
+export const CELL_INDICATOR_SIZE = 11;
 
 // The attention red: a comment whose card carries no colour, and sheets' invalid-value triangle.
 // Hardcoded rather than a theme token — the canvas surfaces that paint it are pinned light.

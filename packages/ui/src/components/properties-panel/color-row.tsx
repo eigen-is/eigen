@@ -26,7 +26,7 @@ type ColorButtonProps = {
 
 // The one colour control every panel row uses: a select-shaped trigger (swatch + hex, or None / —)
 // opening the shared picker, with None and Reset inside the same popover.
-export function ColorButton({ value, onChange, showReset = true, allowNone, noneLabel = 'None' }: ColorButtonProps) {
+function ColorButton({ value, onChange, showReset = true, allowNone, noneLabel = 'None' }: ColorButtonProps) {
     const [open, setOpen] = useState(false);
     const mixed = isMixed(value);
     // Unset and transparent are the same answer to "what paint?" — both read as the None swatch.

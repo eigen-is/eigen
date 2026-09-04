@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1314 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1309 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (160)
+## Components (158)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -143,14 +143,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `AlignmentPicker` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/alignment-picker.tsx |
 | `AlignSection` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/align-section.tsx |
 | `BackgroundFillBlock` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/background-fill-block.tsx |
-| `ColorButton` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/color-row.tsx |
 | `ColorRow` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/color-row.tsx |
 | `FontRow` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/font-row.tsx |
 | `MergedNumberInput` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-number-input.tsx |
 | `MergedSelect` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-select.tsx |
 | `MergedSlider` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-slider.tsx |
 | `PropertiesPanel` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/properties-panel.tsx |
-| `PropertyNumberInput` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-number-input.tsx |
 | `PropertyRow` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/properties-panel.tsx |
 | `PropertySection` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/properties-panel.tsx |
 | `PropertyToggle` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-toggle.tsx |
@@ -778,7 +776,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorToolEntry` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (572)
+## Utilities & constants (569)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -863,12 +861,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `apps` | `@workspace/lib/apps` | packages/lib/src/core/apps.ts |
 | `authClient` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-auth-client.ts |
 | `backgroundCss` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
-| `cssGradientStops` | `@workspace/lib/background` | packages/lib/src/background/gradient.ts |
 | `DEFAULT_FILL_COLOR` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
 | `getBackgroundStyle` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
-| `gradientStops` | `@workspace/lib/background` | packages/lib/src/background/gradient.ts |
 | `isSameFill` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
-| `svgGradientStops` | `@workspace/lib/background` | packages/lib/src/background/gradient.ts |
 | `formatEventTime` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `formatEventWhen` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `formatFreeBusyTitle` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
@@ -936,8 +931,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `writeCardToDoc` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
 | `CANVAS_PREVIEW_HEIGHT` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `CANVAS_PREVIEW_WIDTH` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
+| `CELL_INDICATOR_SIZE` | `@workspace/lib/constants` | packages/lib/src/constants/comment-indicator.ts |
 | `COLLAB_STORAGE_UNAVAILABLE_CLOSE` | `@workspace/lib/constants` | packages/lib/src/constants/collab.ts |
-| `COMMENT_INDICATOR_SIZE` | `@workspace/lib/constants` | packages/lib/src/constants/comment-indicator.ts |
 | `commentIndicatorColor` | `@workspace/lib/constants` | packages/lib/src/constants/comment-indicator.ts |
 | `DOCX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
 | `EIGEN_ACCENT_COLOR_ROW` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |

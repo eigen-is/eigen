@@ -1,6 +1,6 @@
 import { Slider } from '@workspace/ui/components/slider';
 import { cn } from '@workspace/ui/lib/utils';
-import { useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { MergedNumberInput } from './merged-number-input';
 import { isMixed, type MergedValue } from './merged-value';
 
@@ -26,10 +26,14 @@ export function MergedSlider({ value, onChange, beginGesture, min, max, step = 1
     const release = useRef<(() => void) | null>(null);
     // Radix commits on pointer-up only when the value actually changed, and per keypress for the arrows;
     // the pointer-up below is the safety net that closes a gesture which ended where it started.
-    const endGesture = () => {
+    const endGesture = useCallback(() => {
         release.current?.();
         release.current = null;
-    };
+    }, []);
+    // A gesture the component never sees end: Escape mid-drag deselects and unmounts this section, and
+    // so does a peer deleting the element. An unreleased hold leaves captureTimeout at Infinity for the
+    // rest of the session, so every later edit would merge into one undo step.
+    useEffect(() => endGesture, [endGesture]);
 
     return (
         <div className="flex items-center gap-2 h-7">
@@ -46,6 +50,7 @@ export function MergedSlider({ value, onChange, beginGesture, min, max, step = 1
                 }}
                 onValueCommit={endGesture}
                 onPointerUp={endGesture}
+                onPointerCancel={endGesture}
                 onBlur={endGesture}
                 {...props}
             />

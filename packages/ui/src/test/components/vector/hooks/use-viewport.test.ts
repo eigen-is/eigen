@@ -1,7 +1,6 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { fitFrameViewport } from '@workspace/lib/vector';
 import { Window } from 'happy-dom';
-import type { UseViewportOptions } from '../../../../components/vector/hooks/use-viewport';
 
 // react-dom needs a DOM to render the hook harness into, and the hook itself needs a ResizeObserver
 // (its re-fit trigger) and an rAF (its paint). The globals are removed again in afterAll so later test
@@ -51,16 +50,17 @@ const { createRoot } = await import('react-dom/client');
 const { useViewport } = await import('../../../../components/vector/hooks/use-viewport');
 
 type Viewport = ReturnType<typeof useViewport>;
+type Options = NonNullable<Parameters<typeof useViewport>[0]>;
 type WheelInput = { deltaX?: number; deltaY?: number; ctrlKey?: boolean; clientX?: number; clientY?: number };
 const FRAME = { width: 1920, height: 1080 };
 
-function Harness({ options, onRender }: { options: UseViewportOptions; onRender: (v: Viewport) => void }) {
+function Harness({ options, onRender }: { options: Options; onRender: (v: Viewport) => void }) {
     const viewport = useViewport(options);
     onRender(viewport);
     return createElement('div', { ref: viewport.containerRef });
 }
 
-function mount(options: UseViewportOptions, size: { width: number; height: number }) {
+function mount(options: Options, size: { width: number; height: number }) {
     let latest: Viewport | null = null;
     const container = document.createElement('div');
     const root = createRoot(container);
@@ -98,7 +98,7 @@ function mount(options: UseViewportOptions, size: { width: number; height: numbe
 }
 
 describe('useViewport in frame mode', () => {
-    const options: UseViewportOptions = { mode: 'frame', frame: FRAME, resetKey: 'f1' };
+    const options: Options = { mode: 'frame', frame: FRAME, resetKey: 'f1' };
 
     test('opens fitted and re-fits when the container resizes', () => {
         const h = mount(options, { width: 1600, height: 1000 });
@@ -127,6 +127,24 @@ describe('useViewport in frame mode', () => {
         // The zoom pill is hidden in frame mode; its action re-fits rather than jumping to 100%.
         act(() => h.state.resetZoom());
         expect(h.state.viewportRef.current).toEqual(fitted);
+        h.unmount();
+    });
+
+    // A deck whose frames have not loaded yet is still a bounded page, and its zoom pill is already
+    // hidden. Without the extent there is nothing to clamp against, so the lock would silently become
+    // a free canvas the user can zoom with no way back.
+    test('with no frame extent yet, it is frozen rather than free', () => {
+        const h = mount({ mode: 'frame', resetKey: 'f1' }, { width: 1600, height: 1000 });
+        const opened = { ...h.state.viewportRef.current };
+
+        h.wheel({ deltaY: -200, ctrlKey: true, clientX: 800, clientY: 500 });
+        expect(h.state.viewportRef.current).toEqual(opened);
+
+        h.wheel({ deltaY: 200, deltaX: 120 });
+        expect(h.state.viewportRef.current).toEqual(opened);
+
+        act(() => h.state.panBy(120, 90));
+        expect(h.state.viewportRef.current).toEqual(opened);
         h.unmount();
     });
 });

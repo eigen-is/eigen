@@ -1472,6 +1472,15 @@ export function CanvasEditor({
                                     e.preventDefault();
                                     onOpenCard(cardId);
                                 }}
+                                // The pointerdown above swallows the click it would otherwise become, so
+                                // the keyboard needs its own opener; preventDefault keeps Enter/Space from
+                                // synthesising a second one.
+                                onKeyDown={(e) => {
+                                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                                    e.preventDefault();
+                                    onOpenCard(cardId);
+                                }}
+                                aria-label="Open comment"
                                 title="Open comment"
                             >
                                 <CommentIndicator color={color} className="block" />

@@ -83,10 +83,10 @@ function parsePaint(token: string): Paint {
     const hex = token.startsWith('#') ? token.slice(1) : '';
     const wide = hex.length === 3 ? hex.replace(/./g, (c) => c + c) : hex;
     if (wide.length !== 6 && wide.length !== 8) return { color: '#000000', alpha: 1 };
-    return {
-        color: `#${wide.slice(0, 6).toLowerCase()}`,
-        alpha: wide.length === 8 ? round4(byteAt(wide, 6) / 255) : 1,
-    };
+    const alpha = wide.length === 8 ? round4(byteAt(wide, 6) / 255) : 1;
+    // A fully transparent hex says as little about the ramp's hue as the sentinel does, so it borrows
+    // the other end's colour the same way — #e60076 → #00000000 fades out instead of darkening.
+    return { color: alpha === 0 ? null : `#${wide.slice(0, 6).toLowerCase()}`, alpha };
 }
 
 // sRGB hex → linear-light → LMS → OKLab, as [L, a, b] (Björn Ottosson's matrices).

@@ -34,7 +34,6 @@ export const ellipseKind = defineKind<VectorEllipseElement>({
     }),
     hitTest: (el, point) => hitTestEllipse(el, point),
     outline: (el, inflate) => ellipseOutline({ x: el.x, y: el.y, width: el.width, height: el.height }, inflate),
-    // Nothing painted at all — no fill and no stroke — is invisible but real; the canvas rings it.
     paintsNothing: isUnpainted,
     render: (el) => ({ svg: renderRoughShape(el) }),
 });

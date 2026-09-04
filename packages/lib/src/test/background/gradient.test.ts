@@ -50,6 +50,12 @@ describe('gradientStops', () => {
         expect(stops.at(-1)).toEqual({ offset: 1, color: '#ffffff', opacity: 1 });
     });
 
+    test('an alpha-0 hex reads as the transparent sentinel does', () => {
+        const stops = gradientStops('#e60076', '#00000000');
+        for (const stop of stops) expect(stop.color).toBe('#e60076');
+        expect(stops.at(-1)?.opacity).toBe(0);
+    });
+
     test('transparent at both ends paints nothing', () => {
         for (const stop of gradientStops('transparent', 'transparent')) {
             expect(stop).toEqual({ offset: stop.offset, color: '#000000', opacity: 0 });

@@ -647,7 +647,9 @@
    with no picture) is invisible on the page. While the canvas is editable it rings each one faintly so
    it can still be found and selected; the ring is chrome, so nothing printed or exported carries it. */
 .eigen-empty-outline {
-    outline: 1px dashed var(--border);
+    /* Hardcoded rather than a theme token, like the comment mark's red: the page under it is a canvas
+       surface, pinned light in both themes, so --border's dark-mode white would be invisible on it. */
+    outline: 1px dashed oklch(0 0 0 / 25%);
 }
 
 /* Selected-object chrome (shared: docs figure, slides, vector, and sheets' floating

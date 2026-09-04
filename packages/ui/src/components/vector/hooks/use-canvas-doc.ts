@@ -53,13 +53,18 @@ export function sealed<T>(undoManager: Y.UndoManager | null, op: () => T): T {
 // slider drag writes live so the canvas updates under the pointer, and merely leaving those writes
 // unsealed is not enough — Y.UndoManager only merges changes that land within `captureTimeout` of
 // each other, so a slow drag, or a pause to look at the result, silently splits into several steps.
-// Hold the window open for the gesture instead, and seal at both ends. Returns the release.
+// Hold the window open for the gesture instead, and seal at both ends. Returns the release, which is
+// idempotent: a gesture can end more than once (Radix commits AND the pointer-up fires, or an unmount
+// cleanup follows a commit), and a second restore would write back the Infinity the first one left.
 export function holdCapture(undoManager: Y.UndoManager | null): () => void {
     if (!undoManager) return () => {};
     const previous = undoManager.captureTimeout;
     undoManager.stopCapturing();
     undoManager.captureTimeout = Number.POSITIVE_INFINITY;
+    let released = false;
     return () => {
+        if (released) return;
+        released = true;
         undoManager.captureTimeout = previous;
         undoManager.stopCapturing();
     };
