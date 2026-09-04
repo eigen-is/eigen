@@ -7,7 +7,7 @@ import type * as Y from 'yjs';
 import { parseBackgroundFill, serializeBackgroundFill } from './fill';
 import { orderByFractionalIndex, syncInvalidIndices } from './fractional-index';
 import { FRAME_HEIGHT, FRAME_WIDTH, type VectorFrame } from './frames';
-import { ELEMENT_KINDS, isVectorElementType } from './kinds';
+import { ELEMENT_KINDS, isBindable, isVectorElementType } from './kinds';
 import {
     bool,
     cleanStr,
@@ -24,7 +24,6 @@ import {
 import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_SCENE_META,
-    isBindable,
     parseBinding,
     parseIdList,
     STROKE_STYLES,

@@ -9,17 +9,16 @@ import { getLineHeightPx } from './font-metrics';
 // deliberate cycle. Safe because every export on both sides is a hoisted `function` declaration and no
 // module body calls across the cycle while either is still evaluating (test/vector/kinds/cycle.test.ts
 // pins both entry orders).
-import { ELEMENT_KINDS } from './kinds';
+import { ELEMENT_KINDS, isBindable } from './kinds';
 import { distanceToSegment, outlineHits, segSegIntersect } from './outline';
 import {
     type Arrowhead,
-    isBindable,
     parseBinding,
     serializeBinding,
     type VectorArrowElement,
+    type VectorBindableElement,
     type VectorElement,
     type VectorLinearElement,
-    type VectorShapeElement,
 } from './types';
 
 export type Point = { x: number; y: number };
@@ -392,14 +391,14 @@ const MIN_PROJECTABLE_ARROW = 3;
 
 // The outward inflation of a shape's outline when snapping an endpoint to it, and the divide-by-zero
 // floor for the anchor ratio: 5 + half the stroke, so a thicker border pushes the arrow out further.
-export function bindingGap(shape: VectorShapeElement): number {
+export function bindingGap(shape: VectorBindableElement): number {
     return BASE_BINDING_GAP + shape.strokeWidth / 2;
 }
 
 // The proportional anchor for a scene point on a shape (bind time): unrotate the point into the shape's
 // local frame, then take the ratio over max(size, gap) so a near-zero dimension can't divide to Infinity.
 // Not clamped here — a point outside the shape yields a ratio outside [0,1]; anchorToScene clamps on use.
-export function bindingAnchor(shape: VectorShapeElement, point: Point): [number, number] {
+export function bindingAnchor(shape: VectorBindableElement, point: Point): [number, number] {
     const local = rotatePoint(point, boxCenter(shape), -shape.angle);
     const gap = bindingGap(shape);
     return [(local.x - shape.x) / Math.max(shape.width, gap), (local.y - shape.y) / Math.max(shape.height, gap)];
@@ -408,7 +407,7 @@ export function bindingAnchor(shape: VectorShapeElement, point: Point): [number,
 // Is a SCENE point inside a shape's exact fill (by type, unrotated about the centre) — the "focus point
 // sits inside the box" test Excalidraw's projection uses to accept a diagonal hit (isPointInElement) and to
 // suppress the side-midpoint snap when the cursor is buried inside (hitElementItself).
-function pointInShape(shape: VectorShapeElement, point: Point): boolean {
+function pointInShape(shape: VectorBindableElement, point: Point): boolean {
     return ELEMENT_KINDS[shape.type].hitTest(shape, point, 0);
 }
 
@@ -417,7 +416,7 @@ function pointInShape(shape: VectorShapeElement, point: Point): boolean {
 // getSnapOutlineMidPoint order, so a bind-time midpoint snap resolves the same side on a tie. The one owner
 // of this geometry — both the snap-to-midpoint bind and the snap-dot overlay read it, so the dots sit
 // exactly where the dock lands.
-export function shapeAnchorPoints(shape: VectorShapeElement): Point[] {
+export function shapeAnchorPoints(shape: VectorBindableElement): Point[] {
     return ELEMENT_KINDS[shape.type].anchorPoints(shape);
 }
 
@@ -426,7 +425,7 @@ export function shapeAnchorPoints(shape: VectorShapeElement): Point[] {
 // stores the RAW pointer ratio and lights no dots — arrows/focus.ts handleFocusPointDrag; Reinder wants the
 // aim to snap to and light the shape's snap points, so this magnet mirrors SnapDots' side-midpoint set plus
 // the centre). Scene coordinates throughout; the caller suppresses it on Ctrl/Cmd like every other snap.
-export function focusSnapPoint(shape: VectorShapeElement, point: Point, zoom: number): Point | null {
+export function focusSnapPoint(shape: VectorBindableElement, point: Point, zoom: number): Point | null {
     const within = bindingDistance(zoom) + shape.strokeWidth / 2;
     const targets = [...shapeAnchorPoints(shape), boxCenter(shape)];
     let best: Point | null = null;
@@ -444,7 +443,7 @@ export function focusSnapPoint(shape: VectorShapeElement, point: Point, zoom: nu
 // The nearest side midpoint the bind-time snap docks onto, or null: the FIRST midpoint within
 // bindingDistance + strokeWidth/2 of `point`, and only when the cursor sits OUTSIDE the shape's fill
 // (Excalidraw's getSnapOutlineMidPoint — buried-inside cursors fall through to the diagonal projection).
-function snapOutlineMidPoint(shape: VectorShapeElement, point: Point, zoom: number): Point | null {
+function snapOutlineMidPoint(shape: VectorBindableElement, point: Point, zoom: number): Point | null {
     if (pointInShape(shape, point)) return null;
     const within = bindingDistance(zoom) + shape.strokeWidth / 2;
     for (const mid of shapeAnchorPoints(shape)) {
@@ -463,7 +462,7 @@ function snapOutlineMidPoint(shape: VectorShapeElement, point: Point, zoom: numb
 // dragging the focus dot stores the raw aim, never re-projected (handleFocusPointDrag). Elbow arrows never
 // call this — their dock is resolved from the outline, not a diagonal.
 export function projectFixedPointOntoDiagonal(
-    shape: VectorShapeElement,
+    shape: VectorBindableElement,
     point: Point,
     otherEnd: Point,
     arrowSize: { width: number; height: number },
@@ -497,7 +496,7 @@ export function projectFixedPointOntoDiagonal(
 // by its angle. The ratio is clamped to [0,1] here (clampUnit) so a shrunk shape can't fling a straight
 // arrow's chord anchor off the box. An elbow end reads through elbowAnchorScene instead — its stored
 // fixedPoint is the outline+gap dock, deliberately a little outside [0,1], so it must NOT be unit-clamped.
-export function anchorToScene(shape: VectorShapeElement, fixedPoint: [number, number]): Point {
+export function anchorToScene(shape: VectorBindableElement, fixedPoint: [number, number]): Point {
     const [fx, fy] = clampUnit(fixedPoint);
     return rotatePoint(
         { x: shape.x + shape.width * fx, y: shape.y + shape.height * fy },
@@ -531,7 +530,7 @@ function dodgeHalf(ratio: number): number {
 // other end never enters), bounded exactly as Excalidraw's getGlobalFixedPointForBindableElement. The stored
 // fixedPoint already encodes the outline+gap dock (elbowBindPoint), so this sits the endpoint on the
 // anchor's own side and holds it there no matter where the other end moves.
-export function elbowAnchorScene(shape: VectorShapeElement, fixedPoint: [number, number]): Point {
+export function elbowAnchorScene(shape: VectorBindableElement, fixedPoint: [number, number]): Point {
     const [fx, fy] = normalizeFixedPoint(fixedPoint);
     return rotatePoint(
         { x: shape.x + shape.width * fx, y: shape.y + shape.height * fy },
@@ -543,7 +542,7 @@ export function elbowAnchorScene(shape: VectorShapeElement, fixedPoint: [number,
 // Where the segment from → anchor crosses the shape's outline inflated by `gap`, nearest to `from`; the
 // anchor itself when it never crosses. Everything happens in the shape's unrotated local frame — the
 // registry's outline, corner arcs and all — then the hit rotates back by the shape's angle.
-export function outlinePoint(shape: VectorShapeElement, from: Point, anchor: Point, gap: number): Point {
+export function outlinePoint(shape: VectorBindableElement, from: Point, anchor: Point, gap: number): Point {
     const center = boxCenter(shape);
     const a = rotatePoint(from, center, -shape.angle);
     const b = rotatePoint(anchor, center, -shape.angle);
@@ -566,7 +565,7 @@ export function outlinePoint(shape: VectorShapeElement, from: Point, anchor: Poi
 // All intersections of the SCENE segment a→b with `shape`'s outline inflated outward by `gap`, in scene
 // space (shapeOutlineHits works in the shape's unrotated local frame; this rotates in and back out). One
 // source for the outline geometry the elbow dock (elbowBindPoint) and outlinePoint both consume.
-export function outlineIntersections(shape: VectorShapeElement, a: Point, b: Point, gap: number): Point[] {
+export function outlineIntersections(shape: VectorBindableElement, a: Point, b: Point, gap: number): Point[] {
     const center = boxCenter(shape);
     const la = rotatePoint(a, center, -shape.angle);
     const lb = rotatePoint(b, center, -shape.angle);
@@ -633,7 +632,7 @@ const CURVE_DOCK_SAMPLES = 24;
 function curveOutlineDock(
     arrow: VectorArrowElement,
     end: 'start' | 'end',
-    shape: VectorShapeElement,
+    shape: VectorBindableElement,
     points: Point[],
     anchor: Point,
     gap: number,
@@ -672,7 +671,7 @@ function curveOutlineDock(
 // anchor instead (a degenerate arrow would otherwise flip inside the shape). A curved (round, ≥3-point)
 // arrow docks on the CURVE∩outline crossing instead of the straight chord, so the drawn shaft meets the
 // outline exactly at the head; a strict fixed point at stored precision keeps a settled arrow from redirtying.
-export function boundEndpoint(arrow: VectorArrowElement, end: 'start' | 'end', shape: VectorShapeElement): Point {
+export function boundEndpoint(arrow: VectorArrowElement, end: 'start' | 'end', shape: VectorBindableElement): Point {
     const points = parsePoints(arrow.points);
     if (points.length < 2) return linearLocalToScene(arrow, points[0] ?? ORIGIN);
     const thisLocal = end === 'start' ? points[0] : points[points.length - 1];
@@ -756,7 +755,7 @@ export function followBindings(
     return { ...result, fixedSegments: '' };
 }
 
-export function boundShape(binding: string, byId: Map<string, VectorElement>): VectorShapeElement | null {
+export function boundShape(binding: string, byId: Map<string, VectorElement>): VectorBindableElement | null {
     const b = parseBinding(binding);
     if (!b) return null;
     const el = byId.get(b.elementId);
@@ -845,7 +844,7 @@ export function arrowLabelCenter(el: VectorArrowElement, route?: Point[]): Point
 // Intersections of the query segment a→b with the shape's outline inflated outward by `gap`, in the
 // shape's unrotated frame. The registry owns the outline, so what the renderer draws is what an arrow
 // docks to.
-function shapeOutlineHits(shape: VectorShapeElement, a: Point, b: Point, gap: number): Point[] {
+function shapeOutlineHits(shape: VectorBindableElement, a: Point, b: Point, gap: number): Point[] {
     return outlineHits(ELEMENT_KINDS[shape.type].outline(shape, gap), a, b);
 }
 

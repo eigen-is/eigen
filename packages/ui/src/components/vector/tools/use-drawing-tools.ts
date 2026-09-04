@@ -14,7 +14,6 @@ import {
     ELEMENT_KINDS,
     elbowBindPoint,
     elbowRoutingContext,
-    elementToSvg,
     hitThresholdScreen,
     isBindable,
     linearLocalToScene,
@@ -28,9 +27,9 @@ import {
     unpinSegment,
     VECTOR_STYLE_DEFAULTS,
     type VectorArrowElement,
+    type VectorBindableElement,
     type VectorElement,
     type VectorLinearElement,
-    type VectorShapeElement,
 } from '@workspace/lib/vector';
 import { createElement, Fragment, type MutableRefObject, type ReactNode, useEffect, useRef, useState } from 'react';
 import type * as Y from 'yjs';
@@ -43,7 +42,7 @@ import {
     bindElbowEnd,
     bindFocusPoint,
     bindingCandidate,
-    bindingOutlineElement,
+    bindingOutlineSvg,
     bindPinnedElbowEnd,
     followOtherEnd,
 } from './binding';
@@ -251,10 +250,10 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     // vertex/endpoint handles are suppressed for the drag so a re-orbiting endpoint dot can't mislead.
     const [focusDragEnd, setFocusDragEnd] = useState<'start' | 'end' | null>(null);
 
-    const setBindShape = (shape: VectorShapeElement | undefined, pointer: Point, elbow: boolean) =>
+    const setBindShape = (shape: VectorBindableElement | undefined, pointer: Point, elbow: boolean) =>
         setBindHint(shape ? { shapeId: shape.id, pointer, elbow } : null);
     // The bindable shape an endpoint at `scene` reaches (null when nothing reaches / binding is suppressed).
-    const candidateShape = (scene: Point, suppressed: boolean): VectorShapeElement | undefined => {
+    const candidateShape = (scene: Point, suppressed: boolean): VectorBindableElement | undefined => {
         const id = bindingCandidate(ordered, scene, liveZoom(), suppressed);
         const shape = id ? ordered.find((el) => el.id === id) : undefined;
         return shape && isBindable(shape) ? shape : undefined;
@@ -262,7 +261,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     // The elbow dock ratio to store at an endpoint (the point-handle path, event-less → reads suppressRef).
     const elbowBindFor = (
         scene: Point,
-    ): { candidate: string | null; fixedPoint: [number, number] | null; shape: VectorShapeElement | undefined } => {
+    ): { candidate: string | null; fixedPoint: [number, number] | null; shape: VectorBindableElement | undefined } => {
         const shape = candidateShape(scene, suppressRef.current);
         if (!shape) return { candidate: null, fixedPoint: null, shape: undefined };
         return { candidate: shape.id, fixedPoint: elbowBindPoint(shape, scene).fixedPoint, shape };
@@ -887,15 +886,15 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             : null;
 
     // The shape-following outline over the shape a dragged/hovered arrow endpoint reaches (creation, a
-    // point-handle drag, or the pre-click hover). An SVG `<g>` for the scene group: `elementToSvg`
-    // re-strokes the shape's own geometry in the selection colour (`currentColor`, tinted by the
-    // `text-selection-handle` group), so no shape math is duplicated here.
+    // point-handle drag, or the pre-click hover). An SVG `<g>` for the scene group: the kind's own outline
+    // stroked in the selection colour (`currentColor`, tinted by the `text-selection-handle` group), so no
+    // shape math is duplicated here.
     const candidate = bindHint ? ordered.find((el) => el.id === bindHint.shapeId) : undefined;
     const bindingOutline =
         candidate && isBindable(candidate)
             ? createElement('g', {
                   className: 'text-selection-handle',
-                  dangerouslySetInnerHTML: { __html: elementToSvg(bindingOutlineElement(candidate, zoom)) },
+                  dangerouslySetInnerHTML: { __html: bindingOutlineSvg(candidate, zoom) },
               })
             : null;
 

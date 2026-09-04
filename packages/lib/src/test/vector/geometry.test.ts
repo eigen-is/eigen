@@ -57,11 +57,14 @@ import {
     DEFAULT_ELEMENT_PROPS,
     serializeBinding,
     type VectorArrowElement,
+    type VectorBindableElement,
     type VectorElement,
     type VectorLinearElement,
     type VectorRectangleElement,
+    type VectorRichTextElement,
     type VectorShapeElement,
 } from '../../vector/types';
+import { richtext } from './element-factories';
 
 const box = (over: Partial<Box>): Box => ({ x: 0, y: 0, width: 100, height: 60, angle: 0, ...over });
 
@@ -675,7 +678,7 @@ const arrowEl = (over: Partial<VectorArrowElement> & { points: string }): Vector
     ...over,
 });
 
-const bind = (shape: VectorShapeElement, fixedPoint: [number, number]): string =>
+const bind = (shape: VectorBindableElement, fixedPoint: [number, number]): string =>
     serializeBinding({ elementId: shape.id, fixedPoint });
 
 describe('bindingGap', () => {
@@ -1031,6 +1034,62 @@ describe('boundEndpoint — curve-exact docking', () => {
         const p = boundEndpoint(arrow, 'end', far);
         expect(Number.isFinite(p.x)).toBe(true);
         expect(Number.isFinite(p.y)).toBe(true);
+    });
+});
+
+describe('binding a rich text box', () => {
+    // Rich text is a DOM box, but an arrow docks on it exactly as on a rectangle: the outline the kind
+    // declares (rounded by `corners`), the gap its stroke width sets, the follow every bound end gets.
+    // Same box as followBindings' rectangle, so the two are directly comparable.
+    const box = richtext({ id: 'txt', x: 150, y: -30, width: 60, height: 60, corners: 'curved' });
+    const byId = new Map<string, VectorElement>([[box.id, box]]);
+    const toward = arrowEl({ points: '[[0,0],[100,0]]', width: 100, endBinding: bind(box, [0, 0.5]) });
+
+    test('an arrow docks on the box outline, gap and all', () => {
+        // the left inflated side sits at 150 - gap(6) = 144
+        expect(followBindings(toward, byId)).toEqual({
+            x: 0,
+            y: 0,
+            width: 144,
+            height: 0,
+            points: '[[0,0],[144,0]]',
+            fixedSegments: '',
+        });
+    });
+
+    test('the dock is the same one a rectangle of that box would give', () => {
+        const rect = shapeEl({
+            id: box.id,
+            type: 'rectangle',
+            x: box.x,
+            y: box.y,
+            width: box.width,
+            height: box.height,
+            corners: box.corners,
+            strokeWidth: box.strokeWidth,
+        });
+        expect(followBindings(toward, byId)).toEqual(followBindings(toward, new Map([[rect.id, rect]])));
+    });
+
+    test('the bound arrow follows the box when it moves', () => {
+        const moved = new Map<string, VectorElement>([[box.id, { ...box, x: 250 }]]);
+        expect(followBindings(toward, moved)).toMatchObject({ width: 244, points: '[[0,0],[244,0]]' });
+    });
+
+    test('the dock honours the rounded corner the box is drawn with', () => {
+        const sharp: VectorRichTextElement = { ...box, corners: 'straight' };
+        // aimed diagonally at the top-left corner anchor, where a rounded outline and a sharp one differ
+        const atCorner = arrowEl({
+            points: '[[0,0],[50,50]]',
+            x: 100,
+            y: -80,
+            width: 50,
+            height: 50,
+            endBinding: bind(box, [0, 0]),
+        });
+        const curvedDock = boundEndpoint(atCorner, 'end', box);
+        const sharpDock = boundEndpoint(atCorner, 'end', sharp);
+        expect(Math.hypot(curvedDock.x - sharpDock.x, curvedDock.y - sharpDock.y)).toBeGreaterThan(0.1);
     });
 });
 

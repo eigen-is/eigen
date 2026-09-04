@@ -39,7 +39,7 @@ import {
     parsePoints,
     unionBounds,
 } from './geometry';
-import type { VectorArrowElement, VectorElement, VectorShapeElement } from './types';
+import type { VectorArrowElement, VectorBindableElement, VectorElement } from './types';
 
 // Excalidraw's BASE_PADDING / BASE_BINDING_GAP_ELBOW / DEDUP_TRESHOLD.
 const BASE_PADDING = 40;
@@ -102,7 +102,7 @@ export function elbowRoute(
 // the other end). A pinned arrow never routes here — its stored polyline is returned verbatim.
 type LegEnd = {
     point: Point;
-    shape: VectorShapeElement | null;
+    shape: VectorBindableElement | null;
     arrowhead: boolean;
     orig: Point;
 };
@@ -142,8 +142,8 @@ export function arrowRoute(el: VectorElement, byId?: Map<string, VectorElement>)
 // --- routing data (Excalidraw's getElbowArrowData, at-rest branch) ---------------------
 
 type RouteInputs = {
-    startShape: VectorShapeElement | null;
-    endShape: VectorShapeElement | null;
+    startShape: VectorBindableElement | null;
+    endShape: VectorBindableElement | null;
     startGlobal: Point;
     endGlobal: Point;
     startArrowhead: boolean;
@@ -171,8 +171,8 @@ type ElbowArrowData = {
 // on origStart/origEnd; an unbound end just points at the other endpoint. One source for both the router and
 // the pin-drag routing context.
 function endpointHeadings(
-    startShape: VectorShapeElement | null,
-    endShape: VectorShapeElement | null,
+    startShape: VectorBindableElement | null,
+    endShape: VectorBindableElement | null,
     startGlobal: Point,
     endGlobal: Point,
     origStart: Point,
@@ -309,7 +309,7 @@ function getElbowArrowData(input: RouteInputs, startBinding: boolean): ElbowArro
 }
 
 // gap·6 when the end carries an arrowhead, else gap·2 (Excalidraw's getBindingGap · {6,2}); gap = 5 + w/2.
-function headGap(shape: VectorShapeElement, hasArrowhead: boolean): number {
+function headGap(shape: VectorBindableElement, hasArrowhead: boolean): number {
     return (BASE_BINDING_GAP_ELBOW + shape.strokeWidth / 2) * (hasArrowhead ? 6 : 2);
 }
 

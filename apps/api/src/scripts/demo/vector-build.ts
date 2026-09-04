@@ -7,6 +7,7 @@
 import { basename } from 'node:path';
 import { textToParagraphHtml } from '@workspace/lib/html';
 import {
+    baseDefaultsFor,
     bindingAnchor,
     DEFAULT_ARROW_PROPS,
     DEFAULT_CORNERS,
@@ -34,6 +35,7 @@ import {
     type VectorArrowElement,
     type VectorElement,
     type VectorElementBase,
+    type VectorElementType,
     type VectorImageElement,
     type VectorLinearElement,
     type VectorRichTextElement,
@@ -145,14 +147,19 @@ export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
     });
 }
 
-// The base every element shares; each builder adds its type, box and kind fields.
-function baseElement(id: string): Omit<VectorElementBase, 'type' | 'x' | 'y' | 'width' | 'height' | 'angle'> {
-    return { ...DEFAULT_ELEMENT_PROPS, id, index: '' };
+// The base every element shares, under the KIND's own overrides — the same table the apps create with
+// (deck-build.ts does this too), so a seeded image or text box arrives unframed rather than wearing the
+// shared 2px ink border.
+function baseElement(
+    type: VectorElementType,
+    id: string,
+): Omit<VectorElementBase, 'type' | 'x' | 'y' | 'width' | 'height' | 'angle'> {
+    return { ...baseDefaultsFor(type), id, index: '' };
 }
 
 function buildShape(s: SitePlanShape): VectorShapeElement {
     const box = {
-        ...baseElement(`el-${s.key}`),
+        ...baseElement(s.kind, `el-${s.key}`),
         x: s.x,
         y: s.y,
         width: s.width,
@@ -175,7 +182,7 @@ function buildLine(l: SitePlanLine, i: number): VectorLinearElement {
     const points = l.points.map(([x, y]) => ({ x, y }));
     const norm = normalizeLinear(ZERO_BOX, points);
     return {
-        ...baseElement(`el-line-${i}`),
+        ...baseElement(l.freedraw ? 'freedraw' : 'line', `el-line-${i}`),
         type: l.freedraw ? 'freedraw' : 'line',
         x: norm.x,
         y: norm.y,
@@ -196,7 +203,7 @@ function buildLine(l: SitePlanLine, i: number): VectorLinearElement {
 
 function buildImage(im: SitePlanImage, i: number): VectorImageElement {
     return {
-        ...baseElement(`el-image-${i}`),
+        ...baseElement('image', `el-image-${i}`),
         type: 'image',
         x: im.x,
         y: im.y,
@@ -221,7 +228,7 @@ function buildArrow(
     const fontSize = a.labelSize ?? DEFAULT_ARROW_LABEL_SIZE;
     const label = a.label ?? '';
     const arrow: VectorArrowElement = {
-        ...baseElement(`el-arrow-${i}`),
+        ...baseElement('arrow', `el-arrow-${i}`),
         type: 'arrow',
         x: norm.x,
         y: norm.y,
@@ -333,11 +340,10 @@ type RichTextSpec = {
 // is authored in, over the rich-text kind's own defaults.
 function buildRichText(id: string, text: string, box: RichTextSpec): VectorRichTextElement {
     return {
-        ...baseElement(id),
+        ...baseElement('richtext', id),
         ...ELEMENT_KINDS.richtext.defaults(SITE_PLAN_STYLE),
         ...box,
         type: 'richtext',
-        strokeWidth: 0, // text, not a bordered box
         html: textToParagraphHtml(text),
         // The line height measureExcalifont sized the box with, so the text fills exactly that box.
         lineHeight: getFontMetrics(SITE_PLAN_STYLE.fontFamily).lineHeight,

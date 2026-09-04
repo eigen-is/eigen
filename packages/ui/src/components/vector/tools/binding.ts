@@ -19,6 +19,7 @@ import {
     linearLocalToScene,
     moveEndpoints,
     outlineContains,
+    outlinePath,
     type PinPatch,
     type Point,
     parseBinding,
@@ -28,25 +29,30 @@ import {
     remapBinding,
     rotatePoint,
     serializeBinding,
-    solidFill,
     type VectorArrowElement,
+    type VectorBindableElement,
     type VectorElement,
-    type VectorShapeElement,
 } from '@workspace/lib/vector';
 
 // Is `point` inside the shape's own outline grown by `pad` (shrunk, for a negative pad)? The kind owns
 // the curve, so a rounded corner binds where it is drawn rather than out at the sharp box. The outline
 // lives in the shape's unrotated frame, so the query point is unrotated about the centre to match.
-function insideShape(shape: VectorShapeElement, point: Point, pad: number): boolean {
+function insideShape(shape: VectorBindableElement, point: Point, pad: number): boolean {
     const local = rotatePoint(point, boxCenter(shape), -shape.angle);
     return outlineContains(ELEMENT_KINDS[shape.type].outline(shape, pad), local);
 }
 
-// Whether a dragged endpoint at `point` should bind to a shape: a filled shape binds anywhere inside or
-// within the reach band outside; a transparent one binds only in the band AROUND its outline.
-function reaches(shape: VectorShapeElement, point: Point, distance: number): boolean {
-    if (!isTransparentFill(parseFill(shape.fill))) return insideShape(shape, point, distance);
+// Whether a dragged endpoint at `point` should bind to a shape: one with a body binds anywhere inside or
+// within the reach band outside; a see-through one binds only in the band AROUND its outline.
+function reaches(shape: VectorBindableElement, point: Point, distance: number): boolean {
+    if (!isSeeThrough(shape)) return insideShape(shape, point, distance);
     return insideShape(shape, point, distance) && !insideShape(shape, point, -distance);
+}
+
+// Can the endpoint be dropped THROUGH this shape's middle? Its Fill answers for every kind that paints
+// one; an image's body is its pixels, so it has no `fill` field and never reads as see-through.
+function isSeeThrough(shape: VectorBindableElement): boolean {
+    return 'fill' in shape && isTransparentFill(parseFill(shape.fill));
 }
 
 // The bindable shape a dragged endpoint would bind to: the SMALLEST candidate whose reach band contains
@@ -59,7 +65,7 @@ export function bindingCandidate(
 ): string | null {
     if (suppressed) return null;
     const distance = bindingDistance(zoom);
-    let best: VectorShapeElement | null = null;
+    let best: VectorBindableElement | null = null;
     for (const el of ordered) {
         if (!isBindable(el) || !reaches(el, point, distance)) continue;
         if (!best || el.width * el.height < best.width * best.height) best = el;
@@ -67,21 +73,17 @@ export function bindingCandidate(
     return best ? best.id : null;
 }
 
-// The shape-following highlight over a bindable target: the shape re-stroked in the selection
-// colour with a clean 2px screen line and no fill, reusing the SAME per-shape geometry the renderer uses
-// (rect roundness / diamond / ellipse, rotated), so no shape math is duplicated here. `currentColor`
-// lets the caller tint it via a `text-selection-handle` group; strokeWidth ÷ zoom keeps it 2px on screen
-// at any zoom (the scene group scales). Rendered through elementToSvg like every other scene node.
-export function bindingOutlineElement(shape: VectorShapeElement, zoom: number): VectorShapeElement {
-    return {
-        ...shape,
-        strokeColor: 'currentColor',
-        strokeWidth: 2 / zoom,
-        strokeStyle: 'solid',
-        fill: solidFill('transparent'),
-        roughness: 0,
-        opacity: 100,
-    };
+// The shape-following highlight over a bindable target: the kind's OWN outline — the one the dock is
+// resolved against — stroked in the selection colour, rotated about the shape's centre the way every
+// caller of `outline()` rotates. Drawn from the outline rather than by re-rendering the element, so a
+// rich text box or an image is traced without its words or its pixels being painted a second time.
+// `currentColor` lets the caller tint it via a `text-selection-handle` group; the width ÷ zoom keeps it
+// 2px on screen at any zoom (the scene group scales).
+export function bindingOutlineSvg(shape: VectorBindableElement, zoom: number): string {
+    const d = outlinePath(ELEMENT_KINDS[shape.type].outline(shape, 0));
+    const c = boxCenter(shape);
+    const rotate = shape.angle === 0 ? '' : ` transform="rotate(${shape.angle} ${c.x} ${c.y})"`;
+    return `<path d="${d}" fill="none" stroke="currentColor" stroke-width="${2 / zoom}"${rotate}/>`;
 }
 
 // The aim the OTHER end holds while `end` binds — the point projectFixedPointOntoDiagonal casts its ray
@@ -275,7 +277,7 @@ export function followOtherEnd(
 // Whether a scene point sits within a shape's exact outline (no reach band) — the deep-inside test used
 // to suppress the side-midpoint snap dots for a NON-elbow arrow (Excalidraw shows them only around the
 // outline, not when the cursor is buried inside the shape).
-export function pointInsideShape(shape: VectorShapeElement, point: Point): boolean {
+export function pointInsideShape(shape: VectorBindableElement, point: Point): boolean {
     return insideShape(shape, point, 0);
 }
 

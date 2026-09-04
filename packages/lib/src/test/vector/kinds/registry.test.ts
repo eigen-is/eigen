@@ -7,17 +7,18 @@ import {
     capabilitiesOf,
     ELEMENT_FIELDS,
     ELEMENT_KINDS,
+    isBindable,
     isVectorElementType,
     VECTOR_STYLE_DEFAULTS,
 } from '../../../vector/kinds';
 import {
     BASE_ELEMENT_FIELDS,
     DEFAULT_ELEMENT_PROPS,
-    isBindable,
+    type VectorElement,
     type VectorElementBase,
     type VectorRichTextElement,
 } from '../../../vector/types';
-import { linear, richtext, shape } from '../element-factories';
+import { ellipse, image, linear, richtext, shape } from '../element-factories';
 
 const TYPES = ['rectangle', 'diamond', 'ellipse', 'image', 'richtext', 'freedraw', 'line', 'arrow'] as const;
 
@@ -73,19 +74,41 @@ describe('ELEMENT_KINDS', () => {
         expect(ELEMENT_KINDS.image.capabilities.creation).toBe('none');
     });
 
-    test('isBindable and capabilities.bindable name the same kinds', () => {
-        // isBindable stays in types.ts (moving it into kinds/ would make types → kinds an eval cycle), so
-        // it is a second list of one fact — pinned here in both directions.
-        for (const type of ['rectangle', 'diamond', 'ellipse'] as const) {
-            expect(isBindable(shape({ id: 'b', type }))).toBe(ELEMENT_KINDS[type].capabilities.bindable);
-            expect(ELEMENT_KINDS[type].capabilities.bindable).toBe(true);
-        }
-        expect(isBindable(richtext({ id: 't' }))).toBe(ELEMENT_KINDS.richtext.capabilities.bindable);
+    test('the bindable kinds are the closed shapes plus the two DOM boxes', () => {
+        // isBindable READS this table, so the only thing worth pinning is which kinds set the capability:
+        // the arrow endpoint docks on anything with a real outline, never on a stroke.
         expect(TYPES.filter((type) => ELEMENT_KINDS[type].capabilities.bindable)).toEqual([
             'rectangle',
             'diamond',
             'ellipse',
+            'image',
+            'richtext',
         ]);
+        expect(isBindable(richtext({ id: 't' }))).toBe(true);
+        expect(isBindable(shape({ id: 'r', type: 'rectangle' }))).toBe(true);
+        expect(isBindable(linear({ id: 'l', type: 'line' }))).toBe(false);
+    });
+
+    test('every bindable kind answers the docking questions off its own box', () => {
+        // Docking needs an outline, four anchors and two aim lines. The DOM boxes declare no anchorPoints
+        // or aimLines of their own, so this is what pins defineKind's box defaults reaching them.
+        const bindables: VectorElement[] = [
+            shape({ id: 'r', type: 'rectangle' }),
+            shape({ id: 'd', type: 'diamond' }),
+            ellipse({ id: 'e' }),
+            image({ id: 'i' }),
+            richtext({ id: 't' }),
+        ];
+        expect(bindables.map((el) => el.type)).toEqual(
+            TYPES.filter((type) => ELEMENT_KINDS[type].capabilities.bindable),
+        );
+        for (const el of bindables) {
+            const kind = ELEMENT_KINDS[el.type];
+            expect(isBindable(el)).toBe(true);
+            expect(kind.outline(el, 0)).not.toEqual({ kind: 'polyline', points: [] });
+            expect(kind.anchorPoints(el)).toHaveLength(4);
+            expect(kind.aimLines(el)).toHaveLength(2);
+        }
     });
 
     test('the elbow router reads each silhouette off the kind, never off the type', () => {

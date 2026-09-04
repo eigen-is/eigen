@@ -18,8 +18,8 @@ import {
     parsePoints,
     shapeAnchorPoints,
     type VectorArrowElement,
+    type VectorBindableElement,
     type VectorElement,
-    type VectorShapeElement,
 } from '@workspace/lib/vector';
 import type { MutableRefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -57,7 +57,7 @@ export function SnapDots({
     zoom,
     elbow,
 }: {
-    shape: VectorShapeElement;
+    shape: VectorBindableElement;
     pointer: Point;
     zoom: number;
     elbow: boolean;
@@ -104,7 +104,7 @@ export function SnapDots({
 // One bound end worth showing a focus affordance for: the anchor the arrow aims at (inside the shape) and
 // the endpoint it docks to (on the outline). `anchor` is read from the LIVE arrow (the preview element while
 // a focus drag re-aims it), so the dashed line + dot track the drag.
-type FocusEnd = { end: 'start' | 'end'; shape: VectorShapeElement; anchor: Point; endpoint: Point };
+type FocusEnd = { end: 'start' | 'end'; shape: VectorBindableElement; anchor: Point; endpoint: Point };
 
 // The bound ends of a straight 2-point arrow that should show a focus point, skipping `hideEnd` (the end
 // being endpoint-dragged) and any end whose anchor has all but collapsed onto its endpoint
@@ -230,7 +230,7 @@ export function FocusPointHandles({
     const ends = focusEnds(arrow, byId, zoom, hideEnd, FOCUS_GRAB_MIN_SCREEN_GAP);
     if (ends.length === 0) return null;
 
-    const startDrag = (e: React.PointerEvent, end: 'start' | 'end', shape: VectorShapeElement) => {
+    const startDrag = (e: React.PointerEvent, end: 'start' | 'end', shape: VectorBindableElement) => {
         e.preventDefault();
         // Claim the gesture before the canvas hit-test so the shape under the dot isn't dragged instead.
         e.stopPropagation();

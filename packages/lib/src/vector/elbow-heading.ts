@@ -18,15 +18,14 @@ import {
     parsePoints,
     rotatePoint,
 } from './geometry';
-import { capabilitiesOf, ELEMENT_KINDS } from './kinds';
+import { capabilitiesOf, ELEMENT_KINDS, isBindable } from './kinds';
 import { outlineDistance } from './outline';
 import {
-    isBindable,
     parseBinding,
     serializeBinding,
     type VectorArrowElement,
+    type VectorBindableElement,
     type VectorElement,
-    type VectorShapeElement,
 } from './types';
 
 // A unit orthogonal direction. Compared by value (compareHeading), never by reference.
@@ -70,7 +69,7 @@ export function headingIsHorizontal(h: Heading): boolean {
 
 // The rotated-corner AABB of a shape (getElementBounds), optionally inflated per side. `offset` is
 // Excalidraw's [top, right, down, left] tuple — note the asymmetric axis order, matching offsetFromHeading.
-export function aabbForElement(shape: VectorShapeElement, offset?: B4): B4 {
+export function aabbForElement(shape: VectorBindableElement, offset?: B4): B4 {
     const b = getElementBounds(shape);
     if (!offset) return [b.minX, b.minY, b.maxX, b.maxY];
     const [top, right, down, left] = offset;
@@ -84,7 +83,7 @@ export function aabbForElement(shape: VectorShapeElement, offset?: B4): B4 {
 export function getHeadingForElbowArrowSnap(
     p: Point,
     otherPoint: Point,
-    shape: VectorShapeElement | null,
+    shape: VectorBindableElement | null,
     aabb: B4 | null,
     origPoint: Point,
 ): Heading {
@@ -103,14 +102,14 @@ export function getHeadingForElbowArrowSnap(
 // Euclidean distance from a scene point to a shape's outline (Excalidraw's distanceToElement), measured
 // against the outline the registry hands out — so a rounded shape picks its heading and its side from the
 // curve it actually draws.
-export function distanceToElement(shape: VectorShapeElement, p: Point): number {
+export function distanceToElement(shape: VectorBindableElement, p: Point): number {
     const rp = rotatePoint(p, boxCenter(shape), -shape.angle);
     return outlineDistance(ELEMENT_KINDS[shape.type].outline(shape, 0), rp);
 }
 
 // Heading from the ×2 search cones around the shape's (inflated) AABB centre — a wide shape gets wider
 // UP/DOWN cones. Diamonds use vertex sectors instead. Excalidraw's headingForPointFromElement.
-function headingForPointFromElement(shape: VectorShapeElement, aabb: B4, p: Point): Heading {
+function headingForPointFromElement(shape: VectorBindableElement, aabb: B4, p: Point): Heading {
     if (capabilitiesOf(shape).silhouette === 'diamond') {
         return headingForPointFromDiamond(shape, aabb, p);
     }
@@ -127,7 +126,7 @@ function headingForPointFromElement(shape: VectorShapeElement, aabb: B4, p: Poin
 
 // Diamond sectors: the four SHRINK-scaled, rotated vertices carve corner sectors (which win) and side
 // sectors. Excalidraw's headingForPointFromDiamondElement.
-function headingForPointFromDiamond(shape: VectorShapeElement, aabb: B4, p: Point): Heading {
+function headingForPointFromDiamond(shape: VectorBindableElement, aabb: B4, p: Point): Heading {
     const mid = centerOf(aabb);
     const SHRINK = 0.95;
     const vertex = (vx: number, vy: number): Point => {
@@ -209,7 +208,10 @@ const DOCK_PRECISION = 1e-4;
 // Where a raw scene point docks onto a bindable shape for an elbow arrow, and the fixedPoint that stores it.
 // `dock` is the outline+gap point (the previewed/rest endpoint); `fixedPoint` is its ratio through
 // normalizeFixedPoint, so it can sit a little outside [0,1] and never exactly 0.5.
-export function elbowBindPoint(shape: VectorShapeElement, point: Point): { dock: Point; fixedPoint: [number, number] } {
+export function elbowBindPoint(
+    shape: VectorBindableElement,
+    point: Point,
+): { dock: Point; fixedPoint: [number, number] } {
     if (shape.width < MIN_BINDABLE_SIZE || shape.height < MIN_BINDABLE_SIZE) {
         const fixedPoint = normalizeFixedPoint([0.5, 0.5]);
         return { dock: elbowAnchorScene(shape, fixedPoint), fixedPoint };
@@ -246,7 +248,7 @@ export function redockBindingsForElbow(
 // The outline dock for a raw point: push it off a rectangle corner (avoidRectangularCorner), snap it toward
 // the nearest side/vertex midpoint (snapToMid), then intersect the shape's outline+gap along the resolved
 // axis. Falls back to the other axis with the elbow base gap, and to the edge point when neither crosses.
-function elbowDock(shape: VectorShapeElement, point: Point): Point {
+function elbowDock(shape: VectorBindableElement, point: Point): Point {
     const gap = bindingGap(shape);
     const center = boxCenter(shape);
     const aabb = aabbForElement(shape);
@@ -267,7 +269,7 @@ function elbowDock(shape: VectorShapeElement, point: Point): Point {
 // outward through `resolved`, crossing the outline+gap. `isHorizontal` picks the ray's free axis exactly as
 // Excalidraw does. Null when the ray is degenerate or misses.
 function dockIntersection(
-    shape: VectorShapeElement,
+    shape: VectorBindableElement,
     center: Point,
     resolved: Point,
     isHorizontal: boolean,
@@ -299,7 +301,7 @@ function dockIntersection(
 // Excalidraw's avoidRectangularCorner: when a point sits in one of the four diagonal corner regions of a
 // box silhouette, slide it onto the nearer adjacent edge (offset by the gap) so the dock never lands on the
 // sharp corner. Everything in the shape's unrotated frame, rotated back out. Box silhouettes only.
-function avoidRectangularCorner(shape: VectorShapeElement, p: Point, gap: number): Point {
+function avoidRectangularCorner(shape: VectorBindableElement, p: Point, gap: number): Point {
     const center = boxCenter(shape);
     const np = rotatePoint(p, center, -shape.angle);
     const { x, y, width: w, height: h } = shape;
@@ -323,7 +325,7 @@ function avoidRectangularCorner(shape: VectorShapeElement, p: Point, gap: number
 // side/vertex midpoint, so an endpoint dragged near the middle of an edge locks to it. The band is
 // clamp(5%·size, 5, 80). The centre carries Excalidraw's −0.1 tie-break nudge. Null = no snap (caller keeps
 // the raw point).
-function snapToMid(shape: VectorShapeElement, p: Point, tolerance: number, gap: number): Point | null {
+function snapToMid(shape: VectorBindableElement, p: Point, tolerance: number, gap: number): Point | null {
     const { x, y, width: w, height: h } = shape;
     const boxC = boxCenter(shape);
     const center = { x: boxC.x - 0.1, y: boxC.y - 0.1 };

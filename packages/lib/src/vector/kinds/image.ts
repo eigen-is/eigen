@@ -17,7 +17,7 @@ export const imageKind = defineKind<VectorImageElement>({
         corners: true,
         stroke: true,
         strokeOptional: true,
-        bindable: false,
+        bindable: true,
         silhouette: 'box',
         creation: 'none',
     },

@@ -80,6 +80,11 @@ function appendSanitized(node: Node, parent: HTMLElement): void {
         if (href) {
             const clean = document.createElement('a');
             clean.setAttribute('href', href);
+            // A link always opens in a new tab, with the opener sealed. Forced here rather than trusted
+            // from the source markup: this is the one seam every rendered surface passes through, and a
+            // canvas link that navigates in place would take a presenter out of their own deck.
+            clean.setAttribute('target', '_blank');
+            clean.setAttribute('rel', 'noopener noreferrer');
             recurseInto(clean);
             parent.appendChild(clean);
             return;
@@ -108,7 +113,7 @@ export function readDominantTextAlign(html: string): (typeof TEXT_ALIGN_VALUES)[
 
 // Map arbitrary pasted HTML onto the LightEditor tag set (see the sets above): structural formatting
 // and inline marks are kept, headings become paragraphs, everything else is unwrapped or dropped, and
-// ALL attributes except a safe `<a href>` are stripped. DOM-based so escaping is automatic and there
+// ALL attributes are stripped bar a safe `<a href>` and the new-tab pair forced onto it. DOM-based so escaping is automatic and there
 // is no regex-parsing hazard. Returns '' when nothing survives (caller falls back to plain text).
 export function sanitizeToLightEditorHtml(html: string): string {
     const doc = new DOMParser().parseFromString(html, 'text/html');

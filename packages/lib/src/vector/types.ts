@@ -88,7 +88,7 @@ export type VectorDiamondElement = VectorElementBase & Fillable & Sketched & { t
 // through the kind's capabilities.
 export type VectorEllipseElement = VectorElementBase & Fillable & Sketched & { type: 'ellipse' };
 
-// The bindable closed shapes, the family the docking math speaks.
+// The roughjs-drawn closed shapes.
 export type VectorShapeElement = VectorRectangleElement | VectorDiamondElement | VectorEllipseElement;
 
 export type VectorImageElement = VectorElementBase & {
@@ -119,6 +119,12 @@ export type VectorRichTextElement = VectorElementBase &
         lineHeight: number;
         padding: number; // px inset between the box edge and the text; the box keeps its stored size
     };
+
+// What an arrow endpoint may dock to: the closed shapes plus the two DOM boxes, whose outline is the
+// rounded rect their `corners` describes. The RUNTIME answer is the registry's `bindable` capability
+// (isBindable in kinds/index.ts) — this union is its type-level face, and the registry test pins the two
+// against each other so neither can grow without the other.
+export type VectorBindableElement = VectorShapeElement | VectorRichTextElement | VectorImageElement;
 
 // Freehand strokes and (poly)lines. `points` is a JSON `[[x,y],…]` string in scene units RELATIVE
 // to (x,y); the point bbox's min corner is ALWAYS (0,0) (normalizeLinear owns that invariant).
@@ -348,12 +354,6 @@ export function serializeIdList(ids: string[]): string {
 // predicate so `.points`/`.roundness` access has a single owner as the family grows.
 export function isLinearElement(el: VectorElement): el is VectorLinearElement | VectorArrowElement {
     return el.type === 'freedraw' || el.type === 'line' || el.type === 'arrow';
-}
-
-// Bindable targets for an arrow endpoint: the closed shapes only. One predicate so every
-// consumer — the reader's dangling-binding pass, the follow math, the tool's candidate search — agrees.
-export function isBindable(el: VectorElement): el is VectorShapeElement {
-    return el.type === 'rectangle' || el.type === 'diamond' || el.type === 'ellipse';
 }
 
 // A binding is a JSON `{"elementId","fixedPoint":[fx,fy]}` string, or '' when unbound. parseBinding is

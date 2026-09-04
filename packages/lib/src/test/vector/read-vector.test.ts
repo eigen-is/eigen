@@ -437,14 +437,14 @@ describe('readVectorFromDoc', () => {
 
     test('clears a binding whose target is absent or not bindable (doc untouched)', () => {
         const doc = docWith((elements) => {
-            writeElement(elements, 'txt', { type: 'richtext', index: 'a0', html: 'x' });
+            writeElement(elements, 'ln', { type: 'line', index: 'a0', points: '[[0,0],[10,0]]' });
             writeElement(elements, 'ar', {
                 type: 'arrow',
                 index: 'a1',
                 points: '[[0,0],[100,0]]',
-                // start → a shape that never existed; end → a rich-text element (not bindable)
+                // start → an element that never existed; end → a line (an open stroke, never bindable)
                 startBinding: '{"elementId":"ghost","fixedPoint":[0.5,0.5]}',
-                endBinding: '{"elementId":"txt","fixedPoint":[0,0]}',
+                endBinding: '{"elementId":"ln","fixedPoint":[0,0]}',
             });
         });
         const arrow = readVectorFromDoc(doc).elements.find((e) => e.id === 'ar');

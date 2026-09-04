@@ -77,33 +77,27 @@ export function Toolbar({
                             createIcon={Presentation}
                             createType="slides"
                         />
+                        {/* Unconditional: EditMenu drops its edit section itself, and its Find entries
+                            are the read-only viewer's only menu route to the find bar. */}
+                        <EditMenu canEdit={canEdit} canUndo={canUndo} canRedo={canRedo} onUndo={undo} onRedo={redo}>
+                            <ToolMenuItems tools={EDIT_TOOLS} setTool={setTool} />
+                            <DropdownMenuCheckboxItem checked={toolLocked} onCheckedChange={setToolLocked}>
+                                Keep selected tool
+                                <DropdownMenuShortcut>Q</DropdownMenuShortcut>
+                            </DropdownMenuCheckboxItem>
+                        </EditMenu>
                         {canEdit && (
-                            <>
-                                <EditMenu
-                                    canEdit={canEdit}
-                                    canUndo={canUndo}
-                                    canRedo={canRedo}
-                                    onUndo={undo}
-                                    onRedo={redo}
-                                >
-                                    <ToolMenuItems tools={EDIT_TOOLS} setTool={setTool} />
-                                    <DropdownMenuCheckboxItem checked={toolLocked} onCheckedChange={setToolLocked}>
-                                        Keep selected tool
-                                        <DropdownMenuShortcut>Q</DropdownMenuShortcut>
-                                    </DropdownMenuCheckboxItem>
-                                </EditMenu>
-                                <ToolbarMenu label="Insert">
-                                    <DropdownMenuItem onClick={onAddSlide}>
-                                        <Plus className="h-4 w-4 mr-2" /> Slide
+                            <ToolbarMenu label="Insert">
+                                <DropdownMenuItem onClick={onAddSlide}>
+                                    <Plus className="h-4 w-4 mr-2" /> Slide
+                                </DropdownMenuItem>
+                                <ToolMenuItems tools={INSERT_TOOLS} setTool={setTool} />
+                                {onInsertImage && (
+                                    <DropdownMenuItem onClick={onInsertImage}>
+                                        <ImagePlus className="h-4 w-4 mr-2" /> Image
                                     </DropdownMenuItem>
-                                    <ToolMenuItems tools={INSERT_TOOLS} setTool={setTool} />
-                                    {onInsertImage && (
-                                        <DropdownMenuItem onClick={onInsertImage}>
-                                            <ImagePlus className="h-4 w-4 mr-2" /> Image
-                                        </DropdownMenuItem>
-                                    )}
-                                </ToolbarMenu>
-                            </>
+                                )}
+                            </ToolbarMenu>
                         )}
                     </div>
                 }

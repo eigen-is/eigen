@@ -6,6 +6,7 @@ import {
     BASE_ELEMENT_FIELDS,
     DEFAULT_ELEMENT_PROPS,
     type ElementOfType,
+    type VectorBindableElement,
     type VectorElement,
     type VectorElementBase,
     type VectorElementType,
@@ -45,6 +46,14 @@ export const ELEMENT_KINDS: ElementKindRegistry = {
 // `ELEMENT_KINDS[type].capabilities` directly — the panel, the tools and the binding code call this.
 export function capabilitiesOf(el: VectorElement): Capabilities {
     return ELEMENT_KINDS[el.type].capabilitiesOf(el);
+}
+
+// Bindable targets for an arrow endpoint, read off the registry through the one capability accessor. A
+// single predicate so every consumer — the reader's dangling-binding pass, the follow math, the elbow
+// router's obstacles, the tool's candidate search — agrees, and a new kind opts in by declaring the
+// capability rather than by being added to a list.
+export function isBindable(el: VectorElement): el is VectorBindableElement {
+    return capabilitiesOf(el).bindable;
 }
 
 // The registry answers the vocabulary question too, so a stored `type` is validated against the one
