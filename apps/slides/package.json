@@ -16,5 +16,8 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "yjs": "^13.6.27"
+  },
+  "devDependencies": {
+    "happy-dom": "^20.10.6"
   }
 }

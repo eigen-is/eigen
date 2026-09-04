@@ -8,11 +8,11 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { useYjsUndoHotkeys } from '@workspace/lib/collab';
 import { NUDGE_STEP, NUDGE_STEP_LARGE, type VectorElement } from '@workspace/lib/vector';
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type * as Y from 'yjs';
 import { useZOrderHotkeys, type ZOp } from '../../properties-panel/z-order';
 import { applyZOrder, deleteSelection, duplicateSelection } from './selection-ops';
-import type { VectorElementPatch } from './use-canvas-doc';
+import { holdCapture, type VectorElementPatch } from './use-canvas-doc';
 import { VECTOR_TOOLS, type VectorTool } from './use-tool';
 
 type CanvasKeyboardParams = {
@@ -47,6 +47,31 @@ const NUDGES = [
     ['Shift+ArrowUp', 0, -NUDGE_STEP_LARGE],
     ['Shift+ArrowDown', 0, NUDGE_STEP_LARGE],
 ] as const;
+
+// The keys a run of nudges is allowed to contain: the four arrows and the modifiers that qualify them.
+const BURST_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Shift', 'Meta', 'Control', 'Alt']);
+
+export const endsNudgeBurst = (key: string): boolean => !BURST_KEYS.has(key);
+
+// A RUN of nudges is one undo step, and leaving the writes unsealed cannot deliver that: Y.UndoManager
+// only merges changes landing within `captureTimeout` of each other, and a tap re-renders the whole
+// canvas, so two of them routinely land further apart than the 500 ms window and split into a step
+// each. The run is a gesture, so it holds the window open like one (the Opacity slider's
+// `holdCapture` idiom) — sealed from the op before it when it begins, sealed from whatever follows
+// when it ends. `end` is idempotent, so the run can be ended by the input that closes it AND by the
+// canvas unmounting under it.
+export function createNudgeBurst(undoManager: Y.UndoManager | null): { begin: () => void; end: () => void } {
+    let release: (() => void) | null = null;
+    return {
+        begin: () => {
+            release ??= holdCapture(undoManager);
+        },
+        end: () => {
+            release?.();
+            release = null;
+        },
+    };
+}
 
 export function useCanvasKeyboard(params: CanvasKeyboardParams) {
     const { enabled, elements, selectedIds, undoManager } = params;
@@ -93,9 +118,31 @@ export function useCanvasKeyboard(params: CanvasKeyboardParams) {
     const toggleLock = useCallback(() => live.current.setToolLocked(!live.current.toolLocked), []);
     useHotkey('Q', toggleLock, on);
 
-    // Discrete ops go through `sealed` (see deleteSelection/duplicateSelection): a nudge inside the
-    // 500ms capture window then can't merge into them. Nudges themselves are unsealed, so rapid taps
-    // still coalesce into one step.
+    // A run of nudges holds the undo capture window open (createNudgeBurst) so the whole run is one
+    // step. It ends on the first input that is not another nudge — a different key, a pointer press,
+    // the window losing focus — and on unmount, so the hold can never outlive this canvas. The
+    // listeners sit in the capture phase, ahead of the hotkey handlers, so the op that ends the run
+    // is already sealed off from it by the time it writes.
+    const burst = useMemo(() => createNudgeBurst(undoManager), [undoManager]);
+    const burstRef = useRef(burst);
+    burstRef.current = burst;
+    useEffect(() => {
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (endsNudgeBurst(e.key)) burst.end();
+        };
+        document.addEventListener('keydown', onKeyDown, true);
+        document.addEventListener('pointerdown', burst.end, true);
+        window.addEventListener('blur', burst.end);
+        return () => {
+            document.removeEventListener('keydown', onKeyDown, true);
+            document.removeEventListener('pointerdown', burst.end, true);
+            window.removeEventListener('blur', burst.end);
+            burst.end();
+        };
+    }, [burst]);
+
+    // Discrete ops go through `sealed` (see deleteSelection/duplicateSelection), so a nudge run that
+    // is still open when one fires can't merge into it either way.
     const del = useCallback(() => {
         const p = live.current;
         deleteSelection(p.selectedIds, p.deleteElements, p.setSelection, p.undoManager);
@@ -117,7 +164,7 @@ export function useCanvasKeyboard(params: CanvasKeyboardParams) {
     }, []);
     useHotkey('Mod+D', duplicate, onSelectionMod);
 
-    // Nudge — 1px, Shift 5px (scene units). One transact per press (undo coalesces rapid taps).
+    // Nudge — 1px, Shift 5px (scene units). One transact per press, all of them inside the run's hold.
     const nudge = useCallback((dx: number, dy: number) => {
         const p = live.current;
         const byId = new Map(p.elements.map((el) => [el.id, el]));
@@ -125,7 +172,9 @@ export function useCanvasKeyboard(params: CanvasKeyboardParams) {
             .map((id) => byId.get(id))
             .filter((el): el is VectorElement => !!el)
             .map((el) => ({ id: el.id, fields: { x: el.x + dx, y: el.y + dy } }));
-        if (patches.length) p.updateElements(patches);
+        if (!patches.length) return;
+        burstRef.current.begin();
+        p.updateElements(patches);
     }, []);
     const nudgeHandlers = useMemo(
         () =>

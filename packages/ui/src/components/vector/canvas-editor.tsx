@@ -1194,8 +1194,8 @@ export function CanvasEditor({
                 seed: c.seed,
             });
             if (id) setSelectedIds([id]);
-            // Trailing seal: a nudge inside the 500ms capture window must not merge into
-            // this gesture's undo step (nudges deliberately carry no leading stopCapturing).
+            // Trailing seal: nothing inside the 500ms capture window may merge into this gesture's
+            // undo step (the leading seal fired at pointerdown).
             undoManager?.stopCapturing();
             // A kind with an in-place editor opens it on creation — an empty box you cannot type into is
             // not a text tool.

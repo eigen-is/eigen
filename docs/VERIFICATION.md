@@ -46,6 +46,7 @@ verification too.
   NotFoundError that blanks the app. Workaround:
   `page.route(/src\/main\.tsx\?t=/, r => r.fulfill({ body: 'export {};', contentType: 'application/javascript' }))`
   and reload.
+  That workaround assumes the crash is a one-off. While another process keeps writing repo files — a parallel agent, the lint hook — every write pushes a fresh update, so the app (the drive one especially) blanks again on the next one and a restart of the dev servers does not help. Cut the channel instead of patching each update: in `page.addInitScript`, replace `window.WebSocket` with a wrapper that hands back an inert already-closed stub when the requested subprotocols include `vite-hmr` and defers to the native constructor otherwise, which leaves the collab socket and SSE on `:8000` untouched and makes the run deterministic.
 - **Patience**: a first heavy render (sheets Workbook) can take 20–60 s cold — poll for the
   element (`canvas`), then settle a few seconds. The TanStack Router devtools button can
   overlay UI and intercept clicks — remove it from the DOM before clicking near it.
