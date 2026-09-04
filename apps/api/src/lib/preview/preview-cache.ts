@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getTextPreviewMode } from '@workspace/lib/constants';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { type DrivePath, isCollabType } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
 import { COLLAB_DOCUMENT_TYPES } from '../document/collab-types';
 import type { TransformPriority } from '../document/transform/runner';
@@ -179,11 +179,13 @@ async function readNewestStaleText(
         return null;
     }
 
-    // Accept prior-format names too (plain `<stamp>.json` from before TEXT_FORMAT existed) —
-    // a pre-bump copy is exactly what stale-while-revalidate is for.
+    // Current-format names only: a body a previous renderer wrote is a different SHAPE, and the
+    // consumers that scale and lay it out have moved on. Stale-while-revalidate trades freshness of
+    // CONTENT for latency, never correctness of shape — an older format regenerates synchronously.
+    const suffix = `.${TEXT_FORMAT}.json`;
     const candidates = files
-        .filter((name) => name !== cacheName && name.startsWith(prefix) && name.endsWith('.json'))
-        .map((name) => ({ name, stamp: Number(name.slice(prefix.length).replace(/(?:\.f\d+)?\.json$/, '')) }))
+        .filter((name) => name !== cacheName && name.startsWith(prefix) && name.endsWith(suffix))
+        .map((name) => ({ name, stamp: Number(name.slice(prefix.length, -suffix.length)) }))
         .filter((c) => Number.isFinite(c.stamp))
         .sort((a, b) => b.stamp - a.stamp);
 
@@ -278,9 +280,10 @@ export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embed
 }
 
 // A collab container previews from its Yjs document, every other file from its bytes; the mime map
-// is the one list of which is which.
+// is the one list of which is which. The CONTAINER type gates it: mimeType is caller-controlled on
+// upload, and a plain file wearing an eigen mime must keep the preview its bytes deserve.
 export async function getTextPreview(mount: Mount, drivePath: DrivePath): Promise<ServedTextPreview | null> {
-    const documentType = COLLAB_DOCUMENT_TYPES.get(drivePath.mimeType || '');
+    const documentType = isCollabType(drivePath.type) ? COLLAB_DOCUMENT_TYPES.get(drivePath.mimeType || '') : undefined;
     if (!documentType) return getFileTextPreview(mount, drivePath);
     return getOrCacheText(mount.previewsDir, drivePath.id, textCacheName(drivePath), documentType, (priority) =>
         generateDocumentPreview(documentType, mount, drivePath, priority),

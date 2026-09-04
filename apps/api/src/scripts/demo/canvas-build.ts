@@ -1,3 +1,4 @@
+import { followBindings, storedFields, type VectorArrowElement, type VectorElement } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 
 // What the two canvas builders share. deck-build.ts and vector-build.ts write the same element
@@ -12,15 +13,26 @@ export const SIDE_INDEX: Record<CanvasSide, number> = { right: 0, bottom: 1, lef
 // normalizeLinear rebases a route onto its own bounds, so the box it starts from is empty.
 export const ZERO_BOX = { x: 0, y: 0, width: 0, height: 0, angle: 0 } as const;
 
-// One element/frame record → its Y.Map, filtered through the stored-field allow-list so a spec-only
-// key can never reach the doc.
+// One element/frame record → its Y.Map, through the shared stored-field filter so a spec-only key can
+// never reach the doc.
 export function toYMap(source: object, fields: readonly string[]): Y.Map<unknown> {
-    const allowed = new Set(fields);
     const map = new Y.Map<unknown>();
-    for (const [key, value] of Object.entries(source)) {
-        if (value !== undefined && allowed.has(key)) map.set(key, value);
-    }
+    for (const [field, value] of storedFields(source, fields)) map.set(field, value);
     return map;
+}
+
+// Settle a bound arrow's endpoints exactly where the editor would leave them at rest, keeping the
+// patch only when it moved anything. Both builders dock arrows onto shapes, so the follow-and-copy
+// pass is theirs jointly.
+export function settleEndpoints(arrow: VectorArrowElement, byId: Map<string, VectorElement>): void {
+    const patch = followBindings(arrow, byId);
+    if (!patch) return;
+    arrow.x = patch.x;
+    arrow.y = patch.y;
+    arrow.width = patch.width;
+    arrow.height = patch.height;
+    arrow.points = patch.points;
+    arrow.fixedSegments = patch.fixedSegments;
 }
 
 // mulberry32 — a tiny deterministic PRNG, one draw per element (matches addElement's seed range).

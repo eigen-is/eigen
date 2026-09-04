@@ -35,13 +35,18 @@ export function parseEigenMediaHref(href: string): string | null {
     } catch {
         return null; // malformed percent-encoding
     }
-    if (name.length === 0) return null;
-    if (name.includes('/') || name.includes('\\')) return null;
+    return isSafeMediaName(name) ? name : null;
+}
+
+// The traversal/injection guard on a media name: no `/`, no `\`, no control character, not empty. One
+// definition, so a frame background's stored name is exactly as safe as a ref parsed out of an SVG.
+export function isSafeMediaName(name: string): boolean {
+    if (name === '' || name.includes('/') || name.includes('\\')) return false;
     for (let i = 0; i < name.length; i++) {
         const code = name.charCodeAt(i);
-        if (code < 0x20 || code === 0x7f) return null; // control character
+        if (code < 0x20 || code === 0x7f) return false;
     }
-    return name;
+    return true;
 }
 
 // The distinct, safe media names an SVG references, in first-seen order. Forged/unsafe refs are

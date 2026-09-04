@@ -79,12 +79,7 @@ type EigenClipboardData = { version: 1; items: EigenClipboardItem[]; svg?: strin
 Image items carry the file **name** (for Yjs storage on paste) plus source identifiers (for re-upload detection and
 downloading). See [MEDIA-REFERENCES.md](MEDIA-REFERENCES.md) for the full name-based reference design.
 
-Geometry (`width`/`height`/`angle`) and text `typography` are **first-class typed fields**. There is no untyped
-`meta` bag: it existed for app-private extras, ended up write-only (one producer stuffed a rich-text `html` into it
-that no consumer ever read), and is gone. Every field on this wire has a producer AND a consumer; anything an app
-wants to carry across earns a typed field with a reader. Build items via `buildImageClipboardItem` /
-`buildTextClipboardItem` and read the box via `readClipboardBox`; the builders take a `box` and put it on the typed
-fields, so no producer hand-assembles an item.
+Geometry (`width`/`height`/`angle`) and text `typography` are **first-class typed fields**, and there is no untyped bag beside them for app-private extras: every field on this wire has a producer AND a consumer, and anything an app wants to carry across earns a typed field with a reader. Build items via `buildImageClipboardItem` / `buildTextClipboardItem` and read the box via `readClipboardBox`; the builders take a `box` and put it on the typed fields, so no producer hand-assembles an item.
 
 ### Both dimensions are mandatory
 
@@ -93,9 +88,7 @@ producer that stores only one dimension measures the other before it writes: a d
 document reflows, so the height must follow the image), so the copy handler measures the rendered `<img>` and takes
 the height from its intrinsic ratio.
 
-The contract binds hardest on images: they place straight from the wire box. Text does not — every consumer
-re-measures a text item with its own font metrics, because a box sized by another app's fonts would clip or gap. So
-`height` on a text item is fidelity information, not a placement instruction.
+The contract binds hardest on images: they place straight from the wire box. Text does not — every consumer re-measures a text item with its own font metrics, because a box sized by another app's fonts would clip or gap. So `height` on a text item is fidelity information, not a placement instruction.
 
 This is a hard contract, not a nicety. Consumers place items straight from the typed box with **no fallbacks**. The
 alternative — the consumer probing the image to recover its ratio — was an aspect-ratio bug: the probe resolved the
@@ -105,22 +98,11 @@ follows: **after a copy/upload mutation returns a `DrivePath`, build the URL fro
 (`resolveMediaUrlByPath` on the media resolver) — by-name resolution is for render, where the listing has caught up
 and self-heals.
 
-The wire is forgeable by any web page, so the read seam (`readEigenClipboard`) validates **every item against its own
-variant** before a consumer sees it — the geometry must be finite numbers, and a `text` item must carry a string
-`text`, an `image` item its five source identifiers, an `elements` item an array. Anything else is dropped, and one
-bad item never takes the good ones with it. That matters more than it looks: consumers read the typed fields with no
-fallbacks, inside a paste handler that has already called `preventDefault`, so an item that survives validation and
-then throws doesn't just fail — it eats the paste with no error the user can see. (Same threat model that makes rich
-HTML get re-sanitized on paste.)
+The wire is forgeable by any web page, so the read seam (`readEigenClipboard`) validates **every item against its own variant** before a consumer sees it — the geometry must be finite numbers, and a `text` item must carry a string `text`, an `image` item its five source identifiers, an `elements` item an array. Anything else is dropped, and one bad item never takes the good ones with it. That matters more than it looks: consumers read the typed fields with no fallbacks, inside a paste handler that has already called `preventDefault`, so an item that survives validation and then throws doesn't just fail — it eats the paste with no error the user can see. (Same threat model that makes rich HTML get re-sanitized on paste.)
 
 ### Typography: what is on the wire is what somebody reads
 
-`EigenClipboardTypography` is exactly the set a canvas rich-text box models, which is also the widest set any
-consumer can place. The canvas producer writes all ten; the canvas' own foreign-paste applies all ten to the
-rich-text box it creates; docs maps the six it has nodes and marks for (font family, colour, alignment, bold,
-italic, underline/strike) and drops the rest gracefully — it has no font-size, letter-spacing or line-height control
-by design. Sheets reads none of them for a text item. Nothing goes on this wire that no consumer reads:
-`highlightColor` did, was produced by nobody and read by nobody, and is gone.
+`EigenClipboardTypography` is exactly the set a canvas rich-text box models, which is also the widest set any consumer can place. The canvas producer writes all ten; the canvas' own foreign-paste applies all ten to the rich-text box it creates; docs maps the six it has nodes and marks for (font family, colour, alignment, bold, italic, underline/strike) and drops the rest gracefully — it has no font-size, letter-spacing or line-height control by design. Sheets reads none of them for a text item. Nothing goes on this wire that no consumer reads.
 
 ### The elements item (canvas copies)
 
@@ -132,35 +114,20 @@ It is the one item type that carries **position**: the coordinates are the store
 
 ### Empty text carriers
 
-Nothing writes an empty text item today, but the wire is forgeable and any app may. Consumers filter with
-`clipboardTextItemHasContent` so a contentless carrier never lands as a blank paragraph or a blank cell.
+Nothing writes an empty text item today, but the wire is forgeable and any app may. Consumers filter with `clipboardTextItemHasContent` so a contentless carrier never lands as a blank paragraph or a blank cell.
 
 ### Copy flavors
 
-A pure-image copy writes no `text/plain`. The rule it belongs to is "never write two flavours a single consumer
-would both accept", which is what avoids a double-paste; in practice the only pair at risk would be `text/plain`
-beside an `image/png`, and no producer in the repo writes an `image/png` flavour at all, so that half of the rule
-has nothing to bite on today. The rule still governs anything new: add a PNG flavour and it must not ride beside
-`text/plain`. The canvas' own flavour bullet is under [CANVAS.md](CANVAS.md) § Shared primitives.
+A pure-image copy writes no `text/plain`. The rule it belongs to is "never write two flavours a single consumer would both accept", which is what avoids a double-paste; in practice the only pair at risk would be `text/plain` beside an `image/png`, and no producer in the repo writes an `image/png` flavour at all, so that half of the rule has nothing to bite on today. The rule still governs anything new: add a PNG flavour and it must not ride beside `text/plain`. The canvas' own flavour bullet is under [CANVAS.md](CANVAS.md) § Shared primitives.
 
 ### The SVG flavour (canvas copies)
 
-A canvas copy sets `EigenClipboardData.svg` unless one of two gates says otherwise, both in `selectionSvg`
-(`packages/ui/src/components/vector/tools/clipboard.ts`):
+A canvas copy sets `EigenClipboardData.svg` unless one of two gates says otherwise, both in `selectionSvg` (`packages/ui/src/components/vector/tools/clipboard.ts`):
 
-- **A text-only selection omits it.** Every foreign host runs its svg rung BEFORE the typed items, so writing an SVG
-  for a lone rich-text box makes it paste into a document as a flat picture of itself, with the typed text item and
-  its typography never read. An SVG conveys nothing about a text box that the text item doesn't, so not writing it
-  is exactly what makes a copied text box land as styled, editable text.
-- **A big selection omits it.** The same records are serialized once as typed items, again into the SVG's
-  `<metadata>`, and the whole SVG is then URI-encoded into an HTML attribute — a 500-shape select-all put ~1.1MB on
-  `text/html`. Past `CLIPBOARD_SVG_MAX_ELEMENTS` (checked before the render, so a huge selection never pays for it)
-  or `CLIPBOARD_SVG_MAX_BYTES` (the backstop for few-but-enormous elements), the flavour is skipped. The failure
-  mode is deliberate and total: every eigen host still pastes losslessly from the typed items, and a foreign host
-  gets the `text/plain` fallback instead of an image — the same thing it gets for a shape-only copy.
+- **A text-only selection omits it.** Every foreign host runs its svg rung BEFORE the typed items, so writing an SVG for a lone rich-text box makes it paste into a document as a flat picture of itself, with the typed text item and its typography never read. An SVG conveys nothing about a text box that the text item doesn't, so not writing it is exactly what makes a copied text box land as styled, editable text.
+- **A big selection omits it.** The same records are serialized once as typed items, again into the SVG's `<metadata>`, and the whole SVG is then URI-encoded into an HTML attribute — a 500-shape select-all put ~1.1MB on `text/html`. Past `CLIPBOARD_SVG_MAX_ELEMENTS` (checked before the render, so a huge selection never pays for it) or `CLIPBOARD_SVG_MAX_BYTES` (the backstop for few-but-enormous elements), the flavour is skipped. The failure mode is deliberate and total: every eigen host still pastes losslessly from the typed items, and a foreign host gets the `text/plain` fallback instead of an image — the same thing it gets for a shape-only copy.
 
-One more limit is inherent rather than chosen: the render sees the **selection alone**, so an elbow arrow bound to
-an unselected shape draws straight in the copied SVG. That is what a copy of the selection is.
+One more limit is inherent rather than chosen: the render sees the **selection alone**, so an elbow arrow bound to an unselected shape draws straight in the copied SVG. That is what a copy of the selection is.
 
 Otherwise it is: a self-contained `sceneToSvg` render of the selection with the element JSON URI-encoded into a `<metadata>` block (`embedClipboardSvgMetadata`/`extractClipboardSvgMetadata`), Excalidraw's svg-source pattern. It rides the eigen payload because Chromium's async clipboard cannot carry an `image/svg+xml` flavour. Hosts that can't place the canvas' typed carriers (docs, sheets — slides IS the canvas engine now, and consumes the typed items first) call `readSvgClipboardWithItems` BEFORE consuming the typed items — it returns the SVG together with the typed image items that back its refs — then run it through `materializeClipboardSvg` and insert the result as one image via their existing image-upload path. That single consumption point is what keeps the no-double-paste rule. `readSvgClipboardWithItems` also accepts a whole SVG document on `text/plain` (root tag carrying the SVG xmlns — a pasted `<svg>` code snippet without it stays text, and it carries no items), so foreign drawings paste as images too; a canvas restores native elements from the `<metadata>` block when present, whether the SVG arrived on the clipboard or as a dropped `.svg` file — drop and paste run the same rung, so the same file can't behave differently depending on how it got there.
 
@@ -168,33 +135,17 @@ Otherwise it is: a self-contained `sceneToSvg` render of the selection with the 
 
 The name-ref SVG in the eigen JSON is **unchanged** by the rest of this section — every eigen host still materializes it by name via `materializeClipboardSvg`. What the polish round added is a SECOND, foreign-visible flavour that the async menu **Copy/Cut** now ALSO writes: a `<img src="data:image/svg+xml;base64,…">` appended after the marker span, so an html-reading foreign consumer (mail compose, another web page — chat's plain textarea reads only text/plain) that can't read the eigen payload still pastes the drawing as an image. Its images are inlined as base64 `data:` URIs at write time via `inlineClipboardSvgMedia` (bytes fetched through the credentialed media resolver), because no eigen server-side inliner will serve a clipboard `<img>`. Two guards keep it well-behaved: a per-image fetch that fails **strips that ref** (exactly as `materializeClipboardSvg` strips a failed re-upload, so the SVG never references bytes it can't show), and a ~4MB soft cap on the total inlined payload **skips the flavour entirely** (`inlineClipboardSvgMedia` returns null → the write degrades to today's marker + name-ref payload) rather than putting a multi-MB, clipboard-rejectable blob on the clipboard. The `<img>` is marked with `EIGEN_CLIPBOARD_RENDER_ATTR` (`data-eigen-clipboard-render`), which `hasRichHtmlBeyondMarker` strips before its test — so a shape-only vector copy never counts as foreign rich HTML (else docs' rich-HTML rung would land the drawing as a persisted base64 figure).
 
-**Limitation — a shape or image copy is invisible in our own mail composer.** A sync ⌘C of shapes/images writes
-marker-only `text/html` and no `text/plain`, so pasting into mail compose lands nothing. The async menu path's
-base64 `<img>` does not rescue it either: mail's LightEditor has no Image extension
-(`packages/ui/src/components/editor/light-editor.tsx`), so ProseMirror's schema drops the node. The menu path fixes
-the foreign case for hosts that accept an `<img>` (another web page, a foreign rich editor) — not for mail. A real
-fix is an `image/png` flavour on the async path, which would also give the no-PNG-beside-`text/plain` rule something
-to bite on. Not built.
+**Limitation — a shape or image copy is invisible in our own mail composer.** A sync ⌘C of shapes/images writes marker-only `text/html` and no `text/plain`, so pasting into mail compose lands nothing. The async menu path's base64 `<img>` does not rescue it either: mail's LightEditor has no Image extension (`packages/ui/src/components/editor/light-editor.tsx`), so ProseMirror's schema drops the node. The menu path fixes the foreign case for hosts that accept an `<img>` (another web page, a foreign rich editor) — not for mail. A real fix is an `image/png` flavour on the async path, which would also give the no-PNG-beside-`text/plain` rule something to bite on. Not built.
 
 **Limitation — sync ⌘C keeps name refs only.** Only the async menu path writes the inlined `<img>`; a native `copy`/`cut` event (`writeEigenClipboard`) writes just the marker + name-ref SVG, because a sync clipboard event can't fetch the media bytes. Making ⌘C write the inlined flavour would mean handing `navigator.clipboard.write` a promise-`ClipboardItem`, which drops the custom `application/eigen-clipboard` MIME — the same Phase-0 asymmetry the async write already lives with (see the API § asymmetry note). So a menu-copied drawing pastes as an image into a foreign contenteditable; a ⌘C-copied one does not.
 
 ## Cut deletes only what it copied
 
-A canvas copy leaves out any image whose media path doesn't resolve yet — a still-pending upload, or one whose
-folder listing hasn't refreshed — because nobody could fetch its bytes from the wire. `buildSelectionData` therefore
-returns the ids it **actually serialized** beside the payload, and cut deletes those, not the selection. Cutting an
-element the copy silently dropped is data loss: the one copy of it would exist nowhere but the undo stack, with
-nothing telling the user it had gone. What the user sees instead: the rest of the selection is cut, the unresolved
-image stays in the drawing, and a toast says it is still uploading. Both cut paths (⌘X and the menu row) use the
-same ids.
+A canvas copy leaves out any image whose media path doesn't resolve yet — a still-pending upload, or one whose folder listing hasn't refreshed — because nobody could fetch its bytes from the wire. `buildSelectionData` therefore returns the ids it **actually serialized** beside the payload, and cut deletes those, not the selection. Cutting an element the copy silently dropped is data loss: the one copy of it would exist nowhere but the undo stack, with nothing telling the user it had gone. What the user sees instead: the rest of the selection is cut, the unresolved image stays in the drawing, and a toast says it is still uploading. Both cut paths (⌘X and the menu row) use the same ids.
 
 ## A paste that places nothing must not claim the event
 
-An eigen payload can be non-empty and still place nothing: every item dropped at the read seam as forged, or images
-with no `media/` folder to land in. The canvas' `pasteEigenItems` reports whether it placed anything, and the
-handler calls `preventDefault` only when it did — so the rungs below (the SVG flavour, OS files, plain text) still
-get their turn instead of the paste vanishing. If the whole ladder places nothing and an eigen payload was present,
-the canvas toasts, because a ⌘V that silently does nothing is indistinguishable from a broken key.
+An eigen payload can be non-empty and still place nothing: every item dropped at the read seam as forged, or images with no `media/` folder to land in. The canvas' `pasteEigenItems` reports whether it placed anything, and the handler calls `preventDefault` only when it did — so the rungs below (the SVG flavour, OS files, plain text) still get their turn instead of the paste vanishing. The SVG rung answers the same question before it claims: a foreign SVG lands as an image, so with no `media/` folder to upload into it falls through rather than swallowing the paste. If the whole ladder places nothing and an eigen payload was present, the canvas toasts, because a ⌘V that silently does nothing is indistinguishable from a broken key.
 
 ## Cross-Document Media
 
@@ -258,14 +209,7 @@ rather than re-parsing: the eigen JSON is parsed exactly once and handed to `rea
 flavour is derived without a second parse. It stays sync because every reader it composes is sync (the async menu
 paths only ever want eigen items and keep `readEigenClipboardAsync`).
 
-It deliberately does **not** impose a priority order — each app keeps its own short ladder that reads the returned
-fields in its own rung order and calls its own per-kind insert handlers (the ladders in docs, sheets and the canvas engine, which
-serves slides and vector alike). Rich-HTML arbitration also stays caller-side: a consumer that gates on foreign HTML (docs) calls
-`hasRichHtmlBeyondMarker` itself; `classifyPaste` makes no pass over `text/html` for that decision. The one built-in
-special case is the `internalMarkerText` option: sheets' same-tab copy writes a table marker in `text/html` and
-serves paste from `ctx.copyState`, so passing that marker string suppresses the `eigen` + `svg` flavours entirely
-(the caller then falls through to its native table paste). One place owns the marker-skip; every other app passes no
-`internalMarkerText`.
+It deliberately does **not** impose a priority order — each app keeps its own short ladder that reads the returned fields in its own rung order and calls its own per-kind insert handlers (the ladders in docs, sheets and the canvas engine, which serves slides and vector alike). Rich-HTML arbitration also stays caller-side: a consumer that gates on foreign HTML (docs) calls `hasRichHtmlBeyondMarker` itself; `classifyPaste` makes no pass over `text/html` for that decision. The one built-in special case is the `internalMarkerText` option: sheets' same-tab copy writes a table marker in `text/html` and serves paste from `ctx.copyState`, so passing that marker string suppresses the `eigen` + `svg` flavours entirely (the caller then falls through to its native table paste). One place owns the marker-skip; every other app passes no `internalMarkerText`.
 
 ## Used by
 

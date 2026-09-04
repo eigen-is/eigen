@@ -25,12 +25,11 @@ export const freedrawKind = defineKind<VectorLinearElement>({
     capabilities: {
         fill: true,
         fillStyle: true,
+        strokeStyle: false,
         roughness: true,
         corners: false,
-        stroke: true,
         strokeOptional: false,
         bindable: false,
-        silhouette: 'box',
         creation: 'freedraw',
     },
     // An OPEN stroke paints no fill (render below), so it has none to offer.

@@ -6,12 +6,10 @@ category: Basics
 tags: [getting-started, overview, apps]
 related: [getting-started/your-first-steps, drive/get-started]
 order: 1
-updated: 2026-06-08
+updated: 2026-09-04
 ---
 
-Eigen is your personal workspace in the cloud, and an alternative to Google Workspace that you can host
-yourself. Your mail, files, calendar, and more live in one place, and your data stays yours. This page is a
-quick tour of what Eigen is and the apps it includes.
+Eigen is a self-hosted alternative to Google Workspace. Simple and secure. You control your data. Your mail, files, calendar, and more live in one place. This page is a quick tour of what Eigen is and the apps it includes.
 
 ## One workspace, your own data
 
@@ -32,6 +30,7 @@ Each app does one job. You can use as many or as few as you like.
 - **Docs** is for writing and editing documents in the browser.
 - **Sheets** is for spreadsheets and formulas.
 - **Slides** is for building and presenting decks.
+- **Vector** is for drawings and diagrams on an infinite canvas.
 - **Calendar** keeps track of your schedule, with events and invitations.
 - **Contacts** is your address book of the people you know.
 - **Chat** is for quick messages with your team.

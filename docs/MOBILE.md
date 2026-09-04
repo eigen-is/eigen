@@ -39,12 +39,7 @@ components and viewport gates, [COMMENTS.md](COMMENTS.md) for panel hosting, `on
   page shifts left before it scales, so the text column always clears the panel. The figure and
   table properties panels ride the same gate — intentional: from 768px up, selecting a figure or a
   table auto-opens its panel for writers.
-- Slides on mobile is view-only for everyone (`canEdit = canWrite && !isMobile`): a phone gets the
-  frame-fit canvas itself, read-only, with a one-finger horizontal swipe between slides, the slide
-  counter, present mode, comments and the file menu. The slide rail and the properties panel are
-  desktop surfaces — a 208px rail would take half a phone. Rail long-press and the rail context menu
-  are desktop and iPad-desktop-layout only. The kebab open-state cue was dropped again: it is
-  unreachable under the takeover pane.
+- Slides on mobile is view-only for everyone (`canEdit = canWrite && !isMobile`): a phone gets the frame-fit canvas itself, read-only, with a one-finger horizontal swipe between slides, the slide counter, present mode, comments and the file menu. The slide rail and the properties panel are desktop surfaces — a 208px rail would take half a phone. Rail long-press and the rail context menu are desktop and iPad-desktop-layout only. The kebab open-state cue was dropped again: it is unreachable under the takeover pane.
 - Present mode has a transient exit X, a `fullscreenchange` sync and a `.catch` on
   `requestFullscreen`. Esc now exits fullscreen too, and editing is inert while presenting (object
   nudge and delete, Cmd+Z, copy and paste are all gated).
@@ -64,9 +59,7 @@ Contracts for the shipped pane live in [COMMENTS.md](COMMENTS.md) (panel hosting
 
 - **Sheet tabs below 640px** (finding 17): the tab strip is hidden, so there is only "+" and the
   all-sheets dropdown. No rename, reorder or recolor.
-- **A phone filmstrip for the deck** — with the rail desktop-only, a phone navigates by swipe and
-  the counter alone, so there is no jump-to-slide. A horizontal filmstrip under the canvas would
-  restore it.
+- **A phone filmstrip for the deck** — with the rail desktop-only, a phone navigates by swipe and the counter alone, so there is no jump-to-slide. A horizontal filmstrip under the canvas would restore it.
 - **Tap-target pass** (finding 21): recurring 24–36px icon buttons against the ~44px guideline
   (stickies column header 24px, chat message actions 28px, toolbar and topbar 32–36px).
 - **Session-open actions run while the surface is hidden**: opening a find session closes the pane,
@@ -105,13 +98,9 @@ Contracts for the shipped pane live in [COMMENTS.md](COMMENTS.md) (panel hosting
   on iOS; the `+` / "New folder" buttons are the primary touch create paths.
 - Chat message actions stay JS tap-to-reveal (tap emulates hover and shows the floating bar —
   verified working on touch). Not converted to always-visible; the 28px targets are finding 21.
-- Beyond the audit's five long-press surfaces, some context menus remain right-click-only by
-  scope: contacts list rows, canvas objects, sheet row/column headers.
-- The canvas keymap is gated on `canEdit`, so on a phone a hardware keyboard cannot act on the
-  read-only deck; the layered-Escape listener stays document-level, the same hidden-surface family
-  as the session-open residual under Next round.
-- Flipping a desktop viewport to mobile with the rail menu open leaves a menu on screen once.
-  It dismisses on tap. Strictly better than the stranded reopen it replaced.
+- Beyond the audit's five long-press surfaces, some context menus remain right-click-only by scope: contacts list rows, canvas objects, sheet row/column headers.
+- The canvas keymap is gated on `canEdit`, so on a phone a hardware keyboard cannot act on the read-only deck; the layered-Escape listener stays document-level, the same hidden-surface family as the session-open residual under Next round.
+- Flipping a desktop viewport to mobile with the rail menu open leaves a menu on screen once. It dismisses on tap. Strictly better than the stranded reopen it replaced.
 - Pane rows show the anchor text while the card dialog shows the title. A glance mismatch, product
   polish for later.
 - Docs desktop `ActivityPanel` still switches to the comments panel when a card is tapped. It is
@@ -137,10 +126,8 @@ Everything so far is Chromium-only. Open on a real phone and tablet:
 - The sheets pane while the iOS URL bar collapses, and the sheets pane with cards in it.
 - Present mode: the exit X on real iOS (no fullscreen API there) and the Android back-gesture
   exit. Check the 2s fade window when the fullscreen transition is slow.
-- Slides rail callout suppression. `[-webkit-touch-callout:none]` as a TSX arbitrary property
-  is the first of its kind here, so confirm it on a fresh build (stale-JIT gotcha).
-- The phone deck swipe on a real touch surface: a slide step per flick, no fight with the view-only
-  pan, and the counter following along.
+- Slides rail callout suppression. `[-webkit-touch-callout:none]` as a TSX arbitrary property is the first of its kind here, so confirm it on a fresh build (stale-JIT gotcha).
+- The phone deck swipe on a real touch surface: a slide step per flick, no fight with the view-only pan, and the counter following along.
 - Docs between 768 and 830px: page legibility at scale ~0.6 with a panel open. Wide tables and
   full-bleed figures may tuck under the panel in the shift band. That is by design, so eyeball it.
 - Docs figure click at 900px (the properties panel opens through the shift; code-verified only)

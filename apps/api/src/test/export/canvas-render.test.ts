@@ -32,9 +32,7 @@ describe('drawingPage', () => {
     });
 
     test('an empty drawing has no page', () => {
-        expect(
-            drawingPage({ elements: [], frames: [], meta: { background: 'transparent', gridSize: 20 } }, noMedia),
-        ).toBeNull();
+        expect(drawingPage({ elements: [], frames: [], meta: { background: 'transparent' } }, noMedia)).toBeNull();
     });
 
     test('a transparent scene background is no background at all', () => {
@@ -64,9 +62,8 @@ describe('drawingPage', () => {
 });
 
 describe('emptyPage', () => {
-    test('is the given box with the scene background and nothing on it', () => {
-        const scene = sceneOf('v-rect');
-        const page = emptyPage({ ...scene, meta: { ...scene.meta, background: '#ffffff' } }, 960, 120);
+    test("is the given box with the caller's background and nothing on it", () => {
+        const page = emptyPage({ type: 'solid', color: '#ffffff' }, 960, 120);
         expect(page).toEqual({
             width: 960,
             height: 120,
@@ -146,9 +143,11 @@ describe('renderCanvasPage', () => {
         expect(renderCanvasPage(page, 1)).toContain(DATA_URI);
     });
 
-    test('an image whose media does not resolve contributes no layer', () => {
+    test('an image whose media does not resolve draws a placeholder, not a hole', () => {
         const page = drawingPage(sceneOf('v-image'), noMedia);
-        expect(page?.layers).toEqual([]);
+        expect(page?.layers).toHaveLength(1);
+        const svg = page?.layers[0].content;
+        expect(svg && 'svg' in svg && svg.svg).not.toContain('<image');
         expect(GOLDEN_MEDIA_NAME).toBe('pixel.png');
     });
 
@@ -219,7 +218,7 @@ describe('framePages', () => {
     });
 
     test('a deck with no frames has no pages', () => {
-        const empty = { elements: [], frames: [], meta: { background: 'transparent', gridSize: 20 } };
+        const empty = { elements: [], frames: [], meta: { background: 'transparent' } };
         expect(framePages(empty, noMedia)).toEqual([]);
     });
 });

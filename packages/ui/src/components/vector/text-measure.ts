@@ -7,7 +7,7 @@
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { getLineHeightPx } from '@workspace/lib/vector';
 
-export type TextDimensions = { width: number; height: number };
+type TextDimensions = { width: number; height: number };
 
 // One reused offscreen context — created lazily so module-eval stays DOM-free (BE-safe import
 // graph, though this module is only ever pulled in by client components).
@@ -25,7 +25,7 @@ function measureCtx(): CanvasRenderingContext2D {
 // emits no font-weight, so the browser uses normal/400), px size, and the same family+fallback
 // chain getFontFamily emits. measureText advance width at this string is exactly what SVG
 // <text> lays out (Excalidraw's default CanvasTextMetricsProvider).
-export function vectorFontString(fontSize: number, fontFamily: string): string {
+function vectorFontString(fontSize: number, fontFamily: string): string {
     return `400 ${fontSize}px ${getFontFamily(fontFamily)}`;
 }
 

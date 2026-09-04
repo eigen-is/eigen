@@ -12,7 +12,7 @@ import {
     seedDocumentMedia,
     seedEigendoc,
 } from '../fixtures/golden-documents';
-import { authedRequest, driveGet, drivePost, getTestContext, TEST_PNG_BYTES } from '../setup';
+import { authedRequest, driveGet, drivePost, driveUpload, getTestContext, TEST_PNG_BYTES } from '../setup';
 
 // Response contract of GET /drive/:ownerId/:mountId/file/:pathId/export/:format for
 // eigendoc and eigenslides: content types, filenames, Content-Disposition, and error
@@ -122,6 +122,27 @@ describe('Eigenslides export route — response contract', () => {
 
     test('an unsupported format is rejected with 400', async () => {
         const res = await exportRequest(deckPath.id, 'docx');
+        expect(res.status).toBe(400);
+        expect(await res.text()).toContain('not supported');
+    }, 60_000);
+});
+
+describe('Export route — a plain file wearing an eigen mime', () => {
+    // mimeType is caller-controlled on upload (the multipart part's Content-Type lands in the
+    // row verbatim), so the container TYPE is what routes an export. A plain file that claims
+    // an eigen mime has no data.db to render and must be refused, not handed to a Worker.
+    test('is refused with 400 rather than entering the collab export', async () => {
+        const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
+        const spoofed = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            root.id,
+            new File(['not a container'], 'spoof-vector.txt', { type: 'application/eigenvector' }),
+        );
+        expect(spoofed.type).toBe('file');
+
+        const res = await exportRequest(spoofed.id, 'svg');
         expect(res.status).toBe(400);
         expect(await res.text()).toContain('not supported');
     }, 60_000);

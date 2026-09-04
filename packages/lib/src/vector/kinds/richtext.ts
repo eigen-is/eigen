@@ -27,9 +27,9 @@ export const richTextKind = defineKind<VectorRichTextElement>({
     capabilities: {
         fill: true,
         fillStyle: false,
+        strokeStyle: true,
         roughness: false,
         corners: true,
-        stroke: true,
         strokeOptional: true,
         bindable: true,
         silhouette: 'box',
@@ -78,8 +78,7 @@ export const richTextKind = defineKind<VectorRichTextElement>({
 });
 
 // The box's paint + typography as CSS, the one body the foreignObject wrapper, the live layer renderer
-// and the in-place editor share. There is no highlight colour: a marker highlight is a text mark applied inside `html`,
-// and painting one on the box is what gave slides its full-width highlight bug.
+// and the in-place editor share. No highlight colour on the box: a highlight is a text mark inside `html`.
 export function richTextCssText(el: VectorRichTextElement): string {
     const justify =
         el.verticalAlign === 'center' ? 'center' : el.verticalAlign === 'bottom' ? 'flex-end' : 'flex-start';

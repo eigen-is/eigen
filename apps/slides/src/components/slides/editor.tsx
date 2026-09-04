@@ -2,6 +2,7 @@ import { useAuth } from '@workspace/lib/auth';
 import { MediaResolverProvider, useCopyToMediaFolder, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
+    elementsInFrame,
     parseBackgroundFill,
     SLIDES_STYLE_DEFAULTS,
     serializeBackgroundFill,
@@ -102,6 +103,9 @@ function SlideEditorInner({
     }, [doc.loaded, canWrite, doc.yjsDoc]);
 
     const frame = doc.frames.find((f) => f.id === frameId);
+    // The slide's own elements: the z-order arithmetic behind the panel's Arrange row must see the
+    // same list the canvas and the keymap do, because indices are allocated across the whole deck.
+    const frameElements = useMemo(() => elementsInFrame(doc.elements, frameId), [doc.elements, frameId]);
     const selectedElements = useMemo(
         () => doc.elements.filter((el) => selectedIds.includes(el.id)),
         [doc.elements, selectedIds],
@@ -114,10 +118,13 @@ function SlideEditorInner({
     // whole deck, so either can land on an element the canvas is not currently showing.
     const revealElement = useCallback(
         (el: VectorElement) => {
-            setFrameId(el.frameId);
+            // An element homed on no live slide (a peer deleted it, or the record never carried one) is
+            // still searchable and still carries comments; going to its frame would empty the canvas, so
+            // it is selected where we are instead.
+            if (doc.frames.some((f) => f.id === el.frameId)) setFrameId(el.frameId);
             setSelectedIds([el.id]);
         },
-        [setFrameId, setSelectedIds],
+        [doc.frames, setFrameId, setSelectedIds],
     );
 
     const comments = useCanvasCommentHost({
@@ -340,13 +347,10 @@ function SlideEditorInner({
             }
             propertiesPanel={
                 <CanvasPropertiesPanel
-                    elements={doc.elements}
+                    elements={frameElements}
                     selectedElements={selectedElements}
                     updateElements={doc.updateElements}
                     undoManager={doc.undoManager}
-                    meta={doc.meta}
-                    updateMeta={doc.updateMeta}
-                    viewport="frame"
                     aspectLocked={aspectLocked}
                     onAspectLockChange={setAspectLocked}
                     emptyTitle="Slide"
@@ -389,6 +393,7 @@ function SlideEditorInner({
                     <div className="flex-1 min-h-0">
                         <CanvasEditor
                             doc={doc}
+                            styleDefaults={SLIDES_STYLE_DEFAULTS}
                             viewport="frame"
                             frameId={frameId}
                             canEdit={canEdit}

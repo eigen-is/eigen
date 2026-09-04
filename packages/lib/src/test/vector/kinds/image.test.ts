@@ -3,7 +3,7 @@ import { ELEMENT_KINDS } from '../../../vector/kinds';
 import type { VectorImageElement } from '../../../vector/types';
 import { image } from '../element-factories';
 
-// The picture always resolves; these cases are about the border drawn around it.
+// Unless a case says otherwise the picture resolves; these are about the border drawn around it.
 function makeImage(over: Partial<VectorImageElement> = {}): VectorImageElement {
     return image({ id: 'im1', mediaName: 'p.png', ...over });
 }
@@ -45,8 +45,37 @@ describe('image border', () => {
         );
     });
 
-    test('unresolvable media still renders nothing — a border alone is not an image', () => {
-        const out = ELEMENT_KINDS.image.render(makeImage({ strokeColor: '#111' }), { resolveMedia: () => null });
+    test('unresolvable media draws a placeholder and the border, so the box stays visible', () => {
+        const out = ELEMENT_KINDS.image.render(makeImage({ strokeColor: '#111', strokeWidth: 2 }), {
+            resolveMedia: () => null,
+        });
+        if (!('svg' in out)) throw new Error('an image must render svg');
+        expect(out.svg).not.toContain('<image');
+        expect(out.svg).toContain('stroke-dasharray');
+        expect(out.svg).toContain('stroke="#111"');
+    });
+
+    test('an unbordered image whose media is missing still draws the placeholder', () => {
+        const out = ELEMENT_KINDS.image.render(makeImage({ strokeColor: 'transparent' }), {
+            resolveMedia: () => null,
+        });
+        expect('svg' in out && out.svg).not.toBe('');
+    });
+
+    // paintsNothing says exactly this, so the empty-outline ring and the render agree.
+    test('an image with no media name and no border renders nothing', () => {
+        const out = ELEMENT_KINDS.image.render(makeImage({ mediaName: '', strokeColor: 'transparent' }), {
+            resolveMedia: () => null,
+        });
         expect('svg' in out && out.svg).toBe('');
+    });
+
+    test('an image with no media name but a border draws the border alone', () => {
+        const out = ELEMENT_KINDS.image.render(makeImage({ mediaName: '', strokeColor: '#111', strokeWidth: 2 }), {
+            resolveMedia: () => null,
+        });
+        if (!('svg' in out)) throw new Error('an image must render svg');
+        expect(out.svg).toContain('stroke="#111"');
+        expect(out.svg).not.toContain('stroke-dasharray');
     });
 });

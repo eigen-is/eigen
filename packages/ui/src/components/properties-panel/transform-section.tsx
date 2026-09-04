@@ -103,13 +103,13 @@ export function TransformSection({
                     </label>
                 </div>
             )}
+            {/* No min/max: the row is built to take an out-of-range entry and WRAP it — bounds here
+                would clamp a typed -90 to 0 before normalizeAngle ever saw it. */}
             <PropertyRow label="Angle">
                 <MergedNumberInput
                     value={angle}
                     onChange={(v) => onChange({ angle: normalizeAngle(v) })}
                     step={1}
-                    min={0}
-                    max={360}
                     disabled={disabled || angleDisabled}
                 />
             </PropertyRow>

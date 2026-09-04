@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { CREATION_TOOL_TYPES, ELEMENT_KINDS, isVectorElementType, type VectorElementType } from '@workspace/lib/vector';
+import {
+    CREATION_TOOL_TYPES,
+    ELEMENT_KINDS,
+    isVectorElementType,
+    SLIDES_STYLE_DEFAULTS,
+    VECTOR_STYLE_DEFAULTS,
+    type VectorElementType,
+} from '@workspace/lib/vector';
 import { VECTOR_TOOLS } from '../../../../components/vector/hooks/use-tool';
 import { ELEMENT_KIND_UI } from '../../../../components/vector/kinds';
 import { creatingElement, isBoxTool } from '../../../../components/vector/tools/create-shape';
@@ -36,11 +43,12 @@ describe('ELEMENT_KIND_UI', () => {
         }
     });
 
-    test('only rich text and the image carry their own panel rows', () => {
+    test('only the arrow, rich text and the image carry their own panel rows', () => {
         // The generic rows (fill, stroke, corners, opacity) gate on capabilities and are the panel's; a
-        // PanelSection exists only for what they cannot express — rich text's typography, the image's fit.
+        // PanelSection exists only for what they cannot express — the arrow's type/heads/label font,
+        // rich text's typography, the image's fit.
         for (const type of vectorElementTypes()) {
-            const own = type === 'richtext' || type === 'image';
+            const own = type === 'arrow' || type === 'richtext' || type === 'image';
             expect([type, Boolean(ELEMENT_KIND_UI[type].PanelSection)]).toEqual([type, own]);
         }
     });
@@ -54,8 +62,19 @@ describe('ELEMENT_KIND_UI', () => {
             if (ELEMENT_KINDS[type].capabilities.creation !== 'box') continue;
             expect([type, isBoxTool(type)]).toEqual([type, true]);
             if (!isBoxTool(type)) continue;
-            expect(creatingElement({ type, seed: 1, box }).type).toBe(type);
+            expect(creatingElement({ type, seed: 1, box }, VECTOR_STYLE_DEFAULTS).type).toBe(type);
         }
+    });
+
+    test('a drag-create preview is styled by the HOST table, so it cannot pop on release', () => {
+        // The deck's table is flat and solid in Inter; the drawing canvas' is sketchy and hachured in
+        // Excalifont. A preview built from the wrong one changes look the moment the pointer lifts.
+        const box = { x: 0, y: 0, width: 10, height: 10, angle: 0 };
+        const rect = creatingElement({ type: 'rectangle', seed: 1, box }, SLIDES_STYLE_DEFAULTS);
+        expect(rect.type === 'rectangle' && rect.roughness).toBe(SLIDES_STYLE_DEFAULTS.roughness);
+        expect(rect.type === 'rectangle' && rect.fill).toBe(SLIDES_STYLE_DEFAULTS.fill);
+        const text = creatingElement({ type: 'richtext', seed: 1, box }, SLIDES_STYLE_DEFAULTS);
+        expect(text.type === 'richtext' && text.fontFamily).toBe(SLIDES_STYLE_DEFAULTS.fontFamily);
     });
 
     test('only rich text has an in-place editor', () => {

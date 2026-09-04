@@ -3,7 +3,7 @@ import { MediaResolverProvider } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { VECTOR_STYLE_DEFAULTS, type VectorElement } from '@workspace/lib/vector';
 import { useLayout } from '@workspace/ui';
-import { useAspectLock } from '@workspace/ui/components/properties-panel';
+import { ColorRow, PropertySection, useAspectLock } from '@workspace/ui/components/properties-panel';
 import {
     CanvasDocumentShell,
     CanvasEditor,
@@ -149,17 +149,29 @@ export function VectorEditor({
                         selectedElements={selectedElements}
                         updateElements={doc.updateElements}
                         undoManager={doc.undoManager}
-                        meta={doc.meta}
-                        updateMeta={doc.updateMeta}
-                        viewport="infinite"
                         aspectLocked={aspectLocked}
                         onAspectLockChange={setAspectLocked}
+                        emptySection={
+                            <PropertySection title="Background">
+                                {/* The scene background is a plain colour (meta.background), not a Fill —
+                                    a frame's background is a Fill and the deck's own panel edits it.
+                                    Transparent is its default and a rendered state, so None is the way
+                                    back from a colour. */}
+                                <ColorRow
+                                    label="Color"
+                                    value={doc.meta.background}
+                                    onChange={(c) => doc.updateMeta({ background: c })}
+                                    allowNone
+                                />
+                            </PropertySection>
+                        }
                     />
                 }
             >
                 <div className="flex-1 min-w-0">
                     <CanvasEditor
                         doc={doc}
+                        styleDefaults={VECTOR_STYLE_DEFAULTS}
                         viewport="infinite"
                         canEdit={canEdit}
                         ownerId={ownerId}

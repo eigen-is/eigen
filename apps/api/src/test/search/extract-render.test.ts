@@ -113,7 +113,7 @@ describe('extractCollabText', () => {
 
     test('eigenvector: an empty drawing extracts to the empty string', async () => {
         const doc = new Y.Doc();
-        seedVectorDoc(doc, { elements: [], frames: [], meta: { background: 'transparent', gridSize: 20 } });
+        seedVectorDoc(doc, { elements: [], frames: [], meta: { background: 'transparent' } });
 
         const { text, warnings } = await extractCollabText('eigenvector', doc);
         expect(text).toBe('');

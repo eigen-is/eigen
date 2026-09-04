@@ -105,18 +105,9 @@ All four then run their body through `applyPreviewByteGuard()` from that same mo
 
 ## Off-thread Collab Previews (document-transform Worker)
 
-Eigensheets, eigendoc, eigenslides and eigenvector preview generation runs in a one-shot Bun Worker so Yjs reconstruction,
-op replay, recalc, HTML rendering, and sanitization never block the API event loop
-([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)). Every export rides the same runner
-through the same seam — see [EXPORT.md](EXPORT.md):
+Eigensheets, eigendoc, eigenslides and eigenvector preview generation runs in a one-shot Bun Worker so Yjs reconstruction, op replay, recalc, HTML rendering, and sanitization never block the API event loop ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)). Every export rides the same runner through the same seam — see [EXPORT.md](EXPORT.md):
 
-1. The main thread keeps ACL, cache lookup/dedupe, builds the media URL map for doc, slides and vector, and captures
-   the document's compressed Yjs blobs in a short SELECT-only transaction (`readYjsStatePayload` via
-   `captureCollabSource`).
-   That main-thread half is one shared entry, `generateDocumentPreview` in `preview/preview-document.ts`
-   (the `export-document.ts` counterpart); every transform then goes through `runTransformToText` / `runTransformToBytes`
-   (`lib/document/transform/run-transform.ts`), the one main-thread seam that owns capture timing, the
-   operation's deadline, admission, warning surfacing, and failure mapping.
+1. The main thread keeps ACL, cache lookup/dedupe, builds the media URL map for doc, slides and vector, and captures the document's compressed Yjs blobs in a short SELECT-only transaction (`readYjsStatePayload` via `captureCollabSource`). That main-thread half is one shared entry, `generateDocumentPreview` in `preview/preview-document.ts` (the `export-document.ts` counterpart); every transform then goes through `runTransformToText` / `runTransformToBytes` (`lib/document/transform/run-transform.ts`), the one main-thread seam that owns capture timing, the operation's deadline, admission, warning surfacing, and failure mapping.
 2. `DocumentTransformRunner` (`lib/document/transform/runner.ts`) admits the job: one active Worker, queue of
    16 with foreground (first cache miss) and background (stale regeneration) priorities, foreground admission
    additionally bounded by predicted wait. Overload rejects with `503` (surfaced to the client); background
@@ -140,10 +131,7 @@ tries sharp first, then HEIC-specific conversion, then exiftool extraction. Used
 screen previews (max 2560px). `preview-cache.ts` passes `StorageFile` references from `mount.readFile()` directly
 to avoid buffering the entire file upfront.
 
-- **SVG**: Served as-is (no rasterisation). `preview-cache.ts` caches the raw SVG locally for S3 mounts, and
-  runs the stored bytes through `svg-media-inline.ts` first: an `<image href="eigen-media:<name>">` ref is
-  resolved against the file's own folder and inlined as a `data:` URI, because an `<img>`-hosted SVG never
-  fetches external refs. The content type stays `image/svg+xml`, so the route serves it under the sandbox CSP
+- **SVG**: Served as-is (no rasterisation). `preview-cache.ts` caches the raw SVG locally for S3 mounts, and runs the stored bytes through `svg-media-inline.ts` first: an `<image href="eigen-media:<name>">` ref is resolved against the file's own folder and inlined as a `data:` URI, because an `<img>`-hosted SVG never fetches external refs. The content type stays `image/svg+xml`, so the route serves it under the sandbox CSP
 - **Standard images** (JPEG, PNG, WebP, GIF, TIFF): sharp resize + WebP conversion
 - **HEIC/HEIF**: sharp first (works if libvips has HEIC support), else `heic-convert` to JPEG → sharp → WebP
 - **RAW/PSD/AI**: sharp if libvips supports it, else exiftool extracts embedded JPEG → sharp → WebP
@@ -259,9 +247,7 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 
 ### Phase — Eigen Native Types (eigenstickies remaining)
 
-**Goal:** Preview Eigen native files without opening them. eigendoc/eigenslides/eigensheets/eigenvector are
-done — each preview reuses the export render path (`doc/render.ts`, `sheets/render.ts`, `canvas/render.ts` for
-both canvas types) over the shared content readers, inside the transform Worker.
+**Goal:** Preview Eigen native files without opening them. eigendoc/eigenslides/eigensheets/eigenvector are done — each preview reuses the export render path (`doc/render.ts`, `sheets/render.ts`, `canvas/render.ts` for both canvas types) over the shared content readers, inside the transform Worker.
 
 | Type | Status | Approach |
 |------|--------|----------|

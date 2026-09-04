@@ -6,11 +6,13 @@ import {
     cornerRadius,
     diamondOutline,
     ellipseOutline,
+    normalizeAngle,
     outlineDistance,
     outlineHits,
     outlinePath,
     polylineOutline,
     rectOutline,
+    round4,
     sharpDiamondOffset,
 } from '../../vector/outline';
 import { DEFAULT_ELEMENT_PROPS, type VectorRectangleElement, type VectorShapeElement } from '../../vector/types';
@@ -496,6 +498,18 @@ describe('outlineDistance', () => {
         expect(outlineDistance(shape, { x: 50, y: 50 })).toBeCloseTo(50, 6);
     });
 
+    // A zero-width or zero-height ellipse is a segment, not a curve: the Newton iteration would divide
+    // by that semi-axis and hand every caller a NaN.
+    test('a degenerate ellipse measures to the segment it collapsed to', () => {
+        const flat = ellipseOutline({ x: 0, y: 0, width: 100, height: 0 }, 0);
+        expect(outlineDistance(flat, { x: 50, y: 20 })).toBeCloseTo(20, 9);
+        expect(outlineDistance(flat, { x: 120, y: 0 })).toBeCloseTo(20, 9);
+        const thin = ellipseOutline({ x: 0, y: 0, width: 0, height: 100 }, 0);
+        expect(outlineDistance(thin, { x: 20, y: 50 })).toBeCloseTo(20, 9);
+        const point = ellipseOutline({ x: 0, y: 0, width: 0, height: 0 }, 0);
+        expect(outlineDistance(point, { x: 3, y: 4 })).toBeCloseTo(5, 9);
+    });
+
     test('an open polyline measures to the path itself, and an empty outline reads 0', () => {
         const path = polylineOutline([
             { x: 0, y: 0 },
@@ -503,5 +517,24 @@ describe('outlineDistance', () => {
         ]);
         expect(outlineDistance(path, { x: 5, y: 4 })).toBeCloseTo(4, 9);
         expect(outlineDistance(polylineOutline([]), { x: 5, y: 4 })).toBe(0);
+    });
+});
+
+describe('normalizeAngle', () => {
+    test('wraps into [0, 360)', () => {
+        expect(normalizeAngle(0)).toBe(0);
+        expect(normalizeAngle(360)).toBe(0);
+        expect(normalizeAngle(370)).toBe(10);
+        expect(normalizeAngle(720)).toBe(0);
+        expect(normalizeAngle(-10)).toBe(350);
+        expect(normalizeAngle(-370)).toBe(350);
+    });
+});
+
+describe('round4', () => {
+    test('keeps four decimals, the precision every gradient value carries', () => {
+        expect(round4(0.123456)).toBe(0.1235);
+        expect(round4(1)).toBe(1);
+        expect(round4(-0.00004)).toBe(-0);
     });
 });

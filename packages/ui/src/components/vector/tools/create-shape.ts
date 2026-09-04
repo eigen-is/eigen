@@ -6,7 +6,7 @@ import {
     type Box,
     baseDefaultsFor,
     ELEMENT_KINDS,
-    VECTOR_STYLE_DEFAULTS,
+    type StyleDefaults,
     type VectorElement,
 } from '@workspace/lib/vector';
 import type { VectorTool } from '../hooks/use-tool';
@@ -44,7 +44,7 @@ export function newShapeBox(sx: number, sy: number, dx: number, dy: number, from
     return normalizeRect(sx, sy, sx + dx, sy + dy);
 }
 
-export function creatingElement(c: CreatingState): VectorElement {
+export function creatingElement(c: CreatingState, style: StyleDefaults): VectorElement {
     const box = {
         id: CREATING_ID,
         x: c.box.x,
@@ -57,27 +57,35 @@ export function creatingElement(c: CreatingState): VectorElement {
         ...baseDefaultsFor(c.type),
         index: 'a0',
     };
-    // The preview takes its style from the same kind defaults the committed element will (addElement),
-    // so the two can't drift; only the gesture's seed carries over. One branch per kind because each
-    // composes its OWN element type — a union-typed `ELEMENT_KINDS[c.type].defaults()` spread would need
-    // a cast — and because rich text is seedless and previews with an outline no committed box has.
+    // The preview takes its style from the same kind defaults the committed element will (addElement
+    // reads the host's own table), so the two can't drift; only the gesture's seed carries over. One
+    // branch per kind because each composes its OWN element type — a union-typed
+    // `ELEMENT_KINDS[c.type].defaults()` spread would need a cast — and because rich text is seedless
+    // and previews with an outline no committed box has.
     if (c.type === 'ellipse') {
-        return { ...box, ...ELEMENT_KINDS.ellipse.defaults(VECTOR_STYLE_DEFAULTS), type: 'ellipse', seed: c.seed };
+        return { ...box, ...ELEMENT_KINDS.ellipse.defaults(style), type: 'ellipse', seed: c.seed };
     }
     if (c.type === 'diamond') {
-        return { ...box, ...ELEMENT_KINDS.diamond.defaults(VECTOR_STYLE_DEFAULTS), type: 'diamond', seed: c.seed };
+        return { ...box, ...ELEMENT_KINDS.diamond.defaults(style), type: 'diamond', seed: c.seed };
     }
     if (c.type === 'richtext') {
         // An empty text box paints nothing, so the drag needs an outline to size against. Preview-only:
         // the committed box keeps the kind's own (transparent) border.
         return {
             ...box,
-            ...ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS),
+            ...ELEMENT_KINDS.richtext.defaults(style),
             type: 'richtext',
-            strokeColor: VECTOR_STYLE_DEFAULTS.strokeColor,
+            strokeColor: style.strokeColor,
             strokeWidth: 1,
             strokeStyle: 'dashed',
         };
     }
-    return { ...box, ...ELEMENT_KINDS.rectangle.defaults(VECTOR_STYLE_DEFAULTS), type: 'rectangle', seed: c.seed };
+    if (c.type === 'rectangle') {
+        return { ...box, ...ELEMENT_KINDS.rectangle.defaults(style), type: 'rectangle', seed: c.seed };
+    }
+    // Exhaustiveness guard: a new box-creation kind brings its own preview branch instead of silently
+    // previewing as a rectangle (the kinds test pins BOX_TOOLS to the registry). It throws rather than
+    // returning, so a type widened past the union can never reach the layer as a bare string.
+    const exhaustive: never = c.type;
+    throw new Error(`no drag-create preview for ${String(exhaustive)}`);
 }

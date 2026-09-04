@@ -20,8 +20,7 @@ comments / tasks Y.Map        chatName (PK), status, resolvedBy,     useCommentC
      }                                                                CommentCard
 ```
 
-Each container document (eigendoc, eigenstickies, eigenslides, eigensheets, eigenvector) stores `comments.db`
-alongside `data.db`. Comment chats live as `.eigenchat` folders in the container's `chat/` directory.
+Each container document (eigendoc, eigenstickies, eigenslides, eigensheets, eigenvector) stores `comments.db` alongside `data.db`. Comment chats live as `.eigenchat` folders in the container's `chat/` directory.
 
 ```
 my-doc.eigendoc/
@@ -277,42 +276,7 @@ Properties-panel overlay showing all comments for a document. The caller passes 
   a summary strip (status label always leads) + "n hidden · Clear filters" footer; the empty state
   offers Clear filters. Cards without an entry yet are treated as "open" and unassigned. The old
   All/For-you tabs + status Select are gone.
-- **Hosting**: `CommentPanel` and `ActivityPanel` are list bodies with no chrome. Docs, slides and sheets
-  mount the same `PanelColumn` (`packages/ui/src/components/comments/panel-column.tsx`)
-  on every viewport: one `Column` with
-  id `panel` whose toolbar carries `ToolbarTitle`, `CommentFilterButton` in comments mode, and the close
-  affordance — `Column`'s own back arrow below the breakpoint, an X above it. `Column` also sizes the
-  pane: full width on mobile, a `PROPERTIES_PANEL_WIDTH_PX` sibling with `border-l` on desktop, so hosts
-  drop their own width. Mount it outside any `<ColumnLayout mobileColumn="…">` — a `Column` self-hides
-  when its id doesn't match, so a host that wraps it gets no pane at all, silently. Props are pure
-  projection plus one `onOpenCard(cardId)`. On mobile every host passes plain `setOpenCardId`: the editor
-  is hidden while the pane is up, so scroll-to-mark (docs) and the slide + element reveal (slides) would
-  drive a view nobody can see, and an activity row's card opens over the Activity pane rather than
-  switching it to Comments under the dialog. On desktop docs and slides pass their reveal, and docs'
-  activity tap still switches to Comments. `activeComments` is the one optional prop — an activity-only
-  host (stickies) never renders the comments body.
-  Those three hide the editor (a `hidden` wrapper) rather than unmounting it and mount the
-  pane's `Column` as a sibling, so tiptap node views, slide thumbnails, scroll position and selection
-  survive a pane visit — that is also why docs' two resize observers and the sheet engine's skip 0×0
-  boxes (`display: none` measures zero) and why docs' figure node view refuses to size an image off a
-  0-width page. Hiding takes the find bar with it, so each of the three passes
-  `DocSearchProvider`'s `onOpenChange` and closes the pane when a session opens below the breakpoint
-  (⌘F, a palette in-document hit) — the bar would open inside the hidden editor otherwise. Desktop keeps
-  its layout: slides and sheets mount the pane as a right-hand sibling, docs inside its absolute
-  right-edge overlay.
-  **Stickies is the fourth host and is desktop-only**: it mounts `PanelColumn` for activity behind
-  `!isMobile`, hides nothing and passes no `onOpenChange`, and its toolbar toggle is absent on mobile.
-  Giving stickies the mobile pane is recorded as next-round work in
-  [MOBILE.md](MOBILE.md).
-  **Both canvas apps are the fifth host** — slides and vector share one anchoring path, and slides adds the deck's own reveal (opening a card activates that element's slide, then selects it). Cards live in the doc's `comments` Y.Map and anchor per element through
-  `VectorElementBase.commentCardIds` — a JSON id **string**, not an array, because every stored
-  canvas field is a scalar. A card raised from the canvas object menu anchors to that element; one
-  raised from the pane stays document-level, so `PanelColumn` keeps its optional `onAddComment` — a
-  "New comment" button in the comments-pane toolbar that only renders when a host passes it;
-  content-anchored hosts omit it and are unaffected. The canvas' card delete removes the map entry and
-  strips the id from its anchor element, and is deliberately outside the canvas `UndoManager` scope
-  (tracking the comments map would let ⌘Z resurrect cards mid-edit — every host keeps comment maps
-  untracked).
+- **Hosting**: `CommentPanel` and `ActivityPanel` are list bodies with no chrome. Docs, slides and sheets mount the same `PanelColumn` (`packages/ui/src/components/comments/panel-column.tsx`) on every viewport: one `Column` with id `panel` whose toolbar carries `ToolbarTitle`, `CommentFilterButton` in comments mode, and the close affordance — `Column`'s own back arrow below the breakpoint, an X above it. `Column` also sizes the pane: full width on mobile, a `PROPERTIES_PANEL_WIDTH_PX` sibling with `border-l` on desktop, so hosts drop their own width. Mount it outside any `<ColumnLayout mobileColumn="…">` — a `Column` self-hides when its id doesn't match, so a host that wraps it gets no pane at all, silently. Props are pure projection plus one `onOpenCard(cardId)`. On mobile every host passes plain `setOpenCardId`: the editor is hidden while the pane is up, so scroll-to-mark (docs) and the slide + element reveal (slides) would drive a view nobody can see, and an activity row's card opens over the Activity pane rather than switching it to Comments under the dialog. On desktop docs and slides pass their reveal, and docs' activity tap still switches to Comments. `activeComments` is the one optional prop — an activity-only host (stickies) never renders the comments body. Those three hide the editor (a `hidden` wrapper) rather than unmounting it and mount the pane's `Column` as a sibling, so tiptap node views, slide thumbnails, scroll position and selection survive a pane visit — that is also why docs' two resize observers and the sheet engine's skip 0×0 boxes (`display: none` measures zero) and why docs' figure node view refuses to size an image off a 0-width page. Hiding takes the find bar with it, so each of the three passes `DocSearchProvider`'s `onOpenChange` and closes the pane when a session opens below the breakpoint (⌘F, a palette in-document hit) — the bar would open inside the hidden editor otherwise. Desktop keeps its layout: slides and sheets mount the pane as a right-hand sibling, docs inside its absolute right-edge overlay. **Stickies is the fourth host and is desktop-only**: it mounts `PanelColumn` for activity behind `!isMobile`, hides nothing and passes no `onOpenChange`, and its toolbar toggle is absent on mobile. Giving stickies the mobile pane is recorded as next-round work in [MOBILE.md](MOBILE.md). **Both canvas apps are the fifth host** — slides and vector share one anchoring path, and slides adds the deck's own reveal (opening a card activates that element's slide, then selects it). Cards live in the doc's `comments` Y.Map and anchor per element through `VectorElementBase.commentCardIds` — a JSON id **string**, not an array, because every stored canvas field is a scalar. A card raised from the canvas object menu anchors to that element; one raised from the pane stays document-level, so `PanelColumn` keeps its optional `onAddComment` — a "New comment" button in the comments-pane toolbar that only renders when a host passes it; content-anchored hosts omit it and are unaffected. The canvas' card delete removes the map entry and strips the id from its anchor element, and is deliberately outside the canvas `UndoManager` scope (tracking the comments map would let ⌘Z resurrect cards mid-edit — every host keeps comment maps untracked).
 - **Open state**: `useDocumentPanels(isMobile)` (`@workspace/lib/comments`) owns the comments/activity
   pair for docs, slides and sheets — one `panel: 'comments' | 'activity' | null` slot, so the two can
   never both be open. Host-owned like `useCommentFilter`. It also returns `mobilePanelOpen` and the
@@ -392,15 +356,6 @@ Optional `onResolve`/`onAssign` for apps that surface resolve/assign at the dial
 - On selection right-click → CardFormDialog opens with the selected text as `initialTitle`. On save,
   `useCreateCommentCard`'s `anchorInTransact` callback runs `editor.chain().setComment(card.id)`.
 
-### Slides and Vector (the canvas)
-
-- `VectorElementBase.commentCardIds` — a JSON id string on the element; `withCommentCard` /
-  `withoutCommentCard` (`packages/lib/src/vector/comments.ts`) own the encoding and are idempotent.
-- `useCanvasComments(elements, cards)` builds the panel rows; a card's anchor text is the anchoring
-  element's own `searchText`, falling back to the kind's UI label so a row is never blank.
-- A commented element flags its top-right corner in `card.color`; clicking the flag opens the first card.
-- On Add Comment: the anchor callback writes the new card id onto the element in the same transact.
-
 ### Sheets
 
 - `Cell.commentCardIds?: string[]` (one-or-more cardIds per cell).
@@ -423,17 +378,12 @@ Optional `onResolve`/`onAssign` for apps that surface resolve/assign at the dial
 - Delete is a board-level helper `deleteCardFromBoard(cardId)` that walks columns + removes the
   Y.Map entry in one `transact` (single undo step, no orphan column refs).
 
-### Vector
+### Slides and Vector (the canvas)
 
-- `VectorElementBase.commentCardIds` is a JSON id string on the element (`parseIdList` /
-  `serializeIdList`); the host adds and removes an id inline through those two.
-- `useCanvasComments(elements, cards)` builds the `ActiveComments` projection: every card is active,
-  and `commentAnchorTexts` gives each anchored card the element's own `searchText` (first anchor wins,
-  falling back to the kind's UI label).
-- A commented element flags its top-right corner on the canvas; clicking the flag opens its first
-  card, and opening a card from the panel selects its anchor element.
-- On Add Comment from the canvas object menu the anchor callback appends the card id to that element;
-  from the pane the card stays document-level.
+- `VectorElementBase.commentCardIds` is a JSON id string on the element (`parseIdList` / `serializeIdList`); the host adds and removes an id inline through those two. `elementForCommentCard` (`packages/lib/src/vector/comments.ts`) resolves a card back to its anchor element.
+- `useCanvasComments(elements, cards)` builds the `ActiveComments` projection: every card is active, and `commentAnchorTexts` gives each anchored card the element's own `searchText` (first anchor wins, falling back to the kind's UI label).
+- A commented element flags its top-right corner on the canvas; clicking the flag opens its first card, and opening a card from the panel selects its anchor element.
+- On Add Comment from the canvas object menu the host appends the card id to that element once `createCard` has resolved — a separate `updateElement`, not `useCreateCommentCard`'s in-transaction anchor, because the card only exists after an awaited server call. The append is idempotent, so a double submit lists the card once. From the pane the card stays document-level.
 
 ## Active vs orphaned comments
 
@@ -442,9 +392,7 @@ The Y.Doc is the source of truth for which cards are "active":
 - Anchor absent (user removed it) → orphan; Y.Map entry, `.eigenchat`, and `comments.db` row all
   persist for undo/redo and version revert. CommentPanel hides orphans by intersecting
   `activeCardIds` with `cards`.
-- **The canvas is the exception**: every card in a vector document's `comments` map is active, so a
-  card whose anchor element was deleted degrades to a document-level comment instead of disappearing
-  from the panel. Its row then falls back to the kind's label rather than an anchor text.
+- **The canvas is the exception**: every card in a vector document's `comments` map is active, so a card whose anchor element was deleted degrades to a document-level comment instead of disappearing from the panel. Its row then falls back to the kind's label rather than an anchor text.
 
 ## Key files
 

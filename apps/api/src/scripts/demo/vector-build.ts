@@ -19,7 +19,6 @@ import {
     ELEMENT_FIELDS,
     ELEMENT_KINDS,
     elbowBindPoint,
-    followBindings,
     generateNKeysBetween,
     getFontMetrics,
     getLineHeightPx,
@@ -43,7 +42,7 @@ import {
     type VerticalAlign,
 } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
-import { type CanvasSide, mulberry32, SIDE_INDEX, toYMap, ZERO_BOX } from './canvas-build';
+import { type CanvasSide, mulberry32, SIDE_INDEX, settleEndpoints, toYMap, ZERO_BOX } from './canvas-build';
 import type {
     SITE_PLAN,
     SitePlanArrow,
@@ -242,16 +241,7 @@ function buildArrow(
         fontFamily: FONT,
         labelWidth: label ? measureExcalifont(label, fontSize).width : 0,
     };
-    // Settle the endpoints exactly where the editor would at rest, then keep the patch when it moved.
-    const patch = followBindings(arrow, byId);
-    if (patch) {
-        arrow.x = patch.x;
-        arrow.y = patch.y;
-        arrow.width = patch.width;
-        arrow.height = patch.height;
-        arrow.points = patch.points;
-        arrow.fixedSegments = patch.fixedSegments;
-    }
+    settleEndpoints(arrow, byId);
     return arrow;
 }
 

@@ -7,7 +7,7 @@ export type CanvasViewport = { zoom: number; scrollX: number; scrollY: number };
 export type Extent = { width: number; height: number };
 
 // Screen px of breathing room around a fitted frame.
-export const FRAME_FIT_PADDING = 24;
+const FRAME_FIT_PADDING = 24;
 
 // The page card: the frame is drawn as a bordered, slightly rounded card, so the user sees where the
 // page ends. Both are SCREEN px. The ring is drawn in the screen-space chrome layer at exactly these

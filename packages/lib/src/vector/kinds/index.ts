@@ -5,6 +5,7 @@ import {
     BASE_ELEMENT_FIELDS,
     DEFAULT_ELEMENT_PROPS,
     type ElementOfType,
+    prop,
     type VectorBindableElement,
     type VectorElement,
     type VectorElementBase,
@@ -17,6 +18,7 @@ import { freedrawKind } from './freedraw';
 import { imageKind } from './image';
 import type { Capabilities, ElementKind } from './kind';
 import { lineKind } from './line';
+import { fontFamily } from './read-fields';
 import { rectangleKind } from './rectangle';
 import { richTextKind } from './richtext';
 
@@ -99,9 +101,35 @@ const CREATION_ORDER = ['rectangle', 'diamond', 'ellipse', 'arrow', 'line', 'fre
 type CreationToolType = (typeof CREATION_ORDER)[number];
 export const CREATION_TOOL_TYPES: readonly CreationToolType[] = CREATION_ORDER;
 
+// The EIGEN_FONTS families a scene draws text in: a kind that declares a `fontFamily` field, on an
+// element that has text to draw. Derived from the registry, so the SVG export inlines the @font-face
+// block of a new text-bearing kind the day it declares the field, instead of dropping its glyphs.
+export function sceneFontFamilies(elements: VectorElement[]): Set<string> {
+    const families = new Set<string>();
+    for (const el of elements) {
+        const kind = ELEMENT_KINDS[el.type];
+        if (!kind.fields.includes('fontFamily') || kind.searchText(el) === '') continue;
+        families.add(fontFamily(prop(el, 'fontFamily')));
+    }
+    return families;
+}
+
 // The stored-key whitelist every writer iterates and the reader materializes: the base fields plus every
 // kind's own, in declaration order, de-duplicated. A new kind extends it by existing.
 export const ELEMENT_FIELDS: readonly string[] = buildElementFields();
+
+// A record's stored fields, in allow-list order, with undefined values dropped: exactly what a writer
+// sets into a Y.Map and nothing else, so a spec-only or stale key can never reach the doc. Pass
+// ELEMENT_FIELDS for an element and FRAME_FIELDS for a frame — the editor's add and duplicate passes,
+// the deck seeder, the frame writer and the demo builders all store through this one filter.
+export function storedFields(source: object, fields: readonly string[]): [string, unknown][] {
+    const out: [string, unknown][] = [];
+    for (const field of fields) {
+        const value = prop(source, field);
+        if (value !== undefined) out.push([field, value]);
+    }
+    return out;
+}
 
 function buildElementFields(): string[] {
     const out: string[] = [...BASE_ELEMENT_FIELDS];

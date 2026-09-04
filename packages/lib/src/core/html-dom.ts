@@ -79,12 +79,14 @@ function appendSanitized(node: Node, parent: HTMLElement): void {
         const href = safeHref(el.getAttribute('href'));
         if (href) {
             const clean = document.createElement('a');
-            clean.setAttribute('href', href);
             // A link always opens in a new tab, with the opener sealed. Forced here rather than trusted
             // from the source markup: this is the one seam every rendered surface passes through, and a
-            // canvas link that navigates in place would take a presenter out of their own deck.
+            // canvas link that navigates in place would take a presenter out of their own deck. Written
+            // in Tiptap's own serialisation order (Link merges its configured HTMLAttributes before
+            // href), so a pasted link is already canonical and the first keystroke rewrites nothing.
             clean.setAttribute('target', '_blank');
             clean.setAttribute('rel', 'noopener noreferrer');
+            clean.setAttribute('href', href);
             recurseInto(clean);
             parent.appendChild(clean);
             return;

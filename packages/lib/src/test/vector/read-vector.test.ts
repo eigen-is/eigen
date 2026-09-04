@@ -2,8 +2,15 @@ import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
 import { isValidFractionalIndex } from '../../vector/fractional-index';
 import { ELEMENT_FIELDS } from '../../vector/kinds';
+import { MAX_ARROW_LABEL_BYTES, MAX_ARROW_LABEL_LINES } from '../../vector/kinds/read-fields';
 import { readVectorFromDoc } from '../../vector/read-vector';
-import { DEFAULT_CORNERS, DEFAULT_ELEMENT_PROPS, DEFAULT_FONT_FAMILY, DEFAULT_SCENE_META } from '../../vector/types';
+import {
+    DEFAULT_CORNERS,
+    DEFAULT_ELEMENT_PROPS,
+    DEFAULT_FONT_FAMILY,
+    DEFAULT_SCENE_META,
+    parseFixedSegments,
+} from '../../vector/types';
 
 function writeElement(map: Y.Map<unknown>, id: string, fields: Record<string, unknown>) {
     const m = new Y.Map();
@@ -31,13 +38,12 @@ describe('readVectorFromDoc', () => {
     test('materializes elements ordered by fractional index with meta', () => {
         const doc = docWith((elements, meta) => {
             meta.set('background', '#ffffff');
-            meta.set('gridSize', 32);
             writeElement(elements, 'second', { type: 'rectangle', index: 'a1', roundness: 'round' });
             writeElement(elements, 'first', { type: 'ellipse', index: 'a0' });
         });
         const scene = readVectorFromDoc(doc);
         expect(scene.elements.map((e) => e.id)).toEqual(['first', 'second']);
-        expect(scene.meta).toEqual({ background: '#ffffff', gridSize: 32 });
+        expect(scene.meta).toEqual({ background: '#ffffff' });
     });
 
     test('applies defaults for missing fields and ignores foreign keys', () => {
@@ -107,7 +113,6 @@ describe('readVectorFromDoc', () => {
     test('reads a server-hydrated doc (roots are AbstractType after applyUpdate)', () => {
         const src = docWith((elements, meta) => {
             meta.set('background', 'transparent');
-            meta.set('gridSize', 20);
             writeElement(elements, 'a', { type: 'rectangle', index: 'a0', x: 5, y: 6 });
         });
         const server = new Y.Doc();
@@ -138,7 +143,7 @@ describe('readVectorFromDoc', () => {
     test('empty doc yields an empty scene with default meta', () => {
         const scene = readVectorFromDoc(new Y.Doc());
         expect(scene.elements).toEqual([]);
-        expect(scene.meta).toEqual({ background: 'transparent', gridSize: 20 });
+        expect(scene.meta).toEqual({ background: 'transparent' });
     });
 
     test('materializes a linear element with points and roundness', () => {
@@ -325,6 +330,22 @@ describe('readVectorFromDoc', () => {
             endBinding: '',
             labelWidth: 0,
         });
+    });
+
+    test('caps a hostile label at MAX_ARROW_LABEL_BYTES and MAX_ARROW_LABEL_LINES', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'ar', {
+                type: 'arrow',
+                index: 'a0',
+                points: '[[0,0],[50,0]]',
+                // A label's height is its line count times the line height, so lines are the second cap.
+                text: 'x\r\n'.repeat(200_000),
+            });
+        });
+        const [el] = readVectorFromDoc(doc).elements;
+        const text = el.type === 'arrow' ? el.text : '';
+        expect(new TextEncoder().encode(text).length).toBeLessThanOrEqual(MAX_ARROW_LABEL_BYTES);
+        expect(text.split('\n')).toHaveLength(MAX_ARROW_LABEL_LINES);
     });
 
     test('caps a hostile labelWidth at MAX_COORD (protects the shared viewBox)', () => {
@@ -709,6 +730,24 @@ describe('readVectorFromDoc — pinned elbow validation', () => {
         );
     });
 
+    test('pins are rebuilt from the ROUNDED polyline, so the two copies cannot drift', () => {
+        const doc = docWith((elements) =>
+            writeElement(
+                elements,
+                'ar',
+                arrowFields({
+                    points: '[[0,0],[0,10.005],[20.006,10.005],[20.006,30]]',
+                    fixedSegments: '{"segments":[{"index":2,"start":[0,10.005],"end":[20.006,10.005]}]}',
+                }),
+            ),
+        );
+        const [el] = readVectorFromDoc(doc).elements;
+        expect(el.type === 'arrow' && el.points).toBe('[[0,0],[0,10.01],[20.01,10.01],[20.01,30]]');
+        expect(el.type === 'arrow' && parseFixedSegments(el.fixedSegments).segments).toEqual([
+            { index: 2, start: [0, 10.01], end: [20.01, 10.01] },
+        ]);
+    });
+
     test('pins are DROPPED (arrow stays a derived elbow) when the polyline is too short for them', () => {
         const doc = docWith((elements) =>
             writeElement(
@@ -799,6 +838,15 @@ describe('readVectorFromDoc — the canvas model', () => {
         // the doc itself is left alone — the next real write of the element is what persists the re-home
         const stored = doc.getMap('elements').get('a');
         expect(stored instanceof Y.Map && stored.get('frameId')).toBe('ghost');
+    });
+
+    test('an empty frameId is dangling too in a frame document', () => {
+        // An element on no slide is invisible in every one, yet still hits in the deck's search and
+        // still anchors its comments — unreachable and undeletable.
+        const doc = new Y.Doc();
+        doc.transact(() => writeElement(doc.getMap('elements'), 'a', { type: 'rectangle', index: 'a0' }));
+        writeFrame(doc, 'f1', 'a0');
+        expect(readVectorFromDoc(doc).elements[0].frameId).toBe('f1');
     });
 
     test('with no frames at all a dangling frameId falls back to the infinite canvas', () => {

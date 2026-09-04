@@ -324,6 +324,10 @@ function ellipseEdgeDistance(shape: { cx: number; cy: number; rx: number; ry: nu
     const tpy = p.y - shape.cy;
     const px = Math.abs(tpx);
     const py = Math.abs(tpy);
+    // A collapsed semi-axis divides by 0 in the iteration: the curve IS the segment between its poles.
+    if (a === 0 || b === 0) {
+        return distanceToSegment(p, { x: shape.cx - a, y: shape.cy - b }, { x: shape.cx + a, y: shape.cy + b });
+    }
     // The iteration divides by |q|, which is 0 at the exact centre (Excalidraw returns NaN there). The
     // nearest edge point from the centre is the semi-minor axis.
     if (px === 0 && py === 0) return Math.min(a, b);
@@ -422,6 +426,18 @@ function dedupe(points: Point[]): Point[] {
 
 export function clamp(v: number, lo: number, hi: number): number {
     return Math.min(hi, Math.max(lo, v));
+}
+
+// Normalize degrees into [0, 360) for storage — the one angle convention, for the element model and
+// for a gradient's own angle.
+export function normalizeAngle(deg: number): number {
+    return ((deg % 360) + 360) % 360;
+}
+
+// 4-decimal rounding, the precision every gradient value carries: a stop offset, a stop opacity and
+// the unit-square vector a linearGradient runs along.
+export function round4(n: number): number {
+    return Math.round(n * 10_000) / 10_000;
 }
 
 function n(v: number): number {

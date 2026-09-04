@@ -27,6 +27,20 @@ describe('seedDeck', () => {
         expect(readVectorFromDoc(doc).frames.map((f) => f.id)).toEqual([firstId]);
     });
 
+    test('two peers seeding the same empty deck converge on one title slide', () => {
+        const alice = new Y.Doc();
+        const bob = new Y.Doc();
+        seedDeck(alice);
+        seedDeck(bob);
+        Y.applyUpdate(alice, Y.encodeStateAsUpdate(bob));
+        Y.applyUpdate(bob, Y.encodeStateAsUpdate(alice));
+        for (const scene of [readVectorFromDoc(alice), readVectorFromDoc(bob)]) {
+            expect(scene.frames).toHaveLength(1);
+            expect(scene.elements).toHaveLength(1);
+            expect(scene.elements[0].frameId).toBe(scene.frames[0].id);
+        }
+    });
+
     test('the seed is not undoable — a fresh deck cannot be emptied by ⌘Z', () => {
         const doc = new Y.Doc();
         const undoManager = new Y.UndoManager([doc.getMap('elements'), doc.getMap('frames')]);

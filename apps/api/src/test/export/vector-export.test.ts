@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { JSDOM } from 'jsdom';
 import { exportDocument, runDocumentExport } from '../../lib/export/export-document';
 import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { getHome } from '../../lib/home/get-home';
@@ -70,6 +71,11 @@ describe('Eigenvector export route — response contract', () => {
         // the vector transform declares it an HTML integration point — without that the box's markup
         // is dropped and the drawing exports wordless.
         expect(svg).toContain('<foreignObject');
+        // Not just present somewhere: the box's MARKUP survives inside the foreignObject. Drop the
+        // integration-point declaration and DOMPurify keeps the element while emptying its HTML body.
+        const body = svg.slice(svg.indexOf('<foreignObject'), svg.indexOf('</foreignObject>'));
+        expect(body).toContain('<p>');
+        expect(body).toContain(GOLDEN_VECTOR_TEXT.replace('<', '&lt;').replace('>', '&gt;'));
         // The rich-text box and the bound arrow label both render, the payload still escaped.
         expect(svg).toContain(GOLDEN_VECTOR_TEXT.replace('<', '&lt;').replace('>', '&gt;'));
         expect(svg).toContain(GOLDEN_VECTOR_LABEL);
@@ -100,7 +106,7 @@ describe('Eigenvector export — empty drawing', () => {
     test('pdf export of an empty drawing is rejected with 400', async () => {
         const home = await getHome(ctx.alice.user.id);
         const { mount, path } = await home.drive.resolveFile(mountId, emptyPath.id);
-        expect(exportDocument(mount, path, 'pdf')).rejects.toThrow('The drawing is empty');
+        await expect(exportDocument(mount, path, 'pdf')).rejects.toThrow('The drawing is empty');
     }, 60_000);
 });
 
@@ -168,6 +174,36 @@ describe('Eigenvector export — rich-text HTML sanitization', () => {
         expect(svg).not.toContain('onerror');
         expect(svg).not.toContain('onclick');
         expect(svg).not.toContain('javascript:');
+    }, 120_000);
+});
+
+describe('Eigenvector export — the .svg download is XML', () => {
+    test('void tags and entities in a rich-text box come out as well-formed XML', async () => {
+        // A .svg file is parsed by an XML parser (browser, Inkscape, librsvg), where an unclosed <br>
+        // or a bare &nbsp; is a FATAL error: the whole drawing renders as nothing. LightEditor writes
+        // both, so the SVG arm must serialise the foreignObject body as XHTML.
+        const created = await seedVector('XML Text', false);
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, created.id);
+        const scene = buildGoldenVectorScene();
+        seedVectorDoc(collab.doc, {
+            ...scene,
+            elements: scene.elements.map((el) =>
+                el.type === 'richtext'
+                    ? {
+                          ...el,
+                          html: '<p>line&nbsp;one<br>line two</p><p><img src="data:image/gif;base64,R0lGOD"></p>',
+                      }
+                    : el,
+            ),
+        });
+
+        const res = await exportRequest(created.id, 'svg');
+        expect(res.status).toBe(200);
+        const svg = await res.text();
+        expect(svg).toContain('line two');
+        // The oracle: an XML parser accepts the bytes we serve. jsdom throws on a malformed document.
+        expect(() => new JSDOM(svg, { contentType: 'application/xml' })).not.toThrow();
     }, 120_000);
 });
 

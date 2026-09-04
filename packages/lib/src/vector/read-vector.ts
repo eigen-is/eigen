@@ -54,8 +54,7 @@ export function readVectorFromDoc(doc: Y.Doc): VectorScene {
     const ordered = syncInvalidIndices(orderByFractionalIndex(elements));
 
     const background = color(metaMap.get('background'), DEFAULT_SCENE_META.background);
-    const gridSize = num(metaMap.get('gridSize'), DEFAULT_SCENE_META.gridSize);
-    return { elements: ordered, frames, meta: { background, gridSize } };
+    return { elements: ordered, frames, meta: { background } };
 }
 
 // Frames are ordered by fractional index like elements, and heal the same way. Every frame is
@@ -129,13 +128,14 @@ function targetPresent(bindingStr: string, bindable: Set<string>): boolean {
     return parsed !== null && bindable.has(parsed.elementId);
 }
 
-// A frameId pointing at a frame that is gone would hide the element (frame mode renders one frame's
-// elements). Re-home it to the lowest-index frame at READ time — the doc is never written, so the next
-// real write of that element is what persists it, exactly like clearDanglingBindings.
+// A frameId no frame answers to would hide the element (frame mode renders one frame's elements), and
+// in a frame document the empty frameId is one of those: there is no infinite canvas to fall back to.
+// Re-home to the lowest-index frame at READ time — the doc is never written, so the next real write of
+// that element is what persists it, exactly like clearDanglingBindings.
 function rehomeDanglingFrames(elements: VectorElement[], frames: VectorFrame[]): void {
     const known = new Set(frames.map((f) => f.id));
     const home = frames.length > 0 ? frames[0].id : '';
     for (const el of elements) {
-        if (el.frameId !== '' && !known.has(el.frameId)) el.frameId = home;
+        if (!known.has(el.frameId)) el.frameId = home;
     }
 }

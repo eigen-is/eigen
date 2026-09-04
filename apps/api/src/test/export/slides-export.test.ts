@@ -86,6 +86,6 @@ describe('deck export — assembled HTML surface', () => {
         );
         const home = await getHome(ctx.alice.user.id);
         const { mount, path } = await home.drive.resolveFile('default', deckPath.id);
-        expect(exportDocument(mount, path, 'html')).rejects.toThrow('The deck is empty');
+        await expect(exportDocument(mount, path, 'html')).rejects.toThrow('The deck is empty');
     });
 });

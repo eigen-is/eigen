@@ -288,6 +288,12 @@ export function resizeLinear(
     return normalizeLinear(box, rescalePoints(parsePoints(el.points), el, box));
 }
 
+// Distance between two points. Every tool that measures a drag, a grab radius or a segment length
+// asks this rather than spelling out its own Math.hypot.
+export function distance(a: Point, b: Point): number {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
 // Nearest distance from a point to a polyline (min over its segments). A single point degrades to the
 // distance to that point; an empty path is unreachable.
 export function distanceToPolyline(points: Point[], point: Point): number {
@@ -347,7 +353,7 @@ export function linearLocalToScene(box: Box, local: Point): Point {
 }
 
 // Even-odd ray cast, for inside-hits on a closed filled path.
-export function pointInPolygon(p: Point, points: Point[]): boolean {
+function pointInPolygon(p: Point, points: Point[]): boolean {
     let inside = false;
     for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
         const a = points[i];
@@ -931,9 +937,4 @@ export function resizeRotatedRect(
 // Snap an angle (degrees) to the nearest `step` — used for Shift → 15° rotation.
 export function snapAngle(deg: number, step = 15): number {
     return Math.round(deg / step) * step;
-}
-
-// Normalize degrees into [0, 360) for storage.
-export function normalizeAngle(deg: number): number {
-    return ((deg % 360) + 360) % 360;
 }

@@ -9,6 +9,7 @@ import {
     generateKeyBetween,
     isValidFractionalIndex,
     readVectorFromDoc,
+    storedFields,
     type VectorFrame,
 } from '@workspace/lib/vector';
 import { nanoid } from 'nanoid';
@@ -55,11 +56,8 @@ function keyAfter(framesMap: Y.Map<unknown>, afterId?: string | null, excludeId?
 // is the shared DEFAULT_FRAME_BACKGROUND; a caller copying an existing frame passes its own.
 function writeFrame(framesMap: Y.Map<unknown>, frame: Partial<VectorFrame> & { id: string }): void {
     const map = new Y.Map();
-    const record: Record<string, unknown> = { name: '', background: DEFAULT_FRAME_BACKGROUND, ...frame };
-    for (const field of FRAME_FIELDS) {
-        const value = record[field];
-        if (value !== undefined) map.set(field, value);
-    }
+    const record = { name: '', background: DEFAULT_FRAME_BACKGROUND, ...frame };
+    for (const [field, value] of storedFields(record, FRAME_FIELDS)) map.set(field, value);
     framesMap.set(frame.id, map);
 }
 

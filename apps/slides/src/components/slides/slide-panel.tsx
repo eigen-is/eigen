@@ -99,7 +99,7 @@ export function SlidePanel({
                                         index={index}
                                         active={frame.id === activeFrameId}
                                         matched={matchedFrameIds?.has(frame.id)}
-                                        onClick={() => onSelectFrame(frame.id)}
+                                        onSelect={onSelectFrame}
                                     />
                                 </div>
                             </SortableSlide>

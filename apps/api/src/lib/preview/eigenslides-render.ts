@@ -1,8 +1,16 @@
 import { CANVAS_PREVIEW_WIDTH } from '@workspace/lib/constants/preview';
-import { type MediaResolver, readVectorFromDoc } from '@workspace/lib/vector';
+import {
+    DEFAULT_FRAME_BACKGROUND,
+    FRAME_HEIGHT,
+    FRAME_WIDTH,
+    type MediaResolver,
+    orderByFractionalIndex,
+    parseBackgroundFill,
+    readVectorFromDoc,
+} from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import type { TransformWarning } from '../document/transform/protocol';
-import { framePages, renderFittedPage } from '../export/canvas/render';
+import { emptyPage, framePages, renderFittedPage } from '../export/canvas/render';
 import { sanitizeExportHtml } from '../export/sanitize';
 import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-marker';
 import { sanitizeSceneHtml } from './sanitize-scene';
@@ -22,20 +30,30 @@ export function renderEigenslidesPreviewBody(
     mediaUrls: Map<string, string>,
 ): { body: string; warnings: TransformWarning[] } {
     const resolveMedia: MediaResolver = (mediaName) => mediaUrls.get(mediaName) ?? null;
-    const pages = framePages(sanitizeSceneHtml(readVectorFromDoc(doc)), resolveMedia);
+    const full = readVectorFromDoc(doc);
     const warnings: TransformWarning[] = [];
-    // A deck with no frames has no pages; the pane shows its own empty state. (Unlike a drawing, an
-    // empty deck is not a state the editor can leave behind — it seeds a slide on first open.)
-    if (pages.length === 0) return { body: '', warnings };
+    // Sliced BEFORE composing: framePages renders every frame's layers, so a 200-slide deck would pay
+    // for 200 pages to serve 8 of them. Only the elements the shown frames hold need sanitizing too.
+    const frames = orderByFractionalIndex(full.frames).slice(0, PREVIEW_MAX_SLIDES);
+    const shown = new Set(frames.map((frame) => frame.id));
+    const scene = sanitizeSceneHtml({
+        ...full,
+        frames,
+        elements: full.elements.filter((el) => shown.has(el.frameId)),
+    });
+    const pages = framePages(scene, resolveMedia);
+    const scale = CANVAS_PREVIEW_WIDTH / FRAME_WIDTH;
+    // A deck with no frames still previews as one blank slide: getOrCacheText caches only a non-empty
+    // body, so an empty one would re-run the whole document transform on every request, forever.
+    if (pages.length === 0) {
+        const blank = emptyPage(parseBackgroundFill(DEFAULT_FRAME_BACKGROUND), FRAME_WIDTH, FRAME_HEIGHT);
+        return { body: renderFittedPage(blank, scale), warnings };
+    }
 
-    const truncated = pages.length > PREVIEW_MAX_SLIDES;
-    const scale = CANVAS_PREVIEW_WIDTH / pages[0].width;
+    const truncated = full.frames.length > PREVIEW_MAX_SLIDES;
     // Fitted, not bare: the lightbox and the drive hero are narrower than the composed page, and the
     // shared .page-fit box is what scales it down for them.
-    const html = pages
-        .slice(0, PREVIEW_MAX_SLIDES)
-        .map((page) => renderFittedPage(page, scale, resolveMedia))
-        .join('');
+    const html = pages.map((page) => renderFittedPage(page, scale, resolveMedia)).join('');
     const body = sanitizeExportHtml(truncated ? `${html}${renderPreviewTruncatedMarker()}` : html, {
         allowedRefs: new Set(mediaUrls.values()),
     });

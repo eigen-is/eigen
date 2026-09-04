@@ -16,14 +16,9 @@ fonts, base64 images, and flattened eigen-prose CSS. DOCX and PDF are derived fr
 - **DOCX**: HTML fed to `@turbodocx/html-to-docx`
 - **PDF**: HTML fed to WeasyPrint subprocess
 
-Eigenslides and eigensheets reuse the same HTML→PDF pipeline (sheets also export native XLSX), and
-eigenvector exports its own SVG (PDF = the same drawing recomposed as HTML layers on a WeasyPrint page) — see their sections below.
+Eigenslides and eigensheets reuse the same HTML→PDF pipeline (sheets also export native XLSX), and eigenvector exports its own SVG (PDF = the same drawing recomposed as HTML layers on a WeasyPrint page) — see their sections below.
 
-Every eigendoc/eigenslides/eigensheets/eigenvector export runs its Yjs reconstruction, rendering and sanitization in the
-one-shot document-transform Worker ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)): the
-main thread prepares media, the Worker returns the finished document bytes. The DOCX conversion runs there too
-— the Worker loads the externalized `@turbodocx/html-to-docx` from runtime `node_modules`. WeasyPrint stays a
-main-thread subprocess on top of the Worker's HTML.
+Every eigendoc/eigenslides/eigensheets/eigenvector export runs its Yjs reconstruction, rendering and sanitization in the one-shot document-transform Worker ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)): the main thread prepares media, the Worker returns the finished document bytes. The DOCX conversion runs there too — the Worker loads the externalized `@turbodocx/html-to-docx` from runtime `node_modules`. WeasyPrint stays a main-thread subprocess on top of the Worker's HTML.
 
 ## File Structure
 
@@ -51,19 +46,8 @@ apps/api/src/lib/export/
 - **`render.ts`**: pure utility functions with zero side effects — no imports from tiptap, lowlight, or
   any heavy library. Callers pass their own lowlight instance. Shared by both `doc/transform.ts` (export) and
   `preview/eigendoc-render.ts` (quick preview)
-- **Worker side vs main-thread side**: `{doc,canvas,vector,sheets}/transform.ts` assemble the document — over the pure
-  renderers in `*/render.ts` and `sheets/to-xlsx.ts` — and are imported *inside* the Worker; `export-document.ts`
-  is the whole main-thread side, preparing media and calling the seam through one `runDocumentExport`. The split
-  is load-bearing: a module the Worker imports must
-  never reach `preview/preview-cache.ts` (it would drag the screen-preview pipeline, sharp and the sheet engine
-  into every document Worker), which is why `document/media.ts` (light) and `export/media.ts` (screen previews)
-  are separate
-- **content loaders** (`apps/api/src/lib/document/{doc,sheets}.ts`, plus `read-vector.ts` in `packages/lib` for both
-  canvas types): every type ships a media-free reader over an already-materialized `Y.Doc`
-  (`readEigendocFromDoc`, `readSheetsFromDoc`, `readVectorFromDoc`) — that is
-  what export, preview and search extraction (`lib/search/extract-render.ts`, the `extract-text` op) call inside
-  the Worker. There is no Mount-side read path: callers capture compressed blobs (`captureCollabSource`) and the
-  Worker materializes them; media maps come from `document/media.ts` on the main thread
+- **Worker side vs main-thread side**: `{doc,canvas,vector,sheets}/transform.ts` assemble the document — over the pure renderers in `*/render.ts` and `sheets/to-xlsx.ts` — and are imported *inside* the Worker; `export-document.ts` is the whole main-thread side, preparing media and calling the seam through one `runDocumentExport`. The split is load-bearing: a module the Worker imports must never reach `preview/preview-cache.ts` (it would drag the screen-preview pipeline, sharp and the sheet engine into every document Worker), which is why `document/media.ts` (light) and `export/media.ts` (screen previews) are separate
+- **content loaders** (`apps/api/src/lib/document/{doc,sheets}.ts`, plus `read-vector.ts` in `packages/lib` for both canvas types): every type ships a media-free reader over an already-materialized `Y.Doc` (`readEigendocFromDoc`, `readSheetsFromDoc`, `readVectorFromDoc`) — that is what export, preview and search extraction (`lib/search/extract-render.ts`, the `extract-text` op) call inside the Worker. There is no Mount-side read path: callers capture compressed blobs (`captureCollabSource`) and the Worker materializes them; media maps come from `document/media.ts` on the main thread
 - **`export-document.ts`**: routes `(mount, path, format)` through the format->envelope table to one
   `runDocumentExport`. Imported by the drive route, NOT by Drive class — export is not Drive's responsibility
 - **`doc/transform.ts`**: standalone HTML with base64 data URIs, embedded WOFF2 fonts (via Bun `import ... with
@@ -136,38 +120,13 @@ bytes transferred back to the main thread
         +-> PDF export (feed to WeasyPrint subprocess)
 ```
 
-`runDocumentExport(job, mount, path, signal?)` (`export-document.ts`) is the single main-thread entry every
-type and format shares: it derives the title, prepares the media for doc, slides and vector (sheets embed none), then
-calls `runTransformToBytes` — the same seam the previews use. `html` and `pdf-html` produce the identical
-document today (WeasyPrint renders exactly what the download serves), and `docx` is that same document
-converted in the Worker. The `<title>` keeps the UNstripped
-container name (`Report.eigendoc`) — frozen output, pinned by `document-export-route.test.ts`; the docx
-document property keeps the stripped name (`Report`).
+`runDocumentExport(job, mount, path, signal?)` (`export-document.ts`) is the single main-thread entry every type and format shares: it derives the title, prepares the media for doc, slides and vector (sheets embed none), then calls `runTransformToBytes` — the same seam the previews use. `html` and `pdf-html` produce the identical document today (WeasyPrint renders exactly what the download serves), and `docx` is that same document converted in the Worker. The `<title>` keeps the UNstripped container name (`Report.eigendoc`) — frozen output, pinned by `document-export-route.test.ts`; the docx document property keeps the stripped name (`Report`).
 
 ### Sanitization and SSRF
 
-Every HTML pipeline — doc (`doc/transform.ts`), the canvas documents (`canvas/transform.ts`, `vector/transform.ts`) and the sheets document builders
-(`sheets/render.ts`) — routes its assembled body through `sanitizeExportHtml()`
-(`apps/api/src/lib/export/sanitize.ts`) inside the Worker, before it is wrapped or handed to a
-converter. DOCX and the PDFs inherit it, because they are built from that same sanitized HTML.
+Every HTML pipeline — doc (`doc/transform.ts`), the canvas documents (`canvas/transform.ts`, `vector/transform.ts`) and the sheets document builders (`sheets/render.ts`) — routes its assembled body through `sanitizeExportHtml()` (`apps/api/src/lib/export/sanitize.ts`) inside the Worker, before it is wrapped or handed to a converter. DOCX and the PDFs inherit it, because they are built from that same sanitized HTML.
 
-On top of DOMPurify it adds one rule: **every `url()` in a `style` attribute or `<style>` element,
-every `<img src>`, and every SVG `href`/`xlink:href` must be a `data:` URI**; anything else is
-stripped, and `@import` (whose string form fetches without any `url()`, and which can only exist
-in element CSS) is removed from style-element text. Backslashes are dropped from CSS before that
-scan, because a CSS escape spells the same token invisibly to a regex — `\75 rl(…)` and
-`@\69 mport` are `url(…)` and `@import` to the parser that does the fetching. SVG `<image href>`
-is covered because DOMPurify keeps it by default and it is a fetch just like `<img src>`;
-`<a href>` is explicitly exempt. That is the SSRF guard. Export embeds all its
-resources as data URIs, so a remote reference can only have come from an attacker-controlled CRDT
-string (a rich-text box's HTML, a sheet cell). WeasyPrint fetches such references server-side while
-rendering, from the API host, and its CLI has no way to restrict fetch protocols — so the
-restriction has to happen here. The style-element coverage exists for the sheets exports, which
-emit their interned class rules in a body `<style>` (SHEETS.md § HTML/PDF export). The same rule is why
-the vector compositor keeps a gradient or clip reference in an SVG `fill`/`stroke`/`clip-path` attribute and
-never in CSS — attributes are not scanned, a `style` `url(#…)` would be stripped. `<a href>` is
-deliberately left alone: link targets are not fetched
-during render, and docs and sheets carry legitimate http(s) hyperlinks.
+On top of DOMPurify it adds one rule: **every `url()` in a `style` attribute or `<style>` element, every `<img src>`, and every SVG `href`/`xlink:href` must be a `data:` URI**; anything else is stripped, and `@import` (whose string form fetches without any `url()`, and which can only exist in element CSS) is removed from style-element text. Backslashes are dropped from CSS before that scan, because a CSS escape spells the same token invisibly to a regex — `\75 rl(…)` and `@\69 mport` are `url(…)` and `@import` to the parser that does the fetching. SVG `<image href>` is covered because DOMPurify keeps it by default and it is a fetch just like `<img src>`; `<a href>` is explicitly exempt. That is the SSRF guard. Export embeds all its resources as data URIs, so a remote reference can only have come from an attacker-controlled CRDT string (a rich-text box's HTML, a sheet cell). WeasyPrint fetches such references server-side while rendering, from the API host, and its CLI has no way to restrict fetch protocols — so the restriction has to happen here. The style-element coverage exists for the sheets exports, which emit their interned class rules in a body `<style>` (SHEETS.md § HTML/PDF export). The same rule is why the vector compositor keeps a gradient or clip reference in an SVG `fill`/`stroke`/`clip-path` attribute and never in CSS — attributes are not scanned, a `style` `url(#…)` would be stripped. `<a href>` is deliberately left alone: link targets are not fetched during render, and docs and sheets carry legitimate http(s) hyperlinks.
 
 The hook is added and removed around each synchronous `DOMPurify.sanitize()` call, so it never leaks
 to other DOMPurify users in the process. Regression tests: `apps/api/src/test/export/export-pdf-ssrf.test.ts`.
@@ -208,9 +167,7 @@ New document > Open > Rename > Export > [separator] > Share > ... > Print > Dele
 
 ### Drive Context Menu (`packages/ui/src/components/drive/drive-table.tsx`)
 
-Export submenu for eigendoc, eigenslides, eigensheets and eigenvector files, driven by `onExport` callback.
-The offered formats follow the type: `docx/pdf/html` for a doc, `xlsx/pdf/html` for a sheet, `svg/pdf` for a
-drawing, `pdf/html` for everything else.
+Export submenu for eigendoc, eigenslides, eigensheets and eigenvector files, driven by `onExport` callback. The offered formats follow the type: `docx/pdf/html` for a doc, `xlsx/pdf/html` for a sheet, `svg/pdf` for a drawing, `pdf/html` for everything else.
 
 ## Dependencies
 

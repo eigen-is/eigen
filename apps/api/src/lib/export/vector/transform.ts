@@ -1,4 +1,11 @@
-import { isTransparentColor, readVectorFromDoc, sceneToSvg, type VectorScene } from '@workspace/lib/vector';
+import {
+    isTransparentColor,
+    readVectorFromDoc,
+    sceneFontFamilies,
+    sceneToSvg,
+    type VectorScene,
+} from '@workspace/lib/vector';
+import { JSDOM } from 'jsdom';
 import type * as Y from 'yjs';
 import { ApiError } from '../../core/errors';
 import { spliceAfterSvgOpenTag, toDataUriMap } from '../../document/media';
@@ -41,7 +48,7 @@ export function renderEigenvectorExport(
         // box's raw HTML — so the assembled SVG runs through the shared sanitizer (the documented
         // SSRF closure) exactly like slides/sheets and the preview.
         const svg = sanitizeExportHtml(renderSceneSvg(scene, dataUriMap), RICH_TEXT_TAGS);
-        return { data: toTransferableText(svg), warnings: [] };
+        return { data: toTransferableText(toXmlDocument(svg)), warnings: [] };
     }
 
     // pdf-html: the drawing as compositor layers on a page sized to the artwork. Rich text prints
@@ -58,24 +65,25 @@ export function renderEigenvectorExport(
     return { data: toTransferableText(html), warnings: [] };
 }
 
+// An .svg file is read by an XML parser, and a rich-text box's HTML is not XML: an unclosed <br>/<img>
+// or a named entity is a fatal parse error that renders the whole drawing as nothing. DOMPurify hands
+// back HTML serialisation, so take its markup through the DOM once more and serialise it as XML. The
+// literal xmlns attributes go first — the serializer writes the namespace declarations itself, and a
+// second one on the same element is a duplicate attribute.
+function toXmlDocument(svg: string): string {
+    const dom = new JSDOM(svg, { contentType: 'text/html' });
+    const root = dom.window.document.querySelector('svg');
+    if (!root) return svg;
+    for (const el of root.querySelectorAll('[xmlns]')) el.removeAttribute('xmlns');
+    return new dom.window.XMLSerializer().serializeToString(root);
+}
+
 // The drawing's own SVG, with the @font-face blocks its text uses injected into a <defs>
 // <style> for the standalone (svg) download. sceneToSvg emits no top-level <defs>, so the
 // style is spliced in right after the opening <svg> tag.
 function renderSceneSvg(scene: VectorScene, dataUriMap: Map<string, string>): string {
     const svg = sceneToSvg(scene, { resolveMedia: (mediaName) => dataUriMap.get(mediaName) ?? null });
-    const faceCSS = getFontFaceCSSForFamilies(usedFontFamilies(scene));
+    const faceCSS = getFontFaceCSSForFamilies(sceneFontFamilies(scene.elements));
     if (!faceCSS) return svg;
     return spliceAfterSvgOpenTag(svg, `<defs><style>${faceCSS}</style></defs>`);
-}
-
-// The EIGEN_FONTS families the drawing's text actually uses — rich-text boxes and the labels
-// bound to arrows. An element with no text contributes no family, so the SVG inlines only
-// the faces it renders with.
-function usedFontFamilies(scene: VectorScene): Set<string> {
-    const families = new Set<string>();
-    for (const el of scene.elements) {
-        if (el.type === 'richtext' && el.html !== '') families.add(el.fontFamily);
-        if (el.type === 'arrow' && el.text !== '') families.add(el.fontFamily);
-    }
-    return families;
 }

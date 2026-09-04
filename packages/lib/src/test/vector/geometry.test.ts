@@ -33,7 +33,6 @@ import {
     linearSceneToLocal,
     marqueeHits,
     marqueeMode,
-    normalizeAngle,
     normalizeFixedPoint,
     normalizeLinear,
     outlinePoint,
@@ -584,17 +583,6 @@ describe('snapAngle', () => {
     test('honors a custom step', () => {
         expect(snapAngle(50, 90)).toBe(90);
         expect(snapAngle(44, 90)).toBe(0);
-    });
-});
-
-describe('normalizeAngle', () => {
-    test('wraps into [0, 360)', () => {
-        expect(normalizeAngle(0)).toBe(0);
-        expect(normalizeAngle(360)).toBe(0);
-        expect(normalizeAngle(370)).toBe(10);
-        expect(normalizeAngle(720)).toBe(0);
-        expect(normalizeAngle(-10)).toBe(350);
-        expect(normalizeAngle(-370)).toBe(350);
     });
 });
 
@@ -1311,6 +1299,13 @@ describe('elementBounds', () => {
         const stale2 = elementBounds(stale);
         expect(stale2.maxX).toBe(200);
         expect(b.maxX).not.toBe(stale2.maxX);
+    });
+
+    // render and hitTest both guard an empty route; bounds must too, or ±Infinity reaches the shared
+    // viewBox and the whole document exports blank.
+    test('an empty route falls back to the stored box instead of ±Infinity', () => {
+        const el = arrowEl({ points: '[[0,0],[100,0]]', width: 100, height: 0 });
+        expect(elementBounds(el, [])).toEqual(getElementBounds(el));
     });
 
     test('a wide label unions its rect into the bounds', () => {

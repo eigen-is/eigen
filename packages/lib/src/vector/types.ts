@@ -201,7 +201,7 @@ export type FixedSegment = { index: number; start: [number, number]; end: [numbe
 // arrow's whole pin state, decoded from the one JSON scalar.
 type ParsedFixedSegments = { segments: FixedSegment[]; startIsSpecial: boolean; endIsSpecial: boolean };
 
-export type VectorMeta = { background: string; gridSize: number };
+export type VectorMeta = { background: string };
 
 export type VectorScene = { elements: VectorElement[]; frames: VectorFrame[]; meta: VectorMeta };
 
@@ -241,7 +241,7 @@ export const DEFAULT_LINE_ROUNDNESS: Roundness = 'round';
 const DEFAULT_ARROW_ROUNDNESS: Roundness = 'round';
 
 // Canvas-level defaults (the `meta` root).
-export const DEFAULT_SCENE_META: VectorMeta = { background: 'transparent', gridSize: 20 };
+export const DEFAULT_SCENE_META: VectorMeta = { background: 'transparent' };
 
 // Shared element defaults, adopted from Excalidraw's DEFAULT_ELEMENT_PROPS.
 export const DEFAULT_ELEMENT_PROPS = {
@@ -321,6 +321,13 @@ export const STROKE_WIDTH_OPTIONS: { value: string; label: string }[] = [
     { value: '1', label: 'Thin' },
     { value: '2', label: 'Medium' },
     { value: '4', label: 'Bold' },
+];
+
+// The ONE labelling of the Roundness vocabulary, consumed by the panel's Edges row for boxes and
+// lines and by the arrow section (where an elbow's roundness means its corner style).
+export const EDGES_OPTIONS: { value: Roundness; label: string }[] = [
+    { value: 'sharp', label: 'Sharp' },
+    { value: 'round', label: 'Rounded' },
 ];
 
 // Read a property off a parsed-JSON object without a cast (Reflect.get is typed to accept any object).

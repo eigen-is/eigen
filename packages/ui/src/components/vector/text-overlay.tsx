@@ -12,7 +12,7 @@
 // a newline (never commits). The textarea is uncontrolled so its native ⌘Z owns in-session undo.
 
 import { getFontFamily } from '@workspace/lib/constants/fonts';
-import { type Box, getLineHeightPx, type TextAlign } from '@workspace/lib/vector';
+import { type Box, getLineHeightPx, labelText, MAX_ARROW_LABEL_BYTES, type TextAlign } from '@workspace/lib/vector';
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { loadVectorFont } from './text-measure';
 
@@ -60,10 +60,12 @@ export function TextOverlay({
     const valueRef = useRef(initialText);
     const committedRef = useRef(false);
 
+    // Commit what the READER keeps: labelText caps bytes (not UTF-16 units) and lines, so the stored
+    // label is never longer than what every peer's read, render and export will show.
     const commit = useCallback(() => {
         if (committedRef.current) return;
         committedRef.current = true;
-        onCommit(valueRef.current);
+        onCommit(labelText(valueRef.current));
     }, [onCommit]);
 
     // Unmount commits (the latch makes it a no-op after any normal commit): a route change or a
@@ -131,6 +133,9 @@ export function TextOverlay({
         <textarea
             ref={taRef}
             defaultValue={initialText}
+            // Coarse DOM-side guard against a pathological paste — UTF-16 units, so it is always looser
+            // than the reader's byte budget. commit() is what actually caps.
+            maxLength={MAX_ARROW_LABEL_BYTES}
             wrap="off"
             spellCheck={false}
             className="pointer-events-auto absolute"

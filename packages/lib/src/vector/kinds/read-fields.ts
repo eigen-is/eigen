@@ -22,6 +22,13 @@ const MAX_FONT_SIZE = 400;
 // both run sanitizeToLightEditorHtml, so a torn tag here is a cosmetic loss, never an injection.
 const MAX_HTML_BYTES = 64 * 1024;
 
+// An arrow's label is plain text, and both of its dimensions derive from it: the height is the line
+// count times the line height (so a 200k-line label would union a 5M-unit box into the shared viewBox)
+// and the SVG arm emits one <text> node per line. Cap the bytes and the lines; the in-canvas textarea
+// commits through labelText, so what a user types and what the reader keeps are the same string.
+export const MAX_ARROW_LABEL_BYTES = 4 * 1024;
+export const MAX_ARROW_LABEL_LINES = 64;
+
 export type YMapLike = { get(key: string): unknown };
 
 export function isYMapLike(value: unknown): value is YMapLike {
@@ -111,8 +118,18 @@ export function fillField(v: unknown): string {
     return serializeFill(parseFill(str(v, '')));
 }
 
+// The cap lands on a code-point boundary, not a markup one: a torn tag is repaired by every consumer,
+// which parses the body as HTML before it renders or serializes it.
 export function htmlField(v: unknown): string {
     return capBytes(cleanStr(v, ''), MAX_HTML_BYTES);
+}
+
+// Newlines normalize here, not at the consumers, so the line cap and the label's height math count
+// the same lines whatever a peer stored.
+export function labelText(v: unknown): string {
+    const capped = capBytes(cleanStr(v, '').replace(/\r\n?/g, '\n'), MAX_ARROW_LABEL_BYTES);
+    const lines = capped.split('\n');
+    return lines.length <= MAX_ARROW_LABEL_LINES ? capped : lines.slice(0, MAX_ARROW_LABEL_LINES).join('\n');
 }
 
 function capBytes(value: string, maxBytes: number): string {

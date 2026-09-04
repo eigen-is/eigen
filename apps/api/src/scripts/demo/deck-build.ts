@@ -14,7 +14,6 @@ import {
     ELEMENT_FIELDS,
     ELEMENT_KINDS,
     FRAME_FIELDS,
-    followBindings,
     generateNKeysBetween,
     normalizeLinear,
     SLIDES_STYLE_DEFAULTS,
@@ -32,7 +31,7 @@ import {
     type VectorShapeElement,
 } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
-import { type CanvasSide, mulberry32, SIDE_INDEX, toYMap, ZERO_BOX } from './canvas-build';
+import { type CanvasSide, mulberry32, SIDE_INDEX, settleEndpoints, toYMap, ZERO_BOX } from './canvas-build';
 import { DECK_INK, type DeckArrow, type DeckImage, type DeckShape, type DeckSlide, type DeckText } from './content';
 
 // Fixed PRNG salt so every reseed draws the same roughjs seeds. The deck is flat (roughness 0), but
@@ -179,16 +178,7 @@ function buildArrow(
         startBinding: from.binding,
         endBinding: to.binding,
     };
-    // Settle the endpoints exactly where the editor would at rest, then keep the patch when it moved.
-    const patch = followBindings(arrow, byId);
-    if (patch) {
-        arrow.x = patch.x;
-        arrow.y = patch.y;
-        arrow.width = patch.width;
-        arrow.height = patch.height;
-        arrow.points = patch.points;
-        arrow.fixedSegments = patch.fixedSegments;
-    }
+    settleEndpoints(arrow, byId);
     return arrow;
 }
 

@@ -12,9 +12,9 @@ export const ellipseKind = defineKind<VectorEllipseElement>({
     capabilities: {
         fill: true,
         fillStyle: true,
+        strokeStyle: true,
         roughness: true,
         corners: false,
-        stroke: true,
         strokeOptional: true,
         bindable: true,
         silhouette: 'ellipse',

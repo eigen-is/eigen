@@ -1,13 +1,19 @@
 import { CANVAS_PREVIEW_HEIGHT, CANVAS_PREVIEW_WIDTH } from '@workspace/lib/constants/preview';
-import { readVectorFromDoc } from '@workspace/lib/vector';
+import { readVectorFromDoc, sceneReadingOrder } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import type { TransformWarning } from '../document/transform/protocol';
-import { type CanvasPage, drawingPage, emptyPage, renderFittedPage } from '../export/canvas/render';
+import { type CanvasPage, drawingPage, emptyPage, renderFittedPage, sceneBackground } from '../export/canvas/render';
 import { sanitizeExportHtml } from '../export/sanitize';
-import { applyPreviewByteGuard } from './preview-marker';
+import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-marker';
 import { sanitizeSceneHtml } from './sanitize-scene';
 
 const EMPTY_PREVIEW_HEIGHT = 120;
+
+// A glance, not the drawing: like the doc's 20 blocks and the deck's 8 slides, so a scene with tens
+// of thousands of elements cannot make the Worker generate a roughjs path for every one of them.
+// The kept elements are the first in reading order — frame by frame, then z-order inside a frame.
+// A drawing has no frames, so what survives is its bottom 500 in stacking order.
+const PREVIEW_MAX_ELEMENTS = 500;
 
 // Materialized doc → the drawing as one compositor page, the same HTML the PDF export prints.
 // Runs inside the transform Worker (worker.ts owns execution; the main-thread orchestration lives
@@ -26,15 +32,21 @@ export function renderEigenvectorPreviewBody(
     doc: Y.Doc,
     mediaUrls: Map<string, string>,
 ): { body: string; warnings: TransformWarning[] } {
-    const scene = sanitizeSceneHtml(readVectorFromDoc(doc));
+    const full = readVectorFromDoc(doc);
+    const truncated = full.elements.length > PREVIEW_MAX_ELEMENTS;
+    // sceneLayers paints in z-order whatever it is given, so the slice needs no re-sorting.
+    const kept = truncated ? sceneReadingOrder(full).slice(0, PREVIEW_MAX_ELEMENTS) : full.elements;
+    const scene = sanitizeSceneHtml({ ...full, elements: kept });
     const page = drawingPage(scene, (mediaName) => mediaUrls.get(mediaName) ?? null);
     // An empty drawing still previews as a page: getOrCacheText stores only a non-empty body, so
     // nothing here would leave an emptied drawing serving the preview it had when it had content.
     const html = page
         ? renderPreviewPage(page)
-        : renderFittedPage(emptyPage(scene, CANVAS_PREVIEW_WIDTH, EMPTY_PREVIEW_HEIGHT), 1);
+        : renderFittedPage(emptyPage(sceneBackground(scene), CANVAS_PREVIEW_WIDTH, EMPTY_PREVIEW_HEIGHT), 1);
     const warnings: TransformWarning[] = [];
-    const sanitized = sanitizeExportHtml(html, { allowedRefs: new Set(mediaUrls.values()) });
+    const sanitized = sanitizeExportHtml(truncated ? `${html}${renderPreviewTruncatedMarker()}` : html, {
+        allowedRefs: new Set(mediaUrls.values()),
+    });
     return { body: applyPreviewByteGuard(sanitized, warnings), warnings };
 }
 

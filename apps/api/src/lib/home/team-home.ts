@@ -36,28 +36,26 @@ export class TeamHome extends Home {
         this.fs = new LocalFilesystem(this.homeDir);
 
         this.settings = new JsonStore<TeamSettings>(this.fs, 'settings.json', { calendar: { enabled: false } });
-        // Teams start with no mounts by default — mounts are added explicitly via "Add Mount" wizard
         this._drive = new Drive(this);
         this._calendar = new Calendar(this);
     }
 
     override get calendar(): Calendar {
+        this.touch();
         if (this.settings.get().calendar?.enabled === false) {
             throw new ApiError(404, 'Team calendar is disabled');
         }
-        this.touch();
         return this._calendar;
     }
 
     async addMount(input: {
         name: string;
-        storageType?: string;
+        storageType?: MountSettings['storageType'];
         maxSizeMB?: number;
         s3Config?: S3Config;
     }): Promise<{ id: string } & MountSettings> {
         const serverSettings = getServerSettings();
-        const resolvedType = (input.storageType ??
-            mapStorageType(serverSettings.defaults.mount.storageType)) as MountSettings['storageType'];
+        const resolvedType = input.storageType ?? mapStorageType(serverSettings.defaults.mount.storageType);
 
         if (resolvedType === 's3' && input.s3Config) {
             const s3Result = await checkS3Connection(input.s3Config);
@@ -73,8 +71,7 @@ export class TeamHome extends Home {
             s3Config: input.s3Config,
         };
 
-        const currentMounts = this.settings.get().mounts ?? {};
-        await this.settings.set({ mounts: { ...currentMounts, [mountId]: mountSettings } });
+        await this.settings.set({ mounts: { [mountId]: mountSettings } });
 
         const config = createMountConfig(mountId, mountSettings);
         await this.drive.addMount(config);

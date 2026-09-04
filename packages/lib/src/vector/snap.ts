@@ -11,7 +11,7 @@ export const SNAP_SCREEN_THRESHOLD = 8;
 
 export type SnapLine = { orientation: 'horizontal' | 'vertical'; position: number };
 export type SnapTargets = { vSnaps: number[]; hSnaps: number[] };
-export type SnapResult = { box: Box; lines: SnapLine[] };
+type SnapResult = { box: Box; lines: SnapLine[] };
 
 function edgesOf(b: Box) {
     return {
@@ -25,7 +25,8 @@ function edgesOf(b: Box) {
 }
 
 // Candidate snap coordinates from the other objects (excludeIds skips the ones being dragged) plus any
-// host guide lines in `extraV`/`extraH` (slides: canvas edges + centre; vector: none — infinite canvas).
+// host guide lines in `extraV`/`extraH` (frame mode: the frame's edges + centre; the infinite canvas
+// has none).
 // A rotated target contributes centre only.
 export function computeSnapTargets(
     boxes: { id: string; box: Box }[],

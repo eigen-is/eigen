@@ -61,12 +61,15 @@ describe('renderEigenslidesPreviewBody', () => {
         expect(body).not.toContain('Preview truncated');
     });
 
-    test('a deck with no frames previews as nothing, so the pane shows its own empty state', () => {
+    test('a deck with no frames previews as one blank slide, so the artifact is cacheable', () => {
+        // getOrCacheText stores only a non-empty body: an empty one re-runs the whole document
+        // transform (Yjs load + Worker) on every single request, forever, and never settles.
         const doc = new Y.Doc();
-        seedDeckDoc(doc, { elements: [], frames: [], meta: { background: 'transparent', gridSize: 20 } });
+        seedDeckDoc(doc, { elements: [], frames: [], meta: { background: 'transparent' } });
         const { body, warnings } = renderEigenslidesPreviewBody(doc, new Map());
         doc.destroy();
-        expect(body).toBe('');
+        expect(body.match(/class="canvas-page"/g)).toHaveLength(1);
+        expect(body).toContain('background-color:#ffffff');
         expect(warnings).toEqual([]);
     });
 
@@ -81,6 +84,16 @@ describe('renderEigenslidesPreviewBody', () => {
         expect(body).toContain('<p>ok</p>');
         expect(body).not.toContain('<script');
         expect(body).not.toContain('alert(1)');
+    });
+
+    test('a <style> block in a slide body never reaches the page', () => {
+        // The body is injected as live DOM in the drive hero and the lightbox, where a style block
+        // reaches far outside its own preview: it can blank the app or lay an invisible overlay
+        // over it for every user who browses the folder.
+        const body = previewOf('<p>ok</p><style>body{display:none}</style>');
+        expect(body).toContain('<p>ok</p>');
+        expect(body).not.toContain('<style');
+        expect(body).not.toContain('display:none');
     });
 
     test('an event handler on a slide element is stripped', () => {

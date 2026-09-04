@@ -16,7 +16,6 @@ export class UserHome extends Home {
 
     constructor(user: User, cleanUp?: () => void) {
         super(user, cleanUp);
-        this.user = user;
         this.homeDir = getUserHomePath(user.id);
         this.fs = new LocalFilesystem(this.homeDir);
 

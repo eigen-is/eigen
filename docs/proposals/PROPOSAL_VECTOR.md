@@ -112,7 +112,7 @@ Match the slides conventions, improve on the old proposal:
 
 ```
 Y.Map  "elements"  ->  elementId -> Y.Map  (per-element map over the ELEMENT_FIELDS whitelist)
-Y.Map  "meta"      ->  { background, gridSize }
+Y.Map  "meta"      ->  { background }
 ```
 
 - **Per-element `Y.Map`, not whole-element LWW.** Each element is a nested `Y.Map` keyed over a fixed `ELEMENT_FIELDS` allow-list (the slides `OBJECT_FIELDS` pattern, `use-deck.ts:11`). This gives **field-level concurrent merge**: peer A drags an element while peer B recolors it, and both survive. Excalidraw's own model is whole-element last-writer-wins (`reconcile.ts` `shouldDiscardRemoteElement`) because their transport is not a CRDT — but a Yjs map *is* a CRDT, so the field-level merge is free and strictly better, and it is consistent with every other Eigen collab app. We diverge from Excalidraw here for a good reason, stated plainly.

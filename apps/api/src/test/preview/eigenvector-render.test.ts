@@ -88,9 +88,38 @@ describe('renderEigenvectorPreviewBody', () => {
         expect(previewOf('<p onclick="alert(1)">ok</p>')).not.toContain('onclick');
     });
 
+    test('a <style> block in a rich-text body never reaches the page', () => {
+        // The body is injected as live DOM in the drive hero and the lightbox, where a style block
+        // reaches far outside its own preview: it can blank the app or lay an invisible overlay
+        // over it for every user who browses the folder.
+        const body = previewOf('<p>ok</p><style>body{display:none}</style>');
+        expect(body).toContain('<p>ok</p>');
+        expect(body).not.toContain('<style');
+        expect(body).not.toContain('display:none');
+    });
+
+    test('a huge drawing renders a bounded number of elements, and the marker says so', () => {
+        // Every other preview type has a budget (20 blocks, 8 slides, a cell cap): without one a
+        // 50k-element drawing pays roughjs path generation for all of them before the byte guard
+        // even looks at the result.
+        const scene = buildGoldenVectorScene();
+        const rect = scene.elements.find((el) => el.type === 'rectangle');
+        if (!rect) throw new Error('the golden scene has a rectangle');
+        const many = Array.from({ length: 520 }, (_, i) => ({
+            ...rect,
+            id: `many-${i}`,
+            index: `b${i.toString().padStart(4, '0')}`,
+            x: (i % 40) * 20,
+            y: Math.floor(i / 40) * 20,
+        }));
+        const body = previewOfScene({ ...scene, elements: many });
+        expect(body.match(/<svg /g)).toHaveLength(500);
+        expect(body).toContain('Preview truncated');
+    });
+
     test('an empty drawing previews as an empty page, so the cache stops serving its old body', () => {
         const doc = new Y.Doc();
-        seedVectorDoc(doc, { elements: [], frames: [], meta: { background: '#fef3c7', gridSize: 20 } });
+        seedVectorDoc(doc, { elements: [], frames: [], meta: { background: '#fef3c7' } });
         const { body, warnings } = renderEigenvectorPreviewBody(doc, new Map());
         doc.destroy();
         expect(body).toContain(`<div class="canvas-page" style="position:relative;overflow:hidden;width:960px;`);

@@ -147,12 +147,14 @@ export function useTouchGestures(params: TouchGesturesParams): TouchGestures {
         if (touchIgnoredDuringPen(params.isPenDrawing())) return true;
 
         st.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-        st.downInfo.set(e.pointerId, { t: performance.now(), x: e.clientX, y: e.clientY, moved: false });
 
         // Second finger → abort the one-finger gesture and hand both pointers to pan/pinch.
         if (st.pointers.size === 2) {
             const [a, b] = [...st.pointers.keys()];
             params.abortActiveGesture();
+            // A gesture that ever held two fingers is a pinch and nothing else: dropping the down info
+            // keeps the LAST finger lifted from reading its pinch travel as a swipe or a tap.
+            st.downInfo.clear();
             st.twoFinger = { a, b };
             frozenRef.current = true;
             containerRef.current?.setPointerCapture(e.pointerId);
@@ -160,6 +162,8 @@ export function useTouchGestures(params: TouchGesturesParams): TouchGestures {
         }
         // Third+ finger: ignore extras while a pinch runs.
         if (st.pointers.size > 2) return true;
+
+        st.downInfo.set(e.pointerId, { t: performance.now(), x: e.clientX, y: e.clientY, moved: false });
 
         // First finger. Palm rejection: while a pen is in use a finger can't drive a draw/create tool.
         if (st.penMode && !touchAllowedInPenMode(tool)) return true;

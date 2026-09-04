@@ -1,7 +1,6 @@
 import { useCollabDoc } from '@workspace/lib/collab';
 import {
     arrowsBoundTo,
-    baseDefaultsFor,
     DEFAULT_SCENE_META,
     ELEMENT_FIELDS,
     ELEMENT_KINDS,
@@ -22,7 +21,7 @@ import {
 } from '@workspace/lib/vector';
 import { useCallback, useRef, useState } from 'react';
 import * as Y from 'yjs';
-import { duplicateElementsInDoc, hasSeed, newElementId, randomSeed, topmostIndex } from './element-writes';
+import { duplicateElementsInDoc, topmostIndex, writeElementInDoc } from './element-writes';
 import {
     addFrameInDoc,
     deleteFrameInDoc,
@@ -86,24 +85,6 @@ export type VectorElementPatch = Partial<Omit<VectorShapeElement, 'id' | 'type'>
 // addElement input: the caller names a `type` and overrides whatever it likes; the hook fills
 // the rest from lib defaults and generates id/seed/index.
 export type NewVectorElement = { type: VectorElementType } & VectorElementPatch;
-
-// Per-type defaults: the geometry box, the shared base props, and the kind's own fields straight from
-// the registry, styled by the HOST's table (vector draws rough and hatched, slides flat and solid) —
-// a new kind needs no entry here, and a new host only a table.
-function elementDefaults(type: VectorElementType, style: StyleDefaults): Record<string, unknown> {
-    return {
-        x: 0,
-        y: 0,
-        width: 0,
-        height: 0,
-        angle: 0,
-        // The shared base paint under the kind's overrides: rich text and images use the stroke as a
-        // border, so a fresh one is unframed until the user picks a stroke colour. The panel's reset
-        // rows read the same helper, so a reset restores what creation gave.
-        ...baseDefaultsFor(type),
-        ...ELEMENT_KINDS[type].defaults(style),
-    };
-}
 
 // After a patch, re-run followBindings and write the geometry into the same transact for every
 // arrow bound to a patched SHAPE — and for every patched BOUND ARROW, so a nudge/align/rotate of a bound
@@ -204,37 +185,17 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
 
     // Batch add — the whole set in ONE transact (paste's element ADDS: one gesture = one
     // transact / one undo step). Consecutive fractional keys above the current top preserve the
-    // callers' order as the pasted stack's relative z-order. Each element gets a fresh id + seed (or a
-    // caller-supplied seed). Returns the new ids in input order so the caller reselects the paste.
+    // callers' order as the pasted stack's relative z-order. Returns the new ids in input order so the
+    // caller reselects the paste.
     const addElements = useCallback((partials: NewVectorElement[]): string[] => {
         const doc = docRef.current;
         if (!doc || partials.length === 0) return [];
         const ids: string[] = [];
         doc.transact(() => {
-            const elementsMap = doc.getMap('elements');
-            const keys = generateNKeysBetween(topmostIndex(elementsMap), null, partials.length);
-            partials.forEach((partial, i) => {
-                const id = newElementId();
-                // Honor a caller-supplied seed so a drag-create preview and its committed element share
-                // the same roughjs jitter (no visual pop on release); otherwise generate one. undefined on a
-                // seedless kind drops the key (the write loop skips undefined).
-                const seed = hasSeed(partial.type) ? (partial.seed ?? randomSeed()) : undefined;
-                const record: Record<string, unknown> = {
-                    ...elementDefaults(partial.type, defaultsRef.current),
-                    ...partial,
-                    id,
-                    type: partial.type,
-                    seed,
-                    index: keys[i],
-                };
-                const elMap = new Y.Map();
-                for (const field of ELEMENT_FIELDS) {
-                    const v = record[field];
-                    if (v !== undefined) elMap.set(field, v);
-                }
-                elementsMap.set(id, elMap);
-                ids.push(id);
-            });
+            const keys = generateNKeysBetween(topmostIndex(doc.getMap('elements')), null, partials.length);
+            for (const [i, partial] of partials.entries()) {
+                ids.push(writeElementInDoc(doc, partial, keys[i], defaultsRef.current));
+            }
         });
         return ids;
     }, []);
@@ -343,26 +304,36 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         [undoManager],
     );
 
-    const updateFrames = useCallback((patches: { id: string; fields: Partial<VectorFrame> }[]) => {
-        if (docRef.current) updateFramesInDoc(docRef.current, patches);
-    }, []);
+    const updateFrames = useCallback(
+        (patches: { id: string; fields: Partial<VectorFrame> }[]) => {
+            const doc = docRef.current;
+            if (doc) sealed(undoManager, () => updateFramesInDoc(doc, patches));
+        },
+        [undoManager],
+    );
 
     const updateFrame = useCallback(
         (id: string, fields: Partial<VectorFrame>) => updateFrames([{ id, fields }]),
         [updateFrames],
     );
 
-    // The scene's own settings (background, grid).
-    const updateMeta = useCallback((fields: Partial<VectorMeta>) => {
-        const doc = docRef.current;
-        if (!doc) return;
-        doc.transact(() => {
-            const metaMap = doc.getMap('meta');
-            for (const [key, value] of Object.entries(fields)) {
-                if (value !== undefined) metaMap.set(key, value);
-            }
-        });
-    }, []);
+    // The scene's own settings. Sealed like the frame ops: picking a background is a discrete op, and
+    // unsealed it would merge into whatever the user did in the half second before it.
+    const updateMeta = useCallback(
+        (fields: Partial<VectorMeta>) => {
+            const doc = docRef.current;
+            if (!doc) return;
+            sealed(undoManager, () =>
+                doc.transact(() => {
+                    const metaMap = doc.getMap('meta');
+                    for (const [key, value] of Object.entries(fields)) {
+                        if (value !== undefined) metaMap.set(key, value);
+                    }
+                }),
+            );
+        },
+        [undoManager],
+    );
 
     return {
         elements: scene.elements,

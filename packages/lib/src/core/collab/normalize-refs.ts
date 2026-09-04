@@ -13,7 +13,7 @@ export const NORMALIZE_ORIGIN = Symbol('normalize-refs');
 // corruptions a concurrent merge can introduce:
 //   1. a child referenced by MORE THAN ONE parent → keep the copy in the LAST parent in document order;
 //   2. a child referenced by NO parent (an orphan) → append it to the FIRST parent in document order.
-// "Document order" is the host's `orderArrayName` Y.Array (the canvas' frameOrder, stickies' columnOrder),
+// "Document order" is the host's `orderArrayName` Y.Array (stickies' columnOrder),
 // which converges across peers where Y.Map key order does not. Parents present in the map but absent
 // from that array are "strays" — themselves a corruption — and rank BEFORE every ordered parent, so a
 // stray only wins the dedupe when it is the sole holder and is never chosen as a re-home target (both

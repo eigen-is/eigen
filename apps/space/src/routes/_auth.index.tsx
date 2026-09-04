@@ -17,9 +17,9 @@ function HomeComponent() {
 
                         <div className="text-md text-center mb-10">
                             <p className="mb-4">
-                                Your personal workspace in the cloud.
+                                A self-hosted alternative to Google Workspace.
                                 <br />
-                                Simple and secure. You control your own data.
+                                Simple and secure. You control your data.
                             </p>
                         </div>
 

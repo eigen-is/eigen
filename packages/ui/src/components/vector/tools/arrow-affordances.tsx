@@ -11,6 +11,7 @@ import {
     bindingAnchor,
     bindingDistance,
     boundEndpoint,
+    distance,
     focusSnapPoint,
     isBindable,
     type Point,
@@ -39,10 +40,6 @@ const FOCUS_MIN_SCREEN_GAP = FOCUS_POINT_SIZE * 1.5;
 const FOCUS_GRAB_MIN_SCREEN_GAP = 22;
 // Screen radius of the solid dock dot at a bound straight endpoint.
 const FOCUS_DOCK_SCREEN_R = 4;
-
-function dist(a: Point, b: Point): number {
-    return Math.hypot(a.x - b.x, a.y - b.y);
-}
 
 function clampUnit(n: number): number {
     return Math.min(1, Math.max(0, n));
@@ -73,7 +70,7 @@ export function SnapDots({
     let nearest = -1;
     let nearestDist = Number.POSITIVE_INFINITY;
     for (let i = 0; i < mids.length; i++) {
-        const d = dist(mids[i], pointer);
+        const d = distance(mids[i], pointer);
         if (d < nearestDist) {
             nearestDist = d;
             nearest = i;
@@ -128,7 +125,7 @@ function focusEnds(
         if (!shape || !isBindable(shape)) continue;
         const anchor = anchorToScene(shape, binding.fixedPoint);
         const endpoint = boundEndpoint(arrow, end, shape);
-        if (dist(anchor, endpoint) * zoom < minScreenGap) continue;
+        if (distance(anchor, endpoint) * zoom < minScreenGap) continue;
         out.push({ end, shape, anchor, endpoint });
     }
     return out;
