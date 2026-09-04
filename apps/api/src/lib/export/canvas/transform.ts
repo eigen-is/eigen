@@ -103,15 +103,20 @@ svg { display: block; }
 // keeps it.
 const FALLBACK_BREAKPOINTS = [960, 768, 640, 480, 360];
 
+// The narrowest viewport the ladder serves. The bottom step has no lower breakpoint — it applies all
+// the way down — so this is the width it must fit, or a phone crops the page it was meant to save.
+const NARROWEST_VIEWPORT = 320;
+
 // Body padding is 2rem a side, so a page gets the viewport minus 64px. A step must be sized for the
 // NARROW end of its range — `max-width: 960px` still applies at 769px, so scaling it from 960 would
-// clip — and rounded DOWN, so a page under-scales slightly rather than overflowing. The last step has
-// no lower neighbour and keeps its own width.
-const floor3 = (value: number): number => Math.floor(value * 1000) / 1000;
+// clip — and rounded DOWN, so a page under-scales slightly rather than overflowing.
+function floor3(value: number): number {
+    return Math.floor(value * 1000) / 1000;
+}
 
 function fallbackLadder(width: number): string {
     return FALLBACK_BREAKPOINTS.map((breakpoint, i) => {
-        const narrowest = (FALLBACK_BREAKPOINTS[i + 1] ?? breakpoint - 1) + 1;
+        const narrowest = (FALLBACK_BREAKPOINTS[i + 1] ?? NARROWEST_VIEWPORT - 1) + 1;
         return `@media (max-width: ${breakpoint}px) {
     .page-fit > .canvas-page { transform: scale(${floor3(Math.min(narrowest - 64, width) / width)}); }
 }`;

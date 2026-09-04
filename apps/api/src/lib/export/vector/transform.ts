@@ -1,4 +1,10 @@
-import { isTransparentColor, readVectorFromDoc, sceneToSvg, type VectorScene } from '@workspace/lib/vector';
+import {
+    isTransparentColor,
+    readVectorFromDoc,
+    sceneFontFamilies,
+    sceneToSvg,
+    type VectorScene,
+} from '@workspace/lib/vector';
 import { JSDOM } from 'jsdom';
 import type * as Y from 'yjs';
 import { ApiError } from '../../core/errors';
@@ -77,19 +83,7 @@ function toXmlDocument(svg: string): string {
 // style is spliced in right after the opening <svg> tag.
 function renderSceneSvg(scene: VectorScene, dataUriMap: Map<string, string>): string {
     const svg = sceneToSvg(scene, { resolveMedia: (mediaName) => dataUriMap.get(mediaName) ?? null });
-    const faceCSS = getFontFaceCSSForFamilies(usedFontFamilies(scene));
+    const faceCSS = getFontFaceCSSForFamilies(sceneFontFamilies(scene.elements));
     if (!faceCSS) return svg;
     return spliceAfterSvgOpenTag(svg, `<defs><style>${faceCSS}</style></defs>`);
-}
-
-// The EIGEN_FONTS families the drawing's text actually uses — rich-text boxes and the labels
-// bound to arrows. An element with no text contributes no family, so the SVG inlines only
-// the faces it renders with.
-function usedFontFamilies(scene: VectorScene): Set<string> {
-    const families = new Set<string>();
-    for (const el of scene.elements) {
-        if (el.type === 'richtext' && el.html !== '') families.add(el.fontFamily);
-        if (el.type === 'arrow' && el.text !== '') families.add(el.fontFamily);
-    }
-    return families;
 }

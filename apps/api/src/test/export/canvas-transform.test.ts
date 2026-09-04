@@ -26,6 +26,14 @@ describe('canvasHtmlDocument', () => {
         );
     });
 
+    test('the last ladder step is sized for the narrowest viewport, not for its own breakpoint', () => {
+        // The bottom step has no lower neighbour: it applies at every width below 360, so sizing it
+        // for 360 leaves a 320px phone with a page wider than its content box, cropped by .page-fit.
+        expect(deckHtml('screen')).toContain(
+            '@media (max-width: 360px) {\n    .page-fit > .canvas-page { transform: scale(0.266); }',
+        );
+    });
+
     test('the PDF document has no fit box, and its sheet is the composed page', () => {
         const html = deckHtml('pdf');
         expect(html).not.toContain('page-fit');
