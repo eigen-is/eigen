@@ -226,7 +226,7 @@ export function RichTextPanelSection({ elements, onChange }: KindPanelSectionPro
                         />
                     </PropertyRow>
                 </div>
-                {/* The inset between the box edge and the text; the box keeps its stored size. */}
+                {/* The inset between the box edge and the text; it rides inside the box, which re-fits to it. */}
                 <PropertyRow label="Pad">
                     <MergedNumberInput
                         value={padding}

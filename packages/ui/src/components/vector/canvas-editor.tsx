@@ -8,6 +8,7 @@ import {
 } from '@workspace/lib/drive';
 import { stripTagsServer } from '@workspace/lib/html';
 import { useIsCoarsePointer } from '@workspace/lib/media';
+import type { CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     arrowRoute,
@@ -37,9 +38,10 @@ import {
     type VectorArrowElement,
     type VectorElement,
 } from '@workspace/lib/vector';
+import { CommentIndicator } from '@workspace/ui/components/comments';
 import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
 import { cn } from '@workspace/ui/lib/utils';
-import { Image as ImageIcon, MessageSquare } from 'lucide-react';
+import { ImageIcon } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isTypingTarget } from '../../hooks/is-typing-target';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
@@ -145,9 +147,11 @@ type CanvasEditorProps = {
     publishCursor: PublishCursor;
     // Published/cleared by the canvas itself; optional so read-only hosts can omit it.
     imageInsertRef?: { current: CanvasImageInsert | null };
-    // Comments. A commented element flags its top-right corner; clicking the flag opens the first card
-    // (the host reveals it). Omitting onOpenCard hides the flags, omitting onAddComment the menu row.
+    // Comments. A commented element marks its top-right corner; clicking the mark opens the first card
+    // (the host reveals it). Omitting onOpenCard hides the marks, omitting onAddComment the menu row.
     onOpenCard?: (cardId: string) => void;
+    // The document's cards, for the mark's colour — the card's own, like a commented sheet cell's.
+    commentCards?: Record<string, CommentCard>;
     onAddComment?: (elementId: string) => void;
     // ⌘F: every matching element rings, the stepped-to one rings brighter and flashes. Both come from
     // the host's useCanvasDocSearch — the canvas only paints them.
@@ -180,6 +184,7 @@ export function CanvasEditor({
     publishCursor,
     imageInsertRef,
     onOpenCard,
+    commentCards,
     onAddComment,
     searchMatchedIds,
     searchActiveId,
@@ -300,18 +305,24 @@ export function CanvasEditor({
     );
     const ordered = useMemo(() => orderByFractionalIndex(visibleElements), [visibleElements]);
 
-    // The flagged elements: those carrying at least one comment card, with the corner the flag sits on
-    // (a zero-size box, so boxToStyle maps it to the screen point at render time).
+    // The marked elements: those carrying at least one comment card, with the corner the mark sits on
+    // (a zero-size box, so boxToStyle maps it to the screen point at render time) and the card's colour.
     const commentedElements = useMemo(
         () =>
             ordered.flatMap((el) => {
                 const [cardId] = parseIdList(el.commentCardIds);
+                if (!cardId) return [];
                 const box = elementBox(el);
-                return cardId
-                    ? [{ id: el.id, cardId, corner: { x: box.x + box.width, y: box.y, width: 0, height: 0, angle: 0 } }]
-                    : [];
+                return [
+                    {
+                        id: el.id,
+                        cardId,
+                        color: commentCards?.[cardId]?.color,
+                        corner: { x: box.x + box.width, y: box.y, width: 0, height: 0, angle: 0 },
+                    },
+                ];
             }),
-        [ordered],
+        [ordered, commentCards],
     );
 
     // The ringed elements. Only what this canvas renders: a match on another frame is revealed by the
@@ -1343,23 +1354,6 @@ export function CanvasEditor({
             {/* Screen-space chrome, laid out by boxToStyle at the viewport React last rendered; a live
                 gesture moves the whole layer with one transform (chromeTransform) instead. */}
             <div ref={chromeRef} className="pointer-events-none absolute inset-0 origin-top-left">
-                {/* Comment flags: screen-space like the selection ring, so they keep their size at any zoom. */}
-                {onOpenCard &&
-                    commentedElements.map(({ id, cardId, corner }) => {
-                        const { left, top } = boxToStyle(corner);
-                        return (
-                            <button
-                                key={id}
-                                type="button"
-                                className="pointer-events-auto absolute -translate-y-1/2 translate-x-1/2 rounded-full bg-background p-0.5 text-muted-foreground shadow"
-                                style={{ left, top }}
-                                onClick={() => onOpenCard(cardId)}
-                                title="Open comment"
-                            >
-                                <MessageSquare className="h-3 w-3" />
-                            </button>
-                        );
-                    })}
                 {/* ⌘F match rings, in the same screen-space chrome layer as the selection ring. */}
                 {matchedElements.map((el) => (
                     <div
@@ -1428,6 +1422,33 @@ export function CanvasEditor({
                         }}
                     />
                 )}
+                {/* Comment marks: LAST in the chrome layer, so the transform box's own NE grip — which
+                    sits on the very corner a mark claims — can never cover one. Screen-space like the
+                    selection ring, so they keep their size at any zoom. */}
+                {onOpenCard &&
+                    commentedElements.map(({ id, cardId, color, corner }) => {
+                        const { left, top } = boxToStyle(corner);
+                        return (
+                            <button
+                                key={id}
+                                type="button"
+                                // -translate-x-full hangs the triangle inside the box, off the exact corner.
+                                className="pointer-events-auto absolute -translate-x-full"
+                                style={{ left, top }}
+                                // The container captures the pointer on its own pointerdown, so the click
+                                // that would follow never lands on us (it retargets): open from the pointer
+                                // event itself, and keep it off the canvas so it starts no drag.
+                                onPointerDown={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    onOpenCard(cardId);
+                                }}
+                                title="Open comment"
+                            >
+                                <CommentIndicator color={color} className="block" />
+                            </button>
+                        );
+                    })}
                 {/* Round vertex handles: over the box for a 3+-point linear, the sole chrome for a 2-point one. */}
                 {drawing.handles}
                 {/* Dashed union ring for multi-select + read-only single selections; a writable 2-point line/arrow shows only its handles. */}

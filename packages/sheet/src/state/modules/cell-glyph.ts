@@ -1,3 +1,4 @@
+import { COMMENT_INDICATOR_SIZE } from '@workspace/lib/constants/comment-indicator';
 import { type Context, getFlowdata } from '../context';
 import { getRealCellValue, isForcedStringNumber, mergeBorder } from './cell';
 import {
@@ -19,14 +20,14 @@ import { colLocation, rowLocation } from './location';
 export type CellGlyph = 'dropdown' | 'checkbox' | 'comment' | 'invalid' | 'forced-string';
 
 // Corner indicators: a comment top-right, an invalid value or a forced string
-// top-left. One size for all three so they read as one family of marks.
-export const CELL_INDICATOR_SIZE = 11;
+// top-left. One size for all three so they read as one family of marks — the
+// shared comment-mark size, which the canvas apps paint their triangle at too.
 
 // The square the corner triangle is drawn in, anchored on the cell corner itself
 // (the 1px is the grid line): one leg along the top edge, one down the side.
 // The painter (render/cells.ts) and the hit test share this one construction.
 export function cellIndicatorRect(corner: 'left' | 'right', left: number, top: number, right: number): CellGlyphRect {
-    return { x: (corner === 'left' ? left : right - CELL_INDICATOR_SIZE) - 1, y: top, size: CELL_INDICATOR_SIZE };
+    return { x: (corner === 'left' ? left : right - COMMENT_INDICATOR_SIZE) - 1, y: top, size: COMMENT_INDICATOR_SIZE };
 }
 
 function inGlyph(rect: CellGlyphRect, x: number, y: number) {

@@ -2,6 +2,9 @@
 // checkbox, data bar, text and grid lines. Text layout itself lives in
 // modules/text.ts.
 
+// One red for both attention marks: the invalid-value triangle, and the comment
+// triangle's fallback when its card carries no colour of its own.
+import { INDICATOR_RED } from '@workspace/lib/constants/comment-indicator';
 import { isForcedStringNumber, normalizedAttr } from '../modules/cell';
 import { cellIndicatorRect } from '../modules/cell-glyph';
 import { checkCF } from '../modules/condition-format';
@@ -29,9 +32,6 @@ import { defaultStyle } from './types';
 // § Theming) — and grey rather than black, the way Google draws the box.
 const CHECKBOX_STROKE = '#5f6368';
 
-// One red for both attention marks: the invalid-value triangle, and the comment
-// triangle's fallback when its card carries no colour of its own.
-const INDICATOR_RED = '#FC6666';
 const FORCED_STRING_INDICATOR_COLOR = '#487f1e';
 
 // A right-angled triangle filling half of its cellIndicatorRect, anchored on

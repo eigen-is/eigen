@@ -4,6 +4,7 @@ export { AssigneePicker } from './assignee-picker';
 export { CommentContextMenu } from './comment-context-menu';
 export { CommentFilterMenuItems } from './comment-filter-menu-items';
 export { FilterSummary } from './comment-filter-summary';
+export { CommentIndicator } from './comment-indicator';
 export { CommentLifecycleDialogs } from './comment-lifecycle-dialogs';
 export { CommentLifecycleMenuItems } from './comment-lifecycle-menu-items';
 export { type CommentContextMenuItem, CommentMenuItems } from './comment-menu-items';
