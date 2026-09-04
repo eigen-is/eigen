@@ -715,19 +715,21 @@ export const SITE_PLAN = {
     author: 'production' as LeadRole,
     // Drawn bottom-up: lines (ground), shapes, images, arrows, then every text on top.
     lines: [
-        // The dune ridge west of the field, the sea just behind it.
+        // The dune ridge west of the field, the sea just behind it. It sits a walk away from the fence:
+        // that western margin balances the photo-and-legend column hanging off the east side, which is
+        // what puts the scene's centre on the crowd-flow arrow.
         {
             points: [
-                [70, 150],
-                [88, 230],
-                [64, 310],
-                [90, 390],
-                [66, 470],
-                [90, 550],
-                [64, 630],
-                [90, 710],
-                [66, 790],
-                [84, 870],
+                [-118, 150],
+                [-100, 230],
+                [-124, 310],
+                [-98, 390],
+                [-122, 470],
+                [-98, 550],
+                [-124, 630],
+                [-98, 710],
+                [-122, 790],
+                [-104, 870],
             ],
             stroke: '#74c0fc',
         },
@@ -1162,7 +1164,7 @@ export const SITE_PLAN = {
             color: '#868e96',
         },
         { text: 'N', x: 1283, y: 40, fontSize: 20 },
-        { text: 'dunes, sea 5 min', x: 18, y: 120, fontSize: 14, color: '#4dabf7' },
+        { text: 'dunes, sea 5 min', x: -170, y: 120, fontSize: 14, color: '#4dabf7' },
         {
             text: 'Power: 2 x 60kVA + a backup that runs the second stage alone (delivery Thu)',
             x: 760,
