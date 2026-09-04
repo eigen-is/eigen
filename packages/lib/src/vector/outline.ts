@@ -398,6 +398,20 @@ export function distanceToSegment(p: Point, a: Point, b: Point): number {
     return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }
 
+// The point of a non-empty list nearest `to` — the tie-break every outline-hit caller applies.
+export function nearestPoint(points: Point[], to: Point): Point {
+    let best = points[0];
+    let bestDist = Number.POSITIVE_INFINITY;
+    for (const p of points) {
+        const d = (p.x - to.x) ** 2 + (p.y - to.y) ** 2;
+        if (d < bestDist) {
+            bestDist = d;
+            best = p;
+        }
+    }
+    return best;
+}
+
 function dedupe(points: Point[]): Point[] {
     const out: Point[] = [];
     for (const p of points) {
@@ -406,7 +420,7 @@ function dedupe(points: Point[]): Point[] {
     return out;
 }
 
-function clamp(v: number, lo: number, hi: number): number {
+export function clamp(v: number, lo: number, hi: number): number {
     return Math.min(hi, Math.max(lo, v));
 }
 

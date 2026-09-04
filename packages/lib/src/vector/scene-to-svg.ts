@@ -34,7 +34,6 @@ export type MediaResolver = (mediaName: string) => string | null;
 
 export type SceneToSvgOptions = {
     resolveMedia?: MediaResolver;
-    padding?: number;
 };
 
 export function sceneToSvg(scene: VectorScene, opts: SceneToSvgOptions = {}): string {
@@ -43,15 +42,14 @@ export function sceneToSvg(scene: VectorScene, opts: SceneToSvgOptions = {}): st
         return `<svg xmlns="${SVG_NS}" width="0" height="0" viewBox="0 0 0 0"></svg>`;
     }
 
-    const padding = opts.padding ?? DEFAULT_PADDING;
     // byId feeds the derived elbow route (its bends spill past the stored 2-endpoint box, and depend on the
     // bound shapes) to both bounds and rendering.
     const byId = new Map(scene.elements.map((el) => [el.id, el]));
     const bounds = sceneBounds(ordered, byId);
-    const minX = round(bounds.minX - padding);
-    const minY = round(bounds.minY - padding);
-    const width = round(bounds.maxX - bounds.minX + padding * 2);
-    const height = round(bounds.maxY - bounds.minY + padding * 2);
+    const minX = round(bounds.minX - DEFAULT_PADDING);
+    const minY = round(bounds.minY - DEFAULT_PADDING);
+    const width = round(bounds.maxX - bounds.minX + DEFAULT_PADDING * 2);
+    const height = round(bounds.maxY - bounds.minY + DEFAULT_PADDING * 2);
 
     let body = '';
     if (!isTransparentColor(scene.meta.background)) {

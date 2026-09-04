@@ -10,7 +10,7 @@ import type { VectorElement, VectorScene } from './types';
 // The bar lists one row per match: a single line, short enough not to push the count off the row.
 const LABEL_MAX = 80;
 
-export type SearchSceneOptions = {
+type SearchSceneOptions = {
     // Where the match is, in the host's vocabulary ("Slide 3"). Omitted on the infinite canvas.
     contextOf?: (el: VectorElement) => string | undefined;
 };

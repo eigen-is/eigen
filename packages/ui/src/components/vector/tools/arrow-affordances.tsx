@@ -22,8 +22,9 @@ import {
     type VectorElement,
 } from '@workspace/lib/vector';
 import type { MutableRefObject } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { pointInsideShape } from './binding';
+import { useHandleDrag } from './use-handle-drag';
 
 // Screen radius of a side-midpoint snap dot (Excalidraw's 4 / zoom).
 const SNAP_DOT_SCREEN_R = 4;
@@ -223,65 +224,39 @@ export function FocusPointHandles({
     // The end being dragged and its live anchor position, so the grabbed dot follows the cursor without
     // waiting on the parent's preview round-trip (mirrors LinePointHandles' `drag.local`).
     const [drag, setDrag] = useState<{ end: 'start' | 'end'; anchor: Point } | null>(null);
-    const abortRef = useRef<AbortController | null>(null);
-    useEffect(() => () => abortRef.current?.abort(), []);
+    const startHandleDrag = useHandleDrag(frozenRef);
 
     // Grab handles claim the pointer only past the wider gap, so the endpoint wins the 15-22px overlap zone.
     const ends = focusEnds(arrow, byId, zoom, hideEnd, FOCUS_GRAB_MIN_SCREEN_GAP);
     if (ends.length === 0) return null;
 
     const startDrag = (e: React.PointerEvent, end: 'start' | 'end', shape: VectorBindableElement) => {
-        e.preventDefault();
-        // Claim the gesture before the canvas hit-test so the shape under the dot isn't dragged instead.
-        e.stopPropagation();
-        if (abortRef.current && !abortRef.current.signal.aborted) return;
-        e.currentTarget.setPointerCapture(e.pointerId);
-        frozenRef.current = true;
-        const controller = new AbortController();
-        abortRef.current = controller;
-        const { signal } = controller;
-        const pointerId = e.pointerId;
         let latest: [number, number] | null = null;
-
-        const update = (clientX: number, clientY: number, suppressed: boolean) => {
-            const scene = clientToScene(clientX, clientY);
-            // Eigen extension: magnet the aim onto the shape's snap points (side midpoints + centre),
-            // unless Ctrl/Cmd suppresses it — consistent with every other bind/snap here. The raw pointer is
-            // still handed up so the host lights the SnapDots (the nearest side-midpoint highlights).
-            const snapped = suppressed ? scene : (focusSnapPoint(shape, scene, zoom) ?? scene);
-            const [rx, ry] = bindingAnchor(shape, snapped);
-            const fixedPoint: [number, number] = [clampUnit(rx), clampUnit(ry)];
-            latest = fixedPoint;
-            setDrag({ end, anchor: anchorToScene(shape, fixedPoint) });
-            onPreview(end, fixedPoint, scene);
-        };
-        const teardown = () => {
-            setDrag(null);
-            frozenRef.current = false;
-            controller.abort();
-        };
-        const onMove = (me: PointerEvent) => {
-            if (me.pointerId !== pointerId) return;
-            update(me.clientX, me.clientY, me.ctrlKey || me.metaKey);
-        };
-        const onUp = (pe: PointerEvent) => {
-            if (pe.pointerId !== pointerId) return;
-            teardown();
-            // A click that never moved leaves `latest` null → commit nothing (no spurious re-bind).
-            if (latest) onCommit(end, latest);
-            else onPreview(end, null);
-        };
-        const onKey = (ke: KeyboardEvent) => {
-            if (ke.key !== 'Escape') return;
-            ke.preventDefault();
-            ke.stopPropagation();
-            teardown();
-            onPreview(end, null);
-        };
-        document.addEventListener('pointermove', onMove, { signal });
-        document.addEventListener('pointerup', onUp, { signal });
-        document.addEventListener('pointercancel', onUp, { signal });
-        document.addEventListener('keydown', onKey, { signal, capture: true });
+        startHandleDrag(e, {
+            move: (me) => {
+                const scene = clientToScene(me.clientX, me.clientY);
+                // Eigen extension: magnet the aim onto the shape's snap points (side midpoints + centre),
+                // unless Ctrl/Cmd suppresses it — consistent with every other bind/snap here. The raw pointer
+                // is still handed up so the host lights the SnapDots (the nearest side-midpoint highlights).
+                const suppressed = me.ctrlKey || me.metaKey;
+                const snapped = suppressed ? scene : (focusSnapPoint(shape, scene, zoom) ?? scene);
+                const [rx, ry] = bindingAnchor(shape, snapped);
+                const fixedPoint: [number, number] = [clampUnit(rx), clampUnit(ry)];
+                latest = fixedPoint;
+                setDrag({ end, anchor: anchorToScene(shape, fixedPoint) });
+                onPreview(end, fixedPoint, scene);
+            },
+            end: () => {
+                setDrag(null);
+                // A click that never moved leaves `latest` null → commit nothing (no spurious re-bind).
+                if (latest) onCommit(end, latest);
+                else onPreview(end, null);
+            },
+            cancel: () => {
+                setDrag(null);
+                onPreview(end, null);
+            },
+        });
     };
 
     const dotStyle = (scene: Point): React.CSSProperties => {

@@ -1,16 +1,5 @@
 import { RoughGenerator } from 'roughjs/bin/generator';
-import { isTransparentFill, parseFill } from '../fill';
-import {
-    distanceToPolyline,
-    isClosedLinear,
-    isClosedPath,
-    LINEAR_HIT_SCREEN_FACTOR,
-    linearLocalToScene,
-    linearSceneToLocal,
-    parsePoints,
-    pointInPolygon,
-    serializePoints,
-} from '../geometry';
+import { hitTestLinear, isClosedLinear, linearLocalToScene, parsePoints, serializePoints } from '../geometry';
 import { polylineOutline } from '../outline';
 import { DEFAULT_LINE_ROUNDNESS, DEFAULT_LINEAR_ROUNDNESS, ROUNDNESS, type VectorLinearElement } from '../types';
 import { defineKind } from './kind';
@@ -20,9 +9,6 @@ import { drawableToSvg, fillDefs, linearRoughOptions } from './render-utils';
 export const lineKind = defineKind<VectorLinearElement>({
     type: 'line',
     is: (el): el is VectorLinearElement => el.type === 'line',
-    // `pressures`/`simulatePressure` are the linear family's, and a line stores the "no pressure" pair
-    // ('' + simulate) the reader forces on it — freedraw is the only kind that varies them.
-    fields: ['fill', 'roughness', 'seed', 'points', 'roundness', 'pressures', 'simulatePressure'],
     capabilities: {
         fill: true,
         fillStyle: true,
@@ -42,6 +28,8 @@ export const lineKind = defineKind<VectorLinearElement>({
         seed: 0, // the writer replaces it with a random one; 0 keeps `defaults` pure
         points: '',
         roundness: DEFAULT_LINE_ROUNDNESS,
+        // `pressures`/`simulatePressure` are the linear family's, and a line stores the "no pressure" pair
+        // ('' + simulate) the reader forces on it — freedraw is the only kind that varies them.
         pressures: '',
         simulatePressure: true,
     }),
@@ -61,14 +49,7 @@ export const lineKind = defineKind<VectorLinearElement>({
             simulatePressure: true,
         };
     },
-    hitTest: (el, point, threshold) => {
-        const points = parsePoints(el.points);
-        if (points.length === 0) return false;
-        const p = linearSceneToLocal(el, point);
-        if (distanceToPolyline(points, p) <= Math.max(threshold * LINEAR_HIT_SCREEN_FACTOR, el.strokeWidth / 2 + 0.1))
-            return true;
-        return isClosedPath(points) && !isTransparentFill(parseFill(el.fill)) && pointInPolygon(p, points);
-    },
+    hitTest: (el, point, threshold) => hitTestLinear(el, point, threshold, el.strokeWidth / 2),
     outline: (el) => polylineOutline(parsePoints(el.points).map((p) => linearLocalToScene(el, p))),
     // Lines are roughjs: Excalidraw's line arm — rounded curves through the vertices, sharp linearPaths,
     // and (only when the path loops) a filled polygon/curve.

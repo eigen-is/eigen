@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1303 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1295 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (152)
+## Components (154)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -161,8 +161,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserItem` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-item.tsx |
 | `UserName` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name.tsx |
 | `UserNameCard` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name-card.tsx |
+| `CanvasDocumentShell` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/canvas-document-shell.tsx |
 | `CanvasEditor` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/canvas-editor.tsx |
 | `CanvasPropertiesPanel` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/canvas-properties-panel.tsx |
+| `CanvasToolbar` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/canvas-toolbar.tsx |
 | `FrameThumbnail` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/frame-view.tsx |
 | `FrameView` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/frame-view.tsx |
 | `ToolButtons` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/toolbar-tools.tsx |
@@ -193,7 +195,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (246)
+## Hooks (247)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -423,6 +425,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useProseMirrorSearchController` | `@workspace/ui/components/search/prosemirror-search-controller` | packages/ui/src/components/search/prosemirror-search-controller.ts |
 | `useUpload` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-provider.tsx |
 | `useActiveFrame` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-active-frame.ts |
+| `useCanvasCommentHost` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-comment-host.ts |
 | `useCanvasComments` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-comments.ts |
 | `useCanvasDoc` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-doc.ts |
 | `useCanvasDocSearch` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-doc-search.ts |
@@ -444,7 +447,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (333)
+## Types (320)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -665,50 +668,37 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ArrangeOp` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
 | `ArrangePatch` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
 | `Arrowhead` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `ArrowheadGeometry` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `ArrowShape` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `Binding` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `Bounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `Box` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `CanvasViewport` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
-| `Capabilities` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
 | `Corners` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `CreationToolType` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
-| `CubicBezier` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
-| `ElementKind` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
 | `ElementKindRegistry` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
-| `ElementLayerOptions` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `ElementOfType` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `Extent` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `FillStyle` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `FixedSegment` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `FontMetrics` | `@workspace/lib/vector` | packages/lib/src/vector/font-metrics.ts |
-| `FontStyle` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `FontWeight` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `ImageSize` | `@workspace/lib/vector` | packages/lib/src/vector/image-fit.ts |
 | `Layer` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
-| `LayerBoxCss` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `MarqueeMode` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `MediaResolver` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
 | `ObjectFit` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `OutlineShape` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
-| `ParsedFixedSegments` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `PinPatch` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `PinRoutingContext` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `Point` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `RenderOutput` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
 | `Roundness` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `SceneLayersOptions` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `SceneToSvgOptions` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
-| `SearchSceneOptions` | `@workspace/lib/vector` | packages/lib/src/vector/search-scene.ts |
 | `SnapLine` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `SnapResult` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `SnapTargets` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `StrokeStyle` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `StyleDefaults` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
 | `TextAlign` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `TextDecoration` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorArrowElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `VectorBindableElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorDiamondElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorElementBase` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -782,7 +772,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorToolEntry` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (557)
+## Utilities & constants (559)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1120,6 +1110,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `buildElementsClipboardItem` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
 | `capabilitiesOf` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `chromeTransform` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
+| `clamp` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `clampFrameViewport` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `COARSE_HIT_SLOP_MULTIPLIER` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `commentAnchorTexts` | `@workspace/lib/vector` | packages/lib/src/vector/comments.ts |
@@ -1143,7 +1134,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DEFAULT_RICHTEXT_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_SCENE_META` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_SKETCH_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `defineKind` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
 | `diamondOutline` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `distanceToPolyline` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `distanceToSegment` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
@@ -1190,9 +1180,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `hitTestDiamond` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `hitTestElement` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `hitTestEllipse` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `hitTestLinear` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `hitThresholdScreen` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `IMAGE_CASCADE_OFFSET` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
-| `isBindable` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `isBindable` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `isClosedLinear` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `isClosedPath` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `isColorToken` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
@@ -1213,6 +1204,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `moveEndpoints` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `moveSegment` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `nearestFrameId` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
+| `nearestPoint` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `normalizeAngle` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `normalizeFixedPoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `normalizeLinear` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1274,7 +1266,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `serializePressures` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `shapeAnchorPoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `sharpDiamondOffset` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
-| `SLIDES_STYLE_DEFAULTS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
+| `SLIDES_STYLE_DEFAULTS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
 | `SNAP_SCREEN_THRESHOLD` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `snapAngle` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `snapBoxToTargets` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
@@ -1293,7 +1285,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `unpinSegment` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `validateElbowPoints` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `validateOrderKey` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
-| `VECTOR_STYLE_DEFAULTS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
+| `VECTOR_STYLE_DEFAULTS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
 | `VERTICAL_ALIGNS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `alphaGroupKey` | `@workspace/ui` | packages/ui/src/components/alphabetical-list.tsx |
 | `FILTER_LABELS` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |

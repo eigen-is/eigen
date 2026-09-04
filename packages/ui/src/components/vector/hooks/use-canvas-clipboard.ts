@@ -44,8 +44,8 @@ import { remapPastedArrows } from '../tools/binding';
 import { elementBox } from '../tools/boxes';
 import { buildSelectionData, selectionPlainText, toVectorTextAlign } from '../tools/clipboard';
 import { type PastePlan, planElementsPaste } from '../tools/paste-elements';
+import { deleteSelection } from './selection-ops';
 import type { NewVectorElement, VectorElementPatch } from './use-canvas-doc';
-import { deleteSelection } from './use-canvas-keyboard';
 
 type CanvasClipboardParams = {
     canEdit: boolean;

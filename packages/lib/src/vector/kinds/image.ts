@@ -9,7 +9,6 @@ export const imageKind = defineKind<VectorImageElement>({
     type: 'image',
     is: (el): el is VectorImageElement => el.type === 'image',
     // no `roughness`/`seed`: an image is a DOM box, roughjs never touches it
-    fields: ['mediaName', 'corners', 'objectFit'],
     capabilities: {
         fill: false,
         fillStyle: false,

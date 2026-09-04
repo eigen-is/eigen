@@ -4,13 +4,14 @@
 
 import { moveEndpoints, renormalize } from './elbow-pins';
 import { elbowRoutingContext } from './elbow-route';
+import { isTransparentFill, parseFill } from './fill';
 import { getLineHeightPx } from './font-metrics';
 // The registry imports geometry's box primitives and geometry dispatches through the registry: one
 // deliberate cycle. Safe because every export on both sides is a hoisted `function` declaration and no
 // module body calls across the cycle while either is still evaluating (test/vector/kinds/cycle.test.ts
 // pins both entry orders).
 import { ELEMENT_KINDS, isBindable } from './kinds';
-import { distanceToSegment, outlineHits, segSegIntersect } from './outline';
+import { clamp, distanceToSegment, nearestPoint, outlineHits, segSegIntersect } from './outline';
 import {
     type Arrowhead,
     parseBinding,
@@ -300,6 +301,18 @@ export function distanceToPolyline(points: Point[], point: Point): number {
     return min;
 }
 
+// The polyline kinds' hit test: the probe unrotated into the element's local frame, measured to the
+// polyline within the LARGER of the scaled screen threshold and the drawn ink half-width (+0.1); a
+// closed, filled path is also hit anywhere inside. `inkHalf` differs per kind — freedraw's stroke is
+// FREEDRAW_SIZE_FACTOR wider than its strokeWidth.
+export function hitTestLinear(el: VectorLinearElement, point: Point, threshold: number, inkHalf: number): boolean {
+    const points = parsePoints(el.points);
+    if (points.length === 0) return false;
+    const p = linearSceneToLocal(el, point);
+    if (distanceToPolyline(points, p) <= Math.max(threshold * LINEAR_HIT_SCREEN_FACTOR, inkHalf + 0.1)) return true;
+    return isClosedPath(points) && !isTransparentFill(parseFill(el.fill)) && pointInPolygon(p, points);
+}
+
 export function isClosedPath(points: Point[]): boolean {
     if (points.length < 3) return false;
     const first = points[0];
@@ -497,7 +510,11 @@ export function projectFixedPointOntoDiagonal(
 // arrow's chord anchor off the box. An elbow end reads through elbowAnchorScene instead — its stored
 // fixedPoint is the outline+gap dock, deliberately a little outside [0,1], so it must NOT be unit-clamped.
 export function anchorToScene(shape: VectorBindableElement, fixedPoint: [number, number]): Point {
-    const [fx, fy] = clampUnit(fixedPoint);
+    return ratioToScene(shape, clampUnit(fixedPoint));
+}
+
+// A [0,1]-ish ratio pair placed on the shape's current box and rotated with it.
+function ratioToScene(shape: VectorBindableElement, [fx, fy]: [number, number]): Point {
     return rotatePoint(
         { x: shape.x + shape.width * fx, y: shape.y + shape.height * fy },
         boxCenter(shape),
@@ -516,10 +533,7 @@ function clampUnit([fx, fy]: [number, number]): [number, number] {
 export function normalizeFixedPoint([fx, fy]: [number, number]): [number, number] {
     const cx = clamp(fx, -FIXED_POINT_BOUND, FIXED_POINT_BOUND);
     const cy = clamp(fy, -FIXED_POINT_BOUND, FIXED_POINT_BOUND);
-    if (Math.abs(cx - 0.5) < FIXED_POINT_EPSILON || Math.abs(cy - 0.5) < FIXED_POINT_EPSILON) {
-        return [dodgeHalf(cx), dodgeHalf(cy)];
-    }
-    return [cx, cy];
+    return [dodgeHalf(cx), dodgeHalf(cy)];
 }
 
 function dodgeHalf(ratio: number): number {
@@ -531,35 +545,17 @@ function dodgeHalf(ratio: number): number {
 // fixedPoint already encodes the outline+gap dock (elbowBindPoint), so this sits the endpoint on the
 // anchor's own side and holds it there no matter where the other end moves.
 export function elbowAnchorScene(shape: VectorBindableElement, fixedPoint: [number, number]): Point {
-    const [fx, fy] = normalizeFixedPoint(fixedPoint);
-    return rotatePoint(
-        { x: shape.x + shape.width * fx, y: shape.y + shape.height * fy },
-        boxCenter(shape),
-        shape.angle,
-    );
+    return ratioToScene(shape, normalizeFixedPoint(fixedPoint));
 }
 
 // Where the segment from → anchor crosses the shape's outline inflated by `gap`, nearest to `from`; the
 // anchor itself when it never crosses. Everything happens in the shape's unrotated local frame — the
 // registry's outline, corner arcs and all — then the hit rotates back by the shape's angle.
 export function outlinePoint(shape: VectorBindableElement, from: Point, anchor: Point, gap: number): Point {
-    const center = boxCenter(shape);
-    const a = rotatePoint(from, center, -shape.angle);
-    const b = rotatePoint(anchor, center, -shape.angle);
     // Extend past the anchor so a far endpoint still reaches the inflated outline.
-    const far = extendPast(a, b, Math.max(shape.width, shape.height) + 2 * gap);
-    const hits = shapeOutlineHits(shape, a, far, gap);
-    if (hits.length === 0) return anchor;
-    let best = hits[0];
-    let bestDist = distSq(a, best);
-    for (const h of hits) {
-        const d = distSq(a, h);
-        if (d < bestDist) {
-            bestDist = d;
-            best = h;
-        }
-    }
-    return rotatePoint(best, center, shape.angle);
+    const far = extendPast(from, anchor, Math.max(shape.width, shape.height) + 2 * gap);
+    const hits = outlineIntersections(shape, from, far, gap);
+    return hits.length === 0 ? anchor : nearestPoint(hits, from);
 }
 
 // All intersections of the SCENE segment a→b with `shape`'s outline inflated outward by `gap`, in scene
@@ -572,7 +568,7 @@ export function outlineIntersections(shape: VectorBindableElement, a: Point, b: 
     return shapeOutlineHits(shape, la, lb, gap).map((h) => rotatePoint(h, center, shape.angle));
 }
 
-export type CubicBezier = [Point, Point, Point, Point];
+type CubicBezier = [Point, Point, Point, Point];
 
 // The arrow curve's parametric form — the ONE geometry-side owner of the shape roughjs's `gen.curve`
 // draws for a round (non-elbow) arrow. Golden-locked by test to roughjs's `_curve` control points at
@@ -649,16 +645,7 @@ function curveOutlineDock(
             const pt = cubicAt(bez, s / CURVE_DOCK_SAMPLES);
             if (prev) {
                 const hits = outlineIntersections(shape, prev, pt, gap);
-                let best: Point | null = null;
-                let bestDist = Number.POSITIVE_INFINITY;
-                for (const h of hits) {
-                    const d = distSq(prev, h);
-                    if (d < bestDist) {
-                        bestDist = d;
-                        best = h;
-                    }
-                }
-                if (best) return best;
+                if (hits.length > 0) return nearestPoint(hits, prev);
             }
             prev = pt;
         }
@@ -718,41 +705,32 @@ export function followBindings(
     if (!start && !end) return null;
     const points = parsePoints(arrow.points);
     if (points.length < 2) return null;
+    let patch: { x: number; y: number; width: number; height: number; points: string; fixedSegments: string };
     // PINNED: keep the interior polyline + pins verbatim, move only the bound endpoints and re-drop
     // their connector pairs (moveEndpoints), then renormalize as the sealed write. The A* router never runs.
     if (arrow.fixedSegments !== '') {
         const newStart = start ? boundEndpoint(arrow, 'start', start) : null;
         const newEnd = end ? boundEndpoint(arrow, 'end', end) : null;
         const moved = moveEndpoints(arrow, newStart, newEnd, elbowRoutingContext(arrow, byId));
-        const patch = renormalize({ ...arrow, ...moved });
-        if (
-            patch.points === arrow.points &&
-            patch.x === arrow.x &&
-            patch.y === arrow.y &&
-            patch.width === arrow.width &&
-            patch.height === arrow.height &&
-            patch.fixedSegments === arrow.fixedSegments
-        ) {
-            return null;
-        }
-        return patch;
+        patch = renormalize({ ...arrow, ...moved });
+    } else {
+        // DERIVED: recompute the two endpoints and re-normalize (unchanged pre-pin behaviour).
+        const next = points.map((p) => ({ ...p }));
+        if (start) next[0] = linearSceneToLocal(arrow, boundEndpoint(arrow, 'start', start));
+        if (end) next[next.length - 1] = linearSceneToLocal(arrow, boundEndpoint(arrow, 'end', end));
+        patch = { ...normalizeLinear(arrow, next), fixedSegments: '' };
     }
-
-    // DERIVED: recompute the two endpoints and re-normalize (unchanged pre-pin behaviour).
-    const next = points.map((p) => ({ ...p }));
-    if (start) next[0] = linearSceneToLocal(arrow, boundEndpoint(arrow, 'start', start));
-    if (end) next[next.length - 1] = linearSceneToLocal(arrow, boundEndpoint(arrow, 'end', end));
-    const result = normalizeLinear(arrow, next);
     if (
-        result.points === arrow.points &&
-        result.x === arrow.x &&
-        result.y === arrow.y &&
-        result.width === arrow.width &&
-        result.height === arrow.height
+        patch.points === arrow.points &&
+        patch.x === arrow.x &&
+        patch.y === arrow.y &&
+        patch.width === arrow.width &&
+        patch.height === arrow.height &&
+        patch.fixedSegments === arrow.fixedSegments
     ) {
         return null;
     }
-    return { ...result, fixedSegments: '' };
+    return patch;
 }
 
 export function boundShape(binding: string, byId: Map<string, VectorElement>): VectorBindableElement | null {
@@ -778,7 +756,7 @@ export function remapBinding(binding: string, idMap: Map<string, string>): strin
     return mapped ? serializeBinding({ elementId: mapped, fixedPoint: b.fixedPoint }) : '';
 }
 
-export type ArrowheadGeometry =
+type ArrowheadGeometry =
     | { kind: 'barbs'; tip: Point; barb1: Point; barb2: Point }
     | { kind: 'circle'; center: Point; diameter: number };
 
@@ -855,16 +833,6 @@ function extendPast(a: Point, b: Point, ext: number): Point {
     const len = Math.hypot(dx, dy);
     if (len === 0) return b;
     return { x: b.x + (dx / len) * ext, y: b.y + (dy / len) * ext };
-}
-
-function distSq(a: Point, b: Point): number {
-    const dx = a.x - b.x;
-    const dy = a.y - b.y;
-    return dx * dx + dy * dy;
-}
-
-function clamp(v: number, lo: number, hi: number): number {
-    return Math.min(hi, Math.max(lo, v));
 }
 
 // --- Resize / rotate transform math ---------------------------------------------------

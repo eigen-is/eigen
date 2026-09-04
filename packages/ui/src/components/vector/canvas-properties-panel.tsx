@@ -24,7 +24,6 @@ import {
     DEFAULT_FONT_FAMILY,
     type FillStyle,
     isLinearElement,
-    isTransparentColor,
     isTransparentFill,
     normalizeLinear,
     parseFill,
@@ -62,8 +61,8 @@ import {
 } from '@workspace/ui/components/properties-panel';
 import type { ReactNode } from 'react';
 import type * as Y from 'yjs';
+import { applyZOrder } from './hooks/selection-ops';
 import type { VectorElementPatch } from './hooks/use-canvas-doc';
-import { applyZOrder } from './hooks/use-canvas-keyboard';
 import { ELEMENT_KIND_UI } from './kinds';
 import { loadVectorFont, measureVectorText } from './text-measure';
 
@@ -318,15 +317,9 @@ export function CanvasPropertiesPanel({
     // A transparent solid is "no fill", which is BackgroundFillBlock's `null` — one vocabulary.
     const parsedFill = typeof fillRaw === 'string' ? parseFill(fillRaw) : null;
     const fillValue = parsedFill && !isTransparentFill(parsedFill) ? parsedFill : null;
-    const fillStyle = getMergedValue(selectedElements, (el) =>
-        capabilitiesOf(el).fillStyle && 'fill' in el ? parseFill(el.fill).style : undefined,
-    );
-    const roughness = getMergedValue(selectedElements, (el) =>
-        capabilitiesOf(el).roughness && 'roughness' in el ? el.roughness : undefined,
-    );
-    const corners = getMergedValue(selectedElements, (el) =>
-        capabilitiesOf(el).corners && 'corners' in el ? el.corners : undefined,
-    );
+    const fillStyle = getMergedValue(selectedElements, (el) => ('fill' in el ? parseFill(el.fill).style : undefined));
+    const roughness = getMergedValue(selectedElements, (el) => ('roughness' in el ? el.roughness : undefined));
+    const corners = getMergedValue(selectedElements, (el) => ('corners' in el ? el.corners : undefined));
     const roundness = getMergedValue(selectedElements, (el) => ('roundness' in el ? el.roundness : undefined));
     const opacity = getMergedValue(selectedElements, (el) => el.opacity);
     const arrowShape = getMergedValue(arrowEls, (el) => arrowShapeOf(el));
@@ -458,35 +451,19 @@ export function CanvasPropertiesPanel({
                     {/* Arrows carry the 3-way Type row (sharp/curved/elbow); lines & shapes keep Edges. An
                             elbow reuses Edges as its CORNER style (sharp bends vs round arcs) — its shaft is
                             always orthogonal, so roundness is free to mean the corners. */}
-                    {allArrow ? (
-                        <>
-                            <PropertyRow label="Type">
-                                <MergedSelect
-                                    value={arrowShape}
-                                    onChange={applyArrowShape}
-                                    options={ARROW_SHAPE_OPTIONS}
-                                />
-                            </PropertyRow>
-                            {allElbow && (
-                                <PropertyRow label="Edges">
-                                    <MergedSelect
-                                        value={roundness}
-                                        onChange={(v) => applyToAll({ roundness: v })}
-                                        options={EDGES_OPTIONS}
-                                    />
-                                </PropertyRow>
-                            )}
-                        </>
-                    ) : (
-                        allRoundable && (
-                            <PropertyRow label="Edges">
-                                <MergedSelect
-                                    value={roundness}
-                                    onChange={(v) => applyToAll({ roundness: v })}
-                                    options={EDGES_OPTIONS}
-                                />
-                            </PropertyRow>
-                        )
+                    {allArrow && (
+                        <PropertyRow label="Type">
+                            <MergedSelect value={arrowShape} onChange={applyArrowShape} options={ARROW_SHAPE_OPTIONS} />
+                        </PropertyRow>
+                    )}
+                    {(allArrow ? allElbow : allRoundable) && (
+                        <PropertyRow label="Edges">
+                            <MergedSelect
+                                value={roundness}
+                                onChange={(v) => applyToAll({ roundness: v })}
+                                options={EDGES_OPTIONS}
+                            />
+                        </PropertyRow>
                     )}
                 </PropertySection>
             )}
@@ -544,7 +521,7 @@ export function CanvasPropertiesPanel({
                                 frame's background is a Fill and its panel is the host's. */}
                             <ColorRow
                                 label="Background"
-                                value={isTransparentColor(meta.background) ? '' : meta.background}
+                                value={meta.background}
                                 onChange={(c) => updateMeta({ background: c || TRANSPARENT_COLOR })}
                                 showReset
                             />

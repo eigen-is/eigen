@@ -39,13 +39,6 @@ describe('ELEMENT_KINDS', () => {
         }
     });
 
-    test('every kind defaults to a complete element when merged with the base', () => {
-        for (const kind of Object.values(ELEMENT_KINDS)) {
-            const defaults = kind.defaults(VECTOR_STYLE_DEFAULTS);
-            expect(Object.keys(defaults).sort()).toEqual([...kind.fields].sort());
-        }
-    });
-
     test('a kind ignores an element of another kind instead of throwing', () => {
         const rect = shape({ id: 'r', type: 'rectangle' });
         expect(ELEMENT_KINDS.arrow.searchText(rect)).toBe('');

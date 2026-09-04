@@ -1,8 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { EigenDocRouteStatus, RequestAccessView } from '@workspace/ui';
 import { eigenDocEditorValidateSearch } from '@workspace/ui/components/drive';
-import { DriveAccessDialog } from '@workspace/ui/components/drive/drive-access-dialog';
-import { useEigenDocEditorRoute, useLatchedDocSearchTerm } from '@workspace/ui/hooks/use-eigen-doc-editor-route';
+import { EigenDocEditorRoute } from '@workspace/ui/components/layout/app/eigen-doc-editor-route';
+import { useLatchedDocSearchTerm } from '@workspace/ui/hooks/use-eigen-doc-editor-route';
 import { useCallback } from 'react';
 import { StickiesBoard } from '../components/stickies/board';
 
@@ -16,19 +15,6 @@ function StickiesRoute() {
     const { chat, card, q } = Route.useSearch();
     const navigate = useNavigate();
     const initialSearchTerm = useLatchedDocSearchTerm(q);
-    const {
-        docInfo,
-        isError,
-        error,
-        refetch,
-        path,
-        chatFolderId,
-        mediaFolderId,
-        accessDialogOpen,
-        openAccessDialog,
-        setAccessDialogOpen,
-    } = useEigenDocEditorRoute(ownerId, mountId, pathId);
-
     const handleClearChat = useCallback(() => {
         navigate({
             to: Route.fullPath,
@@ -47,27 +33,19 @@ function StickiesRoute() {
         });
     }, [navigate, ownerId, mountId, pathId]);
 
-    if (!docInfo) return <EigenDocRouteStatus isError={isError} error={error} onRetry={refetch} />;
-    if (!docInfo.canRead || !path) {
-        return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId} />;
-    }
-
     return (
-        <>
-            <StickiesBoard
-                ownerId={ownerId}
-                path={path}
-                canWrite={docInfo.canWrite}
-                chatFolderId={chatFolderId}
-                mediaFolderId={mediaFolderId}
-                onAccessDialogOpen={openAccessDialog}
-                initialChatName={chat}
-                onClearInitialChat={handleClearChat}
-                initialSearchTerm={initialSearchTerm}
-                initialCardId={card}
-                onClearInitialCard={handleClearCard}
-            />
-            <DriveAccessDialog open={accessDialogOpen} onOpenChange={setAccessDialogOpen} path={path} />
-        </>
+        <EigenDocEditorRoute ownerId={ownerId} mountId={mountId} pathId={pathId}>
+            {(props) => (
+                <StickiesBoard
+                    ownerId={ownerId}
+                    {...props}
+                    initialChatName={chat}
+                    onClearInitialChat={handleClearChat}
+                    initialSearchTerm={initialSearchTerm}
+                    initialCardId={card}
+                    onClearInitialCard={handleClearCard}
+                />
+            )}
+        </EigenDocEditorRoute>
     );
 }

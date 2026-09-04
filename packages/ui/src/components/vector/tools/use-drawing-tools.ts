@@ -34,6 +34,7 @@ import {
 import { createElement, Fragment, type MutableRefObject, type ReactNode, useEffect, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 import { isTypingTarget } from '../../../hooks/is-typing-target';
+import { randomSeed } from '../hooks/element-writes';
 import type { NewVectorElement, VectorElementPatch } from '../hooks/use-canvas-doc';
 import type { VectorTool } from '../hooks/use-tool';
 import { FocusIndicators, FocusPointHandles, SnapDots } from './arrow-affordances';
@@ -65,10 +66,6 @@ const LINE_DRAG_SCREEN = 4;
 
 const PREVIEW_ID = '__drawing__';
 const EMPTY_IDS: Set<string> = new Set();
-
-function randomSeed(): number {
-    return Math.floor(Math.random() * 2 ** 31);
-}
 
 function dist(a: Point, b: Point): number {
     return Math.hypot(a.x - b.x, a.y - b.y);
@@ -142,7 +139,7 @@ type DrawingToolsParams = {
     undoManager: Y.UndoManager | null;
 };
 
-export type DrawingTools = {
+type DrawingTools = {
     // A freehand/line/eraser gesture is in flight (chrome is suppressed for it, like create/marquee).
     active: boolean;
     // A multi-point line/arrow draft is collecting clicks — drives the finish hint.
@@ -253,11 +250,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     const setBindShape = (shape: VectorBindableElement | undefined, pointer: Point, elbow: boolean) =>
         setBindHint(shape ? { shapeId: shape.id, pointer, elbow } : null);
     // The bindable shape an endpoint at `scene` reaches (null when nothing reaches / binding is suppressed).
-    const candidateShape = (scene: Point, suppressed: boolean): VectorBindableElement | undefined => {
-        const id = bindingCandidate(ordered, scene, liveZoom(), suppressed);
-        const shape = id ? ordered.find((el) => el.id === id) : undefined;
-        return shape && isBindable(shape) ? shape : undefined;
-    };
+    const candidateShape = (scene: Point, suppressed: boolean): VectorBindableElement | undefined =>
+        bindingCandidate(ordered, scene, liveZoom(), suppressed) ?? undefined;
     // The elbow dock ratio to store at an endpoint (the point-handle path, event-less → reads suppressRef).
     const elbowBindFor = (
         scene: Point,
@@ -914,19 +908,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             : null;
 
     // --- Escape / Enter / double-click / blur (capture phase, latest closures via a ref) ----------
-    const apiRef = useRef<{
-        escape: () => boolean;
-        finish: () => boolean;
-        deleteSelectedPoint: () => boolean;
-        blur: () => void;
-    }>({
-        escape: () => false,
-        finish: () => false,
-        deleteSelectedPoint: () => false,
-        blur: () => {},
-    });
-    apiRef.current = {
-        escape: () => {
+    const api = {
+        escape: (): boolean => {
             if (strokeRef.current) {
                 cancelFreedraw();
                 return true;
@@ -953,7 +936,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             }
             return false;
         },
-        finish: () => {
+        finish: (): boolean => {
             if (!lineRef.current) return false;
             finishLineWith(lineRef.current.committed);
             return true;
@@ -964,7 +947,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         // arrow (route derived, no editable interior) is a no-op — but we STILL consume the key so it
         // cannot fall through and delete the element out from under a selected point. With no point
         // selected we return false and selection-delete removes the whole element as usual.
-        deleteSelectedPoint: () => {
+        deleteSelectedPoint: (): boolean => {
             // A selected PIN unpins — precedence over vertex/element delete, one sealed step.
             if (
                 selectedPinIndex !== null &&
@@ -1012,6 +995,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             else if (lineRef.current) finishLineWith(lineRef.current.committed);
         },
     };
+    const apiRef = useRef(api);
+    apiRef.current = api;
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {

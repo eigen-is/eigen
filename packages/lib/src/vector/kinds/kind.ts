@@ -7,6 +7,7 @@
 // callers rotate around the element centre). `render(el, ctx)` draws in the element's LOCAL frame
 // (origin at its top-left) — elementToSvg's <g transform> is what places and rotates it.
 
+import { serializeFill, TRANSPARENT_FILL } from '../fill';
 import { type Bounds, boxCenter, getElementBounds, type Point, rotatePoint } from '../geometry';
 import type { OutlineShape } from '../outline';
 import type { Corners, VectorElement, VectorElementBase } from '../types';
@@ -56,9 +57,9 @@ export type Capabilities = {
 };
 
 // The base fields a kind may start a new element with other than the shared table's value.
-export type BasePaintDefaults = Partial<Pick<VectorElementBase, 'strokeColor' | 'strokeWidth' | 'strokeStyle'>>;
+type BasePaintDefaults = Partial<Pick<VectorElementBase, 'strokeColor' | 'strokeWidth' | 'strokeStyle'>>;
 
-export type RenderContext = {
+type RenderContext = {
     resolveMedia?: (mediaName: string) => string | null;
     // An elbow arrow's derived route; without it the arrow falls back to its stored endpoints.
     route?: Point[];
@@ -73,11 +74,9 @@ export type RenderOutput = { svg: string } | { html: string; style: string };
 // handful of keys they happen to share.
 type KindFields<T extends VectorElement> = T extends VectorElement ? Omit<T, keyof VectorElementBase> : never;
 
-export type KindSpec<T extends VectorElement> = {
+type KindSpec<T extends VectorElement> = {
     type: T['type'];
     is(el: VectorElement): el is T;
-    // The stored keys BEYOND the base set. ELEMENT_FIELDS is BASE_ELEMENT_FIELDS plus every kind's.
-    fields: readonly string[];
     capabilities: Capabilities;
     defaults(style: StyleDefaults): KindFields<T>;
     // Overrides of the shared base defaults for a NEW element of this kind. The DOM-box kinds use the
@@ -92,8 +91,6 @@ export type KindSpec<T extends VectorElement> = {
     bounds?(el: T, route?: Point[]): Bounds;
     hitTest(el: T, point: Point, threshold: number, route?: Point[]): boolean;
     outline(el: T, inflate: number): OutlineShape;
-    // The four dock anchors in SCENE space, right/bottom/left/top. Omit for the box default.
-    anchorPoints?(el: T): Point[];
     // The two lines a straight arrow's bind-time aim projects onto. Omit for the box default.
     aimLines?(el: T): [[Point, Point], [Point, Point]];
     render(el: T, ctx: RenderContext): RenderOutput;
@@ -153,13 +150,43 @@ function boxAimLines(el: VectorElement): [[Point, Point], [Point, Point]] {
     ];
 }
 
+// The vector app's style table: roughness 1, hachure, Excalifont, curved corners (SLIDES_STYLE_DEFAULTS
+// is the deck's flat counterpart). A fresh element starts unpainted but hatched — the hatch style rides
+// the fill, so the first colour the user picks lands as hachure.
+export const VECTOR_STYLE_DEFAULTS: StyleDefaults = {
+    strokeColor: '#1e1e1e',
+    strokeWidth: 2,
+    fill: serializeFill({ ...TRANSPARENT_FILL, style: 'hachure' }),
+    roughness: 1,
+    corners: 'curved',
+    fontFamily: 'Excalifont',
+    fontSize: 20,
+    color: '#1e1e1e',
+};
+
+// The deck's style table: flat and solid in Inter, the way a presentation reads. Same keys, same
+// meaning — a host's table decides how a NEW element looks, never which kinds exist. There is no text
+// alignment here because StyleDefaults has none: a fresh box starts top-left in both apps.
+export const SLIDES_STYLE_DEFAULTS: StyleDefaults = {
+    strokeColor: '#1e1e1e',
+    strokeWidth: 2,
+    fill: serializeFill({ ...TRANSPARENT_FILL, style: 'solid' }),
+    roughness: 0,
+    corners: 'curved',
+    fontFamily: 'Inter',
+    fontSize: 48,
+    color: '#000000',
+};
+
 // Widen a narrow-typed kind into the union-typed registry entry. Each method re-narrows through the
 // kind's own guard, so no call site needs a cast and a mis-dispatch degrades quietly instead of
 // throwing on a render path.
 export function defineKind<T extends VectorElement>(spec: KindSpec<T>): ElementKind<T> {
     return {
         type: spec.type,
-        fields: spec.fields,
+        // The stored keys BEYOND the base set, read off `defaults` so a kind declares them once.
+        // Every kind's defaults are pure and unconditional, so one call at module-eval answers for good.
+        fields: Object.keys(spec.defaults(VECTOR_STYLE_DEFAULTS)),
         capabilities: spec.capabilities,
         capabilitiesOf: (el) =>
             spec.is(el) && spec.capabilitiesOf
@@ -171,7 +198,7 @@ export function defineKind<T extends VectorElement>(spec: KindSpec<T>): ElementK
         bounds: (el, route) => (spec.is(el) && spec.bounds ? spec.bounds(el, route) : getElementBounds(el)),
         hitTest: (el, point, threshold, route) => (spec.is(el) ? spec.hitTest(el, point, threshold, route) : false),
         outline: (el, inflate) => (spec.is(el) ? spec.outline(el, inflate) : EMPTY_OUTLINE),
-        anchorPoints: (el) => (spec.is(el) && spec.anchorPoints ? spec.anchorPoints(el) : boxAnchorPoints(el)),
+        anchorPoints: boxAnchorPoints,
         aimLines: (el) => (spec.is(el) && spec.aimLines ? spec.aimLines(el) : boxAimLines(el)),
         render: (el, ctx) => (spec.is(el) ? spec.render(el, ctx) : { svg: '' }),
         searchText: (el) => (spec.is(el) && spec.searchText ? spec.searchText(el) : ''),

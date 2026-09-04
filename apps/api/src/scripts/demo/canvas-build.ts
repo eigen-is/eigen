@@ -1,3 +1,5 @@
+import * as Y from 'yjs';
+
 // What the two canvas builders share. deck-build.ts and vector-build.ts write the same element
 // records into the same Y.Doc shape, so the anchor-side order, the zero box and the PRNG live here
 // once — three copies drifting apart is three demos that no longer reseed identically.
@@ -9,6 +11,17 @@ export const SIDE_INDEX: Record<CanvasSide, number> = { right: 0, bottom: 1, lef
 
 // normalizeLinear rebases a route onto its own bounds, so the box it starts from is empty.
 export const ZERO_BOX = { x: 0, y: 0, width: 0, height: 0, angle: 0 } as const;
+
+// One element/frame record → its Y.Map, filtered through the stored-field allow-list so a spec-only
+// key can never reach the doc.
+export function toYMap(source: object, fields: readonly string[]): Y.Map<unknown> {
+    const allowed = new Set(fields);
+    const map = new Y.Map<unknown>();
+    for (const [key, value] of Object.entries(source)) {
+        if (value !== undefined && allowed.has(key)) map.set(key, value);
+    }
+    return map;
+}
 
 // mulberry32 — a tiny deterministic PRNG, one draw per element (matches addElement's seed range).
 export function mulberry32(seed: number): () => number {

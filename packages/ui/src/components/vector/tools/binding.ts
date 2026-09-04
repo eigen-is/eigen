@@ -62,7 +62,7 @@ export function bindingCandidate(
     point: Point,
     zoom: number,
     suppressed: boolean,
-): string | null {
+): VectorBindableElement | null {
     if (suppressed) return null;
     const distance = bindingDistance(zoom);
     let best: VectorBindableElement | null = null;
@@ -70,7 +70,7 @@ export function bindingCandidate(
         if (!isBindable(el) || !reaches(el, point, distance)) continue;
         if (!best || el.width * el.height < best.width * best.height) best = el;
     }
-    return best ? best.id : null;
+    return best;
 }
 
 // The shape-following highlight over a bindable target: the kind's OWN outline — the one the dock is
@@ -118,10 +118,8 @@ function bindingFor(
     zoom: number,
     suppressed: boolean,
 ): string {
-    const id = bindingCandidate(ordered, scene, zoom, suppressed);
-    if (!id) return '';
-    const shape = ordered.find((el) => el.id === id);
-    if (!shape || !isBindable(shape)) return '';
+    const shape = bindingCandidate(ordered, scene, zoom, suppressed);
+    if (!shape) return '';
     // Straight arrows aim the stored ratio through a natural line — project the raw endpoint onto the shape's
     // diagonals / centre lines (or snap to a side midpoint), Excalidraw's bind-time nicety that makes fresh
     // arrows point through the middle rather than at wherever the cursor landed. But that projection is the
@@ -134,7 +132,7 @@ function bindingFor(
         arrow.elbow || pointInsideShape(shape, scene)
             ? scene
             : (projectFixedPointOntoDiagonal(shape, scene, otherEnd, arrow, zoom) ?? scene);
-    return serializeBinding({ elementId: id, fixedPoint: bindingAnchor(shape, focus) });
+    return serializeBinding({ elementId: shape.id, fixedPoint: bindingAnchor(shape, focus) });
 }
 
 // Resolve an arrow's bindings on commit (creation or an endpoint-handle drag). For each end flagged in

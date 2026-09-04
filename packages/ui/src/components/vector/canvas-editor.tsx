@@ -40,7 +40,7 @@ import {
 import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
 import { cn } from '@workspace/ui/lib/utils';
 import { Image as ImageIcon, MessageSquare } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isTypingTarget } from '../../hooks/is-typing-target';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
 import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
@@ -53,9 +53,11 @@ import type { ZOp } from '../properties-panel/z-order';
 import { CanvasObjectMenu } from './canvas-object-menu';
 import { pointerCursor } from './cursor';
 import { ElementLayer } from './element-layer';
+import { randomSeed } from './hooks/element-writes';
+import { applyZOrder, deleteSelection, duplicateSelection } from './hooks/selection-ops';
 import { useCanvasClipboard } from './hooks/use-canvas-clipboard';
 import type { CanvasDoc, NewVectorElement, VectorElementPatch } from './hooks/use-canvas-doc';
-import { applyZOrder, deleteSelection, duplicateSelection, useCanvasKeyboard } from './hooks/use-canvas-keyboard';
+import { useCanvasKeyboard } from './hooks/use-canvas-keyboard';
 import { type CanvasPeerState, type PublishCursor, peerOnFrame } from './hooks/use-canvas-presence';
 import { hitTestTopmost, marqueeSelect } from './hooks/use-selection';
 import { useSpaceHeld } from './hooks/use-space-held';
@@ -532,12 +534,6 @@ export function CanvasEditor({
         setEditing(ed);
     };
 
-    // The overlay awaits loadVectorFont on open, so commit-time measureVectorText is normally exact.
-    // The safety net for the rare commit-before-load-resolves race: if the face isn't loaded, load it
-    // and re-measure into the element once it swaps in (self-healing — stored dims are the server
-    // renderer's source of truth, and the measurement util stays the sole dim writer). Re-validated
-    // against the LIVE element at resolve time: a newer edit (text/font/size) owns the dims, so a
-    // slow load can never write stale dims over it — and the single .then can't loop.
     // What this canvas sees (frame-scoped in frame mode) — the snap builder, the resize/move selection
     // paths and the label heal read it. `elementsRef` stays the WHOLE scene: a pending image on another
     // frame is still this tab's to sweep.
@@ -616,6 +612,12 @@ export function CanvasEditor({
         },
     });
 
+    // The overlay awaits loadVectorFont on open, so commit-time measureVectorText is normally exact.
+    // The safety net for the rare commit-before-load-resolves race: if the face isn't loaded, load it
+    // and re-measure into the element once it swaps in (self-healing — stored dims are the server
+    // renderer's source of truth, and the measurement util stays the sole dim writer). Re-validated
+    // against the LIVE element at resolve time: a newer edit (text/font/size) owns the dims, so a
+    // slow load can never write stale dims over it — and the single .then can't loop.
     const healLabelWidth = useCallback(
         (id: string, text: string, fontSize: number, fontFamily: string) => {
             if (isVectorFontLoaded(fontSize, fontFamily)) return;
@@ -955,7 +957,7 @@ export function CanvasEditor({
             gestureRef.current = { kind: 'create', pointerId: e.pointerId, startX: p.x, startY: p.y };
             setCreating({
                 type: tool,
-                seed: Math.floor(Math.random() * 2 ** 31),
+                seed: randomSeed(),
                 box: { x: p.x, y: p.y, width: 0, height: 0, angle: 0 },
             });
             return;
@@ -1229,8 +1231,10 @@ export function CanvasEditor({
 
     // One scene node — every render path routes through here so `byId` (an elbow arrow's route context) is
     // threaded in one place, not per callsite.
-    const node = (el: VectorElement) => (
-        <ElementLayer key={el.id} el={el} resolveMedia={resolveMediaUrl} byId={renderById} />
+    const node = (el: VectorElement, children?: ReactNode) => (
+        <ElementLayer key={el.id} el={el} resolveMedia={resolveMediaUrl} byId={renderById}>
+            {children}
+        </ElementLayer>
     );
 
     // Every element's layer, in z-order, plus the in-flight create and freehand/vertex drafts.
@@ -1246,15 +1250,16 @@ export function CanvasEditor({
                 // IS the rendering, painted with the same CSS the renderer would have emitted.
                 if (el.id === richTextEditId) {
                     const Editor = ELEMENT_KIND_UI[el.type].InPlaceEditor;
-                    return Editor ? (
-                        <ElementLayer key={el.id} el={renderEl(el)} resolveMedia={resolveMediaUrl} byId={renderById}>
-                            <Editor
-                                element={el}
-                                onChange={(fields) => updateElement(el.id, fields)}
-                                onExit={closeRichText}
-                            />
-                        </ElementLayer>
-                    ) : null;
+                    return Editor
+                        ? node(
+                              renderEl(el),
+                              <Editor
+                                  element={el}
+                                  onChange={(fields) => updateElement(el.id, fields)}
+                                  onExit={closeRichText}
+                              />,
+                          )
+                        : null;
                 }
                 return node(renderEl(el));
             })}

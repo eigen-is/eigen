@@ -31,8 +31,8 @@ import {
     type VectorRichTextElement,
     type VectorShapeElement,
 } from '@workspace/lib/vector';
-import * as Y from 'yjs';
-import { type CanvasSide, mulberry32, SIDE_INDEX, ZERO_BOX } from './canvas-build';
+import type * as Y from 'yjs';
+import { type CanvasSide, mulberry32, SIDE_INDEX, toYMap, ZERO_BOX } from './canvas-build';
 import { DECK_INK, type DeckArrow, type DeckImage, type DeckShape, type DeckSlide, type DeckText } from './content';
 
 // Fixed PRNG salt so every reseed draws the same roughjs seeds. The deck is flat (roughness 0), but
@@ -87,15 +87,6 @@ export function buildDeckDoc(doc: Y.Doc, slides: DeckSlide[]): void {
         for (const frame of frames) framesMap.set(frame.id, toYMap(frame, FRAME_FIELDS));
         for (const element of ordered) elementsMap.set(element.id, toYMap(element, ELEMENT_FIELDS));
     });
-}
-
-function toYMap(source: object, fields: readonly string[]): Y.Map<unknown> {
-    const allowed = new Set(fields);
-    const map = new Y.Map<unknown>();
-    for (const [key, value] of Object.entries(source)) {
-        if (value !== undefined && allowed.has(key)) map.set(key, value);
-    }
-    return map;
 }
 
 function buildText(t: DeckText, slideKey: string, frameId: string, i: number): VectorRichTextElement {

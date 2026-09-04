@@ -8,7 +8,6 @@ import { renderRoughShape } from './render-utils';
 export const diamondKind = defineKind<VectorDiamondElement>({
     type: 'diamond',
     is: (el): el is VectorDiamondElement => el.type === 'diamond',
-    fields: ['fill', 'corners', 'roughness', 'seed'],
     capabilities: {
         fill: true,
         fillStyle: true,

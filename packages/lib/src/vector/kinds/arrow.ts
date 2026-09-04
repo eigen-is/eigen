@@ -48,22 +48,6 @@ import { baseRoughOptions, drawableToSvg, svgId } from './render-utils';
 export const arrowKind = defineKind<VectorArrowElement>({
     type: 'arrow',
     is: (el): el is VectorArrowElement => el.type === 'arrow',
-    fields: [
-        'roughness',
-        'seed',
-        'points',
-        'roundness',
-        'elbow',
-        'fixedSegments',
-        'startArrowhead',
-        'endArrowhead',
-        'startBinding',
-        'endBinding',
-        'text',
-        'fontSize',
-        'fontFamily',
-        'labelWidth',
-    ],
     capabilities: {
         fill: false,
         fillStyle: false,
@@ -134,14 +118,7 @@ export const arrowKind = defineKind<VectorArrowElement>({
             { x: label.center.x + hw, y: label.center.y + hh },
             { x: label.center.x - hw, y: label.center.y + hh },
         ].map((c) => linearLocalToScene(el, c));
-        const xs = corners.map((c) => c.x);
-        const ys = corners.map((c) => c.y);
-        return unionBounds(box, {
-            minX: Math.min(...xs),
-            minY: Math.min(...ys),
-            maxX: Math.max(...xs),
-            maxY: Math.max(...ys),
-        });
+        return unionBounds(box, pointsBounds(corners));
     },
     // An arrow is hit on its polyline (like a line) OR inside its label rect — both measured in the arrow's
     // local frame (the label rotates with the arrow), so a wide label on a short arrow is still selectable.

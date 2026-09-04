@@ -42,8 +42,8 @@ import {
     type VectorShapeElement,
     type VerticalAlign,
 } from '@workspace/lib/vector';
-import * as Y from 'yjs';
-import { type CanvasSide, mulberry32, SIDE_INDEX, ZERO_BOX } from './canvas-build';
+import type * as Y from 'yjs';
+import { type CanvasSide, mulberry32, SIDE_INDEX, toYMap, ZERO_BOX } from './canvas-build';
 import type {
     SITE_PLAN,
     SitePlanArrow,
@@ -132,18 +132,9 @@ export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
         el.y -= dy;
     }
 
-    // Every object is built with only ELEMENT_FIELDS keys, so a plain entries walk is the write
-    // allow-list (the guard keeps that guarantee if the model ever grows a non-stored field).
-    const allowed = new Set<string>(ELEMENT_FIELDS);
     doc.transact(() => {
         const map = doc.getMap('elements');
-        for (const el of ordered) {
-            const ym = new Y.Map();
-            for (const [key, value] of Object.entries(el)) {
-                if (value !== undefined && allowed.has(key)) ym.set(key, value);
-            }
-            map.set(el.id, ym);
-        }
+        for (const el of ordered) map.set(el.id, toYMap(el, ELEMENT_FIELDS));
     });
 }
 

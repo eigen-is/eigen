@@ -12,7 +12,6 @@ const DIAGONAL_SHRINK = 15;
 export const rectangleKind = defineKind<VectorRectangleElement>({
     type: 'rectangle',
     is: (el): el is VectorRectangleElement => el.type === 'rectangle',
-    fields: ['fill', 'corners', 'roughness', 'seed'],
     capabilities: {
         fill: true,
         fillStyle: true,

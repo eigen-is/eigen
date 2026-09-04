@@ -9,7 +9,6 @@ export const ellipseKind = defineKind<VectorEllipseElement>({
     type: 'ellipse',
     is: (el): el is VectorEllipseElement => el.type === 'ellipse',
     // no `corners`: an ellipse has none to treat, and a stored field nothing reads is drift
-    fields: ['fill', 'roughness', 'seed'],
     capabilities: {
         fill: true,
         fillStyle: true,

@@ -38,7 +38,7 @@ const zoomAt = (v: CanvasViewport, nextZoom: number, px: number, py: number): Ca
     scrollY: v.scrollY + py / nextZoom - py / v.zoom,
 });
 
-export type UseViewportOptions = {
+type UseViewportOptions = {
     // 'frame' bounds the canvas to one page: it opens fitted and pans are clamped to its edges.
     mode?: 'infinite' | 'frame';
     frame?: Extent;

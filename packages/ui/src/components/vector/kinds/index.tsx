@@ -37,7 +37,7 @@ export type KindPanelSectionProps = {
     onChange: (fields: VectorElementPatch) => void;
 };
 
-export type ElementKindUi = {
+type ElementKindUi = {
     icon: LucideIcon;
     label: string;
     // Present exactly on the kinds a tool can create; an image arrives by upload, so it has none.

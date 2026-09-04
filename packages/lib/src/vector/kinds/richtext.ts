@@ -24,22 +24,6 @@ export const richTextKind = defineKind<VectorRichTextElement>({
     type: 'richtext',
     is: (el): el is VectorRichTextElement => el.type === 'richtext',
     // no `roughness`/`seed`: rich text is a DOM box, roughjs never touches it
-    fields: [
-        'html',
-        'fill',
-        'corners',
-        'fontFamily',
-        'fontSize',
-        'fontWeight',
-        'fontStyle',
-        'textDecoration',
-        'textAlign',
-        'verticalAlign',
-        'color',
-        'letterSpacing',
-        'lineHeight',
-        'padding',
-    ],
     capabilities: {
         fill: true,
         fillStyle: false,

@@ -1,7 +1,6 @@
 // The registry. TypeScript forces every member of VectorElementType to have an entry, so a new kind
 // cannot be half-added.
 
-import { serializeFill, TRANSPARENT_FILL } from '../fill';
 import {
     BASE_ELEMENT_FIELDS,
     DEFAULT_ELEMENT_PROPS,
@@ -16,13 +15,13 @@ import { diamondKind } from './diamond';
 import { ellipseKind } from './ellipse';
 import { freedrawKind } from './freedraw';
 import { imageKind } from './image';
-import type { Capabilities, ElementKind, StyleDefaults } from './kind';
+import type { Capabilities, ElementKind } from './kind';
 import { lineKind } from './line';
 import { rectangleKind } from './rectangle';
 import { richTextKind } from './richtext';
 
-export type { Capabilities, ElementKind, RenderOutput, StyleDefaults } from './kind';
-export { defineKind } from './kind';
+export type { RenderOutput, StyleDefaults } from './kind';
+export { SLIDES_STYLE_DEFAULTS, VECTOR_STYLE_DEFAULTS } from './kind';
 // The in-place editor paints its box with the SAME string the renderer emits, so the two cannot drift.
 export { richTextCssText } from './richtext';
 
@@ -89,7 +88,7 @@ const TOOL_ORDER: VectorElementType[] = [
 // can never disagree.
 const CREATION_ORDER = ['rectangle', 'diamond', 'ellipse', 'arrow', 'line', 'freedraw', 'richtext'] as const;
 
-export type CreationToolType = (typeof CREATION_ORDER)[number];
+type CreationToolType = (typeof CREATION_ORDER)[number];
 export const CREATION_TOOL_TYPES: readonly CreationToolType[] = CREATION_ORDER;
 
 // The stored-key whitelist every writer iterates and the reader materializes: the base fields plus every
@@ -108,31 +107,3 @@ function buildElementFields(): string[] {
     }
     return out;
 }
-
-// The vector app's style table: roughness 1, hachure, Excalifont, curved corners (SLIDES_STYLE_DEFAULTS
-// is the deck's flat counterpart). A fresh element starts unpainted but hatched — the hatch style rides
-// the fill, so the first colour the user picks lands as hachure.
-export const VECTOR_STYLE_DEFAULTS: StyleDefaults = {
-    strokeColor: '#1e1e1e',
-    strokeWidth: 2,
-    fill: serializeFill({ ...TRANSPARENT_FILL, style: 'hachure' }),
-    roughness: 1,
-    corners: 'curved',
-    fontFamily: 'Excalifont',
-    fontSize: 20,
-    color: '#1e1e1e',
-};
-
-// The deck's style table: flat and solid in Inter, the way a presentation reads. Same keys, same
-// meaning — a host's table decides how a NEW element looks, never which kinds exist. There is no text
-// alignment here because StyleDefaults has none: a fresh box starts top-left in both apps.
-export const SLIDES_STYLE_DEFAULTS: StyleDefaults = {
-    strokeColor: '#1e1e1e',
-    strokeWidth: 2,
-    fill: serializeFill({ ...TRANSPARENT_FILL, style: 'solid' }),
-    roughness: 0,
-    corners: 'curved',
-    fontFamily: 'Inter',
-    fontSize: 48,
-    color: '#000000',
-};

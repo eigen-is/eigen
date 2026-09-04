@@ -34,11 +34,10 @@ apps/api/src/lib/export/
   weasyprint.ts                  # Generic: htmlToPdf(html | UTF-8 bytes) -> Buffer via subprocess
   sanitize.ts                    # sanitizeExportHtml: DOMPurify + the call-scoped data-refs-only SSRF hook
   modules.d.ts                   # Type declarations for untyped npm packages
-  render-types.ts                # Shared contract: FigureImgSrcResolver (an eigendoc figure node's src)
   fonts.ts                       # Embedded WOFF2 @font-face CSS (Inter, Source Serif 4, JetBrains Mono, Excalifont)
   media.ts                       # collectExportMedia: screen previews -> transferable buffers (main thread)
   doc/
-    render.ts                    # Pure node renderers: renderFigureNode, renderCodeBlockNode, renderTaskItemNode
+    render.ts                    # Pure node renderers + the FigureImgSrcResolver contract they take
     transform.ts                 # Worker-side: materialized doc + media -> HTML bytes, or docx via html-to-docx
 
 # Content loaders (Yjs -> PM JSON / Sheet[] / VectorScene) live in

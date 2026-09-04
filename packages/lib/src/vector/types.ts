@@ -48,9 +48,9 @@ export type Corners = (typeof CORNERS)[number];
 export type ObjectFit = (typeof OBJECT_FITS)[number];
 export type TextAlign = (typeof TEXT_ALIGNS)[number];
 export type VerticalAlign = (typeof VERTICAL_ALIGNS)[number];
-export type FontWeight = (typeof FONT_WEIGHTS)[number];
-export type FontStyle = (typeof FONT_STYLES)[number];
-export type TextDecoration = (typeof TEXT_DECORATIONS)[number];
+type FontWeight = (typeof FONT_WEIGHTS)[number];
+type FontStyle = (typeof FONT_STYLES)[number];
+type TextDecoration = (typeof TEXT_DECORATIONS)[number];
 export type Arrowhead = (typeof ARROWHEADS)[number];
 export type ArrowShape = (typeof ARROW_SHAPES)[number];
 
@@ -189,7 +189,7 @@ export type ElementOfType<K extends VectorElementType> = OfType<VectorElement, K
 
 // A forward binding: an anchor as a proportion (fixedPoint) of the target shape's local w/h, so the
 // anchor follows the shape by construction. Not clamped on write; consumers clamp to [0,1] on read.
-export type Binding = { elementId: string; fixedPoint: [number, number] };
+type Binding = { elementId: string; fixedPoint: [number, number] };
 
 // One pinned polyline segment (Excalidraw's FixedSegment). `index` is the identity — it keys
 // `points[index-1]→points[index]`; `start`/`end` are LOCAL copies of those two vertices (always
@@ -199,7 +199,7 @@ export type FixedSegment = { index: number; start: [number, number]; end: [numbe
 
 // The parsed fixedSegments envelope: the pins plus the two synthetic-point markers. A pinned elbow
 // arrow's whole pin state, decoded from the one JSON scalar.
-export type ParsedFixedSegments = { segments: FixedSegment[]; startIsSpecial: boolean; endIsSpecial: boolean };
+type ParsedFixedSegments = { segments: FixedSegment[]; startIsSpecial: boolean; endIsSpecial: boolean };
 
 export type VectorMeta = { background: string; gridSize: number };
 

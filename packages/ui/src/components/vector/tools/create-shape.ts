@@ -17,7 +17,7 @@ const CREATING_ID = '__creating__';
 // creatingElement composes each kind's own element without a cast; `isBoxTool` answers from the
 // registry's `creation` capability, and the registry test pins the two against each other.
 const BOX_TOOLS = ['rectangle', 'diamond', 'ellipse', 'richtext'] as const;
-export type BoxTool = (typeof BOX_TOOLS)[number];
+type BoxTool = (typeof BOX_TOOLS)[number];
 
 export function isBoxTool(tool: VectorTool): tool is BoxTool {
     return tool !== 'select' && tool !== 'eraser' && ELEMENT_KINDS[tool].capabilities.creation === 'box';

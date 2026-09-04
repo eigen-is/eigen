@@ -32,7 +32,7 @@ export function touchAllowedInPenMode(tool: VectorTool): boolean {
 
 // Incremental pan+pinch from one two-finger frame: `scale` is the finger-spread ratio, the pan is the
 // midpoint's screen travel, both applied about the current midpoint. Pure so the math is unit-tested.
-export type PinchFrame = { scale: number; midX: number; midY: number; panDx: number; panDy: number };
+type PinchFrame = { scale: number; midX: number; midY: number; panDx: number; panDy: number };
 export function pinchFrame(prevA: TouchXY, prevB: TouchXY, currA: TouchXY, currB: TouchXY): PinchFrame {
     const prevMidX = (prevA.x + prevB.x) / 2;
     const prevMidY = (prevA.y + prevB.y) / 2;

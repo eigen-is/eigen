@@ -273,7 +273,7 @@ describe('bindingCandidate / bindArrow — the DOM boxes are targets too', () =>
     test('a dragged endpoint over a rich text box finds it', () => {
         const box = textBox({ id: 'txt' });
         const { el, ordered } = dropping(box);
-        expect(bindingCandidate(ordered, { x: 60, y: 30 }, 1, false)).toBe('txt');
+        expect(bindingCandidate(ordered, { x: 60, y: 30 }, 1, false)?.id).toBe('txt');
         const bound = bindArrow(el, { start: false, end: true }, ordered, 1, false);
         const stored = parseBinding(bound.endBinding);
         expect(stored?.elementId).toBe('txt');
@@ -282,12 +282,12 @@ describe('bindingCandidate / bindArrow — the DOM boxes are targets too', () =>
 
     test('an image has no Fill to read, and still binds anywhere inside its pixels', () => {
         const { ordered } = dropping(picture({ id: 'img' }));
-        expect(bindingCandidate(ordered, { x: 60, y: 30 }, 1, false)).toBe('img');
+        expect(bindingCandidate(ordered, { x: 60, y: 30 }, 1, false)?.id).toBe('img');
     });
 
     test('a see-through text box binds only in the band around its outline, like a transparent shape', () => {
         const { ordered } = dropping(textBox({ id: 'txt', fill: solidFill('transparent') }));
         expect(bindingCandidate(ordered, { x: 60, y: 30 }, 1, false)).toBeNull();
-        expect(bindingCandidate(ordered, { x: 60, y: 2 }, 1, false)).toBe('txt');
+        expect(bindingCandidate(ordered, { x: 60, y: 2 }, 1, false)?.id).toBe('txt');
     });
 });

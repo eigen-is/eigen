@@ -17,6 +17,12 @@ export function newElementId(): string {
     return `el-${nanoid(10)}`;
 }
 
+// A fresh roughjs jitter seed. One source: the creation paths, the duplicate pass and the draw drafts
+// must draw from the same range or a preview pops on release.
+export function randomSeed(): number {
+    return Math.floor(Math.random() * 2 ** 31);
+}
+
 // Only the roughjs kinds declare a seed; writing one onto an image or a rich-text box is exactly the
 // drift the ELEMENT_FIELDS whitelist exists to prevent.
 export function hasSeed(type: unknown): boolean {
@@ -77,7 +83,7 @@ export function duplicateElementsInDoc(doc: Y.Doc, ids: string[], dx: number, dy
                 if (v !== undefined) clone.set(field, v);
             }
             clone.set('id', id);
-            if (hasSeed(src.get('type'))) clone.set('seed', Math.floor(Math.random() * 2 ** 31));
+            if (hasSeed(src.get('type'))) clone.set('seed', randomSeed());
             clone.set('index', keys[i]);
             // A copy starts with no comments; the cards belong to the element that was commented on.
             clone.set('commentCardIds', '');

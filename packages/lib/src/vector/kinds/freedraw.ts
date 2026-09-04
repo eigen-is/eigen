@@ -2,16 +2,13 @@ import { getStroke } from 'perfect-freehand';
 import { RoughGenerator } from 'roughjs/bin/generator';
 import { isTransparentFill, parseFill } from '../fill';
 import {
-    distanceToPolyline,
     FREEDRAW_SIZE_FACTOR,
+    hitTestLinear,
     isClosedLinear,
     isClosedPath,
-    LINEAR_HIT_SCREEN_FACTOR,
     linearLocalToScene,
-    linearSceneToLocal,
     parsePoints,
     parsePressures,
-    pointInPolygon,
     serializePoints,
     serializePressures,
 } from '../geometry';
@@ -24,7 +21,6 @@ import { drawableToSvg, escapeXml, fillDefs, getSvgPathFromStroke, linearRoughOp
 export const freedrawKind = defineKind<VectorLinearElement>({
     type: 'freedraw',
     is: (el): el is VectorLinearElement => el.type === 'freedraw',
-    fields: ['fill', 'roughness', 'seed', 'points', 'roundness', 'pressures', 'simulatePressure'],
     capabilities: {
         fill: true,
         fillStyle: true,
@@ -73,17 +69,7 @@ export const freedrawKind = defineKind<VectorLinearElement>({
             simulatePressure: !useReal,
         };
     },
-    // Unrotate the probe into the element's local frame, then measure to the polyline. Tolerance is the
-    // larger of the 0.85-scaled screen threshold and the drawn ink half-width (+0.1); a closed, filled
-    // path is also hit anywhere inside.
-    hitTest: (el, point, threshold) => {
-        const points = parsePoints(el.points);
-        if (points.length === 0) return false;
-        const p = linearSceneToLocal(el, point);
-        const inkHalf = (el.strokeWidth * FREEDRAW_SIZE_FACTOR) / 2;
-        if (distanceToPolyline(points, p) <= Math.max(threshold * LINEAR_HIT_SCREEN_FACTOR, inkHalf + 0.1)) return true;
-        return isClosedPath(points) && !isTransparentFill(parseFill(el.fill)) && pointInPolygon(p, points);
-    },
+    hitTest: (el, point, threshold) => hitTestLinear(el, point, threshold, (el.strokeWidth * FREEDRAW_SIZE_FACTOR) / 2),
     outline: (el) => polylineOutline(parsePoints(el.points).map((p) => linearLocalToScene(el, p))),
     // Freehand strokes are perfect-freehand, not roughjs: a filled outline `<path>` with no stroke.
     // roughness/seed/strokeStyle don't touch the stroke; only a closed freedraw's optional fill uses them.

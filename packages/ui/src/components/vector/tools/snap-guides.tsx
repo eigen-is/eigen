@@ -10,31 +10,21 @@ const SNAP_LINE_EXTENT = 1_000_000;
 export function SnapGuides({ lines }: { lines: SnapLine[] }) {
     return (
         <>
-            {lines.map((line, i) =>
-                line.orientation === 'vertical' ? (
+            {lines.map((line, i) => {
+                const v = line.orientation === 'vertical';
+                return (
                     <line
                         key={i}
                         className="stroke-selection-handle"
-                        x1={line.position}
-                        y1={-SNAP_LINE_EXTENT}
-                        x2={line.position}
-                        y2={SNAP_LINE_EXTENT}
+                        x1={v ? line.position : -SNAP_LINE_EXTENT}
+                        y1={v ? -SNAP_LINE_EXTENT : line.position}
+                        x2={v ? line.position : SNAP_LINE_EXTENT}
+                        y2={v ? SNAP_LINE_EXTENT : line.position}
                         strokeWidth={1}
                         vectorEffect="non-scaling-stroke"
                     />
-                ) : (
-                    <line
-                        key={i}
-                        className="stroke-selection-handle"
-                        x1={-SNAP_LINE_EXTENT}
-                        y1={line.position}
-                        x2={SNAP_LINE_EXTENT}
-                        y2={line.position}
-                        strokeWidth={1}
-                        vectorEffect="non-scaling-stroke"
-                    />
-                ),
-            )}
+                );
+            })}
         </>
     );
 }

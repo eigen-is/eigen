@@ -19,7 +19,7 @@ import {
     rotatePoint,
 } from './geometry';
 import { capabilitiesOf, ELEMENT_KINDS, isBindable } from './kinds';
-import { outlineDistance } from './outline';
+import { clamp, nearestPoint, outlineDistance } from './outline';
 import {
     parseBinding,
     serializeBinding,
@@ -42,7 +42,7 @@ export type B4 = [number, number, number, number];
 
 // How near (SCENE units) a bound endpoint must sit to its shape for cone-based heading to apply. The router
 // runs zoom-free (server + derive path), so this is maxBindingDistance_simple at zoom 1 = clamp(15/1.5,15,30).
-export const MAX_BINDING_DISTANCE = 15;
+const MAX_BINDING_DISTANCE = 15;
 
 // Excalidraw's vectorToHeading: snap a free vector to its dominant axis direction (the `<=` on LEFT and the
 // strict `>` elsewhere are load-bearing — they decide the exit side on exact diagonals).
@@ -283,19 +283,9 @@ function dockIntersection(
     const reach = Math.max(shape.width, shape.height) * 2;
     const far = { x: otherPoint.x + (dx / len) * reach, y: otherPoint.y + (dy / len) * reach };
     const hits = outlineIntersections(shape, otherPoint, far, gap);
-    if (hits.length === 0) return null;
     // The ray leaves the interior and crosses one side; when it clips two, take the one nearest the resolved
     // dock direction (Excalidraw's degenerate distance sort collapses to the same single crossing here).
-    let best = hits[0];
-    let bestDist = distSq(resolved, best);
-    for (const h of hits) {
-        const d = distSq(resolved, h);
-        if (d < bestDist) {
-            bestDist = d;
-            best = h;
-        }
-    }
-    return best;
+    return hits.length === 0 ? null : nearestPoint(hits, resolved);
 }
 
 // Excalidraw's avoidRectangularCorner: when a point sits in one of the four diagonal corner regions of a
@@ -360,8 +350,4 @@ function distSq(a: Point, b: Point): number {
     const dx = a.x - b.x;
     const dy = a.y - b.y;
     return dx * dx + dy * dy;
-}
-
-function clamp(v: number, lo: number, hi: number): number {
-    return Math.min(hi, Math.max(lo, v));
 }

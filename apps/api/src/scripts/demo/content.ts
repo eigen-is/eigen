@@ -246,6 +246,17 @@ const DECK_PAPER = { type: 'solid', color: '#fffdfa' } as const;
 const DECK_ACCENT = '#e8590c';
 const DECK_HEADING = { x: 160, y: 110, width: 1600, height: 130, fontSize: 88, bold: true } as const;
 
+// The "numbers" slide is one card repeated on a 560px pitch — only x and the copy differ; the text
+// box sits 30px inside its card.
+const STAT_X = [160, 720, 1280] as const;
+const STAT_CARD = { kind: 'rectangle', y: 380, width: 480, height: 320, fill: '#ffe8d5', stroke: DECK_ACCENT } as const;
+const STAT_TEXT = { y: 410, width: 420, height: 260, fontSize: 44, align: 'center', valign: 'center' } as const;
+const STAT_COPY = [
+    '<p><strong>4,200</strong></p><p>visitors over two days</p>',
+    '<p><strong>26</strong></p><p>acts on two stages</p>',
+    '<p><strong>80</strong></p><p>volunteers on the crew</p>',
+] as const;
+
 export const SPONSOR_DECK = {
     folder: 'marketing' as TeamFolder,
     name: 'sponsor pitch', // lowercase, no extension
@@ -333,70 +344,10 @@ export const SPONSOR_DECK = {
             key: 'numbers',
             name: 'Last edition in numbers',
             background: DECK_PAPER,
-            shapes: [
-                {
-                    key: 'stat-1',
-                    kind: 'rectangle',
-                    x: 160,
-                    y: 380,
-                    width: 480,
-                    height: 320,
-                    fill: '#ffe8d5',
-                    stroke: DECK_ACCENT,
-                },
-                {
-                    key: 'stat-2',
-                    kind: 'rectangle',
-                    x: 720,
-                    y: 380,
-                    width: 480,
-                    height: 320,
-                    fill: '#ffe8d5',
-                    stroke: DECK_ACCENT,
-                },
-                {
-                    key: 'stat-3',
-                    kind: 'rectangle',
-                    x: 1280,
-                    y: 380,
-                    width: 480,
-                    height: 320,
-                    fill: '#ffe8d5',
-                    stroke: DECK_ACCENT,
-                },
-            ],
+            shapes: STAT_X.map((x, i) => ({ ...STAT_CARD, key: `stat-${i + 1}`, x })),
             texts: [
                 { ...DECK_HEADING, html: '<p>Last edition in numbers</p>' },
-                {
-                    html: '<p><strong>4,200</strong></p><p>visitors over two days</p>',
-                    x: 190,
-                    y: 410,
-                    width: 420,
-                    height: 260,
-                    fontSize: 44,
-                    align: 'center',
-                    valign: 'center',
-                },
-                {
-                    html: '<p><strong>26</strong></p><p>acts on two stages</p>',
-                    x: 750,
-                    y: 410,
-                    width: 420,
-                    height: 260,
-                    fontSize: 44,
-                    align: 'center',
-                    valign: 'center',
-                },
-                {
-                    html: '<p><strong>80</strong></p><p>volunteers on the crew</p>',
-                    x: 1310,
-                    y: 410,
-                    width: 420,
-                    height: 260,
-                    fontSize: 44,
-                    align: 'center',
-                    valign: 'center',
-                },
+                ...STAT_X.map((x, i) => ({ ...STAT_TEXT, x: x + 30, html: STAT_COPY[i] })),
             ],
         },
         {

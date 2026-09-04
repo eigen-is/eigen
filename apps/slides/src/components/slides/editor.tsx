@@ -1,45 +1,36 @@
 import { useAuth } from '@workspace/lib/auth';
-import { useCommentCards, useCommentFilter, useCommentLifecycle, useDocumentPanels } from '@workspace/lib/comments';
 import { MediaResolverProvider, useCopyToMediaFolder, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
-import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
-    elementForCommentCard,
     parseBackgroundFill,
-    parseIdList,
     SLIDES_STYLE_DEFAULTS,
     serializeBackgroundFill,
-    serializeIdList,
     type VectorElement,
 } from '@workspace/lib/vector';
-import { CollabLoadingState, Column, ColumnLayout, EmptyState, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
-import { CardFormDialog } from '@workspace/ui/components/cards';
-import { type CommentContextMenuItem, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
-import { useContextMenu } from '@workspace/ui/components/context-menu';
-import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
+import { EmptyState, TooltipButton, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
+import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { useAspectLock } from '@workspace/ui/components/properties-panel';
-import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import {
+    CanvasDocumentShell,
     CanvasEditor,
     type CanvasImageInsert,
     CanvasPropertiesPanel,
+    CanvasToolbar,
     useActiveFrame,
-    useCanvasComments,
+    useCanvasCommentHost,
     useCanvasDoc,
     useCanvasDocSearch,
     useCanvasPresence,
     useSelection,
     useTool,
 } from '@workspace/ui/components/vector';
-import { cn } from '@workspace/ui/lib/utils';
-import { Presentation } from 'lucide-react';
+import { Play, Plus, Presentation } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSlideDnd } from './hooks/use-slide-dnd';
 import { PresentMode, presentStep } from './present-mode';
 import { seedDeck } from './seed-deck';
 import { SlideBackgroundPanel } from './slide-background-panel';
 import { SlidePanel } from './slide-panel';
-import { Toolbar } from './toolbar';
 
 type SlideEditorProps = {
     ownerId: string;
@@ -119,21 +110,6 @@ function SlideEditorInner({
     const allImageSelected = selectedElements.length > 0 && selectedElements.every((el) => el.type === 'image');
     const [aspectLocked, setAspectLocked] = useAspectLock(selectedIds.join(','), allImageSelected);
 
-    // Comments + activity (the shared PanelColumn shape). Every card stays active; one anchored to an
-    // element takes that element's own text as its panel row.
-    const cards = useCommentCards(doc.yjsDoc, 'comments');
-    const activeComments = useCanvasComments(doc.elements, cards);
-    const {
-        panel,
-        commentPanelOpen,
-        activityPanelOpen,
-        mobilePanelOpen,
-        toggleComments,
-        toggleActivity,
-        closePanels,
-        onSearchOpenChange,
-    } = useDocumentPanels(isMobile);
-
     // Revealing an element means going to its slide FIRST — ⌘F and the comment pane both span the
     // whole deck, so either can land on an element the canvas is not currently showing.
     const revealElement = useCallback(
@@ -143,6 +119,18 @@ function SlideEditorInner({
         },
         [setFrameId, setSelectedIds],
     );
+
+    const comments = useCanvasCommentHost({
+        ownerId,
+        path,
+        canWrite,
+        mediaFolderId,
+        chatFolderId,
+        initialChatName,
+        doc,
+        isMobile,
+        onReveal: revealElement,
+    });
 
     // "Slide 3" — where a match is, in the deck's words. Frame order is the stored order.
     const frameNumbers = useMemo(() => new Map(doc.frames.map((f, i) => [f.id, i + 1])), [doc.frames]);
@@ -174,98 +162,7 @@ function SlideEditorInner({
         return ids;
     }, [doc.elements, searchMatchedIds]);
 
-    const lifecycle = useCommentLifecycle({
-        ownerId,
-        mountId: path.mountId,
-        pathId: path.id,
-        chatFolderId,
-        mediaFolderId,
-        doc: doc.yjsDoc,
-        activeCardIds: activeComments.ids,
-        initialChatName,
-        ready: doc.synced,
-    });
-    const {
-        allComments,
-        cards: lifecycleCards,
-        createCard,
-        assignComment,
-        members,
-        assignedCount,
-        setOpenCardId,
-    } = lifecycle;
-
-    const commentFilter = useCommentFilter();
-    const commentContextMenu = useContextMenu<CommentContextMenuItem>();
-
     const [isPresenting, setIsPresenting] = useState(false);
-    const [addOpen, setAddOpen] = useState(false);
-    // The element a pending "New comment" anchors to — null for a card raised from the pane, which
-    // stays document-level.
-    const [commentAnchorId, setCommentAnchorId] = useState<string | null>(null);
-    const addCommentTo = useCallback((elementId: string) => {
-        setCommentAnchorId(elementId);
-        setAddOpen(true);
-    }, []);
-    const closeAdd = useCallback((open: boolean) => {
-        setAddOpen(open);
-        if (!open) setCommentAnchorId(null);
-    }, []);
-
-    // Opening a card reveals its anchor; the mobile pane hides the canvas, so there it just opens.
-    const openCard = useCallback(
-        (cardId: string) => {
-            const el = elementForCommentCard(doc.elements, cardId);
-            if (el) revealElement(el);
-            setOpenCardId(cardId);
-        },
-        [doc.elements, revealElement, setOpenCardId],
-    );
-
-    const handleSaveNew = useCallback(
-        async (
-            patch: { title?: string; description?: string; color?: string },
-            attachments?: CardAttachmentDraft[],
-            assignee?: string | null,
-        ) => {
-            const anchorId = commentAnchorId;
-            const card = await createCard({ ...patch, attachments });
-            if (card && anchorId) {
-                const el = doc.elements.find((e) => e.id === anchorId);
-                // Idempotent: a double submit must not list the same card twice on the element.
-                const ids = el ? parseIdList(el.commentCardIds) : [];
-                if (el && !ids.includes(card.id)) {
-                    doc.updateElement(anchorId, { commentCardIds: serializeIdList([...ids, card.id]) });
-                }
-            }
-            if (assignee !== undefined && card?.chatName) {
-                assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });
-            }
-            setCommentAnchorId(null);
-            setAddOpen(false);
-        },
-        [commentAnchorId, createCard, assignComment, doc.elements, doc.updateElement],
-    );
-
-    // Delete drops the card from the `comments` Y.Map and strips it from its anchor, so no element
-    // keeps a flag for a card that is gone.
-    const deleteCard = useCallback(
-        (cardId: string) => {
-            const yjsDoc = doc.yjsDoc;
-            if (!yjsDoc) return;
-            const anchor = elementForCommentCard(doc.elements, cardId);
-            yjsDoc.transact(() => {
-                yjsDoc.getMap('comments').delete(cardId);
-            });
-            // Untracked: stripping the anchor is bookkeeping for a delete the UndoManager never saw (the
-            // comments map is outside its scope), so ⌘Z must not resurrect the flag without its card.
-            if (anchor) {
-                const ids = parseIdList(anchor.commentCardIds).filter((id) => id !== cardId);
-                doc.updateElementUntracked(anchor.id, { commentCardIds: serializeIdList(ids) });
-            }
-        },
-        [doc.yjsDoc, doc.elements, doc.updateElementUntracked],
-    );
 
     // Adding a slide activates it, the way inserting one always has. Duplicate and delete are the
     // rail's own rows and arrive with it.
@@ -377,25 +274,6 @@ function SlideEditorInner({
         [mediaFolderId, frame, copyToMediaFolder, updateFrame],
     );
 
-    // A w-64 sibling occupies the right edge whenever the comment/activity pane or the properties
-    // panel is up — inset the find bar clear of it.
-    const rightPanelShown = (!isMobile && !!panel) || canEdit;
-
-    const panelProps = {
-        onClose: closePanels,
-        path,
-        cards: lifecycleCards,
-        entries: allComments,
-        members,
-        currentUserEmail: user?.email ?? '',
-        filter: commentFilter,
-        activeComments,
-        commentContextMenu,
-        // The mobile pane hides the canvas, so its element reveal would go unseen there.
-        onOpenCard: isMobile ? setOpenCardId : openCard,
-        onAddComment: canWrite && chatFolderId ? () => setAddOpen(true) : undefined,
-    };
-
     // Present mode replaces the editor outright: no tools, no rail, no panels. The doc hook stays
     // mounted above it, so leaving present returns to the same slide with the same selection state —
     // and so does the leave guard, which must outlive the swap or a presenter's unsynced edits would
@@ -416,186 +294,136 @@ function SlideEditorInner({
     }
 
     return (
-        <ColumnLayout>
-            <UnsyncedEditsGuard active={doc.unsyncedEdits} />
-            {/* The pane hides the deck on mobile (a Column sibling below); keep it mounted (hidden
-                wrapper) so Yjs state, selection and the active slide survive a pane visit. */}
-            <div className={cn('flex-1 min-w-0 h-full', mobilePanelOpen && 'hidden')}>
-                <DocSearchProvider
-                    controller={docSearchController}
-                    initialSearchTerm={initialSearchTerm}
-                    onOpenChange={onSearchOpenChange}
-                    // right-68 = the w-64 right panel + the bar's own gutter.
-                    barClassName={cn('top-14', rightPanelShown && 'right-68')}
-                >
-                    <Column
-                        id="editor"
-                        width="flex"
-                        className="flex-1 h-full"
-                        toolbarBorder="always"
-                        toolbar={
-                            <Toolbar
-                                path={path}
-                                canWrite={canWrite}
-                                canEdit={canEdit}
-                                offline={doc.offline}
-                                storageUnavailable={doc.loaded && doc.storageUnavailable}
-                                undoManager={doc.undoManager}
-                                tool={tool}
-                                setTool={setTool}
-                                toolLocked={toolLocked}
-                                setToolLocked={setToolLocked}
-                                onAddSlide={addSlide}
-                                onPresent={enterPresent}
-                                onInsertImage={canEdit && mediaFolderId ? () => setImagePickerOpen(true) : undefined}
-                                onAccessDialogOpen={onAccessDialogOpen}
-                                onToggleCommentPanel={toggleComments}
-                                commentPanelOpen={commentPanelOpen}
-                                assignedCommentCount={assignedCount}
-                                onToggleActivityPanel={toggleActivity}
-                                activityPanelOpen={activityPanelOpen}
+        <CanvasDocumentShell
+            doc={doc}
+            comments={comments}
+            path={path}
+            canWrite={canWrite}
+            canEdit={canEdit}
+            mediaFolderId={mediaFolderId}
+            searchController={docSearchController}
+            initialSearchTerm={initialSearchTerm}
+            imagePickerOpen={imagePickerOpen}
+            onImagePickerOpenChange={setImagePickerOpen}
+            imageInsertRef={imageInsertRef}
+            toolbar={
+                <CanvasToolbar
+                    path={path}
+                    canWrite={canWrite}
+                    canEdit={canEdit}
+                    offline={doc.offline}
+                    storageUnavailable={doc.loaded && doc.storageUnavailable}
+                    undoManager={doc.undoManager}
+                    tool={tool}
+                    setTool={setTool}
+                    toolLocked={toolLocked}
+                    setToolLocked={setToolLocked}
+                    onInsertImage={canEdit && mediaFolderId ? () => setImagePickerOpen(true) : undefined}
+                    onAccessDialogOpen={onAccessDialogOpen}
+                    exportFormats={['pdf', 'html']}
+                    createLabel="New slides"
+                    createIcon={Presentation}
+                    createType="slides"
+                    insertItems={
+                        <DropdownMenuItem onClick={addSlide}>
+                            <Plus className="h-4 w-4 mr-2" /> Slide
+                        </DropdownMenuItem>
+                    }
+                    toolItems={<TooltipButton icon={Plus} tooltipText="Add slide" onClick={addSlide} />}
+                    centerItems={<TooltipButton icon={Play} tooltipText="Present" onClick={enterPresent} />}
+                    onToggleCommentPanel={comments.toggleComments}
+                    commentPanelOpen={comments.commentPanelOpen}
+                    assignedCommentCount={comments.assignedCount}
+                    onToggleActivityPanel={comments.toggleActivity}
+                    activityPanelOpen={comments.activityPanelOpen}
+                />
+            }
+            propertiesPanel={
+                <CanvasPropertiesPanel
+                    elements={doc.elements}
+                    selectedElements={selectedElements}
+                    updateElements={doc.updateElements}
+                    undoManager={doc.undoManager}
+                    meta={doc.meta}
+                    updateMeta={doc.updateMeta}
+                    viewport="frame"
+                    aspectLocked={aspectLocked}
+                    onAspectLockChange={setAspectLocked}
+                    emptyTitle="Slide"
+                    emptySection={
+                        frame ? (
+                            <SlideBackgroundPanel
+                                frames={doc.frames}
+                                frameId={frame.id}
+                                background={background}
+                                backgroundImageUrl={backgroundImageUrl}
+                                updateFrames={updateFrames}
+                                onUploadImage={uploadBackgroundImage}
+                                onPickImageFromDrive={(paths) => {
+                                    void pickBackgroundImage(paths);
+                                }}
                             />
-                        }
-                    >
-                        {/* Latched: a WS blip keeps the deck mounted; `doc.synced` still gates presence. */}
-                        {!doc.loaded ? (
-                            <CollabLoadingState storageUnavailable={doc.storageUnavailable} />
-                        ) : (
-                            <div className="flex h-full w-full overflow-hidden">
-                                {/* The rail is desktop-only: a phone pages with a swipe (spec D8),
-                                    and a 52-wide column would take a third of the screen. */}
-                                {!isMobile && (
-                                    <SlidePanel
-                                        frames={doc.frames}
-                                        elements={doc.elements}
-                                        activeFrameId={frameId}
-                                        onSelectFrame={setFrameId}
-                                        onDragStart={handleDragStart}
-                                        onDragEnd={handleDragEnd}
-                                        dragActiveId={dragActiveId}
-                                        onDeleteSlide={canEdit ? deleteSlide : undefined}
-                                        onDuplicateSlide={canEdit ? duplicateSlide : undefined}
-                                        matchedFrameIds={matchedFrameIds}
-                                    />
-                                )}
-                                {frame ? (
-                                    <div className="flex-1 min-w-0 flex flex-col">
-                                        <div className="flex-1 min-h-0">
-                                            <CanvasEditor
-                                                doc={doc}
-                                                viewport="frame"
-                                                frameId={frameId}
-                                                canEdit={canEdit}
-                                                ownerId={ownerId}
-                                                mountId={path.mountId}
-                                                tool={tool}
-                                                setTool={setTool}
-                                                toolLocked={toolLocked}
-                                                setToolLocked={setToolLocked}
-                                                selectedIds={selectedIds}
-                                                setSelectedIds={setSelectedIds}
-                                                toggle={toggle}
-                                                aspectLocked={aspectLocked}
-                                                publishCursor={publishCursor}
-                                                imageInsertRef={imageInsertRef}
-                                                onOpenCard={openCard}
-                                                onAddComment={canWrite && chatFolderId ? addCommentTo : undefined}
-                                                searchMatchedIds={searchMatchedIds}
-                                                searchActiveId={searchActiveId}
-                                                // A view-only deck pages on a one-finger swipe; an editable
-                                                // one keeps that finger for the canvas (D4.13).
-                                                onSwipeFrame={canEdit ? undefined : stepFrame}
-                                            />
-                                        </div>
-                                        <div className="h-8 bg-muted border-t flex items-center justify-between px-4 text-xs text-muted-foreground">
-                                            <span>
-                                                Slide {frameIndex + 1} of {doc.frames.length}
-                                            </span>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="flex-1 min-w-0">
-                                        <EmptyState
-                                            icon={<Presentation className="h-8 w-8" />}
-                                            message="No slides yet"
-                                        />
-                                    </div>
-                                )}
-                                {/* Right side: the comment/activity pane wins over the properties panel;
-                                    mobile hosts the pane as an outside sibling. */}
-                                {!isMobile && panel ? (
-                                    <PanelColumn activePanel={panel} {...panelProps} />
-                                ) : canEdit ? (
-                                    <CanvasPropertiesPanel
-                                        elements={doc.elements}
-                                        selectedElements={selectedElements}
-                                        updateElements={doc.updateElements}
-                                        undoManager={doc.undoManager}
-                                        meta={doc.meta}
-                                        updateMeta={doc.updateMeta}
-                                        viewport="frame"
-                                        aspectLocked={aspectLocked}
-                                        onAspectLockChange={setAspectLocked}
-                                        emptyTitle="Slide"
-                                        emptySection={
-                                            frame ? (
-                                                <SlideBackgroundPanel
-                                                    frames={doc.frames}
-                                                    frameId={frame.id}
-                                                    background={background}
-                                                    backgroundImageUrl={backgroundImageUrl}
-                                                    updateFrames={updateFrames}
-                                                    onUploadImage={uploadBackgroundImage}
-                                                    onPickImageFromDrive={(paths) => {
-                                                        void pickBackgroundImage(paths);
-                                                    }}
-                                                />
-                                            ) : null
-                                        }
-                                    />
-                                ) : null}
-                            </div>
-                        )}
-
-                        {mediaFolderId && (
-                            <DrivePickerWithUpload
-                                open={imagePickerOpen}
-                                onOpenChange={setImagePickerOpen}
-                                title="Add image"
-                                mimeFilter={['image/*']}
-                                multiSelect
-                                onPickFromDrive={(paths) =>
-                                    void imageInsertRef.current?.insertDrivePaths(paths).catch(() => {})
-                                }
-                                onPickFromDevice={(files) => imageInsertRef.current?.insertFiles(files)}
-                                accept="image/*"
-                                multiple
-                            />
-                        )}
-                    </Column>
-                </DocSearchProvider>
-            </div>
-
-            {mobilePanelOpen && panel && <PanelColumn activePanel={panel} {...panelProps} />}
-
-            <CardFormDialog
-                open={addOpen}
-                onOpenChange={closeAdd}
-                onSave={handleSaveNew}
-                allowAttachments={!!mediaFolderId}
-                members={members}
-                currentUserEmail={user?.email}
-                dialogTitle="New comment"
-                submitLabel="Add comment"
-            />
-
-            <CommentLifecycleDialogs
-                lifecycle={lifecycle}
-                path={path}
-                canWrite={canWrite}
-                commentContextMenu={commentContextMenu}
-                onDelete={deleteCard}
-            />
-        </ColumnLayout>
+                        ) : null
+                    }
+                />
+            }
+        >
+            {/* The rail is desktop-only: a phone pages with a swipe (spec D8), and a 52-wide column
+                would take a third of the screen. */}
+            {!isMobile && (
+                <SlidePanel
+                    frames={doc.frames}
+                    elements={doc.elements}
+                    activeFrameId={frameId}
+                    onSelectFrame={setFrameId}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
+                    dragActiveId={dragActiveId}
+                    onDeleteSlide={canEdit ? deleteSlide : undefined}
+                    onDuplicateSlide={canEdit ? duplicateSlide : undefined}
+                    matchedFrameIds={matchedFrameIds}
+                />
+            )}
+            {frame ? (
+                <div className="flex-1 min-w-0 flex flex-col">
+                    <div className="flex-1 min-h-0">
+                        <CanvasEditor
+                            doc={doc}
+                            viewport="frame"
+                            frameId={frameId}
+                            canEdit={canEdit}
+                            ownerId={ownerId}
+                            mountId={path.mountId}
+                            tool={tool}
+                            setTool={setTool}
+                            toolLocked={toolLocked}
+                            setToolLocked={setToolLocked}
+                            selectedIds={selectedIds}
+                            setSelectedIds={setSelectedIds}
+                            toggle={toggle}
+                            aspectLocked={aspectLocked}
+                            publishCursor={publishCursor}
+                            imageInsertRef={imageInsertRef}
+                            onOpenCard={comments.openCard}
+                            onAddComment={canWrite && chatFolderId ? comments.addCommentTo : undefined}
+                            searchMatchedIds={searchMatchedIds}
+                            searchActiveId={searchActiveId}
+                            // A view-only deck pages on a one-finger swipe; an editable one keeps
+                            // that finger for the canvas (D4.13).
+                            onSwipeFrame={canEdit ? undefined : stepFrame}
+                        />
+                    </div>
+                    <div className="h-8 bg-muted border-t flex items-center justify-between px-4 text-xs text-muted-foreground">
+                        <span>
+                            Slide {frameIndex + 1} of {doc.frames.length}
+                        </span>
+                    </div>
+                </div>
+            ) : (
+                <div className="flex-1 min-w-0">
+                    <EmptyState icon={<Presentation className="h-8 w-8" />} message="No slides yet" />
+                </div>
+            )}
+        </CanvasDocumentShell>
     );
 }

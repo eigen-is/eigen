@@ -22,13 +22,13 @@ export type Layer = {
     content: RenderOutput;
 };
 
-export type SceneLayersOptions = {
+type SceneLayersOptions = {
     // Render one frame's elements; omit for the whole infinite canvas.
     frameId?: string;
     resolveMedia?: MediaResolver;
 };
 
-export type ElementLayerOptions = {
+type ElementLayerOptions = {
     resolveMedia?: MediaResolver;
     // An elbow arrow's derived route; without it the arrow falls back to its stored endpoints.
     route?: Point[];
@@ -51,7 +51,7 @@ export function elementLayer(el: VectorElement, opts: ElementLayerOptions = {}):
     };
 }
 
-export type LayerBoxCss = { width: string; height: string; transform: string; opacity?: string };
+type LayerBoxCss = { width: string; height: string; transform: string; opacity?: string };
 
 // The layer's box as CSS: one derivation, set as React style props by the live canvas and serialized
 // into a style attribute by the compositor, so what a user sees is what prints. The origin rides in a

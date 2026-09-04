@@ -6,7 +6,6 @@ import {
     ELEMENT_FIELDS,
     ELEMENT_KINDS,
     followBindings,
-    generateKeyBetween,
     generateNKeysBetween,
     isVectorElementType,
     readVectorFromDoc,
@@ -23,7 +22,7 @@ import {
 } from '@workspace/lib/vector';
 import { useCallback, useRef, useState } from 'react';
 import * as Y from 'yjs';
-import { duplicateElementsInDoc, hasSeed, newElementId, topmostIndex } from './element-writes';
+import { duplicateElementsInDoc, hasSeed, newElementId, randomSeed, topmostIndex } from './element-writes';
 import {
     addFrameInDoc,
     deleteFrameInDoc,
@@ -178,37 +177,6 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         },
     });
 
-    const addElement = useCallback((partial: NewVectorElement) => {
-        const doc = docRef.current;
-        if (!doc) return;
-        const id = newElementId();
-        // Honor a caller-supplied seed so a drag-create preview and its committed element share
-        // the same roughjs jitter (no visual pop on release); otherwise generate one. undefined on a
-        // seedless kind drops the key (the write loop skips undefined).
-        const seed = hasSeed(partial.type) ? (partial.seed ?? Math.floor(Math.random() * 2 ** 31)) : undefined;
-        const record: Record<string, unknown> = {
-            ...elementDefaults(partial.type, defaultsRef.current),
-            ...partial,
-            id,
-            type: partial.type,
-            seed,
-        };
-        doc.transact(() => {
-            const elementsMap = doc.getMap('elements');
-            // Place on top: read the live topmost index (each transact commits before the next
-            // add, so successive adds get a0, a1, a2… — reading React state would collide them).
-            record.index = generateKeyBetween(topmostIndex(elementsMap), null);
-
-            const elMap = new Y.Map();
-            for (const field of ELEMENT_FIELDS) {
-                const v = record[field];
-                if (v !== undefined) elMap.set(field, v);
-            }
-            elementsMap.set(id, elMap);
-        });
-        return id;
-    }, []);
-
     // Batch add — the whole set in ONE transact (paste's element ADDS: one gesture = one
     // transact / one undo step). Consecutive fractional keys above the current top preserve the
     // callers' order as the pasted stack's relative z-order. Each element gets a fresh id + seed (or a
@@ -222,7 +190,10 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
             const keys = generateNKeysBetween(topmostIndex(elementsMap), null, partials.length);
             partials.forEach((partial, i) => {
                 const id = newElementId();
-                const seed = hasSeed(partial.type) ? (partial.seed ?? Math.floor(Math.random() * 2 ** 31)) : undefined;
+                // Honor a caller-supplied seed so a drag-create preview and its committed element share
+                // the same roughjs jitter (no visual pop on release); otherwise generate one. undefined on a
+                // seedless kind drops the key (the write loop skips undefined).
+                const seed = hasSeed(partial.type) ? (partial.seed ?? randomSeed()) : undefined;
                 const record: Record<string, unknown> = {
                     ...elementDefaults(partial.type, defaultsRef.current),
                     ...partial,
@@ -242,6 +213,11 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         });
         return ids;
     }, []);
+
+    const addElement = useCallback(
+        (partial: NewVectorElement): string | undefined => addElements([partial])[0],
+        [addElements],
+    );
 
     // Batch update — the whole set in ONE transact, so a group move / nudge / z-order rewrite is a
     // single undo step and a single broadcast — one gesture = one transact. Missing ids
@@ -351,7 +327,7 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         [updateFrames],
     );
 
-    // The scene's own settings (background, grid). One sealed write, like every discrete panel op.
+    // The scene's own settings (background, grid).
     const updateMeta = useCallback((fields: Partial<VectorMeta>) => {
         const doc = docRef.current;
         if (!doc) return;
