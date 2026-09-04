@@ -1,3 +1,4 @@
+import { escapeXml } from '@workspace/lib/html';
 import {
     BORDER_STYLES,
     type BorderSide,
@@ -249,7 +250,7 @@ async function rewriteInternalHyperlinks(
             // #gid=N target as the cell text. exceljs never writes display.
             const ref = out.match(/ ref="([^"]+)"/);
             const label = ref ? labels?.get(ref[1]) : undefined;
-            if (label != null) out = out.replace('/>', ` display="${escapeXmlAttribute(label)}"/>`);
+            if (label != null) out = out.replace('/>', ` display="${escapeXml(label)}"/>`);
             return out;
         });
         if (ids.length === 0) continue;
@@ -267,15 +268,6 @@ async function rewriteInternalHyperlinks(
     }
     if (!changed) return buffer;
     return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
-}
-
-function escapeXmlAttribute(value: string): string {
-    return value
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&apos;');
 }
 
 function applyCellValue(cell: XlsxCell, v: FortuneCell): void {

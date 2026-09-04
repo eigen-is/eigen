@@ -29,13 +29,15 @@ describe('holdCapture', () => {
         expect(manager.captureTimeout).toBe(original);
     });
 
-    test('a hold released after a later one still leaves the original timeout', () => {
+    test('a nested hold is a no-op: releasing it leaves the outer hold in charge', () => {
         const manager = undoManager();
         const original = manager.captureTimeout;
 
         const first = holdCapture(manager);
         const second = holdCapture(manager);
         second();
+        expect(manager.captureTimeout).toBe(Number.POSITIVE_INFINITY);
+
         first();
         expect(manager.captureTimeout).toBe(original);
     });

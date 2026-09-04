@@ -59,6 +59,10 @@ export function sealed<T>(undoManager: Y.UndoManager | null, op: () => T): T {
 export function holdCapture(undoManager: Y.UndoManager | null): () => void {
     if (!undoManager) return () => {};
     const previous = undoManager.captureTimeout;
+    // A hold is already open, so this one is a no-op: capturing Infinity as the timeout to restore would
+    // make the inner release leave the window open forever, and sealing here would split the outer
+    // gesture's step in two. The outer hold stays in charge.
+    if (previous === Number.POSITIVE_INFINITY) return () => {};
     undoManager.stopCapturing();
     undoManager.captureTimeout = Number.POSITIVE_INFINITY;
     let released = false;

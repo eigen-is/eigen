@@ -34,6 +34,7 @@ import {
     FONT_STYLES,
     FONT_WEIGHTS,
     IMAGE_CASCADE_OFFSET,
+    num,
     oneOf,
     type Point,
     pasteAnchorOffset,
@@ -57,16 +58,12 @@ import { type PastePlan, planElementsPaste } from '../tools/paste-elements';
 import { deleteSelection } from './selection-ops';
 import type { NewVectorElement, VectorElementPatch } from './use-canvas-doc';
 
-// A forgeable wire carries arbitrary JSON, so a numeric field that isn't a finite number never reaches
-// the document.
-function num(v: number | undefined, fallback: number): number {
-    return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
-}
-
 // Foreign typography → the rich-text fields it names. This is the full set a rich-text box models, which
-// is also the full set the canvas producer writes: nothing on that wire goes unread. Each value is
-// coerced against the kind's own union with `oneOf`, the same clamp the document reader applies to a
-// stored field, so a pasted value can only ever be one a peer write could have made.
+// is also the full set the canvas producer writes: nothing on that wire goes unread. The fields below are
+// coerced with `oneOf`/`num`, the same clamps the document reader applies to a stored field, so a pasted
+// value can only ever be one a peer write could have made. The three the CALLER reads — fontFamily,
+// fontSize, color — ride in unclamped and are clamped on the way out instead, by the reader every render,
+// export and preview goes through (font list, 4-400px, colour token), exactly as any peer write is.
 function richTextTypography(typo: EigenClipboardTypography) {
     return {
         textAlign: oneOf(typo.textAlign, TEXT_ALIGNS, DEFAULT_RICHTEXT_PROPS.textAlign),
@@ -80,13 +77,14 @@ function richTextTypography(typo: EigenClipboardTypography) {
 }
 
 // Cut deletes only what the clipboard carries, so an image that could not be serialized stays put. Tell
-// the user, or the difference between "cut" and "cut most of it" is invisible.
-function warnPartialCut(kept: number) {
-    if (kept <= 0) return;
+// the user, or the difference between "cut" and "cut most of it" is invisible — and between "cut" and
+// "did nothing at all" when the selection was that image alone.
+function warnPartialCut(pendingImages: number) {
+    if (pendingImages <= 0) return;
     toast.info(
-        kept === 1
+        pendingImages === 1
             ? 'One image is still uploading, so it stayed in the drawing'
-            : `${kept} images are still uploading, so they stayed in the drawing`,
+            : `${pendingImages} images are still uploading, so they stayed in the drawing`,
     );
 }
 
@@ -393,8 +391,16 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
         const onCutEvent = (e: ClipboardEvent) => {
             const { selectedIds, buildData, plainText, deleteElements, setSelectedIds, undoManager } = live.current;
             if (blocked() || selectedIds.length === 0) return;
-            const { data, serializedIds } = buildData();
-            if (!data.items.length) return;
+            const { data, serializedIds, pendingImages } = buildData();
+            if (!data.items.length) {
+                // A selection of only still-uploading images serializes to nothing: there is no payload
+                // to write and nothing that may be deleted. Claim the event and say why anyway — silently
+                // doing nothing is indistinguishable from a cut that worked.
+                if (!pendingImages) return;
+                e.preventDefault();
+                warnPartialCut(pendingImages);
+                return;
+            }
             e.preventDefault();
             writeEigenClipboard(e, data, plainText());
             // Delete ONLY what the payload carries. An image whose media path doesn't resolve yet was
@@ -402,7 +408,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             // a substitute for not losing it. One sealed undo step (deleteSelection stopCaptures on both
             // sides).
             deleteSelection(serializedIds, deleteElements, setSelectedIds, undoManager);
-            warnPartialCut(selectedIds.length - serializedIds.length);
+            warnPartialCut(pendingImages);
         };
         const onPasteEvent = (e: ClipboardEvent) => {
             const { pasteEigenItems, pasteSvgText, pasteNonEigenText } = live.current;
@@ -467,15 +473,19 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
     };
     const onMenuCut = () => {
         if (!canEdit) return;
-        const { data, serializedIds } = buildData();
-        if (!data.items.length) return;
+        const { data, serializedIds, pendingImages } = buildData();
+        if (!data.items.length) {
+            // Nothing serialized — the keyboard sibling's case, minus an event to claim.
+            warnPartialCut(pendingImages);
+            return;
+        }
         // Delete only once the async write lands — a denied/failed clipboard write must not destroy
         // the selection (the content would exist nowhere but the undo stack) — and only the ids the
         // payload actually carries, exactly like the keyboard path.
         void writeEigenClipboardAsync(data, plainText(), foreignImgHtml(data.svg))
             .then(() => {
                 deleteSelection(serializedIds, deleteElements, setSelectedIds, undoManager);
-                warnPartialCut(selectedIds.length - serializedIds.length);
+                warnPartialCut(pendingImages);
             })
             .catch(() => {});
     };

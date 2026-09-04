@@ -1542,12 +1542,19 @@ export function CanvasEditor({
                 />
             </div>
             {/* OS-file drag-over affordance. Shown only when a drop would actually insert (the drop
-                hook stays enabled even when it wouldn't — see above). */}
-            <FileDropOverlay visible={isDragging && imagesEnabled} label="Drop images to add" icon={ImageIcon} />
+                hook stays enabled even when it wouldn't — see above). Paper-pinned like the chrome layer:
+                its border and label are `primary`, which in dark mode is near-white — over the light page
+                of a framed canvas that is white on white. */}
+            <FileDropOverlay
+                visible={isDragging && imagesEnabled}
+                label="Drop images to add"
+                icon={ImageIcon}
+                className={CANVAS_PAPER_CLASS}
+            />
             {/* Finish hint for a multi-point line/arrow draft: the finish triggers aren't discoverable, so
-                surface them while collecting clicks. */}
+                surface them while collecting clicks. Paper-pinned for the same reason as the overlay. */}
             {drawing.multiPointDraft && (
-                <HintPill className="bottom-3 left-1/2 -translate-x-1/2">
+                <HintPill className={cn(CANVAS_PAPER_CLASS, 'bottom-3 left-1/2 -translate-x-1/2')}>
                     Enter or double-click to finish · Esc to cancel
                 </HintPill>
             )}
@@ -1555,7 +1562,7 @@ export function CanvasEditor({
                 router devtools badge owns the bottom-left corner in dev. A framed page has no zoom of
                 its own — it always shows the whole page — so it shows no pill. */}
             {viewport === 'infinite' && (
-                <HintPill className="bottom-3 right-3" title="Reset zoom" onClick={resetZoom}>
+                <HintPill className={cn(CANVAS_PAPER_CLASS, 'bottom-3 right-3')} title="Reset zoom" onClick={resetZoom}>
                     {Math.round(zoom * 100)}%
                 </HintPill>
             )}

@@ -106,22 +106,34 @@ function selectionSvg(
 // listing hasn't refreshed) has no portable reference, so nobody could fetch its bytes and it is left
 // out of the whole payload. CUT deletes these ids, never the selection — deleting an element the copy
 // silently dropped is data loss, and undo is not a substitute for not losing it.
+//
+// `pendingImages` counts exactly those dropped images, which is what the cut paths tell the user about.
+// It is NOT `selectedIds.length - serializedIds.length`: a selected id that no longer exists in the
+// scene (a peer deleted it) is also missing from the payload, and is nothing to report.
 export function buildSelectionData(
     ordered: VectorElement[],
     selectedIds: string[],
     meta: VectorMeta,
     frameId: string,
     resolveMediaPath: (name: string) => DrivePath | undefined,
-): { data: EigenClipboardData; serializedIds: string[] } {
-    const selected = ordered.filter(
-        (el) => selectedIds.includes(el.id) && (el.type !== 'image' || resolveMediaPath(el.mediaName)),
-    );
+): { data: EigenClipboardData; serializedIds: string[]; pendingImages: number } {
+    const selected: VectorElement[] = [];
+    let pendingImages = 0;
+    for (const el of ordered) {
+        if (!selectedIds.includes(el.id)) continue;
+        if (el.type === 'image' && !resolveMediaPath(el.mediaName)) {
+            pendingImages += 1;
+            continue;
+        }
+        selected.push(el);
+    }
     const elementsItem = buildElementsClipboardItem(selected, frameId);
     const items: EigenClipboardItem[] = elementsItem ? [elementsItem] : [];
     items.push(...foreignItems(selected, resolveMediaPath));
     return {
         data: { version: 1, items, svg: selectionSvg(selected, items, meta, resolveMediaPath) },
         serializedIds: selected.map((el) => el.id),
+        pendingImages,
     };
 }
 

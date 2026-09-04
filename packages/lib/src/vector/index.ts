@@ -11,9 +11,9 @@ export * from './frames';
 export * from './geometry';
 export * from './image-fit';
 export * from './kinds';
-// The clipboard reads foreign typography as bare strings; `oneOf` is the same coercion the document
-// reader clamps a stored field with, so a pasted value can't be anything a peer write couldn't be.
-export { oneOf } from './kinds/read-fields';
+// The clipboard reads foreign typography as bare strings; `oneOf` and `num` are the same coercions the
+// document reader clamps a stored field with, so a pasted value can't be anything a peer write couldn't be.
+export { num, oneOf } from './kinds/read-fields';
 export * from './media-refs';
 export * from './outline';
 export * from './read-vector';
