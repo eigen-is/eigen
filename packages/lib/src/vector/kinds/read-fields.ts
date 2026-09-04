@@ -111,6 +111,8 @@ export function fillField(v: unknown): string {
     return serializeFill(parseFill(str(v, '')));
 }
 
+// The cap lands on a code-point boundary, not a markup one: a torn tag is repaired by every consumer,
+// which parses the body as HTML before it renders or serializes it.
 export function htmlField(v: unknown): string {
     return capBytes(cleanStr(v, ''), MAX_HTML_BYTES);
 }
