@@ -18,7 +18,7 @@ import {
 } from '../types';
 import { defineKind } from './kind';
 import { clampNum, color, fillField, fontFamily, fontSize, htmlField, oneOf } from './read-fields';
-import { isBordered, round } from './render-utils';
+import { isBordered, isUnpainted, round } from './render-utils';
 
 export const richTextKind = defineKind<VectorRichTextElement>({
     type: 'richtext',
@@ -69,6 +69,8 @@ export const richTextKind = defineKind<VectorRichTextElement>({
     hitTest: (el, point) => hitTestBox(el, point),
     outline: (el, inflate) =>
         rectOutline({ x: el.x, y: el.y, width: el.width, height: el.height }, cornerRadius(el, 'rectangle'), inflate),
+    // An empty box with no paint of its own draws literally nothing — the case the canvas rings.
+    paintsNothing: (el) => isUnpainted(el) && stripTagsServer(el.html).trim() === '',
     render: (el) => ({ html: el.html, style: richTextCssText(el) }),
     // The search collector and ⌘F both read plain text; stripTagsServer is the React/DOM-free stripper
     // (core/html.ts), so this works in the API Worker as well as the browser.
@@ -115,4 +117,18 @@ export function richTextCssText(el: VectorRichTextElement): string {
     // instead of growing the box, so the layer box and the drawn box are the same rectangle.
     if (bordered || el.padding > 0) style.push('box-sizing:border-box');
     return style.join(';');
+}
+
+// A box's height GROWS with the text in it: whatever renders it measures its body and writes the fit
+// back when the text needs more room than the box has. The stored height is the user's MINIMUM, never
+// a maximum — extra height is how a box is vertically aligned (`verticalAlign` has nothing to work
+// with otherwise), so nothing ever shrinks a box automatically; a manual resize sets the new minimum.
+// `contentHeight` is the body's own extent; the stored height is the border box, so the inset and the
+// border ride inside it. null = the box is already tall enough, which is also the loop guard: every
+// peer measures the same box, and only a real (>= 1px) shortfall is ever written.
+export function richTextFitHeight(el: VectorRichTextElement, contentHeight: number): number | null {
+    const needed = contentHeight + 2 * el.padding + (isBordered(el) ? 2 * el.strokeWidth : 0);
+    // A sub-pixel shortfall is left alone: the body overflows visibly rather than clipping, so writing
+    // for it would only cost every peer a round of updates.
+    return needed - el.height >= 1 ? Math.ceil(needed) : null;
 }

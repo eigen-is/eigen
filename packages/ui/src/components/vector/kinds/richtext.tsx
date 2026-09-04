@@ -5,6 +5,7 @@
 
 import {
     ELEMENT_KINDS,
+    RICH_TEXT_CLASS,
     richTextCssText,
     VECTOR_STYLE_DEFAULTS,
     type VectorRichTextElement,
@@ -72,7 +73,10 @@ export function RichTextInPlaceEditor({ element, onChange, onExit }: InPlaceEdit
                 onChange={(html) => onChange({ html })}
                 toolbar="floating"
                 proseStyle={false}
-                className="min-h-0 break-words"
+                // The rendered body's class, so the descendant rules an inline style cannot reach (list
+                // markers, paragraph spacing) apply WHILE typing too: the box the user types in is the
+                // box the renderer paints, and the auto-fit measures one height for both.
+                className={`${RICH_TEXT_CLASS} min-h-0 break-words`}
                 containerClassName="relative flex flex-col w-full"
                 onReady={({ editor }) => editor.chain().focus('end').run()}
             />
@@ -213,7 +217,7 @@ export function RichTextPanelSection({ elements, onChange }: KindPanelSectionPro
                         max={5}
                     />
                 </PropertyRow>
-                {/* The inset between the box edge and the text; the box keeps its stored size. */}
+                {/* The inset between the box edge and the text; it rides inside the box, which re-fits to it. */}
                 <PropertyRow label="Padding">
                     <MergedNumberInput
                         value={padding}

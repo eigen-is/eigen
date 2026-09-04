@@ -94,6 +94,10 @@ type KindSpec<T extends VectorElement> = {
     // The two lines a straight arrow's bind-time aim projects onto. Omit for the box default.
     aimLines?(el: T): [[Point, Point], [Point, Point]];
     render(el: T, ctx: RenderContext): RenderOutput;
+    // Whether THIS element puts no ink on the page at all — an empty text box, a shape with neither
+    // fill nor border, an image with no picture. The canvas rings such an element while editing so it
+    // stays findable; a kind that always paints something omits this.
+    paintsNothing?(el: T): boolean;
     // What the kind contributes to the search index. Omit when it carries no text.
     searchText?(el: T): string;
 };
@@ -117,6 +121,7 @@ export type ElementKind<T extends VectorElement = VectorElement> = {
     anchorPoints(el: VectorElement): Point[];
     aimLines(el: VectorElement): [[Point, Point], [Point, Point]];
     render(el: VectorElement, ctx: RenderContext): RenderOutput;
+    paintsNothing(el: VectorElement): boolean;
     searchText(el: VectorElement): string;
 };
 
@@ -149,6 +154,12 @@ function boxAimLines(el: VectorElement): [[Point, Point], [Point, Point]] {
         [rot({ x, y: y + h / 2 }), rot({ x: x + w, y: y + h / 2 })],
     ];
 }
+
+// The box a click with the text tool places, in scene units. Beside the style tables because it is the
+// same kind of answer — "what does a new one look like" — but ONE table for both hosts: the height is
+// only the box's starting minimum (it grows to the first line typed at whatever size the host's table
+// says), so there is nothing per-app to say about it.
+export const NEW_TEXT_BOX_SIZE = { width: 320, height: 48 };
 
 // The vector app's style table: roughness 1, hachure, Excalifont, curved corners (SLIDES_STYLE_DEFAULTS
 // is the deck's flat counterpart). A fresh element starts unpainted but hatched — the hatch style rides
@@ -201,6 +212,7 @@ export function defineKind<T extends VectorElement>(spec: KindSpec<T>): ElementK
         anchorPoints: boxAnchorPoints,
         aimLines: (el) => (spec.is(el) && spec.aimLines ? spec.aimLines(el) : boxAimLines(el)),
         render: (el, ctx) => (spec.is(el) ? spec.render(el, ctx) : { svg: '' }),
+        paintsNothing: (el) => (spec.is(el) && spec.paintsNothing ? spec.paintsNothing(el) : false),
         searchText: (el) => (spec.is(el) && spec.searchText ? spec.searchText(el) : ''),
     };
 }

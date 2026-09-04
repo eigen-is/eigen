@@ -21,9 +21,9 @@ import { rectangleKind } from './rectangle';
 import { richTextKind } from './richtext';
 
 export type { RenderOutput, StyleDefaults } from './kind';
-export { SLIDES_STYLE_DEFAULTS, VECTOR_STYLE_DEFAULTS } from './kind';
+export { NEW_TEXT_BOX_SIZE, SLIDES_STYLE_DEFAULTS, VECTOR_STYLE_DEFAULTS } from './kind';
 // The in-place editor paints its box with the SAME string the renderer emits, so the two cannot drift.
-export { richTextCssText } from './richtext';
+export { richTextCssText, richTextFitHeight } from './richtext';
 
 // Each entry keeps its own element type, so `ELEMENT_KINDS.richtext.defaults(style)` is rich text's
 // field set and a generic `ELEMENT_KINDS[el.type]` lookup still answers with the union.
@@ -45,6 +45,14 @@ export const ELEMENT_KINDS: ElementKindRegistry = {
 // `ELEMENT_KINDS[type].capabilities` directly — the panel, the tools and the binding code call this.
 export function capabilitiesOf(el: VectorElement): Capabilities {
     return ELEMENT_KINDS[el.type].capabilitiesOf(el);
+}
+
+// Does this element put any ink on the page? False for an empty text box, a shape with neither fill nor
+// border, and an image with no picture. Editing chrome only — the canvas rings such an element so it
+// stays findable and selectable; a thumbnail, present mode, a preview and an export show the page as it
+// is. A kind answers for itself (kind.ts), so nothing switches on `type` out here.
+export function paintsNothing(el: VectorElement): boolean {
+    return ELEMENT_KINDS[el.type].paintsNothing(el);
 }
 
 // Bindable targets for an arrow endpoint, read off the registry through the one capability accessor. A

@@ -405,6 +405,7 @@ function SlideEditorInner({
                             publishCursor={publishCursor}
                             imageInsertRef={imageInsertRef}
                             onOpenCard={comments.openCard}
+                            commentCards={comments.lifecycle.cards}
                             onAddComment={canWrite && chatFolderId ? comments.addCommentTo : undefined}
                             searchMatchedIds={searchMatchedIds}
                             searchActiveId={searchActiveId}

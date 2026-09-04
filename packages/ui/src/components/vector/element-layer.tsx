@@ -17,7 +17,8 @@ import {
     SVG_NS,
     type VectorElement,
 } from '@workspace/lib/vector';
-import { memo } from 'react';
+import { memo, useRef } from 'react';
+import { type FitHeight, useRichTextAutoFit } from './text-fit';
 
 type ElementLayerProps = {
     el: VectorElement;
@@ -27,6 +28,9 @@ type ElementLayerProps = {
     // An in-place editor for this element. While present the layer takes pointer events and the kind's
     // own body is not drawn — the editor IS what the user sees.
     children?: React.ReactNode;
+    // Rich text's height follows its text: pass a writer and the layer measures its own body and fits
+    // the box (text-fit.ts). Omitted by every read-only surface — a thumbnail must not write.
+    onFitHeight?: FitHeight;
 };
 
 // Pan/zoom and drag re-render without touching elements, so identity settles those in one compare;
@@ -56,6 +60,9 @@ function samePoints(a: Point[] | undefined, b: Point[] | undefined): boolean {
 export function sameLayerProps(prev: ElementLayerProps, next: ElementLayerProps): boolean {
     // A hosted editor is a fresh node every parent render; never memoize it away.
     if (prev.children !== next.children) return false;
+    // The canvas swaps this to undefined for the length of a gesture, which is how a live resize keeps
+    // the auto-fit off the box it is dragging.
+    if (prev.onFitHeight !== next.onFitHeight) return false;
     if (prev.resolveMedia !== next.resolveMedia) return false;
     if (!sameElement(prev.el, next.el)) return false;
     // Same element fields AND the same scene map → identical output (the pan/zoom/drag common case).
@@ -72,14 +79,23 @@ function layerStyle(layer: Pick<Layer, 'box' | 'opacity'>): React.CSSProperties 
     return { left: 0, top: 0, ...layerBoxCss(layer) };
 }
 
-export const ElementLayer = memo(function ElementLayer({ el, resolveMedia, byId, children }: ElementLayerProps) {
+export const ElementLayer = memo(function ElementLayer({
+    el,
+    resolveMedia,
+    byId,
+    children,
+    onFitHeight,
+}: ElementLayerProps) {
+    // The layer node, so rich text can measure the body inside it — its own, or the in-place editor's.
+    const hostRef = useRef<HTMLDivElement>(null);
+    useRichTextAutoFit(hostRef, el, onFitHeight);
     const layer = elementLayer(el, { resolveMedia, route: arrowRoute(el, byId) });
     if (!layer) return null;
     const { content } = layer;
     const style = layerStyle(layer);
     if (children) {
         return (
-            <div data-element-id={el.id} className="pointer-events-auto absolute" style={style}>
+            <div ref={hostRef} data-element-id={el.id} className="pointer-events-auto absolute" style={style}>
                 {children}
             </div>
         );
@@ -93,6 +109,7 @@ export const ElementLayer = memo(function ElementLayer({ el, resolveMedia, byId,
         const html = layerInnerHtml({ ...content, html: sanitizeToLightEditorHtml(content.html) });
         return (
             <div
+                ref={hostRef}
                 data-element-id={el.id}
                 className="absolute"
                 style={style}

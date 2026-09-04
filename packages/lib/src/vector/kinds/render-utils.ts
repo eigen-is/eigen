@@ -166,6 +166,12 @@ export function isBordered(el: { strokeWidth: number; strokeColor: string }): bo
     return el.strokeWidth > 0 && !isTransparentColor(el.strokeColor);
 }
 
+// Neither a painted fill nor a painted stroke: the element's own paint puts no ink on the page. The
+// shared half of a kind's `paintsNothing` — rich text adds "and no text", an image "and no picture".
+export function isUnpainted(el: { fill: string; strokeWidth: number; strokeColor: string }): boolean {
+    return !isBordered(el) && isTransparentFill(parseFill(el.fill));
+}
+
 // The stroke-style vocabulary as roughjs `strokeLineDash` / an SVG `stroke-dasharray`: one dash table,
 // shared by the drawing kinds and by the image's border.
 export function dashArray(strokeStyle: VectorShapeElement['strokeStyle'], strokeWidth: number): number[] | undefined {

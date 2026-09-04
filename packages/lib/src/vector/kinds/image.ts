@@ -37,6 +37,9 @@ export const imageKind = defineKind<VectorImageElement>({
     hitTest: (el, point) => hitTestBox(el, point),
     outline: (el, inflate) =>
         rectOutline({ x: el.x, y: el.y, width: el.width, height: el.height }, cornerRadius(el, 'rectangle'), inflate),
+    // No picture and no border: elementLayer drops such an element entirely, so nothing would mark
+    // the spot the user dropped it on.
+    paintsNothing: (el) => el.mediaName === '' && !isBordered(el),
     render: (el, ctx) => {
         const href = ctx.resolveMedia?.(el.mediaName) ?? null;
         if (!href) return { svg: '' };

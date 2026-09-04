@@ -1,7 +1,7 @@
 import { useAuth } from '@workspace/lib/auth';
 import { materializeClipboardSvg, needsReUpload, reUploadImage } from '@workspace/lib/clipboard';
 import { useCommentFilter, useCommentLifecycle, useDocumentPanels } from '@workspace/lib/comments';
-import { EIGEN_STICKIES_INDICATOR_MAP } from '@workspace/lib/constants/colors';
+import { commentIndicatorColor } from '@workspace/lib/constants/comment-indicator';
 import {
     isPendingMediaName,
     MediaResolverProvider,
@@ -451,9 +451,7 @@ function SheetEditorInner({
                                             const entry = card.chatName
                                                 ? allComments.find((c) => c.chatName === card.chatName)
                                                 : undefined;
-                                            const indicatorColor = card.color
-                                                ? (EIGEN_STICKIES_INDICATOR_MAP.get(card.color) ?? card.color)
-                                                : null;
+                                            const indicatorColor = commentIndicatorColor(card.color);
                                             return { card, entry, indicatorColor };
                                         },
                                     }}

@@ -643,6 +643,13 @@
     left: -1px;
 }
 
+/* An element that paints nothing (an empty text box, a shape with neither fill nor border, an image
+   with no picture) is invisible on the page. While the canvas is editable it rings each one faintly so
+   it can still be found and selected; the ring is chrome, so nothing printed or exported carries it. */
+.eigen-empty-outline {
+    outline: 1px dashed var(--border);
+}
+
 /* Selected-object chrome (shared: docs figure, slides, vector, and sheets' floating
    image (ImgBoxs), all via ObjectTransform): the ring around the object and the square
    resize grips, one visual for every editor. */
