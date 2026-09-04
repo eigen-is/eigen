@@ -324,6 +324,10 @@ function ellipseEdgeDistance(shape: { cx: number; cy: number; rx: number; ry: nu
     const tpy = p.y - shape.cy;
     const px = Math.abs(tpx);
     const py = Math.abs(tpy);
+    // A collapsed semi-axis divides by 0 in the iteration: the curve IS the segment between its poles.
+    if (a === 0 || b === 0) {
+        return distanceToSegment(p, { x: shape.cx - a, y: shape.cy - b }, { x: shape.cx + a, y: shape.cy + b });
+    }
     // The iteration divides by |q|, which is 0 at the exact centre (Excalidraw returns NaN there). The
     // nearest edge point from the centre is the semi-minor axis.
     if (px === 0 && py === 0) return Math.min(a, b);

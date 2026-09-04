@@ -1313,6 +1313,13 @@ describe('elementBounds', () => {
         expect(b.maxX).not.toBe(stale2.maxX);
     });
 
+    // render and hitTest both guard an empty route; bounds must too, or ±Infinity reaches the shared
+    // viewBox and the whole document exports blank.
+    test('an empty route falls back to the stored box instead of ±Infinity', () => {
+        const el = arrowEl({ points: '[[0,0],[100,0]]', width: 100, height: 0 });
+        expect(elementBounds(el, [])).toEqual(getElementBounds(el));
+    });
+
     test('a wide label unions its rect into the bounds', () => {
         const el = arrowEl({ points: '[[0,0],[100,0]]', width: 100, height: 0, text: 'wide', labelWidth: 200 });
         const b = elementBounds(el);

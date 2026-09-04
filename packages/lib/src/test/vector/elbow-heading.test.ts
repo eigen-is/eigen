@@ -170,6 +170,9 @@ describe('elbowRoute — pre-dock origPoint seam', () => {
 
         // The seam is threaded: a far pre-dock point is accepted and steers the heading, so the routes differ.
         expect(preDock).not.toEqual(atRest);
+        // Distance exactly 0 (an endpoint sitting ON the outline) is as NEAR as it gets, so it takes the
+        // cone branch like the resting point — not the far branch a falsy test would send it down.
+        expect(elbowRoute(arrow, byId, { start: { x: 10, y: 0 } })).toEqual(atRest);
         // Sanity: both still begin exactly on the stored start (unchanged).
         expect(atRest[0]).toEqual(start);
         expect(preDock[0]).toEqual(start);

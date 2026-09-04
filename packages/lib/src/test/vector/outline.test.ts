@@ -496,6 +496,18 @@ describe('outlineDistance', () => {
         expect(outlineDistance(shape, { x: 50, y: 50 })).toBeCloseTo(50, 6);
     });
 
+    // A zero-width or zero-height ellipse is a segment, not a curve: the Newton iteration would divide
+    // by that semi-axis and hand every caller a NaN.
+    test('a degenerate ellipse measures to the segment it collapsed to', () => {
+        const flat = ellipseOutline({ x: 0, y: 0, width: 100, height: 0 }, 0);
+        expect(outlineDistance(flat, { x: 50, y: 20 })).toBeCloseTo(20, 9);
+        expect(outlineDistance(flat, { x: 120, y: 0 })).toBeCloseTo(20, 9);
+        const thin = ellipseOutline({ x: 0, y: 0, width: 0, height: 100 }, 0);
+        expect(outlineDistance(thin, { x: 20, y: 50 })).toBeCloseTo(20, 9);
+        const point = ellipseOutline({ x: 0, y: 0, width: 0, height: 0 }, 0);
+        expect(outlineDistance(point, { x: 3, y: 4 })).toBeCloseTo(5, 9);
+    });
+
     test('an open polyline measures to the path itself, and an empty outline reads 0', () => {
         const path = polylineOutline([
             { x: 0, y: 0 },

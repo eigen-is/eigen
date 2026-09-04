@@ -91,8 +91,10 @@ export function getHeadingForElbowArrowSnap(
     if (!shape || !aabb) return otherPointHeading;
 
     const d = distanceToElement(shape, origPoint);
+    // null, not 0: a degenerate outline and an endpoint sitting exactly on the edge both read 0, and
+    // both are as NEAR as an endpoint gets — only "beyond MAX_BINDING_DISTANCE" is far.
     const distance = d > MAX_BINDING_DISTANCE ? null : d;
-    if (!distance) {
+    if (distance === null) {
         const c = boxCenter(shape);
         return vectorToHeading(p.x - c.x, p.y - c.y);
     }

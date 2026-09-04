@@ -107,7 +107,8 @@ export const arrowKind = defineKind<VectorArrowElement>({
     // clipped by the viewBox nor missed by marquee/ring. `route` (the derived elbow polyline) replaces the
     // stored box for an elbow arrow, whose bends spill outside the 2-endpoint box.
     bounds: (el, route): Bounds => {
-        const box = route ? pointsBounds(route.map((p) => linearLocalToScene(el, p))) : getElementBounds(el);
+        // An empty route is no route: pointsBounds([]) is ±Infinity, which would poison the shared viewBox.
+        const box = route?.length ? pointsBounds(route.map((p) => linearLocalToScene(el, p))) : getElementBounds(el);
         const label = arrowLabelBox(el, route);
         if (!label) return box;
         const hw = label.width / 2;
