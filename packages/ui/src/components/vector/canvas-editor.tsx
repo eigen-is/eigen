@@ -849,6 +849,7 @@ export function CanvasEditor({
         containerRef,
         viewport,
         frameId,
+        styleDefaults,
         ordered,
         meta,
         selectedIds,

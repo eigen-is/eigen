@@ -28,8 +28,6 @@ import type {
 } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
-    DEFAULT_FONT_FAMILY,
-    DEFAULT_FONT_SIZE,
     DEFAULT_RICHTEXT_PROPS,
     FONT_STYLES,
     FONT_WEIGHTS,
@@ -40,6 +38,7 @@ import {
     pasteAnchorOffset,
     readElementsClipboardItem,
     reanchorElements,
+    type StyleDefaults,
     TEXT_ALIGNS,
     TEXT_DECORATIONS,
     type TextAlign,
@@ -102,6 +101,10 @@ type CanvasClipboardParams = {
     containerRef: { current: HTMLDivElement | null };
     viewport: 'infinite' | 'frame';
     frameId: string;
+    // The host's table for a NEW element (vector: Excalifont 20, slides: Inter 48). A pasted text box
+    // is a new element like any other, so it is measured and created with this, never the engine's own
+    // defaults — else ⌘V and the T tool disagree on the same slide.
+    styleDefaults: StyleDefaults;
     // The scene in z-order, its background, and the selection — what a copy serializes.
     ordered: VectorElement[];
     meta: VectorMeta;
@@ -128,6 +131,7 @@ type CanvasClipboardParams = {
 
 export function useCanvasClipboard(params: CanvasClipboardParams) {
     const { canEdit, textEditingRef, containerRef, viewport, frameId, ordered, meta, selectedIds } = params;
+    const { styleDefaults } = params;
     const { setSelectedIds } = params;
     const { addElement, addElements, updateElements, updateElementUntracked } = params;
     const { deleteElements, deleteElementsUntracked, undoManager } = params;
@@ -214,8 +218,8 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                 // An empty text item is a foreign contentless carrier — skip it.
                 if (item.type !== 'text' || !clipboardTextItemHasContent(item)) continue;
                 const typo = item.typography ?? {};
-                const fontFamily = typo.fontFamily ?? DEFAULT_FONT_FAMILY;
-                const fontSize = num(typo.fontSize, DEFAULT_FONT_SIZE);
+                const fontFamily = typo.fontFamily ?? styleDefaults.fontFamily;
+                const fontSize = num(typo.fontSize, styleDefaults.fontSize);
                 const { width, height } = measureVectorText(item.text, fontSize, fontFamily);
                 plan.partials.push({
                     type: 'richtext',
@@ -232,7 +236,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             }
             return plan;
         },
-        [viewportCenterScene, mediaFolderId],
+        [viewportCenterScene, mediaFolderId, styleDefaults],
     );
 
     // One paste = one undo step: every ADD in one transact, the arrow-binding remap inside the same
@@ -327,13 +331,14 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
         [pasteEigenItems],
     );
 
-    // Plain-text paste (no eigen payload, no OS files) → ONE rich-text box at the viewport centre, with
-    // default typography and a locally-measured box (the pasteEigenItems text idiom). Multi-line text is
-    // preserved — textToParagraphHtml keeps one paragraph per line. One sealed undo step.
+    // Plain-text paste (no eigen payload, no OS files) → ONE rich-text box at the viewport centre, in the
+    // HOST's typography and with a locally-measured box (the pasteEigenItems text idiom). The partial names
+    // no font, so the box is created with the same table it is measured with. Multi-line text is preserved
+    // — textToParagraphHtml keeps one paragraph per line. One sealed undo step.
     const pasteTextElement = useCallback(
         (text: string, textAlign: TextAlign = 'left') => {
             const anchor = viewportCenterScene();
-            const { width: w, height: h } = measureVectorText(text, DEFAULT_FONT_SIZE, DEFAULT_FONT_FAMILY);
+            const { width: w, height: h } = measureVectorText(text, styleDefaults.fontSize, styleDefaults.fontFamily);
             const id = sealed(undoManager, () =>
                 addElement({
                     type: 'richtext',
@@ -343,14 +348,12 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                     height: h,
                     angle: 0,
                     html: textToParagraphHtml(text),
-                    fontSize: DEFAULT_FONT_SIZE,
-                    fontFamily: DEFAULT_FONT_FAMILY,
                     textAlign,
                 }),
             );
             if (id) setSelectedIds([id]);
         },
-        [viewportCenterScene, addElement, setSelectedIds, undoManager],
+        [viewportCenterScene, addElement, setSelectedIds, undoManager, styleDefaults],
     );
 
     // Non-eigen text paste (the keyboard fallthrough and the async menu path share this policy): plain
@@ -383,6 +386,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
         pasteSvgText,
         pasteNonEigenText,
         insertImageFiles,
+        mediaFolderId,
         viewportCenterScene,
         deleteElements,
         setSelectedIds,
@@ -435,7 +439,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
         };
         const onPasteEvent = (e: ClipboardEvent) => {
             const { pasteEigenItems, pasteSvgText, pasteNonEigenText } = live.current;
-            const { insertImageFiles, viewportCenterScene } = live.current;
+            const { insertImageFiles, mediaFolderId, viewportCenterScene } = live.current;
             if (blocked()) return;
             const cd = e.clipboardData;
             if (!cd) return;
@@ -456,13 +460,20 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             // A bare SVG on the clipboard: ours (the items in `<metadata>`) restores native elements;
             // any other SVG inserts as an image via the media path. OS files still fall through.
             if (paste.svg) {
-                claim();
-                if (!pasteSvgText(paste.svg.svg)) {
-                    void insertImageFiles([svgToImageFile(paste.svg.svg)], viewportCenterScene());
+                if (pasteSvgText(paste.svg.svg)) {
+                    claim();
+                    return;
                 }
-                return;
+                // A foreign SVG lands as an IMAGE, which needs a media/ folder to upload into —
+                // insertImageFiles places nothing without one, so this rung claims the paste only when
+                // it can actually place it and otherwise leaves the text rung below its turn.
+                if (mediaFolderId) {
+                    claim();
+                    void insertImageFiles([svgToImageFile(paste.svg.svg)], viewportCenterScene());
+                    return;
+                }
             }
-            // No eigen/SVG payload. OS files fall through to useFilePasteTarget (image drop path).
+            // Nothing placed by the rungs above. OS files fall through to useFilePasteTarget (image drop path).
             if (paste.files.length > 0) return;
             // Plain text (or the text of pasted HTML) → a new rich-text box; only claim the event when
             // content is actually consumed, else it falls through to the OS-file path.
@@ -534,10 +545,11 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             if (text) transfer.setData('text/plain', text);
             const paste = classifyPaste(transfer);
             if (paste.svg) {
-                if (!pasteSvgText(paste.svg.svg)) {
+                if (pasteSvgText(paste.svg.svg)) return;
+                if (mediaFolderId) {
                     await insertImageFiles([svgToImageFile(paste.svg.svg)], viewportCenterScene());
+                    return;
                 }
-                return;
             }
             if (pasteNonEigenText(paste.html, paste.text)) return;
             // An eigen payload was there and no rung could place any of it — the keyboard path's toast,
