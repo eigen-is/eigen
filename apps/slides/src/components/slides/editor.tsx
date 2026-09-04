@@ -118,10 +118,13 @@ function SlideEditorInner({
     // whole deck, so either can land on an element the canvas is not currently showing.
     const revealElement = useCallback(
         (el: VectorElement) => {
-            setFrameId(el.frameId);
+            // An element homed on no live slide (a peer deleted it, or the record never carried one) is
+            // still searchable and still carries comments; going to its frame would empty the canvas, so
+            // it is selected where we are instead.
+            if (doc.frames.some((f) => f.id === el.frameId)) setFrameId(el.frameId);
             setSelectedIds([el.id]);
         },
-        [setFrameId, setSelectedIds],
+        [doc.frames, setFrameId, setSelectedIds],
     );
 
     const comments = useCanvasCommentHost({

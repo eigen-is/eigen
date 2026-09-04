@@ -11,6 +11,7 @@ import {
     type Box,
     type CanvasViewport,
     DEFAULT_ELEMENT_PROPS,
+    distance,
     ELEMENT_KINDS,
     elbowBindPoint,
     elbowRoutingContext,
@@ -66,10 +67,6 @@ const LINE_DRAG_SCREEN = 4;
 
 const PREVIEW_ID = '__drawing__';
 const EMPTY_IDS: Set<string> = new Set();
-
-function dist(a: Point, b: Point): number {
-    return Math.hypot(a.x - b.x, a.y - b.y);
-}
 
 // The geometry + base props every live preview element (draw draft) shares. Its callers spread the kind's
 // own create defaults under it — the same table the commit writes through addElement, so a preview can
@@ -378,8 +375,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         const last = draft.committed[draft.committed.length - 1];
         const first = draft.committed[0];
         const confirm = LINE_CONFIRM_SCREEN / liveZoom();
-        if (draft.committed.length >= 2 && dist(rel, last) <= confirm) return finishLineWith(draft.committed);
-        if (draft.type === 'line' && draft.committed.length >= 3 && dist(rel, first) <= confirm) {
+        if (draft.committed.length >= 2 && distance(rel, last) <= confirm) return finishLineWith(draft.committed);
+        if (draft.type === 'line' && draft.committed.length >= 3 && distance(rel, first) <= confirm) {
             // Close the loop on the first point so the fill (isClosedPath) reads a closed path.
             return finishLineWith([...draft.committed, { x: 0, y: 0 }]);
         }
@@ -515,7 +512,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             const rel = { x: scene.x - draft.origin.x, y: scene.y - draft.origin.y };
             const last = draft.committed[draft.committed.length - 1];
             draft.trailing = e.shiftKey ? snapSegment(last, rel) : rel;
-            if (draft.mode === 'pending' && dist(scene, draft.origin) >= LINE_DRAG_SCREEN / liveZoom())
+            if (draft.mode === 'pending' && distance(scene, draft.origin) >= LINE_DRAG_SCREEN / liveZoom())
                 lineMovedRef.current = true;
             // The moving endpoint (origin + trailing) drives the binding highlight for an arrow draft.
             // Read Ctrl/Cmd off the live pointer event here — a keyup missed during a window blur can

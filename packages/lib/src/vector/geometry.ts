@@ -288,6 +288,12 @@ export function resizeLinear(
     return normalizeLinear(box, rescalePoints(parsePoints(el.points), el, box));
 }
 
+// Distance between two points. Every tool that measures a drag, a grab radius or a segment length
+// asks this rather than spelling out its own Math.hypot.
+export function distance(a: Point, b: Point): number {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
 // Nearest distance from a point to a polyline (min over its segments). A single point degrades to the
 // distance to that point; an empty path is unreachable.
 export function distanceToPolyline(points: Point[], point: Point): number {

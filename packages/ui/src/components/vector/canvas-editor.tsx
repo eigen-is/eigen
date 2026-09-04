@@ -846,6 +846,7 @@ export function CanvasEditor({
     const { onMenuCopy, onMenuCut, onMenuPaste, pasteSvgText } = useCanvasClipboard({
         canEdit,
         textEditingRef,
+        containerRef,
         viewport,
         frameId,
         ordered,

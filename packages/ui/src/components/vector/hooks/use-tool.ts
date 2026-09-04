@@ -15,16 +15,14 @@ export type VectorToolEntry = {
     tool: VectorTool;
     icon: LucideIcon;
     label: string;
-    shortcut: LetterKey;
-    digit: NumberKey;
+    // Absent only for a creatable kind the registry gave no shortcut: nothing is bound and nothing is
+    // shown for it, rather than doubling up on Select's keys.
+    shortcut?: LetterKey;
+    digit?: NumberKey;
     // Drives the toolbar's menu split: inserting tools fill the Insert menu, the rest (the select mode
     // + eraser) live in the Edit menu.
     inserts: boolean;
 };
-
-// A creatable kind without a shortcut is a registry bug, not a runtime state (the registry test pins
-// it); this keeps the type honest without inventing a second table or a cast.
-const NO_SHORTCUT: { letter: LetterKey; digit: NumberKey } = { letter: 'V', digit: '1' };
 
 // The LIST, its ORDER and its presentation come from the registries, so adding a kind adds a tool:
 // CREATION_TOOL_TYPES is the vocabulary, ELEMENT_KIND_UI the icon/label/shortcut. useCanvasKeyboard
@@ -32,8 +30,8 @@ const NO_SHORTCUT: { letter: LetterKey; digit: NumberKey } = { letter: 'V', digi
 export const VECTOR_TOOLS: VectorToolEntry[] = [
     { tool: 'select', icon: MousePointer2, label: 'Select', shortcut: 'V', digit: '1', inserts: false },
     ...CREATION_TOOL_TYPES.map((type) => {
-        const { icon, label, shortcut = NO_SHORTCUT } = ELEMENT_KIND_UI[type];
-        return { tool: type, icon, label, shortcut: shortcut.letter, digit: shortcut.digit, inserts: true };
+        const { icon, label, shortcut } = ELEMENT_KIND_UI[type];
+        return { tool: type, icon, label, shortcut: shortcut?.letter, digit: shortcut?.digit, inserts: true };
     }),
     { tool: 'eraser', icon: Eraser, label: 'Eraser', shortcut: 'E', digit: '0', inserts: false },
 ];

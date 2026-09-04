@@ -97,6 +97,9 @@ type CanvasClipboardParams = {
     // Read from listeners bound once, so the live "a text surface owns the keyboard" answer rides a
     // ref: the overlay and the in-place editor keep native clipboard while they are open.
     textEditingRef: { current: boolean };
+    // The canvas surface, for the same question about the MOUSE: a text run selected outside it (a
+    // comment, the activity list) owns copy/cut.
+    containerRef: { current: HTMLDivElement | null };
     viewport: 'infinite' | 'frame';
     frameId: string;
     // The scene in z-order, its background, and the selection — what a copy serializes.
@@ -124,7 +127,8 @@ type CanvasClipboardParams = {
 };
 
 export function useCanvasClipboard(params: CanvasClipboardParams) {
-    const { canEdit, textEditingRef, viewport, frameId, ordered, meta, selectedIds, setSelectedIds } = params;
+    const { canEdit, textEditingRef, containerRef, viewport, frameId, ordered, meta, selectedIds } = params;
+    const { setSelectedIds } = params;
     const { addElement, addElements, updateElements, updateElementUntracked } = params;
     const { deleteElements, deleteElementsUntracked, undoManager } = params;
     const { viewportCenterScene, insertImageFiles, mediaFolderId } = params;
@@ -389,9 +393,19 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
 
     useEffect(() => {
         const blocked = () => isTypingTarget() || !live.current.canEdit || textEditingRef.current;
+        // A non-collapsed text selection OUTSIDE the canvas owns copy/cut: the user is copying that run
+        // (a comment, an activity row), and writing the element payload would take the clipboard from
+        // them with nothing on screen to explain it. Inside the canvas there is no text to copy — the
+        // in-place editor is `blocked()` above — so only the outside case bails.
+        const textSelectedOutside = () => {
+            const selection = window.getSelection();
+            if (!selection || selection.isCollapsed || selection.toString().trim() === '') return false;
+            const node = selection.anchorNode;
+            return !(node && containerRef.current?.contains(node));
+        };
         const onCopyEvent = (e: ClipboardEvent) => {
             const { selectedIds, buildData, plainText } = live.current;
-            if (blocked() || selectedIds.length === 0) return;
+            if (blocked() || textSelectedOutside() || selectedIds.length === 0) return;
             const { data } = buildData();
             if (!data.items.length) return;
             e.preventDefault();
@@ -399,7 +413,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
         };
         const onCutEvent = (e: ClipboardEvent) => {
             const { selectedIds, buildData, plainText, deleteElements, setSelectedIds, undoManager } = live.current;
-            if (blocked() || selectedIds.length === 0) return;
+            if (blocked() || textSelectedOutside() || selectedIds.length === 0) return;
             const { data, serializedIds, pendingImages } = buildData();
             if (!data.items.length) {
                 // A selection of only still-uploading images serializes to nothing: there is no payload
@@ -468,7 +482,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             document.removeEventListener('cut', onCutEvent);
             document.removeEventListener('paste', onPasteEvent, true);
         };
-    }, [textEditingRef]);
+    }, [textEditingRef, containerRef]);
 
     // Menu clipboard rows: no ClipboardEvent here, so copy/cut go through the async writer and paste
     // through the async reader (eigen items only — OS files still need ⌘V). Same producer/consumer as

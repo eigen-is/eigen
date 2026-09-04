@@ -18,6 +18,7 @@ import {
 import { cn } from '@workspace/ui/lib/utils';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { ElementLayer } from './element-layer';
+import { CANVAS_PAPER_CLASS } from './paper';
 
 type FrameViewProps = {
     frame: VectorFrame;
@@ -55,7 +56,15 @@ export function FrameView({ frame, elements, resolveMedia, interactive, classNam
     return (
         <div
             ref={containerRef}
-            className={cn('relative overflow-hidden', !interactive && 'pointer-events-none', className)}
+            // The page is the canvas' PAPER here too (FramePage carries the same pin on the live
+            // canvas): a thumbnail and present mode render user content on a light page, so what is
+            // inside must resolve against the light palette even in dark mode.
+            className={cn(
+                CANVAS_PAPER_CLASS,
+                'relative overflow-hidden',
+                !interactive && 'pointer-events-none',
+                className,
+            )}
             style={{
                 aspectRatio: `${frame.width}/${frame.height}`,
                 ...getBackgroundStyle(parseBackgroundFill(frame.background), resolveMedia),

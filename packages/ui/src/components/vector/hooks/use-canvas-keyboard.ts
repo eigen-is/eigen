@@ -29,6 +29,13 @@ type CanvasKeyboardParams = {
     duplicateElements: (ids: string[], dx: number, dy: number) => string[];
 };
 
+// The tools that actually carry keys. A creatable kind the registry gave no shortcut binds nothing
+// rather than doubling up on Select's V/1; resolved at module eval, so the hook count and order below
+// are fixed across renders.
+const KEYED_TOOLS = VECTOR_TOOLS.flatMap(({ tool, shortcut, digit }) =>
+    shortcut && digit ? [{ tool, shortcut, digit }] : [],
+);
+
 // The nudge bindings in one table, so the eight handlers are built — and memoized — in one place.
 const NUDGES = [
     ['ArrowLeft', -NUDGE_STEP, 0],
@@ -70,14 +77,14 @@ export function useCanvasKeyboard(params: CanvasKeyboardParams) {
     // itself. A module constant, so the hook count and order are fixed across renders.
     const toolHandlers = useMemo(
         () =>
-            VECTOR_TOOLS.map(
+            KEYED_TOOLS.map(
                 ({ tool }) =>
                     () =>
                         live.current.setTool(tool),
             ),
         [],
     );
-    for (const [i, { shortcut, digit }] of VECTOR_TOOLS.entries()) {
+    for (const [i, { shortcut, digit }] of KEYED_TOOLS.entries()) {
         useHotkey(shortcut, toolHandlers[i], on);
         useHotkey(digit, toolHandlers[i], on);
     }

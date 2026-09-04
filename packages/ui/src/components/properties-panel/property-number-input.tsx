@@ -42,7 +42,9 @@ export function PropertyNumberInput({
                 setLocalValue(raw);
                 if (raw !== '' && raw !== '-') {
                     const v = Number(raw);
-                    if (!Number.isNaN(v)) onChange(v);
+                    // Clamped BEFORE it is written: the input's own min/max only drive the spinner and
+                    // validity styling, so typing 0 into a width would otherwise reach the document.
+                    if (!Number.isNaN(v)) onChange(Math.min(max ?? v, Math.max(min ?? v, v)));
                 }
             }}
             onFocus={() => setFocused(true)}
