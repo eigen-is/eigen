@@ -35,7 +35,7 @@ import { createElement, Fragment, type MutableRefObject, type ReactNode, useEffe
 import type * as Y from 'yjs';
 import { isTypingTarget } from '../../../hooks/is-typing-target';
 import { randomSeed } from '../hooks/element-writes';
-import type { NewVectorElement, VectorElementPatch } from '../hooks/use-canvas-doc';
+import { type NewVectorElement, sealed, type VectorElementPatch } from '../hooks/use-canvas-doc';
 import type { VectorTool } from '../hooks/use-tool';
 import { FocusIndicators, FocusPointHandles, SnapDots } from './arrow-affordances';
 import {
@@ -286,23 +286,23 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         const stroke = strokeRef.current;
         cancelFreedraw();
         if (!stroke) return;
-        undoManager?.stopCapturing();
         // Real pen pressure iff any sample left the 0.5 no-pressure sentinel (Excalidraw's test — a mouse
         // reports a flat 0.5). normalizeLinear preserves point order and count, so stroke.pressures stays
         // index-aligned with the written points. Simulate ⇒ pressures '' + true ⇒ byte-identical legacy ink.
         const realPressure = stroke.pressures.some((p) => p !== 0.5);
         // Tool stays freedraw (Excalidraw keeps the pencil active); one addElement per stroke.
-        const id = addElement({
-            type: 'freedraw',
-            seed: seedRef.current,
-            ...normalizeLinear(
-                { x: stroke.origin.x, y: stroke.origin.y, width: 0, height: 0, angle: 0 },
-                stroke.points,
-            ),
-            pressures: realPressure ? serializePressures(stroke.pressures) : '',
-            simulatePressure: !realPressure,
-        });
-        undoManager?.stopCapturing();
+        const id = sealed(undoManager, () =>
+            addElement({
+                type: 'freedraw',
+                seed: seedRef.current,
+                ...normalizeLinear(
+                    { x: stroke.origin.x, y: stroke.origin.y, width: 0, height: 0, angle: 0 },
+                    stroke.points,
+                ),
+                pressures: realPressure ? serializePressures(stroke.pressures) : '',
+                simulatePressure: !realPressure,
+            }),
+        );
         if (id) setSelectedIds([id]);
     };
 
@@ -333,25 +333,23 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         const draft = lineRef.current;
         clearLine();
         if (!draft || distinctCount(points) < 2) return;
-        undoManager?.stopCapturing();
-        let id: string | undefined;
-        if (draft.type === 'arrow') {
-            const bound = bindArrow(
-                arrowElement(draft.origin, points, seedRef.current),
-                { start: true, end: true },
-                ordered,
-                liveZoom(),
-                suppressRef.current,
-            );
-            id = addElement({ type: 'arrow', seed: seedRef.current, ...bound });
-        } else {
-            id = addElement({
+        const id = sealed(undoManager, () => {
+            if (draft.type === 'arrow') {
+                const bound = bindArrow(
+                    arrowElement(draft.origin, points, seedRef.current),
+                    { start: true, end: true },
+                    ordered,
+                    liveZoom(),
+                    suppressRef.current,
+                );
+                return addElement({ type: 'arrow', seed: seedRef.current, ...bound });
+            }
+            return addElement({
                 type: draft.type,
                 seed: seedRef.current,
                 ...normalizeLinear({ x: draft.origin.x, y: draft.origin.y, width: 0, height: 0, angle: 0 }, points),
             });
-        }
-        undoManager?.stopCapturing();
+        });
         if (id) setSelectedIds([id]);
     };
 
@@ -394,9 +392,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         const er = eraserRef.current;
         cancelEraser();
         if (!er?.marked.size) return;
-        undoManager?.stopCapturing();
-        deleteElements([...er.marked]);
-        undoManager?.stopCapturing();
+        sealed(undoManager, () => deleteElements([...er.marked]));
         // Tool stays eraser.
     };
 
@@ -691,59 +687,62 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             setPointDraft(null);
             return;
         }
-        undoManager?.stopCapturing();
-        if (
-            selectedLine.type === 'arrow' &&
-            selectedLine.elbow &&
-            selectedLine.fixedSegments !== '' &&
-            isEndpoint(index, points.length)
-        ) {
-            // Pinned elbow endpoint commit: thread the dock (bindPinnedElbowEnd, replaying the cached
-            // preview frame so release === last frame) then the renormalization pass, one sealed write. When
-            // the endpoint collapses back to derived (fixedSegments ''), skip the renormalize wrap so the
-            // canonical origin survives; the binding fields ride through either way.
-            const arrow = selectedLine;
-            const end = index === 0 ? 'start' : 'end';
-            const endScene = linearLocalToScene(arrow, points[index]);
-            const frame = cached && cached.end === end ? cached : elbowBindFor(endScene);
-            const bound = bindPinnedElbowEnd(arrow, end, frame.candidate, frame.fixedPoint, endScene, byId);
-            updateElement(
-                arrow.id,
-                bound.fixedSegments === ''
-                    ? bound
-                    : {
-                          ...renormalize({ ...arrow, ...bound }),
-                          startBinding: bound.startBinding,
-                          endBinding: bound.endBinding,
-                      },
-            );
-        } else if (selectedLine.type === 'arrow') {
-            const reshaped = { ...selectedLine, ...normalizeLinear(selectedLine, points) };
-            if (selectedLine.elbow && isEndpoint(index, points.length)) {
-                // Replay the last preview frame's cached dock — never re-run the candidate search from the
-                // release cursor. Recompute only in the degenerate no-move case (no preview frame ran).
+        sealed(undoManager, () => {
+            if (
+                selectedLine.type === 'arrow' &&
+                selectedLine.elbow &&
+                selectedLine.fixedSegments !== '' &&
+                isEndpoint(index, points.length)
+            ) {
+                // Pinned elbow endpoint commit: thread the dock (bindPinnedElbowEnd, replaying the cached
+                // preview frame so release === last frame) then the renormalization pass, one sealed write. When
+                // the endpoint collapses back to derived (fixedSegments ''), skip the renormalize wrap so the
+                // canonical origin survives; the binding fields ride through either way.
+                const arrow = selectedLine;
                 const end = index === 0 ? 'start' : 'end';
-                const frame =
-                    cached && cached.end === end
-                        ? cached
-                        : elbowBindFor(linearLocalToScene(selectedLine, points[index]));
-                updateElement(selectedLine.id, bindElbowEnd(reshaped, end, frame.candidate, frame.fixedPoint, byId));
-            } else {
-                // Straight (or a middle vertex): the dragged endpoint (re)binds/unbinds via the chord model,
-                // the other end keeps its binding, every bound end re-snaps through bindArrow.
-                const bound = bindArrow(
-                    reshaped,
-                    { start: index === 0, end: index === points.length - 1 },
-                    ordered,
-                    liveZoom(),
-                    suppressRef.current,
+                const endScene = linearLocalToScene(arrow, points[index]);
+                const frame = cached && cached.end === end ? cached : elbowBindFor(endScene);
+                const bound = bindPinnedElbowEnd(arrow, end, frame.candidate, frame.fixedPoint, endScene, byId);
+                updateElement(
+                    arrow.id,
+                    bound.fixedSegments === ''
+                        ? bound
+                        : {
+                              ...renormalize({ ...arrow, ...bound }),
+                              startBinding: bound.startBinding,
+                              endBinding: bound.endBinding,
+                          },
                 );
-                updateElement(selectedLine.id, bound);
+            } else if (selectedLine.type === 'arrow') {
+                const reshaped = { ...selectedLine, ...normalizeLinear(selectedLine, points) };
+                if (selectedLine.elbow && isEndpoint(index, points.length)) {
+                    // Replay the last preview frame's cached dock — never re-run the candidate search from the
+                    // release cursor. Recompute only in the degenerate no-move case (no preview frame ran).
+                    const end = index === 0 ? 'start' : 'end';
+                    const frame =
+                        cached && cached.end === end
+                            ? cached
+                            : elbowBindFor(linearLocalToScene(selectedLine, points[index]));
+                    updateElement(
+                        selectedLine.id,
+                        bindElbowEnd(reshaped, end, frame.candidate, frame.fixedPoint, byId),
+                    );
+                } else {
+                    // Straight (or a middle vertex): the dragged endpoint (re)binds/unbinds via the chord model,
+                    // the other end keeps its binding, every bound end re-snaps through bindArrow.
+                    const bound = bindArrow(
+                        reshaped,
+                        { start: index === 0, end: index === points.length - 1 },
+                        ordered,
+                        liveZoom(),
+                        suppressRef.current,
+                    );
+                    updateElement(selectedLine.id, bound);
+                }
+            } else {
+                updateElement(selectedLine.id, normalizeLinear(selectedLine, points));
             }
-        } else {
-            updateElement(selectedLine.id, normalizeLinear(selectedLine, points));
-        }
-        undoManager?.stopCapturing();
+        });
         setPointDraft(null);
     };
 
@@ -760,10 +759,14 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     };
     const onElbowPinCommit = (patch: PinPatch) => {
         if (selectedLine?.type !== 'arrow') return;
-        undoManager?.stopCapturing();
         // Unpinning the last pin returns the arrow to derived mode with a canonical origin — skip the
         // renormalize wrap there, which would re-run it over a now-derived 2-point arrow.
-        updateElement(selectedLine.id, patch.fixedSegments === '' ? patch : renormalize({ ...selectedLine, ...patch }));
+        sealed(undoManager, () =>
+            updateElement(
+                selectedLine.id,
+                patch.fixedSegments === '' ? patch : renormalize({ ...selectedLine, ...patch }),
+            ),
+        );
         setSelectedPinIndex(null);
         setPointDraft(null);
     };
@@ -800,9 +803,9 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         }
         const binding = parseBinding(end === 'start' ? selectedLine.startBinding : selectedLine.endBinding);
         if (binding) {
-            undoManager?.stopCapturing();
-            updateElement(selectedLine.id, bindFocusPoint(selectedLine, end, binding.elementId, fixedPoint, byId));
-            undoManager?.stopCapturing();
+            sealed(undoManager, () =>
+                updateElement(selectedLine.id, bindFocusPoint(selectedLine, end, binding.elementId, fixedPoint, byId)),
+            );
         }
         setPointDraft(null);
     };
@@ -955,13 +958,14 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 selectedLine.elbow &&
                 selectedLine.fixedSegments !== ''
             ) {
-                undoManager?.stopCapturing();
                 // Dropping the last pin returns to derived mode with a canonical origin — skip the
                 // renormalize wrap there so that origin survives.
                 const patch = unpinSegment(selectedLine, selectedPinIndex);
-                updateElement(
-                    selectedLine.id,
-                    patch.fixedSegments === '' ? patch : renormalize({ ...selectedLine, ...patch }),
+                sealed(undoManager, () =>
+                    updateElement(
+                        selectedLine.id,
+                        patch.fixedSegments === '' ? patch : renormalize({ ...selectedLine, ...patch }),
+                    ),
                 );
                 setSelectedPinIndex(null);
                 return true;
@@ -972,15 +976,15 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             const interior =
                 !(selectedLine.type === 'arrow' && selectedLine.elbow) && index > 0 && index < pts.length - 1;
             if (!interior) return true; // endpoint / elbow → no-op, but consume (never delete the element)
-            undoManager?.stopCapturing();
-            updateElement(
-                selectedLine.id,
-                normalizeLinear(
-                    selectedLine,
-                    pts.filter((_, i) => i !== index),
+            sealed(undoManager, () =>
+                updateElement(
+                    selectedLine.id,
+                    normalizeLinear(
+                        selectedLine,
+                        pts.filter((_, i) => i !== index),
+                    ),
                 ),
             );
-            undoManager?.stopCapturing();
             // After removing an interior point, keep editing the previous point IF it is still interior
             // (i.e. the removed one wasn't the first interior point); otherwise clear the point selection.
             // Points before the removed index keep their index, so `index - 1` still addresses that point.

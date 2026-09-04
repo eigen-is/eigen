@@ -5,7 +5,6 @@ import {
     useUploadFile,
     useZombieMediaSweep,
 } from '@workspace/lib/drive';
-import { stripTagsServer } from '@workspace/lib/html';
 import { useIsCoarsePointer } from '@workspace/lib/media';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -27,6 +26,7 @@ import {
     marqueeMode,
     NEW_TEXT_BOX_SIZE,
     orderByFractionalIndex,
+    paintsNothing,
     parseIdList,
     parsePoints,
     resizeLinear,
@@ -60,7 +60,7 @@ import { EmptyOutlines } from './empty-outline';
 import { randomSeed } from './hooks/element-writes';
 import { applyZOrder, deleteSelection, duplicateSelection } from './hooks/selection-ops';
 import { useCanvasClipboard } from './hooks/use-canvas-clipboard';
-import type { CanvasDoc, NewVectorElement, VectorElementPatch } from './hooks/use-canvas-doc';
+import { type CanvasDoc, type NewVectorElement, sealed, type VectorElementPatch } from './hooks/use-canvas-doc';
 import { useCanvasKeyboard } from './hooks/use-canvas-keyboard';
 import { type CanvasPeerState, type PublishCursor, peerOnFrame } from './hooks/use-canvas-presence';
 import { hitTestTopmost, marqueeSelect } from './hooks/use-selection';
@@ -641,16 +641,14 @@ export function CanvasEditor({
                     // A label's height derives from its line count, so only labelWidth is measured.
                     const healed = measureVectorText(text, fontSize, fontFamily);
                     if (healed.width === el.labelWidth) return;
-                    undoManager?.stopCapturing();
-                    updateElement(id, { labelWidth: healed.width });
-                    undoManager?.stopCapturing();
+                    sealed(undoManager, () => updateElement(id, { labelWidth: healed.width }));
                 })
                 .catch(() => {});
         },
         [updateElement, undoManager],
     );
 
-    // One editing session → exactly one Yjs write. stopCapturing on both sides so the session is its own
+    // One editing session → exactly one Yjs write, `sealed` so the session is its own
     // undo step. Read the live session from a ref (not a closure) so the callback stays stable and side
     // effects run once, never inside a state updater.
     const commitEditing = useCallback(
@@ -666,9 +664,7 @@ export function CanvasEditor({
             // on a Yjs map the arrow's remote deletion already removed.
             if (!(ed.isNew && empty)) {
                 const labelWidth = empty ? 0 : measureVectorText(text, ed.fontSize, ed.fontFamily).width;
-                undoManager?.stopCapturing();
-                updateElement(ed.id, { text: empty ? '' : text, labelWidth });
-                undoManager?.stopCapturing();
+                sealed(undoManager, () => updateElement(ed.id, { text: empty ? '' : text, labelWidth }));
                 if (!empty) healLabelWidth(ed.id, text, ed.fontSize, ed.fontFamily);
             }
             setSelectedIds([ed.id]);
@@ -684,23 +680,25 @@ export function CanvasEditor({
         setRichTextEditId(id);
     };
 
-    // Close it: an empty box is deleted (a rich-text box with no text is invisible chrome), otherwise the
-    // trailing seal closes the session's coalesced writes. Reads the LIVE element — the session wrote
-    // through updateElement, so React state may be one tick behind.
+    // Close it: a box that paints nothing at all is deleted (empty invisible chrome — the kind answers
+    // that, the same predicate the unpainted ring uses), otherwise the trailing seal closes the session's
+    // coalesced writes. Reads the LIVE element — the session wrote through updateElement, so React state
+    // may be one tick behind.
     const closeRichText = useCallback(() => {
         const id = richTextEditRef.current;
         richTextEditRef.current = null;
         setRichTextEditId(null);
         if (!id) return;
         const el = visibleRef.current.find((e) => e.id === id);
-        if (el?.type === 'richtext' && stripTagsServer(el.html).trim() === '') {
-            // Seal FIRST: without it, the delete lands inside Y.UndoManager's 500ms captureTimeout and
-            // merges into the session's last keystroke, so whether it is its own undo step would depend
-            // on how fast the user clicked away.
-            undoManager?.stopCapturing();
-            deleteElements([id]);
+        if (el && paintsNothing(el)) {
+            // Sealed on BOTH sides: without the leading seal the delete lands inside Y.UndoManager's 500ms
+            // captureTimeout and merges into the session's last keystroke, so whether it is its own undo
+            // step would depend on how fast the user clicked away.
+            sealed(undoManager, () => deleteElements([id]));
             setSelectedIds([]);
+            return;
         }
+        // Trailing seal: the session's coalesced writes are one undo step.
         undoManager?.stopCapturing();
     }, [deleteElements, setSelectedIds, undoManager]);
 
@@ -749,14 +747,15 @@ export function CanvasEditor({
                 anchor,
             );
 
-            undoManager?.stopCapturing();
+            // The whole batch is one undo step.
             const pending: { id: string; promise: Promise<DrivePath | null> }[] = [];
-            for (const [i, { file }] of measured.entries()) {
-                const { pendingName, promise } = startUpload(file);
-                const id = addElement({ type: 'image', ...boxes[i], mediaName: pendingName });
-                if (id) pending.push({ id, promise });
-            }
-            undoManager?.stopCapturing(); // trailing seal — the whole batch is one undo step
+            sealed(undoManager, () => {
+                for (const [i, { file }] of measured.entries()) {
+                    const { pendingName, promise } = startUpload(file);
+                    const id = addElement({ type: 'image', ...boxes[i], mediaName: pendingName });
+                    if (id) pending.push({ id, promise });
+                }
+            });
             setSelectedIds(pending.map((p) => p.id));
 
             for (const { id, promise } of pending) {
@@ -799,11 +798,10 @@ export function CanvasEditor({
                 measured.map((m) => m.intrinsic),
                 viewportCenterScene(),
             );
-            undoManager?.stopCapturing();
-            const ids = addElements(
-                measured.map(({ name }, i) => ({ type: 'image' as const, ...boxes[i], mediaName: name })),
+            // The whole batch is one undo step.
+            const ids = sealed(undoManager, () =>
+                addElements(measured.map(({ name }, i) => ({ type: 'image' as const, ...boxes[i], mediaName: name }))),
             );
-            undoManager?.stopCapturing(); // trailing seal — the whole batch is one undo step
             setSelectedIds(ids);
         },
         [

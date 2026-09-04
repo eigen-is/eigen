@@ -2,7 +2,7 @@
 // — with nothing selected it edits the canvas itself (the background row). It edits every selected
 // element through the shared MIXED conventions: '—' in number inputs / color swatches / select
 // placeholders and a data-mixed attribute on toggles. Each discrete control change is one updateElements
-// transact across the selection (one undo step, stopCapturing sealed on both sides); the one continuous
+// transact across the selection (one undo step, `sealed` on both sides); the one continuous
 // control, the Opacity slider, writes live inside a holdCapture gesture so one drag is one undo step.
 //
 // Every row gates on a CAPABILITY, never on a type list: `fill` opens the Fill block, `stroke` the Stroke
@@ -61,7 +61,7 @@ import {
 import type { ReactNode } from 'react';
 import type * as Y from 'yjs';
 import { applyZOrder } from './hooks/selection-ops';
-import { holdCapture, type VectorElementPatch } from './hooks/use-canvas-doc';
+import { holdCapture, sealed, type VectorElementPatch } from './hooks/use-canvas-doc';
 import { ELEMENT_KIND_UI } from './kinds';
 import { loadVectorFont, measureVectorText } from './text-measure';
 
@@ -198,9 +198,7 @@ export function CanvasPropertiesPanel({
     // Same fields on every selected element — one transact, one undo step.
     const applyToAll = (fields: VectorElementPatch) => {
         if (!selectedIds.length) return;
-        undoManager?.stopCapturing();
-        updateElements(selectedIds.map((id) => ({ id, fields })));
-        undoManager?.stopCapturing();
+        sealed(undoManager, () => updateElements(selectedIds.map((id) => ({ id, fields }))));
     };
 
     // The same write UNSEALED, for a continuous control: MergedSlider seals at both ends of a drag itself,
@@ -221,22 +219,22 @@ export function CanvasPropertiesPanel({
         if (!arrowEls.length) return;
         const base = arrowShapeFields(shape);
         const allById = new Map(elements.map((el) => [el.id, el]));
-        undoManager?.stopCapturing();
-        updateElements(
-            arrowEls.map((el) => {
-                if (shape !== 'elbow') return { id: el.id, fields: base };
-                const pts = parsePoints(el.points);
-                const collapsed = pts.length >= 2 ? [pts[0], pts[pts.length - 1]] : pts;
-                // A bound end's fixedPoint was stored for the straight read; re-dock it for the elbow read so
-                // the endpoint sits on the outline, not inside the shape. followBindings re-glues after.
-                const redocked = redockBindingsForElbow(el, allById);
-                return {
-                    id: el.id,
-                    fields: { ...base, ...redocked, angle: 0, ...normalizeLinear({ ...el, angle: 0 }, collapsed) },
-                };
-            }),
+        sealed(undoManager, () =>
+            updateElements(
+                arrowEls.map((el) => {
+                    if (shape !== 'elbow') return { id: el.id, fields: base };
+                    const pts = parsePoints(el.points);
+                    const collapsed = pts.length >= 2 ? [pts[0], pts[pts.length - 1]] : pts;
+                    // A bound end's fixedPoint was stored for the straight read; re-dock it for the elbow read
+                    // so the endpoint sits on the outline, not inside the shape. followBindings re-glues after.
+                    const redocked = redockBindingsForElbow(el, allById);
+                    return {
+                        id: el.id,
+                        fields: { ...base, ...redocked, angle: 0, ...normalizeLinear({ ...el, angle: 0 }, collapsed) },
+                    };
+                }),
+            ),
         );
-        undoManager?.stopCapturing();
     };
 
     // Numeric transform writes. A width/height change routes linear elements through resizeLinearTo so
@@ -244,17 +242,17 @@ export function CanvasPropertiesPanel({
     const applyTransform = (fields: VectorElementPatch) => {
         if (!selectedIds.length) return;
         const resizesLinear = fields.width !== undefined || fields.height !== undefined;
-        undoManager?.stopCapturing();
-        updateElements(
-            selectedIds.map((id) => {
-                const el = byId.get(id);
-                if (resizesLinear && el && isLinearElement(el)) {
-                    return { id, fields: { ...fields, ...resizeLinearTo(el, fields) } };
-                }
-                return { id, fields };
-            }),
+        sealed(undoManager, () =>
+            updateElements(
+                selectedIds.map((id) => {
+                    const el = byId.get(id);
+                    if (resizesLinear && el && isLinearElement(el)) {
+                        return { id, fields: { ...fields, ...resizeLinearTo(el, fields) } };
+                    }
+                    return { id, fields };
+                }),
+            ),
         );
-        undoManager?.stopCapturing();
     };
 
     // A font family / size change re-measures each arrow's own label and writes `labelWidth` (the sole
@@ -271,22 +269,20 @@ export function CanvasPropertiesPanel({
             const { width } = measureVectorText(el.text, fontSize, fontFamily);
             return { id: el.id, fields: { ...patch, labelWidth: width } };
         });
-        undoManager?.stopCapturing();
-        updateElements(patches);
-        undoManager?.stopCapturing();
+        sealed(undoManager, () => updateElements(patches));
     };
 
     // The two halves of the stored fill are edited separately, so each write preserves the other ON EACH
     // ELEMENT: re-painting a mixed-hatch selection must not collapse it to one hatch. One undo step.
     const applyFill = (next: (fill: Fill) => Fill) => {
         if (!selectedIds.length) return;
-        undoManager?.stopCapturing();
-        updateElements(
-            selectedElements
-                .filter((el) => 'fill' in el)
-                .map((el) => ({ id: el.id, fields: { fill: serializeFill(next(parseFill(el.fill))) } })),
+        sealed(undoManager, () =>
+            updateElements(
+                selectedElements
+                    .filter((el) => 'fill' in el)
+                    .map((el) => ({ id: el.id, fields: { fill: serializeFill(next(parseFill(el.fill))) } })),
+            ),
         );
-        undoManager?.stopCapturing();
     };
 
     const handleZOrderApply = (op: ZOp) => applyZOrder(op, elements, selectedIds, updateElements, undoManager);
@@ -300,17 +296,17 @@ export function CanvasPropertiesPanel({
         );
         if (!patches.length) return;
         // A linear element's width/height goes through resizeLinearTo so its points scale with the box.
-        undoManager?.stopCapturing();
-        updateElements(
-            patches.map((p) => {
-                const el = byId.get(p.id);
-                if (el && isLinearElement(el)) {
-                    return { id: p.id, fields: resizeLinearTo(el, p) };
-                }
-                return { id: p.id, fields: { x: p.x, y: p.y, width: p.width, height: p.height } };
-            }),
+        sealed(undoManager, () =>
+            updateElements(
+                patches.map((p) => {
+                    const el = byId.get(p.id);
+                    if (el && isLinearElement(el)) {
+                        return { id: p.id, fields: resizeLinearTo(el, p) };
+                    }
+                    return { id: p.id, fields: { x: p.x, y: p.y, width: p.width, height: p.height } };
+                }),
+            ),
         );
-        undoManager?.stopCapturing();
     };
 
     const tx = getMergedValue(selectedElements, (el) => Math.round(el.x));

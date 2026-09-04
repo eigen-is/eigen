@@ -56,7 +56,7 @@ import { remapPastedArrows } from '../tools/binding';
 import { buildSelectionData, selectionPlainText } from '../tools/clipboard';
 import { type PastePlan, planElementsPaste } from '../tools/paste-elements';
 import { deleteSelection } from './selection-ops';
-import type { NewVectorElement, VectorElementPatch } from './use-canvas-doc';
+import { type NewVectorElement, sealed, type VectorElementPatch } from './use-canvas-doc';
 
 // Foreign typography → the rich-text fields it names. This is the full set a rich-text box models, which
 // is also the full set the canvas producer writes: nothing on that wire goes unread. The fields below are
@@ -226,15 +226,16 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
     );
 
     // One paste = one undo step: every ADD in one transact, the arrow-binding remap inside the same
-    // capture window (no stopCapturing between them), then the cross-mount images resolve untracked.
+    // capture window (one `sealed` around both), then the cross-mount images resolve untracked.
     const commitPaste = useCallback(
         (plan: PastePlan): boolean => {
             if (!plan.partials.length) return false;
-            undoManager?.stopCapturing();
-            const ids = addElements(plan.partials);
-            const remap = remapPastedArrows(plan.arrowRemaps, plan.cloneIds, ids);
-            if (remap.length) updateElements(remap);
-            undoManager?.stopCapturing();
+            const ids = sealed(undoManager, () => {
+                const added = addElements(plan.partials);
+                const remap = remapPastedArrows(plan.arrowRemaps, plan.cloneIds, added);
+                if (remap.length) updateElements(remap);
+                return added;
+            });
             if (!ids.length) return false;
             setSelectedIds(ids);
 
@@ -321,20 +322,20 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
         (text: string, textAlign: TextAlign = 'left') => {
             const anchor = viewportCenterScene();
             const { width: w, height: h } = measureVectorText(text, DEFAULT_FONT_SIZE, DEFAULT_FONT_FAMILY);
-            undoManager?.stopCapturing();
-            const id = addElement({
-                type: 'richtext',
-                x: anchor.x - w / 2,
-                y: anchor.y - h / 2,
-                width: w,
-                height: h,
-                angle: 0,
-                html: textToParagraphHtml(text),
-                fontSize: DEFAULT_FONT_SIZE,
-                fontFamily: DEFAULT_FONT_FAMILY,
-                textAlign,
-            });
-            undoManager?.stopCapturing();
+            const id = sealed(undoManager, () =>
+                addElement({
+                    type: 'richtext',
+                    x: anchor.x - w / 2,
+                    y: anchor.y - h / 2,
+                    width: w,
+                    height: h,
+                    angle: 0,
+                    html: textToParagraphHtml(text),
+                    fontSize: DEFAULT_FONT_SIZE,
+                    fontFamily: DEFAULT_FONT_FAMILY,
+                    textAlign,
+                }),
+            );
             if (id) setSelectedIds([id]);
         },
         [viewportCenterScene, addElement, setSelectedIds, undoManager],
