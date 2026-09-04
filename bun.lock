@@ -256,7 +256,6 @@
         "@dnd-kit/utilities": "^3.2.2",
         "@workspace/lib": "workspace:*",
         "@workspace/ui": "workspace:*",
-        "nanoid": "^5.1.5",
         "yjs": "^13.6.27",
       },
     },
