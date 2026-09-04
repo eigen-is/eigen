@@ -94,6 +94,10 @@ type KindSpec<T extends VectorElement> = {
     // The two lines a straight arrow's bind-time aim projects onto. Omit for the box default.
     aimLines?(el: T): [[Point, Point], [Point, Point]];
     render(el: T, ctx: RenderContext): RenderOutput;
+    // Whether THIS element puts no ink on the page at all — an empty text box, a shape with neither
+    // fill nor border, an image with no picture. The canvas rings such an element while editing so it
+    // stays findable; a kind that always paints something omits this.
+    paintsNothing?(el: T): boolean;
     // What the kind contributes to the search index. Omit when it carries no text.
     searchText?(el: T): string;
 };
@@ -117,6 +121,7 @@ export type ElementKind<T extends VectorElement = VectorElement> = {
     anchorPoints(el: VectorElement): Point[];
     aimLines(el: VectorElement): [[Point, Point], [Point, Point]];
     render(el: VectorElement, ctx: RenderContext): RenderOutput;
+    paintsNothing(el: VectorElement): boolean;
     searchText(el: VectorElement): string;
 };
 
@@ -201,6 +206,7 @@ export function defineKind<T extends VectorElement>(spec: KindSpec<T>): ElementK
         anchorPoints: boxAnchorPoints,
         aimLines: (el) => (spec.is(el) && spec.aimLines ? spec.aimLines(el) : boxAimLines(el)),
         render: (el, ctx) => (spec.is(el) ? spec.render(el, ctx) : { svg: '' }),
+        paintsNothing: (el) => (spec.is(el) && spec.paintsNothing ? spec.paintsNothing(el) : false),
         searchText: (el) => (spec.is(el) && spec.searchText ? spec.searchText(el) : ''),
     };
 }

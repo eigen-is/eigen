@@ -3,7 +3,7 @@ import { cornerRadius, diamondOutline } from '../outline';
 import { CORNERS, DEFAULT_CORNERS, type VectorDiamondElement } from '../types';
 import { defineKind } from './kind';
 import { fillField, oneOf, roughness, seed } from './read-fields';
-import { renderRoughShape } from './render-utils';
+import { isUnpainted, renderRoughShape } from './render-utils';
 
 export const diamondKind = defineKind<VectorDiamondElement>({
     type: 'diamond',
@@ -36,5 +36,7 @@ export const diamondKind = defineKind<VectorDiamondElement>({
     hitTest: (el, point) => hitTestDiamond(el, point),
     outline: (el, inflate) =>
         diamondOutline({ x: el.x, y: el.y, width: el.width, height: el.height }, cornerRadius(el, 'diamond'), inflate),
+    // Nothing painted at all — no fill and no stroke — is invisible but real; the canvas rings it.
+    paintsNothing: isUnpainted,
     render: (el) => ({ svg: renderRoughShape(el) }),
 });

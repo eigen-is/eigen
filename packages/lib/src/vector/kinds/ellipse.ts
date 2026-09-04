@@ -3,7 +3,7 @@ import { ellipseOutline } from '../outline';
 import type { VectorEllipseElement } from '../types';
 import { defineKind } from './kind';
 import { fillField, roughness, seed } from './read-fields';
-import { renderRoughShape } from './render-utils';
+import { isUnpainted, renderRoughShape } from './render-utils';
 
 export const ellipseKind = defineKind<VectorEllipseElement>({
     type: 'ellipse',
@@ -34,5 +34,7 @@ export const ellipseKind = defineKind<VectorEllipseElement>({
     }),
     hitTest: (el, point) => hitTestEllipse(el, point),
     outline: (el, inflate) => ellipseOutline({ x: el.x, y: el.y, width: el.width, height: el.height }, inflate),
+    // Nothing painted at all — no fill and no stroke — is invisible but real; the canvas rings it.
+    paintsNothing: isUnpainted,
     render: (el) => ({ svg: renderRoughShape(el) }),
 });

@@ -3,7 +3,7 @@ import { cornerRadius, rectOutline } from '../outline';
 import { CORNERS, DEFAULT_CORNERS, type VectorRectangleElement } from '../types';
 import { defineKind } from './kind';
 import { fillField, oneOf, roughness, seed } from './read-fields';
-import { renderRoughShape } from './render-utils';
+import { isUnpainted, renderRoughShape } from './render-utils';
 
 // Excalidraw shrinks a rectangle's projection diagonals by 15px at each end
 // (getDiagonalsForBindableElement) — the focus points behave oddly right at the corners.
@@ -53,6 +53,8 @@ export const rectangleKind = defineKind<VectorRectangleElement>({
             [rot(up[0]), rot(up[1])],
         ];
     },
+    // Nothing painted at all — no fill and no stroke — is invisible but real; the canvas rings it.
+    paintsNothing: isUnpainted,
     render: (el) => ({ svg: renderRoughShape(el) }),
 });
 

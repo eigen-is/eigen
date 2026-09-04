@@ -55,6 +55,7 @@ import type { ZOp } from '../properties-panel/z-order';
 import { CanvasObjectMenu } from './canvas-object-menu';
 import { pointerCursor } from './cursor';
 import { ElementLayer } from './element-layer';
+import { EmptyOutlines } from './empty-outline';
 import { randomSeed } from './hooks/element-writes';
 import { applyZOrder, deleteSelection, duplicateSelection } from './hooks/selection-ops';
 import { useCanvasClipboard } from './hooks/use-canvas-clipboard';
@@ -1354,6 +1355,8 @@ export function CanvasEditor({
             {/* Screen-space chrome, laid out by boxToStyle at the viewport React last rendered; a live
                 gesture moves the whole layer with one transform (chromeTransform) instead. */}
             <div ref={chromeRef} className="pointer-events-none absolute inset-0 origin-top-left">
+                {/* Invisible-but-real elements, ringed while editing so they stay findable. */}
+                {canEdit && <EmptyOutlines elements={ordered} boxToStyle={boxToStyle} />}
                 {/* ⌘F match rings, in the same screen-space chrome layer as the selection ring. */}
                 {matchedElements.map((el) => (
                     <div

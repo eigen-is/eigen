@@ -47,6 +47,14 @@ export function capabilitiesOf(el: VectorElement): Capabilities {
     return ELEMENT_KINDS[el.type].capabilitiesOf(el);
 }
 
+// Does this element put any ink on the page? False for an empty text box, a shape with neither fill nor
+// border, and an image with no picture. Editing chrome only — the canvas rings such an element so it
+// stays findable and selectable; a thumbnail, present mode, a preview and an export show the page as it
+// is. A kind answers for itself (kind.ts), so nothing switches on `type` out here.
+export function paintsNothing(el: VectorElement): boolean {
+    return ELEMENT_KINDS[el.type].paintsNothing(el);
+}
+
 // Bindable targets for an arrow endpoint, read off the registry through the one capability accessor. A
 // single predicate so every consumer — the reader's dangling-binding pass, the follow math, the elbow
 // router's obstacles, the tool's candidate search — agrees, and a new kind opts in by declaring the

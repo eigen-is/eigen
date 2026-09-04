@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1302 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1303 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -774,7 +774,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorToolEntry` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (564)
+## Utilities & constants (565)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1224,6 +1224,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `outlineIntersections` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `outlinePath` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `outlinePoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `paintsNothing` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `parseBackgroundFill` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `parseBinding` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `parseEigenMediaHref` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
