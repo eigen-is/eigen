@@ -156,6 +156,16 @@ describe('buildSelectionData', () => {
         expect(serializedIds).toEqual(['i2']);
     });
 
+    test('pendingImages counts the dropped images, not every id the payload lacks', () => {
+        // The cut toast reads this number. A selected id that is no longer in the scene (a peer deleted
+        // it) is missing from the payload too, and is nothing to tell the user about.
+        const pending = image('i1', 'a1', 'pending.png');
+        const resolve = (): DrivePath | undefined => undefined;
+        const { data, pendingImages } = buildSelectionData([pending], ['i1', 'gone'], meta, '', resolve);
+        expect(pendingImages).toBe(1);
+        expect(data.items).toEqual([]);
+    });
+
     test('a text-only selection ships NO svg, so it lands in a document as text and not as a picture', () => {
         // Every foreign host runs its svg rung before the typed items, so an svg here would make a
         // copied text box paste as a flat image with its typography unread.

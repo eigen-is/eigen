@@ -33,7 +33,7 @@ const HTML_WRAPPER_RESET = `<style>.${RICH_TEXT_CLASS} p{margin:0}</style>`;
 // host (FE/BE) supplies it; unresolvable media renders nothing.
 export type MediaResolver = (mediaName: string) => string | null;
 
-export type SceneToSvgOptions = {
+type SceneToSvgOptions = {
     resolveMedia?: MediaResolver;
 };
 
