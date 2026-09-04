@@ -112,7 +112,9 @@ export function ArrowPanelSection({ elements, scene, onChange, onChangeEach }: K
                 </PropertySection>
             )}
 
-            <PropertySection title="Shape">
+            {/* Titled for the kind, not "Shape": the panel's own Shape section sits BELOW Stroke, and a
+                kind section renders above it — a same-titled section must not move between selections. */}
+            <PropertySection title="Arrow">
                 <PropertyRow label="Type">
                     <MergedSelect value={shape} onChange={applyShape} options={ARROW_SHAPE_OPTIONS} />
                 </PropertyRow>

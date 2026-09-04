@@ -11,7 +11,8 @@ const EMPTY_PREVIEW_HEIGHT = 120;
 
 // A glance, not the drawing: like the doc's 20 blocks and the deck's 8 slides, so a scene with tens
 // of thousands of elements cannot make the Worker generate a roughjs path for every one of them.
-// The kept elements are the first in READING order, so what survives is the drawing's top-left.
+// The kept elements are the first in reading order — frame by frame, then z-order inside a frame.
+// A drawing has no frames, so what survives is its bottom 500 in stacking order.
 const PREVIEW_MAX_ELEMENTS = 500;
 
 // Materialized doc → the drawing as one compositor page, the same HTML the PDF export prints.

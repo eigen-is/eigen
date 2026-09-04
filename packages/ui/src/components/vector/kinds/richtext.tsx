@@ -27,7 +27,7 @@ import {
     Strikethrough,
     Underline,
 } from 'lucide-react';
-import { useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import type { InPlaceEditorProps, KindPanelSectionProps } from './index';
 
 // The box the user types in IS the box the renderer paints: same CSS string, applied through
@@ -39,6 +39,9 @@ export function RichTextInPlaceEditor({ element, onChange, onExit }: InPlaceEdit
     // Not a state mirror: the element's own paint/typography, re-applied when a panel row changes it
     // mid-session. React never manages this attribute, so nothing fights over it.
     const css = element.type === 'richtext' ? richTextCssText(element) : '';
+    // LightEditor reads `content` once, at creation — and the parent re-renders on every keystroke, so
+    // sanitizing in the render body would re-parse a body of up to MAX_HTML_BYTES each time.
+    const initialHtml = useMemo(() => sanitizeToLightEditorHtml(element.type === 'richtext' ? element.html : ''), []);
     // Layout effect, not an effect: the box would otherwise paint once unstyled before the CSS lands,
     // flashing the text at the app's font on every session open.
     useLayoutEffect(() => {
@@ -67,7 +70,7 @@ export function RichTextInPlaceEditor({ element, onChange, onExit }: InPlaceEdit
                 // The OTHER mount seam for stored rich text (element-layer.tsx is the painted one), so
                 // it sanitizes too: `html` reaches us verbatim from a hostile peer's Y.Doc write, and a
                 // session would otherwise re-serialize it as trusted markup.
-                content={sanitizeToLightEditorHtml(element.html)}
+                content={initialHtml}
                 onChange={(html) => onChange({ html })}
                 toolbar="floating"
                 proseStyle={false}

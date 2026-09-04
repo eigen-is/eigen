@@ -84,7 +84,8 @@ export function creatingElement(c: CreatingState, style: StyleDefaults): VectorE
         return { ...box, ...ELEMENT_KINDS.rectangle.defaults(style), type: 'rectangle', seed: c.seed };
     }
     // Exhaustiveness guard: a new box-creation kind brings its own preview branch instead of silently
-    // previewing as a rectangle (the kinds test pins BOX_TOOLS to the registry).
+    // previewing as a rectangle (the kinds test pins BOX_TOOLS to the registry). It throws rather than
+    // returning, so a type widened past the union can never reach the layer as a bare string.
     const exhaustive: never = c.type;
-    return exhaustive;
+    throw new Error(`no drag-create preview for ${String(exhaustive)}`);
 }
