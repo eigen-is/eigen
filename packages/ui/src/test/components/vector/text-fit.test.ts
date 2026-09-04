@@ -89,9 +89,9 @@ describe('the fit a measured body drives', () => {
         expect(measured === null ? null : richTextFitHeight(box({ height: 40 }), measured)).toBe(72);
     });
 
-    test('deleting lines writes the shorter box', () => {
+    test('deleting lines leaves the box as tall as the user has it', () => {
         const measured = textBodyHeight(body([{ top: 0, height: 24 }]));
-        expect(measured === null ? null : richTextFitHeight(box({ height: 72 }), measured)).toBe(24);
+        expect(measured === null ? null : richTextFitHeight(box({ height: 72 }), measured)).toBeNull();
     });
 
     test('an unchanged body writes nothing', () => {

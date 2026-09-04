@@ -12,13 +12,17 @@ describe('richTextFitHeight', () => {
         expect(richTextFitHeight(box({ height: 40 }), 180)).toBe(180);
     });
 
-    test('shrinks to it as well — no stored minimum', () => {
-        expect(richTextFitHeight(box({ height: 400 }), 24)).toBe(24);
+    test("never shrinks: the stored height is the user's minimum, not a maximum", () => {
+        // A taller box than its text is deliberate — it is what verticalAlign aligns within, and a
+        // manual resize is how the user sets it.
+        expect(richTextFitHeight(box({ height: 400 }), 24)).toBeNull();
+        expect(richTextFitHeight(box({ height: 400, verticalAlign: 'center' }), 24)).toBeNull();
     });
 
-    test('a sub-pixel difference writes nothing (the loop guard every peer shares)', () => {
+    test('a sub-pixel shortfall writes nothing (the loop guard every peer shares)', () => {
         expect(richTextFitHeight(box({ height: 40 }), 40)).toBeNull();
         expect(richTextFitHeight(box({ height: 40 }), 39.4)).toBeNull();
+        expect(richTextFitHeight(box({ height: 40 }), 40.2)).toBeNull();
     });
 
     test('rounds up, so the last line is never clipped by a fraction', () => {

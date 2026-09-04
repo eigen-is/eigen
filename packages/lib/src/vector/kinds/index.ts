@@ -21,7 +21,7 @@ import { rectangleKind } from './rectangle';
 import { richTextKind } from './richtext';
 
 export type { RenderOutput, StyleDefaults } from './kind';
-export { SLIDES_STYLE_DEFAULTS, VECTOR_STYLE_DEFAULTS } from './kind';
+export { NEW_TEXT_BOX_SIZE, SLIDES_STYLE_DEFAULTS, VECTOR_STYLE_DEFAULTS } from './kind';
 // The in-place editor paints its box with the SAME string the renderer emits, so the two cannot drift.
 export { richTextCssText, richTextFitHeight } from './richtext';
 

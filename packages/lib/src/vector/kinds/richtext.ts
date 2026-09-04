@@ -119,13 +119,16 @@ export function richTextCssText(el: VectorRichTextElement): string {
     return style.join(';');
 }
 
-// A box's height is DERIVED from the text in it: whatever renders it measures its body and writes the
-// fit back, so a box never clips or trails empty space (Google Slides' policy — grow AND shrink, no
-// stored minimum). `contentHeight` is the body's own extent; the stored height is the border box, so
-// the inset and the border ride inside it. null = the stored value already fits, which is also the
-// loop guard: every peer measures the same box, and only a real (>= 1px) difference is ever written.
+// A box's height GROWS with the text in it: whatever renders it measures its body and writes the fit
+// back when the text needs more room than the box has. The stored height is the user's MINIMUM, never
+// a maximum — extra height is how a box is vertically aligned (`verticalAlign` has nothing to work
+// with otherwise), so nothing ever shrinks a box automatically; a manual resize sets the new minimum.
+// `contentHeight` is the body's own extent; the stored height is the border box, so the inset and the
+// border ride inside it. null = the box is already tall enough, which is also the loop guard: every
+// peer measures the same box, and only a real (>= 1px) shortfall is ever written.
 export function richTextFitHeight(el: VectorRichTextElement, contentHeight: number): number | null {
-    const chrome = 2 * el.padding + (isBordered(el) ? 2 * el.strokeWidth : 0);
-    const fitted = Math.ceil(contentHeight + chrome);
-    return Math.abs(fitted - el.height) >= 1 ? fitted : null;
+    const needed = contentHeight + 2 * el.padding + (isBordered(el) ? 2 * el.strokeWidth : 0);
+    // A sub-pixel shortfall is left alone: the body overflows visibly rather than clipping, so writing
+    // for it would only cost every peer a round of updates.
+    return needed - el.height >= 1 ? Math.ceil(needed) : null;
 }

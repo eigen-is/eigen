@@ -155,6 +155,12 @@ function boxAimLines(el: VectorElement): [[Point, Point], [Point, Point]] {
     ];
 }
 
+// The box a click with the text tool places, in scene units. Beside the style tables because it is the
+// same kind of answer — "what does a new one look like" — but ONE table for both hosts: the height is
+// only the box's starting minimum (it grows to the first line typed at whatever size the host's table
+// says), so there is nothing per-app to say about it.
+export const NEW_TEXT_BOX_SIZE = { width: 320, height: 48 };
+
 // The vector app's style table: roughness 1, hachure, Excalifont, curved corners (SLIDES_STYLE_DEFAULTS
 // is the deck's flat counterpart). A fresh element starts unpainted but hatched — the hatch style rides
 // the fill, so the first colour the user picks lands as hachure.

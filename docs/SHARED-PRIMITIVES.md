@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1303 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1304 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -774,7 +774,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorToolEntry` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (565)
+## Utilities & constants (566)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1211,6 +1211,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `moveSegment` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `nearestFrameId` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `nearestPoint` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
+| `NEW_TEXT_BOX_SIZE` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
 | `normalizeAngle` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `normalizeFixedPoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `normalizeLinear` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |

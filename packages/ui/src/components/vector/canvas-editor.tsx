@@ -24,6 +24,7 @@ import {
     isTransparentColor,
     type MarqueeMode,
     marqueeMode,
+    NEW_TEXT_BOX_SIZE,
     orderByFractionalIndex,
     parseBackgroundFill,
     parseIdList,
@@ -80,8 +81,6 @@ import { useDrawingTools } from './tools/use-drawing-tools';
 // Below this scene-unit extent (in BOTH dimensions) a drag-create is a click → discarded.
 const CREATE_MIN_SIZE = 1;
 const MIN_ELEMENT_SIZE = 1;
-// The box a click with the rich-text tool places, in scene units. It arrives empty and selected.
-const NEW_RICHTEXT_SIZE = { width: 200, height: 40 };
 // Image drop/paste SIZING (natural-size-that-fits, 80% viewport cap, never upscale, unreadable →
 // default box) is the shared `fitImageSize` helper — vector is its reference behavior; the cascade
 // offset is the shared IMAGE_CASCADE_OFFSET.
@@ -1147,7 +1146,9 @@ export function CanvasEditor({
             // its default size, because a click is how you start typing.
             const clicked = c.box.width < CREATE_MIN_SIZE && c.box.height < CREATE_MIN_SIZE;
             if (clicked && c.type !== 'richtext') return;
-            const box = clicked ? { ...c.box, ...NEW_RICHTEXT_SIZE } : c.box;
+            // A click places the shared starting box (the engine's, so both apps agree); a drag keeps what
+            // the user drew. Either way the height only ever grows from there.
+            const box = clicked ? { ...c.box, ...NEW_TEXT_BOX_SIZE } : c.box;
             const id = addElement({
                 type: c.type,
                 x: box.x,
@@ -1295,7 +1296,11 @@ export function CanvasEditor({
     // has no such box — its layers sit straight on the scene.
     const frameLayers = frame ? (
         <div
-            className="absolute overflow-hidden"
+            // overflow-CLIP, not hidden: `hidden` makes the page a scroll container, and the browser
+            // scrolls one to reveal a focused contenteditable's caret — which slid the whole page up
+            // under the screen-space chrome, leaving the selection ring behind (the probe measured
+            // 123.5px). `clip` clips identically and cannot be scrolled by anyone.
+            className="absolute overflow-clip"
             style={{
                 left: 0,
                 top: 0,
@@ -1316,7 +1321,9 @@ export function CanvasEditor({
         <div
             ref={containerRef}
             tabIndex={-1}
-            className="eigen-paper relative h-full w-full select-none overflow-hidden bg-background touch-none outline-none"
+            // overflow-clip for the same reason the page below uses it: the infinite canvas is not a
+            // scroll container, so a caret scroll must not be able to slide the scene under the chrome.
+            className="eigen-paper relative h-full w-full select-none overflow-clip bg-background touch-none outline-none"
             style={{ cursor, backgroundColor: background }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
