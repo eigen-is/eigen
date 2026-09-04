@@ -1,4 +1,5 @@
 import type { BackgroundFill } from '../types/background';
+import { cssGradientStops } from './gradient';
 
 export const DEFAULT_FILL_COLOR = '#e60076';
 
@@ -20,7 +21,7 @@ export function getBackgroundStyle(
             return { backgroundColor: fill.color };
         case 'gradient':
             return {
-                backgroundImage: `linear-gradient(${fill.angle}deg, ${fill.from}, ${fill.to})`,
+                backgroundImage: `linear-gradient(${fill.angle}deg, ${cssGradientStops(fill.from, fill.to)})`,
             };
         case 'image': {
             if (!fill.mediaName) return {};

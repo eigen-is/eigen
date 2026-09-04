@@ -15,7 +15,14 @@ describe('getBackgroundStyle', () => {
 
     test('gradient → linear-gradient backgroundImage', () => {
         expect(getBackgroundStyle({ type: 'gradient', from: '#ffffff', to: 'transparent', angle: 180 })).toEqual({
-            backgroundImage: 'linear-gradient(180deg, #ffffff, transparent)',
+            backgroundImage: 'linear-gradient(180deg, #ffffff 0%, #ffffff00 100%)',
+        });
+    });
+
+    // The transparent-end rule is a GRADIENT rule: a solid transparent paint still declares the token.
+    test('a solid transparent fill is left alone', () => {
+        expect(getBackgroundStyle({ type: 'solid', color: 'transparent' })).toEqual({
+            backgroundColor: 'transparent',
         });
     });
 
@@ -90,7 +97,7 @@ describe('backgroundCss', () => {
     test('is getBackgroundStyle as declarations', () => {
         expect(backgroundCss({ type: 'solid', color: '#ff0080' })).toEqual(['background-color:#ff0080']);
         expect(backgroundCss({ type: 'gradient', from: '#fff', to: 'transparent', angle: 180 })).toEqual([
-            'background-image:linear-gradient(180deg, #fff, transparent)',
+            'background-image:linear-gradient(180deg, #ffffff 0%, #ffffff00 100%)',
         ]);
     });
 

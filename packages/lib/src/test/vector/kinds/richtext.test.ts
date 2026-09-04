@@ -22,7 +22,7 @@ describe('rich text box paint', () => {
     test('a gradient fill paints a CSS linear-gradient', () => {
         const fill = serializeFill({ type: 'gradient', from: '#000000', to: '#ffffff', angle: 45, style: 'solid' });
         expect(styleOf(richtext({ id: 'rt1', fill }))).toContain(
-            'background-image:linear-gradient(45deg, #000000, #ffffff)',
+            'background-image:linear-gradient(45deg, #000000 0%, #ffffff 100%)',
         );
     });
 

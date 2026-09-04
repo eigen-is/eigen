@@ -692,4 +692,19 @@ describe('gradient fills', () => {
     test('a transparent fill emits no defs', () => {
         expect(elementToSvg(goldenShape({ id: 'g3', type: 'rectangle' }))).not.toContain('linearGradient');
     });
+
+    // A transparent end reads as transparent BLACK in both renderers, which paints a dark band across
+    // the middle of the shape. It is emitted as the other end's colour at stop-opacity 0 instead.
+    test('a gradient fading to transparent emits no black stop', () => {
+        const svg = elementToSvg(
+            goldenShape({
+                id: 'g4',
+                type: 'rectangle',
+                fill: '{"type":"gradient","from":"#e60076","to":"transparent","angle":45,"style":"solid"}',
+            }),
+        );
+        expect(svg).toContain('<stop offset="1" stop-color="#e60076" stop-opacity="0"/>');
+        expect(svg).not.toContain('stop-color="transparent"');
+        expect(svg).not.toContain('stop-color="#000000"');
+    });
 });
