@@ -88,6 +88,16 @@ describe('renderEigenvectorPreviewBody', () => {
         expect(previewOf('<p onclick="alert(1)">ok</p>')).not.toContain('onclick');
     });
 
+    test('a <style> block in a rich-text body never reaches the page', () => {
+        // The body is injected as live DOM in the drive hero and the lightbox, where a style block
+        // reaches far outside its own preview: it can blank the app or lay an invisible overlay
+        // over it for every user who browses the folder.
+        const body = previewOf('<p>ok</p><style>body{display:none}</style>');
+        expect(body).toContain('<p>ok</p>');
+        expect(body).not.toContain('<style');
+        expect(body).not.toContain('display:none');
+    });
+
     test('an empty drawing previews as an empty page, so the cache stops serving its old body', () => {
         const doc = new Y.Doc();
         seedVectorDoc(doc, { elements: [], frames: [], meta: { background: '#fef3c7', gridSize: 20 } });
