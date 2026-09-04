@@ -32,9 +32,7 @@ describe('drawingPage', () => {
     });
 
     test('an empty drawing has no page', () => {
-        expect(
-            drawingPage({ elements: [], frames: [], meta: { background: 'transparent', gridSize: 20 } }, noMedia),
-        ).toBeNull();
+        expect(drawingPage({ elements: [], frames: [], meta: { background: 'transparent' } }, noMedia)).toBeNull();
     });
 
     test('a transparent scene background is no background at all', () => {
@@ -220,7 +218,7 @@ describe('framePages', () => {
     });
 
     test('a deck with no frames has no pages', () => {
-        const empty = { elements: [], frames: [], meta: { background: 'transparent', gridSize: 20 } };
+        const empty = { elements: [], frames: [], meta: { background: 'transparent' } };
         expect(framePages(empty, noMedia)).toEqual([]);
     });
 });

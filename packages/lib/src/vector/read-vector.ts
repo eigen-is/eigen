@@ -54,8 +54,7 @@ export function readVectorFromDoc(doc: Y.Doc): VectorScene {
     const ordered = syncInvalidIndices(orderByFractionalIndex(elements));
 
     const background = color(metaMap.get('background'), DEFAULT_SCENE_META.background);
-    const gridSize = num(metaMap.get('gridSize'), DEFAULT_SCENE_META.gridSize);
-    return { elements: ordered, frames, meta: { background, gridSize } };
+    return { elements: ordered, frames, meta: { background } };
 }
 
 // Frames are ordered by fractional index like elements, and heal the same way. Every frame is

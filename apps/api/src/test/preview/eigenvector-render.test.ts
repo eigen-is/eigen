@@ -119,7 +119,7 @@ describe('renderEigenvectorPreviewBody', () => {
 
     test('an empty drawing previews as an empty page, so the cache stops serving its old body', () => {
         const doc = new Y.Doc();
-        seedVectorDoc(doc, { elements: [], frames: [], meta: { background: '#fef3c7', gridSize: 20 } });
+        seedVectorDoc(doc, { elements: [], frames: [], meta: { background: '#fef3c7' } });
         const { body, warnings } = renderEigenvectorPreviewBody(doc, new Map());
         doc.destroy();
         expect(body).toContain(`<div class="canvas-page" style="position:relative;overflow:hidden;width:960px;`);

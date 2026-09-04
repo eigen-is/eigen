@@ -65,7 +65,7 @@ describe('renderEigenslidesPreviewBody', () => {
         // getOrCacheText stores only a non-empty body: an empty one re-runs the whole document
         // transform (Yjs load + Worker) on every single request, forever, and never settles.
         const doc = new Y.Doc();
-        seedDeckDoc(doc, { elements: [], frames: [], meta: { background: 'transparent', gridSize: 20 } });
+        seedDeckDoc(doc, { elements: [], frames: [], meta: { background: 'transparent' } });
         const { body, warnings } = renderEigenslidesPreviewBody(doc, new Map());
         doc.destroy();
         expect(body.match(/class="canvas-page"/g)).toHaveLength(1);

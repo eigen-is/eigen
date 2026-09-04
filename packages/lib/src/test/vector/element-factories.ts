@@ -84,5 +84,5 @@ export function arrow(over: Partial<VectorArrowElement> & Pick<VectorArrowElemen
 }
 
 export function scene(elements: VectorElement[], background = 'transparent'): VectorScene {
-    return { meta: { background, gridSize: 20 }, frames: [], elements };
+    return { meta: { background }, frames: [], elements };
 }

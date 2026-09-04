@@ -38,13 +38,12 @@ describe('readVectorFromDoc', () => {
     test('materializes elements ordered by fractional index with meta', () => {
         const doc = docWith((elements, meta) => {
             meta.set('background', '#ffffff');
-            meta.set('gridSize', 32);
             writeElement(elements, 'second', { type: 'rectangle', index: 'a1', roundness: 'round' });
             writeElement(elements, 'first', { type: 'ellipse', index: 'a0' });
         });
         const scene = readVectorFromDoc(doc);
         expect(scene.elements.map((e) => e.id)).toEqual(['first', 'second']);
-        expect(scene.meta).toEqual({ background: '#ffffff', gridSize: 32 });
+        expect(scene.meta).toEqual({ background: '#ffffff' });
     });
 
     test('applies defaults for missing fields and ignores foreign keys', () => {
@@ -114,7 +113,6 @@ describe('readVectorFromDoc', () => {
     test('reads a server-hydrated doc (roots are AbstractType after applyUpdate)', () => {
         const src = docWith((elements, meta) => {
             meta.set('background', 'transparent');
-            meta.set('gridSize', 20);
             writeElement(elements, 'a', { type: 'rectangle', index: 'a0', x: 5, y: 6 });
         });
         const server = new Y.Doc();
@@ -145,7 +143,7 @@ describe('readVectorFromDoc', () => {
     test('empty doc yields an empty scene with default meta', () => {
         const scene = readVectorFromDoc(new Y.Doc());
         expect(scene.elements).toEqual([]);
-        expect(scene.meta).toEqual({ background: 'transparent', gridSize: 20 });
+        expect(scene.meta).toEqual({ background: 'transparent' });
     });
 
     test('materializes a linear element with points and roundness', () => {

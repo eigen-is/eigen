@@ -316,7 +316,7 @@ export function buildGoldenDeckScene(): VectorScene {
         );
     }
 
-    return { elements, frames, meta: { background: 'transparent', gridSize: 20 } };
+    return { elements, frames, meta: { background: 'transparent' } };
 }
 
 // Rich text only — no media, so the deck renders without a seeded media/ folder. Every frame carries
@@ -353,7 +353,7 @@ export function buildHeavyDeckScene(frameCount = 60, elementsPerFrame = 6): Vect
             );
         }
     }
-    return { elements, frames, meta: { background: 'transparent', gridSize: 20 } };
+    return { elements, frames, meta: { background: 'transparent' } };
 }
 
 // A follow-up edit in its own transaction, the way an editor session writes one, so
@@ -559,7 +559,7 @@ export function buildGoldenVectorScene(): VectorScene {
             fill: serializeFill({ type: 'gradient', from: '#e60076', to: '#2563eb', angle: 45, style: 'hachure' }),
         },
     ];
-    return { elements, frames: [], meta: { background: 'transparent', gridSize: 20 } };
+    return { elements, frames: [], meta: { background: 'transparent' } };
 }
 
 // Write a VectorScene into a Y.Doc the way use-canvas-doc.ts persists one: a per-element Y.Map under
@@ -582,7 +582,6 @@ export function seedVectorDoc(doc: Y.Doc, scene: VectorScene): void {
             framesMap.set(frame.id, yFrame);
         }
         metaMap.set('background', scene.meta.background);
-        metaMap.set('gridSize', scene.meta.gridSize);
     });
 }
 

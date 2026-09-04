@@ -18,7 +18,7 @@ import { buildSelectionData } from '../../../../components/vector/tools/clipboar
 // so the sync copy path stays byte-free and the ref resolves against the target's media/ on paste. A
 // still-pending upload (no portable path) is left out of the whole payload.
 
-const meta: VectorMeta = { background: 'transparent', gridSize: 20 };
+const meta: VectorMeta = { background: 'transparent' };
 
 const BASE = { ...DEFAULT_ELEMENT_PROPS, x: 0, y: 0, width: 100, height: 60, angle: 0 };
 
