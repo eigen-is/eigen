@@ -1,1 +1,1 @@
-export { backgroundCss, DEFAULT_FILL_COLOR, getBackgroundStyle, isSameFill } from './style';
+export { backgroundCss, DEFAULT_FILL_COLOR, getBackgroundStyle } from './style';

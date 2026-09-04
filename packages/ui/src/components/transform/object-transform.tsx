@@ -48,7 +48,7 @@ function sameBox(a: Box, b: Box): boolean {
 export type ObjectTransformProps = {
     // Element bounds in scene units, degrees. Single box only — multi-select never mounts this.
     box: Box;
-    // Host positioning of the ring: percent CSS (slides) or px-from-zoom (vector). Position/size
+    // Host positioning of the ring: px-from-zoom on the canvas. Position/size
     // ONLY — the component owns `transform: rotate(angle)` + center origin itself.
     boxToStyle: (box: Box) => React.CSSProperties;
     // Convert a screen-px pointer delta to scene units. MUST be a uniform x/y scale — that is
@@ -62,9 +62,9 @@ export type ObjectTransformProps = {
     // Shift meaning (aspect-locked by default, Shift frees it) — Excalidraw's image feel; sides stay
     // single-axis. Default 'free' leaves every existing host unchanged.
     resizeMode?: 'free' | 'aspect' | 'aspect-default';
-    // Scene-unit resize floor (slides 30, vector ~1). Defaults to 1.
+    // Scene-unit resize floor (the canvas passes ~1). Defaults to 1.
     minSize?: number;
-    // Optional resize-time box snapping (slides' edge/center guides). Applied on the RESIZE path
+    // Optional resize-time box snapping (the canvas' edge/center guides). Applied on the RESIZE path
     // ONLY — never rotate, never the pointerdown start echo — before `latest`, so the committed
     // box is the snapped one; minSize is re-clamped after it. Skipped while a modifier is shaping
     // the box (aspect-lock / from-center), so it can't fight those. A host that doesn't snap omits

@@ -1,34 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { commentAnchorTexts, elementForCommentCard } from '../../vector/comments';
-import {
-    DEFAULT_ARROW_PROPS,
-    DEFAULT_ELEMENT_PROPS,
-    DEFAULT_SKETCH_PROPS,
-    type VectorArrowElement,
-    type VectorElement,
-} from '../../vector/types';
-import { richtext, shape } from './element-factories';
+import type { VectorElement } from '../../vector/types';
+import { arrow, richtext, shape } from './element-factories';
 
 // The host's label table in miniature — the panel row's fallback when a kind carries no text.
 const labelOf = (el: VectorElement): string =>
     el.type === 'arrow' ? 'Arrow' : el.type === 'richtext' ? 'Text' : 'Rectangle';
-
-function arrow(over: Partial<VectorArrowElement> & Pick<VectorArrowElement, 'id'>): VectorArrowElement {
-    return {
-        ...DEFAULT_ELEMENT_PROPS,
-        ...DEFAULT_SKETCH_PROPS,
-        ...DEFAULT_ARROW_PROPS,
-        type: 'arrow',
-        x: 0,
-        y: 0,
-        width: 100,
-        height: 60,
-        angle: 0,
-        index: 'a0',
-        points: '[[0,0],[100,60]]',
-        ...over,
-    };
-}
 
 describe('commentAnchorTexts', () => {
     test('anchor text comes from the element the card is on', () => {

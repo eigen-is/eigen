@@ -2,7 +2,7 @@ import { backgroundCss } from '../../background';
 import { getFontFamily } from '../../constants/fonts';
 import { stripTagsServer } from '../../core/html';
 import { isTransparentFill, parseFill } from '../fill';
-import { hitTestBox } from '../geometry';
+import { hitTestBox, round } from '../geometry';
 import { cornerRadius, rectOutline } from '../outline';
 import {
     CORNERS,
@@ -18,7 +18,7 @@ import {
 } from '../types';
 import { defineKind } from './kind';
 import { clampNum, color, fillField, fontFamily, fontSize, htmlField, oneOf } from './read-fields';
-import { isBordered, isUnpainted, round } from './render-utils';
+import { isBordered, isUnpainted } from './render-utils';
 
 export const richTextKind = defineKind<VectorRichTextElement>({
     type: 'richtext',

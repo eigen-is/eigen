@@ -4,12 +4,13 @@
 // by the frontend (previews/embeds/thumbnails/export) and the API transform Worker. Every per-kind
 // body lives in the registry (kinds/); this module places what a kind draws.
 
+import { escapeXml } from '../core/html';
 import { arrowRoute, sceneBounds } from './elbow-route';
 import { isTransparentColor } from './fill';
 import { orderByFractionalIndex } from './fractional-index';
-import type { Box } from './geometry';
+import { type Box, round } from './geometry';
 import { ELEMENT_KINDS } from './kinds';
-import { escapeXml, round } from './kinds/render-utils';
+
 import { RICH_TEXT_CLASS } from './scene-layers';
 import type { VectorElement, VectorScene } from './types';
 

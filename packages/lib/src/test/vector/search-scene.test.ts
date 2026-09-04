@@ -1,23 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { FRAME_HEIGHT, FRAME_WIDTH, type VectorFrame } from '../../vector/frames';
-import { ELEMENT_KINDS, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
 import { searchScene } from '../../vector/search-scene';
-import { DEFAULT_ELEMENT_PROPS, type VectorArrowElement, type VectorScene } from '../../vector/types';
-import { richtext, scene, shape } from './element-factories';
-
-const arrow = (over: Partial<VectorArrowElement> & Pick<VectorArrowElement, 'id'>): VectorArrowElement => ({
-    ...DEFAULT_ELEMENT_PROPS,
-    ...ELEMENT_KINDS.arrow.defaults(VECTOR_STYLE_DEFAULTS),
-    type: 'arrow',
-    x: 0,
-    y: 0,
-    width: 100,
-    height: 0,
-    angle: 0,
-    index: 'a0',
-    points: '[[0,0],[100,0]]',
-    ...over,
-});
+import type { VectorScene } from '../../vector/types';
+import { arrow, richtext, scene, shape } from './element-factories';
 
 const frame = (id: string, index: string): VectorFrame => ({
     id,
@@ -44,9 +29,12 @@ describe('searchScene', () => {
     });
 
     test('finds an arrow label', () => {
-        expect(searchScene(scene([arrow({ id: 'arr', text: 'depends on' })]), /depends/gi).map((m) => m.id)).toEqual([
-            'arr',
-        ]);
+        expect(
+            searchScene(
+                scene([arrow({ id: 'arr', text: 'depends on', height: 0, points: '[[0,0],[100,0]]' })]),
+                /depends/gi,
+            ).map((m) => m.id),
+        ).toEqual(['arr']);
     });
 
     test('a match id is the element id — self-describing, resolvable without a cached search', () => {

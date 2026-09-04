@@ -1,5 +1,5 @@
+import { escapeXml } from '@workspace/lib/html';
 import { XMLParser } from 'fast-xml-parser';
-import { escapeXml } from '../shared/xml';
 import { propstatNotFound, propstatOk } from './xml';
 
 // The shared PROPFIND core both DAV surfaces sit on (RFC 4918 § 9.1): parse the request body into the

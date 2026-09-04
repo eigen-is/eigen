@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { backgroundCss, getBackgroundStyle, isSameFill } from '../../background/style';
+import { backgroundCss, getBackgroundStyle } from '../../background/style';
 
 describe('getBackgroundStyle', () => {
     test('null / undefined → empty style', () => {
@@ -53,43 +53,6 @@ describe('getBackgroundStyle', () => {
         expect(
             getBackgroundStyle({ type: 'image', mediaName: '', fit: 'cover' }, (name) => `https://cdn/${name}`),
         ).toEqual({});
-    });
-});
-
-describe('isSameFill', () => {
-    test('null / undefined cases', () => {
-        expect(isSameFill(null, null)).toBe(true);
-        expect(isSameFill(undefined, undefined)).toBe(true);
-        expect(isSameFill(null, undefined)).toBe(true);
-        expect(isSameFill(undefined, null)).toBe(true);
-        expect(isSameFill(null, { type: 'solid', color: '#fff' })).toBe(false);
-        expect(isSameFill({ type: 'solid', color: '#fff' }, null)).toBe(false);
-        expect(isSameFill(undefined, { type: 'solid', color: '#fff' })).toBe(false);
-    });
-
-    test('different types → false', () => {
-        expect(
-            isSameFill({ type: 'solid', color: '#fff' }, { type: 'gradient', from: '#fff', to: '#000', angle: 0 }),
-        ).toBe(false);
-    });
-
-    test('solid equality', () => {
-        expect(isSameFill({ type: 'solid', color: '#abc' }, { type: 'solid', color: '#abc' })).toBe(true);
-        expect(isSameFill({ type: 'solid', color: '#abc' }, { type: 'solid', color: '#abd' })).toBe(false);
-    });
-
-    test('gradient equality', () => {
-        const g = { type: 'gradient', from: '#fff', to: 'transparent', angle: 180 } as const;
-        expect(isSameFill(g, { ...g })).toBe(true);
-        expect(isSameFill(g, { ...g, angle: 90 })).toBe(false);
-        expect(isSameFill(g, { ...g, from: '#000' })).toBe(false);
-    });
-
-    test('image equality', () => {
-        const i = { type: 'image', mediaName: 'a.png', fit: 'cover' } as const;
-        expect(isSameFill(i, { ...i })).toBe(true);
-        expect(isSameFill(i, { ...i, fit: 'contain' })).toBe(false);
-        expect(isSameFill(i, { ...i, mediaName: 'b.png' })).toBe(false);
     });
 });
 

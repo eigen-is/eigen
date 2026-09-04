@@ -1,8 +1,9 @@
+import { escapeXml } from '@workspace/lib/html';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { computeEtag } from '../core/http';
-import { escapeXml } from '../shared/xml';
 
-// Re-exported so this module's importers keep getting escapeXml from './xml'.
+// Re-exported so this module's importers keep getting escapeXml from './xml'; the escape itself is
+// lib's, shared with the SVG the canvas kinds serialize.
 export { escapeXml };
 
 const XML_HEADER = '<?xml version="1.0" encoding="utf-8"?>';

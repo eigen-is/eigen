@@ -1,5 +1,5 @@
-// Multi-select value merging for properties panels. Extracted verbatim from slides'
-// slide-properties-panel (its second consumer is the vector panel). A getter reads one field
+// Multi-select value merging for properties panels (the canvas panel and the rows it composes).
+// A getter reads one field
 // off every selected object: all-equal collapses to the value, any disagreement is MIXED, an
 // empty/all-undefined selection is undefined. Panels render MIXED as '—' (number inputs, color
 // swatches, select placeholders) or a data-mixed attribute (toggles).

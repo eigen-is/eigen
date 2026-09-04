@@ -277,13 +277,14 @@ Notifications: `home.notifications.persist({...})` → writes to DB + broadcasts
 
 ### Eigen File Types
 
-| Type     | MIME                        | Extension        | Storage                       |
-|----------|-----------------------------|------------------|-------------------------------|
-| Document | `application/eigendoc`      | `.eigendoc`      | Dir with `data.db` (Yjs)      |
-| Stickies | `application/eigenstickies` | `.eigenstickies` | Dir with `data.db` (Yjs)      |
-| Chat     | `application/eigenchat`     | `.eigenchat`     | Dir with `data.db` + `media/` |
-| Slides   | `application/eigenslides`   | `.eigenslides`   | Dir with `data.db` (Yjs)      |
-| Sheets   | `application/eigensheets`   | `.eigensheets`   | Dir with `data.db` (Yjs)      |
+| Type     | MIME                        | Extension        | Storage                                             |
+|----------|-----------------------------|------------------|-----------------------------------------------------|
+| Document | `application/eigendoc`      | `.eigendoc`      | Dir with `data.db` (Yjs) + `comments.db` + `media/` |
+| Stickies | `application/eigenstickies` | `.eigenstickies` | Dir with `data.db` (Yjs) + `comments.db` + `media/` |
+| Chat     | `application/eigenchat`     | `.eigenchat`     | Dir with `data.db` + `media/`                       |
+| Slides   | `application/eigenslides`   | `.eigenslides`   | Dir with `data.db` (Yjs) + `comments.db` + `media/` |
+| Sheets   | `application/eigensheets`   | `.eigensheets`   | Dir with `data.db` (Yjs) + `comments.db` + `media/` |
+| Vector   | `application/eigenvector`   | `.eigenvector`   | Dir with `data.db` (Yjs) + `comments.db` + `media/` |
 
 ### Owner ID Prefixes
 

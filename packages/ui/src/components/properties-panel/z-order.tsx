@@ -1,7 +1,7 @@
-// Shared z-order ("Arrange") vocabulary + chrome for canvas apps (vector, slides). The WRITES stay
-// per-app — vector rewrites fractional indices, slides splices a Y.Array — so this module owns the
-// verbs and the UI only: the `ZOp` union, the four Arrange buttons, and the keyboard brackets. Each
-// host folds its own gates into `enabled` and passes an `onApply` wired to its own reorder.
+// Shared z-order ("Arrange") vocabulary + chrome for canvas apps. The WRITE stays with the host —
+// the canvas rewrites fractional indices — so this module owns the verbs and the UI only: the `ZOp`
+// union, the four Arrange buttons, and the keyboard brackets. Each host folds its own gates into
+// `enabled` and passes an `onApply` wired to its own reorder.
 
 import { BringToFront, ChevronDown, ChevronUp, SendToBack } from 'lucide-react';
 import { useEffect, useRef } from 'react';

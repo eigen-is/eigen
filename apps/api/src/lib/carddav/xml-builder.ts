@@ -1,3 +1,4 @@
+import { escapeXml } from '@workspace/lib/html';
 import { CARD_MAX_BYTES } from '../contacts/card-store';
 import type { CardBook } from '../contacts/dav-store';
 import type { PropMap } from '../dav/propfind';
@@ -5,7 +6,6 @@ import type { PropMap } from '../dav/propfind';
 // namespace) live in the shared DAV envelope (lib/dav/xml.ts) — one principal and one XML envelope serve both
 // protocols, so these are imported, never duplicated. This file only adds the addressbook-specific property blocks.
 import { ownershipEntries } from '../dav/xml';
-import { escapeXml } from '../shared/xml';
 
 export { PROPFIND_BODY_MAX_BYTES, parsePropfind, selectProps, wantsBrief } from '../dav/propfind';
 export {

@@ -1,9 +1,10 @@
-import { hitTestBox } from '../geometry';
+import { escapeXml } from '../../core/html';
+import { hitTestBox, round } from '../geometry';
 import { cornerRadius, outlinePath, rectOutline } from '../outline';
 import { CORNERS, DEFAULT_CORNERS, DEFAULT_OBJECT_FIT, OBJECT_FITS, type VectorImageElement } from '../types';
 import { defineKind } from './kind';
 import { oneOf, str } from './read-fields';
-import { dashArray, escapeXml, isBordered, round, svgId } from './render-utils';
+import { dashArray, isBordered, svgId } from './render-utils';
 
 export const imageKind = defineKind<VectorImageElement>({
     type: 'image',

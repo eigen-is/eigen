@@ -1,7 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import type { EigenClipboardElementsItem } from '../../types/clipboard';
-import { buildElementsClipboardItem, readElementsClipboardItem, reanchorElements } from '../../vector/clipboard';
+import {
+    buildElementsClipboardItem,
+    pasteAnchorOffset,
+    readElementsClipboardItem,
+    reanchorElements,
+} from '../../vector/clipboard';
 import { solidFill } from '../../vector/fill';
+import { DUPLICATE_OFFSET } from '../../vector/geometry';
 import { arrow, ellipse, image, linear, richtext, shape } from './element-factories';
 
 describe('the elements clipboard item', () => {
@@ -100,5 +106,45 @@ describe('the elements clipboard item', () => {
 
     test('an empty selection produces no item', () => {
         expect(buildElementsClipboardItem([], '')).toBeNull();
+    });
+});
+
+describe('pasteAnchorOffset', () => {
+    // BASE puts a shape at (0,0) 100×60, so its bounds centre is (50, 30).
+    const set = [shape({ id: 'r', type: 'rectangle' })];
+    const CENTRE = { x: 50, y: 30 };
+
+    test('a paste into the frame it was copied from takes the duplicate step', () => {
+        expect(pasteAnchorOffset(set, 'f1', 'f1', CENTRE)).toEqual({ dx: DUPLICATE_OFFSET, dy: DUPLICATE_OFFSET });
+    });
+
+    test('a paste into a DIFFERENT frame lands in place — frame-relative coords mean the same spot', () => {
+        expect(pasteAnchorOffset(set, 'f1', 'f2', CENTRE)).toEqual({ dx: 0, dy: 0 });
+    });
+
+    test('a crossing re-anchors the bounding box on the viewport centre', () => {
+        // Infinite canvas → frame, and the viewport centre is far from the copied bounds.
+        expect(pasteAnchorOffset(set, '', 'f2', { x: 1050, y: 530 })).toEqual({ dx: 1000, dy: 500 });
+        // Frame → infinite canvas, same rule.
+        expect(pasteAnchorOffset(set, 'f1', '', { x: 1050, y: 530 })).toEqual({ dx: 1000, dy: 500 });
+    });
+
+    test('infinite → infinite re-anchors on the viewport centre when the copy came from elsewhere', () => {
+        expect(pasteAnchorOffset(set, '', '', { x: 2450, y: 1830 })).toEqual({ dx: 2400, dy: 1800 });
+    });
+
+    test('a selection already under the viewport centre takes the duplicate step, not a no-op', () => {
+        // THE bug: the re-anchor is ~0, so the copy landed pixel-exactly on the original and ⌘V looked
+        // like a dead key. Below one duplicate step it behaves like ⌘D instead.
+        expect(pasteAnchorOffset(set, '', '', CENTRE)).toEqual({ dx: DUPLICATE_OFFSET, dy: DUPLICATE_OFFSET });
+        expect(pasteAnchorOffset(set, '', '', { x: CENTRE.x + 4, y: CENTRE.y - 3 })).toEqual({
+            dx: DUPLICATE_OFFSET,
+            dy: DUPLICATE_OFFSET,
+        });
+    });
+
+    test('one duplicate step away is already a visible move, so the re-anchor stands', () => {
+        const { dx, dy } = pasteAnchorOffset(set, '', '', { x: CENTRE.x + 200, y: CENTRE.y + 200 });
+        expect({ dx, dy }).toEqual({ dx: 200, dy: 200 });
     });
 });

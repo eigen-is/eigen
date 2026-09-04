@@ -98,7 +98,7 @@ export type VectorImageElement = VectorElementBase & {
     objectFit: ObjectFit; // → preserveAspectRatio none / xMidYMid meet / xMidYMid slice
 };
 
-// The one text kind: TipTap HTML in a box, styled by the typography fields slides' TextObject carried.
+// The one text kind: TipTap HTML in a box, styled by its own typography fields.
 // `strokeColor`/`strokeWidth`/`strokeStyle` are its border, `fill` its box background. A hachured text
 // box is not a thing, so its renderer paints the fill's paint half and ignores the hatch style
 // (capabilities.fillStyle: false) — the stored field is the same one every fillable kind carries.
