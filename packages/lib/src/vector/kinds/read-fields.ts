@@ -25,7 +25,7 @@ const MAX_HTML_BYTES = 64 * 1024;
 // An arrow's label is plain text, and both of its dimensions derive from it: the height is the line
 // count times the line height (so a 200k-line label would union a 5M-unit box into the shared viewBox)
 // and the SVG arm emits one <text> node per line. Cap the bytes and the lines; the in-canvas textarea
-// caps its own input at MAX_ARROW_LABEL_BYTES so a user never types past the reader.
+// commits through labelText, so what a user types and what the reader keeps are the same string.
 export const MAX_ARROW_LABEL_BYTES = 4 * 1024;
 export const MAX_ARROW_LABEL_LINES = 64;
 
