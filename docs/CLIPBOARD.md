@@ -145,7 +145,7 @@ A canvas copy leaves out any image whose media path doesn't resolve yet — a st
 
 ## A paste that places nothing must not claim the event
 
-An eigen payload can be non-empty and still place nothing: every item dropped at the read seam as forged, or images with no `media/` folder to land in. The canvas' `pasteEigenItems` reports whether it placed anything, and the handler calls `preventDefault` only when it did — so the rungs below (the SVG flavour, OS files, plain text) still get their turn instead of the paste vanishing. If the whole ladder places nothing and an eigen payload was present, the canvas toasts, because a ⌘V that silently does nothing is indistinguishable from a broken key.
+An eigen payload can be non-empty and still place nothing: every item dropped at the read seam as forged, or images with no `media/` folder to land in. The canvas' `pasteEigenItems` reports whether it placed anything, and the handler calls `preventDefault` only when it did — so the rungs below (the SVG flavour, OS files, plain text) still get their turn instead of the paste vanishing. The SVG rung answers the same question before it claims: a foreign SVG lands as an image, so with no `media/` folder to upload into it falls through rather than swallowing the paste. If the whole ladder places nothing and an eigen payload was present, the canvas toasts, because a ⌘V that silently does nothing is indistinguishable from a broken key.
 
 ## Cross-Document Media
 

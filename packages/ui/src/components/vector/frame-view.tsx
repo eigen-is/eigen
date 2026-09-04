@@ -18,6 +18,7 @@ import {
 import { cn } from '@workspace/ui/lib/utils';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { ElementLayer } from './element-layer';
+import { CANVAS_PAPER_CLASS } from './paper';
 
 type FrameViewProps = {
     frame: VectorFrame;
@@ -55,7 +56,15 @@ export function FrameView({ frame, elements, resolveMedia, interactive, classNam
     return (
         <div
             ref={containerRef}
-            className={cn('relative overflow-hidden', !interactive && 'pointer-events-none', className)}
+            // The page is the canvas' PAPER here too (FramePage carries the same pin on the live
+            // canvas): a thumbnail and present mode render user content on a light page, so what is
+            // inside must resolve against the light palette even in dark mode.
+            className={cn(
+                CANVAS_PAPER_CLASS,
+                'relative overflow-hidden',
+                !interactive && 'pointer-events-none',
+                className,
+            )}
             style={{
                 aspectRatio: `${frame.width}/${frame.height}`,
                 ...getBackgroundStyle(parseBackgroundFill(frame.background), resolveMedia),
@@ -78,7 +87,9 @@ type FrameThumbnailProps = {
     index: number;
     active: boolean;
     matched?: boolean;
-    onClick: () => void;
+    // Takes the frame's id rather than closing over it, so the rail can hand every row ONE handler and
+    // the memo below is not defeated by a fresh closure per render.
+    onSelect: (frameId: string) => void;
 };
 
 // The rail row. The memo compares the frame's OWN elements (the host passes the slice, so a 60-slide
@@ -88,7 +99,7 @@ type FrameThumbnailProps = {
 // the per-element work is then skipped again by ElementLayer's own field compare.
 export function sameThumbnail(prev: FrameThumbnailProps, next: FrameThumbnailProps): boolean {
     if (prev.index !== next.index || prev.active !== next.active || prev.matched !== next.matched) return false;
-    if (prev.onClick !== next.onClick) return false;
+    if (prev.onSelect !== next.onSelect) return false;
     if (prev.frame.id !== next.frame.id || prev.frame.background !== next.frame.background) return false;
     if (prev.elements.length !== next.elements.length) return false;
     return prev.elements.every((el, i) => el === next.elements[i]);
@@ -100,7 +111,7 @@ export const FrameThumbnail = memo(function FrameThumbnail({
     index,
     active,
     matched,
-    onClick,
+    onSelect,
 }: FrameThumbnailProps) {
     const { resolveMediaUrl } = useMediaResolver();
 
@@ -108,7 +119,7 @@ export const FrameThumbnail = memo(function FrameThumbnail({
         // select-none + callout suppression keep a long press off iOS's loupe (as .eigen-list-item does).
         <button
             type="button"
-            onClick={onClick}
+            onClick={() => onSelect(frame.id)}
             className={cn(
                 'flex w-full items-start gap-2 rounded-sm px-1 py-1 text-left',
                 'select-none [-webkit-touch-callout:none]',

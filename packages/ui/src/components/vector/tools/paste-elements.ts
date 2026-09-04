@@ -46,7 +46,10 @@ export function planElementsPaste(
             // so its bytes are fetchable from nowhere — dropping it beats pasting a broken reference.
             const item = imageItems.find((i) => i.mediaName === el.mediaName);
             if (!item) continue;
-            if (needsReUpload(item.sourceParentId, mediaFolderId)) {
+            // A wire with no source folder is forged or incomplete: re-upload it like any cross-mount
+            // item, because keeping its `mediaName` would leave a placeholder pointing at bytes that
+            // are in nobody's media/ (a failed re-upload drops the element instead).
+            if (!item.sourceParentId || needsReUpload(item.sourceParentId, mediaFolderId)) {
                 // Optimistic add under a pending name; the hook swaps the real one in once it lands.
                 partial.mediaName = `${PENDING_PREFIX}${crypto.randomUUID()}`;
                 plan.crossMount.push({ index: plan.partials.length, item });

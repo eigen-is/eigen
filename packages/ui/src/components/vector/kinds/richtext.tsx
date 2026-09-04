@@ -3,6 +3,7 @@
 // shell and the drawing app cannot drift. The box background is the generic Fill row, its border the
 // generic Stroke row; this section is the text itself.
 
+import { sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
 import { RICH_TEXT_CLASS, richTextCssText, type VectorRichTextElement } from '@workspace/lib/vector';
 import { LightEditor } from '@workspace/ui/components/editor/light-editor';
 import {
@@ -63,7 +64,10 @@ export function RichTextInPlaceEditor({ element, onChange, onExit }: InPlaceEdit
             }}
         >
             <LightEditor
-                content={element.html}
+                // The OTHER mount seam for stored rich text (element-layer.tsx is the painted one), so
+                // it sanitizes too: `html` reaches us verbatim from a hostile peer's Y.Doc write, and a
+                // session would otherwise re-serialize it as trusted markup.
+                content={sanitizeToLightEditorHtml(element.html)}
                 onChange={(html) => onChange({ html })}
                 toolbar="floating"
                 proseStyle={false}

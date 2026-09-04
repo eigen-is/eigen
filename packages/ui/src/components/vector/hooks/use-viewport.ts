@@ -12,6 +12,7 @@
 import type { Box, CanvasViewport, Extent } from '@workspace/lib/vector';
 import {
     chromeTransform,
+    clamp,
     clampFrameViewport,
     fitFrameViewport,
     groupTransform,
@@ -25,8 +26,6 @@ const WHEEL_DELTA_CLAMP = 10;
 // Trailing delay before a gesture's viewport reaches React: long enough to span a trackpad's wheel
 // stream and a pointerup, short enough that the zoom pill settles as soon as the input stops.
 const COMMIT_DELAY_MS = 120;
-
-const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 const same = (a: CanvasViewport, b: CanvasViewport) =>
     a.zoom === b.zoom && a.scrollX === b.scrollX && a.scrollY === b.scrollY;

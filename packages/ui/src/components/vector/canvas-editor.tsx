@@ -5,13 +5,13 @@ import {
     useUploadFile,
     useZombieMediaSweep,
 } from '@workspace/lib/drive';
-import { stripTagsServer } from '@workspace/lib/html';
 import { useIsCoarsePointer } from '@workspace/lib/media';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     arrowRoute,
     type Box,
+    boxCenter,
     computeSnapTargets,
     elementBounds,
     elementsInFrame,
@@ -27,12 +27,15 @@ import {
     marqueeMode,
     NEW_TEXT_BOX_SIZE,
     orderByFractionalIndex,
+    paintsNothing,
     parseIdList,
     parsePoints,
     resizeLinear,
+    rotatePoint,
     SNAP_SCREEN_THRESHOLD,
     type SnapLine,
     type SnapTargets,
+    type StyleDefaults,
     SVG_NS,
     sceneBounds,
     snapBoxToTargets,
@@ -60,7 +63,7 @@ import { EmptyOutlines } from './empty-outline';
 import { randomSeed } from './hooks/element-writes';
 import { applyZOrder, deleteSelection, duplicateSelection } from './hooks/selection-ops';
 import { useCanvasClipboard } from './hooks/use-canvas-clipboard';
-import type { CanvasDoc, NewVectorElement, VectorElementPatch } from './hooks/use-canvas-doc';
+import { type CanvasDoc, type NewVectorElement, sealed, type VectorElementPatch } from './hooks/use-canvas-doc';
 import { useCanvasKeyboard } from './hooks/use-canvas-keyboard';
 import { type CanvasPeerState, type PublishCursor, peerOnFrame } from './hooks/use-canvas-presence';
 import { hitTestTopmost, marqueeSelect } from './hooks/use-selection';
@@ -126,6 +129,9 @@ type CanvasEditorProps = {
     viewport: 'infinite' | 'frame';
     // The active frame, '' on the infinite canvas — the home stamped on every new element.
     frameId?: string;
+    // The host's style table (the same one its useCanvasDoc writes through), so a drag-create preview
+    // looks exactly like the element that lands.
+    styleDefaults: StyleDefaults;
     tool: VectorTool;
     setTool: (t: VectorTool) => void;
     // Tool lock (Q / padlock): a placement keeps the current tool active; threaded like `tool`, toggled here on Q.
@@ -171,6 +177,7 @@ export function CanvasEditor({
     doc,
     viewport,
     frameId = '',
+    styleDefaults,
     tool,
     setTool,
     toolLocked,
@@ -314,12 +321,15 @@ export function CanvasEditor({
                 const [cardId] = parseIdList(el.commentCardIds);
                 if (!cardId) return [];
                 const box = elementBox(el);
+                // The corner travels with the element's rotation, like every other chrome layer, so the
+                // mark stays on a rotated shape instead of floating beside it.
+                const { x, y } = rotatePoint({ x: box.x + box.width, y: box.y }, boxCenter(box), box.angle);
                 return [
                     {
                         id: el.id,
                         cardId,
                         color: commentCards?.[cardId]?.color,
-                        corner: { x: box.x + box.width, y: box.y, width: 0, height: 0, angle: 0 },
+                        corner: { x, y, width: 0, height: 0, angle: 0 },
                     },
                 ];
             }),
@@ -374,6 +384,7 @@ export function CanvasEditor({
         zoom,
         viewportRef,
         coarse,
+        styleDefaults,
         ordered,
         byId: committedById,
         selectedIds,
@@ -501,20 +512,22 @@ export function CanvasEditor({
     // Layered Escape (bubble phase): ObjectTransform claims mid-resize/rotate Escapes in the capture
     // phase and stops them, so this never fires during a grip drag. It cancels an in-progress
     // canvas gesture, else deselects, else returns to the select tool.
-    const escRef = useRef({ hasSelection: false, tool });
-    escRef.current = { hasSelection: selectedIds.length > 0, tool };
+    const escRef = useRef({ hasSelection: false, tool, toolLocked });
+    escRef.current = { hasSelection: selectedIds.length > 0, tool, toolLocked };
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
             // A dialog/palette input owns its own Escape (close, clear); no gesture can be active
             // while one has focus, so skipping the whole handler is safe.
             if (e.key !== 'Escape' || isTypingTarget()) return;
             const g = gestureRef.current;
+            const s = escRef.current;
             if (g) {
                 gestureRef.current = null;
                 frozenRef.current = false;
                 if (g.kind === 'create') {
                     setCreating(null);
-                    setTool('select');
+                    // The padlock survives a CANCELLED placement exactly as it survives a completed one.
+                    if (!s.toolLocked) setTool('select');
                 } else if (g.kind === 'marquee') {
                     setMarquee(null);
                     // Cancel restores the gesture's base: the prior set for additive marquees,
@@ -529,7 +542,6 @@ export function CanvasEditor({
                 }
                 return;
             }
-            const s = escRef.current;
             if (s.hasSelection) setSelectedIds([]);
             else if (s.tool !== 'select') setTool('select');
         };
@@ -641,16 +653,14 @@ export function CanvasEditor({
                     // A label's height derives from its line count, so only labelWidth is measured.
                     const healed = measureVectorText(text, fontSize, fontFamily);
                     if (healed.width === el.labelWidth) return;
-                    undoManager?.stopCapturing();
-                    updateElement(id, { labelWidth: healed.width });
-                    undoManager?.stopCapturing();
+                    sealed(undoManager, () => updateElement(id, { labelWidth: healed.width }));
                 })
                 .catch(() => {});
         },
         [updateElement, undoManager],
     );
 
-    // One editing session → exactly one Yjs write. stopCapturing on both sides so the session is its own
+    // One editing session → exactly one Yjs write, `sealed` so the session is its own
     // undo step. Read the live session from a ref (not a closure) so the callback stays stable and side
     // effects run once, never inside a state updater.
     const commitEditing = useCallback(
@@ -666,9 +676,7 @@ export function CanvasEditor({
             // on a Yjs map the arrow's remote deletion already removed.
             if (!(ed.isNew && empty)) {
                 const labelWidth = empty ? 0 : measureVectorText(text, ed.fontSize, ed.fontFamily).width;
-                undoManager?.stopCapturing();
-                updateElement(ed.id, { text: empty ? '' : text, labelWidth });
-                undoManager?.stopCapturing();
+                sealed(undoManager, () => updateElement(ed.id, { text: empty ? '' : text, labelWidth }));
                 if (!empty) healLabelWidth(ed.id, text, ed.fontSize, ed.fontFamily);
             }
             setSelectedIds([ed.id]);
@@ -684,23 +692,25 @@ export function CanvasEditor({
         setRichTextEditId(id);
     };
 
-    // Close it: an empty box is deleted (a rich-text box with no text is invisible chrome), otherwise the
-    // trailing seal closes the session's coalesced writes. Reads the LIVE element — the session wrote
-    // through updateElement, so React state may be one tick behind.
+    // Close it: a box that paints nothing at all is deleted (empty invisible chrome — the kind answers
+    // that, the same predicate the unpainted ring uses), otherwise the trailing seal closes the session's
+    // coalesced writes. Reads the LIVE element — the session wrote through updateElement, so React state
+    // may be one tick behind.
     const closeRichText = useCallback(() => {
         const id = richTextEditRef.current;
         richTextEditRef.current = null;
         setRichTextEditId(null);
         if (!id) return;
         const el = visibleRef.current.find((e) => e.id === id);
-        if (el?.type === 'richtext' && stripTagsServer(el.html).trim() === '') {
-            // Seal FIRST: without it, the delete lands inside Y.UndoManager's 500ms captureTimeout and
-            // merges into the session's last keystroke, so whether it is its own undo step would depend
-            // on how fast the user clicked away.
-            undoManager?.stopCapturing();
-            deleteElements([id]);
+        if (el && paintsNothing(el)) {
+            // Sealed on BOTH sides: without the leading seal the delete lands inside Y.UndoManager's 500ms
+            // captureTimeout and merges into the session's last keystroke, so whether it is its own undo
+            // step would depend on how fast the user clicked away.
+            sealed(undoManager, () => deleteElements([id]));
             setSelectedIds([]);
+            return;
         }
+        // Trailing seal: the session's coalesced writes are one undo step.
         undoManager?.stopCapturing();
     }, [deleteElements, setSelectedIds, undoManager]);
 
@@ -749,14 +759,15 @@ export function CanvasEditor({
                 anchor,
             );
 
-            undoManager?.stopCapturing();
+            // The whole batch is one undo step.
             const pending: { id: string; promise: Promise<DrivePath | null> }[] = [];
-            for (const [i, { file }] of measured.entries()) {
-                const { pendingName, promise } = startUpload(file);
-                const id = addElement({ type: 'image', ...boxes[i], mediaName: pendingName });
-                if (id) pending.push({ id, promise });
-            }
-            undoManager?.stopCapturing(); // trailing seal — the whole batch is one undo step
+            sealed(undoManager, () => {
+                for (const [i, { file }] of measured.entries()) {
+                    const { pendingName, promise } = startUpload(file);
+                    const id = addElement({ type: 'image', ...boxes[i], mediaName: pendingName });
+                    if (id) pending.push({ id, promise });
+                }
+            });
             setSelectedIds(pending.map((p) => p.id));
 
             for (const { id, promise } of pending) {
@@ -799,11 +810,10 @@ export function CanvasEditor({
                 measured.map((m) => m.intrinsic),
                 viewportCenterScene(),
             );
-            undoManager?.stopCapturing();
-            const ids = addElements(
-                measured.map(({ name }, i) => ({ type: 'image' as const, ...boxes[i], mediaName: name })),
+            // The whole batch is one undo step.
+            const ids = sealed(undoManager, () =>
+                addElements(measured.map(({ name }, i) => ({ type: 'image' as const, ...boxes[i], mediaName: name }))),
             );
-            undoManager?.stopCapturing(); // trailing seal — the whole batch is one undo step
             setSelectedIds(ids);
         },
         [
@@ -842,8 +852,10 @@ export function CanvasEditor({
     const { onMenuCopy, onMenuCut, onMenuPaste, pasteSvgText } = useCanvasClipboard({
         canEdit,
         textEditingRef,
+        containerRef,
         viewport,
         frameId,
+        styleDefaults,
         ordered,
         meta,
         selectedIds,
@@ -888,14 +900,20 @@ export function CanvasEditor({
 
     // Text-edit entry shared by a mouse double-click and a touch double-tap (touch-gestures synthesizes
     // the tap-tap). frozenRef: no new session over a live gesture. An arrow opens the label overlay;
-    // any kind with an in-place editor opens that instead, inside its own layer.
+    // any kind with an in-place editor opens that instead, inside its own layer; empty canvas starts a
+    // new box there (Excalidraw's openNewText — rich text is the only text kind, so nothing to choose),
+    // placed like the text tool's own click: the starting box with its corner on the point.
     const openTextAtClient = (clientX: number, clientY: number) => {
         if (!canEdit || tool !== 'select' || textEditing || frozenRef.current) return;
         const p = clientToScene(clientX, clientY);
         const hit = hitTestTopmost(ordered, p, viewportRef.current.zoom, committedById, coarse);
         const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
-        if (hitEl?.type === 'arrow') openEditArrowLabel(hitEl);
-        else if (hitEl && ELEMENT_KIND_UI[hitEl.type].InPlaceEditor) openRichText(hitEl.id);
+        if (hitEl?.type === 'arrow') return openEditArrowLabel(hitEl);
+        if (hitEl && !ELEMENT_KIND_UI[hitEl.type].InPlaceEditor) return;
+        const id = hitEl
+            ? hitEl.id
+            : sealed(undoManager, () => addElement({ type: 'richtext', x: p.x, y: p.y, ...NEW_TEXT_BOX_SIZE }));
+        if (id) openRichText(id);
     };
     const onDoubleClick = (e: React.MouseEvent) => openTextAtClient(e.clientX, e.clientY);
 
@@ -1301,7 +1319,7 @@ export function CanvasEditor({
                 }
                 return node(renderEl(el));
             })}
-            {creating && node(creatingElement(creating))}
+            {creating && node(creatingElement(creating, styleDefaults))}
             {/* Live freehand/line draft, or a point-edit reshape — the SAME render path. */}
             {drawing.previewElement && node(drawing.previewElement)}
         </>

@@ -16,6 +16,10 @@ import { type Box, getLineHeightPx, MAX_ARROW_LABEL_BYTES, type TextAlign } from
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { loadVectorFont } from './text-measure';
 
+// A label is a caption, not a document: the same ceiling the reader caps the stored `text` at, so a
+// paste into the overlay can never commit text the document would silently trim.
+const MAX_LABEL_LENGTH = 4096;
+
 type TextOverlayProps = {
     // Element top-left + box in scene units (box drives the rotation origin).
     x: number;
@@ -135,6 +139,7 @@ export function TextOverlay({
             maxLength={MAX_ARROW_LABEL_BYTES}
             wrap="off"
             spellCheck={false}
+            maxLength={MAX_LABEL_LENGTH}
             className="pointer-events-auto absolute"
             style={{
                 left: pos.left,

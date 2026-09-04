@@ -51,12 +51,11 @@ export const arrowKind = defineKind<VectorArrowElement>({
     capabilities: {
         fill: false,
         fillStyle: false,
+        strokeStyle: true,
         roughness: true,
         corners: false,
-        stroke: true,
         strokeOptional: false,
         bindable: false,
-        silhouette: 'box',
         creation: 'polyline',
     },
     defaults: (style) => ({

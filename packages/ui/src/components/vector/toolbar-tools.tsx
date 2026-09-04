@@ -12,7 +12,7 @@ export function ToolMenuItems({ tools, setTool }: { tools: VectorToolEntry[]; se
             {tools.map((entry) => (
                 <DropdownMenuItem key={entry.tool} onClick={() => setTool(entry.tool)}>
                     <entry.icon className="h-4 w-4 mr-2" /> {entry.label}
-                    <DropdownMenuShortcut>{entry.shortcut}</DropdownMenuShortcut>
+                    {entry.shortcut && <DropdownMenuShortcut>{entry.shortcut}</DropdownMenuShortcut>}
                 </DropdownMenuItem>
             ))}
         </>
@@ -26,7 +26,7 @@ export function ToolButtons({ tool, setTool }: { tool: VectorTool; setTool: (too
                 <TooltipButton
                     key={entry.tool}
                     icon={entry.icon}
-                    tooltipText={`${entry.label} (${entry.shortcut})`}
+                    tooltipText={entry.shortcut ? `${entry.label} (${entry.shortcut})` : entry.label}
                     active={tool === entry.tool}
                     preventFocusLoss
                     onClick={() => setTool(entry.tool)}
