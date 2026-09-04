@@ -21,7 +21,6 @@ import {
     type Corners,
     capabilitiesOf,
     computeArrange,
-    DEFAULT_FONT_FAMILY,
     type FillStyle,
     isLinearElement,
     isTransparentFill,
@@ -41,11 +40,11 @@ import {
     type VectorLinearElement,
     type VectorMeta,
 } from '@workspace/lib/vector';
-import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import {
     AlignSection,
     BackgroundFillBlock,
     ColorRow,
+    FontRow,
     getMergedValue,
     isMixed,
     MergedNumberInput,
@@ -191,6 +190,10 @@ export function CanvasPropertiesPanel({
     // An elbow arrow pins angle 0 (its route lives in the unrotated local frame), so a pure-elbow
     // selection disables the panel Angle input.
     const allElbow = allArrow && arrowEls.every((el) => el.elbow);
+    // The Shape section: a box's Corners, an arrow's Type, and the Edges row for a line or an elbow arrow
+    // (a sharp/curved arrow's Type already answers its curvature).
+    const showEdges = allArrow ? allElbow : allRoundable;
+    const showShape = showCorners || allArrow || showEdges;
     // A Text section (font + size only — the label is always centered, its colour comes from Stroke)
     // shows for arrows once every one carries a label; an empty label has no font to tune.
     const allArrowLabeled = allArrow && arrowEls.every((el) => el.text !== '');
@@ -359,19 +362,12 @@ export function CanvasPropertiesPanel({
 
             {allArrowLabeled && (
                 <PropertySection title="Text">
-                    <PropertyRow label="Font">
-                        <FontPicker
-                            value={
-                                isMixed(arrowFontFamily)
-                                    ? DEFAULT_FONT_FAMILY
-                                    : (arrowFontFamily ?? DEFAULT_FONT_FAMILY)
-                            }
-                            onChange={(f) => {
-                                applyArrowFont({ fontFamily: f }).catch(() => {});
-                            }}
-                            className="h-7 w-full text-xs"
-                        />
-                    </PropertyRow>
+                    <FontRow
+                        value={arrowFontFamily}
+                        onChange={(f) => {
+                            applyArrowFont({ fontFamily: f }).catch(() => {});
+                        }}
+                    />
                     <PropertyRow label="Size">
                         <MergedNumberInput
                             value={arrowFontSize}
@@ -439,24 +435,26 @@ export function CanvasPropertiesPanel({
                 </PropertySection>
             )}
 
-            {showSketch && (
-                <PropertySection title="Sketch">
-                    <PropertyRow label="Rough">
-                        <MergedSelect
-                            value={numToStr(roughness)}
-                            onChange={(v) => applyToAll({ roughness: Number(v) })}
-                            options={ROUGHNESS_OPTIONS}
-                        />
-                    </PropertyRow>
-                    {/* Arrows carry the 3-way Type row (sharp/curved/elbow); lines & shapes keep Edges. An
-                            elbow reuses Edges as its CORNER style (sharp bends vs round arcs) — its shaft is
-                            always orthogonal, so roundness is free to mean the corners. */}
+            {showShape && (
+                <PropertySection title="Shape">
+                    {showCorners && (
+                        <PropertyRow label="Corners">
+                            <MergedSelect
+                                value={corners}
+                                onChange={(v) => applyToAll({ corners: v })}
+                                options={CORNERS_OPTIONS}
+                            />
+                        </PropertyRow>
+                    )}
+                    {/* Arrows carry the 3-way Type row (sharp/curved/elbow); lines keep Edges. An elbow
+                        reuses Edges as its CORNER style (sharp bends vs round arcs) — its shaft is always
+                        orthogonal, so roundness is free to mean the corners. */}
                     {allArrow && (
                         <PropertyRow label="Type">
                             <MergedSelect value={arrowShape} onChange={applyArrowShape} options={ARROW_SHAPE_OPTIONS} />
                         </PropertyRow>
                     )}
-                    {(allArrow ? allElbow : allRoundable) && (
+                    {showEdges && (
                         <PropertyRow label="Edges">
                             <MergedSelect
                                 value={roundness}
@@ -465,18 +463,6 @@ export function CanvasPropertiesPanel({
                             />
                         </PropertyRow>
                     )}
-                </PropertySection>
-            )}
-
-            {showCorners && (
-                <PropertySection title="Shape">
-                    <PropertyRow label="Corners">
-                        <MergedSelect
-                            value={corners}
-                            onChange={(v) => applyToAll({ corners: v })}
-                            options={CORNERS_OPTIONS}
-                        />
-                    </PropertyRow>
                 </PropertySection>
             )}
 
@@ -499,6 +485,18 @@ export function CanvasPropertiesPanel({
                 </PropertySection>
             )}
 
+            {showSketch && (
+                <PropertySection title="Sketch">
+                    <PropertyRow label="Style">
+                        <MergedSelect
+                            value={numToStr(roughness)}
+                            onChange={(v) => applyToAll({ roughness: Number(v) })}
+                            options={ROUGHNESS_OPTIONS}
+                        />
+                    </PropertyRow>
+                </PropertySection>
+            )}
+
             {has && (
                 <PropertySection title="Appearance">
                     <PropertyRow label="Opacity">
@@ -516,11 +514,11 @@ export function CanvasPropertiesPanel({
             {!has &&
                 (emptySection ??
                     (viewport === 'infinite' && (
-                        <PropertySection title="Canvas">
+                        <PropertySection title="Background">
                             {/* The scene background is a plain colour (meta.background), not a Fill — a
                                 frame's background is a Fill and its panel is the host's. */}
                             <ColorRow
-                                label="Background"
+                                label="Color"
                                 value={meta.background}
                                 onChange={(c) => updateMeta({ background: c || TRANSPARENT_COLOR })}
                                 showReset

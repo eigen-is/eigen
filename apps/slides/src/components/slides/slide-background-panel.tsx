@@ -8,7 +8,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { serializeBackgroundFill, type VectorFrame } from '@workspace/lib/vector';
 import { Button } from '@workspace/ui/components/button';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
-import { BackgroundFillBlock } from '@workspace/ui/components/properties-panel';
+import { BackgroundFillBlock, PropertySection } from '@workspace/ui/components/properties-panel';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { useCallback, useState } from 'react';
 import { type ApplyTo, targetFrameIds } from './apply-to';
@@ -64,11 +64,10 @@ export function SlideBackgroundPanel({
                 imagePreviewUrl={backgroundImageUrl}
             />
 
-            <div className="px-3 py-3">
-                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Apply to</h4>
+            <PropertySection title="Apply to">
                 <div className="flex gap-2">
                     <Select value={applyTo} onValueChange={(value) => setApplyTo(toApplyTo(value))}>
-                        <SelectTrigger size="sm" className="text-xs flex-1">
+                        <SelectTrigger size="xs" className="flex-1">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -77,11 +76,11 @@ export function SlideBackgroundPanel({
                             <SelectItem value="all">All slides</SelectItem>
                         </SelectContent>
                     </Select>
-                    <Button size="sm" className="h-8 text-xs" onClick={() => write(background, applyTo)}>
+                    <Button size="sm" className="h-7 text-xs" onClick={() => write(background, applyTo)}>
                         Apply
                     </Button>
                 </div>
-            </div>
+            </PropertySection>
 
             <DrivePickerWithUpload
                 open={pickerOpen}

@@ -11,7 +11,7 @@ export const PROPERTIES_PANEL_WIDTH_PX = 256;
 //
 //   1. geometry     Transform / Layout
 //   2. content      Text · Spacing · Image
-//   3. paint        Fill / Color / Background · Stroke / Border · Sketch
+//   3. paint        Fill / Color / Background · Stroke / Border · Shape · Arrowheads · Sketch
 //   4. appearance   Appearance
 //   5. actions      Arrange · Align
 //   6. destructive  Delete
@@ -62,12 +62,18 @@ type PropertyRowProps = {
     label: string;
     children: ReactNode;
     className?: string;
+    // Single-letter labels (X/Y/W/H) in a two-column grid, where the full label column would starve the input.
+    compact?: boolean;
 };
 
-export function PropertyRow({ label, children, className }: PropertyRowProps) {
+// One row grammar for every panel: a fixed label column and the control filling the rest, so number
+// inputs, selects, colour swatches and toggle groups all start on the same vertical line.
+export function PropertyRow({ label, children, className, compact }: PropertyRowProps) {
     return (
         <div className={cn('flex items-center gap-2', className)}>
-            <span className="text-xs text-muted-foreground w-7 shrink-0">{label}</span>
+            <span className={cn('text-xs text-muted-foreground shrink-0 truncate', compact ? 'w-5' : 'w-14')}>
+                {label}
+            </span>
             <div className="flex-1 min-w-0">{children}</div>
         </div>
     );

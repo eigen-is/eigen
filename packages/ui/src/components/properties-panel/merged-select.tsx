@@ -23,7 +23,7 @@ export function MergedSelect<T extends string>({ value, onChange, options }: Mer
         // onValueChange is the library seam: Radix types it (value: string) => void, so the cast back
         // to the option union lives here and nowhere else.
         <Select value={controlled} onValueChange={(v) => onChange(v as T)}>
-            <SelectTrigger className="h-7 text-xs">
+            <SelectTrigger size="xs" className="w-full">
                 <SelectValue placeholder={mixed ? '—' : undefined} />
             </SelectTrigger>
             <SelectContent>

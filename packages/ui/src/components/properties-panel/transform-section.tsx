@@ -78,16 +78,16 @@ export function TransformSection({
     return (
         <PropertySection title="Transform">
             <div className="grid grid-cols-2 gap-2">
-                <PropertyRow label="X">
+                <PropertyRow label="X" compact>
                     <MergedNumberInput value={x} onChange={(v) => onChange({ x: v })} step={1} disabled={disabled} />
                 </PropertyRow>
-                <PropertyRow label="Y">
+                <PropertyRow label="Y" compact>
                     <MergedNumberInput value={y} onChange={(v) => onChange({ y: v })} step={1} disabled={disabled} />
                 </PropertyRow>
-                <PropertyRow label="W">
+                <PropertyRow label="W" compact>
                     <MergedNumberInput value={width} onChange={changeWidth} step={1} min={1} disabled={sizeOff} />
                 </PropertyRow>
-                <PropertyRow label="H">
+                <PropertyRow label="H" compact>
                     <MergedNumberInput value={height} onChange={changeHeight} step={1} min={1} disabled={sizeOff} />
                 </PropertyRow>
             </div>
@@ -103,7 +103,7 @@ export function TransformSection({
                     </label>
                 </div>
             )}
-            <PropertyRow label="°">
+            <PropertyRow label="Angle">
                 <MergedNumberInput
                     value={angle}
                     onChange={(v) => onChange({ angle: normalizeAngle(v) })}
