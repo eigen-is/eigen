@@ -64,7 +64,7 @@ export function HomeComponent() {
             <div className="text-lg text-center mb-8 max-w-md">
                 <div>
                     <p className="mb-4">
-                        Your personal workspace in the cloud.
+                        A self-hosted alternative to Google Workspace.
                         <br />
                         Simple and secure. You control your data.
                     </p>

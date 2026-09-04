@@ -13,13 +13,13 @@ export const Route = createFileRoute('/blog/')({
             {
                 name: 'description',
                 content:
-                    'Read about the development of eigen, a minimal and secure workspace in the cloud where you control your own data.',
+                    'Read about the development of Eigen, a self-hosted alternative to Google Workspace where you control your data.',
             },
             { property: 'og:title', content: 'Blog - eigen' },
             {
                 property: 'og:description',
                 content:
-                    'Read about the development of eigen, a minimal and secure workspace in the cloud where you control your own data.',
+                    'Read about the development of Eigen, a self-hosted alternative to Google Workspace where you control your data.',
             },
             { property: 'og:type', content: 'website' },
         ],

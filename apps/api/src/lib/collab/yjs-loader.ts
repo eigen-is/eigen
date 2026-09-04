@@ -3,7 +3,7 @@ import { asc, desc, gt } from 'drizzle-orm';
 import { type BunSQLiteDatabase, drizzle } from 'drizzle-orm/bun-sqlite';
 import * as Y from 'yjs';
 import { ApiError } from '../core/errors';
-import type { ManagedDatabase, SchemaType } from '../core/managed-database';
+import type { ManagedDatabase } from '../core/managed-database';
 import { decompressBlob } from './blob-codec';
 import * as schema from './schema';
 
@@ -18,7 +18,7 @@ export type YjsStatePayload = {
 };
 
 function copyBlob(stored: Uint8Array): ArrayBuffer {
-    return stored.buffer.slice(stored.byteOffset, stored.byteOffset + stored.byteLength) as ArrayBuffer;
+    return new Uint8Array(stored).buffer;
 }
 
 // Selects the newest snapshot plus every update with id > snapshot.lastUpdateId
@@ -49,17 +49,17 @@ function readPayload(db: DocDb): YjsStatePayload {
                 ? {
                       id: snapshot.id,
                       lastUpdateId: snapshot.lastUpdateId,
-                      data: copyBlob(snapshot.stateData as Uint8Array),
+                      data: copyBlob(snapshot.stateData),
                   }
                 : null,
-            updates: updates.map((update) => ({ id: update.id, data: copyBlob(update.updateData as Uint8Array) })),
+            updates: updates.map((update) => ({ id: update.id, data: copyBlob(update.updateData) })),
         };
     });
     return payload;
 }
 
-export function readYjsStatePayload(managedDb: ManagedDatabase<SchemaType>): YjsStatePayload {
-    return readPayload(managedDb.db as DocDb);
+export function readYjsStatePayload(managedDb: ManagedDatabase<typeof schema>): YjsStatePayload {
+    return readPayload(managedDb.db);
 }
 
 // Decompresses and applies a captured payload into `doc`. Returns counters used
@@ -99,7 +99,7 @@ export function materializeYjsState(
 }
 
 export function loadYjsState(
-    managedDb: ManagedDatabase<SchemaType>,
+    managedDb: ManagedDatabase<typeof schema>,
     doc?: Y.Doc,
     label?: string,
 ): { doc: Y.Doc; updatesApplied: number; bytesApplied: number } {

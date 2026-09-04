@@ -36,11 +36,9 @@ export class Home {
 
     protected idleMs = 1000 * 60 * 5;
 
-    private initialized: boolean = false;
-    private initializationStarted: boolean = false;
-    private initWaiters: { resolve: (home: Home) => void; reject: (reason: unknown) => void }[] = [];
+    private initPromise: Promise<this> | null = null;
     private timeout: Timer | undefined;
-    private _destructing: boolean = false;
+    private _destructing = false;
     private _destructPromise: Promise<void> | null = null;
 
     get destructing(): boolean {
@@ -53,7 +51,7 @@ export class Home {
 
     constructor(user: User, cleanUp?: () => void) {
         this.user = user;
-        this.cleanUp = cleanUp || null;
+        this.cleanUp = cleanUp ?? null;
     }
 
     get drive(): Drive {
@@ -85,17 +83,11 @@ export class Home {
         return !!this._calendar;
     }
 
-    public async init(autoCreateDefaultMount: boolean = false) {
-        if (this.initialized) {
-            return this;
-        }
-        if (this.initializationStarted) {
-            return new Promise<Home>((resolve, reject) => {
-                this.initWaiters.push({ resolve, reject });
-            });
-        }
-        this.initializationStarted = true;
+    public init(autoCreateDefaultMount: boolean = false): Promise<this> {
+        return (this.initPromise ??= this.runInit(autoCreateDefaultMount));
+    }
 
+    private async runInit(autoCreateDefaultMount: boolean): Promise<this> {
         try {
             await time('Home.init.settings', () => this.settings?.load() ?? Promise.resolve());
 
@@ -112,23 +104,14 @@ export class Home {
             const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
             if (failed) throw failed.reason;
 
-            this.initialized = true;
             console.log(`[Home] Initialized for ${this.user.id}`);
-            for (const { resolve } of this.initWaiters) {
-                resolve(this);
-            }
-            this.initWaiters = [];
             return this;
         } catch (err) {
             // One failure path for the whole init body (settings load included): the idempotent
-            // shutdown() (see destruct) closes what got built and clears the idle timer, queued
-            // concurrent init() callers are rejected — they'd otherwise await forever — and the
-            // rethrow makes getHome discard this half-built Home instead of caching a leaking one.
+            // shutdown() (see destruct) closes what got built and clears the idle timer, and the
+            // rethrow makes getHome discard this half-built Home instead of caching a leaking one
+            // (concurrent callers share the memoised rejection).
             await this.shutdown();
-            for (const { reject } of this.initWaiters) {
-                reject(err);
-            }
-            this.initWaiters = [];
             throw err;
         }
     }
@@ -166,72 +149,6 @@ export class Home {
 
     public unsubscribeSSE(listener: (event: SSEvent) => void) {
         this.sseListeners = this.sseListeners.filter((l) => l !== listener);
-    }
-
-    public createSSEStream(getHome: (userId: string) => Promise<Home>): ReadableStream<SSEvent | { event: string }> {
-        let keepalive: Timer | null = null;
-        let listener: ((event: SSEvent) => void) | null = null;
-        let isClosed = false;
-        let currentHome: Home = this;
-
-        return new ReadableStream({
-            start: (controller) => {
-                listener = (event: SSEvent) => {
-                    if (isClosed || controller.desiredSize === null) return;
-                    try {
-                        controller.enqueue(event);
-                    } catch {
-                        isClosed = true;
-                    }
-                };
-
-                currentHome.subscribeSSE(listener);
-
-                try {
-                    controller.enqueue({ event: 'keepalive' });
-                } catch {
-                    isClosed = true;
-                }
-
-                keepalive = setInterval(async () => {
-                    if (isClosed) return;
-
-                    // Re-acquire Home if it was recreated externally
-                    try {
-                        const freshHome = await getHome(this.user.id); // own home: re-acquire after recreation
-                        if (freshHome !== currentHome) {
-                            console.log(`[SSE] Home recreated for ${this.user.id}, re-subscribing`);
-                            try {
-                                currentHome.unsubscribeSSE(listener!);
-                            } catch {}
-                            freshHome.subscribeSSE(listener!);
-                            currentHome = freshHome;
-                        }
-                    } catch (e) {
-                        console.error(`[SSE] Failed to get Home for ${this.user.id}:`, e);
-                    }
-
-                    if (controller.desiredSize === null) {
-                        isClosed = true;
-                        return;
-                    }
-                    try {
-                        controller.enqueue({ event: 'keepalive' });
-                    } catch {
-                        isClosed = true;
-                    }
-                }, 15000);
-            },
-            cancel: () => {
-                isClosed = true;
-                if (keepalive) clearInterval(keepalive);
-                if (listener) {
-                    try {
-                        currentHome.unsubscribeSSE(listener);
-                    } catch {}
-                }
-            },
-        });
     }
 
     public async size(teamIds: string[] = []): Promise<HomeSizeResponse> {
@@ -312,9 +229,12 @@ export class Home {
         key: string,
         factory: () => Promise<ManagedDatabase<S>>,
     ): Promise<ManagedDatabase<S>> {
-        if (!this.managedDatabases.has(key)) {
-            this.managedDatabases.set(key, createAsyncSingleton(factory));
+        const existing = this.managedDatabases.get(key);
+        if (existing) {
+            return existing() as Promise<ManagedDatabase<S>>;
         }
-        return this.managedDatabases.get(key)!() as Promise<ManagedDatabase<S>>;
+        const singleton = createAsyncSingleton(factory);
+        this.managedDatabases.set(key, singleton);
+        return singleton();
     }
 }

@@ -10,7 +10,7 @@ there is no harness left that fills them for you. Kept here so the template is r
 ---
 
 You are a technical writer creating **one** help article for **Eigen Support**, the public help center in
-`apps/index`. Eigen is a self-hosted Google Workspace alternative (Mail, Drive, Docs, Sheets, Slides, Calendar,
+`apps/index`. Eigen is a self-hosted alternative to Google Workspace (Mail, Drive, Docs, Sheets, Slides, Calendar,
 Contacts, Chat, Stickies, plus Space for account settings and Admin).
 
 ## Read first, in this order

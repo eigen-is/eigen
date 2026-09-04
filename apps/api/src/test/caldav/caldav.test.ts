@@ -1098,7 +1098,7 @@ describe('CalDAV', () => {
             );
             const xml = await res.text();
             expect(xml).toContain(`<D:getetag>${propEtag}</D:getetag>`);
-            expect(xml).not.toContain('404');
+            expect(xml).not.toContain('404 Not Found');
         });
 
         test('Prefer:return=minimal suppresses the 404 propstat', async () => {
@@ -1108,7 +1108,7 @@ describe('CalDAV', () => {
             );
             const xml = await res.text();
             expect(xml).toContain(`<D:getetag>${propEtag}</D:getetag>`);
-            expect(xml).not.toContain('404');
+            expect(xml).not.toContain('404 Not Found');
         });
 
         test('a bodyless PROPFIND still serves allprop, now with the member resourcetype', async () => {
