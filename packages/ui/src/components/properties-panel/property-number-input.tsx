@@ -1,4 +1,5 @@
 import { Input } from '@workspace/ui/components/input';
+import { cn } from '@workspace/ui/lib/utils';
 import { useState } from 'react';
 
 type PropertyNumberInputProps = {
@@ -9,6 +10,7 @@ type PropertyNumberInputProps = {
     step?: number;
     placeholder?: string;
     disabled?: boolean;
+    className?: string;
 };
 
 export function PropertyNumberInput({
@@ -19,6 +21,7 @@ export function PropertyNumberInput({
     step,
     placeholder,
     disabled,
+    className,
 }: PropertyNumberInputProps) {
     const [localValue, setLocalValue] = useState(() => String(value ?? ''));
     const [focused, setFocused] = useState(false);
@@ -31,7 +34,7 @@ export function PropertyNumberInput({
     return (
         <Input
             type="number"
-            className="h-7 text-xs"
+            className={cn('h-7 text-xs', className)}
             value={focused ? localValue : externalStr}
             placeholder={placeholder}
             onChange={(e) => {
