@@ -55,10 +55,17 @@ function elementDefaults(type: VectorElementType, style: StyleDefaults): Record<
 // One element into the doc's `elements` map at the given fractional index, under the kind's defaults
 // and the host's style table — THE element writer, shared by the editor's add path and the deck
 // seeder. Honors a caller-supplied seed so a drag-create preview and its committed element share the
-// same roughjs jitter (no visual pop on release); a seedless kind stores none. Nested in a live
-// transact it joins that one, so a caller's origin and single-atom guarantee both survive.
-export function writeElementInDoc(doc: Y.Doc, partial: NewVectorElement, index: string, style: StyleDefaults): string {
-    const id = newElementId();
+// same roughjs jitter (no visual pop on release); a seedless kind stores none. A caller-supplied `id`
+// is the seeder's: two peers seeding one empty deck write the same key, so they converge on one
+// element instead of two. Nested in a live transact it joins that one, so a caller's origin and
+// single-atom guarantee both survive.
+export function writeElementInDoc(
+    doc: Y.Doc,
+    partial: NewVectorElement,
+    index: string,
+    style: StyleDefaults,
+    id: string = newElementId(),
+): string {
     const seed = hasSeed(partial.type) ? (partial.seed ?? randomSeed()) : undefined;
     const record = { ...elementDefaults(partial.type, style), ...partial, id, type: partial.type, seed, index };
     const element = new Y.Map<unknown>();
