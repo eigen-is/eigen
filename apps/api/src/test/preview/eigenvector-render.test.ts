@@ -98,6 +98,25 @@ describe('renderEigenvectorPreviewBody', () => {
         expect(body).not.toContain('display:none');
     });
 
+    test('a huge drawing renders a bounded number of elements, and the marker says so', () => {
+        // Every other preview type has a budget (20 blocks, 8 slides, a cell cap): without one a
+        // 50k-element drawing pays roughjs path generation for all of them before the byte guard
+        // even looks at the result.
+        const scene = buildGoldenVectorScene();
+        const rect = scene.elements.find((el) => el.type === 'rectangle');
+        if (!rect) throw new Error('the golden scene has a rectangle');
+        const many = Array.from({ length: 520 }, (_, i) => ({
+            ...rect,
+            id: `many-${i}`,
+            index: `b${i.toString().padStart(4, '0')}`,
+            x: (i % 40) * 20,
+            y: Math.floor(i / 40) * 20,
+        }));
+        const body = previewOfScene({ ...scene, elements: many });
+        expect(body.match(/<svg /g)).toHaveLength(500);
+        expect(body).toContain('Preview truncated');
+    });
+
     test('an empty drawing previews as an empty page, so the cache stops serving its old body', () => {
         const doc = new Y.Doc();
         seedVectorDoc(doc, { elements: [], frames: [], meta: { background: '#fef3c7', gridSize: 20 } });
