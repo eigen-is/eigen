@@ -16,8 +16,6 @@ const CHECKER = {
 type ColorButtonProps = {
     value: MergedValue<string>;
     onChange: (color: string) => void;
-    // The picker's Reset row, which writes '' — the caller maps that to its own default.
-    showReset?: boolean;
     // Offer a None swatch, which writes the transparent token. Opt-in: a row whose paint is the only
     // thing keeping its element visible (an arrow's stroke) must not offer it.
     allowNone?: boolean;
@@ -25,8 +23,8 @@ type ColorButtonProps = {
 };
 
 // The one colour control every panel row uses: a select-shaped trigger (swatch + hex, or None / —)
-// opening the shared picker, with None and Reset inside the same popover.
-function ColorButton({ value, onChange, showReset = true, allowNone, noneLabel = 'None' }: ColorButtonProps) {
+// opening the shared picker, with the None swatch inside the same popover.
+function ColorButton({ value, onChange, allowNone, noneLabel = 'None' }: ColorButtonProps) {
     const [open, setOpen] = useState(false);
     const mixed = isMixed(value);
     // Unset and transparent are the same answer to "what paint?" — both read as the None swatch.
@@ -67,7 +65,9 @@ function ColorButton({ value, onChange, showReset = true, allowNone, noneLabel =
                             <span>{noneLabel}</span>
                         </button>
                     )}
-                    <ColorPicker value={displayColor ?? ''} onChange={pick} showReset={showReset} />
+                    {/* No Reset row: a picked colour is replaced by picking another, and where paint is
+                        optional the None swatch is the way back. */}
+                    <ColorPicker value={displayColor ?? ''} onChange={pick} showReset={false} />
                 </div>
             </PopoverContent>
         </Popover>

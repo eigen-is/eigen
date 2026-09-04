@@ -141,14 +141,7 @@ function SolidBody({
     value: Extract<BackgroundFill, { type: 'solid' }>;
     onChange: (next: BackgroundFill) => void;
 }) {
-    return (
-        <ColorRow
-            label="Color"
-            value={value.color}
-            onChange={(color) => onChange({ type: 'solid', color })}
-            showReset={false}
-        />
-    );
+    return <ColorRow label="Color" value={value.color} onChange={(color) => onChange({ type: 'solid', color })} />;
 }
 
 function GradientBody({
@@ -164,7 +157,6 @@ function GradientBody({
                 label="From"
                 value={value.from}
                 onChange={(from) => onChange({ ...value, from })}
-                showReset={false}
                 allowNone
                 noneLabel="Transparent"
             />
@@ -172,7 +164,6 @@ function GradientBody({
                 label="To"
                 value={value.to}
                 onChange={(to) => onChange({ ...value, to })}
-                showReset={false}
                 allowNone
                 noneLabel="Transparent"
             />

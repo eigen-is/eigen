@@ -18,7 +18,6 @@ import {
     arrowShapeFields,
     arrowShapeOf,
     type Box,
-    baseDefaultsFor,
     type Corners,
     capabilitiesOf,
     computeArrange,
@@ -34,7 +33,6 @@ import {
     STROKE_WIDTH_OPTIONS,
     type StrokeStyle,
     serializeFill,
-    TRANSPARENT_COLOR,
     TRANSPARENT_FILL,
     type VectorArrowElement,
     type VectorElement,
@@ -168,10 +166,6 @@ export function CanvasPropertiesPanel({
     // A border can be switched off only where the element still has a body without it; a line or an
     // arrow IS its stroke, so its colour row offers no None swatch.
     const strokeOptional = all((el) => capabilitiesOf(el).strokeOptional);
-    // What the Stroke row's reset restores: the default CREATING this kind would have given, so an
-    // image's border resets to none instead of to the shared ink colour. A mixed selection follows the
-    // first element's kind.
-    const strokeReset = has ? baseDefaultsFor(selectedElements[0].type).strokeColor : '';
     // The hatch row sits INSIDE the Fill block — it is the other half of the same stored fill — and shows
     // only for the kinds whose renderer honours it.
     const showFillStyle = showFill && all((el) => capabilitiesOf(el).fillStyle);
@@ -424,7 +418,7 @@ export function CanvasPropertiesPanel({
                     <ColorRow
                         label="Color"
                         value={strokeColor}
-                        onChange={(c) => applyToAll({ strokeColor: c || strokeReset })}
+                        onChange={(c) => applyToAll({ strokeColor: c })}
                         allowNone={strokeOptional}
                     />
                     <PropertyRow label="Width">
@@ -530,12 +524,13 @@ export function CanvasPropertiesPanel({
                     (viewport === 'infinite' && (
                         <PropertySection title="Background">
                             {/* The scene background is a plain colour (meta.background), not a Fill — a
-                                frame's background is a Fill and its panel is the host's. */}
+                                frame's background is a Fill and its panel is the host's. Transparent is
+                                its default and a rendered state, so None is the way back from a colour. */}
                             <ColorRow
                                 label="Color"
                                 value={meta.background}
-                                onChange={(c) => updateMeta({ background: c || TRANSPARENT_COLOR })}
-                                showReset
+                                onChange={(c) => updateMeta({ background: c })}
+                                allowNone
                             />
                         </PropertySection>
                     )))}
