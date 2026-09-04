@@ -19,6 +19,12 @@ export function presentStep(index: number, count: number, delta: number): number
     return Math.max(next, 0);
 }
 
+// A click on a link belongs to the link: the presenter opening a source must not also move the deck
+// on behind it. Every other spot on the slide is the next-slide surface.
+export function clickAdvances(target: EventTarget | null): boolean {
+    return !(target instanceof Element) || target.closest('a[href]') === null;
+}
+
 // The exit affordance shows on entry and on any pointer activity, then fades away again.
 const CONTROLS_MS = 2000;
 
@@ -80,9 +86,9 @@ export function PresentMode({ frame, elements, onNext, onPrev, onExit }: Present
                 !controlsVisible && 'cursor-none',
             )}
             onPointerMove={revealControls}
-            onClick={() => {
+            onClick={(e) => {
                 revealControls();
-                onNext();
+                if (clickAdvances(e.target)) onNext();
             }}
             onContextMenu={(e) => {
                 e.preventDefault();
