@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { parseOwnerId } from '../../../types';
 import type { DrivePath } from '../../../types/drive';
 import { useAuth } from '../../auth';
@@ -153,4 +153,17 @@ export function useIsEffectiveOwner(ownerId: string): boolean {
         }
         return false;
     }, [user, ownerId, myTeams]);
+}
+
+// True when the path's own ACL names the current user — a direct share, as opposed to
+// access inherited from a shared folder or a team drive.
+export function useIsSharedWithMe(): (path: DrivePath) => boolean {
+    const { user } = useAuth();
+    return useCallback(
+        (path: DrivePath) =>
+            !!user &&
+            path.ownerId !== user.id &&
+            !!path.acl?.some((entry) => entry.id.toLowerCase() === user.email.toLowerCase()),
+        [user],
+    );
 }
