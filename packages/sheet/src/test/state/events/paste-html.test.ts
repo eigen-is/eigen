@@ -11,7 +11,7 @@
 // upcoming refactors near the paste pipeline are gated on current behaviour. They
 // never assert on internal call sequences.
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { Window } from 'happy-dom';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
@@ -29,7 +29,9 @@ import { pastedHtmlFactory } from '../factories/pasted-html';
 // would leak DOM globals across the whole sheet test process.
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
 const g = globalThis as any;
-g.document = new Window().document;
+const win = new Window();
+g.document = win.document;
+g.DOMParser = win.DOMParser;
 g.sessionStorage = { setItem: () => {} };
 
 function grid(rows: number, cols: number): (Cell | null)[][] {
@@ -360,5 +362,35 @@ describe('HTML-table paste — merges, borders, row height', () => {
         expect(d[1][0]).toBeNull();
         expect(d[2][0]).toBeNull();
         expect(ctx.sheets[0].config!.merge).toEqual({ '0_0': { r: 0, c: 0, rs: 2, cs: 2 } });
+    });
+});
+
+// Audit 2026-09-06 finding #3: the branch used to assign OS clipboard HTML to a live
+// <div> (document.createElement('div').innerHTML = txtdata). A live element loads <img>
+// and fires its onerror even while detached, so a crafted clipboard runs script on the
+// Eigen origin. The fix parses into an inert DOMParser document instead.
+describe('HTML-table paste — inert parsing (no live image load)', () => {
+    it('parses clipboard HTML into an inert document, never a live <div>, so an <img onerror> cannot fire', () => {
+        const ctx = makeCtx();
+        const createSpy = spyOn(g.document, 'createElement');
+        // Read mock.calls before mockRestore() — restoring clears the recorded calls.
+        let madeDiv = true;
+        try {
+            pasteHtml(
+                ctx,
+                '<table><tr><td>safe</td>' + '<td><img src="x" onerror="globalThis.__pwned = true"></td></tr></table>',
+            );
+            madeDiv = createSpy.mock.calls.some((args) => args[0] === 'div');
+        } finally {
+            createSpy.mockRestore();
+        }
+
+        // The table still pastes — the first cell keeps its value.
+        expect(ctx.sheets[0].data![0][0]?.v).toBe('safe');
+        // happy-dom never loads images, so onerror can't fire here regardless; the real
+        // guarantee is structural — the branch parses into an inert document and never
+        // assigns to a live <div>, whose innerHTML would load the image in a browser.
+        expect((g as { __pwned?: boolean }).__pwned).toBeUndefined();
+        expect(madeDiv).toBe(false);
     });
 });
