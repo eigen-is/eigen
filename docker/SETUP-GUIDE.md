@@ -402,7 +402,7 @@ When the webserver itself runs in docker, `127.0.0.1` inside that container is i
 
 #### TLS certs without bundled Caddy
 
-The bundled cert manager lives in the Caddy container. When Caddy is off, postfix and dovecot still need certs for IMAPS/SMTPS. Reuse your host's Let's Encrypt certs with the host-cert overlay:
+The bundled cert manager lives in the Caddy container. When Caddy is off, postfix and dovecot still need certs for IMAPS/SMTPS. Reuse your host's Let's Encrypt certs with the host-cert overlay (needs Compose 2.24.4+ for its `!override` tag):
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.host-certs.yml \
@@ -460,7 +460,7 @@ SMTP_PORT=25
 - Bind to `0.0.0.0` (or the docker bridge gateway, default `172.20.0.1`), not just `127.0.0.1`
 - Permit relay from the docker bridge subnet (`172.20.0.0/24`, or whatever you set `EIGEN_SUBNET` to)
 
-Third-party relays (Brevo, SendGrid, Postmark) work the same way — set `SMTP_HOST` to the relay host and use the standard `SMTP_RELAY_*` credentials.
+Third-party relays (Brevo, SendGrid, Postmark) need authentication, and the API talks plain unauthenticated SMTP only (`apps/api/src/lib/core/mailer.ts`). The `SMTP_RELAY_*` credentials are read by the bundled postfix, not by the API, so without the `mail` profile your host mail server has to be the one that authenticates to the relay.
 
 > **Heads-up:** the in-app **Mail** tab still appears when bundled mail is off, and clicking it returns errors (the gating flag is on the roadmap). Tell users to point their IMAP client at your existing mail server.
 
