@@ -17,7 +17,17 @@ import {
     type VectorRichTextElement,
 } from '../types';
 import { defineKind } from './kind';
-import { clampNum, color, fillField, fontFamily, fontSize, htmlField, oneOf } from './read-fields';
+import {
+    clampNum,
+    color,
+    fillField,
+    fontFamily,
+    fontSize,
+    htmlField,
+    letterSpacingField,
+    lineHeightField,
+    oneOf,
+} from './read-fields';
 import { isBordered, isUnpainted } from './render-utils';
 
 export const richTextKind = defineKind<VectorRichTextElement>({
@@ -60,10 +70,9 @@ export const richTextKind = defineKind<VectorRichTextElement>({
         textAlign: oneOf(src.get('textAlign'), TEXT_ALIGNS, DEFAULT_RICHTEXT_PROPS.textAlign),
         verticalAlign: oneOf(src.get('verticalAlign'), VERTICAL_ALIGNS, DEFAULT_RICHTEXT_PROPS.verticalAlign),
         color: color(src.get('color'), DEFAULT_ELEMENT_PROPS.strokeColor),
-        // Bounded so a hostile value can't blow every peer's layout: ±200px tracking, 0.5-10x leading,
-        // 0-200px inset.
-        letterSpacing: clampNum(src.get('letterSpacing'), -200, 200, DEFAULT_RICHTEXT_PROPS.letterSpacing),
-        lineHeight: clampNum(src.get('lineHeight'), 0.5, 10, DEFAULT_RICHTEXT_PROPS.lineHeight),
+        letterSpacing: letterSpacingField(src.get('letterSpacing')),
+        lineHeight: lineHeightField(src.get('lineHeight')),
+        // Bounded like the two above, so a hostile inset can't blow every peer's layout.
         padding: clampNum(src.get('padding'), 0, 200, DEFAULT_RICHTEXT_PROPS.padding),
     }),
     hitTest: (el, point) => hitTestBox(el, point),

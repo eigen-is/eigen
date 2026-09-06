@@ -4,7 +4,13 @@
 
 import { EIGEN_FONT_NAMES } from '../../constants/fonts';
 import { isColorToken, parseFill, serializeFill } from '../fill';
-import { DEFAULT_ELEMENT_PROPS, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE, DEFAULT_SKETCH_PROPS } from '../types';
+import {
+    DEFAULT_ELEMENT_PROPS,
+    DEFAULT_FONT_FAMILY,
+    DEFAULT_FONT_SIZE,
+    DEFAULT_RICHTEXT_PROPS,
+    DEFAULT_SKETCH_PROPS,
+} from '../types';
 
 // Sanity bound on spatial fields. Without a cap one client's corrupt write (say 1e15 from a math bug)
 // freezes every other peer — rough fill cost scales with element area.
@@ -61,6 +67,16 @@ export function fontSize(v: unknown): number {
 // declaration of the writer's choosing. Only an EIGEN_FONTS name passes; the picker writes nothing else.
 export function fontFamily(v: unknown): string {
     return oneOf(v, EIGEN_FONT_NAMES, DEFAULT_FONT_FAMILY);
+}
+
+// Rich-text typography bounds, shared by the document reader and the paste wire: a hostile value
+// can't blow every peer's layout with 1e9 tracking or leading.
+export function letterSpacingField(v: unknown): number {
+    return clampNum(v, -200, 200, DEFAULT_RICHTEXT_PROPS.letterSpacing);
+}
+
+export function lineHeightField(v: unknown): number {
+    return clampNum(v, 0.5, 10, DEFAULT_RICHTEXT_PROPS.lineHeight);
 }
 
 // roughjs inputs. A negative strokeWidth reaches SVG as an invalid stroke-width, and an out-of-band

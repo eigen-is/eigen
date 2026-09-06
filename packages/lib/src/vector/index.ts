@@ -11,9 +11,10 @@ export * from './frames';
 export * from './geometry';
 export * from './image-fit';
 export * from './kinds';
-// The clipboard reads foreign typography as bare strings; `oneOf` and `num` are the same coercions the
-// document reader clamps a stored field with, so a pasted value can't be anything a peer write couldn't be.
-// `labelText` travels with them so the in-canvas textarea commits exactly what the reader keeps.
+// The paste ladder reads a foreign app's font size and dominant text align as bare values; `oneOf` and
+// `num` are the same coercions the document reader clamps a stored field with, so a pasted value can't be
+// anything a peer write couldn't be. `labelText` travels with them so the in-canvas textarea commits
+// exactly what the reader keeps.
 export { labelText, MAX_ARROW_LABEL_BYTES, num, oneOf } from './kinds/read-fields';
 export * from './media-refs';
 export * from './outline';

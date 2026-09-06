@@ -456,6 +456,19 @@ describe('readVectorFromDoc', () => {
         expect(huge.type === 'rectangle' && [huge.roughness, huge.seed]).toEqual([10, 2 ** 31]);
     });
 
+    test('normalizes the stored angle into [0, 360)', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'wrapped', { type: 'rectangle', index: 'a0', angle: -90 });
+            writeElement(elements, 'absurd', { type: 'rectangle', index: 'a1', angle: 1e300 });
+            writeElement(elements, 'nan', { type: 'rectangle', index: 'a2', angle: Number.NaN });
+        });
+        const [wrapped, absurd, nan] = readVectorFromDoc(doc).elements;
+        expect(wrapped.angle).toBe(270);
+        expect(absurd.angle).toBeGreaterThanOrEqual(0);
+        expect(absurd.angle).toBeLessThan(360);
+        expect(nan.angle).toBe(0);
+    });
+
     test('clears a binding whose target is absent or not bindable (doc untouched)', () => {
         const doc = docWith((elements) => {
             writeElement(elements, 'ln', { type: 'line', index: 'a0', points: '[[0,0],[10,0]]' });
@@ -522,7 +535,6 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
         'frameId',
         'commentCardIds',
         'opacity',
-        'locked',
         'strokeColor',
         'strokeWidth',
         'strokeStyle',
@@ -540,7 +552,6 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
         frameId: 'frame1',
         commentCardIds: '["card1","card2"]',
         opacity: 42,
-        locked: true,
         strokeColor: '#abcdef',
         strokeWidth: 7,
         strokeStyle: 'dashed',

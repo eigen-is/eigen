@@ -9,7 +9,6 @@ import { orderByFractionalIndex, syncInvalidIndices } from './fractional-index';
 import { FRAME_HEIGHT, FRAME_WIDTH, type VectorFrame } from './frames';
 import { ELEMENT_KINDS, isBindable, isVectorElementType } from './kinds';
 import {
-    bool,
     cleanStr,
     color,
     coord,
@@ -21,6 +20,7 @@ import {
     strokeWidth,
     type YMapLike,
 } from './kinds/read-fields';
+import { normalizeAngle } from './outline';
 import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_SCENE_META,
@@ -96,12 +96,11 @@ function readBase(value: YMapLike, id: string, type: VectorElementType): VectorE
         y: coord(value.get('y')),
         width: size(value.get('width')),
         height: size(value.get('height')),
-        angle: num(value.get('angle'), 0),
+        angle: normalizeAngle(num(value.get('angle'), 0)),
         index: str(value.get('index'), ''),
         frameId: str(value.get('frameId'), ''),
         commentCardIds: serializeIdList(parseIdList(str(value.get('commentCardIds'), ''))),
         opacity: Math.min(100, Math.max(0, num(value.get('opacity'), DEFAULT_ELEMENT_PROPS.opacity))),
-        locked: bool(value.get('locked'), DEFAULT_ELEMENT_PROPS.locked),
         strokeColor: color(value.get('strokeColor'), DEFAULT_ELEMENT_PROPS.strokeColor),
         strokeWidth: strokeWidth(value.get('strokeWidth')),
         strokeStyle: oneOf(value.get('strokeStyle'), STROKE_STYLES, DEFAULT_ELEMENT_PROPS.strokeStyle),

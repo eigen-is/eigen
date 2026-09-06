@@ -3,11 +3,13 @@ import type { EigenClipboardElementsItem } from '../../types/clipboard';
 import {
     buildElementsClipboardItem,
     pasteAnchorOffset,
+    readClipboardTypography,
     readElementsClipboardItem,
     reanchorElements,
 } from '../../vector/clipboard';
 import { solidFill } from '../../vector/fill';
 import { DUPLICATE_OFFSET } from '../../vector/geometry';
+import { DEFAULT_RICHTEXT_PROPS } from '../../vector/types';
 import { arrow, ellipse, image, linear, richtext, shape } from './element-factories';
 
 describe('the elements clipboard item', () => {
@@ -162,5 +164,48 @@ describe('pasteAnchorOffset', () => {
     test('one duplicate step away is already a visible move, so the re-anchor stands', () => {
         const { dx, dy } = pasteAnchorOffset(set, '', '', { x: CENTRE.x + 200, y: CENTRE.y + 200 });
         expect({ dx, dy }).toEqual({ dx: 200, dy: 200 });
+    });
+});
+
+describe('readClipboardTypography', () => {
+    test('keeps the fields a peer write could have made', () => {
+        expect(
+            readClipboardTypography({
+                textAlign: 'center',
+                fontWeight: 'bold',
+                fontStyle: 'italic',
+                textDecoration: 'underline',
+                verticalAlign: 'center',
+                letterSpacing: 4,
+                lineHeight: 1.5,
+            }),
+        ).toEqual({
+            textAlign: 'center',
+            fontWeight: 'bold',
+            fontStyle: 'italic',
+            textDecoration: 'underline',
+            verticalAlign: 'center',
+            letterSpacing: 4,
+            lineHeight: 1.5,
+        });
+    });
+
+    test('clamps tracking and leading to the bounds the document reader enforces', () => {
+        const forged = readClipboardTypography({ letterSpacing: 1e9, lineHeight: 1e9 });
+        expect([forged.letterSpacing, forged.lineHeight]).toEqual([200, 10]);
+        const negative = readClipboardTypography({ letterSpacing: -1e9, lineHeight: -1e9 });
+        expect([negative.letterSpacing, negative.lineHeight]).toEqual([-200, 0.5]);
+    });
+
+    test('falls back to the rich-text defaults for an unknown or missing value', () => {
+        expect(readClipboardTypography({ textAlign: 'justify-all', lineHeight: Number.NaN })).toEqual({
+            textAlign: DEFAULT_RICHTEXT_PROPS.textAlign,
+            fontWeight: DEFAULT_RICHTEXT_PROPS.fontWeight,
+            fontStyle: DEFAULT_RICHTEXT_PROPS.fontStyle,
+            textDecoration: DEFAULT_RICHTEXT_PROPS.textDecoration,
+            verticalAlign: DEFAULT_RICHTEXT_PROPS.verticalAlign,
+            letterSpacing: DEFAULT_RICHTEXT_PROPS.letterSpacing,
+            lineHeight: DEFAULT_RICHTEXT_PROPS.lineHeight,
+        });
     });
 });
