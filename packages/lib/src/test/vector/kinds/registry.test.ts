@@ -181,8 +181,13 @@ describe('ELEMENT_KINDS', () => {
         expect(ELEMENT_KINDS.ellipse.capabilities.corners).toBe(false);
         expect(ELEMENT_KINDS.rectangle.capabilities.bindable).toBe(true);
         expect(ELEMENT_KINDS.arrow.capabilities.bindable).toBe(false);
-        expect(ELEMENT_KINDS.richtext.capabilities.roughness).toBe(false);
         expect(ELEMENT_KINDS.image.capabilities.fill).toBe(false);
+    });
+
+    test('no kind answers a roughness capability — every kind is drawn by roughjs', () => {
+        for (const kind of Object.values(ELEMENT_KINDS)) {
+            expect(Object.keys(kind.capabilities)).not.toContain('roughness');
+        }
     });
 
     test('rich text carries a padding field, unpadded by default', () => {

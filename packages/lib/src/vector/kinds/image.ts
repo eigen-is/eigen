@@ -13,12 +13,10 @@ const MISSING_MEDIA_DASH = '6 6';
 export const imageKind = defineKind<VectorImageElement>({
     type: 'image',
     is: (el): el is VectorImageElement => el.type === 'image',
-    // no `roughness`/`seed`: an image is a DOM box, roughjs never touches it
     capabilities: {
         fill: false,
         fillStyle: false,
         strokeStyle: true,
-        roughness: false,
         corners: true,
         edges: false,
         strokeOptional: true,

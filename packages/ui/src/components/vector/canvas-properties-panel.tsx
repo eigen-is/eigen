@@ -6,9 +6,9 @@
 // control, the Opacity slider, writes live inside a holdCapture gesture so one drag is one undo step.
 //
 // Every row gates on a CAPABILITY, never on a type list: `fill` opens the Fill block, `strokeStyle` its
-// dash row, `roughness` the Sketch section, `corners` the Shape section. The Stroke section itself needs
-// no gate — every kind paints one. What a capability cannot express — rich text's typography, the
-// image's fit — comes from the kind's own PanelSection in ELEMENT_KIND_UI.
+// dash row, `corners` the Shape section. The Stroke and Sketch sections need no gate — every kind paints
+// a stroke, and every kind is drawn by roughjs. What a capability cannot express — rich text's
+// typography, the image's fit — comes from the kind's own PanelSection in ELEMENT_KIND_UI.
 
 import type { Fill, FillPaint } from '@workspace/lib/types/background';
 import {
@@ -136,7 +136,6 @@ export function CanvasPropertiesPanel({
     // The hatch row sits INSIDE the Fill block — it is the other half of the same stored fill — and shows
     // only for the kinds whose renderer honours it.
     const showFillStyle = showFill && all((el) => capabilitiesOf(el).fillStyle);
-    const showSketch = all((el) => capabilitiesOf(el).roughness);
     // Corners follow the kind's own capability; the separate Edges row is the shaft curvature a line or
     // an arrow carries (round curve vs sharp polyline), never freedraw.
     const showCorners = all((el) => capabilitiesOf(el).corners);
@@ -249,7 +248,7 @@ export function CanvasPropertiesPanel({
     const parsedFill = typeof fillRaw === 'string' ? parseFill(fillRaw) : null;
     const fillValue = parsedFill && !isTransparentFill(parsedFill) ? parsedFill : null;
     const fillStyle = getMergedValue(selectedElements, (el) => ('fill' in el ? parseFill(el.fill).style : undefined));
-    const roughness = getMergedValue(selectedElements, (el) => ('roughness' in el ? el.roughness : undefined));
+    const roughness = getMergedValue(selectedElements, (el) => el.roughness);
     const corners = getMergedValue(selectedElements, (el) => ('corners' in el ? el.corners : undefined));
     const roundness = getMergedValue(selectedElements, (el) => ('roundness' in el ? el.roundness : undefined));
     const opacity = getMergedValue(selectedElements, (el) => el.opacity);
@@ -365,7 +364,7 @@ export function CanvasPropertiesPanel({
                 </PropertySection>
             )}
 
-            {showSketch && (
+            {has && (
                 <PropertySection title="Sketch">
                     <PropertyRow label="Style">
                         <MergedSelect

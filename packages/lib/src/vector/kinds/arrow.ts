@@ -40,7 +40,6 @@ export const arrowKind = defineKind<VectorArrowElement>({
         fill: false,
         fillStyle: false,
         strokeStyle: true,
-        roughness: true,
         corners: false,
         edges: true,
         strokeOptional: false,

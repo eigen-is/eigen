@@ -40,8 +40,6 @@ export type Capabilities = {
     // Whether the kind's renderer honours the dash style of that stroke. A freehand stroke is a filled
     // outline rather than a drawn line, so dashes mean nothing to it.
     strokeStyle: boolean;
-    // Also "is this kind drawn by roughjs at all": the sketch paint rows follow it.
-    roughness: boolean;
     corners: boolean;
     // Whether the shaft's curvature is the user's to pick (the Edges row): a drawn polyline's is, a
     // freehand stroke's is not — its roundness is how the stroke is rendered, not a style it offers.

@@ -13,7 +13,6 @@ export const lineKind = defineKind<VectorLinearElement>({
         fill: true,
         fillStyle: true,
         strokeStyle: true,
-        roughness: true,
         corners: false,
         edges: true,
         strokeOptional: false,

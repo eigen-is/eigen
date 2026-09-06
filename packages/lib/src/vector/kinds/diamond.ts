@@ -12,7 +12,6 @@ export const diamondKind = defineKind<VectorDiamondElement>({
         fill: true,
         fillStyle: true,
         strokeStyle: true,
-        roughness: true,
         corners: true,
         edges: false,
         strokeOptional: true,

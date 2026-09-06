@@ -13,7 +13,6 @@ export const ellipseKind = defineKind<VectorEllipseElement>({
         fill: true,
         fillStyle: true,
         strokeStyle: true,
-        roughness: true,
         corners: false,
         edges: false,
         strokeOptional: true,

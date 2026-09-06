@@ -33,12 +33,10 @@ import { isBordered, isUnpainted } from './render-utils';
 export const richTextKind = defineKind<VectorRichTextElement>({
     type: 'richtext',
     is: (el): el is VectorRichTextElement => el.type === 'richtext',
-    // no `roughness`/`seed`: rich text is a DOM box, roughjs never touches it
     capabilities: {
         fill: true,
         fillStyle: false,
         strokeStyle: true,
-        roughness: false,
         corners: true,
         edges: false,
         strokeOptional: true,
