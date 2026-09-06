@@ -9,7 +9,8 @@ type MergedSliderProps = {
     // The write itself — plain and unsealed; the gesture around it decides the undo step.
     onChange: (v: number) => void;
     // Opens one undo step and returns its release. A drag opens on its first change and releases on
-    // commit, so however long the user takes, ⌘Z reverts the whole drag. See docs/CANVAS.md § sealing.
+    // commit, a typed number on its first keystroke and on blur, so however long the user takes over
+    // either, ⌘Z reverts the whole edit. See docs/CANVAS.md § sealing.
     beginGesture: () => () => void;
     min: number;
     max: number;
@@ -36,7 +37,9 @@ export function MergedSlider({ value, onChange, beginGesture, min, max, step = 1
     useEffect(() => endGesture, [endGesture]);
 
     return (
-        <div className="flex items-center gap-2 h-7">
+        // onBlur rides on the row rather than on either control: React's is the bubbling focusout, so
+        // one handler ends whichever gesture the user was in when they left it.
+        <div className="flex items-center gap-2 h-7" onBlur={endGesture}>
             <Slider
                 value={[mixed || value === undefined ? min : value]}
                 min={min}
@@ -51,7 +54,6 @@ export function MergedSlider({ value, onChange, beginGesture, min, max, step = 1
                 onValueCommit={endGesture}
                 onPointerUp={endGesture}
                 onPointerCancel={endGesture}
-                onBlur={endGesture}
                 {...props}
             />
             {/* Wide enough for "100" at the panel's 14px input text, with px-2 rather than the
@@ -59,10 +61,11 @@ export function MergedSlider({ value, onChange, beginGesture, min, max, step = 1
             <div className="w-16 shrink-0">
                 <MergedNumberInput
                     value={value}
+                    // Typed digits are ONE edit: the field writes per keystroke, so the gesture opens on
+                    // the first and closes when the user leaves the field — as the drag's does on commit.
                     onChange={(v) => {
-                        const done = beginGesture();
+                        release.current ??= beginGesture();
                         onChange(v);
-                        done();
                     }}
                     min={min}
                     max={max}
