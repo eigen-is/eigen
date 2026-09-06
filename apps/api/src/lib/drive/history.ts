@@ -16,7 +16,9 @@ import { fileEvents, paths, pathWatchers } from '../mount/schema';
 import { getMemberships, getUserById, type User } from '../user';
 import { canReadFromAncestors } from './acl';
 
-const HISTORY_MAX_AGE_DAYS = 90;
+// Per-path caps, no age cap: a quiet file keeps its whole story. 'edited' rows are the noise
+// and get trimmed first, so creation/share/assign rows survive a busy document.
+const HISTORY_MAX_EDITED_PER_PATH = 100;
 const HISTORY_MAX_PER_PATH = 500;
 
 export class FileHistory {
@@ -281,8 +283,12 @@ export class FileHistory {
 
     prune(): void {
         this.db.run(sql`
-            DELETE FROM ${fileEvents}
-            WHERE createdAt < unixepoch() - ${HISTORY_MAX_AGE_DAYS * 24 * 3600}
+            DELETE FROM ${fileEvents} WHERE id IN (
+                SELECT id FROM (
+                    SELECT id, ROW_NUMBER() OVER (PARTITION BY pathId ORDER BY createdAt DESC) AS rn
+                    FROM ${fileEvents} WHERE eventType = 'edited'
+                ) WHERE rn > ${HISTORY_MAX_EDITED_PER_PATH}
+            )
         `);
         this.db.run(sql`
             DELETE FROM ${fileEvents} WHERE id IN (
