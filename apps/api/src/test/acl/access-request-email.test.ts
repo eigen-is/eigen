@@ -1,5 +1,9 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import type { Notification } from '@workspace/lib/types/notification';
+import { eq } from 'drizzle-orm';
+import { user as userSchema } from '../../../auth-schema';
+import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { assertJson, authedRequest, driveGet, drivePost, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -84,5 +88,43 @@ describe('Access-request email', () => {
         const calls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === ctx.alice.user.email));
         expect(calls.length).toBe(0);
         spy.mockRestore();
+    });
+
+    // Finding #15: the route accepted an unbounded message and any authenticated caller.
+    test('rejects an oversized message with 422', async () => {
+        const doc = await createDoc('access-request-huge');
+        const res = await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${doc.id}/request-access`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: 'x'.repeat(100_000) }),
+            },
+        );
+        expect(res.status).toBe(422);
+    });
+
+    test('rejects a guest caller with 403', async () => {
+        const email = `access-req-guest-${randomUUID()}@external.com`;
+        const password = randomUUID();
+        const created = await auth.api.createUser({ body: { email, password, name: 'Guest Req', role: 'user' } });
+        // Admin plugin only allows 'user'/'admin' via the API — demote directly to 'guest'.
+        getAuthDrizzleDb().update(userSchema).set({ role: 'guest' }).where(eq(userSchema.id, created.user.id)).run();
+        const signIn = await auth.api.signInEmail({ returnHeaders: true, body: { email, password } });
+        const guestToken =
+            (signIn.headers.get('set-cookie') ?? '').match(/better-auth\.session_token=([^;]+)/)?.[1] ?? '';
+
+        const doc = await createDoc('access-request-guest');
+        const res = await authedRequest(
+            guestToken,
+            `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${doc.id}/request-access`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: 'let me in' }),
+            },
+        );
+        expect(res.status).toBe(403);
     });
 });
