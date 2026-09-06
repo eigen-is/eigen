@@ -38,15 +38,9 @@ describe('deckOwnsClick', () => {
         expect(deckOwnsClick(slide('<div><p>a slide</p></div>').querySelector('p'))).toBe(true);
     });
 
-    test("a right-click on a link is the browser's — the deck neither steps back nor eats the menu", () => {
-        // Both handlers ask the same question, so a link keeps its own context menu the way it keeps
-        // its own click.
-        const el = slide('<div><a href="https://example.com">source</a></div>');
-        expect(deckOwnsClick(el.querySelector('a'))).toBe(false);
-        expect(deckOwnsClick(el)).toBe(true);
-    });
-
-    test("a click on a link is the link's — the deck stays put", () => {
+    // Both the click and the context-menu handler ask this, so a link keeps its own menu the way it
+    // keeps its own click.
+    test("a press on a link is the link's — the deck stays put", () => {
         expect(deckOwnsClick(slide('<div><a href="https://example.com">source</a></div>').querySelector('a'))).toBe(
             false,
         );
