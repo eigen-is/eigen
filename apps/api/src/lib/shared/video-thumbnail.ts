@@ -48,6 +48,10 @@ async function probe(localPath: string): Promise<ProbeResult | null> {
         'ffprobe',
         '-v',
         'error',
+        // A crafted playlist wearing video/mp4 could dereference file://http:// on some builds;
+        // pin the input to local files (crypto covers encrypted local segments) before -i.
+        '-protocol_whitelist',
+        'file,crypto',
         '-select_streams',
         'v:0',
         '-show_entries',
@@ -78,6 +82,9 @@ async function probe(localPath: string): Promise<ProbeResult | null> {
 async function extractFrame(localPath: string, outPath: string, seekSeconds: number): Promise<boolean> {
     const { exitCode } = await runWithTimeout([
         'ffmpeg',
+        // Same protocol pin as probe(): keep -i local, before the input.
+        '-protocol_whitelist',
+        'file,crypto',
         '-ss',
         String(seekSeconds),
         '-i',
