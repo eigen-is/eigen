@@ -152,6 +152,7 @@ describe('bindArrow — outside side-midpoint drop snaps the anchor onto the dot
                     height: Math.abs(startScene.y - endScene.y) || 1,
                 });
                 const bound = bindArrow(el, { start: end === 'start', end: end === 'end' }, [shape, el], 1, false);
+                const byId = new Map([[shape.id, shape]]);
                 const committed = { ...el, ...bound };
                 const stored = parseBinding(end === 'start' ? bound.startBinding : bound.endBinding);
                 expect(stored).not.toBeNull();
@@ -161,7 +162,7 @@ describe('bindArrow — outside side-midpoint drop snaps the anchor onto the dot
                 expect(stored.fixedPoint[1]).toBeCloseTo(0.5, 6);
                 expect(dist(anchorToScene(shape, stored.fixedPoint), rightMid)).toBeCloseTo(0, 6);
                 // The docked endpoint sits on the outline by the midpoint (within one binding gap), not deep inside.
-                expect(dist(boundEndpoint(committed, end, shape), rightMid)).toBeLessThanOrEqual(
+                expect(dist(boundEndpoint(committed, end, shape, byId), rightMid)).toBeLessThanOrEqual(
                     bindingGap(shape) + 1e-6,
                 );
             });

@@ -6,11 +6,10 @@ import {
     DEFAULT_ELEMENT_PROPS,
     serializeBinding,
     type VectorArrowElement,
-    type VectorElement,
     type VectorRectangleElement,
     type VectorShapeElement,
 } from '../../vector/types';
-import { richtext } from './element-factories';
+import { byIdOf, richtext } from './element-factories';
 
 // Spread-only so the ellipse case doesn't trip the excess-property check on `corners`.
 const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
@@ -60,8 +59,6 @@ const arrowEl = (over: Partial<VectorArrowElement> & { points: string }): Vector
 
 const bind = (shape: VectorShapeElement, fixedPoint: [number, number]): string =>
     serializeBinding({ elementId: shape.id, fixedPoint });
-
-const byIdOf = (...els: VectorElement[]): Map<string, VectorElement> => new Map(els.map((e) => [e.id, e]));
 
 // Consecutive vertices differ on exactly one axis (a right angle at every bend, no diagonals).
 const isOrthogonal = (route: Point[]): boolean => {

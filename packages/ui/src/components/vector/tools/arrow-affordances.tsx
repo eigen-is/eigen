@@ -124,7 +124,7 @@ function focusEnds(
         const shape = byId.get(binding.elementId);
         if (!shape || !isBindable(shape)) continue;
         const anchor = anchorToScene(shape, binding.fixedPoint);
-        const endpoint = boundEndpoint(arrow, end, shape);
+        const endpoint = boundEndpoint(arrow, end, shape, byId);
         if (distance(anchor, endpoint) * zoom < minScreenGap) continue;
         out.push({ end, shape, anchor, endpoint });
     }
