@@ -386,6 +386,11 @@ export function round(n: number): number {
     return r === 0 ? 0 : r;
 }
 
+// A point at stored precision, the same quantization serializePoints applies on the way out.
+function roundPoint(p: Point): Point {
+    return { x: round(p.x), y: round(p.y) };
+}
+
 // Pressures are 0..1, so 2-decimal point rounding would flatten the width variation — keep 3 decimals.
 function round3(n: number): number {
     const r = Math.round(n * 1000) / 1000;
@@ -651,12 +656,36 @@ function curveOutlineDock(
     return null;
 }
 
+// The scene point a bound end aims its chord FROM: the ADJACENT vertex (Excalidraw's updateBoundPoint,
+// index 1 / -2), so dragging a mid vertex slides the attachment along the outline to face it. On a 2-point
+// arrow that vertex IS the other end — and when THAT end is bound too it is being re-docked in the same
+// pass, so aim from its anchor, the one point of it that holds still. Both ends then land on the line
+// through the two anchors: the rest state Excalidraw's per-frame updateBoundElements walks toward while a
+// shape is dragged, reached here in one exact pass, so a settled arrow still re-solves to itself.
+function chordAim(
+    arrow: VectorArrowElement,
+    end: 'start' | 'end',
+    points: Point[],
+    byId: Map<string, VectorElement>,
+): Point {
+    const otherBinding = end === 'start' ? arrow.endBinding : arrow.startBinding;
+    const other = points.length === 2 ? parseBinding(otherBinding) : null;
+    const otherShape = other ? boundShape(otherBinding, byId) : null;
+    if (other && otherShape) return anchorToScene(otherShape, other.fixedPoint);
+    return linearLocalToScene(arrow, points[end === 'start' ? 1 : points.length - 2]);
+}
+
 // A bound endpoint's scene position: snap the anchor to the shape outline along the segment from the
-// adjacent vertex, with Excalidraw's guard — if that would make the arrow shorter than 10 units, sit on the
+// chord aim above, with Excalidraw's guard — if that would make the arrow shorter than 10 units, sit on the
 // anchor instead (a degenerate arrow would otherwise flip inside the shape). A curved (round, ≥3-point)
 // arrow docks on the CURVE∩outline crossing instead of the straight chord, so the drawn shaft meets the
 // outline exactly at the head; a strict fixed point at stored precision keeps a settled arrow from redirtying.
-export function boundEndpoint(arrow: VectorArrowElement, end: 'start' | 'end', shape: VectorBindableElement): Point {
+export function boundEndpoint(
+    arrow: VectorArrowElement,
+    end: 'start' | 'end',
+    shape: VectorBindableElement,
+    byId: Map<string, VectorElement>,
+): Point {
     const points = parsePoints(arrow.points);
     if (points.length < 2) return linearLocalToScene(arrow, points[0] ?? ORIGIN);
     const thisLocal = end === 'start' ? points[0] : points[points.length - 1];
@@ -666,10 +695,7 @@ export function boundEndpoint(arrow: VectorArrowElement, end: 'start' | 'end', s
     // end never enters — so it can't change side when the other end moves. Straight ends keep the chord
     // orbit below (that IS Excalidraw parity, and the anchor UX is layered around it).
     if (arrow.elbow) return elbowAnchorScene(shape, binding.fixedPoint);
-    // Excalidraw aims the chord from the ADJACENT vertex (updateBoundPoint, index 1 / -2), so a dragged
-    // mid point slides the attachment along the outline to face it. Same point as the far end for 2-point
-    // arrows.
-    const otherScene = linearLocalToScene(arrow, end === 'start' ? points[1] : points[points.length - 2]);
+    const otherScene = chordAim(arrow, end, points, byId);
     const anchor = anchorToScene(shape, binding.fixedPoint);
     const gap = bindingGap(shape);
     let endpoint = outlinePoint(shape, otherScene, anchor, gap);
@@ -707,15 +733,18 @@ export function followBindings(
     // PINNED: keep the interior polyline + pins verbatim, move only the bound endpoints and re-drop
     // their connector pairs (moveEndpoints), then renormalize as the sealed write. The A* router never runs.
     if (arrow.fixedSegments !== '') {
-        const newStart = start ? boundEndpoint(arrow, 'start', start) : null;
-        const newEnd = end ? boundEndpoint(arrow, 'end', end) : null;
+        const newStart = start ? boundEndpoint(arrow, 'start', start, byId) : null;
+        const newEnd = end ? boundEndpoint(arrow, 'end', end, byId) : null;
         const moved = moveEndpoints(arrow, newStart, newEnd, elbowRoutingContext(arrow, byId));
         patch = renormalize({ ...arrow, ...moved });
     } else {
-        // DERIVED: recompute the two endpoints and re-normalize (unchanged pre-pin behaviour).
+        // DERIVED: recompute the two endpoints and re-normalize (unchanged pre-pin behaviour). A dock
+        // rounds to stored precision here, not only on serialization, so the box normalizeLinear derives
+        // is the box of the points that get WRITTEN — the last sub-0.01 digit of a re-solve can't leave
+        // x/width drifting under a settled arrow.
         const next = points.map((p) => ({ ...p }));
-        if (start) next[0] = linearSceneToLocal(arrow, boundEndpoint(arrow, 'start', start));
-        if (end) next[next.length - 1] = linearSceneToLocal(arrow, boundEndpoint(arrow, 'end', end));
+        if (start) next[0] = roundPoint(linearSceneToLocal(arrow, boundEndpoint(arrow, 'start', start, byId)));
+        if (end) next[next.length - 1] = roundPoint(linearSceneToLocal(arrow, boundEndpoint(arrow, 'end', end, byId)));
         patch = { ...normalizeLinear(arrow, next), fixedSegments: '' };
     }
     if (

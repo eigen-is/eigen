@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { RoughGenerator } from 'roughjs/bin/generator';
+import { elbowBindPoint } from '../../vector/elbow-heading';
 import { elbowRoute } from '../../vector/elbow-route';
 import { solidFill } from '../../vector/fill';
 import {
@@ -49,6 +50,8 @@ import {
     snapAngle,
     unionBounds,
 } from '../../vector/geometry';
+import { ELEMENT_KINDS } from '../../vector/kinds';
+import { outlineDistance } from '../../vector/outline';
 import {
     arrowsBoundTo,
     type Corners,
@@ -62,7 +65,7 @@ import {
     type VectorRichTextElement,
     type VectorShapeElement,
 } from '../../vector/types';
-import { richtext } from './element-factories';
+import { byIdOf, richtext } from './element-factories';
 
 const box = (over: Partial<Box>): Box => ({ x: 0, y: 0, width: 100, height: 60, angle: 0, ...over });
 
@@ -802,7 +805,7 @@ describe('boundEndpoint', () => {
             width: 36,
             endBinding: bind(shape, [0.5, 0.5]),
         });
-        const p = boundEndpoint(arrow, 'end', shape);
+        const p = boundEndpoint(arrow, 'end', shape, byIdOf(shape));
         expect(p.x).toBeCloseTo(-1);
         expect(p.y).toBeCloseTo(0);
     });
@@ -816,7 +819,7 @@ describe('boundEndpoint', () => {
             width: 9,
             endBinding: bind(shape, [0.5, 0.5]),
         });
-        expect(boundEndpoint(arrow, 'end', shape)).toEqual({ x: 25, y: 0 });
+        expect(boundEndpoint(arrow, 'end', shape, byIdOf(shape))).toEqual({ x: 25, y: 0 });
     });
 
     // Excalidraw's updateBoundPoint aims the chord from the ADJACENT vertex (index 1 / -2), not the far
@@ -834,7 +837,7 @@ describe('boundEndpoint', () => {
             height: 40,
             endBinding: bind(shape, [0.5, 0.5]),
         });
-        const p = boundEndpoint(arrow, 'end', shape);
+        const p = boundEndpoint(arrow, 'end', shape, byIdOf(shape));
         expect(p.x).toBeCloseTo(2.25);
         expect(p.y).toBeCloseTo(26);
     });
@@ -854,7 +857,7 @@ describe('boundEndpoint', () => {
             endBinding: bind(rect, [-0.03, 0.42]),
         });
         // end stored at scene (394,50) — far to the RIGHT of the rect — yet the dock is the LEFT side.
-        const p = boundEndpoint(elbow, 'end', rect);
+        const p = boundEndpoint(elbow, 'end', rect, byIdOf(rect));
         expect(p).toEqual(elbowAnchorScene(rect, [-0.03, 0.42]));
         expect(p.x).toBeCloseTo(-6); // 200 * -0.03
         expect(p.y).toBeCloseTo(42); // 100 * 0.42
@@ -936,8 +939,8 @@ describe('boundEndpoint — curve-exact docking', () => {
         for (const shape of [rect, ell, dia]) {
             const curved = curvedArrow({ endBinding: bind(shape, [0.5, 0.5]) });
             const sharp = curvedArrow({ endBinding: bind(shape, [0.5, 0.5]), roundness: 'sharp' });
-            const curveP = boundEndpoint(curved, 'end', shape);
-            const chordP = boundEndpoint(sharp, 'end', shape);
+            const curveP = boundEndpoint(curved, 'end', shape, byIdOf(shape));
+            const chordP = boundEndpoint(sharp, 'end', shape, byIdOf(shape));
             // curve solve genuinely moves the endpoint along the outline
             expect(Math.hypot(curveP.x - chordP.x, curveP.y - chordP.y)).toBeGreaterThan(0.1);
             expect(Number.isFinite(curveP.x)).toBe(true);
@@ -946,27 +949,27 @@ describe('boundEndpoint — curve-exact docking', () => {
     });
 
     test('the curved dock lands on the inflated rectangle outline', () => {
-        const curveP = boundEndpoint(curvedArrow(), 'end', rect);
+        const curveP = boundEndpoint(curvedArrow(), 'end', rect, byIdOf(rect));
         expect(onInflatedRect(curveP, rect)).toBeLessThan(0.05);
     });
 
     test('the curved dock is endpoint-independent: feeding the solved endpoint back re-solves to it', () => {
         const arrow = curvedArrow();
-        const first = boundEndpoint(arrow, 'end', rect);
+        const first = boundEndpoint(arrow, 'end', rect, byIdOf(rect));
         // Same interior vertices, only the stored endpoint replaced by the solved dock.
         const refed = arrowEl({
             ...arrow,
             points: serializePoints([{ x: 0, y: 0 }, { x: 10, y: 60 }, linearSceneToLocal(arrow, first)]),
         });
-        const second = boundEndpoint(refed, 'end', rect);
+        const second = boundEndpoint(refed, 'end', rect, byIdOf(rect));
         expect(Math.hypot(second.x - first.x, second.y - first.y)).toBeLessThan(0.02);
     });
 
     test('rotated target: curve docking is transparent to a square shape rotated 90°', () => {
         const flat = shapeEl({ id: 's', type: 'rectangle', x: 5, y: -20, width: 40, height: 40, strokeWidth: 2 });
         const turned = { ...flat, angle: 90 };
-        const a = boundEndpoint(curvedArrow({ endBinding: bind(flat, [0.5, 0.5]) }), 'end', flat);
-        const b = boundEndpoint(curvedArrow({ endBinding: bind(turned, [0.5, 0.5]) }), 'end', turned);
+        const a = boundEndpoint(curvedArrow({ endBinding: bind(flat, [0.5, 0.5]) }), 'end', flat, byIdOf(flat));
+        const b = boundEndpoint(curvedArrow({ endBinding: bind(turned, [0.5, 0.5]) }), 'end', turned, byIdOf(turned));
         expect(b.x).toBeCloseTo(a.x, 4);
         expect(b.y).toBeCloseTo(a.y, 4);
     });
@@ -981,14 +984,18 @@ describe('boundEndpoint — curve-exact docking', () => {
             endBinding: bind(rect, [0.5, 0.5]),
         });
         const sharp = arrowEl({ ...twoPt, roundness: 'sharp' });
-        expect(boundEndpoint(twoPt, 'end', rect)).toEqual(boundEndpoint(sharp, 'end', rect));
+        expect(boundEndpoint(twoPt, 'end', rect, byIdOf(rect))).toEqual(
+            boundEndpoint(sharp, 'end', rect, byIdOf(rect)),
+        );
     });
 
     test('a sharp 3-point arrow is untouched by the curve path', () => {
         const sharp = curvedArrow({ roundness: 'sharp' });
         const otherScene = linearLocalToScene(sharp, { x: 10, y: 60 });
         const anchor = anchorToScene(rect, [0.5, 0.5]);
-        expect(boundEndpoint(sharp, 'end', rect)).toEqual(outlinePoint(rect, otherScene, anchor, bindingGap(rect)));
+        expect(boundEndpoint(sharp, 'end', rect, byIdOf(rect))).toEqual(
+            outlinePoint(rect, otherScene, anchor, bindingGap(rect)),
+        );
     });
 
     test('short curved arrow keeps the anchor guard (no NaN)', () => {
@@ -1001,14 +1008,14 @@ describe('boundEndpoint — curve-exact docking', () => {
             roundness: 'round',
             endBinding: bind(rect, [0.5, 0.5]),
         });
-        expect(boundEndpoint(short, 'end', rect)).toEqual(anchorToScene(rect, [0.5, 0.5]));
+        expect(boundEndpoint(short, 'end', rect, byIdOf(rect))).toEqual(anchorToScene(rect, [0.5, 0.5]));
     });
 
     test('a curve that never reaches the outline falls back to the chord result, no NaN', () => {
         // A far-away shape the short arrow can never reach: the curve solve finds no crossing.
         const far = shapeEl({ id: 'far', type: 'rectangle', x: 5000, y: 5000, width: 40, height: 40, strokeWidth: 2 });
         const arrow = curvedArrow({ endBinding: bind(far, [0.5, 0.5]) });
-        const p = boundEndpoint(arrow, 'end', far);
+        const p = boundEndpoint(arrow, 'end', far, byIdOf(far));
         expect(Number.isFinite(p.x)).toBe(true);
         expect(Number.isFinite(p.y)).toBe(true);
     });
@@ -1064,23 +1071,23 @@ describe('binding a rich text box', () => {
             height: 50,
             endBinding: bind(box, [0, 0]),
         });
-        const curvedDock = boundEndpoint(atCorner, 'end', box);
-        const sharpDock = boundEndpoint(atCorner, 'end', sharp);
+        const curvedDock = boundEndpoint(atCorner, 'end', box, byIdOf(box));
+        const sharpDock = boundEndpoint(atCorner, 'end', sharp, byIdOf(sharp));
         expect(Math.hypot(curvedDock.x - sharpDock.x, curvedDock.y - sharpDock.y)).toBeGreaterThan(0.1);
     });
 });
 
+const applyFollow = (arrow: VectorArrowElement, ids: Map<string, VectorElement>): VectorArrowElement => {
+    const r = followBindings(arrow, ids);
+    return r ? { ...arrow, ...r } : arrow;
+};
+
 describe('followBindings', () => {
     const shapeB = shapeEl({ id: 'rect', type: 'rectangle', x: 150, y: -30, width: 60, height: 60, strokeWidth: 2 });
-    const byId = new Map<string, VectorElement>([[shapeB.id, shapeB]]);
+    const byId = byIdOf(shapeB);
 
     // D5.5 (review MAJOR): a curved bound arrow must settle to a STRICT byte-equal fixed point, so an
     // unrelated edit re-running followBindings never re-dirties it (spurious undo entries + broadcast churn).
-    const applyFollow = (arrow: VectorArrowElement, ids: Map<string, VectorElement>): VectorArrowElement => {
-        const r = followBindings(arrow, ids);
-        return r ? { ...arrow, ...r } : arrow;
-    };
-
     for (const angle of [0, 37]) {
         for (const type of ['rectangle', 'ellipse', 'diamond'] as const) {
             test(`curved bound arrow reaches a byte-equal fixed point (${type}, angle ${angle})`, () => {
@@ -1095,24 +1102,12 @@ describe('followBindings', () => {
                     roundness: 'round',
                     endBinding: bind(target, [0.5, 0.5]),
                 });
-                // The curve solve makes the points a strict byte-equal fixed point from the first settle.
-                const a1 = applyFollow(arrow, ids);
-                const a2 = applyFollow(a1, ids);
-                expect(a2.points).toBe(a1.points);
-                // followBindings converges to an exact no-op (returns null) within a bounded number of
-                // passes and never oscillates. (The one extra pass beyond the points settling is
-                // normalizeLinear rounding its full-precision width to match the rounded points — the same
-                // behaviour the straight-chord path already has; not specific to curve docking.)
-                let settled = a2;
-                let steps = 0;
-                let r = followBindings(settled, ids);
-                while (r !== null && steps < 4) {
-                    settled = { ...settled, ...r };
-                    steps++;
-                    r = followBindings(settled, ids);
-                }
-                expect(r).toBeNull();
-                expect(settled.points).toBe(a1.points);
+                // The curve solve makes the whole geometry a strict byte-equal fixed point from the first
+                // settle: one follow docks it, the next is an exact no-op (null), so an unrelated edit
+                // re-running followBindings writes nothing.
+                const settled = applyFollow(arrow, ids);
+                expect(settled.points).not.toBe(arrow.points);
+                expect(followBindings(settled, ids)).toBeNull();
             });
         }
     }
@@ -1160,6 +1155,93 @@ describe('followBindings', () => {
         expect(endAfter.y).toBeCloseTo(endBefore.y);
         expect(midAfter.x).toBeCloseTo(midBefore.x);
         expect(midAfter.y).toBeCloseTo(midBefore.y);
+    });
+});
+
+// Moving ONE shape re-aims the whole arrow, so the end docked on the OTHER shape has to move too. On a
+// 2-point arrow each end aims through the other end's anchor, which lands both docks on the line through
+// the two anchors in a single follow.
+describe('followBindings — an arrow bound at both ends', () => {
+    const shapeA = shapeEl({ id: 'a', type: 'rectangle', x: 0, y: 0, width: 60, height: 60, strokeWidth: 2 });
+    const shapeB = shapeEl({ id: 'b', type: 'rectangle', x: 200, y: 0, width: 60, height: 60, strokeWidth: 2 });
+    // At rest: A's right side + gap(6) = 66, B's left side − gap = 194, both at the shapes' mid height.
+    const link = arrowEl({
+        id: 'link',
+        points: '[[0,0],[128,0]]',
+        x: 66,
+        y: 30,
+        width: 128,
+        height: 0,
+        startBinding: bind(shapeA, [0.5, 0.5]),
+        endBinding: bind(shapeB, [0.5, 0.5]),
+    });
+    const atRest = byIdOf(shapeA, shapeB);
+    const movedA = { ...shapeA, x: 40, y: 150 };
+    const afterMove = byIdOf(movedA, shapeB);
+
+    // Distance from a scene point to the shape's docking edge — the drawn outline inflated by the binding gap.
+    const gapOutlineDistance = (s: VectorBindableElement, p: Point): number =>
+        outlineDistance(ELEMENT_KINDS[s.type].outline(s, bindingGap(s)), rotatePoint(p, boxCenter(s), -s.angle));
+
+    const endpointsOf = (a: VectorArrowElement): [Point, Point] => {
+        const pts = parsePoints(a.points);
+        return [linearLocalToScene(a, pts[0]), linearLocalToScene(a, pts[pts.length - 1])];
+    };
+
+    test('a settled arrow is left alone (settleEndpoints keeps a docked demo arrow byte-identical)', () => {
+        expect(followBindings(link, atRest)).toBeNull();
+    });
+
+    test('moving one shape re-docks BOTH ends onto their outlines, aimed through both anchors', () => {
+        const [, endBefore] = endpointsOf(link);
+        const settled = applyFollow(link, afterMove);
+        const [start, end] = endpointsOf(settled);
+
+        // The far end no longer sits where the old, horizontal shaft crossed B.
+        expect(Math.hypot(end.x - endBefore.x, end.y - endBefore.y)).toBeGreaterThan(1);
+        expect(gapOutlineDistance(movedA, start)).toBeCloseTo(0, 2);
+        expect(gapOutlineDistance(shapeB, end)).toBeCloseTo(0, 2);
+
+        // Both anchors are the shape centres, so the settled shaft lies on the line through them.
+        const centreA = boxCenter(movedA);
+        const centreB = boxCenter(shapeB);
+        const dx = end.x - start.x;
+        const dy = end.y - start.y;
+        const offLine = (p: Point) => Math.abs(dx * (p.y - start.y) - dy * (p.x - start.x)) / Math.hypot(dx, dy);
+        expect(offLine(centreA)).toBeCloseTo(0, 2);
+        expect(offLine(centreB)).toBeCloseTo(0, 2);
+    });
+
+    test('the re-docked arrow is itself at rest (one more follow is a no-op)', () => {
+        expect(followBindings(applyFollow(link, afterMove), afterMove)).toBeNull();
+    });
+
+    test('a one-sided binding leaves the free end exactly where it was', () => {
+        const oneSided = { ...link, startBinding: '' };
+        const [startBefore] = endpointsOf(oneSided);
+        const [start] = endpointsOf(applyFollow(oneSided, afterMove));
+        expect(start.x).toBeCloseTo(startBefore.x, 6);
+        expect(start.y).toBeCloseTo(startBefore.y, 6);
+    });
+
+    test('an elbow arrow keeps each end on its own fixedPoint dock and re-routes between them', () => {
+        const startDock = elbowBindPoint(shapeA, { x: 66, y: 30 });
+        const endDock = elbowBindPoint(shapeB, { x: 194, y: 30 });
+        const elbow = arrowEl({
+            ...link,
+            elbow: true,
+            startBinding: serializeBinding({ elementId: shapeA.id, fixedPoint: startDock.fixedPoint }),
+            endBinding: serializeBinding({ elementId: shapeB.id, fixedPoint: endDock.fixedPoint }),
+        });
+        const routeBefore = elbowRoute(elbow, atRest);
+        const settled = applyFollow(elbow, afterMove);
+        const [start, end] = endpointsOf(settled);
+
+        expect(start.x).toBeCloseTo(elbowAnchorScene(movedA, startDock.fixedPoint).x, 1);
+        expect(start.y).toBeCloseTo(elbowAnchorScene(movedA, startDock.fixedPoint).y, 1);
+        expect(end.x).toBeCloseTo(elbowAnchorScene(shapeB, endDock.fixedPoint).x, 1);
+        expect(end.y).toBeCloseTo(elbowAnchorScene(shapeB, endDock.fixedPoint).y, 1);
+        expect(elbowRoute(settled, afterMove)).not.toEqual(routeBefore);
     });
 });
 

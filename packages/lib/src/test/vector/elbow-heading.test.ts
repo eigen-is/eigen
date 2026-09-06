@@ -22,6 +22,7 @@ import {
     type VectorRectangleElement,
     type VectorShapeElement,
 } from '../../vector/types';
+import { byIdOf } from './element-factories';
 
 // Spread-only so the ellipse case doesn't trip the excess-property check on `corners`.
 const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
@@ -97,8 +98,8 @@ describe('elbowBindPoint — far-side dock', () => {
         const endBinding = serializeBinding({ elementId: rect.id, fixedPoint });
 
         // boundEndpoint('end') is the dock regardless of where the free start sits — the other end is not read.
-        const startRight = boundEndpoint(elbowArrow({ x: 400, y: 50 }, dock, endBinding), 'end', rect);
-        const startLeft = boundEndpoint(elbowArrow({ x: -400, y: 50 }, dock, endBinding), 'end', rect);
+        const startRight = boundEndpoint(elbowArrow({ x: 400, y: 50 }, dock, endBinding), 'end', rect, byIdOf(rect));
+        const startLeft = boundEndpoint(elbowArrow({ x: -400, y: 50 }, dock, endBinding), 'end', rect, byIdOf(rect));
         expect(startRight).toEqual(startLeft); // no chord → identical, other end never enters
         expect(startRight).toEqual(elbowAnchorScene(rect, fixedPoint));
         expect(startRight.x).toBeCloseTo(-6); // stays on the LEFT (far) side, not orbited to +206
@@ -198,7 +199,7 @@ describe('elbow bind → resolve round-trip (commit pin)', () => {
         };
 
         // Read half: boundEndpoint returns the docked outline point, exactly — the write+read round-trip closes.
-        const resolved = boundEndpoint(arrow, 'start', rect);
+        const resolved = boundEndpoint(arrow, 'start', rect, byIdOf(rect));
         expect(resolved.x).toBeCloseTo(dock.x);
         expect(resolved.y).toBeCloseTo(dock.y);
         // The dock sits on the left outline + gap(6), NOT out at the -50 cursor.
@@ -237,7 +238,7 @@ describe('redockBindingsForElbow — to-elbow re-docks a raw-cursor bound end', 
         const { endBinding } = redockBindingsForElbow(arrow, byId);
         expect(parseBinding(endBinding)).not.toBeNull();
         // After: boundEndpoint rests on the left outline + gap(6), off the (20,50) inside point.
-        const rest = boundEndpoint({ ...arrow, endBinding }, 'end', rect);
+        const rest = boundEndpoint({ ...arrow, endBinding }, 'end', rect, byIdOf(rect));
         expect(rest.x).toBeCloseTo(-6);
         expect(rest.x).not.toBeCloseTo(inside.x);
     });
