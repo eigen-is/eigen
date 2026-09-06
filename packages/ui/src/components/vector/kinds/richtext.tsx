@@ -52,7 +52,8 @@ export function RichTextInPlaceEditor({ element, onChange, onExit }: InPlaceEdit
     return (
         <div
             ref={boxRef}
-            className="pointer-events-auto"
+            // Positioned, so the box stacks over the layer's absolute backdrop whatever the editor renders.
+            className="relative pointer-events-auto"
             // The canvas hit-tests on the container; a pointer inside the editor is the editor's, and a
             // double-click here must not re-open a session over the open one.
             onPointerDown={(e) => e.stopPropagation()}
