@@ -352,7 +352,7 @@ export default class SharedDrive {
         // whatever their permission level. Paths reached through a shared folder trash as usual.
         const path = await this.sharedDrive.getPath(mountId, pathId);
         const own = path?.acl?.find((entry) => entry.id.toLowerCase() === this.user.email.toLowerCase());
-        if (own) {
+        if (path && own && !this.isEffectiveOwnerSync(path.ownerId, await this.getUserMemberships())) {
             return this.sharedDrive.updateACLDelta(
                 mountId,
                 pathId,

@@ -88,7 +88,7 @@ export function CardDialog({
     ) => {
         // Same Save may rename the card — use the new title so the activity event + title cache
         // don't record the stale pre-edit name.
-        if (assignee !== undefined && card.chatName) onAssign?.(card.chatName, assignee, patch.title ?? card.title);
+        if (assignee !== undefined && chatName) onAssign?.(chatName, assignee, patch.title ?? card.title);
         if (!onUpdate) return;
         if (drafts === undefined) {
             onUpdate(patch);
@@ -208,8 +208,8 @@ export function CardDialog({
             }
             {...action}
         >
-            {card.chatName ? (
-                <CommentThread ownerId={ownerId} mountId={mountId} chatName={card.chatName} className="h-full" />
+            {chatName ? (
+                <CommentThread ownerId={ownerId} mountId={mountId} chatName={chatName} className="h-full" />
             ) : (
                 <div className="px-4 pb-4 text-sm text-muted-foreground">No chat available for this card.</div>
             )}

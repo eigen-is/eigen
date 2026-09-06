@@ -34,13 +34,16 @@ export async function receiveSharedPathChange(
     if (newACL === null || !matchesACL(newACL, home.user, memberships, 'read')) {
         sharedDb.delete(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).run();
         home.broadcast(buildDriveEvent(SSEventType.DRIVE_ACL_UNSHARED, path));
-        home.notifications?.persist({
-            type: 'unshare',
-            actorEmail,
-            title: actorDisplay ? `${actorDisplay} removed your access` : 'Access removed',
-            body: displayName,
-            details: { pathType: path.type },
-        });
+        // Leaving a share is the user's own doing — no notice for that.
+        if (actorEmail?.toLowerCase() !== home.user.email.toLowerCase()) {
+            home.notifications?.persist({
+                type: 'unshare',
+                actorEmail,
+                title: actorDisplay ? `${actorDisplay} removed your access` : 'Access removed',
+                body: displayName,
+                details: { pathType: path.type },
+            });
+        }
     } else if (sharedDb.select().from(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).get()) {
         sharedDb
             .update(sharedSchema.sharedPaths)

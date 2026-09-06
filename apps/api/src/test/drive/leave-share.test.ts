@@ -25,9 +25,12 @@ describe('Delete of a direct share leaves it', () => {
             },
         );
         folderId = folder.id;
-        // Read-only + sharing restricted: the strictest share a recipient can be given.
+        // Bob read-only + sharing restricted (the strictest share a recipient can be given), Charlie write.
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, MOUNT, `path/${folderId}/acl`, {
-            add: [{ id: BOB_EMAIL.toUpperCase(), read: true, write: false }],
+            add: [
+                { id: BOB_EMAIL.toUpperCase(), read: true, write: false },
+                { id: ctx.charlie.user.email, read: true, write: true },
+            ],
             sharingRestricted: true,
         });
     });
@@ -36,8 +39,17 @@ describe('Delete of a direct share leaves it', () => {
         return authedRequest(token, `/drive/${ctx.alice.user.id}/${MOUNT}/path/${folderId}`, { method: 'DELETE' });
     }
 
-    test('a user the path is not shared with gets 403', async () => {
-        expect((await del(ctx.charlie.user.sessionToken)).status).toBe(403);
+    test('a write recipient deleting a direct share leaves it instead of trashing it', async () => {
+        await assertJson(await del(ctx.charlie.user.sessionToken));
+
+        const folder = await driveGet<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            MOUNT,
+            `path/${folderId}`,
+        );
+        expect(folder.trashedAt).toBeNull();
+        expect(folder.acl?.map((entry) => entry.id)).toEqual([BOB_EMAIL]);
     });
 
     test('a read-only recipient deleting a direct share leaves it, even when sharing is restricted', async () => {
@@ -66,7 +78,7 @@ describe('Delete of a direct share leaves it', () => {
         expect(folder.acl ?? []).toEqual([]);
     });
 
-    test('deleting again after leaving is a 403', async () => {
+    test('deleting after leaving is a 403, like any stranger', async () => {
         expect((await del(ctx.bob.user.sessionToken)).status).toBe(403);
     });
 });

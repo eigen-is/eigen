@@ -5,7 +5,7 @@ import {
     useCopyPath,
     useDeletePaths,
     useDuplicatePath,
-    useIsSharedWithMe,
+    useIsEffectiveOwnerOf,
     useMovePath,
 } from '@workspace/lib/drive';
 import { useIsCoarsePointer } from '@workspace/lib/media';
@@ -52,7 +52,7 @@ export function useDriveLayoutDialogs({
     const deletePathsMutation = useDeletePaths();
     const convertMutation = useConvertDocument(ownerId, mountId);
     const isCoarsePointer = useIsCoarsePointer();
-    const isSharedWithMe = useIsSharedWithMe();
+    const isEffectiveOwnerOf = useIsEffectiveOwnerOf();
     const { exportPath, isExporting } = useDocumentExport();
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
     const [pendingDeletePaths, setPendingDeletePaths] = useState<DrivePath[]>([]);
@@ -76,16 +76,17 @@ export function useDriveLayoutDialogs({
     const handleDeletePaths = useCallback(
         (paths: DrivePath[]) => {
             if (paths.length === 0) return;
-            // Confirm on touch (no hover cue, easy mis-taps) and for direct shares, where
-            // "delete" leaves the share instead. Fine-pointer own-drive deletes stay instant.
-            if (isCoarsePointer || paths.some(isSharedWithMe)) {
+            // Confirm on touch (no hover cue, easy mis-taps) and for paths in someone else's
+            // drive, where "delete" either leaves a direct share or trashes the owner's copy.
+            // Fine-pointer own-drive deletes stay instant.
+            if (isCoarsePointer || paths.some((path) => !isEffectiveOwnerOf(path.ownerId))) {
                 setPendingDeletePaths(paths);
                 setDeleteConfirmOpen(true);
                 return;
             }
             runDeletePaths(paths);
         },
-        [isCoarsePointer, isSharedWithMe, runDeletePaths],
+        [isCoarsePointer, isEffectiveOwnerOf, runDeletePaths],
     );
 
     const handleMovePath = useCallback(
