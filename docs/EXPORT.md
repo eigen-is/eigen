@@ -315,6 +315,7 @@ apps/api/src/lib/export/sheets/
   render.ts      # Sheet[] → HTML (renderSheetsHtml full export, renderSheetsPreviewHtml budgeted preview,
                  #   renderSheetsExportDocument + renderSheetsPdfDocument standalone documents)
   to-xlsx.ts     # Sheet[] → XLSX buffer via ExcelJS
+  cell-style.ts  # ht/vt → alignment names + isNumericRotation, shared by render.ts and to-xlsx.ts
   fonts.ts       # FONT_ARRAY + resolveFontFamily (numeric/string ff → family name)
 # content loader: apps/api/src/lib/document/sheets.ts (Yjs snapshot → Sheet[])
 ```

@@ -1,6 +1,6 @@
-import type { CellMatrix, Op, Sheet } from '@workspace/lib/sheets';
+import { type CellMatrix, encodeSheetsSnapshot, type Op, type Sheet } from '@workspace/lib/sheets';
 import type * as Y from 'yjs';
-import { writeSheetsToYjs } from '../../lib/document/sheets';
+import { writeSheetsSnapshotToYjs } from '../../lib/document/sheets';
 
 // Deterministic sheet fixtures for the document-transform work (preview golden tests
 // and the responsiveness benchmark). Everything is derived from cell coordinates —
@@ -208,6 +208,14 @@ export function buildHeavyOps(batches = 40, opsPerBatch = 25, rows = 600, cols =
         result.push(batch);
     }
     return result;
+}
+
+// Test-only seam: production never writes Sheet[] (the editor flushes an encoded
+// snapshot, the import commits the Worker's JSON). `computed` seeds the decoded
+// calcChain, which the read-path recalc gate keys off — only pass true for
+// value-complete sheets; false makes an export recompute, the safe direction.
+export function writeSheetsToYjs(doc: Y.Doc, sheets: Sheet[], opts: { computed: boolean }): void {
+    writeSheetsSnapshotToYjs(doc, encodeSheetsSnapshot(sheets, opts));
 }
 
 // Seeds a collab doc the way the editor does: one snapshot write, then each op

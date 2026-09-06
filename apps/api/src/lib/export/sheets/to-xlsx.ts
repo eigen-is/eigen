@@ -34,6 +34,7 @@ import type {
     Cell as XlsxCell,
 } from 'exceljs';
 import JSZip from 'jszip';
+import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from './cell-style';
 import { resolveFontFamily } from './fonts';
 
 // Sheet[] -> XLSX workbook bytes. Runs inside the transform Worker (worker.ts owns
@@ -45,18 +46,6 @@ const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
 const DAY_MS = 86_400_000;
 // Excel's default row height; the importer treats it as "no explicit height".
 const DEFAULT_ROW_HEIGHT_PT = 15.75;
-
-const REVERSE_HORIZONTAL: Record<number, 'left' | 'center' | 'right'> = {
-    0: 'center',
-    1: 'left',
-    2: 'right',
-};
-
-const REVERSE_VERTICAL: Record<number, 'top' | 'middle' | 'bottom'> = {
-    0: 'middle',
-    1: 'top',
-    2: 'bottom',
-};
 
 function hexToArgb(hex: string): string {
     return `FF${hex.replace('#', '')}`;
@@ -273,7 +262,7 @@ async function rewriteInternalHyperlinks(
 function applyCellValue(cell: XlsxCell, v: FortuneCell): void {
     if (v.f) {
         const formula = v.f.startsWith('=') ? v.f.slice(1) : v.f;
-        cell.value = { formula, result: v.v ?? undefined } as XlsxCell['value'];
+        cell.value = { formula, result: v.v ?? undefined };
         if (v.ct?.fa) cell.numFmt = v.ct.fa;
         return;
     }
@@ -317,16 +306,11 @@ function applyCellStyle(cell: XlsxCell, v: FortuneCell): void {
         };
     }
 
-    const textRotation =
-        v.rt === 'vertical'
-            ? ('vertical' as const)
-            : typeof v.rt === 'number' && v.rt !== 0 && v.rt >= -90 && v.rt <= 90
-              ? v.rt
-              : null;
+    const textRotation = v.rt === 'vertical' ? 'vertical' : isNumericRotation(v) ? v.rt : null;
     if (v.ht != null || v.vt != null || v.tb === '2' || textRotation != null) {
         cell.alignment = {
-            ...(v.ht != null && v.ht in REVERSE_HORIZONTAL && { horizontal: REVERSE_HORIZONTAL[v.ht] }),
-            ...(v.vt != null && v.vt in REVERSE_VERTICAL && { vertical: REVERSE_VERTICAL[v.vt] }),
+            ...(v.ht != null && v.ht in HORIZONTAL_ALIGN && { horizontal: HORIZONTAL_ALIGN[v.ht] }),
+            ...(v.vt != null && v.vt in VERTICAL_ALIGN && { vertical: VERTICAL_ALIGN[v.vt] }),
             ...(v.tb === '2' && { wrapText: true }),
             ...(textRotation != null && { textRotation }),
         };

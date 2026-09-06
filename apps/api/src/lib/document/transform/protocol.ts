@@ -3,8 +3,9 @@ import type { YjsStatePayload } from '../../collab/yjs-loader';
 // Closed request/response unions crossing the document-transform Worker boundary.
 // Only clone-safe primitives, ArrayBuffers and Maps of primitives ride here — never
 // Mount, database, Y.Doc, or other class instances, and never module/function names
-// user input could influence. Phases 2–4 carry every eigensheets/eigendoc/eigenslides preview,
-// every HTML/PDF/XLSX/DOCX export, the xlsx and docx imports, and the search content extraction.
+// user input could influence. Every eigensheets/eigendoc/eigenslides/eigenvector preview,
+// every HTML/PDF/XLSX/DOCX export, the xlsx and docx imports and the search content
+// extraction ride these unions.
 
 // `pdf-html` is the HTML stage of the PDF export — WeasyPrint stays a main-thread
 // subprocess, so the Worker returns the document it renders from.
@@ -104,6 +105,22 @@ export type TransformResult =
     | ExportWorkerResult
     | SheetsImportWorkerResult
     | DocImportWorkerResult;
+
+// Which result a job kind produces. The runner proves the pairing at runtime with
+// resultMatchesRequest; run-transform.ts narrows to this once so no caller re-checks.
+// Keyed off the job discriminants, so a captured request (job + source) resolves the
+// same. A future arm resolves to `never` and fails to compile at its callsite.
+export type TransformResultFor<R extends CollabTransformJob | ImportTransformJob> = R extends { kind: 'preview' }
+    ? PreviewResult
+    : R extends { kind: 'extract-text' }
+      ? ExtractTextResult
+      : R extends { kind: 'export' }
+        ? ExportWorkerResult
+        : R extends { targetType: 'eigensheets' }
+          ? SheetsImportWorkerResult
+          : R extends { targetType: 'eigendoc' }
+            ? DocImportWorkerResult
+            : never;
 
 export type DocumentTransformResponse =
     | { ok: true; result: TransformResult; warnings: TransformWarning[] }
