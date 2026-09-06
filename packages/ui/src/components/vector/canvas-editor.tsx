@@ -30,6 +30,7 @@ import {
     paintsNothing,
     parseIdList,
     parsePoints,
+    pointInFrame,
     resizeLinear,
     rotatePoint,
     SNAP_SCREEN_THRESHOLD,
@@ -877,7 +878,9 @@ export function CanvasEditor({
 
     const { targetProps: fileDropProps, isDragging } = useFileDropTarget((files, e) => {
         if (!imagesEnabled) return;
-        const anchor = e ? clientToScene(e.clientX, e.clientY) : viewportCenterScene();
+        const dropped = e ? clientToScene(e.clientX, e.clientY) : viewportCenterScene();
+        // Same page rule as the create gestures: a drop on the letterbox backdrop lands on the page.
+        const anchor = frame && !pointInFrame(dropped, frame) ? viewportCenterScene() : dropped;
         // An .svg WE exported carries its elements in a `<metadata>` block, so dropping one restores
         // native elements exactly as pasting one does — drop and paste are the same ladder, or the same
         // file behaves differently depending on how it arrived. Any other svg is just an image.
@@ -906,6 +909,9 @@ export function CanvasEditor({
     const openTextAtClient = (clientX: number, clientY: number) => {
         if (!canEdit || tool !== 'select' || textEditing || frozenRef.current) return;
         const p = clientToScene(clientX, clientY);
+        // The letterbox backdrop is not the canvas: off the page there is nothing to edit and nothing
+        // may be created, or the new box and its editor mount inside the clip, invisible.
+        if (frame && !pointInFrame(p, frame)) return;
         const hit = hitTestTopmost(ordered, p, viewportRef.current.zoom, committedById, coarse);
         const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
         if (hitEl?.type === 'arrow') return openEditArrowLabel(hitEl);
@@ -987,6 +993,9 @@ export function CanvasEditor({
         if (!canEdit) return;
 
         const p = clientToScene(e.clientX, e.clientY);
+        // Same page rule as the double-click: a creation gesture starting on the backdrop is ignored.
+        // Select and eraser still work out there, so a marquee may sweep across the page from outside.
+        if (frame && tool !== 'select' && tool !== 'eraser' && !pointInFrame(p, frame)) return;
 
         // Freehand / line / eraser own their own gesture (local state + capture); the hook consumes
         // the event for those tools and the canvas does nothing more.

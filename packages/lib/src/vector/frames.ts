@@ -3,6 +3,7 @@
 // 1920x1080 — elements may overhang and the frame clips them.
 
 import { serializeBackgroundFill } from './fill';
+import type { Point } from './geometry';
 
 export const FRAME_WIDTH = 1920;
 export const FRAME_HEIGHT = 1080;
@@ -27,6 +28,12 @@ export const FRAME_FIELDS: readonly string[] = ['id', 'index', 'name', 'backgrou
 // White, not '': a background-less frame is invisible against the present-mode backdrop and exports as
 // a hole. '' stays reachable — it is what the panel's None writes — but nothing defaults to it.
 export const DEFAULT_FRAME_BACKGROUND: string = serializeBackgroundFill({ type: 'solid', color: '#ffffff' });
+
+// Whether a scene point is ON the page. A frame clips its overhang, so a creation gesture that starts
+// off the page would write an element (and mount an in-place editor) nobody can see.
+export function pointInFrame(p: Point, frame: VectorFrame): boolean {
+    return p.x >= 0 && p.y >= 0 && p.x <= frame.width && p.y <= frame.height;
+}
 
 // The elements homed to one frame. '' selects the infinite canvas's own elements.
 export function elementsInFrame<T extends { frameId: string }>(elements: T[], frameId: string): T[] {
