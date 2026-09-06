@@ -12,18 +12,23 @@ import {
     type FillStyle,
     isLinearElement,
     type VectorArrowElement,
+    type VectorImageElement,
     type VectorLinearElement,
+    type VectorRichTextElement,
     type VectorShapeElement,
 } from '../types';
 
 // Everything the fill paint needs: the stored Fill JSON plus the id its gradient def is scoped to.
 type FillSource = { id: string; fill: string };
 
-// A closed shape's rough drawing. The generator is per-call: seeded roughjs output depends only on
+// What the one rough box drawable serves: the closed shapes, plus the two DOM boxes whose border it is.
+type RoughBoxElement = VectorShapeElement | VectorImageElement | VectorRichTextElement;
+
+// A closed box's rough drawing. The generator is per-call: seeded roughjs output depends only on
 // el.seed. The linecap rides the paths (the caller owns the placing <g>).
-export function renderRoughShape(el: VectorShapeElement): string {
+export function renderRoughShape(el: RoughBoxElement): string {
     const paths = drawableToSvg(shapeDrawable(new RoughGenerator(), el));
-    return `${fillDefs(el)}<g stroke-linecap="round">${paths}</g>`;
+    return `${'fill' in el ? fillDefs(el) : ''}<g stroke-linecap="round">${paths}</g>`;
 }
 
 // Ported from Excalidraw's getFreeDrawSvgPath: a chain of quadratic segments whose control points are
@@ -45,24 +50,24 @@ function med(a: number[], b: number[]): number[] {
     return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
 }
 
-function shapeDrawable(gen: RoughGenerator, el: VectorShapeElement): Drawable {
+function shapeDrawable(gen: RoughGenerator, el: RoughBoxElement): Drawable {
     if (el.type === 'ellipse') {
         return gen.ellipse(el.width / 2, el.height / 2, el.width, el.height, roughOptions(el, false));
     }
     const box = { x: 0, y: 0, width: el.width, height: el.height };
-    const radius = cornerRadius(el, el.type);
+    const radius = cornerRadius(el, el.type === 'diamond' ? 'diamond' : 'rectangle');
     const rounded = radius > 0;
     const options = roughOptions(el, rounded);
     // Straight corners keep roughjs's own rectangle/polygon generators; a rounded one is the shared
     // outline path, the same curve docking intersects.
     if (!rounded) {
-        if (el.type === 'rectangle') return gen.rectangle(0, 0, el.width, el.height, options);
+        if (el.type !== 'diamond') return gen.rectangle(0, 0, el.width, el.height, options);
         return gen.polygon(
             sharpDiamondOffset(box, 0).map((p): [number, number] => [p.x, p.y]),
             options,
         );
     }
-    const outline = el.type === 'rectangle' ? rectOutline(box, radius, 0) : diamondOutline(box, radius, 0);
+    const outline = el.type === 'diamond' ? diamondOutline(box, radius, 0) : rectOutline(box, radius, 0);
     return gen.path(outlinePath(outline), options);
 }
 
@@ -70,7 +75,7 @@ function shapeDrawable(gen: RoughGenerator, el: VectorShapeElement): Drawable {
 // dark-mode filter. Determinism comes from the persisted per-element `seed`. The base fields are
 // shared by shapes and linear elements; fill differs (shapes always, lines only when they loop).
 export function baseRoughOptions(
-    el: VectorShapeElement | VectorLinearElement | VectorArrowElement,
+    el: RoughBoxElement | VectorLinearElement | VectorArrowElement,
     continuousPath: boolean,
 ): Options {
     return {
@@ -92,14 +97,17 @@ export function baseRoughOptions(
     };
 }
 
-function roughOptions(el: VectorShapeElement, continuousPath: boolean): Options {
+function roughOptions(el: RoughBoxElement, continuousPath: boolean): Options {
     const options = baseRoughOptions(el, continuousPath);
     // A shape with its border switched off (capabilities.strokeOptional): roughjs's own 'none' skips
     // the outline sets entirely, so the fill still paints and no invisible path is serialized.
     if (isTransparentColor(el.strokeColor)) options.stroke = 'none';
-    const { fill, fillStyle } = fillOptions(el);
-    options.fill = fill;
-    options.fillStyle = fillStyle;
+    // An image carries no Fill at all, and roughjs then draws the outline alone — its border.
+    if ('fill' in el) {
+        const { fill, fillStyle } = fillOptions(el);
+        options.fill = fill;
+        options.fillStyle = fillStyle;
+    }
     if (el.type === 'ellipse') options.curveFitting = 1;
     return options;
 }
@@ -150,10 +158,10 @@ export function linearRoughOptions(el: VectorLinearElement, points: Point[]): Op
 
 // Reduce roughness for small elements so they don't look destroyed (Excalidraw's rule); a relatively
 // long linear element is spared too, so a straight line doesn't wobble.
-function adjustRoughness(el: VectorShapeElement | VectorLinearElement | VectorArrowElement): number {
+function adjustRoughness(el: RoughBoxElement | VectorLinearElement | VectorArrowElement): number {
     const maxSize = Math.max(el.width, el.height);
     const minSize = Math.min(el.width, el.height);
-    const rounded = (el.type === 'rectangle' || el.type === 'diamond') && el.corners !== 'straight';
+    const rounded = 'corners' in el && el.corners !== 'straight';
     const linear = isLinearElement(el);
     if ((minSize >= 20 && maxSize >= 50) || (minSize >= 15 && rounded) || (linear && maxSize >= 50)) {
         return el.roughness;
@@ -173,9 +181,9 @@ export function isUnpainted(el: { fill: string; strokeWidth: number; strokeColor
     return !isBordered(el) && isTransparentFill(parseFill(el.fill));
 }
 
-// The stroke-style vocabulary as roughjs `strokeLineDash` / an SVG `stroke-dasharray`: one dash table,
-// shared by the drawing kinds and by the image's border.
-export function dashArray(strokeStyle: VectorShapeElement['strokeStyle'], strokeWidth: number): number[] | undefined {
+// The stroke-style vocabulary as roughjs `strokeLineDash`: one dash table behind every stroke roughjs
+// draws, the DOM boxes' borders included.
+function dashArray(strokeStyle: VectorShapeElement['strokeStyle'], strokeWidth: number): number[] | undefined {
     if (strokeStyle === 'dashed') return [8, 8 + strokeWidth];
     if (strokeStyle === 'dotted') return [1.5, 6 + strokeWidth];
     return undefined;

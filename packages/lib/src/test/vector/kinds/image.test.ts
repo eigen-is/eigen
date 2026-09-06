@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { ELEMENT_KINDS } from '../../../vector/kinds';
+import { outlinePath, rectOutline } from '../../../vector/outline';
 import type { VectorImageElement } from '../../../vector/types';
 import { image } from '../element-factories';
 
@@ -24,14 +25,27 @@ describe('image border', () => {
         expect(svg.indexOf('<image')).toBeLessThan(svg.lastIndexOf('stroke='));
     });
 
-    test('the border follows the corner treatment — the same path the clip uses', () => {
+    test('the border is the roughjs drawable the shapes draw, not a plain outline', () => {
+        const bordered = { strokeColor: '#1e1e1e', strokeWidth: 2, corners: 'straight', roughness: 1 } as const;
+        const svg = svgOf(makeImage({ ...bordered, seed: 5 }));
+        const border = svg.slice(svg.indexOf('<g stroke-linecap="round">'));
+        expect(border).toStartWith('<g stroke-linecap="round">');
+        // roughjs draws each edge twice, so the border is many subpaths where the silhouette is one.
+        const d = border.match(/\sd="([^"]+)"/)?.[1] ?? '';
+        expect(d.match(/M/g)?.length ?? 0).toBeGreaterThan(1);
+        expect(d).not.toBe(outlinePath(rectOutline({ x: 0, y: 0, width: 100, height: 60 }, 0, 0)));
+        // The jitter is the stored seed's, so the same box renders byte-identically every time.
+        expect(svgOf(makeImage({ ...bordered, seed: 5 }))).toBe(svg);
+        expect(svgOf(makeImage({ ...bordered, seed: 6 }))).not.toBe(svg);
+    });
+
+    test('a rounded image still clips its picture to the silhouette path', () => {
         const rounded = svgOf(
             makeImage({ strokeColor: '#111', strokeWidth: 1, corners: 'round', width: 200, height: 80 }),
         );
-        // One definition of the silhouette: the clipPath's `d` and the border's `d` are identical.
-        const ds = [...rounded.matchAll(/\sd="([^"]+)"/g)].map((m) => m[1]);
-        expect(ds.length).toBe(2);
-        expect(ds[0]).toBe(ds[1]);
+        const d = outlinePath(rectOutline({ x: 0, y: 0, width: 200, height: 80 }, 40, 0));
+        expect(rounded).toContain(`<clipPath id="image-clip-im1"><path d="${d}"/></clipPath>`);
+        expect(rounded).toContain('<g stroke-linecap="round">');
     });
 
     test('a transparent stroke colour or zero width draws no border', () => {

@@ -289,6 +289,8 @@ export function buildGoldenDeckScene(): VectorScene {
         width: 640,
         height: 360,
         angle: 0,
+        // The border is a roughjs drawable, and roughjs reads seed 0 as "pick a random one".
+        seed: 1,
         strokeColor: '#1a5fb4',
         strokeWidth: 4,
         mediaName: GOLDEN_MEDIA_NAME,
