@@ -68,7 +68,7 @@ describe('Container write guard', () => {
                 expectedUpdatedAt: before.updatedAt,
                 force: true,
             });
-            expect(res.status).toBe(423);
+            expect(res.status).toBe(400);
 
             const after = await driveGet<DrivePath>(
                 ctx.bob.user.sessionToken,

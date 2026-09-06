@@ -195,12 +195,8 @@ export function processInboundImip(
     const method = parsedMethod ?? calAttachment.method;
     if (!method || events.length === 0) return;
 
-    // Every mutation below binds to the `From:` address (a forged REPLY could set another attendee's
-    // status, a forged REQUEST/CANCEL could inject or drop events under a spoofed organizer). That
-    // binding is only trustworthy once the sender is authenticated, so act automatically only when our
-    // own verifying MTA recorded an aligned DKIM pass in an Authentication-Results header. Fail closed
-    // on anything else — no header, a fail, an unaligned domain, or a header forged from outside — and
-    // leave the invite as a plain calendar attachment instead of applying it.
+    // Every mutation binds to `From:`, which is only trustworthy once our own MTA recorded an aligned
+    // DKIM pass; otherwise fail closed and leave the invite as a plain attachment.
     const sender = mail.from?.value?.[0]?.address?.toLowerCase() ?? null;
     const verdict = verifyImipSender(mail.authenticationResults, getMailDomain(), sender?.split('@')[1] ?? null);
     if (!verdict.verified) {
