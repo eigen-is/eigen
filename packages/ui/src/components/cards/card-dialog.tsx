@@ -62,14 +62,20 @@ export function CardDialog({
 
     if (!card) return null;
 
+    // Missing entry = unseeded legacy thread, open and unassigned (matchesCommentFilter's rule);
+    // the first assign/resolve write seeds it server-side.
+    const chatName = card.chatName;
+    const status = entry?.status ?? 'open';
+    const assignee = entry?.assignee ?? null;
+
     // Resolve/re-open is a write, gated like the menus' row and the Edit pencil: a read-only viewer
     // would only get the 403 the collab route answers with.
     const action =
-        canWrite && entry && onResolve
+        canWrite && chatName && onResolve
             ? {
-                  actionIcon: entry.status === 'open' ? Check : RotateCcw,
-                  actionTooltip: entry.status === 'open' ? 'Resolve' : 'Re-open',
-                  onAction: () => onResolve(entry.chatName, entry.status === 'open' ? 'resolved' : 'open', card.title),
+                  actionIcon: status === 'open' ? Check : RotateCcw,
+                  actionTooltip: status === 'open' ? 'Resolve' : 'Re-open',
+                  onAction: () => onResolve(chatName, status === 'open' ? 'resolved' : 'open', card.title),
               }
             : {};
 
@@ -82,7 +88,7 @@ export function CardDialog({
     ) => {
         // Same Save may rename the card — use the new title so the activity event + title cache
         // don't record the stale pre-edit name.
-        if (assignee !== undefined && card.chatName) onAssign?.(card.chatName, assignee, patch.title ?? card.title);
+        if (assignee !== undefined && chatName) onAssign?.(chatName, assignee, patch.title ?? card.title);
         if (!onUpdate) return;
         if (drafts === undefined) {
             onUpdate(patch);
@@ -95,10 +101,8 @@ export function CardDialog({
     // The assignee sits in the dialog's meta row: an inline picker when reassignable, else an inert
     // chip; a read-only card with no assignee shows nothing to avoid noise.
     let assigneeControl: React.ReactNode = null;
-    if (card.chatName && entry) {
-        const assignee = entry.assignee;
+    if (chatName) {
         if (canWrite && onAssign && members && currentUserEmail) {
-            const chatName = card.chatName;
             assigneeControl = (
                 <AssigneePicker
                     value={assignee}
@@ -153,7 +157,7 @@ export function CardDialog({
                 initialAttachments={card.attachments}
                 members={members}
                 currentUserEmail={currentUserEmail}
-                initialAssignee={entry?.assignee}
+                initialAssignee={assignee}
                 onSave={async (patch, drafts, assignee) => {
                     await handleEditSave(patch, drafts, assignee);
                     onEditingChange(false);
@@ -204,8 +208,8 @@ export function CardDialog({
             }
             {...action}
         >
-            {card.chatName ? (
-                <CommentThread ownerId={ownerId} mountId={mountId} chatName={card.chatName} className="h-full" />
+            {chatName ? (
+                <CommentThread ownerId={ownerId} mountId={mountId} chatName={chatName} className="h-full" />
             ) : (
                 <div className="px-4 pb-4 text-sm text-muted-foreground">No chat available for this card.</div>
             )}

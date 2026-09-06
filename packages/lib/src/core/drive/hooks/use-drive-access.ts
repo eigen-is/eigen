@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { parseOwnerId } from '../../../types';
 import type { DrivePath } from '../../../types/drive';
 import { useAuth } from '../../auth';
@@ -140,17 +140,36 @@ export function useDriveAccess(
     };
 }
 
-export function useIsEffectiveOwner(ownerId: string): boolean {
+export function useIsEffectiveOwnerOf(): (ownerId: string) => boolean {
     const { user } = useAuth();
     const { data: myTeams } = useMyTeams();
 
-    return useMemo(() => {
-        if (!user) return false;
-        if (ownerId === user.id) return true;
-        const parsed = parseOwnerId(ownerId);
-        if (parsed.type === 'team' && myTeams) {
-            return myTeams.some((t) => t.id === parsed.id);
-        }
-        return false;
-    }, [user, ownerId, myTeams]);
+    return useCallback(
+        (ownerId: string) => {
+            if (!user) return false;
+            if (ownerId === user.id) return true;
+            const parsed = parseOwnerId(ownerId);
+            return parsed.type === 'team' && !!myTeams?.some((t) => t.id === parsed.id);
+        },
+        [user, myTeams],
+    );
+}
+
+export function useIsEffectiveOwner(ownerId: string): boolean {
+    return useIsEffectiveOwnerOf()(ownerId);
+}
+
+// True when the path's own ACL names the current user by email — a direct share, which a delete
+// leaves (SharedDrive.deletePath). Access through a shared folder, a team drive or a team ACL
+// entry is not one: a delete there trashes the owner's copy.
+export function useIsSharedWithMe(): (path: DrivePath) => boolean {
+    const { user } = useAuth();
+    const isEffectiveOwnerOf = useIsEffectiveOwnerOf();
+    return useCallback(
+        (path: DrivePath) =>
+            !!user &&
+            !isEffectiveOwnerOf(path.ownerId) &&
+            !!path.acl?.some((entry) => entry.id.toLowerCase() === user.email.toLowerCase()),
+        [user, isEffectiveOwnerOf],
+    );
 }

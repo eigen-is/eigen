@@ -274,7 +274,7 @@ describe('FileHistory', () => {
                 .values({
                     id: randomUUID(),
                     pathId: fileId,
-                    eventType: 'edited',
+                    eventType: 'renamed',
                     actorUserId: 'u6',
                     actorEmail: 'u6@test',
                     details: null,
@@ -293,7 +293,7 @@ describe('FileHistory', () => {
     });
 });
 
-describe('FileHistory old-row prune', () => {
+describe('FileHistory edited-row prune', () => {
     let mount: Mount;
     let rootId: string;
     let metaDb: ManagedDatabase<SchemaType>;
@@ -307,38 +307,45 @@ describe('FileHistory old-row prune', () => {
         metaDb = captured.get('mounts/test-prune-old/metadata.db')!;
     });
 
-    test('prune drops rows older than 90 days', async () => {
-        const fileId = await mount.touchFile(rootId, 'old-event.txt', 'text/plain');
+    test('prune trims edited rows beyond 100 but keeps an older structural row', async () => {
+        const fileId = await mount.touchFile(rootId, 'edited-events.txt', 'text/plain');
 
-        mount.history.record({
-            pathId: fileId,
-            eventType: 'created',
-            actor: { id: 'u7', email: 'u7@test' },
-        });
-
-        // Insert a row backdated 91 days to verify the 90-day prune without sleeping
-        const oldDate = new Date(Date.now() - 91 * 24 * 60 * 60 * 1000);
+        // Backdated so it is the oldest row: an age cap or a naive trim would drop it first.
+        const oldDate = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000);
         metaDb.db
             .insert(fileEvents)
             .values({
                 id: randomUUID(),
                 pathId: fileId,
-                eventType: 'edited',
+                eventType: 'created',
                 actorUserId: 'u7',
                 actorEmail: 'u7@test',
                 details: null,
                 createdAt: oldDate,
             })
             .run();
+        for (let i = 0; i < 150; i++) {
+            metaDb.db
+                .insert(fileEvents)
+                .values({
+                    id: randomUUID(),
+                    pathId: fileId,
+                    eventType: 'edited',
+                    actorUserId: 'u7',
+                    actorEmail: 'u7@test',
+                    details: null,
+                    createdAt: new Date(),
+                })
+                .run();
+        }
 
-        const beforePrune = mount.history.list(fileId, { limit: 600 });
-        expect(beforePrune.length).toBe(2);
+        expect(mount.history.list(fileId, { limit: 600 })).toHaveLength(151);
 
         mount.history.prune();
 
         const afterPrune = mount.history.list(fileId, { limit: 600 });
-        expect(afterPrune.length).toBe(1);
-        expect(afterPrune[0].eventType).toBe('created');
+        expect(afterPrune).toHaveLength(101);
+        expect(afterPrune.at(-1)?.eventType).toBe('created');
     });
 });
 

@@ -69,7 +69,6 @@ export function EigenDocSharedView({ config, to, pid, uid, mid, onNavigate, onNa
             onAfterAction={() => navigate({ to: '/' })}
             capabilities={{
                 ...DRIVE_CAPABILITIES.listing,
-                canDelete: to === 'by-me',
                 canRename: to === 'by-me',
                 createTypes: new Set([config.type]),
             }}

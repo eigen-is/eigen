@@ -348,6 +348,20 @@ export default class SharedDrive {
     }
 
     public async deletePath(mountId: string, pathId: string, _user?: User): Promise<void> {
+        // A path shared directly with the caller is left, not trashed: only their ACL entry goes,
+        // whatever their permission level. Paths reached through a shared folder trash as usual.
+        const path = await this.sharedDrive.getPath(mountId, pathId);
+        const own = path?.acl?.find((entry) => entry.id.toLowerCase() === this.user.email.toLowerCase());
+        if (path && own && !this.isEffectiveOwnerSync(path.ownerId, await this.getUserMemberships())) {
+            return this.sharedDrive.updateACLDelta(
+                mountId,
+                pathId,
+                { remove: [own.id] },
+                undefined,
+                undefined,
+                this.user,
+            );
+        }
         return this.withWritePermission(mountId, pathId, () => this.sharedDrive.deletePath(mountId, pathId, this.user));
     }
 

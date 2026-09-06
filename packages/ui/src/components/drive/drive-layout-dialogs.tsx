@@ -1,6 +1,13 @@
 import { getDriveDownloadUrl, openDocument } from '@workspace/lib/api';
 import { usePaletteSelectionActions } from '@workspace/lib/command-palette';
-import { useConvertDocument, useCopyPath, useDeletePaths, useDuplicatePath, useMovePath } from '@workspace/lib/drive';
+import {
+    useConvertDocument,
+    useCopyPath,
+    useDeletePaths,
+    useDuplicatePath,
+    useIsEffectiveOwnerOf,
+    useMovePath,
+} from '@workspace/lib/drive';
 import { useIsCoarsePointer } from '@workspace/lib/media';
 import { type DrivePath, EIGEN_DOC_TYPES, type EigenDocType } from '@workspace/lib/types/drive';
 import { useCallback, useMemo, useState } from 'react';
@@ -45,6 +52,7 @@ export function useDriveLayoutDialogs({
     const deletePathsMutation = useDeletePaths();
     const convertMutation = useConvertDocument(ownerId, mountId);
     const isCoarsePointer = useIsCoarsePointer();
+    const isEffectiveOwnerOf = useIsEffectiveOwnerOf();
     const { exportPath, isExporting } = useDocumentExport();
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
     const [pendingDeletePaths, setPendingDeletePaths] = useState<DrivePath[]>([]);
@@ -68,17 +76,17 @@ export function useDriveLayoutDialogs({
     const handleDeletePaths = useCallback(
         (paths: DrivePath[]) => {
             if (paths.length === 0) return;
-            // Touch has no hover cue and mis-taps are easy, so confirm move-to-trash on coarse
-            // pointers. Fine-pointer stays instant — byte-identical to before. Palette-triggered
-            // deletes flow through here too, so they also confirm on touch (intended).
-            if (isCoarsePointer) {
+            // Confirm on touch (no hover cue, easy mis-taps) and for paths in someone else's
+            // drive, where "delete" either leaves a direct share or trashes the owner's copy.
+            // Fine-pointer own-drive deletes stay instant.
+            if (isCoarsePointer || paths.some((path) => !isEffectiveOwnerOf(path.ownerId))) {
                 setPendingDeletePaths(paths);
                 setDeleteConfirmOpen(true);
                 return;
             }
             runDeletePaths(paths);
         },
-        [isCoarsePointer, runDeletePaths],
+        [isCoarsePointer, isEffectiveOwnerOf, runDeletePaths],
     );
 
     const handleMovePath = useCallback(

@@ -62,6 +62,10 @@ export function CommentMenuItems({
         );
     }
     const { card, entry } = item;
+    // Missing entry = unseeded legacy thread, open and unassigned (matchesCommentFilter's rule);
+    // the first assign/resolve write seeds it server-side.
+    const chatName = card.chatName;
+    const status = entry?.status ?? 'open';
     return (
         <>
             {onOpen && (
@@ -93,22 +97,22 @@ export function CommentMenuItems({
                     </SubContent>
                 </Sub>
             )}
-            {onAssign && members && currentUserEmail && entry && (
+            {onAssign && members && currentUserEmail && chatName && (
                 <AssigneeMenuItems
                     primitives={{ Item, Sub, SubTrigger, SubContent }}
                     members={members}
                     currentUserEmail={currentUserEmail}
-                    assignee={entry.assignee}
-                    onAssign={(email) => onAssign(entry.chatName, email, card.title)}
+                    assignee={entry?.assignee ?? null}
+                    onAssign={(email) => onAssign(chatName, email, card.title)}
                 />
             )}
-            {entry?.status === 'open' && onResolve && (
-                <Item onClick={() => onResolve(entry.chatName, card.title)}>
+            {chatName && status === 'open' && onResolve && (
+                <Item onClick={() => onResolve(chatName, card.title)}>
                     <Check className="h-4 w-4" /> Resolve {noun}
                 </Item>
             )}
-            {entry?.status === 'resolved' && onReopen && (
-                <Item onClick={() => onReopen(entry.chatName, card.title)}>
+            {chatName && status === 'resolved' && onReopen && (
+                <Item onClick={() => onReopen(chatName, card.title)}>
                     <RotateCcw className="h-4 w-4" /> Reopen {noun}
                 </Item>
             )}
