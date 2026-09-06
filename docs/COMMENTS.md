@@ -184,7 +184,7 @@ PATCH  /collab/:ownerId/:mountId/:pathId/comments/:chatName/assignee Assign ({ a
 Both PATCH writes reject an unknown `chatName` with **404 `Comment thread not found`**: `assertCommentChatExists`
 (`comment-index.ts`) requires the name to resolve to a real `.eigenchat` under the container's `chat/` folder
 before `ensureComment` runs, so a writer can never mint an index row (+ `assigned` event + dead-link
-notification) for a phantom name. Real legacy chats missing their row still heal — that check passes for them.
+notification) for a phantom name. Real legacy chats missing their row still heal — that check passes for them, and the FE keeps assign/resolve reachable for such cards: `CommentMenuItems` and `CardDialog` treat a missing entry as open and unassigned (the `matchesCommentFilter` rule), so the first write is what seeds the row.
 
 There is no longer a `PATCH .../color` route — color lives on the Y.Doc card and round-trips via
 y-websocket.
