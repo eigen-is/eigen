@@ -7,10 +7,10 @@ import { getUploadMaxSize } from '../lib/config/enforcement';
 import { ApiError } from '../lib/core';
 import { requireNonGuest, requireSelf } from '../lib/core/access';
 import { contentDisposition, scriptableInlineHeaders, setCacheHeaders } from '../lib/core/http';
-import { type DriveLike, getDrive, getSharedDrive } from '../lib/drive';
+import { getDrive, getSharedDrive } from '../lib/drive';
 import { propagateAccessRequest } from '../lib/drive/access-request-propagation';
 import { aggregateMimeContents, aggregateWatches } from '../lib/drive/aggregate';
-import { assertPlainFolderParent } from '../lib/drive/container-guard';
+import { assertParentIsFolder } from '../lib/drive/container-guard';
 import { copyPathAcross } from '../lib/drive/copy-across';
 import { getUniqueFileName } from '../lib/drive/naming';
 import { serveFile } from '../lib/drive/serve-file';
@@ -25,15 +25,6 @@ import { eigenDocTypeSchema } from './shared-schemas';
 // One cap for every free-text share note (collaborator email + access request), so a single
 // oversized body can't be persisted or mailed.
 const MAX_SHARE_MESSAGE_LENGTH = 12000;
-
-// A create/copy REST parent must be a plain folder, never a managed document container —
-// mirrors Drive.movePath. The Drive.create*/createFolder methods stay permissive because
-// container media provisioning and the copy-across bridge write container internals directly.
-async function assertRestParentIsFolder(drive: DriveLike, mountId: string, parentId: string): Promise<void> {
-    const parent = await drive.getPath(mountId, parentId);
-    if (!parent) throw new ApiError(404, 'Parent folder not found');
-    assertPlainFolderParent(parent);
-}
 
 // Drive routes allow cross-owner access (shared drives, team drives).
 // Access control is enforced by getSharedDrive() → SharedDrive ACL checks, not by ownerId === user.id.
@@ -98,7 +89,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/folder/:pathId',
         async ({ params, body, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            await assertRestParentIsFolder(drive, params.mountId, params.pathId);
+            await assertParentIsFolder(drive, params.mountId, params.pathId);
             return await drive.createFolder(params.mountId, params.pathId, body.folderName, user);
         },
         {
@@ -110,7 +101,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/folder/:pathId/create/:type',
         async ({ params, body, user }): Promise<DrivePath> => {
             const drive = await getSharedDrive(params.ownerId, user);
-            await assertRestParentIsFolder(drive, params.mountId, params.pathId);
+            await assertParentIsFolder(drive, params.mountId, params.pathId);
             return await drive.create(params.mountId, params.pathId, body.fileName, params.type, user);
         },
         {
@@ -173,7 +164,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             // WebDAV COPY keeps its overwrite/409 semantics. The self-into-subtree cycle guard lives
             // in Drive.copyPath now — cross-mount copies can never be self-descendant.
             const targetDrive = sameMount ? sourceDrive : await getSharedDrive(body.targetOwnerId, user);
-            await assertRestParentIsFolder(targetDrive, body.targetMountId, body.targetParentId);
+            await assertParentIsFolder(targetDrive, body.targetMountId, body.targetParentId);
             const desired = (body.name ?? src.name).replace(/[/\\]/g, '_');
             const siblings = await targetDrive.getFolderContents(body.targetMountId, body.targetParentId);
             const used = new Set(siblings.map((s) => s.name.toLowerCase()));

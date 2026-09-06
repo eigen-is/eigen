@@ -1,5 +1,6 @@
 import { DRIVE_TYPE_FOLDER, type DrivePath, isDocumentType } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
+import type { DriveLike } from './get-drive';
 
 // Guards that keep an Eigen document container's app-managed internals (data.db,
 // comments.db, media/) off the client-facing write surface. Shared by the WebDAV
@@ -33,4 +34,13 @@ export function assertPlainFolderParent(parent: DrivePath): void {
     if (parent.type !== DRIVE_TYPE_FOLDER) {
         throw new ApiError(400, 'Parent must be a folder');
     }
+}
+
+// Resolve a caller-chosen parent id and assert it is a plain folder. The single gate every
+// create/copy route uses before handing a body/param-chosen parentId to Drive.create*/createFolder,
+// so a chat/doc/folder can never be planted inside another owner's document container on a team drive.
+export async function assertParentIsFolder(drive: DriveLike, mountId: string, parentId: string): Promise<void> {
+    const parent = await drive.getPath(mountId, parentId);
+    if (!parent) throw new ApiError(404, 'Parent folder not found');
+    assertPlainFolderParent(parent);
 }

@@ -7,6 +7,7 @@ import { findChatsByMembers } from '../lib/chat/find-by-members';
 import { requireNonGuest, requireSelf, requireTeamAccess } from '../lib/core/access';
 import { ApiError } from '../lib/core/errors';
 import { type Drive, getDrive, getSharedDrive } from '../lib/drive';
+import { assertParentIsFolder } from '../lib/drive/container-guard';
 import { getUniqueFileName } from '../lib/drive/naming';
 import { getTeamHome } from '../lib/home';
 import { betterAuth } from './auth';
@@ -78,6 +79,9 @@ export const chatRouter = new Elysia({ name: 'chat' })
             if (!fileName) throw new ApiError(422, 'A chat name is required');
 
             const parentId = body.parentId ?? (await drive.ensureChatsFolder(params.mountId));
+            // parentId is caller-chosen — refuse a document container so a team member can't plant
+            // a chat inside another owner's managed container tree.
+            await assertParentIsFolder(drive, params.mountId, parentId);
 
             // Auto-named chats dedupe against a sibling snapshot; user-typed names 409 on conflict.
             // Concurrent same-name creates can slip past the snapshot — the unique index 409s the
