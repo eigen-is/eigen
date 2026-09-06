@@ -24,6 +24,13 @@ describe('iMIP sender authentication (unit)', () => {
         expect(request('alice@mail.partner.com', `${authserv}; dkim=pass header.d=partner.com`).verified).toBe(true);
     });
 
+    test('a unicode From domain aligns with its punycode header.d', () => {
+        // The parser decodes From domains to unicode; OpenDKIM signs with the ASCII (xn--) form.
+        expect(
+            request('alice@münchen.example', `${authserv}; dkim=pass header.d=xn--mnchen-3ya.example`).verified,
+        ).toBe(true);
+    });
+
     test('header.i is accepted in place of header.d', () => {
         expect(request('alice@partner.com', `${authserv}; dkim=pass header.i=@partner.com`).verified).toBe(true);
     });

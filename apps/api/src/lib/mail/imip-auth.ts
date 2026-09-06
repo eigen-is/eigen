@@ -1,6 +1,15 @@
+import { domainToASCII } from 'node:url';
+
 // Just enough RFC 8601 Authentication-Results parsing to answer one question: did OUR verifying MTA
 // (OpenDKIM, `Mode sv`) record a DKIM pass whose signing domain is aligned with the sender's `From:`
 // domain? Inbound iMIP acts automatically only on a verified sender; every other input is unverified.
+
+// Fold a domain to lowercase punycode. The mail parser decodes From domains to unicode
+// (`domainToUnicode`) while OpenDKIM writes `header.d` in ASCII, so both sides normalise here first.
+function normalizeDomain(domain: string): string {
+    const trimmed = domain.toLowerCase().replace(/\.$/, '');
+    return domainToASCII(trimmed) || trimmed;
+}
 
 // The authserv-id is the first token of the header value, before the first ';' and any version number.
 function authservIdOf(value: string): string {
@@ -10,8 +19,8 @@ function authservIdOf(value: string): string {
 // DMARC-style relaxed alignment: equal, or one is a subdomain of the other. A full organisational-domain
 // (public-suffix) comparison would need the PSL; subdomain-suffix matching covers the real cases without it.
 export function domainsAligned(a: string, b: string): boolean {
-    const x = a.toLowerCase().replace(/\.$/, '');
-    const y = b.toLowerCase().replace(/\.$/, '');
+    const x = normalizeDomain(a);
+    const y = normalizeDomain(b);
     if (!x || !y) return false;
     return x === y || x.endsWith(`.${y}`) || y.endsWith(`.${x}`);
 }
