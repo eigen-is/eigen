@@ -34,8 +34,8 @@ export type Capabilities = {
     // Whether the kind paints a Fill at all. GEOMETRY-DEPENDENT on the linear kinds (an open stroke has
     // nothing to fill), so read it through capabilitiesOf(el), never off this table.
     fill: boolean;
-    // Whether the kind's renderer honours the hatch style HALF of that fill. Rich text paints its box
-    // background as CSS and an arrow's fill is its arrowheads', so neither hatches.
+    // Whether the kind's renderer honours the hatch style HALF of that fill. An arrow's fill is its
+    // arrowheads', so it hatches nothing.
     fillStyle: boolean;
     // Whether the kind's renderer honours the dash style of that stroke. A freehand stroke is a filled
     // outline rather than a drawn line, so dashes mean nothing to it.
