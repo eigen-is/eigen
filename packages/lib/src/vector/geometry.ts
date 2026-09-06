@@ -668,10 +668,12 @@ function chordAim(
     points: Point[],
     byId: Map<string, VectorElement>,
 ): Point {
-    const otherBinding = end === 'start' ? arrow.endBinding : arrow.startBinding;
-    const other = points.length === 2 ? parseBinding(otherBinding) : null;
-    const otherShape = other ? boundShape(otherBinding, byId) : null;
-    if (other && otherShape) return anchorToScene(otherShape, other.fixedPoint);
+    if (points.length === 2) {
+        const otherBinding = end === 'start' ? arrow.endBinding : arrow.startBinding;
+        const other = parseBinding(otherBinding);
+        const otherShape = boundShape(otherBinding, byId);
+        if (other && otherShape) return anchorToScene(otherShape, other.fixedPoint);
+    }
     return linearLocalToScene(arrow, points[end === 'start' ? 1 : points.length - 2]);
 }
 
@@ -711,7 +713,7 @@ export function boundEndpoint(
                     : dock;
         }
     }
-    if (Math.hypot(endpoint.x - otherScene.x, endpoint.y - otherScene.y) <= BASE_ARROW_MIN_LENGTH) return anchor;
+    if (distance(endpoint, otherScene) <= BASE_ARROW_MIN_LENGTH) return anchor;
     return endpoint;
 }
 
