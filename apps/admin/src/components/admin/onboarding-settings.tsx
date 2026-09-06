@@ -10,6 +10,7 @@ import { Switch } from '@workspace/ui/components/switch';
 import { useState } from 'react';
 
 type OnboardingDraft = {
+    openSignup?: boolean;
     waitlist?: Partial<ServerSettings['onboarding']['waitlist']>;
     autoAddOwnerContact?: boolean;
     welcomeMail?: Partial<ServerSettings['onboarding']['welcomeMail']>;
@@ -33,6 +34,7 @@ export function OnboardingSettingsPage() {
     const onboarding = settings.onboarding;
 
     const current = {
+        openSignup: draft.openSignup ?? onboarding.openSignup,
         waitlist: { ...onboarding.waitlist, ...draft.waitlist },
         autoAddOwnerContact: draft.autoAddOwnerContact ?? onboarding.autoAddOwnerContact,
         welcomeMail: { ...onboarding.welcomeMail, ...draft.welcomeMail },
@@ -64,6 +66,21 @@ export function OnboardingSettingsPage() {
 
     return (
         <div className="space-y-6">
+            <div className="space-y-4">
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Open signup</h3>
+                <p className="text-sm text-muted-foreground">
+                    When enabled, anyone can create an account through the public sign-up endpoint. Leave off to onboard
+                    only through invites, the waitlist and admin user creation.
+                </p>
+
+                <div className="flex items-center gap-3">
+                    <Switch checked={current.openSignup} onCheckedChange={(openSignup) => update({ openSignup })} />
+                    <Label>Allow open account signup</Label>
+                </div>
+            </div>
+
+            <Separator />
+
             <div className="space-y-4">
                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Waitlist</h3>
                 <p className="text-sm text-muted-foreground">

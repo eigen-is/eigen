@@ -4,9 +4,16 @@ import { type DrivePath, EIGEN_DOC_TYPE_INFO, type EigenDocType, withEigenExtens
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
+import { useAuth } from '../../auth';
 import { CREATE_TIMEOUT_MS, createWithReconcile, fetchListingOnce } from '../reconcile-create';
 import { partitionCopyResults } from './copy-media-partition';
-import { invalidateItemCreated, invalidateItemDeleted, invalidatePathMoved, invalidatePathRenamed } from './keys';
+import {
+    invalidateAclSharedOrUnshared,
+    invalidateItemCreated,
+    invalidateItemDeleted,
+    invalidatePathMoved,
+    invalidatePathRenamed,
+} from './keys';
 import { folderContentQueryConfig } from './reads';
 
 // CREATE FOLDER — owner/mount come per call so one instance serves any target drive.
@@ -81,6 +88,7 @@ export class PartialDeleteError extends Error {
 // (aggregate filter views list other owners' items) each hit their own home.
 export function useDeletePaths() {
     const queryClient = useQueryClient();
+    const { user } = useAuth();
     return useMutation({
         mutationFn: async (paths: DrivePath[]) => {
             const results = await Promise.allSettled(
@@ -98,6 +106,8 @@ export function useDeletePaths() {
             for (const path of succeeded) {
                 invalidateItemDeleted(queryClient, path.ownerId, path.mountId, path.id, path.parentId, path.mimeType);
             }
+            // Deleting a direct share leaves it, which drops the row from the caller's shared-with-me list.
+            if (user) invalidateAclSharedOrUnshared(queryClient, user.id);
             const failed = paths.filter((_, i) => results[i].status === 'rejected');
             if (failed.length > 0) throw new PartialDeleteError(succeeded, failed);
             return succeeded;

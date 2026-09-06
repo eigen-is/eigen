@@ -706,10 +706,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     }
 
                     const txtdata = paste.html || paste.text;
-                    const ele = document.createElement('div');
-                    ele.innerHTML = txtdata;
-
-                    const trList = ele.querySelectorAll('table tr');
+                    // Parse into an inert document, never a live <div>: txtdata is OS clipboard HTML
+                    // and a live element's innerHTML loads <img> and fires its onerror even detached.
+                    const trList = new DOMParser().parseFromString(txtdata, 'text/html').querySelectorAll('table tr');
                     const maxRow = trList.length + context.selections![0].row[0];
                     const rowToBeAdded =
                         maxRow -

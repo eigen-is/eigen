@@ -66,6 +66,8 @@ export function stripTagsServer(html: string): string {
 // The canvas mounts a rich-text box's `html` through the LightEditor sanitizer in ./html-dom while the
 // API renders the same string into exports and previews, so both filter to this one list; two lists
 // would mean a `<table>` or an `<img src="data:…">` a peer wrote is invisible live and printed anyway.
+// The base set: a comment-card LightEditor also enables taskList, and ./html-dom's
+// sanitizeCommentCardHtml keeps that structure on top of these — nothing on the API renders one.
 export const LIGHT_EDITOR_BLOCK_TAGS = ['p', 'blockquote', 'ul', 'ol', 'li'] as const;
 export const LIGHT_EDITOR_MARK_TAGS = ['strong', 'em', 'u', 's'] as const;
 export const LIGHT_EDITOR_TAGS: string[] = [...LIGHT_EDITOR_BLOCK_TAGS, ...LIGHT_EDITOR_MARK_TAGS, 'a', 'br'];
@@ -73,5 +75,5 @@ export const LIGHT_EDITOR_ATTRS = ['href', 'target', 'rel'];
 
 // The only href schemes a LightEditor anchor keeps — a javascript:/data:/vbscript: href is an XSS
 // vector, and the sanitized HTML is rendered through dangerouslySetInnerHTML by the canvas' rich-text
-// layer and injected as live DOM in the drive hero.
+// layer and the comment-card notes, and injected as live DOM in the drive hero.
 export const LIGHT_EDITOR_HREF = /^(https?:|mailto:)/i;

@@ -128,5 +128,6 @@ export function parseMail(bytes: Buffer): ParsedMail {
         messageId: headers.messageId,
         inReplyTo: headers.inReplyTo,
         references: headers.references,
+        authenticationResults: headers.authenticationResults,
     };
 }

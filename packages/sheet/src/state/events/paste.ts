@@ -1132,12 +1132,12 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
             }
         } else {
             if (txtdata.indexOf('table') > -1) {
-                const ele = document.createElement('div');
-                ele.innerHTML = txtdata;
+                // Parse into an inert document, never a live <div>: txtdata is OS clipboard HTML and
+                // a live element's innerHTML loads <img> and fires its onerror even while detached.
+                const parsed = new DOMParser().parseFromString(txtdata, 'text/html');
 
-                const trList = ele.querySelectorAll('table tr');
+                const trList = parsed.querySelectorAll('table tr');
                 if (trList.length === 0) {
-                    ele.remove();
                     return;
                 }
 
@@ -1157,7 +1157,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
 
                 let r = 0;
                 const borderInfo: Record<string, CellBorderSides> = {};
-                const styleInner = ele.querySelectorAll('style')[0]?.innerHTML || '';
+                const styleInner = parsed.querySelectorAll('style')[0]?.innerHTML || '';
                 const patternReg = /{([^}]*)}/g;
                 const patternStyle = styleInner.match(patternReg);
                 const nameReg = /^\S.*/gm;
@@ -1370,7 +1370,6 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
 
                 ctx.formulaRangeSelections = [];
                 pasteHandler(ctx, data, borderInfo);
-                ele.remove();
             }
             // the copied content is an image file — hand it to the app's fit-to-pane insert + upload
             // (the Insert-menu / OS-drop path); the engine carries no upload seam of its own (U5c).

@@ -3,6 +3,7 @@ import type * as Y from 'yjs';
 import type { ChatAttachment } from '../../../types/chat';
 import type { CommentCard } from '../../../types/comments';
 import { getItemMapRoot } from '../../collab/yjs-utils';
+import { sanitizeCommentCardHtml } from '../../html-dom';
 
 function readCards(map: Y.Map<Y.Map<unknown>>): Record<string, CommentCard> {
     const out: Record<string, CommentCard> = {};
@@ -17,7 +18,9 @@ function readCards(map: Y.Map<Y.Map<unknown>>): Record<string, CommentCard> {
         out[id] = {
             id,
             title: typeof title === 'string' ? title : '',
-            description: typeof description === 'string' ? description : '',
+            // The one read seam every consumer of a card's description passes through, so it is where
+            // a hostile peer's Y.Doc write is sanitized before any dangerouslySetInnerHTML render.
+            description: typeof description === 'string' ? sanitizeCommentCardHtml(description) : '',
             color: typeof color === 'string' ? color : undefined,
             chatName: typeof chatName === 'string' ? chatName : undefined,
             creator: typeof creator === 'string' ? creator : undefined,

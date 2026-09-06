@@ -1,6 +1,6 @@
 import type { TextPreviewMode } from '@workspace/lib/constants';
 import { escapeHtml } from '@workspace/lib/html';
-import DOMPurify from 'isomorphic-dompurify';
+import { sanitizeExportHtml } from '../export/sanitize';
 
 const LANGUAGE_MAP: Record<string, string> = {
     '.js': 'javascript',
@@ -75,7 +75,8 @@ export async function generateTextPreview(
     if (mode === 'markdown') {
         const MarkdownIt = (await import('markdown-it')).default;
         const md = new MarkdownIt({ html: false, linkify: true, typographer: true });
-        const body = DOMPurify.sanitize(md.render(content), { FORCE_BODY: true });
+        // Same ref-stripping sanitizer as every preview body: a `![](http://…)` image must not beacon viewers
+        const body = sanitizeExportHtml(md.render(content));
         return { body, mode };
     }
 

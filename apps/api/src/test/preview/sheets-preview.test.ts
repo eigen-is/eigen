@@ -111,6 +111,34 @@ describe('eigensheets preview (read policy)', () => {
         expect(warnings).toEqual([]);
         doc.destroy();
     });
+
+    // A cell background is escapeHtml'd into the style attribute, so a CRDT string like
+    // `red;background-image:url(http://…)` reaches the preview intact. The body renders as
+    // live DOM in the drive hero, so the shared sanitizer must neutralize the url() — else
+    // every viewer fires the beacon.
+    test('a hostile cell background cannot beacon a viewer', () => {
+        const cell = {
+            v: 'Beacon',
+            m: 'Beacon',
+            ct: { fa: 'General', t: 'g' },
+            bg: 'red;background-image:url(http://evil.example/x)',
+        };
+        const sheet: Sheet = {
+            id: 'beacon',
+            name: 'Beacon',
+            celldata: [{ r: 0, c: 0, v: cell }],
+            data: [[cell]],
+            config: {},
+        };
+        const doc = new Y.Doc();
+        seedSheetsDoc(doc, [sheet], []);
+
+        const { body } = renderEigensheetsPreviewBody(doc);
+        expect(body).toContain('Beacon');
+        expect(body).not.toContain('http://evil.example');
+        expect(body).not.toMatch(/url\(http/i);
+        doc.destroy();
+    });
 });
 
 describe('eigensheets preview (heavy fixture)', () => {

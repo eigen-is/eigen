@@ -109,8 +109,10 @@ The notification pipeline itself (storage, coalescing, SSE, routes) is
 [ACTIVITY-ROWS.md](ACTIVITY-ROWS.md).
 
 Retention: `FileHistory.prune` runs fire-and-forget off `Mount.init` (a `setTimeout(0)` the teardown
-can cancel) — delete `file_events` older than **90 days**, then trim each `pathId` to its newest
-**500** rows, both hardcoded in `history.ts`. `path_watchers` is explicit user state, never pruned.
+can cancel) — per `pathId`, trim `'edited'` rows to the newest **100**, then trim all rows to the newest
+**500**, both hardcoded in `history.ts`. There is no age cap: the in-document activity panel is the file's
+story, and a quiet file must keep its creation/share/assign rows. `path_watchers` is explicit user state,
+never pruned.
 
 ## UX surfaces
 
@@ -151,7 +153,7 @@ Tracked as one ROADMAP row.
   the editor's Version History menu with actor/verb rows instead of standing up a second timeline;
   (3) rich semantic events only exist where the client has a discrete, nameable action (stickies) —
   docs and sheets have no clean client boundary and the Yjs update log is a transient sync buffer,
-  so they stay coarse `'edited'` unless we build server-side op interpretation; (4) the 500/90-day
+  so they stay coarse `'edited'` unless we build server-side op interpretation; (4) the 100/500
   prune is a feed cap, and an authoritative in-doc history wants tiered retention like
   `versioning/retention.ts`.
 - **Richer sheet / doc / slide vocabulary** (`sheet-column-inserted`, `slide-reordered`, …) — a

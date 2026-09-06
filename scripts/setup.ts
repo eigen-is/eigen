@@ -328,6 +328,7 @@ VITE_APP_CHAT_URL=/chat
 VITE_APP_ADMIN_URL=/admin
 VITE_APP_SLIDES_URL=/slides
 VITE_APP_SHEETS_URL=/sheets
+VITE_APP_VECTOR_URL=/vector
 VITE_APP_INDEX_URL=/
 `;
 
@@ -478,15 +479,14 @@ console.log('  1. Add the DNS records above');
 console.log(
     '  2. bun install && set -a && source .env.production && set +a && bun run --sequential --filter "./apps/*" build',
 );
-console.log('  3. bun --filter "@apps/api" buildfordocker');
 if (useHostProxy) {
-    console.log('  4. docker compose --env-file .env.production build       # bakes dist/ into eigen-static');
-    console.log('  5. docker compose --env-file .env.production up -d');
+    console.log('  3. docker compose --env-file .env.production build       # bakes dist/ into eigen-static');
+    console.log('  4. docker compose --env-file .env.production up -d');
     console.log(
-        `  6. Wire the snippet in: ln -s ${resolve(NGINX_OUT)} /etc/nginx/sites-enabled/eigen.conf && systemctl reload nginx`,
+        `  5. Wire the snippet in: ln -s ${resolve(NGINX_OUT)} /etc/nginx/sites-enabled/eigen.conf && systemctl reload nginx`,
     );
 } else {
-    console.log('  4. docker compose --env-file .env.production up -d');
+    console.log('  3. docker compose --env-file .env.production up -d');
 }
 if (mailDomain !== domain) {
     console.log(`\nNote: web is on ${domain} but mail is @${mailDomain}. Mail clients won't auto-find`);

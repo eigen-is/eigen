@@ -52,6 +52,9 @@ export type ParsedMail = {
     replyTo?: AddressObject | undefined;
     messageId?: string | undefined;
     inReplyTo?: string | undefined;
+    // Raw `Authentication-Results` header values, in document order (topmost first). The verifying
+    // MTA prepends its own, so the first entry stamped with our authserv-id is the trusted one.
+    authenticationResults?: string[] | undefined;
 };
 
 export type EmailSummary = {

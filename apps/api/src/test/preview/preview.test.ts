@@ -66,6 +66,17 @@ describe('Preview', () => {
         expect(data.mode).toBe('markdown');
     });
 
+    test('markdown remote image cannot beacon a viewer', async () => {
+        // The body renders as live DOM in the drive hero, so a `.md` image pointing at a
+        // remote URL must not survive into an <img src> that fetches on every view.
+        const content = 'Look here: ![x](http://evil.example/beacon)\n\nreadable text';
+        const { res } = await uploadAndTextPreview('beacon.md', content, 'text/markdown');
+        expect(res.status).toBe(200);
+        const data = await res.json();
+        expect(data.body).toContain('readable text');
+        expect(data.body).not.toContain('http://evil.example');
+    });
+
     test('code file returns syntax highlighted body', async () => {
         const { res } = await uploadAndTextPreview('test.json', '{"key": "value"}', 'application/json');
         expect(res.status).toBe(200);

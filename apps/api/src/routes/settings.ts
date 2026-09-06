@@ -67,6 +67,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                 ),
                 onboarding: t.Optional(
                     t.Object({
+                        openSignup: t.Optional(t.Boolean()),
                         waitlist: t.Optional(
                             t.Object({
                                 enabled: t.Optional(t.Boolean()),

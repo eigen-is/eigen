@@ -96,9 +96,11 @@ See [IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md).
 **Backend.** Routes in `apps/api/src/routes/editor.ts` — thin, ACL through `getSharedDrive()`, quota
 through `enforceMountQuota()`, persistence through `Drive.writeFileContent()`. The editor logic
 itself is in `apps/api/src/lib/drive/inline-edit.ts`: `getEditableContent()` (read + UTF-8 validation
-+ frontmatter split), `prepareSaveContent()` (conflict check + reattach + size cap),
-`extractFrontmatter()` / `reattachFrontmatter()`, `MAX_INLINE_EDIT_SIZE`. There is no
-`saveEditableContent()` — the route composes `prepareSaveContent` with `Drive.writeFileContent`.
++ frontmatter split), `prepareSaveContent()` (editability gate via `getTextPreviewMode` + conflict check
++ reattach + size cap), `extractFrontmatter()` / `reattachFrontmatter()`, `MAX_INLINE_EDIT_SIZE`. There is
+no `saveEditableContent()` — the route composes `prepareSaveContent` with `Drive.writeFileContent`. The
+save route also runs the shared `enclosingDocumentContainer()` guard so a path inside a managed container
+(`data.db`, `media/`) can never be overwritten through the editor, matching the read side and WebDAV.
 
 **Shared hooks.** `packages/lib/src/core/editor/hooks/` — `use-file-content.ts` (GET query) and
 `use-file-save.ts` (PUT mutation + cache invalidation). `getTextPreviewMode()` in

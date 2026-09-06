@@ -237,6 +237,8 @@ entries a concurrent sharer just added (the same failure class chat-invite bubbl
 dialog (`DriveAccessListEdit`) diffs its edited list against the initial one and sends only the delta.
 Defined in `apps/api/src/routes/drive.ts`.
 
+Leaving a share is a delete: `SharedDrive.deletePath` checks whether the path's own ACL names the caller by email (and the caller isn't an effective owner) and, if so, removes only that entry through `Drive.updateACLDelta` (no write check — a read-only recipient can always leave, restricted or not), so the owner's file and every other recipient are untouched; the recipient's own home skips the "removed your access" notification for it. Access through a shared folder, a team drive or a team ACL entry is not a direct share: a delete there trashes the owner's copy as before, write-gated. The FE mirrors the same test with `useIsSharedWithMe()` so `DriveDeleteItem` can say "Remove shared item" instead of "Move to trash", and `useDriveLayoutDialogs` confirms every delete in a drive the caller doesn't own (`useIsEffectiveOwnerOf()`).
+
 ### Frontend
 
 `useIsEffectiveOwner()` (`packages/lib/src/core/drive/hooks/use-drive-access.ts`) decides what the share dialog
@@ -249,8 +251,8 @@ owners. Both components sit in `packages/ui/src/components/drive/`.
 **No inheritance.** Per-path, not inherited from parent folders. A subfolder inside a restricted folder is not
 restricted. Matches Google Drive.
 
-**No self-removal exception.** A restricted editor cannot touch the ACL at all, including removing themselves. Hide
-the share client-side or ask the owner. A `DELETE .../acl/me` endpoint can be added later if needed.
+**Self-removal is a delete, not an ACL edit.** A restricted editor cannot touch the ACL at all; the only thing they
+can do is leave, and that rides on `deletePath` so the ACL route keeps one rule.
 
 **Visibility blocked too.** An editor cannot flip a restricted file to `public-read` — same route, same check.
 

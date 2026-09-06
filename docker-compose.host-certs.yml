@@ -19,7 +19,7 @@
 #
 #   chmod +x /etc/letsencrypt/renewal-hooks/deploy/eigen.sh
 #
-# Compose 2.20+ required (uses !override to fully replace the volume list).
+# Compose 2.24.4+ required (uses !override to fully replace the volume list).
 services:
   postfix:
     volumes: !override

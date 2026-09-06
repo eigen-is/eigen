@@ -1,10 +1,10 @@
 import { isContainerType } from '@workspace/lib/types/drive';
 import { enforceMountQuota } from '../config/enforcement';
 import { ApiError } from '../core/errors';
-import { computeEtag, etagMatches, parseByteRange } from '../core/http';
+import { computeEtag, etagMatches, parseByteRange, scriptableInlineHeaders } from '../core/http';
+import { enclosingDocumentContainer } from '../drive/container-guard';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
-import { enclosingDocumentContainer } from './container-guard';
 import { assertWritable } from './locks';
 
 function mimeTypeFromName(name: string): string {
@@ -53,6 +53,11 @@ export async function handleGet(args: {
         ETag: etag,
         'Last-Modified': path.updatedAt.toUTCString(),
         'Accept-Ranges': 'bytes',
+        // Same hardening REST serveFile applies: nosniff on every body, plus a sandbox CSP for
+        // scriptable types (html/xhtml/svg) so a disguised upload can't run script with the
+        // viewer's session. Harmless to real WebDAV clients, which ignore CSP on a download.
+        'X-Content-Type-Options': 'nosniff',
+        ...scriptableInlineHeaders(path.mimeType),
     };
 
     if (headOnly) return new Response(null, { status: 200, headers });
