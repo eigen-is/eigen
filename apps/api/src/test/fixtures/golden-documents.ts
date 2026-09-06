@@ -7,7 +7,6 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_RICHTEXT_PROPS,
-    DEFAULT_SKETCH_PROPS,
     FRAME_FIELDS,
     FRAME_HEIGHT,
     FRAME_WIDTH,
@@ -396,7 +395,6 @@ export function buildGoldenVectorScene(): VectorScene {
         {
             ...base,
             ...filled,
-            ...DEFAULT_SKETCH_PROPS,
             id: 'v-rect',
             type: 'rectangle',
             x: 0,
@@ -410,7 +408,6 @@ export function buildGoldenVectorScene(): VectorScene {
         {
             ...base,
             ...filled,
-            ...DEFAULT_SKETCH_PROPS,
             id: 'v-ellipse',
             type: 'ellipse',
             x: 140,
@@ -450,7 +447,6 @@ export function buildGoldenVectorScene(): VectorScene {
         {
             ...base,
             ...filled,
-            ...DEFAULT_SKETCH_PROPS,
             id: 'v-freedraw',
             type: 'freedraw',
             x: 0,
@@ -467,7 +463,6 @@ export function buildGoldenVectorScene(): VectorScene {
         {
             ...base,
             ...filled,
-            ...DEFAULT_SKETCH_PROPS,
             id: 'v-line',
             type: 'line',
             x: 140,
@@ -483,7 +478,6 @@ export function buildGoldenVectorScene(): VectorScene {
         },
         {
             ...base,
-            ...DEFAULT_SKETCH_PROPS,
             id: 'v-arrow',
             type: 'arrow',
             elbow: false,
@@ -523,7 +517,6 @@ export function buildGoldenVectorScene(): VectorScene {
         // and export exercise the server-side elbowRoute path end-to-end.
         {
             ...base,
-            ...DEFAULT_SKETCH_PROPS,
             id: 'v-elbow',
             type: 'arrow',
             elbow: true,
@@ -550,7 +543,6 @@ export function buildGoldenVectorScene(): VectorScene {
         // inside the element's own <svg>. The export golden is what keeps that true.
         {
             ...base,
-            ...DEFAULT_SKETCH_PROPS,
             id: 'v-gradient',
             type: 'rectangle',
             x: 260,

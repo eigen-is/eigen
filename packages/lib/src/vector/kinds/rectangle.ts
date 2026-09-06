@@ -2,7 +2,7 @@ import { boxCenter, hitTestBox, type Point, rotatePoint } from '../geometry';
 import { cornerRadius, rectOutline } from '../outline';
 import { CORNERS, DEFAULT_CORNERS, type VectorRectangleElement } from '../types';
 import { defineKind } from './kind';
-import { fillField, oneOf, roughness, seed } from './read-fields';
+import { fillField, oneOf } from './read-fields';
 import { isUnpainted, renderRoughShape } from './render-utils';
 
 // Excalidraw shrinks a rectangle's projection diagonals by 15px at each end
@@ -27,16 +27,12 @@ export const rectangleKind = defineKind<VectorRectangleElement>({
     defaults: (style) => ({
         fill: style.fill,
         corners: style.corners,
-        roughness: style.roughness,
-        seed: 0, // the writer replaces it with a random one; 0 keeps `defaults` pure
     }),
     read: (src, base) => ({
         ...base,
         type: 'rectangle',
         fill: fillField(src.get('fill')),
         corners: oneOf(src.get('corners'), CORNERS, DEFAULT_CORNERS),
-        roughness: roughness(src.get('roughness')),
-        seed: seed(src.get('seed')),
     }),
     hitTest: (el, point) => hitTestBox(el, point),
     outline: (el, inflate) =>

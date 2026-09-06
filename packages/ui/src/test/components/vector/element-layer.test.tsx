@@ -1,7 +1,6 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import {
     DEFAULT_ELEMENT_PROPS,
-    DEFAULT_SKETCH_PROPS,
     ELEMENT_KINDS,
     serializeBinding,
     serializePoints,
@@ -67,7 +66,7 @@ const { createRoot } = await import('react-dom/client');
 
 const rect = (over: Partial<VectorShapeElement> = {}): VectorShapeElement => ({
     ...DEFAULT_ELEMENT_PROPS,
-    ...DEFAULT_SKETCH_PROPS,
+    roughness: 1,
     id: 'r1',
     type: 'rectangle',
     fill: solidFill('#dddddd'),
@@ -85,7 +84,7 @@ const rect = (over: Partial<VectorShapeElement> = {}): VectorShapeElement => ({
 // An elbow arrow bound to `r1` at its start: the one layer whose drawing depends on the scene map.
 const elbow = (): VectorArrowElement => ({
     ...DEFAULT_ELEMENT_PROPS,
-    ...DEFAULT_SKETCH_PROPS,
+    roughness: 1,
     ...ELEMENT_KINDS.arrow.defaults(VECTOR_STYLE_DEFAULTS),
     id: 'a1',
     type: 'arrow',

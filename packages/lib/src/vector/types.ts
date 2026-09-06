@@ -81,15 +81,11 @@ export type VectorElementBase = {
 // transparent solid fill.
 type Fillable = { fill: string };
 
-// Everything roughjs draws by hand. Image and rich text are DOM boxes, so they carry neither (a stored
-// field nothing reads is drift — the same rule that keeps `corners` off the ellipse).
-type Sketched = { roughness: number; seed: number };
-
-export type VectorRectangleElement = VectorElementBase & Fillable & Sketched & { type: 'rectangle'; corners: Corners };
-export type VectorDiamondElement = VectorElementBase & Fillable & Sketched & { type: 'diamond'; corners: Corners };
+export type VectorRectangleElement = VectorElementBase & Fillable & { type: 'rectangle'; corners: Corners };
+export type VectorDiamondElement = VectorElementBase & Fillable & { type: 'diamond'; corners: Corners };
 // An ellipse has no corners to treat, so it carries no `corners` field; the panel hides the row
 // through the kind's capabilities.
-export type VectorEllipseElement = VectorElementBase & Fillable & Sketched & { type: 'ellipse' };
+export type VectorEllipseElement = VectorElementBase & Fillable & { type: 'ellipse' };
 
 // The roughjs-drawn closed shapes.
 export type VectorShapeElement = VectorRectangleElement | VectorDiamondElement | VectorEllipseElement;
@@ -132,8 +128,7 @@ export type VectorBindableElement = VectorShapeElement | VectorRichTextElement |
 // Freehand strokes and (poly)lines. `points` is a JSON `[[x,y],…]` string in scene units RELATIVE
 // to (x,y); the point bbox's min corner is ALWAYS (0,0) (normalizeLinear owns that invariant).
 export type VectorLinearElement = VectorElementBase &
-    Fillable &
-    Sketched & {
+    Fillable & {
         type: 'freedraw' | 'line';
         points: string;
         roundness: Roundness; // line: 'round' = roughjs curve through the vertices. freedraw ignores it.
@@ -150,32 +145,31 @@ export type VectorLinearElement = VectorElementBase &
 // exclusive `type` keeps the discriminated union clean — `el.type === 'arrow'` narrows straight to the
 // arrow fields. `startBinding`/`endBinding` are a JSON `{"elementId","fixedPoint":[fx,fy]}` string or ''
 // when unbound (parseBinding/serializeBinding); the reverse index is derived, never stored.
-export type VectorArrowElement = VectorElementBase &
-    Sketched & {
-        type: 'arrow';
-        points: string;
-        roundness: Roundness;
-        // Elbow ("snake") arrow: store only this flag + the two endpoints (points) + bindings; the orthogonal
-        // route is DERIVED on every read/render (elbowRoute), never stored. An elbow arrow pins angle 0 (its
-        // route lives in the unrotated local frame — the reader forces it). `roundness` is ignored while true.
-        elbow: boolean;
-        // Pinned route segments (Excalidraw's fixedSegments), '' when none. NON-empty flips the elbow arrow
-        // into STORED-POLYLINE mode: `points` then holds the full routed polyline (not just the two endpoints)
-        // and the incremental editors in elbow-pins.ts mutate it — the A* router never runs on a pinned arrow.
-        // The string is a JSON envelope `{"segments":[{index,start,end},…],"startIsSpecial","endIsSpecial"}`:
-        // each pin keys `points[index-1]→points[index]` (Excalidraw's identity), start/end are LOCAL copies of
-        // those two vertices (self-describing for validation/resize, always re-derived from the polyline), and
-        // the isSpecial flags mark a synthetic L-jog point after start / before end. Ignored on a straight arrow.
-        fixedSegments: string;
-        startArrowhead: Arrowhead;
-        endArrowhead: Arrowhead;
-        startBinding: string;
-        endBinding: string;
-        text: string; // the optional label; '' = no label — the last plain-text path on the canvas
-        fontSize: number;
-        fontFamily: string;
-        labelWidth: number; // client-measured, the sole width source
-    };
+export type VectorArrowElement = VectorElementBase & {
+    type: 'arrow';
+    points: string;
+    roundness: Roundness;
+    // Elbow ("snake") arrow: store only this flag + the two endpoints (points) + bindings; the orthogonal
+    // route is DERIVED on every read/render (elbowRoute), never stored. An elbow arrow pins angle 0 (its
+    // route lives in the unrotated local frame — the reader forces it). `roundness` is ignored while true.
+    elbow: boolean;
+    // Pinned route segments (Excalidraw's fixedSegments), '' when none. NON-empty flips the elbow arrow
+    // into STORED-POLYLINE mode: `points` then holds the full routed polyline (not just the two endpoints)
+    // and the incremental editors in elbow-pins.ts mutate it — the A* router never runs on a pinned arrow.
+    // The string is a JSON envelope `{"segments":[{index,start,end},…],"startIsSpecial","endIsSpecial"}`:
+    // each pin keys `points[index-1]→points[index]` (Excalidraw's identity), start/end are LOCAL copies of
+    // those two vertices (self-describing for validation/resize, always re-derived from the polyline), and
+    // the isSpecial flags mark a synthetic L-jog point after start / before end. Ignored on a straight arrow.
+    fixedSegments: string;
+    startArrowhead: Arrowhead;
+    endArrowhead: Arrowhead;
+    startBinding: string;
+    endBinding: string;
+    text: string; // the optional label; '' = no label — the last plain-text path on the canvas
+    fontSize: number;
+    fontFamily: string;
+    labelWidth: number; // client-measured, the sole width source
+};
 
 export type VectorElement =
     | VectorShapeElement
@@ -263,9 +257,6 @@ export const DEFAULT_ELEMENT_PROPS = {
     VectorElementBase,
     'strokeColor' | 'strokeWidth' | 'strokeStyle' | 'opacity' | 'frameId' | 'commentCardIds' | 'roughness' | 'seed'
 >;
-
-// roughjs tuning, on the six sketched kinds only.
-export const DEFAULT_SKETCH_PROPS = { roughness: 1, seed: 0 };
 
 // Rich-text defaults beyond the host's style table: the typography a fresh box starts in, and the
 // fallback a corrupt stored value degrades to.

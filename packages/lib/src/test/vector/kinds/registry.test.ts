@@ -225,12 +225,13 @@ describe('ELEMENT_KINDS', () => {
 });
 
 describe('capabilities agree with the stored fields', () => {
-    test('fill, corners and roughness are derivable from each kind own fields', () => {
+    test('fill and corners are derivable from each kind own fields', () => {
         for (const [type, kind] of Object.entries(ELEMENT_KINDS)) {
             const fields = kind.fields;
             expect([type, kind.capabilities.fill]).toEqual([type, fields.includes('fill')]);
             expect([type, kind.capabilities.corners]).toEqual([type, fields.includes('corners')]);
-            expect([type, kind.capabilities.roughness]).toEqual([type, fields.includes('roughness')]);
+            // roughness and seed are the base's, so no kind may declare them again.
+            expect([type, fields.includes('roughness') || fields.includes('seed')]).toEqual([type, false]);
         }
     });
 

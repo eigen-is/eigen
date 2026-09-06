@@ -33,7 +33,6 @@ const BASE = {
 const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
     ...BASE,
     ...ELEMENT_KINDS.rectangle.defaults(VECTOR_STYLE_DEFAULTS),
-    seed: 1,
 };
 
 const RICHTEXT_BASE: Omit<VectorRichTextElement, 'id' | 'type'> = {
@@ -56,7 +55,7 @@ export function richtext(
 // The ellipse has no `corners`, so it cannot ride SHAPE_BASE (whose rectangle typing carries one) —
 // a round-trip fixture must be exactly the kind's own field set.
 export function ellipse(over: Partial<VectorEllipseElement> & Pick<VectorEllipseElement, 'id'>): VectorEllipseElement {
-    return { ...BASE, ...ELEMENT_KINDS.ellipse.defaults(VECTOR_STYLE_DEFAULTS), type: 'ellipse', seed: 1, ...over };
+    return { ...BASE, ...ELEMENT_KINDS.ellipse.defaults(VECTOR_STYLE_DEFAULTS), type: 'ellipse', ...over };
 }
 
 export function image(over: Partial<VectorImageElement> & Pick<VectorImageElement, 'id'>): VectorImageElement {
@@ -72,7 +71,7 @@ const POINTS = serializePoints([
 export function linear(
     over: Partial<VectorLinearElement> & Pick<VectorLinearElement, 'id' | 'type'>,
 ): VectorLinearElement {
-    return { ...BASE, ...ELEMENT_KINDS.freedraw.defaults(VECTOR_STYLE_DEFAULTS), points: POINTS, seed: 1, ...over };
+    return { ...BASE, ...ELEMENT_KINDS.freedraw.defaults(VECTOR_STYLE_DEFAULTS), points: POINTS, ...over };
 }
 
 export function arrow(over: Partial<VectorArrowElement> & Pick<VectorArrowElement, 'id'>): VectorArrowElement {
@@ -81,7 +80,6 @@ export function arrow(over: Partial<VectorArrowElement> & Pick<VectorArrowElemen
         ...ELEMENT_KINDS.arrow.defaults(VECTOR_STYLE_DEFAULTS),
         type: 'arrow',
         points: POINTS,
-        seed: 1,
         ...over,
     };
 }

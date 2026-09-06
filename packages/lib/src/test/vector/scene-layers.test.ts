@@ -4,7 +4,6 @@ import { elementLayer, layerBoxCss, layerInnerHtml, RICH_TEXT_CLASS, sceneLayers
 import {
     DEFAULT_ARROW_PROPS,
     DEFAULT_ELEMENT_PROPS,
-    DEFAULT_SKETCH_PROPS,
     type VectorArrowElement,
     type VectorImageElement,
 } from '../../vector/types';
@@ -94,7 +93,8 @@ describe('sceneLayers', () => {
     test('an elbow arrow renders through its scene-derived route, not its stored endpoints', () => {
         const arrow: VectorArrowElement = {
             ...DEFAULT_ELEMENT_PROPS,
-            ...DEFAULT_SKETCH_PROPS,
+            roughness: 1,
+            seed: 0,
             ...DEFAULT_ARROW_PROPS,
             id: 'ar',
             type: 'arrow',

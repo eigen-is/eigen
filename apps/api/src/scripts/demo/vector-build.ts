@@ -13,7 +13,6 @@ import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_FILL_STYLE,
     DEFAULT_LINE_ROUNDNESS,
-    DEFAULT_SKETCH_PROPS,
     ELEMENT_FIELDS,
     elbowBindPoint,
     generateNKeysBetween,
@@ -119,9 +118,9 @@ export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
     const seed = mulberry32(SEED_SALT);
     for (const [i, el] of ordered.entries()) {
         el.index = keys[i];
-        // One draw per element either way, so adding an unsketched kind never shifts the others' jitter.
-        const drawn = Math.floor(seed() * 2 ** 31);
-        if ('seed' in el) el.seed = drawn;
+        // One draw per element, in z-order: the images and text boxes keep the draw already spent on
+        // them, so no shape's jitter moves.
+        el.seed = Math.floor(seed() * 2 ** 31);
     }
 
     // The spec is authored in its own top-left frame; the editor opens on the scene origin, so shift the
@@ -153,7 +152,7 @@ function buildShape(s: SitePlanShape): VectorShapeElement {
         strokeWidth: s.strokeWidth ?? DEFAULT_ELEMENT_PROPS.strokeWidth,
         strokeStyle: s.strokeStyle ?? DEFAULT_ELEMENT_PROPS.strokeStyle,
         fill: solidFill(s.fill ?? 'transparent', s.fillStyle ?? DEFAULT_FILL_STYLE),
-        ...DEFAULT_SKETCH_PROPS,
+        seed: 0,
     };
     // An ellipse has no corners to treat, so it carries no `corners` field.
     if (s.kind === 'ellipse') return { ...box, type: 'ellipse' };
@@ -177,7 +176,7 @@ function buildLine(l: SitePlanLine, i: number): VectorLinearElement {
         strokeWidth: l.strokeWidth ?? DEFAULT_ELEMENT_PROPS.strokeWidth,
         strokeStyle: l.strokeStyle ?? DEFAULT_ELEMENT_PROPS.strokeStyle,
         fill: solidFill('transparent'),
-        ...DEFAULT_SKETCH_PROPS,
+        seed: 0,
         roundness: l.roundness ?? DEFAULT_LINE_ROUNDNESS,
         points: norm.points,
         pressures: '',
@@ -217,7 +216,7 @@ function buildArrow(
         angle: 0,
         strokeColor: a.stroke ?? DEFAULT_ELEMENT_PROPS.strokeColor,
         strokeStyle: a.strokeStyle ?? DEFAULT_ELEMENT_PROPS.strokeStyle,
-        ...DEFAULT_SKETCH_PROPS,
+        seed: 0,
         roundness: DEFAULT_ARROW_PROPS.roundness,
         points: norm.points,
         elbow: a.elbow ?? false,
