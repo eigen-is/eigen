@@ -26,6 +26,9 @@ type SceneLayersOptions = {
     // Render one frame's elements; omit for the whole infinite canvas.
     frameId?: string;
     resolveMedia?: MediaResolver;
+    // The whole scene by id, for a caller that already holds one — a deck composes page after page off
+    // the same elements, and rebuilding the map per frame is the deck's element count squared.
+    byId?: Map<string, VectorElement>;
 };
 
 type ElementLayerOptions = {
@@ -88,7 +91,7 @@ export function sceneLayers(scene: VectorScene, opts: SceneLayersOptions = {}): 
     const { frameId } = opts;
     const visible = frameId === undefined ? scene.elements : elementsInFrame(scene.elements, frameId);
     // byId spans the whole scene: an elbow arrow inside a frame still routes around its bound shapes.
-    const byId = new Map(scene.elements.map((el) => [el.id, el]));
+    const byId = opts.byId ?? new Map(scene.elements.map((el) => [el.id, el]));
     const layers: Layer[] = [];
     for (const el of orderByFractionalIndex(visible)) {
         // arrowRoute self-guards (not an arrow, or not elbow => undefined), so no element-type test is needed.
