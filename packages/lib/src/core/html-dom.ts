@@ -40,39 +40,52 @@ function safeHref(href: string | null): string | null {
 
 // Comment-card descriptions come from a LightEditor with `taskList` enabled, so they carry TipTap
 // task lists (ul[data-type=taskList] > li[data-checked] > label>input[type=checkbox] + div) that the
-// base allowlist would strip. `taskList: true` keeps exactly that structure with only its own
-// constrained attributes — no other attribute or tag is trusted, so the XSS boundary is unchanged.
-type SanitizeOptions = { taskList?: boolean };
+// base allowlist would strip. `taskList: true` keeps exactly that structure — each of the five tags
+// survives only in its own position (tracked by `taskCtx`), with only its own constrained attributes;
+// a stray label/div/input outside a task item unwraps, so the XSS boundary is unchanged. The content
+// div recurses back to plain prose (no `taskCtx`), so a nested task list re-enters through its own ul.
+type TaskCtx = 'list' | 'item' | 'label';
+type SanitizeOptions = { taskList?: boolean; taskCtx?: TaskCtx };
 
-function appendTaskListNode(el: HTMLElement, parent: HTMLElement, recurseInto: (target: HTMLElement) => void): boolean {
+function appendTaskListNode(el: HTMLElement, parent: HTMLElement, opts: SanitizeOptions): boolean {
     const tag = el.tagName;
+    const recurse = (target: HTMLElement, taskCtx: TaskCtx | undefined) => {
+        for (const child of Array.from(el.childNodes)) appendSanitized(child, target, { ...opts, taskCtx });
+    };
+    // A task list may appear anywhere in prose; its items and their inner structure survive only inside it.
     if (tag === 'UL' && el.getAttribute('data-type') === 'taskList') {
         const ul = document.createElement('ul');
         ul.setAttribute('data-type', 'taskList');
-        recurseInto(ul);
+        recurse(ul, 'list');
         parent.appendChild(ul);
         return true;
     }
-    if (tag === 'LI' && el.hasAttribute('data-checked')) {
+    if (tag === 'LI' && opts.taskCtx === 'list' && el.hasAttribute('data-checked')) {
         const li = document.createElement('li');
         li.setAttribute('data-checked', el.getAttribute('data-checked') === 'true' ? 'true' : 'false');
         li.setAttribute('data-type', 'taskItem');
-        recurseInto(li);
+        recurse(li, 'item');
         parent.appendChild(li);
         return true;
     }
-    if (tag === 'LABEL' || tag === 'DIV') {
-        const clean = document.createElement(tag.toLowerCase());
-        recurseInto(clean);
-        parent.appendChild(clean);
+    if (tag === 'LABEL' && opts.taskCtx === 'item') {
+        const label = document.createElement('label');
+        recurse(label, 'label');
+        parent.appendChild(label);
         return true;
     }
-    if (tag === 'INPUT') {
+    if (tag === 'INPUT' && opts.taskCtx === 'label') {
         // Forced to a checkbox with no other attribute: an onfocus/autofocus/value never survives.
         const input = document.createElement('input');
         input.setAttribute('type', 'checkbox');
         if (el.hasAttribute('checked')) input.setAttribute('checked', '');
         parent.appendChild(input);
+        return true;
+    }
+    if (tag === 'DIV' && opts.taskCtx === 'item') {
+        const div = document.createElement('div');
+        recurse(div, undefined);
+        parent.appendChild(div);
         return true;
     }
     return false;
@@ -95,7 +108,7 @@ function appendSanitized(node: Node, parent: HTMLElement, opts: SanitizeOptions)
     const recurseInto = (target: HTMLElement) => {
         for (const child of Array.from(el.childNodes)) appendSanitized(child, target, opts);
     };
-    if (opts.taskList && appendTaskListNode(el, parent, recurseInto)) return;
+    if (opts.taskList && appendTaskListNode(el, parent, opts)) return;
     // Headings collapse to paragraphs (LightEditor has no heading node).
     if (HEADING_TAGS.has(tag)) {
         const p = document.createElement('p');

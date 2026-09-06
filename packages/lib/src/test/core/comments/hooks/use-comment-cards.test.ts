@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import * as Y from 'yjs';
 import { readCards } from '../../../../core/comments/hooks/use-comment-cards';
+import { sanitizeCommentCardHtml } from '../../../../core/html-dom';
 import type { CommentCard } from '../../../../types/comments';
 import type { AttachmentReference } from '../../../../types/drive-reference';
 
@@ -167,5 +168,43 @@ describe('readCards sanitizes hostile description HTML', () => {
         expect(card.description).toContain('<div><p>Done</p></div>');
         expect(card.description).not.toContain('onerror');
         expect(card.description).not.toContain('<img');
+    });
+
+    test('a stray label/div/input outside a task item unwraps to its children', () => {
+        const card = cardWithDescription(
+            '<label>hi</label><div>body</div><input type="text" autofocus onfocus="alert(1)">',
+        );
+        expect(card.description).not.toContain('<label>');
+        expect(card.description).not.toContain('<div>');
+        expect(card.description).not.toContain('<input');
+        expect(card.description).not.toContain('onfocus');
+        expect(card.description).toContain('hi');
+        expect(card.description).toContain('body');
+    });
+
+    test('the NoteCard progress regex still counts done/total after readCards', () => {
+        // The exact regexes NoteCard runs over the sanitized description (note-card.tsx).
+        const TASK_ITEMS_RE = /<li[^>]*\bdata-checked=/g;
+        const CHECKED_ITEMS_RE = /<li[^>]*\bdata-checked="true"/g;
+        const card = cardWithDescription(
+            '<ul data-type="taskList">' +
+                '<li data-checked="true" data-type="taskItem"><label><input type="checkbox" checked="checked"></label><div><p>A</p></div></li>' +
+                '<li data-checked="true" data-type="taskItem"><label><input type="checkbox" checked="checked"></label><div><p>B</p></div></li>' +
+                '<li data-checked="false" data-type="taskItem"><label><input type="checkbox"></label><div><p>C</p></div></li>' +
+                '</ul>',
+        );
+        expect(card.description.match(TASK_ITEMS_RE)?.length).toBe(3);
+        expect(card.description.match(CHECKED_ITEMS_RE)?.length).toBe(2);
+    });
+
+    test('sanitizing is idempotent — the toggled innerHTML NoteCardDialog writes back is stable', () => {
+        const dirty =
+            '<p><strong>keep</strong> <a href="https://eigen.is">link</a></p>' +
+            '<img src=x onerror="alert(1)"><script>alert(2)</script>' +
+            '<ul data-type="taskList"><li data-checked="true" data-type="taskItem">' +
+            '<label><input type="checkbox" checked="checked"></label><div><p>Done <img src=x onerror="alert(3)"></p></div>' +
+            '</li></ul>';
+        const once = sanitizeCommentCardHtml(dirty);
+        expect(sanitizeCommentCardHtml(once)).toBe(once);
     });
 });
