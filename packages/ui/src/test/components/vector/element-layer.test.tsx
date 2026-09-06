@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { afterAll, describe, expect, test } from 'bun:test';
 import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_SKETCH_PROPS,
@@ -12,14 +12,55 @@ import { Window } from 'happy-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ElementLayer, sameLayerProps } from '../../../components/vector/element-layer';
 
-// The rich-text sanitizer parses with DOMParser and builds through document.createElement, so the
-// markup tests below need a DOM at module scope (the lib clipboard tests' recipe).
-const window = new Window();
+// The rich-text sanitizer parses with DOMParser and builds through document.createElement, and the
+// auto-fit tests mount the layer for real, so this file borrows a whole happy-dom window the way the
+// text-overlay test next door does and puts every global back afterwards.
+const window = new Window({ url: 'http://localhost:3000' });
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
 const g = globalThis as any;
-g.DOMParser = window.DOMParser;
+const borrowed: string[] = [];
+for (const key of Object.getOwnPropertyNames(window)) {
+    // biome-ignore lint/suspicious/noExplicitAny: reading the happy-dom window's own globals
+    const value = (window as any)[key];
+    if (g[key] === undefined && value !== undefined) {
+        g[key] = value;
+        borrowed.push(key);
+    }
+}
+for (const key of ['DOMParser', 'Event', 'Node', 'Element', 'HTMLElement']) {
+    // biome-ignore lint/suspicious/noExplicitAny: reading the happy-dom window's own globals
+    g[key] = (window as any)[key];
+    borrowed.push(key);
+}
+g.window = window;
 g.document = window.document;
-g.Node = window.Node;
+g.navigator = window.navigator;
+g.IS_REACT_ACT_ENVIRONMENT = true;
+
+// The auto-fit re-measures on its ResizeObserver; happy-dom has none, so the test drives the callback
+// itself — that is how a measured body reaches the hook after the offsets are defined on it.
+let remeasure: (() => void) | null = null;
+class FakeResizeObserver {
+    constructor(callback: () => void) {
+        remeasure = callback;
+    }
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+}
+g.ResizeObserver = FakeResizeObserver;
+
+afterAll(() => {
+    for (const key of borrowed) g[key] = undefined;
+    g.window = undefined;
+    g.document = undefined;
+    g.navigator = undefined;
+    g.ResizeObserver = undefined;
+    g.IS_REACT_ACT_ENVIRONMENT = undefined;
+});
+
+const { act } = await import('react');
+const { createRoot } = await import('react-dom/client');
 
 const rect = (over: Partial<VectorShapeElement> = {}): VectorShapeElement => ({
     ...DEFAULT_ELEMENT_PROPS,
@@ -131,5 +172,53 @@ describe('rich text is sanitized at the mount seam', () => {
         );
         expect(html).not.toContain('javascript:');
         expect(html).toContain('click');
+    });
+});
+
+describe('the rich-text auto-fit', () => {
+    // The fit is written by the host, and what it writes it as depends on who caused it: the box the
+    // user is typing in grows as part of their keystroke's undo step, so ⌘Z takes the text and the
+    // height back together. A fit driven by a peer's edit, a load or a panel change is bookkeeping.
+    async function fitFor(editing: boolean): Promise<[string, number, boolean]> {
+        const calls: [string, number, boolean][] = [];
+        const container = document.createElement('div');
+        document.body.append(container);
+        const root = createRoot(container);
+        const el = richtext('<p>one</p>');
+        await act(async () => {
+            root.render(
+                <ElementLayer el={el} onFitHeight={(id, height, typing) => calls.push([id, height, typing])}>
+                    {editing ? (
+                        <div>
+                            <p>one</p>
+                        </div>
+                    ) : undefined}
+                </ElementLayer>,
+            );
+        });
+        // happy-dom lays nothing out, so the measured block child carries the offsets a browser would.
+        const line = container.querySelector('p');
+        if (!line) throw new Error('the layer rendered no measurable body');
+        Object.defineProperty(line, 'offsetTop', { value: 0 });
+        Object.defineProperty(line, 'offsetHeight', { value: 120 });
+        await act(async () => remeasure?.());
+        await act(async () => root.unmount());
+        container.remove();
+
+        const last = calls.at(-1);
+        if (!last) throw new Error('the layer never fitted the box');
+        return last;
+    }
+
+    test("a box with the in-place editor in it fits as the typing user's own edit", async () => {
+        const [id, height, typing] = await fitFor(true);
+        expect(id).toBe('t1');
+        expect(height).toBeGreaterThan(120);
+        expect(typing).toBe(true);
+    });
+
+    test('a box nobody is editing fits as bookkeeping', async () => {
+        const [, , typing] = await fitFor(false);
+        expect(typing).toBe(false);
     });
 });

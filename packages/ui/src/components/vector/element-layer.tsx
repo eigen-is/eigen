@@ -88,7 +88,9 @@ export const ElementLayer = memo(function ElementLayer({
 }: ElementLayerProps) {
     // The layer node, so rich text can measure the body inside it — its own, or the in-place editor's.
     const hostRef = useRef<HTMLDivElement>(null);
-    useRichTextAutoFit(hostRef, el, onFitHeight);
+    // Hosting the in-place editor IS the user typing in this box, which is what makes its growth
+    // part of their edit rather than bookkeeping.
+    useRichTextAutoFit(hostRef, el, onFitHeight, !!children);
     const layer = elementLayer(el, { resolveMedia, route: arrowRoute(el, byId) });
     if (!layer) return null;
     const { content } = layer;

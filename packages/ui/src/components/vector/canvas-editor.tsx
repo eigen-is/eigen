@@ -1288,12 +1288,15 @@ export function CanvasEditor({
     const background = viewport === 'infinite' && !isTransparentColor(meta.background) ? meta.background : undefined;
 
     // Rich text's height is DERIVED from the text in it, so the layer that renders a box measures it and
-    // writes the fit back here — untracked, because a derived size is bookkeeping and not the user's own
-    // undo step. Withheld while a gesture is live: a resize preview owns the box it is dragging, and the
-    // committed width re-fits it the moment the drag ends.
+    // writes the fit back here. A fit the typing user caused rides in their own undo step — the box
+    // grew because of that keystroke, and ⌘Z must take both back, since the fit itself only ever grows.
+    // Every other fit (a peer's edit, a load, a panel change) is bookkeeping and stays untracked.
+    // Withheld while a gesture is live: a resize preview owns the box it is dragging, and the committed
+    // width re-fits it the moment the drag ends.
     const fitElementHeight = useCallback(
-        (id: string, height: number) => updateElementUntracked(id, { height }),
-        [updateElementUntracked],
+        (id: string, height: number, editing: boolean) =>
+            editing ? updateElement(id, { height }) : updateElementUntracked(id, { height }),
+        [updateElement, updateElementUntracked],
     );
     const onFitHeight = canEdit && !hasPreviews && !creating ? fitElementHeight : undefined;
 
