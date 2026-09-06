@@ -60,3 +60,18 @@ export function stripTagsServer(html: string): string {
         .replace(/\n{3,}/g, '\n\n')
         .trim();
 }
+
+// What the shared LightEditor's schema keeps: its block nodes, the inline marks it renders, `<a>`
+// (Link is enabled) and `<br>` — plus the only three attributes that survive, all of them the anchor's.
+// The canvas mounts a rich-text box's `html` through the LightEditor sanitizer in ./html-dom while the
+// API renders the same string into exports and previews, so both filter to this one list; two lists
+// would mean a `<table>` or an `<img src="data:…">` a peer wrote is invisible live and printed anyway.
+export const LIGHT_EDITOR_BLOCK_TAGS = ['p', 'blockquote', 'ul', 'ol', 'li'] as const;
+export const LIGHT_EDITOR_MARK_TAGS = ['strong', 'em', 'u', 's'] as const;
+export const LIGHT_EDITOR_TAGS: string[] = [...LIGHT_EDITOR_BLOCK_TAGS, ...LIGHT_EDITOR_MARK_TAGS, 'a', 'br'];
+export const LIGHT_EDITOR_ATTRS = ['href', 'target', 'rel'];
+
+// The only href schemes a LightEditor anchor keeps — a javascript:/data:/vbscript: href is an XSS
+// vector, and the sanitized HTML is rendered through dangerouslySetInnerHTML by the canvas' rich-text
+// layer and injected as live DOM in the drive hero.
+export const LIGHT_EDITOR_HREF = /^(https?:|mailto:)/i;

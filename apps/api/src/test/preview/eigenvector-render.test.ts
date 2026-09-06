@@ -98,6 +98,29 @@ describe('renderEigenvectorPreviewBody', () => {
         expect(body).not.toContain('display:none');
     });
 
+    test('a rich-text body is filtered to the tag set the live canvas mounts', () => {
+        // The canvas mounts the same string through the LightEditor sanitizer, which keeps neither a
+        // table nor an inline image — so a peer who writes one into the Y.Doc must not get a body that
+        // renders here but nowhere a collaborator can see it.
+        const body = previewOf(
+            '<p>ok</p><table><tr><td>grid</td></tr></table><img src="data:image/gif;base64,R0lGOD">',
+        );
+        expect(body).toContain('<p>ok</p>');
+        expect(body).not.toContain('<table');
+        expect(body).not.toContain('<img');
+    });
+
+    test('the marks and links a rich-text box legitimately holds survive', () => {
+        // `target` is not asserted: the assembled-document pass that follows runs DOMPurify's own
+        // profile, which drops it everywhere as tabnabbing hardening.
+        const body = previewOf(
+            '<p><strong>bold</strong> <a href="https://eigen.is" rel="noopener noreferrer">link</a></p>',
+        );
+        expect(body).toContain('<strong>bold</strong>');
+        expect(body).toContain('href="https://eigen.is"');
+        expect(body).toContain('rel="noopener noreferrer"');
+    });
+
     test('a huge drawing renders a bounded number of elements, and the marker says so', () => {
         // Every other preview type has a budget (20 blocks, 8 slides, a cell cap): without one a
         // 50k-element drawing pays roughjs path generation for all of them before the byte guard
@@ -130,8 +153,8 @@ describe('renderEigenvectorPreviewBody', () => {
 
     test('an external reference in a rich-text body never reaches a viewer', () => {
         // The body is injected as live DOM, so a url() or an <img src> a collaborator wrote is a
-        // beacon fired at everyone who opens the folder — the rich-text pass drops both.
-        // Every attribute that fetches without a click, not just <img src>.
+        // beacon fired at everyone who opens the folder. The rich-text pass keeps only the LightEditor
+        // set, which has neither a fetching element nor a `style` attribute to hide one in.
         const body = previewOf(
             '<p style="background:url(https://evil.example/beacon.png)">ok</p>' +
                 '<img src="https://evil.example/pixel.png">' +
@@ -141,7 +164,7 @@ describe('renderEigenvectorPreviewBody', () => {
                 '<picture><source srcset="https://evil.example/s.png"><img alt=""></picture>' +
                 '<input type="image" src="https://evil.example/i.png">',
         );
-        expect(body).toContain('<p style="background:url()">ok</p>');
+        expect(body).toContain('<p>ok</p>');
         expect(body).not.toContain('evil.example');
         // What the compositor itself put in the page survives: the media URL the main thread
         // resolved, and the SVG-attribute refs a kind points at its own gradient and clip with.

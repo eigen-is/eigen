@@ -22,4 +22,10 @@ describe('renderEigenvectorExport', () => {
         expect(svg).not.toContain('display:none');
         expect(svg).toContain('hi');
     });
+
+    test('filters the body to the tag set the live canvas mounts', () => {
+        const svg = svgWithRichText('<p>hi</p><table><tr><td>grid</td></tr></table>');
+        expect(svg).not.toContain('<table');
+        expect(svg).toContain('hi');
+    });
 });

@@ -126,8 +126,8 @@ describe('renderEigenslidesPreviewBody', () => {
 
     test('an external reference in a slide body never reaches a viewer', () => {
         // The body is injected as live DOM, so a url() or an <img src> a collaborator wrote is a
-        // beacon fired at everyone who opens the folder. Every attribute that fetches without a
-        // click, not just <img src>.
+        // beacon fired at everyone who opens the folder. The rich-text pass keeps only the LightEditor
+        // set, which has neither a fetching element nor a `style` attribute to hide one in.
         const body = previewOf(
             '<p style="background:url(https://evil.example/beacon.png)">ok</p>' +
                 '<img src="https://evil.example/pixel.png">' +
@@ -137,7 +137,7 @@ describe('renderEigenslidesPreviewBody', () => {
                 '<picture><source srcset="https://evil.example/s.png"><img alt=""></picture>' +
                 '<input type="image" src="https://evil.example/i.png">',
         );
-        expect(body).toContain('<p style="background:url()">ok</p>');
+        expect(body).toContain('<p>ok</p>');
         expect(body).not.toContain('evil.example');
         // What the compositor itself put in the page survives: the media URL the main thread
         // resolved, for the image element and for the frame that paints one as its background,

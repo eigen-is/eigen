@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1311 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1316 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -771,7 +771,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (576)
+## Utilities & constants (581)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -996,6 +996,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `formatFileSize` | `@workspace/lib/format` | packages/lib/src/core/format.ts |
 | `escapeHtml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `escapeXml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
+| `LIGHT_EDITOR_ATTRS` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
+| `LIGHT_EDITOR_BLOCK_TAGS` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
+| `LIGHT_EDITOR_HREF` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
+| `LIGHT_EDITOR_MARK_TAGS` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
+| `LIGHT_EDITOR_TAGS` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `stripTagsServer` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `textToParagraphHtml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `unescapeHtml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
