@@ -123,6 +123,21 @@ describe('ELEMENT_KINDS', () => {
         }
     });
 
+    test('a rectangle too small to shrink aims along its whole diagonal', () => {
+        // 20x20: the diagonal is 28.3px, shorter than the 15px pulled in at each end, so shrinking it
+        // would flip it end for end and aim the arrow backwards through the shape.
+        expect(ELEMENT_KINDS.rectangle.aimLines(shape({ id: 'r', type: 'rectangle', width: 20, height: 20 }))).toEqual([
+            [
+                { x: 0, y: 0 },
+                { x: 20, y: 20 },
+            ],
+            [
+                { x: 20, y: 0 },
+                { x: 0, y: 20 },
+            ],
+        ]);
+    });
+
     test('only the rectangle aims along its corner diagonals; the others use the centre lines', () => {
         // 100×60 shrunk by 15 at each end along the (100, 60) diagonal
         expect(ELEMENT_KINDS.rectangle.aimLines(shape({ id: 'r', type: 'rectangle' }))[0][0].x).toBeCloseTo(
@@ -141,6 +156,12 @@ describe('ELEMENT_KINDS', () => {
                 ],
             ]);
         }
+    });
+
+    test('the Edges row belongs to the two drawn polylines, not to a freehand stroke', () => {
+        // freedraw stores a roundness too, so the capability is what separates "has the field" from
+        // "the user picks it".
+        expect(TYPES.filter((type) => ELEMENT_KINDS[type].capabilities.edges)).toEqual(['line', 'arrow']);
     });
 
     test('capabilities answer the questions the panel used to ask by type', () => {

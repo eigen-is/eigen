@@ -43,6 +43,9 @@ export type Capabilities = {
     // Also "is this kind drawn by roughjs at all": the sketch paint rows follow it.
     roughness: boolean;
     corners: boolean;
+    // Whether the shaft's curvature is the user's to pick (the Edges row): a drawn polyline's is, a
+    // freehand stroke's is not — its roundness is how the stroke is rendered, not a style it offers.
+    edges: boolean;
     // Whether the stroke may be switched OFF (the Stroke colour row offers a None swatch). True where
     // the element still has a body without it — a shape's fill, an image's pixels, a text box's text.
     // Not derivable from `fill`: a line fills only when its path closes yet IS its stroke, and an

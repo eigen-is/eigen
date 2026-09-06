@@ -5,7 +5,7 @@
 
 import { useAuth } from '@workspace/lib/auth';
 import { useCommentCards, useCommentFilter, useCommentLifecycle, useDocumentPanels } from '@workspace/lib/comments';
-import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
+import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { elementForCommentCard, parseIdList, serializeIdList, type VectorElement } from '@workspace/lib/vector';
 import { useCallback, useState } from 'react';
@@ -100,11 +100,7 @@ export const useCanvasCommentHost = ({
 
     // A comment raised from an element anchors to it; one raised from the panel stays document-level.
     const handleSaveNew = useCallback(
-        async (
-            patch: { title?: string; description?: string; color?: string },
-            attachments?: CardAttachmentDraft[],
-            assignee?: string | null,
-        ) => {
+        async (patch: CardFormPatch, attachments?: CardAttachmentDraft[], assignee?: string | null) => {
             const anchorId = commentAnchorId;
             const card = await createCard({ ...patch, attachments });
             if (card && anchorId) {

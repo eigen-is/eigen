@@ -21,28 +21,20 @@ import {
 import { PENDING_PREFIX } from '@workspace/lib/drive';
 import { textToParagraphHtml } from '@workspace/lib/html';
 import { htmlToPlainText, readDominantTextAlign } from '@workspace/lib/html-dom';
-import type {
-    EigenClipboardImageItem,
-    EigenClipboardItem,
-    EigenClipboardTypography,
-} from '@workspace/lib/types/clipboard';
+import type { EigenClipboardImageItem, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
-    DEFAULT_RICHTEXT_PROPS,
-    FONT_STYLES,
-    FONT_WEIGHTS,
     IMAGE_CASCADE_OFFSET,
     num,
     oneOf,
     type Point,
     pasteAnchorOffset,
+    readClipboardTypography,
     readElementsClipboardItem,
     reanchorElements,
     type StyleDefaults,
     TEXT_ALIGNS,
-    TEXT_DECORATIONS,
     type TextAlign,
-    VERTICAL_ALIGNS,
     type VectorElement,
     type VectorMeta,
 } from '@workspace/lib/vector';
@@ -60,24 +52,6 @@ import { type NewVectorElement, sealed, type VectorElementPatch } from './use-ca
 // How many cross-mount images re-upload at once. The wire is forgeable, so a paste must not turn into
 // hundreds of parallel fetch + upload round-trips; a handful keeps a normal multi-image paste quick.
 const REUPLOAD_CONCURRENCY = 4;
-
-// Foreign typography → the rich-text fields it names. This is the full set a rich-text box models, which
-// is also the full set the canvas producer writes: nothing on that wire goes unread. The fields below are
-// coerced with `oneOf`/`num`, the same clamps the document reader applies to a stored field, so a pasted
-// value can only ever be one a peer write could have made. The three the CALLER reads — fontFamily,
-// fontSize, color — ride in unclamped and are clamped on the way out instead, by the reader every render,
-// export and preview goes through (font list, 4-400px, colour token), exactly as any peer write is.
-function richTextTypography(typo: EigenClipboardTypography) {
-    return {
-        textAlign: oneOf(typo.textAlign, TEXT_ALIGNS, DEFAULT_RICHTEXT_PROPS.textAlign),
-        fontWeight: oneOf(typo.fontWeight, FONT_WEIGHTS, DEFAULT_RICHTEXT_PROPS.fontWeight),
-        fontStyle: oneOf(typo.fontStyle, FONT_STYLES, DEFAULT_RICHTEXT_PROPS.fontStyle),
-        textDecoration: oneOf(typo.textDecoration, TEXT_DECORATIONS, DEFAULT_RICHTEXT_PROPS.textDecoration),
-        verticalAlign: oneOf(typo.verticalAlign, VERTICAL_ALIGNS, DEFAULT_RICHTEXT_PROPS.verticalAlign),
-        letterSpacing: num(typo.letterSpacing, DEFAULT_RICHTEXT_PROPS.letterSpacing),
-        lineHeight: num(typo.lineHeight, DEFAULT_RICHTEXT_PROPS.lineHeight),
-    };
-}
 
 // Cut deletes only what the clipboard carries, so an image that could not be serialized stays put. Tell
 // the user, or the difference between "cut" and "cut most of it" is invisible — and between "cut" and
@@ -247,7 +221,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                     fontSize,
                     fontFamily,
                     color: typo.color,
-                    ...richTextTypography(typo),
+                    ...readClipboardTypography(typo),
                 });
             }
             return plan;

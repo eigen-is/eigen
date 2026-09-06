@@ -54,6 +54,7 @@ export const arrowKind = defineKind<VectorArrowElement>({
         strokeStyle: true,
         roughness: true,
         corners: false,
+        edges: true,
         strokeOptional: false,
         bindable: false,
         creation: 'polyline',

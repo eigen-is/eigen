@@ -17,12 +17,19 @@ export function textBodyHeight(body: Element): number | null {
     return last.offsetTop + last.offsetHeight - first.offsetTop;
 }
 
-export type FitHeight = (id: string, height: number) => void;
+// `editing` is true when the box is the one the user is typing in, so the host can store that growth
+// as part of the keystroke that caused it rather than as bookkeeping.
+export type FitHeight = (id: string, height: number, editing: boolean) => void;
 
 // `host` is the element's layer div; its single child is the styled text body — the rendered one, or
 // the in-place editor's box, which carries the same CSS and holds the editor as its one block child.
 // No handler (a thumbnail, present mode, a read-only canvas) means no measuring at all.
-export function useRichTextAutoFit(host: RefObject<HTMLDivElement | null>, el: VectorElement, onFit?: FitHeight) {
+export function useRichTextAutoFit(
+    host: RefObject<HTMLDivElement | null>,
+    el: VectorElement,
+    onFit: FitHeight | undefined,
+    editing: boolean,
+) {
     useLayoutEffect(() => {
         const body = host.current?.firstElementChild;
         if (!onFit || el.type !== 'richtext' || !body) return;
@@ -30,7 +37,7 @@ export function useRichTextAutoFit(host: RefObject<HTMLDivElement | null>, el: V
         const fit = () => {
             const content = textBodyHeight(body);
             const height = content === null ? null : richTextFitHeight(box, content);
-            if (height !== null) onFit(box.id, height);
+            if (height !== null) onFit(box.id, height, editing);
         };
         fit();
         // The body's own box changes when a resize re-wraps it and when a late web font swaps in; a
@@ -38,5 +45,5 @@ export function useRichTextAutoFit(host: RefObject<HTMLDivElement | null>, el: V
         const observer = new ResizeObserver(fit);
         observer.observe(body);
         return () => observer.disconnect();
-    }, [host, el, onFit]);
+    }, [host, el, onFit, editing]);
 }

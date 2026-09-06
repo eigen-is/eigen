@@ -128,6 +128,8 @@ Every HTML pipeline — doc (`doc/transform.ts`), the canvas documents (`canvas/
 
 On top of DOMPurify it adds one rule: **every `url()` in a `style` attribute or `<style>` element, every `<img src>`, and every SVG `href`/`xlink:href` must be a `data:` URI**; anything else is stripped, and `@import` (whose string form fetches without any `url()`, and which can only exist in element CSS) is removed from style-element text. Backslashes are dropped from CSS before that scan, because a CSS escape spells the same token invisibly to a regex — `\75 rl(…)` and `@\69 mport` are `url(…)` and `@import` to the parser that does the fetching. SVG `<image href>` is covered because DOMPurify keeps it by default and it is a fetch just like `<img src>`; `<a href>` is explicitly exempt. That is the SSRF guard. Export embeds all its resources as data URIs, so a remote reference can only have come from an attacker-controlled CRDT string (a rich-text box's HTML, a sheet cell). WeasyPrint fetches such references server-side while rendering, from the API host, and its CLI has no way to restrict fetch protocols — so the restriction has to happen here. The style-element coverage exists for the sheets exports, which emit their interned class rules in a body `<style>` (SHEETS.md § HTML/PDF export). The same rule is why the vector compositor keeps a gradient or clip reference in an SVG `fill`/`stroke`/`clip-path` attribute and never in CSS — attributes are not scanned, a `style` `url(#…)` would be stripped. `<a href>` is deliberately left alone: link targets are not fetched during render, and docs and sheets carry legitimate http(s) hyperlinks.
 
+A canvas scene gets a second, narrower pass first. `sanitizeSceneHtml` (same file) filters every element's rich-text `html` before the compositor assembles anything, and it filters to the **LightEditor tag set** — `LIGHT_EDITOR_TAGS`/`LIGHT_EDITOR_ATTRS`/`LIGHT_EDITOR_HREF` in `packages/lib/src/core/html.ts`, the same fact the canvas mounts a stored body with (`sanitizeToLightEditorHtml`). One list, one answer to what a rich-text box can hold: a `<table>`, an `<img src="data:…">` or a `<style>` a hostile peer wrote into the Y.Doc is unwrapped on every live client, so it must be unwrapped in the `.svg`/`.html` download, the PDF and the drive hero too. `target` and `rel` opt out of the href-scheme rule (they are not URLs); the assembled-document pass that follows still drops `target` everywhere, as DOMPurify's own profile does.
+
 The hook is added and removed around each synchronous `DOMPurify.sanitize()` call, so it never leaks
 to other DOMPurify users in the process. Regression tests: `apps/api/src/test/export/export-pdf-ssrf.test.ts`.
 
@@ -158,16 +160,20 @@ bundles fine and stays in.
 `useExportDocument()` returns `{ exportDocument, isExporting }`. Handles fetch, blob download, filename
 extraction from Content-Disposition, and error handling via `onMutationError`.
 
+### Which formats a type offers
+
+`EIGEN_DOC_TYPE_INFO[type].exportFormats` (`packages/lib/src/types/drive.ts`) is the one list, in menu order: `docx/pdf/html` for a doc, `xlsx/pdf/html` for a sheet, `pdf/html` for a deck, `svg/pdf` for a drawing, nothing for stickies and chat. `exportFormatsFor(type)` reads it. The export route gates on the same list — and each entry narrows to a literal there, so a format added to a type without a Worker envelope for it fails to compile rather than reaching a user as a 400.
+
 ### FileMenu (`packages/ui/src/components/layout/toolbar/file-menu.tsx`)
 
-Export submenu rendered via `onExport` prop, positioned after Rename:
+Export submenu rendered when the host passes `onExport` and the type offers formats, positioned after Rename:
 ```
 New document > Open > Rename > Export > [separator] > Share > ... > Print > Delete
 ```
 
 ### Drive Context Menu (`packages/ui/src/components/drive/drive-table.tsx`)
 
-Export submenu for eigendoc, eigenslides, eigensheets and eigenvector files, driven by `onExport` callback. The offered formats follow the type: `docx/pdf/html` for a doc, `xlsx/pdf/html` for a sheet, `svg/pdf` for a drawing, `pdf/html` for everything else.
+The same submenu on a drive row, driven by the `onExport` callback and the same per-type list.
 
 ## Dependencies
 

@@ -9,7 +9,8 @@ type MergedSliderProps = {
     // The write itself — plain and unsealed; the gesture around it decides the undo step.
     onChange: (v: number) => void;
     // Opens one undo step and returns its release. A drag opens on its first change and releases on
-    // commit, so however long the user takes, ⌘Z reverts the whole drag. See docs/CANVAS.md § sealing.
+    // commit, a typed number on its first keystroke and on blur, so however long the user takes over
+    // either, ⌘Z reverts the whole edit. See docs/CANVAS.md § sealing.
     beginGesture: () => () => void;
     min: number;
     max: number;
@@ -30,13 +31,25 @@ export function MergedSlider({ value, onChange, beginGesture, min, max, step = 1
         release.current?.();
         release.current = null;
     }, []);
+    // Both controls write per change — the slider per drag frame, the field per keystroke — so the
+    // gesture opens on the first of them and stays open until a commit or a blur closes it. Typed
+    // digits are ONE edit that way: without the hold, "100" seals three undo steps (1, 10, 100).
+    const write = useCallback(
+        (v: number) => {
+            release.current ??= beginGesture();
+            onChange(v);
+        },
+        [beginGesture, onChange],
+    );
     // A gesture the component never sees end: Escape mid-drag deselects and unmounts this section, and
     // so does a peer deleting the element. An unreleased hold leaves captureTimeout at Infinity for the
     // rest of the session, so every later edit would merge into one undo step.
     useEffect(() => endGesture, [endGesture]);
 
     return (
-        <div className="flex items-center gap-2 h-7">
+        // onBlur rides on the row rather than on either control: React's is the bubbling focusout, so
+        // one handler ends whichever gesture the user was in when they left it.
+        <div className="flex items-center gap-2 h-7" onBlur={endGesture}>
             <Slider
                 value={[mixed || value === undefined ? min : value]}
                 min={min}
@@ -44,31 +57,16 @@ export function MergedSlider({ value, onChange, beginGesture, min, max, step = 1
                 step={step}
                 data-mixed={mixed ? '' : undefined}
                 className={cn('flex-1', mixed && '[&_[data-slot=slider-range]]:opacity-0')}
-                onValueChange={([v]) => {
-                    release.current ??= beginGesture();
-                    onChange(v);
-                }}
+                onValueChange={([v]) => write(v)}
                 onValueCommit={endGesture}
                 onPointerUp={endGesture}
                 onPointerCancel={endGesture}
-                onBlur={endGesture}
                 {...props}
             />
             {/* Wide enough for "100" at the panel's 14px input text, with px-2 rather than the
                 default px-3 so the slider keeps most of the row. */}
             <div className="w-16 shrink-0">
-                <MergedNumberInput
-                    value={value}
-                    onChange={(v) => {
-                        const done = beginGesture();
-                        onChange(v);
-                        done();
-                    }}
-                    min={min}
-                    max={max}
-                    step={step}
-                    className="px-2"
-                />
+                <MergedNumberInput value={value} onChange={write} min={min} max={max} step={step} className="px-2" />
             </div>
         </div>
     );

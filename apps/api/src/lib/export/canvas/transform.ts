@@ -13,7 +13,7 @@ import {
 } from '../../document/transform/protocol';
 import { FONT_STACK_SANS } from '../font-stacks';
 import { getFontCSS } from '../fonts';
-import { sanitizeExportHtml } from '../sanitize';
+import { sanitizeExportHtml, sanitizeSceneHtml } from '../sanitize';
 import { type CanvasPage, framePages, renderCanvasPage, renderFittedPage } from './render';
 
 // Standalone HTML for a page of compositor layers — the deck's HTML and PDF exports and the drawing's
@@ -46,9 +46,9 @@ export function canvasHtmlDocument(opts: {
     // its content is an extra blank page in WeasyPrint. Callers guarantee at least one page.
     const width = round(pages[0].width * scale);
     const height = round(pages[0].height * scale);
-    // A collaborator can put arbitrary strings in a schemaless scene — including a rich-text box's raw
-    // HTML — so the assembled body runs through the shared sanitizer (the documented SSRF closure).
-    // No ADD_TAGS: the compositor emits ordinary HTML, never a foreignObject.
+    // A collaborator can put arbitrary strings in a schemaless scene, so the assembled body runs
+    // through the shared sanitizer (the documented SSRF closure); a rich-text box's raw HTML was
+    // filtered at the scene. No ADD_TAGS: the compositor emits ordinary HTML, never a foreignObject.
     const body = sanitizeExportHtml(rendered.join(''));
     const css = mode === 'pdf' ? pdfCss(width, height) : screenCss(width);
     return `<!DOCTYPE html>
@@ -74,7 +74,9 @@ export function renderEigenslidesExport(
 ): { data: ArrayBuffer; warnings: TransformWarning[] } {
     const dataUriMap = toDataUriMap(media);
     const resolveMedia: MediaResolver = (mediaName) => dataUriMap.get(mediaName) ?? null;
-    const pages = framePages(readVectorFromDoc(doc), resolveMedia);
+    // Rich text is filtered per element before the compositor lays it out, so a <style> block in a
+    // text box cannot reach the document — which carries the generated @font-face rules of its own.
+    const pages = framePages(sanitizeSceneHtml(readVectorFromDoc(doc)), resolveMedia);
     // Nothing to print, and nothing to size a page from.
     if (pages.length === 0) throw new ApiError(400, 'The deck is empty');
     const html = canvasHtmlDocument({

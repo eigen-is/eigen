@@ -1,7 +1,7 @@
 import { useNavigate } from '@tanstack/react-router';
 import { openDocument } from '@workspace/lib/api';
 import { usePaletteSelectionActions } from '@workspace/lib/command-palette';
-import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
+import type { DrivePath, EigenDocType, ExportFormat } from '@workspace/lib/types/drive';
 import {
     DRIVE_MIME_CHAT,
     DRIVE_MIME_DOC,
@@ -9,6 +9,7 @@ import {
     DRIVE_MIME_SLIDES,
     DRIVE_MIME_STICKIES,
     DRIVE_MIME_VECTOR,
+    exportFormatsFor,
 } from '@workspace/lib/types/drive';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { Button } from '@workspace/ui/components/button';
@@ -40,17 +41,16 @@ const OPEN_LABELS: Record<EigenDocType, { mime: string; title: string }> = {
     vector: { mime: DRIVE_MIME_VECTOR, title: 'Open vector' },
 };
 
-const DOWNLOAD_LABELS: Record<string, string> = {
+const DOWNLOAD_LABELS: Record<ExportFormat, string> = {
     docx: 'Microsoft Word (.docx)',
     pdf: 'PDF (.pdf)',
     html: 'Web Page (.html)',
     xlsx: 'Microsoft Excel (.xlsx)',
-    csv: 'Comma Separated Values (.csv)',
     svg: 'SVG image (.svg)',
 };
 
-export function formatDownloadLabel(format: string): string {
-    return DOWNLOAD_LABELS[format] ?? `${format.toUpperCase()} (.${format})`;
+export function formatDownloadLabel(format: ExportFormat): string {
+    return DOWNLOAD_LABELS[format];
 }
 
 type FileMenuProps = {
@@ -59,8 +59,7 @@ type FileMenuProps = {
     onAccessDialogOpen: () => void;
     onImport?: () => void;
     importLabel?: string;
-    onExport?: (format: string) => void;
-    exportFormats?: string[];
+    onExport?: (format: ExportFormat) => void;
     createLabel: string;
     createIcon?: LucideIcon;
     createType: EigenDocType;
@@ -74,7 +73,6 @@ export function FileMenu({
     onImport,
     importLabel,
     onExport,
-    exportFormats,
     createLabel,
     createIcon: CreateIcon = FileText,
     createType,
@@ -88,6 +86,8 @@ export function FileMenu({
     // Lifted out of VersionHistoryMenu so the dialog survives the dropdown's unmount-on-close.
     const [pendingSnapshot, setPendingSnapshot] = useState<Snapshot | null>(null);
     const openConfig = OPEN_LABELS[createType];
+    const downloadFormats = exportFormatsFor(createType);
+    const canDownload = !!onExport && downloadFormats.length > 0;
     const navigate = useNavigate();
 
     // Mounted by every eigendoc toolbar, so one publish gives ⌘K the open doc's actions
@@ -121,14 +121,14 @@ export function FileMenu({
                     )}
 
                     {/* Section 2: Export & Rename */}
-                    {(onExport || canWrite) && <DropdownMenuSeparator />}
-                    {onExport && (
+                    {(canDownload || canWrite) && <DropdownMenuSeparator />}
+                    {canDownload && onExport && (
                         <DropdownMenuSub>
                             <DropdownMenuSubTrigger>
                                 <Download className="h-4 w-4 mr-2" /> Download
                             </DropdownMenuSubTrigger>
                             <DropdownMenuSubContent>
-                                {(exportFormats ?? ['docx', 'pdf', 'html']).map((format) => (
+                                {downloadFormats.map((format) => (
                                     <DropdownMenuItem key={format} onClick={() => onExport(format)}>
                                         {formatDownloadLabel(format)}
                                     </DropdownMenuItem>

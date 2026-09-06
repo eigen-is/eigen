@@ -68,7 +68,6 @@ export type VectorElementBase = {
     // A JSON `["id",…]` string like `points`, so every stored field stays a scalar.
     commentCardIds: string;
     opacity: number; // 0..100
-    locked: boolean;
     strokeColor: string;
     strokeWidth: number;
     strokeStyle: StrokeStyle;
@@ -219,7 +218,6 @@ export const BASE_ELEMENT_FIELDS = [
     'frameId',
     'commentCardIds',
     'opacity',
-    'locked',
     'strokeColor',
     'strokeWidth',
     'strokeStyle',
@@ -249,12 +247,11 @@ export const DEFAULT_ELEMENT_PROPS = {
     strokeWidth: 2,
     strokeStyle: 'solid',
     opacity: 100,
-    locked: false,
     frameId: '',
     commentCardIds: '',
 } satisfies Pick<
     VectorElementBase,
-    'strokeColor' | 'strokeWidth' | 'strokeStyle' | 'opacity' | 'locked' | 'frameId' | 'commentCardIds'
+    'strokeColor' | 'strokeWidth' | 'strokeStyle' | 'opacity' | 'frameId' | 'commentCardIds'
 >;
 
 // roughjs tuning, on the six sketched kinds only.

@@ -1151,10 +1151,12 @@ describe('followBindings', () => {
         const pts: Point[] = JSON.parse(next.points).map(([x, y]: [number, number]) => ({ x, y }));
         const endAfter = sceneOf(next, 90, pts[2]);
         const midAfter = sceneOf(next, 90, pts[1]);
-        expect(endAfter.x).toBeCloseTo(endBefore.x);
-        expect(endAfter.y).toBeCloseTo(endBefore.y);
-        expect(midAfter.x).toBeCloseTo(midBefore.x);
-        expect(midAfter.y).toBeCloseTo(midBefore.y);
+        // Held to stored precision: the follow quantizes the box the way it always quantized the points,
+        // so an untouched vertex can land up to half a 2-decimal step away — under a rendered pixel.
+        expect(Math.abs(endAfter.x - endBefore.x)).toBeLessThanOrEqual(0.01);
+        expect(Math.abs(endAfter.y - endBefore.y)).toBeLessThanOrEqual(0.01);
+        expect(Math.abs(midAfter.x - midBefore.x)).toBeLessThanOrEqual(0.01);
+        expect(Math.abs(midAfter.y - midBefore.y)).toBeLessThanOrEqual(0.01);
     });
 });
 
@@ -1214,6 +1216,33 @@ describe('followBindings — an arrow bound at both ends', () => {
 
     test('the re-docked arrow is itself at rest (one more follow is a no-op)', () => {
         expect(followBindings(applyFollow(link, afterMove), afterMove)).toBeNull();
+    });
+
+    // The same strictness at fractional coordinates: the docks are 66 and 115.6, whose difference is
+    // 49.599999999999994 in full precision while the serialized points round to 49.6 — so the box has to
+    // be quantized too, or every later follow rewrites the width by 1e-14 forever.
+    test('a fractional dock settles in one follow, box included', () => {
+        const fractional = { ...shapeB, x: 121.6 };
+        const ids = byIdOf(shapeA, fractional);
+        const settled = applyFollow(link, ids);
+        expect(settled.width).toBe(49.6);
+        expect(followBindings(settled, ids)).toBeNull();
+    });
+
+    // Pushed together the two docks cross over — A's right side + gap is 66, B's left side − gap is 60 —
+    // so the solved shaft would run 66 → 60: six units long and pointing backwards, both heads buried in
+    // the wrong shape. The degenerate guard has to catch that and sit both ends on their anchors.
+    test('two shapes pushed together fall back to their anchors instead of an inverted arrow', () => {
+        const touching = { ...shapeB, x: 66 };
+        const ids = byIdOf(shapeA, touching);
+        const settled = applyFollow(link, ids);
+        const [start, end] = endpointsOf(settled);
+
+        expect(start.x).toBeCloseTo(boxCenter(shapeA).x, 6);
+        expect(start.y).toBeCloseTo(boxCenter(shapeA).y, 6);
+        expect(end.x).toBeCloseTo(boxCenter(touching).x, 6);
+        expect(end.y).toBeCloseTo(boxCenter(touching).y, 6);
+        expect(followBindings(settled, ids)).toBeNull();
     });
 
     test('a one-sided binding leaves the free end exactly where it was', () => {

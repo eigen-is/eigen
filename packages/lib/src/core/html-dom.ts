@@ -1,6 +1,8 @@
 // Browser-only HTML helpers — these depend on the DOM (`document`), so backend-shared
 // code (anything importable by apps/api) must never import this module. The BE-safe HTML
 // helpers (escapeHtml, stripTagsServer) live in ./html.
+import { LIGHT_EDITOR_BLOCK_TAGS, LIGHT_EDITOR_HREF, type LIGHT_EDITOR_MARK_TAGS } from './html';
+
 export function htmlToPlainText(html: string): string {
     // DOMParser, never a live-element innerHTML: callers feed untrusted clipboard HTML, and a
     // detached element still loads images and fires their onerror handlers — an inert parsed
@@ -9,13 +11,12 @@ export function htmlToPlainText(html: string): string {
     return doc.body.textContent ?? '';
 }
 
-// Tags the shared LightEditor (StarterKit, headings/code/hr disabled) actually keeps. Block nodes
-// and the inline marks it renders; `<a>` is kept because Link is enabled. Everything else is
-// unwrapped (children preserved) or dropped, so pasted rich HTML converges to LightEditor's schema.
-const LIGHT_EDITOR_BLOCK_TAGS = new Set(['P', 'BLOCKQUOTE', 'UL', 'OL', 'LI']);
+// The tags of ./html's shared LightEditor set, matched here on the uppercase DOM tagName. Everything
+// else is unwrapped (children preserved) or dropped, so pasted rich HTML converges to that schema.
+const BLOCK_TAGS = new Set<string>(LIGHT_EDITOR_BLOCK_TAGS.map((tag) => tag.toUpperCase()));
 // Inline marks → their canonical element, so the stored HTML is born the way Tiptap re-serialises it
 // (b→strong, i→em, del/strike→s) and a first edit is a no-op rather than a spurious diff.
-const MARK_TAG_CANON: Record<string, string> = {
+const MARK_TAG_CANON: Record<string, (typeof LIGHT_EDITOR_MARK_TAGS)[number]> = {
     STRONG: 'strong',
     B: 'strong',
     EM: 'em',
@@ -29,13 +30,11 @@ const HEADING_TAGS = new Set(['H1', 'H2', 'H3', 'H4', 'H5', 'H6']);
 // Elements whose CONTENT must be discarded entirely (never unwrapped — their text is code/markup).
 const DROP_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'IFRAME', 'OBJECT', 'EMBED', 'TEMPLATE', 'HEAD', 'TITLE']);
 
-// Only http(s)/mailto links survive — a javascript:/data:/vbscript: href is an XSS vector (the
-// sanitized HTML is rendered via dangerouslySetInnerHTML by the canvas' rich-text layer and the
-// comment-card notes). An unsafe href unwraps the anchor to its text.
+// An unsafe href unwraps the anchor to its text.
 function safeHref(href: string | null): string | null {
     if (!href) return null;
     const trimmed = href.trim();
-    return /^(https?:|mailto:)/i.test(trimmed) ? trimmed : null;
+    return LIGHT_EDITOR_HREF.test(trimmed) ? trimmed : null;
 }
 
 // Comment-card descriptions come from a LightEditor with `taskList` enabled, so they carry TipTap
@@ -116,7 +115,7 @@ function appendSanitized(node: Node, parent: HTMLElement, opts: SanitizeOptions)
         parent.appendChild(p);
         return;
     }
-    if (LIGHT_EDITOR_BLOCK_TAGS.has(tag)) {
+    if (BLOCK_TAGS.has(tag)) {
         const clean = document.createElement(tag.toLowerCase());
         recurseInto(clean);
         parent.appendChild(clean);
@@ -169,8 +168,9 @@ export function readDominantTextAlign(html: string): (typeof TEXT_ALIGN_VALUES)[
 
 // Map arbitrary pasted HTML onto the LightEditor tag set (see the sets above): structural formatting
 // and inline marks are kept, headings become paragraphs, everything else is unwrapped or dropped, and
-// ALL attributes are stripped bar a safe `<a href>` and the new-tab pair forced onto it. DOM-based so escaping is automatic and there
-// is no regex-parsing hazard. Returns '' when nothing survives (caller falls back to plain text).
+// ALL attributes are stripped bar a safe `<a href>` and the new-tab pair forced onto it. DOM-based so
+// escaping is automatic and there is no regex-parsing hazard. Returns '' when nothing survives (the
+// caller falls back to plain text).
 export function sanitizeToLightEditorHtml(html: string): string {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const out = document.createElement('div');

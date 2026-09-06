@@ -25,7 +25,6 @@ export function ToolbarLeftItems({ path, onAccessDialogOpen, canWrite }: Toolbar
                 onImport={() => setImportPickerOpen(true)}
                 importLabel="Import xlsx file…"
                 onExport={(format) => exportPath(path, format)}
-                exportFormats={['xlsx', 'pdf', 'html']}
                 createLabel="New sheet"
                 createIcon={Sheet}
                 createType="sheets"

@@ -3,7 +3,7 @@ import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { ChatAttachment, CommentEntry } from '@workspace/lib/types/chat';
 import { isAttachmentReference } from '@workspace/lib/types/chat';
-import type { CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
+import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { Check, RotateCcw } from 'lucide-react';
 import { AttachmentChip } from '../attachment/attachment-chip';
@@ -30,12 +30,7 @@ type CardDialogProps = {
     copyLinkUrl?: string;
     members?: EffectiveMember[];
     currentUserEmail?: string;
-    onUpdate?: (patch: {
-        title?: string;
-        description?: string;
-        color?: string;
-        attachments?: ChatAttachment[];
-    }) => void;
+    onUpdate?: (patch: CardFormPatch & { attachments?: ChatAttachment[] }) => void;
     onResolve?: (chatName: string, next: 'open' | 'resolved', title?: string) => void;
     onAssign?: (chatName: string, assignee: string | null, title?: string) => void;
 };
@@ -81,11 +76,7 @@ export function CardDialog({
 
     const attachmentNames = card.attachments?.filter((a): a is string => typeof a === 'string') ?? [];
 
-    const handleEditSave = async (
-        patch: { title?: string; description?: string; color?: string },
-        drafts?: CardAttachmentDraft[],
-        assignee?: string | null,
-    ) => {
+    const handleEditSave = async (patch: CardFormPatch, drafts?: CardAttachmentDraft[], assignee?: string | null) => {
         // Same Save may rename the card — use the new title so the activity event + title cache
         // don't record the stale pre-edit name.
         if (assignee !== undefined && chatName) onAssign?.(chatName, assignee, patch.title ?? card.title);

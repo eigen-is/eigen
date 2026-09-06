@@ -1,4 +1,10 @@
-import { CODE_EXTENSIONS } from '../types/drive';
+import {
+    CODE_EXTENSIONS,
+    DRIVE_MIME_DOC,
+    DRIVE_MIME_SHEETS,
+    DRIVE_MIME_SLIDES,
+    DRIVE_MIME_VECTOR,
+} from '../types/drive';
 
 const CODE_MIMES = [
     'text/',
@@ -51,10 +57,10 @@ function getExtension(fileName: string): string {
 }
 
 export function getTextPreviewMode(mimeType: string, fileName: string): TextPreviewMode | null {
-    if (mimeType === 'application/eigendoc') return 'eigendoc';
-    if (mimeType === 'application/eigenslides') return 'eigenslides';
-    if (mimeType === 'application/eigensheets') return 'eigensheets';
-    if (mimeType === 'application/eigenvector') return 'eigenvector';
+    if (mimeType === DRIVE_MIME_DOC) return 'eigendoc';
+    if (mimeType === DRIVE_MIME_SLIDES) return 'eigenslides';
+    if (mimeType === DRIVE_MIME_SHEETS) return 'eigensheets';
+    if (mimeType === DRIVE_MIME_VECTOR) return 'eigenvector';
     const ext = getExtension(fileName);
     if (mimeType === 'text/markdown' || ext === '.md' || ext === '.markdown') return 'markdown';
     if (mimeType === 'text/plain' || ext === '.txt') return 'plaintext';

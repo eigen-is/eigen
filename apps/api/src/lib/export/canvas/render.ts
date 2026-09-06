@@ -49,7 +49,7 @@ export function drawingPage(scene: VectorScene, resolveMedia: MediaResolver): Ca
         originX: round(bounds.minX - DEFAULT_PADDING),
         originY: round(bounds.minY - DEFAULT_PADDING),
         background: sceneBackground(scene),
-        layers: sceneLayers(scene, { resolveMedia }),
+        layers: sceneLayers(scene, { resolveMedia, byId }),
     };
 }
 
@@ -57,13 +57,16 @@ export function drawingPage(scene: VectorScene, resolveMedia: MediaResolver): Ca
 // drawing there is no content-bounds arithmetic and no origin offset; an element that overhangs is
 // clipped by the page box, exactly as the live canvas clips it.
 export function framePages(scene: VectorScene, resolveMedia: MediaResolver): CanvasPage[] {
+    // One map for the whole deck: it spans every element whatever page is being composed, so building
+    // it per frame would cost the deck's element count once per slide.
+    const byId = new Map(scene.elements.map((el) => [el.id, el]));
     return orderByFractionalIndex(scene.frames).map((frame) => ({
         width: frame.width,
         height: frame.height,
         originX: 0,
         originY: 0,
         background: parseBackgroundFill(frame.background),
-        layers: sceneLayers(scene, { frameId: frame.id, resolveMedia }),
+        layers: sceneLayers(scene, { frameId: frame.id, resolveMedia, byId }),
     }));
 }
 

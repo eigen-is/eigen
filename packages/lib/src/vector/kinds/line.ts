@@ -15,6 +15,7 @@ export const lineKind = defineKind<VectorLinearElement>({
         strokeStyle: true,
         roughness: true,
         corners: false,
+        edges: true,
         strokeOptional: false,
         bindable: false,
         creation: 'polyline',

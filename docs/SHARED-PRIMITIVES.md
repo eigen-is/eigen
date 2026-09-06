@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1317 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1319 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (158)
+## Components (156)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -171,8 +171,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CanvasToolbar` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/canvas-toolbar.tsx |
 | `FrameThumbnail` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/frame-view.tsx |
 | `FrameView` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/frame-view.tsx |
-| `ToolButtons` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/toolbar-tools.tsx |
-| `ToolMenuItems` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/toolbar-tools.tsx |
 
 ## Providers (6)
 
@@ -199,7 +197,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (249)
+## Hooks (248)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -432,7 +430,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useUpload` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-provider.tsx |
 | `useActiveFrame` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-active-frame.ts |
 | `useCanvasCommentHost` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-comment-host.ts |
-| `useCanvasComments` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-comments.ts |
 | `useCanvasDoc` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-doc.ts |
 | `useCanvasDocSearch` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-doc-search.ts |
 | `useCanvasPresence` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-presence.ts |
@@ -453,7 +450,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (317)
+## Types (318)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -578,6 +575,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EmailSignature` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `EmailSummary` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `EventData` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
+| `ExportFormat` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `FileEditorContent` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `FileEvent` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `FileEventDetailsMap` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
@@ -658,6 +656,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Sections` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `ActiveComments` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `CardAttachmentDraft` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
+| `CardFormPatch` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `CommentCard` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `DocumentPanel` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `DocCommentMatch` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
@@ -772,10 +771,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PublishCursor` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-presence.ts |
 | `VectorElementPatch` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-doc.ts |
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
-| `VectorToolEntry` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (578)
+## Utilities & constants (582)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1000,6 +998,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `formatFileSize` | `@workspace/lib/format` | packages/lib/src/core/format.ts |
 | `escapeHtml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `escapeXml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
+| `LIGHT_EDITOR_ATTRS` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
+| `LIGHT_EDITOR_BLOCK_TAGS` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
+| `LIGHT_EDITOR_HREF` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
+| `LIGHT_EDITOR_MARK_TAGS` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
+| `LIGHT_EDITOR_TAGS` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `stripTagsServer` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `textToParagraphHtml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `unescapeHtml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
@@ -1057,6 +1060,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EIGEN_DOC_TYPES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EIGEN_DOCUMENT_TYPES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EMPTY_S3` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
+| `exportFormatsFor` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `externalOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `getEigenDocInfoByMime` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `getEigenDocInfoByType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -1246,10 +1250,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `parsePoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `parsePressures` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `pasteAnchorOffset` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
+| `pointInFrame` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `pointsBounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `polylineOutline` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `projectFixedPointOntoDiagonal` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `prop` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `readClipboardTypography` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
 | `readElementFromFields` | `@workspace/lib/vector` | packages/lib/src/vector/read-vector.ts |
 | `readElementsClipboardItem` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
 | `readVectorFromDoc` | `@workspace/lib/vector` | packages/lib/src/vector/read-vector.ts |
@@ -1343,13 +1349,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `buildDocSearchQuery` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 | `searchFlashKey` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 | `uploadWithProgress` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-with-progress.tsx |
-| `EDIT_TOOLS` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/toolbar-tools.tsx |
-| `INSERT_TOOLS` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/toolbar-tools.tsx |
 | `isVectorFontLoaded` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |
 | `loadVectorFont` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |
 | `measureVectorText` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |
-| `newElementId` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/element-writes.ts |
-| `newFrameId` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/frame-writes.ts |
 | `VECTOR_TOOLS` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `writeElementInDoc` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/element-writes.ts |
 | `writeFrameInDoc` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/frame-writes.ts |

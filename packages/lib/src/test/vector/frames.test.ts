@@ -7,6 +7,7 @@ import {
     FRAME_WIDTH,
     framesFrom,
     nearestFrameId,
+    pointInFrame,
     type VectorFrame,
 } from '../../vector/frames';
 import { SLIDES_STYLE_DEFAULTS, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
@@ -41,6 +42,23 @@ describe('elementsInFrame', () => {
         ];
         expect(elementsInFrame(els, 'f1').map((e) => e.id)).toEqual(['a']);
         expect(elementsInFrame(els, '').map((e) => e.id)).toEqual(['c']);
+    });
+});
+
+describe('pointInFrame', () => {
+    const [page] = frames('f1');
+
+    test('the page and its edges are inside', () => {
+        expect(pointInFrame({ x: 0, y: 0 }, page)).toBe(true);
+        expect(pointInFrame({ x: 960, y: 540 }, page)).toBe(true);
+        expect(pointInFrame({ x: FRAME_WIDTH, y: FRAME_HEIGHT }, page)).toBe(true);
+    });
+
+    test('the letterbox backdrop around it is outside', () => {
+        expect(pointInFrame({ x: -1, y: 540 }, page)).toBe(false);
+        expect(pointInFrame({ x: 960, y: -1 }, page)).toBe(false);
+        expect(pointInFrame({ x: FRAME_WIDTH + 1, y: 540 }, page)).toBe(false);
+        expect(pointInFrame({ x: 960, y: FRAME_HEIGHT + 1 }, page)).toBe(false);
     });
 });
 

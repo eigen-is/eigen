@@ -60,6 +60,10 @@ export type EigenDocType = (typeof EIGEN_DOC_TYPES)[number];
 // doc before pair-walking them — needed because Y.applyUpdate hydrates as
 // AbstractType, so `instanceof` checks would otherwise fail. Omitted for chat.
 export type YjsRootKind = 'map' | 'array' | 'text' | 'xmlfragment';
+
+// Every download format the export route can produce. A type's own list is below.
+export type ExportFormat = 'docx' | 'xlsx' | 'pdf' | 'html' | 'svg';
+
 export type EigenDocTypeInfo = {
     type: EigenDocType;
     mime: string;
@@ -73,6 +77,9 @@ export type EigenDocTypeInfo = {
     softColorVar: string;
     appName: string;
     yjsRoots?: Record<string, YjsRootKind>;
+    // The download formats offered for this type, in menu order — the ONE list the export route gates
+    // on and every Download menu is built from. Omitted where there is nothing to export.
+    exportFormats?: readonly ExportFormat[];
 };
 
 export const EIGEN_DOC_TYPE_INFO = {
@@ -87,6 +94,7 @@ export const EIGEN_DOC_TYPE_INFO = {
         softColorVar: '--app-docs-color-soft',
         appName: 'docs',
         yjsRoots: { default: 'xmlfragment' },
+        exportFormats: ['docx', 'pdf', 'html'],
     },
     stickies: {
         type: DRIVE_TYPE_STICKIES,
@@ -112,6 +120,7 @@ export const EIGEN_DOC_TYPE_INFO = {
         softColorVar: '--app-slides-color-soft',
         appName: 'slides',
         yjsRoots: { elements: 'map', frames: 'map', meta: 'map' },
+        exportFormats: ['pdf', 'html'],
     },
     sheets: {
         type: DRIVE_TYPE_SHEETS,
@@ -124,6 +133,7 @@ export const EIGEN_DOC_TYPE_INFO = {
         softColorVar: '--app-sheets-color-soft',
         appName: 'sheets',
         yjsRoots: { state: 'map', ops: 'array' },
+        exportFormats: ['xlsx', 'pdf', 'html'],
     },
     chat: {
         type: DRIVE_TYPE_CHAT,
@@ -147,6 +157,7 @@ export const EIGEN_DOC_TYPE_INFO = {
         softColorVar: '--app-vector-color-soft',
         appName: 'vector',
         yjsRoots: { elements: 'map', frames: 'map', meta: 'map' },
+        exportFormats: ['svg', 'pdf'],
     },
 } as const satisfies Record<EigenDocType, EigenDocTypeInfo>;
 
@@ -158,6 +169,13 @@ export const DRIVE_EXTENSIONS = {
     chat: EIGEN_DOC_TYPE_INFO.chat.extension,
     vector: EIGEN_DOC_TYPE_INFO.vector.extension,
 } as const satisfies Record<EigenDocType, string>;
+
+// The Download rows a type offers: read by every menu that draws them and by the export route that
+// gates on them, so a menu can never offer a format the route answers 400 to. Empty for a plain file,
+// a folder, and the two types with nothing to export.
+export function exportFormatsFor(type: DrivePathType): readonly ExportFormat[] {
+    return getEigenDocInfoByType(type)?.exportFormats ?? [];
+}
 
 export function getEigenDocInfoByType(type: DrivePathType): EigenDocTypeInfo | undefined {
     return EIGEN_DOC_TYPES.includes(type as EigenDocType) ? EIGEN_DOC_TYPE_INFO[type as EigenDocType] : undefined;

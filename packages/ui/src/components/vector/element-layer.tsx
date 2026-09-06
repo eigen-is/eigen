@@ -7,13 +7,13 @@
 import { sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
 import {
     arrowRoute,
+    boundShape,
     ELEMENT_FIELDS,
     elementLayer,
     type Layer,
     layerBoxCss,
     layerInnerHtml,
     type MediaResolver,
-    type Point,
     SVG_NS,
     type VectorElement,
 } from '@workspace/lib/vector';
@@ -48,11 +48,22 @@ function sameElement(a: VectorElement, b: VectorElement): boolean {
     return true;
 }
 
-function samePoints(a: Point[] | undefined, b: Point[] | undefined): boolean {
-    if (a === b) return true;
-    if (!a || !b || a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) {
-        if (a[i].x !== b[i].x || a[i].y !== b[i].y) return false;
+// A derived elbow arrow is the one layer whose output reads the scene map, and it reads it ONLY for the
+// shapes its two ends are bound to (elbowRoute's obstacles are the bound shapes, nothing else). So the
+// same two shapes mean the same route — answered without running A* to find out.
+function sameRouteContext(
+    el: VectorElement,
+    prev?: Map<string, VectorElement>,
+    next?: Map<string, VectorElement>,
+): boolean {
+    if (el.type !== 'arrow' || !el.elbow || el.fixedSegments !== '') return true;
+    // Without a map an elbow arrow draws its stored endpoints instead, which is a different polyline.
+    if (!prev || !next) return false;
+    for (const binding of [el.startBinding, el.endBinding]) {
+        const a = boundShape(binding, prev);
+        const b = boundShape(binding, next);
+        if (a === b) continue;
+        if (!a || !b || !sameElement(a, b)) return false;
     }
     return true;
 }
@@ -65,11 +76,13 @@ export function sameLayerProps(prev: ElementLayerProps, next: ElementLayerProps)
     if (prev.onFitHeight !== next.onFitHeight) return false;
     if (prev.resolveMedia !== next.resolveMedia) return false;
     if (!sameElement(prev.el, next.el)) return false;
-    // Same element fields AND the same scene map → identical output (the pan/zoom/drag common case).
-    // Only when the map changes identity might an elbow arrow need re-routing though its OWN fields
-    // are unchanged (a BOUND SHAPE moved) — fall to comparing the derived route so it re-renders then.
+    // Same element fields AND the same scene map → identical output (the pan/zoom common case). A drag
+    // rebuilds the map every frame, so identity alone cannot settle those: only an elbow arrow whose
+    // OWN fields are unchanged might still need re-routing (a BOUND SHAPE moved), and that is the one
+    // thing worth asking about — comparing derived routes here would re-run the router on every arrow,
+    // twice, per frame of the drag.
     if (prev.byId === next.byId) return true;
-    return samePoints(arrowRoute(prev.el, prev.byId), arrowRoute(next.el, next.byId));
+    return sameRouteContext(next.el, prev.byId, next.byId);
 }
 
 // The box as CSS: lib's layerBoxCss with left/top pinned at zero, because the origin rides in the
@@ -88,7 +101,9 @@ export const ElementLayer = memo(function ElementLayer({
 }: ElementLayerProps) {
     // The layer node, so rich text can measure the body inside it — its own, or the in-place editor's.
     const hostRef = useRef<HTMLDivElement>(null);
-    useRichTextAutoFit(hostRef, el, onFitHeight);
+    // Hosting the in-place editor IS the user typing in this box, which is what makes its growth
+    // part of their edit rather than bookkeeping.
+    useRichTextAutoFit(hostRef, el, onFitHeight, !!children);
     const layer = elementLayer(el, { resolveMedia, route: arrowRoute(el, byId) });
     if (!layer) return null;
     const { content } = layer;

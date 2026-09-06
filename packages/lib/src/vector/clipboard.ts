@@ -2,11 +2,21 @@
 // record"; reading is "run it through the document reader", so a forged wire is exactly as safe as a
 // hostile peer write — one validator, no second field list to drift.
 
-import type { EigenClipboardElementsItem, EigenClipboardItem } from '../types/clipboard';
+import type { EigenClipboardElementsItem, EigenClipboardItem, EigenClipboardTypography } from '../types/clipboard';
 import { DUPLICATE_OFFSET, getElementsBounds, type Point } from './geometry';
 import { ELEMENT_FIELDS } from './kinds';
+import { letterSpacingField, lineHeightField, oneOf } from './kinds/read-fields';
 import { readElementFromFields } from './read-vector';
-import type { VectorElement } from './types';
+import {
+    DEFAULT_RICHTEXT_PROPS,
+    FONT_STYLES,
+    FONT_WEIGHTS,
+    TEXT_ALIGNS,
+    TEXT_DECORATIONS,
+    VERTICAL_ALIGNS,
+    type VectorElement,
+    type VectorRichTextElement,
+} from './types';
 
 function storedRecord(el: VectorElement): Record<string, string | number | boolean> {
     const source: Record<string, unknown> = { ...el };
@@ -84,4 +94,25 @@ export function pasteAnchorOffset(
         return { dx: DUPLICATE_OFFSET, dy: DUPLICATE_OFFSET };
     }
     return { dx, dy };
+}
+
+// A foreign app's typography → the rich-text fields it names, validated with the same coercers the
+// document reader runs, so a pasted box is exactly a box a peer could have written. The three the
+// CALLER reads — fontFamily, fontSize, color — ride in unclamped and are clamped on the way out
+// instead, by the reader every render, export and preview goes through.
+export function readClipboardTypography(
+    typo: EigenClipboardTypography,
+): Pick<
+    VectorRichTextElement,
+    'textAlign' | 'fontWeight' | 'fontStyle' | 'textDecoration' | 'verticalAlign' | 'letterSpacing' | 'lineHeight'
+> {
+    return {
+        textAlign: oneOf(typo.textAlign, TEXT_ALIGNS, DEFAULT_RICHTEXT_PROPS.textAlign),
+        fontWeight: oneOf(typo.fontWeight, FONT_WEIGHTS, DEFAULT_RICHTEXT_PROPS.fontWeight),
+        fontStyle: oneOf(typo.fontStyle, FONT_STYLES, DEFAULT_RICHTEXT_PROPS.fontStyle),
+        textDecoration: oneOf(typo.textDecoration, TEXT_DECORATIONS, DEFAULT_RICHTEXT_PROPS.textDecoration),
+        verticalAlign: oneOf(typo.verticalAlign, VERTICAL_ALIGNS, DEFAULT_RICHTEXT_PROPS.verticalAlign),
+        letterSpacing: letterSpacingField(typo.letterSpacing),
+        lineHeight: lineHeightField(typo.lineHeight),
+    };
 }

@@ -656,28 +656,42 @@ function curveOutlineDock(
     return null;
 }
 
-// The scene point a bound end aims its chord FROM: the ADJACENT vertex (Excalidraw's updateBoundPoint,
-// index 1 / -2), so dragging a mid vertex slides the attachment along the outline to face it. On a 2-point
-// arrow that vertex IS the other end — and when THAT end is bound too it is being re-docked in the same
-// pass, so aim from its anchor, the one point of it that holds still. Both ends then land on the line
-// through the two anchors: the rest state Excalidraw's per-frame updateBoundElements walks toward while a
-// shape is dragged, reached here in one exact pass, so a settled arrow still re-solves to itself.
-function chordAim(
+// The two scene points a bound end needs from the far side of the arrow: the point its chord AIMS from,
+// and the point the degenerate guard MEASURES to. Both are the ADJACENT vertex (Excalidraw's
+// updateBoundPoint, index 1 / -2), so dragging a mid vertex slides the attachment along the outline to
+// face it. On a 2-point arrow that vertex IS the other end — and when THAT end is bound too it is being
+// re-docked in the same pass, so aim from its anchor, the one point of it that holds still: both ends
+// then land on the line through the two anchors, the rest state Excalidraw's per-frame
+// updateBoundElements walks toward while a shape is dragged, reached here in one exact pass, so a settled
+// arrow still re-solves to itself. The guard gets that end's own dock instead, because the two anchors
+// stay tens of units apart while the docks cross past each other the moment the shapes touch.
+function farSide(
     arrow: VectorArrowElement,
     end: 'start' | 'end',
     points: Point[],
+    anchor: Point,
     byId: Map<string, VectorElement>,
-): Point {
-    const otherBinding = end === 'start' ? arrow.endBinding : arrow.startBinding;
-    const other = points.length === 2 ? parseBinding(otherBinding) : null;
-    const otherShape = other ? boundShape(otherBinding, byId) : null;
-    if (other && otherShape) return anchorToScene(otherShape, other.fixedPoint);
-    return linearLocalToScene(arrow, points[end === 'start' ? 1 : points.length - 2]);
+): { aim: Point; dock: Point } {
+    if (points.length === 2) {
+        const otherBinding = end === 'start' ? arrow.endBinding : arrow.startBinding;
+        const other = parseBinding(otherBinding);
+        const otherShape = boundShape(otherBinding, byId);
+        if (other && otherShape) {
+            const otherAnchor = anchorToScene(otherShape, other.fixedPoint);
+            return {
+                aim: otherAnchor,
+                dock: outlinePoint(otherShape, anchor, otherAnchor, bindingGap(otherShape)),
+            };
+        }
+    }
+    const adjacent = linearLocalToScene(arrow, points[end === 'start' ? 1 : points.length - 2]);
+    return { aim: adjacent, dock: adjacent };
 }
 
 // A bound endpoint's scene position: snap the anchor to the shape outline along the segment from the
-// chord aim above, with Excalidraw's guard — if that would make the arrow shorter than 10 units, sit on the
-// anchor instead (a degenerate arrow would otherwise flip inside the shape). A curved (round, ≥3-point)
+// chord aim above, with Excalidraw's guard — if that would leave less than 10 units between the two ends,
+// sit on the anchor instead (a degenerate arrow would otherwise flip inside the shape). The guard is
+// symmetric, so two shapes pushed together put BOTH ends on their anchors. A curved (round, ≥3-point)
 // arrow docks on the CURVE∩outline crossing instead of the straight chord, so the drawn shaft meets the
 // outline exactly at the head; a strict fixed point at stored precision keeps a settled arrow from redirtying.
 export function boundEndpoint(
@@ -695,10 +709,10 @@ export function boundEndpoint(
     // end never enters — so it can't change side when the other end moves. Straight ends keep the chord
     // orbit below (that IS Excalidraw parity, and the anchor UX is layered around it).
     if (arrow.elbow) return elbowAnchorScene(shape, binding.fixedPoint);
-    const otherScene = chordAim(arrow, end, points, byId);
     const anchor = anchorToScene(shape, binding.fixedPoint);
+    const far = farSide(arrow, end, points, anchor, byId);
     const gap = bindingGap(shape);
-    let endpoint = outlinePoint(shape, otherScene, anchor, gap);
+    let endpoint = outlinePoint(shape, far.aim, anchor, gap);
     if (arrow.roundness === 'round' && points.length >= 3) {
         const dock = curveOutlineDock(arrow, end, shape, points, anchor, gap);
         if (dock) {
@@ -711,7 +725,7 @@ export function boundEndpoint(
                     : dock;
         }
     }
-    if (Math.hypot(endpoint.x - otherScene.x, endpoint.y - otherScene.y) <= BASE_ARROW_MIN_LENGTH) return anchor;
+    if (distance(endpoint, far.dock) <= BASE_ARROW_MIN_LENGTH) return anchor;
     return endpoint;
 }
 
@@ -738,14 +752,22 @@ export function followBindings(
         const moved = moveEndpoints(arrow, newStart, newEnd, elbowRoutingContext(arrow, byId));
         patch = renormalize({ ...arrow, ...moved });
     } else {
-        // DERIVED: recompute the two endpoints and re-normalize (unchanged pre-pin behaviour). A dock
-        // rounds to stored precision here, not only on serialization, so the box normalizeLinear derives
-        // is the box of the points that get WRITTEN — the last sub-0.01 digit of a re-solve can't leave
-        // x/width drifting under a settled arrow.
+        // DERIVED: recompute the two endpoints and re-normalize (unchanged pre-pin behaviour). The docks
+        // round to stored precision here, not only on serialization, and so does the box normalizeLinear
+        // derives from them — a box carrying a digit the serialized points cannot is what leaves x/width
+        // drifting by 1e-14 under a settled arrow, follow after follow.
         const next = points.map((p) => ({ ...p }));
         if (start) next[0] = roundPoint(linearSceneToLocal(arrow, boundEndpoint(arrow, 'start', start, byId)));
         if (end) next[next.length - 1] = roundPoint(linearSceneToLocal(arrow, boundEndpoint(arrow, 'end', end, byId)));
-        patch = { ...normalizeLinear(arrow, next), fixedSegments: '' };
+        const norm = normalizeLinear(arrow, next);
+        patch = {
+            x: round(norm.x),
+            y: round(norm.y),
+            width: round(norm.width),
+            height: round(norm.height),
+            points: norm.points,
+            fixedSegments: '',
+        };
     }
     if (
         patch.points === arrow.points &&

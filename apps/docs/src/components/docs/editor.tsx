@@ -45,7 +45,7 @@ import type {
     EigenClipboardItem,
     EigenClipboardTextItem,
 } from '@workspace/lib/types/clipboard';
-import type { CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
+import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DEFAULT_IMAGE_BOX } from '@workspace/lib/vector';
@@ -720,11 +720,7 @@ const TiptapEditor = ({
     const selectionContextMenu = useContextMenu<boolean>();
 
     const handleSaveNew = useCallback(
-        async (
-            patch: { title?: string; description?: string; color?: string },
-            attachments?: CardAttachmentDraft[],
-            assignee?: string | null,
-        ) => {
+        async (patch: CardFormPatch, attachments?: CardAttachmentDraft[], assignee?: string | null) => {
             if (!editor || !pendingMarkRange) return;
             const range = pendingMarkRange;
             const card = await createCard(

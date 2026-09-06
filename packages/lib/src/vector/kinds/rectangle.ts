@@ -18,6 +18,7 @@ export const rectangleKind = defineKind<VectorRectangleElement>({
         strokeStyle: true,
         roughness: true,
         corners: true,
+        edges: false,
         strokeOptional: true,
         bindable: true,
         silhouette: 'box',
@@ -57,13 +58,13 @@ export const rectangleKind = defineKind<VectorRectangleElement>({
     render: (el) => ({ svg: renderRoughShape(el) }),
 });
 
-// Pull a segment in by DIAGONAL_SHRINK at each end, along its own direction. A segment shorter than the
-// shrink is returned unchanged.
+// Pull a segment in by DIAGONAL_SHRINK at each end, along its own direction. A segment with no room for
+// both bites is returned unchanged — shrinking it would reverse it and aim the arrow back out.
 function shrink(a: Point, b: Point): [Point, Point] {
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const len = Math.hypot(dx, dy);
-    if (len === 0) return [a, b];
+    if (len <= 2 * DIAGONAL_SHRINK) return [a, b];
     const ox = (dx / len) * DIAGONAL_SHRINK;
     const oy = (dy / len) * DIAGONAL_SHRINK;
     return [

@@ -27,9 +27,11 @@ import {
     marqueeMode,
     NEW_TEXT_BOX_SIZE,
     orderByFractionalIndex,
+    type Point,
     paintsNothing,
     parseIdList,
     parsePoints,
+    pointInFrame,
     resizeLinear,
     rotatePoint,
     SNAP_SCREEN_THRESHOLD,
@@ -875,9 +877,16 @@ export function CanvasEditor({
         uploadFile: uploadFile.mutateAsync,
     });
 
+    // In frame mode the letterbox backdrop is not the canvas: the frame clips its overhang, so an
+    // element created out there — and the in-place editor over it — would be invisible. The infinite
+    // canvas has no page, so nothing is off it.
+    const offPage = (p: Point) => !!frame && !pointInFrame(p, frame);
+
     const { targetProps: fileDropProps, isDragging } = useFileDropTarget((files, e) => {
         if (!imagesEnabled) return;
-        const anchor = e ? clientToScene(e.clientX, e.clientY) : viewportCenterScene();
+        const dropped = e ? clientToScene(e.clientX, e.clientY) : viewportCenterScene();
+        // A drop on the backdrop lands on the page instead of being ignored — the files are already here.
+        const anchor = offPage(dropped) ? viewportCenterScene() : dropped;
         // An .svg WE exported carries its elements in a `<metadata>` block, so dropping one restores
         // native elements exactly as pasting one does — drop and paste are the same ladder, or the same
         // file behaves differently depending on how it arrived. Any other svg is just an image.
@@ -906,6 +915,7 @@ export function CanvasEditor({
     const openTextAtClient = (clientX: number, clientY: number) => {
         if (!canEdit || tool !== 'select' || textEditing || frozenRef.current) return;
         const p = clientToScene(clientX, clientY);
+        if (offPage(p)) return;
         const hit = hitTestTopmost(ordered, p, viewportRef.current.zoom, committedById, coarse);
         const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
         if (hitEl?.type === 'arrow') return openEditArrowLabel(hitEl);
@@ -987,6 +997,9 @@ export function CanvasEditor({
         if (!canEdit) return;
 
         const p = clientToScene(e.clientX, e.clientY);
+        // A creation gesture starting on the backdrop is ignored. Select and eraser still work out
+        // there, so a marquee may sweep across the page from outside.
+        if (tool !== 'select' && tool !== 'eraser' && offPage(p)) return;
 
         // Freehand / line / eraser own their own gesture (local state + capture); the hook consumes
         // the event for those tools and the canvas does nothing more.
@@ -1279,12 +1292,15 @@ export function CanvasEditor({
     const background = viewport === 'infinite' && !isTransparentColor(meta.background) ? meta.background : undefined;
 
     // Rich text's height is DERIVED from the text in it, so the layer that renders a box measures it and
-    // writes the fit back here — untracked, because a derived size is bookkeeping and not the user's own
-    // undo step. Withheld while a gesture is live: a resize preview owns the box it is dragging, and the
-    // committed width re-fits it the moment the drag ends.
+    // writes the fit back here. A fit the typing user caused rides in their own undo step — the box
+    // grew because of that keystroke, and ⌘Z must take both back, since the fit itself only ever grows.
+    // Every other fit (a peer's edit, a load, a panel change) is bookkeeping and stays untracked.
+    // Withheld while a gesture is live: a resize preview owns the box it is dragging, and the committed
+    // width re-fits it the moment the drag ends.
     const fitElementHeight = useCallback(
-        (id: string, height: number) => updateElementUntracked(id, { height }),
-        [updateElementUntracked],
+        (id: string, height: number, editing: boolean) =>
+            editing ? updateElement(id, { height }) : updateElementUntracked(id, { height }),
+        [updateElement, updateElementUntracked],
     );
     const onFitHeight = canEdit && !hasPreviews && !creating ? fitElementHeight : undefined;
 

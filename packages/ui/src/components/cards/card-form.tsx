@@ -1,7 +1,7 @@
 import { wasToasted } from '@workspace/lib/api-error';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { ChatAttachment } from '@workspace/lib/types/chat';
-import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
+import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
@@ -36,7 +36,7 @@ type CardFormProps = {
     currentUserEmail?: string;
     initialAssignee?: string | null;
     onSave: (
-        patch: { title?: string; description?: string; color?: string },
+        patch: CardFormPatch,
         attachments?: CardAttachmentDraft[],
         // undefined = untouched; the host skips the assignment PATCH.
         assignee?: string | null,
@@ -88,7 +88,7 @@ export function CardForm({
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!title.trim()) return;
-        const patch: { title?: string; description?: string; color?: string } = {};
+        const patch: CardFormPatch = {};
         // Edit mode seeds drafts with the existing ChatAttachment objects, so identity
         // compare detects any removal/addition without a deep equality pass.
         const draftsChanged =

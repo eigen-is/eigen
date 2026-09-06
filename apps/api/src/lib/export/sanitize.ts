@@ -1,3 +1,5 @@
+import { LIGHT_EDITOR_ATTRS, LIGHT_EDITOR_HREF, LIGHT_EDITOR_TAGS } from '@workspace/lib/html';
+import type { VectorScene } from '@workspace/lib/vector';
 import DOMPurify from 'isomorphic-dompurify';
 
 type SanitizeConfig = Parameters<typeof DOMPurify.sanitize>[1];
@@ -91,4 +93,33 @@ export function sanitizeExportHtml(html: string, options?: SanitizeOptions): str
         DOMPurify.removeHook('afterSanitizeAttributes');
         DOMPurify.removeHook('uponSanitizeElement');
     }
+}
+
+// A rich-text box's `html` is a schemaless collaborator string, and the canvas mounts it through the
+// LightEditor sanitizer — so every renderer of one filters to that same set (@workspace/lib/html), and
+// there is a single answer to what a text box can hold. DOMPurify's own profile is far wider: a <table>,
+// an <img src="data:…"> or a <style> a peer wrote would be invisible on every live client yet rendered
+// in the .svg/.html download, the PDF and the drive hero — and a <style> element styles whatever embeds
+// the box rather than the box itself. The assembled document cannot forbid <style> instead: it carries
+// the generated @font-face block.
+const LIGHT_EDITOR_ONLY: SanitizeConfig = {
+    ALLOWED_TAGS: LIGHT_EDITOR_TAGS,
+    ALLOWED_ATTR: LIGHT_EDITOR_ATTRS,
+    // The scheme rule exists for `href`; `target` and `rel` are not URLs, so they have to opt out of it
+    // or DOMPurify tests `_blank` against it and drops the new-tab pair the canvas forces onto a link.
+    ALLOWED_URI_REGEXP: LIGHT_EDITOR_HREF,
+    ADD_URI_SAFE_ATTR: ['target', 'rel'],
+};
+
+// Every canvas scene element that carries an `html` body, with that body filtered: the LightEditor set
+// plus the shared restriction to data: refs, so nothing a collaborator wrote in it can fetch from
+// anywhere. Every renderer of an untrusted scene — both previews, the deck export, the drawing export —
+// reads the scene through here first, then sanitizes its own assembled output.
+export function sanitizeSceneHtml(scene: VectorScene): VectorScene {
+    return {
+        ...scene,
+        elements: scene.elements.map((el) =>
+            'html' in el ? { ...el, html: sanitizeExportHtml(el.html, LIGHT_EDITOR_ONLY) } : el,
+        ),
+    };
 }

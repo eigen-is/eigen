@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { Window } from 'happy-dom';
-import { clickAdvances, presentStep } from '../../../components/slides/present-mode';
+import { deckOwnsClick, presentStep } from '../../../components/slides/present-mode';
 
 // A DOM at module scope, the canvas suites' recipe: the predicate walks up from the clicked node, so
 // `instanceof Element` needs the constructor to be the global one.
@@ -28,32 +28,34 @@ describe('presentStep', () => {
     });
 });
 
-describe('clickAdvances', () => {
+describe('deckOwnsClick', () => {
     const slide = (html: string) => {
         document.body.innerHTML = html;
         return document.body.firstElementChild as Element;
     };
 
     test('a click on the slide itself moves the deck on', () => {
-        expect(clickAdvances(slide('<div><p>a slide</p></div>').querySelector('p'))).toBe(true);
+        expect(deckOwnsClick(slide('<div><p>a slide</p></div>').querySelector('p'))).toBe(true);
     });
 
-    test("a click on a link is the link's — the deck stays put", () => {
-        expect(clickAdvances(slide('<div><a href="https://example.com">source</a></div>').querySelector('a'))).toBe(
+    // Both the click and the context-menu handler ask this, so a link keeps its own menu the way it
+    // keeps its own click.
+    test("a press on a link is the link's — the deck stays put", () => {
+        expect(deckOwnsClick(slide('<div><a href="https://example.com">source</a></div>').querySelector('a'))).toBe(
             false,
         );
     });
 
     test('a click on text inside a link counts as the link', () => {
         const el = slide('<div><a href="https://example.com"><strong>source</strong></a></div>');
-        expect(clickAdvances(el.querySelector('strong'))).toBe(false);
+        expect(deckOwnsClick(el.querySelector('strong'))).toBe(false);
     });
 
     test('an anchor with no href is not a link', () => {
-        expect(clickAdvances(slide('<div><a>not a link</a></div>').querySelector('a'))).toBe(true);
+        expect(deckOwnsClick(slide('<div><a>not a link</a></div>').querySelector('a'))).toBe(true);
     });
 
     test('a target that is not an element advances', () => {
-        expect(clickAdvances(null)).toBe(true);
+        expect(deckOwnsClick(null)).toBe(true);
     });
 });

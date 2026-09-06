@@ -13,6 +13,7 @@ g.document = window.document;
 g.navigator = window.navigator;
 g.DOMRect = window.DOMRect;
 g.KeyboardEvent = window.KeyboardEvent;
+g.Event = window.Event;
 g.Element = window.Element;
 g.HTMLElement = window.HTMLElement;
 g.IS_REACT_ACT_ENVIRONMENT = true;
@@ -34,6 +35,7 @@ afterAll(() => {
     g.navigator = undefined;
     g.DOMRect = undefined;
     g.KeyboardEvent = undefined;
+    g.Event = undefined;
     g.Element = undefined;
     g.HTMLElement = undefined;
     g.ResizeObserver = undefined;
@@ -81,4 +83,52 @@ test('a gesture cut short by unmount still releases the capture hold', () => {
 
     act(() => root.unmount());
     expect(undoManager.captureTimeout).toBe(original);
+});
+
+// Typing an exact number is one edit, not one per digit: without a held gesture, "100" seals three
+// undo steps (1, 10, 100) and ⌘Z walks back through the digits.
+test('typing in the number field holds ONE undo gesture until the field is left', () => {
+    const doc = new Y.Doc();
+    const undoManager = new Y.UndoManager(doc.getMap('elements'));
+    const original = undoManager.captureTimeout;
+    let gestures = 0;
+
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    act(() =>
+        root.render(
+            createElement(MergedSlider, {
+                value: 0,
+                onChange: () => {},
+                beginGesture: () => {
+                    gestures += 1;
+                    return holdCapture(undoManager);
+                },
+                min: 0,
+                max: 100,
+                'aria-label': 'Opacity',
+            }),
+        ),
+    );
+
+    const field = container.querySelector('input[type="number"]');
+    if (!field) throw new Error('the slider did not render its number field');
+    const setValue = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    if (!setValue) throw new Error('no native value setter to type through');
+    for (const typed of ['1', '10', '100']) {
+        act(() => {
+            setValue.call(field, typed);
+            field.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+    }
+    expect(gestures).toBe(1);
+    expect(undoManager.captureTimeout).toBe(Number.POSITIVE_INFINITY);
+
+    act(() => {
+        field.dispatchEvent(new Event('focusout', { bubbles: true }));
+    });
+    expect(undoManager.captureTimeout).toBe(original);
+
+    act(() => root.unmount());
 });

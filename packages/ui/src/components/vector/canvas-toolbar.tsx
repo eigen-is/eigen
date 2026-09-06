@@ -44,7 +44,6 @@ type CanvasToolbarProps = {
     onToggleActivityPanel: () => void;
     activityPanelOpen: boolean;
     // The File menu's per-app identity.
-    exportFormats: string[];
     createLabel: string;
     createIcon: LucideIcon;
     createType: EigenDocType;
@@ -74,7 +73,6 @@ export function CanvasToolbar({
     assignedCommentCount,
     onToggleActivityPanel,
     activityPanelOpen,
-    exportFormats,
     createLabel,
     createIcon,
     createType,
@@ -96,7 +94,6 @@ export function CanvasToolbar({
                             canWrite={canWrite}
                             onAccessDialogOpen={onAccessDialogOpen}
                             onExport={(format) => exportPath(path, format)}
-                            exportFormats={exportFormats}
                             createLabel={createLabel}
                             createIcon={createIcon}
                             createType={createType}
