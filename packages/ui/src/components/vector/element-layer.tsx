@@ -1,6 +1,6 @@
 // One scene element as its own memoized, absolutely positioned layer: a div carrying the element's
 // box (a transform to its origin + rotate about the box centre, which is CSS's default
-// transform-origin) holding either the kind's unpositioned SVG fragment or its rich-text div. The SAME lib render path
+// transform-origin) holding the kind's body as layerInnerHtml writes it. The SAME lib render path
 // previews, embeds, export and the print compositor use — elementLayer is the one definition of where
 // an element goes and what it draws.
 
@@ -14,7 +14,6 @@ import {
     layerBoxCss,
     layerInnerHtml,
     type MediaResolver,
-    SVG_NS,
     type VectorElement,
 } from '@workspace/lib/vector';
 import { memo, useRef } from 'react';
@@ -115,32 +114,17 @@ export const ElementLayer = memo(function ElementLayer({
             </div>
         );
     }
-    // Rich text IS the layer's own body (one styled div); everything else is an SVG fragment in an
-    // overflow-visible viewport, because roughjs overshoots its box and an elbow route spills past it.
-    if (!('svg' in content)) {
-        // THE mount seam for stored rich text, so this is where it is sanitized: `html` reaches us
-        // verbatim from a hostile peer's Y.Doc write or a forged clipboard record. Same allowlist the
-        // in-place editor's paste runs, so legitimate LightEditor markup passes through unchanged.
-        const html = layerInnerHtml({ ...content, html: sanitizeToLightEditorHtml(content.html) });
-        return (
-            <div
-                ref={hostRef}
-                data-element-id={el.id}
-                className="absolute"
-                style={style}
-                dangerouslySetInnerHTML={{ __html: html }}
-            />
-        );
-    }
+    // THE mount seam for stored rich text, so this is where it is sanitized: `html` reaches us
+    // verbatim from a hostile peer's Y.Doc write or a forged clipboard record. Same allowlist the
+    // in-place editor's paste runs, so legitimate LightEditor markup passes through unchanged.
+    const safeContent = 'html' in content ? { ...content, html: sanitizeToLightEditorHtml(content.html) } : content;
     return (
-        <div data-element-id={el.id} className="absolute" style={style}>
-            {/* min-*-px: a horizontal arrow's box is 0 high, and a zero-extent SVG viewport disables
-                rendering entirely (SVG 2 §8.2). Overflow is visible, so the floor never clips. */}
-            <svg
-                className="absolute inset-0 h-full min-h-px w-full min-w-px overflow-visible"
-                xmlns={SVG_NS}
-                dangerouslySetInnerHTML={{ __html: content.svg }}
-            />
-        </div>
+        <div
+            ref={hostRef}
+            data-element-id={el.id}
+            className="absolute"
+            style={style}
+            dangerouslySetInnerHTML={{ __html: layerInnerHtml(safeContent) }}
+        />
     );
 }, sameLayerProps);

@@ -6,7 +6,7 @@ import { richtext } from '../element-factories';
 
 function styleOf(el: VectorRichTextElement): string {
     const out = ELEMENT_KINDS.richtext.render(el, {});
-    if ('svg' in out) throw new Error('rich text must render html');
+    if (!('html' in out)) throw new Error('rich text must render html');
     return out.style;
 }
 

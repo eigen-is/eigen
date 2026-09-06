@@ -10,7 +10,7 @@ function makeImage(over: Partial<VectorImageElement> = {}): VectorImageElement {
 
 function svgOf(el: VectorImageElement): string {
     const out = ELEMENT_KINDS.image.render(el, { resolveMedia: () => 'https://example.test/p.png' });
-    if (!('svg' in out)) throw new Error('an image must render svg');
+    if ('html' in out) throw new Error('an image must render svg');
     return out.svg;
 }
 
@@ -49,7 +49,7 @@ describe('image border', () => {
         const out = ELEMENT_KINDS.image.render(makeImage({ strokeColor: '#111', strokeWidth: 2 }), {
             resolveMedia: () => null,
         });
-        if (!('svg' in out)) throw new Error('an image must render svg');
+        if ('html' in out) throw new Error('an image must render svg');
         expect(out.svg).not.toContain('<image');
         expect(out.svg).toContain('stroke-dasharray');
         expect(out.svg).toContain('stroke="#111"');
@@ -59,7 +59,7 @@ describe('image border', () => {
         const out = ELEMENT_KINDS.image.render(makeImage({ strokeColor: 'transparent' }), {
             resolveMedia: () => null,
         });
-        expect('svg' in out && out.svg).not.toBe('');
+        expect(!('html' in out) && out.svg).not.toBe('');
     });
 
     // paintsNothing says exactly this, so the empty-outline ring and the render agree.
@@ -67,14 +67,14 @@ describe('image border', () => {
         const out = ELEMENT_KINDS.image.render(makeImage({ mediaName: '', strokeColor: 'transparent' }), {
             resolveMedia: () => null,
         });
-        expect('svg' in out && out.svg).toBe('');
+        expect(!('html' in out) && out.svg).toBe('');
     });
 
     test('an image with no media name but a border draws the border alone', () => {
         const out = ELEMENT_KINDS.image.render(makeImage({ mediaName: '', strokeColor: '#111', strokeWidth: 2 }), {
             resolveMedia: () => null,
         });
-        if (!('svg' in out)) throw new Error('an image must render svg');
+        if ('html' in out) throw new Error('an image must render svg');
         expect(out.svg).toContain('stroke="#111"');
         expect(out.svg).not.toContain('stroke-dasharray');
     });

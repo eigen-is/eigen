@@ -309,7 +309,7 @@ describe('capabilitiesOf', () => {
             for (const points of [open, closed]) {
                 const el = linear({ id: 'l', type, points, fill: solidFill('#ff0000') });
                 const output = ELEMENT_KINDS[type].render(el, {});
-                const painted = 'svg' in output && output.svg.includes('#ff0000');
+                const painted = !('html' in output) && output.svg.includes('#ff0000');
                 expect([type, points === closed, painted]).toEqual([type, points === closed, capabilitiesOf(el).fill]);
             }
         }

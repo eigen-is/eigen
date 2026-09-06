@@ -196,6 +196,15 @@ describe('the layer box', () => {
     });
 });
 
+describe('the layer body', () => {
+    test('an svg kind mounts the overflow-visible viewport layerInnerHtml writes', () => {
+        const html = renderToStaticMarkup(<ElementLayer el={rect()} />);
+        expect(html.match(/<svg/g)).toHaveLength(1);
+        expect(html).toContain('min-width:1px');
+        expect(html).toContain('overflow:visible');
+    });
+});
+
 describe('rich text is sanitized at the mount seam', () => {
     // `html` reaches the layer verbatim from the Y.Doc — any peer with write access, or a forged
     // clipboard record, can put anything in it. This is the seam every live/preview/present surface

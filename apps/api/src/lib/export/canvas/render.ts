@@ -11,7 +11,6 @@ import {
     orderByFractionalIndex,
     parseBackgroundFill,
     round,
-    SVG_NS,
     sceneBounds,
     sceneLayers,
     type VectorScene,
@@ -128,27 +127,10 @@ function renderLayer(layer: Layer): string {
         'left:0',
         ...Object.entries(layerBoxCss(layer)).map(([property, value]) => `${property}:${value}`),
     ];
-    // Rich text IS the layer's body (layerInnerHtml wraps it in its styled div); everything else is
-    // an unpositioned kind fragment that needs an SVG viewport, overflow-visible because roughjs
-    // overshoots its box and an elbow route spills past it. min-*-px: a horizontal arrow's box is
-    // 0 high, and a zero-extent SVG viewport disables rendering entirely (SVG 2 §8.2).
-    // layerInnerHtml deliberately omits the <p> margin reset a standalone SVG carries: the PDF
-    // wrapper's `* { margin: 0 }` and the app's Tailwind preflight each already supply one.
-    const inner = layerInnerHtml(layer.content);
-    const body =
-        'svg' in layer.content
-            ? `<svg xmlns="${SVG_NS}" overflow="visible" style="${style([
-                  'position:absolute',
-                  'top:0',
-                  'left:0',
-                  'width:100%',
-                  'height:100%',
-                  'min-width:1px',
-                  'min-height:1px',
-                  'overflow:visible',
-              ])}">${inner}</svg>`
-            : inner;
-    return `<div style="${style(layerStyle)}">${body}</div>`;
+    // layerInnerHtml is the whole body, the same string the live canvas mounts. It deliberately omits
+    // the <p> margin reset a standalone SVG carries: the PDF wrapper's `* { margin: 0 }` and the app's
+    // Tailwind preflight each already supply one.
+    return `<div style="${style(layerStyle)}">${layerInnerHtml(layer.content)}</div>`;
 }
 
 function style(declarations: string[]): string {

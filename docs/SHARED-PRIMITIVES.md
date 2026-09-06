@@ -1301,7 +1301,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `stripEigenMediaRefs` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
 | `STROKE_STYLES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `STROKE_WIDTH_OPTIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `SVG_NS` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
+| `SVG_NS` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `syncInvalidIndices` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `TEXT_ALIGNS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `TEXT_DECORATIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
