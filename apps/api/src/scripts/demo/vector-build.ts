@@ -29,7 +29,6 @@ import {
     serializeBinding,
     shapeAnchorPoints,
     solidFill,
-    type TextAlign,
     VECTOR_STYLE_DEFAULTS,
     type VectorArrowElement,
     type VectorElement,
@@ -39,7 +38,6 @@ import {
     type VectorLinearElement,
     type VectorRichTextElement,
     type VectorShapeElement,
-    type VerticalAlign,
 } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import { type CanvasSide, mulberry32, SIDE_INDEX, settleEndpoints, toYMap, ZERO_BOX } from './canvas-build';
@@ -306,17 +304,10 @@ function buildText(t: SitePlanText, i: number): VectorRichTextElement {
     });
 }
 
-type RichTextSpec = {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    angle: number;
-    fontSize: number;
-    color: string;
-    textAlign: TextAlign;
-    verticalAlign: VerticalAlign;
-};
+type RichTextSpec = Pick<
+    VectorRichTextElement,
+    'x' | 'y' | 'width' | 'height' | 'angle' | 'fontSize' | 'color' | 'textAlign' | 'verticalAlign'
+>;
 
 // Both text builders go through one place: the box the seeder measured plus the typography the drawing
 // is authored in, over the rich-text kind's own defaults.

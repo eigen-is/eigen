@@ -10,7 +10,6 @@ import { orderByFractionalIndex } from './fractional-index';
 import { elementsInFrame } from './frames';
 import { type Point, round } from './geometry';
 import { ELEMENT_KINDS, type RenderOutput } from './kinds';
-
 import type { MediaResolver } from './scene-to-svg';
 import type { VectorElement, VectorScene } from './types';
 

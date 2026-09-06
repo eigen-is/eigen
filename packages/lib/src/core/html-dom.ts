@@ -115,8 +115,9 @@ export function readDominantTextAlign(html: string): (typeof TEXT_ALIGN_VALUES)[
 
 // Map arbitrary pasted HTML onto the LightEditor tag set (see the sets above): structural formatting
 // and inline marks are kept, headings become paragraphs, everything else is unwrapped or dropped, and
-// ALL attributes are stripped bar a safe `<a href>` and the new-tab pair forced onto it. DOM-based so escaping is automatic and there
-// is no regex-parsing hazard. Returns '' when nothing survives (caller falls back to plain text).
+// ALL attributes are stripped bar a safe `<a href>` and the new-tab pair forced onto it. DOM-based so
+// escaping is automatic and there is no regex-parsing hazard. Returns '' when nothing survives (the
+// caller falls back to plain text).
 export function sanitizeToLightEditorHtml(html: string): string {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const out = document.createElement('div');

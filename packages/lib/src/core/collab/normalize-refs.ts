@@ -19,8 +19,8 @@ export const NORMALIZE_ORIGIN = Symbol('normalize-refs');
 // stray only wins the dedupe when it is the sole holder and is never chosen as a re-home target (both
 // would park a child on a parent the UI never renders). With no ordered parents at all (order array
 // empty/unseeded) we fall back to map-key order. Stickies (columns / tasks / taskIds / columnOrder) is
-// the shape this serves. All writes run in ONE transaction under NORMALIZE_ORIGIN. Idempotent — a well-formed doc writes nothing, so it is safe to
-// run once on sync and on every remote-origin merge.
+// the shape this serves. All writes run in ONE transaction under NORMALIZE_ORIGIN. Idempotent — a
+// well-formed doc writes nothing, so it is safe to run once on sync and on every remote-origin merge.
 export function normalizeParentChildRefs(
     doc: Y.Doc,
     parentMap: string,

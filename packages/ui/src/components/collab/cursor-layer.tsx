@@ -5,14 +5,13 @@ import { CollabPointer } from './collab-pointer';
 import { RemoteSelectionRing } from './remote-selection-ring';
 import { useAwarenessPeers } from './use-awareness-peers';
 
-// The awareness state a collaborating client publishes (see use-canvas-presence / use-slides-presence).
-// One documented convention shape — every host writes a subset; `slideId` scopes a peer to a
-// sub-surface (slides publishes it so peers on other slides can be hidden; vector omits it). This is
-// NOT a shared union imported everywhere: it is the concrete shape the shared cursor layer projects,
-// and the generic useAwarenessPeers hook stays projection-free. Each host validates what it writes.
-// Exactly the fields the shared layer reads — nothing more. Host-private awareness fields (slides'
-// slideId, a future boardId, …) extend this per app: `type SlidesPeerState = CursorPeerState &
-// { slideId?: string }`, inferred through the generic `isPeerVisible` — never added here.
+// The awareness state a collaborating client publishes (see use-canvas-presence / use-stickies-presence).
+// One documented convention shape — every host writes a subset. This is NOT a shared union imported
+// everywhere: it is the concrete shape the shared cursor layer projects, and the generic
+// useAwarenessPeers hook stays projection-free. Each host validates what it writes. Exactly the fields
+// the shared layer reads — nothing more. Host-private awareness fields extend this per host — the
+// canvas' `CanvasPeerState = CursorPeerState & { frameId?: string }` scopes a peer to one frame,
+// inferred through the generic `isPeerVisible` — never added here.
 export type CursorPeerState = {
     user?: { name: string; color: string; userId?: string };
     cursor?: { x: number; y: number } | null;

@@ -11,7 +11,6 @@ import { isTransparentColor } from './fill';
 import { orderByFractionalIndex } from './fractional-index';
 import { type Box, round } from './geometry';
 import { ELEMENT_KINDS } from './kinds';
-
 import { RICH_TEXT_CLASS } from './scene-layers';
 import type { VectorElement, VectorScene } from './types';
 
