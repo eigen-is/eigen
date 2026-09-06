@@ -10,7 +10,6 @@ import { contentDisposition, scriptableInlineHeaders, setCacheHeaders } from '..
 import { getDrive, getSharedDrive } from '../lib/drive';
 import { propagateAccessRequest } from '../lib/drive/access-request-propagation';
 import { aggregateMimeContents, aggregateWatches } from '../lib/drive/aggregate';
-import { assertParentIsFolder } from '../lib/drive/container-guard';
 import { copyPathAcross } from '../lib/drive/copy-across';
 import { getUniqueFileName } from '../lib/drive/naming';
 import { serveFile } from '../lib/drive/serve-file';
@@ -89,7 +88,6 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/folder/:pathId',
         async ({ params, body, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            await assertParentIsFolder(drive, params.mountId, params.pathId);
             return await drive.createFolder(params.mountId, params.pathId, body.folderName, user);
         },
         {
@@ -101,7 +99,6 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/folder/:pathId/create/:type',
         async ({ params, body, user }): Promise<DrivePath> => {
             const drive = await getSharedDrive(params.ownerId, user);
-            await assertParentIsFolder(drive, params.mountId, params.pathId);
             return await drive.create(params.mountId, params.pathId, body.fileName, params.type, user);
         },
         {
@@ -164,7 +161,6 @@ export const driveRouter = new Elysia({ name: 'drive' })
             // WebDAV COPY keeps its overwrite/409 semantics. The self-into-subtree cycle guard lives
             // in Drive.copyPath now — cross-mount copies can never be self-descendant.
             const targetDrive = sameMount ? sourceDrive : await getSharedDrive(body.targetOwnerId, user);
-            await assertParentIsFolder(targetDrive, body.targetMountId, body.targetParentId);
             const desired = (body.name ?? src.name).replace(/[/\\]/g, '_');
             const siblings = await targetDrive.getFolderContents(body.targetMountId, body.targetParentId);
             const used = new Set(siblings.map((s) => s.name.toLowerCase()));

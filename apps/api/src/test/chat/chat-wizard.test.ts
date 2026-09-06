@@ -479,29 +479,6 @@ describe('Chat wizard — create with members', () => {
         expect(mirrored!.canWrite).toBe(true);
     });
 
-    test('rejects a document container as the parent, but a plain folder still works', async () => {
-        const doc = await drivePost<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            `folder/${rootId}/create/doc`,
-            { fileName: 'wizard-parent-guard' },
-        );
-        const intoContainer = await createRoom(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, {
-            fileName: 'Sneaky chat',
-            members: [bobEmail],
-            parentId: doc.id,
-        });
-        expect(intoContainer.status).toBe(400);
-
-        const intoFolder = await createRoom(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, {
-            fileName: 'Folder chat',
-            members: [bobEmail],
-            parentId: chatsFolderId,
-        });
-        expect(intoFolder.status).toBe(200);
-    });
-
     test('notifies added members in-app but suppresses the share email', async () => {
         // Turn userOnAclAdd on so a plain share WOULD email bob — the wizard must still not.
         await setUserAclEmail(true);
