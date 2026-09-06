@@ -332,7 +332,7 @@ const handleSaveNew = async ({ title, description, color }) => {
 - **`mode="edit"`** emits a minimal patch (changed fields only), so an unchanged save is a no-op
   Yjs update.
 
-Description is edited via `<LightEditor>`, color via the shared `<ColorPicker>`
+Description is edited via `<LightEditor>` and sanitized on read in `useCommentCards` (`sanitizeCommentCardHtml`, the LightEditor allowlist plus task lists) because a peer's raw Y.Doc write reaches every viewer's `dangerouslySetInnerHTML`; color via the shared `<ColorPicker>`
 (`EIGEN_STICKIES_COLORS`). Card creation is lazy: clicking "Add comment" opens the dialog purely
 client-side; the backend is only touched on Save.
 

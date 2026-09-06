@@ -6,7 +6,7 @@
 
 ## Organization
 
-Created during setup wizard. Uses better-auth `organization()` plugin with `teams: { enabled: true }` and `apiKey()`
+Created during setup wizard. Uses better-auth `organization()` plugin with `teams: { enabled: true }`, the plugin's default 100-member cap lifted (`membershipLimit`), and `apiKey()`
 plugin.
 
 - All new users auto-joined as `member` (via `databaseHooks.user.create.after`)
