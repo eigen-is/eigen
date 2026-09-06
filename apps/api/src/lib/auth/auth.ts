@@ -175,6 +175,9 @@ export const auth = betterAuth({
             // a system action (auth.api.createOrganization with userId, no session), which bypasses
             // this gate.
             allowUserToCreateOrganization: false,
+            // Default caps the org at 100 members and fails every later user creation in the create hook.
+            // The function form lifts the cap without turning the plugin's list-query limit into Infinity.
+            membershipLimit: () => Number.POSITIVE_INFINITY,
             teams: {
                 enabled: true,
             },
