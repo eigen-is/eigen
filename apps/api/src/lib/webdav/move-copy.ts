@@ -1,8 +1,8 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
-import { enclosingDocumentContainer } from '../drive/container-guard';
 import { type DriveLike, getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
+import { enclosingDocumentContainer } from './container-guard';
 import { assertWritable } from './locks';
 
 type DestParts = { ownerId: string; mountId: string; pathStr: string };

@@ -1,8 +1,6 @@
 import { Elysia, t } from 'elysia';
 import { enforceMountQuota } from '../lib/config/enforcement';
-import { ApiError } from '../lib/core';
 import { getSharedDrive } from '../lib/drive';
-import { enclosingDocumentContainer } from '../lib/drive/container-guard';
 import { getEditableContent, prepareSaveContent } from '../lib/drive/inline-edit';
 import { betterAuth } from './auth';
 
@@ -26,12 +24,6 @@ export const editorRouter = new Elysia({ name: 'editor' })
         async ({ params, body, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
             const { path } = await drive.resolveFile(params.mountId, params.pathId);
-            // Refuse a path inside a managed container (data.db, comments.db, media/): its bytes
-            // are drive-layer-owned. Same guard, same breadcrumb decision as the WebDAV write layer.
-            const breadcrumb = await drive.breadCrumb(params.mountId, params.pathId);
-            if (enclosingDocumentContainer(breadcrumb, { includeSelf: false })) {
-                throw new ApiError(423, 'Container internals are read-only');
-            }
             const result = prepareSaveContent(
                 path,
                 body.content,

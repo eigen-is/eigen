@@ -16,9 +16,7 @@ export function renderEigensheetsPreviewBody(doc: Y.Doc): { body: string; warnin
     const { sheets } = readSheetsFromDoc(doc, { recalc: false });
 
     const { html, truncated } = renderSheetsPreviewHtml(sheets);
-    // Shared body sanitizer like every other preview: on top of DOMPurify it strips non-data:
-    // url()/src/href so a cell bg carrying `background-image:url(http://…)` can't beacon a viewer.
-    // No allowedRefs — sheets embed no media, so nothing but data: URIs may stay.
+    // Same ref-stripping sanitizer as every preview body: a cell bg `url(http://…)` must not beacon viewers
     const sanitized = sanitizeExportHtml(html);
     const body = truncated ? `${sanitized}${renderPreviewTruncatedMarker()}` : sanitized;
 

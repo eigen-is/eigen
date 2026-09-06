@@ -66,8 +66,7 @@ Mountain Duck capture every container losslessly.
 The container is **read-only inside**: `PUT`, `MKCOL`, `DELETE`, `MOVE` (source or dest),
 `PROPPATCH` targeting any path *inside* a container return `423 Locked`. The container as a whole
 can be moved, renamed, or deleted as a unit through the normal Drive code path. `enclosingDocumentContainer()`
-in `drive/container-guard.ts` runs over a single pre-fetched breadcrumb to make that decision — the same
-guard the drive REST routes and the inline-editor save use, so every write surface refuses container internals.
+in `webdav/container-guard.ts` runs over a single pre-fetched breadcrumb to make that decision.
 
 Reads (`GET`, `PROPFIND`, `COPY`-out) are unaffected. An `export` mode that surfaces eigen documents
 as `.docx`/`.xlsx`/`.pdf` was scoped in the original proposal but **not implemented** — round-tripping
@@ -110,6 +109,7 @@ apps/api/src/lib/webdav/
   proppatch.ts          # PROPPATCH — 207 multistatus + dead-prop persistence
   move-copy.ts          # MOVE / COPY (same-mount only)
   locks.ts              # LOCK / UNLOCK handlers + assertWritable()
+  container-guard.ts    # enclosingDocumentContainer() over breadcrumb
   container-overlay.ts  # AppleDouble + Office-tempfile filename filter
   xml.ts                # multistatus / propstat / encodeHref, prop serialization
 ```

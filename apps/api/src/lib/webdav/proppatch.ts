@@ -1,8 +1,8 @@
 import { XMLParser } from 'fast-xml-parser';
 import { ApiError } from '../core/errors';
-import { enclosingDocumentContainer } from '../drive/container-guard';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
+import { enclosingDocumentContainer } from './container-guard';
 import { assertWritable } from './locks';
 import { buildXmlResponse, encodeHref, escapeXml, multistatus, propstatOk, propstatStatus, response } from './xml';
 

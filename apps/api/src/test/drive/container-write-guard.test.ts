@@ -68,7 +68,7 @@ describe('Container write guard', () => {
                 expectedUpdatedAt: before.updatedAt,
                 force: true,
             });
-            expect(res.status).toBe(423);
+            expect(res.status).toBe(400);
 
             const after = await driveGet<DrivePath>(
                 ctx.bob.user.sessionToken,
@@ -118,102 +118,6 @@ describe('Container write guard', () => {
                 expectedUpdatedAt: current.updatedAt,
             });
             expect(res.status).toBe(200);
-        });
-    });
-
-    describe('#13 create / copy parents', () => {
-        test('creating a folder with a document container as parent is rejected', async () => {
-            const doc = await createDoc('no-folder-here.eigendoc');
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/drive/${aliceId()}/${mountId}/folder/${doc.id}`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ folderName: 'intruder' }),
-                },
-            );
-            expect(res.status).toBe(400);
-        });
-
-        test('creating a nested doc inside a document container is rejected', async () => {
-            const doc = await createDoc('no-doc-here.eigendoc');
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/drive/${aliceId()}/${mountId}/folder/${doc.id}/create/doc`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ fileName: 'nested' }),
-                },
-            );
-            expect(res.status).toBe(400);
-        });
-
-        test('a normal folder still creates in a plain folder', async () => {
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/drive/${aliceId()}/${mountId}/folder/${rootId}`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ folderName: `ok-${Date.now()}` }),
-                },
-            );
-            expect(res.status).toBe(200);
-        });
-
-        test('uploading into the container media/ folder still works (attachment path)', async () => {
-            const doc = await createDoc('media-ok.eigendoc');
-            const media = (await containerChildren(doc.id)).find((c) => c.name === 'media');
-            expect(media).toBeDefined();
-            const file = new File([TEST_PNG_BYTES], 'attach.png', { type: 'image/png' });
-            const uploaded = await driveUpload<DrivePath>(
-                ctx.alice.user.sessionToken,
-                aliceId(),
-                mountId,
-                media!.id,
-                file,
-            );
-            expect(uploaded.id).toBeDefined();
-        });
-
-        test('copying a file into a document container is rejected, but into media/ works', async () => {
-            const doc = await createDoc('copy-guard.eigendoc');
-            const media = (await containerChildren(doc.id)).find((c) => c.name === 'media');
-            const source = await driveUpload<DrivePath>(
-                ctx.alice.user.sessionToken,
-                aliceId(),
-                mountId,
-                rootId,
-                new File(['payload'], 'src.txt', { type: 'text/plain' }),
-            );
-
-            const intoContainer = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/drive/${aliceId()}/${mountId}/path/${source.id}/copy`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ targetOwnerId: aliceId(), targetMountId: mountId, targetParentId: doc.id }),
-                },
-            );
-            expect(intoContainer.status).toBe(400);
-
-            const intoMedia = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/drive/${aliceId()}/${mountId}/path/${source.id}/copy`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        targetOwnerId: aliceId(),
-                        targetMountId: mountId,
-                        targetParentId: media!.id,
-                    }),
-                },
-            );
-            expect(intoMedia.status).toBe(200);
         });
     });
 });

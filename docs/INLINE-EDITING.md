@@ -98,9 +98,7 @@ through `enforceMountQuota()`, persistence through `Drive.writeFileContent()`. T
 itself is in `apps/api/src/lib/drive/inline-edit.ts`: `getEditableContent()` (read + UTF-8 validation
 + frontmatter split), `prepareSaveContent()` (editability gate via `getTextPreviewMode` + conflict check
 + reattach + size cap), `extractFrontmatter()` / `reattachFrontmatter()`, `MAX_INLINE_EDIT_SIZE`. There is
-no `saveEditableContent()` — the route composes `prepareSaveContent` with `Drive.writeFileContent`. The
-save route also runs the shared `enclosingDocumentContainer()` guard so a path inside a managed container
-(`data.db`, `media/`) can never be overwritten through the editor, matching the read side and WebDAV.
+no `saveEditableContent()` — the route composes `prepareSaveContent` with `Drive.writeFileContent`.
 
 **Shared hooks.** `packages/lib/src/core/editor/hooks/` — `use-file-content.ts` (GET query) and
 `use-file-save.ts` (PUT mutation + cache invalidation). `getTextPreviewMode()` in

@@ -79,7 +79,6 @@ export type ServerSettings = {
         };
     };
     onboarding: {
-        openSignup: boolean;
         waitlist: {
             enabled: boolean;
         };

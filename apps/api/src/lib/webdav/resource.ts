@@ -2,9 +2,9 @@ import { isContainerType } from '@workspace/lib/types/drive';
 import { enforceMountQuota } from '../config/enforcement';
 import { ApiError } from '../core/errors';
 import { computeEtag, etagMatches, parseByteRange, scriptableInlineHeaders } from '../core/http';
-import { enclosingDocumentContainer } from '../drive/container-guard';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
+import { enclosingDocumentContainer } from './container-guard';
 import { assertWritable } from './locks';
 
 function mimeTypeFromName(name: string): string {
