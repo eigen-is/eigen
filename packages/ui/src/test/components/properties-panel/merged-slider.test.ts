@@ -13,6 +13,7 @@ g.document = window.document;
 g.navigator = window.navigator;
 g.DOMRect = window.DOMRect;
 g.KeyboardEvent = window.KeyboardEvent;
+g.Event = window.Event;
 g.Element = window.Element;
 g.HTMLElement = window.HTMLElement;
 g.IS_REACT_ACT_ENVIRONMENT = true;
@@ -34,6 +35,7 @@ afterAll(() => {
     g.navigator = undefined;
     g.DOMRect = undefined;
     g.KeyboardEvent = undefined;
+    g.Event = undefined;
     g.Element = undefined;
     g.HTMLElement = undefined;
     g.ResizeObserver = undefined;
@@ -117,14 +119,14 @@ test('typing in the number field holds ONE undo gesture until the field is left'
     for (const typed of ['1', '10', '100']) {
         act(() => {
             setValue.call(field, typed);
-            field.dispatchEvent(new window.Event('input', { bubbles: true }));
+            field.dispatchEvent(new Event('input', { bubbles: true }));
         });
     }
     expect(gestures).toBe(1);
     expect(undoManager.captureTimeout).toBe(Number.POSITIVE_INFINITY);
 
     act(() => {
-        field.dispatchEvent(new window.Event('focusout', { bubbles: true }));
+        field.dispatchEvent(new Event('focusout', { bubbles: true }));
     });
     expect(undoManager.captureTimeout).toBe(original);
 
