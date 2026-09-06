@@ -21,6 +21,16 @@ import { loadYjsState } from './yjs-loader';
 export const MESSAGE_SYNC = 0;
 export const MESSAGE_AWARENESS = 1;
 
+// A real y-websocket client owns exactly one awareness client id per doc; a tab that reloads or
+// reconnects opens a fresh socket with a new id, so one connection never legitimately declares many.
+// 8 tolerates a client that churns a few ids on one socket while stopping a flood that bloats the
+// shared map (fanned out to every peer, replayed to every joiner).
+const MAX_AWARENESS_CLIENT_IDS = 8;
+// A legitimate awareness state is name + colour + userId + a cursor/selection — ~100-300 bytes, a
+// few KiB for a large multi-element canvas selection. 16 KiB leaves generous headroom while capping
+// the per-state bytes fanned out to every peer and replayed to every joiner.
+const MAX_AWARENESS_STATE_BYTES = 16 * 1024;
+
 const SNAPSHOT_INTERVAL = 100;
 // Sheets' flushSnapshot dumps the whole sheet JSON into one update row on tab
 // close; a count-only threshold lets data.db balloon to ~100× the doc size
@@ -141,6 +151,20 @@ function isConnection(origin: unknown): origin is ServerWebSocket<undefined> {
     return origin !== null && typeof origin === 'object' && 'readyState' in origin;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
+}
+
+// A client may publish presence for itself only: an awareness `user` field must carry the session
+// user's id, so a reader can't paint another person's name/colour. A state with no `user` field (the
+// initial empty handshake state) carries no identity to spoof.
+function awarenessIdentityMatches(state: unknown, userId: string): boolean {
+    if (!isRecord(state)) return true;
+    const identity = state['user'];
+    if (identity === undefined || identity === null) return true;
+    return isRecord(identity) && identity['userId'] === userId;
+}
+
 export default class CollabDocument {
     private drive: Drive;
     private path: DrivePath;
@@ -155,6 +179,10 @@ export default class CollabDocument {
         return this.connections.size;
     }
     private connectionClientIds: Map<ServerWebSocket<undefined>, Set<number>> = new Map();
+    // Reverse index of connectionClientIds: which connection currently owns each awareness client id.
+    // An id may only be written or removed by the connection that first declared it, so a reader can't
+    // evict or overwrite a peer's presence. Released on removal and on disconnect.
+    private clientIdOwners: Map<number, ServerWebSocket<undefined>> = new Map();
     private closed: boolean = false;
     private lastTouchedAt = 0;
     private lastEditRecordedAt: Map<string, number> = new Map(); // userId -> ts
@@ -321,8 +349,12 @@ export default class CollabDocument {
     private dropConnection(conn: ServerWebSocket<undefined>): void {
         this.connections.delete(conn);
         const clientIds = this.connectionClientIds.get(conn);
-        if (clientIds && clientIds.size > 0) {
-            awarenessProtocol.removeAwarenessStates(this.awareness, Array.from(clientIds), null);
+        if (clientIds) {
+            // Release ownership so a reconnecting tab reusing the same clientID isn't locked out.
+            for (const id of clientIds) this.clientIdOwners.delete(id);
+            if (clientIds.size > 0) {
+                awarenessProtocol.removeAwarenessStates(this.awareness, Array.from(clientIds), null);
+            }
         }
         this.connectionClientIds.delete(conn);
     }
@@ -377,23 +409,47 @@ export default class CollabDocument {
             }
         } else if (messageType === MESSAGE_AWARENESS) {
             const awarenessUpdate = decoding.readVarUint8Array(decoder);
-            // Applying fires the awareness 'update' handler, which is the one fan-out to the other peers.
-            awarenessProtocol.applyAwarenessUpdate(this.awareness, awarenessUpdate, conn);
+            const user = this.connections.get(conn);
+            if (!user) return;
 
+            // Validate before applying: a read-only peer could otherwise flood the shared awareness
+            // map (fanned out to every peer, replayed to every joiner) with unbounded client ids or
+            // state, spoof another user's identity, or evict/overwrite a peer's presence. Drop the
+            // whole frame on any violation.
+            const owned = new Set(this.connectionClientIds.get(conn));
+            const removed: number[] = [];
             try {
                 const trackDecoder = decoding.createDecoder(awarenessUpdate);
                 const len = decoding.readVarUint(trackDecoder);
-                let ids = this.connectionClientIds.get(conn);
-                if (!ids) {
-                    ids = new Set();
-                    this.connectionClientIds.set(conn, ids);
-                }
                 for (let i = 0; i < len; i++) {
-                    ids.add(decoding.readVarUint(trackDecoder));
+                    const clientId = decoding.readVarUint(trackDecoder);
+                    decoding.readVarUint(trackDecoder); // clock
+                    const stateJson = decoding.readVarString(trackDecoder);
+                    // A client id may only be written or removed by the connection that first declared it.
+                    const ownerConn = this.clientIdOwners.get(clientId);
+                    if (ownerConn !== undefined && ownerConn !== conn) return;
+                    if (stateJson === 'null') {
+                        removed.push(clientId);
+                        continue;
+                    }
+                    if (Buffer.byteLength(stateJson) > MAX_AWARENESS_STATE_BYTES) return;
+                    if (!awarenessIdentityMatches(JSON.parse(stateJson), user.id)) return;
+                    owned.add(clientId);
+                    if (owned.size > MAX_AWARENESS_CLIENT_IDS) return;
                 }
             } catch {
-                // ignore parsing errors
+                return; // malformed frame
             }
+
+            // Applying fires the awareness 'update' handler, which is the one fan-out to the other peers.
+            awarenessProtocol.applyAwarenessUpdate(this.awareness, awarenessUpdate, conn);
+            // Removals shrink the owned set (and free the id) so a client that recycles clientIDs isn't wedged at the cap.
+            for (const id of removed) {
+                owned.delete(id);
+                this.clientIdOwners.delete(id);
+            }
+            for (const id of owned) this.clientIdOwners.set(id, conn);
+            this.connectionClientIds.set(conn, owned);
         } else {
             console.warn(`Unknown message type: ${messageType}`);
         }
