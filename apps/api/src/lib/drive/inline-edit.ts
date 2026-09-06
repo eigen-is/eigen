@@ -55,6 +55,14 @@ export function prepareSaveContent(
 ): { conflict: true; currentUpdatedAt: Date } | { conflict: false; data: Buffer } {
     if (path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
 
+    // Same editability gate as the read side (getEditableContent): only files
+    // getTextPreviewMode considers editable may be written back. Without it a write
+    // collaborator could overwrite an arbitrary binary (a container's data.db, a .png)
+    // with text through the editor route.
+    if (!getTextPreviewMode(path.mimeType, path.name)) {
+        throw new ApiError(400, 'File type not supported for inline editing');
+    }
+
     if (path.updatedAt.getTime() !== expectedUpdatedAt.getTime() && !force) {
         return { conflict: true, currentUpdatedAt: path.updatedAt };
     }

@@ -43,7 +43,7 @@ Every mutating method goes through `assertWritable()` (lock check) and the conta
 |---|---|---|---|
 | `OPTIONS` | – | `apps/api/src/app.ts` | Advertises `DAV: 1, 2` and the `Allow` list. Handled before CORS. |
 | `PROPFIND` | 1 | `Drive.resolvePath`, `Drive.getFolderContents` | Depth 0/1 supported. Depth ∞ returns `403` with `<DAV:propfind-finite-depth>` (RFC 4918 §9.1). |
-| `GET` / `HEAD` | 1 | `Drive.readFile` (or `readRange` for `Range:`) | `bytes=N-M`, open-ended `bytes=N-`, suffix `bytes=-N` all supported. `If-Match` / `If-None-Match` honored in RFC 7232 §6 order. |
+| `GET` / `HEAD` | 1 | `Drive.readFile` (or `readRange` for `Range:`) | `bytes=N-M`, open-ended `bytes=N-`, suffix `bytes=-N` all supported. `If-Match` / `If-None-Match` honored in RFC 7232 §6 order. Bodies carry `X-Content-Type-Options: nosniff` (plus a sandbox CSP for html/xhtml/svg), matching REST `serveFile`. |
 | `PUT` | 1 | `Drive.createFileFromData` (new) / `Drive.writeFileContent` (overwrite) | Both stage the body to a tmp file with hashing before the insert. Quota pre-check via `Content-Length`. Thumbnails regenerate on overwrite. |
 | `DELETE` | 1 | `Drive.deletePath` (soft) | Goes to trash. `resolvePath` skips trashed rows so subsequent `GET`/`PROPFIND` returns 404. |
 | `MKCOL` | 1 | `Drive.createFolder` | Bodied `MKCOL` returns `415` (RFC 4918 §9.3.1). |
@@ -66,7 +66,8 @@ Mountain Duck capture every container losslessly.
 The container is **read-only inside**: `PUT`, `MKCOL`, `DELETE`, `MOVE` (source or dest),
 `PROPPATCH` targeting any path *inside* a container return `423 Locked`. The container as a whole
 can be moved, renamed, or deleted as a unit through the normal Drive code path. `enclosingDocumentContainer()`
-in `webdav/container-guard.ts` runs over a single pre-fetched breadcrumb to make that decision.
+in `drive/container-guard.ts` runs over a single pre-fetched breadcrumb to make that decision — the same
+guard the drive REST routes and the inline-editor save use, so every write surface refuses container internals.
 
 Reads (`GET`, `PROPFIND`, `COPY`-out) are unaffected. An `export` mode that surfaces eigen documents
 as `.docx`/`.xlsx`/`.pdf` was scoped in the original proposal but **not implemented** — round-tripping
@@ -109,7 +110,6 @@ apps/api/src/lib/webdav/
   proppatch.ts          # PROPPATCH — 207 multistatus + dead-prop persistence
   move-copy.ts          # MOVE / COPY (same-mount only)
   locks.ts              # LOCK / UNLOCK handlers + assertWritable()
-  container-guard.ts    # enclosingDocumentContainer() over breadcrumb
   container-overlay.ts  # AppleDouble + Office-tempfile filename filter
   xml.ts                # multistatus / propstat / encodeHref, prop serialization
 ```

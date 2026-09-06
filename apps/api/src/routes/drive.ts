@@ -10,6 +10,7 @@ import { contentDisposition, scriptableInlineHeaders, setCacheHeaders } from '..
 import { getDrive, getSharedDrive } from '../lib/drive';
 import { propagateAccessRequest } from '../lib/drive/access-request-propagation';
 import { aggregateMimeContents, aggregateWatches } from '../lib/drive/aggregate';
+import { assertParentIsFolder } from '../lib/drive/container-guard';
 import { copyPathAcross } from '../lib/drive/copy-across';
 import { getUniqueFileName } from '../lib/drive/naming';
 import { serveFile } from '../lib/drive/serve-file';
@@ -20,6 +21,10 @@ import { getThumbnail } from '../lib/shared/thumbnails';
 import { SNAPSHOT_NAME_FORMAT } from '../lib/versioning/timestamp';
 import { betterAuth } from './auth';
 import { eigenDocTypeSchema } from './shared-schemas';
+
+// One cap for every free-text share note (collaborator email + access request), so a single
+// oversized body can't be persisted or mailed.
+const MAX_SHARE_MESSAGE_LENGTH = 12000;
 
 // Drive routes allow cross-owner access (shared drives, team drives).
 // Access control is enforced by getSharedDrive() → SharedDrive ACL checks, not by ownerId === user.id.
@@ -84,6 +89,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/folder/:pathId',
         async ({ params, body, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
+            await assertParentIsFolder(drive, params.mountId, params.pathId);
             return await drive.createFolder(params.mountId, params.pathId, body.folderName, user);
         },
         {
@@ -95,6 +101,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/folder/:pathId/create/:type',
         async ({ params, body, user }): Promise<DrivePath> => {
             const drive = await getSharedDrive(params.ownerId, user);
+            await assertParentIsFolder(drive, params.mountId, params.pathId);
             return await drive.create(params.mountId, params.pathId, body.fileName, params.type, user);
         },
         {
@@ -157,6 +164,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             // WebDAV COPY keeps its overwrite/409 semantics. The self-into-subtree cycle guard lives
             // in Drive.copyPath now — cross-mount copies can never be self-descendant.
             const targetDrive = sameMount ? sourceDrive : await getSharedDrive(body.targetOwnerId, user);
+            await assertParentIsFolder(targetDrive, body.targetMountId, body.targetParentId);
             const desired = (body.name ?? src.name).replace(/[/\\]/g, '_');
             const siblings = await targetDrive.getFolderContents(body.targetMountId, body.targetParentId);
             const used = new Set(siblings.map((s) => s.name.toLowerCase()));
@@ -504,7 +512,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         {
             body: t.Object({
                 subject: t.Optional(t.String({ maxLength: 200 })),
-                message: t.String({ maxLength: 12000 }),
+                message: t.String({ maxLength: MAX_SHARE_MESSAGE_LENGTH }),
                 sendCopyToSelf: t.Boolean(),
             }),
             auth: true,
@@ -593,6 +601,9 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .post(
         '/drive/:ownerId/:mountId/path/:pathId/request-access',
         async ({ params, user, body }) => {
+            // Guests can't be granted shares, so there's nothing to request — gate them out like
+            // the sibling share routes (acl, access-check).
+            requireNonGuest(user);
             // Skips the SharedDrive facade by design: the caller has NO permission yet — that is
             // the point of the request. propagateAccessRequest only notifies the owner (via the
             // home relay); it never reads or returns path data to the requester.
@@ -608,7 +619,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         {
             auth: true,
             body: t.Object({
-                message: t.Optional(t.String()),
+                message: t.Optional(t.String({ maxLength: MAX_SHARE_MESSAGE_LENGTH })),
             }),
         },
     )

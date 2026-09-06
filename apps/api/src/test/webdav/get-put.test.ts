@@ -243,3 +243,47 @@ describe('WebDAV PUT thumbnails', () => {
         expect(path.details?.height).toBe(4);
     });
 });
+
+describe('WebDAV GET security headers', () => {
+    let ctx: TestContext;
+    let mountId: string;
+    let rootId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        mountId = await getDefaultMountId(ctx.alice.user.sessionToken, ctx.alice.user.id);
+        const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
+        rootId = root.id;
+    });
+
+    // Finding #14: a served upload must carry the same hardening REST serveFile applies, so a
+    // scriptable body can't run script with the viewer's session on the API origin.
+    test('GET of an uploaded .html carries nosniff and the sandbox CSP', async () => {
+        const html = '<html><body><script>alert(1)</script></body></html>';
+        const file = new File([html], 'page.html', { type: 'text/html' });
+        await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, rootId, file);
+
+        const res = await webdavRequest(
+            ctx.alice.user.email,
+            'GET',
+            `/webdav/${ctx.alice.user.id}/${mountId}/page.html`,
+        );
+        expect(res.status).toBe(200);
+        expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
+        expect(res.headers.get('Content-Security-Policy')).toBe("sandbox; default-src 'none'");
+    });
+
+    test('GET of a plain .txt carries nosniff but no CSP', async () => {
+        const file = new File(['just text'], 'plain.txt', { type: 'text/plain' });
+        await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, rootId, file);
+
+        const res = await webdavRequest(
+            ctx.alice.user.email,
+            'GET',
+            `/webdav/${ctx.alice.user.id}/${mountId}/plain.txt`,
+        );
+        expect(res.status).toBe(200);
+        expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
+        expect(res.headers.get('Content-Security-Policy')).toBeNull();
+    });
+});
