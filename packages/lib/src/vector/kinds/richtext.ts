@@ -40,6 +40,7 @@ export const richTextKind = defineKind<VectorRichTextElement>({
         strokeStyle: true,
         roughness: false,
         corners: true,
+        edges: false,
         strokeOptional: true,
         bindable: true,
         silhouette: 'box',

@@ -18,6 +18,7 @@ export const rectangleKind = defineKind<VectorRectangleElement>({
         strokeStyle: true,
         roughness: true,
         corners: true,
+        edges: false,
         strokeOptional: true,
         bindable: true,
         silhouette: 'box',

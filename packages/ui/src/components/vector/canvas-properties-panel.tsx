@@ -150,10 +150,10 @@ export function CanvasPropertiesPanel({
     // An elbow arrow pins angle 0 (its route lives in the unrotated local frame), so a pure-elbow
     // selection disables the panel Angle input; the arrow's own rows live in its kind section.
     const allElbow = all((el) => el.type === 'arrow' && el.elbow);
-    // The Edges row is a shaft's curvature (round curve vs sharp polyline) — a line's or an arrow's,
-    // never freedraw's. An all-arrow selection asks it in the arrow's own section instead, where it is
-    // the elbow's corner style and shows only for an elbow.
-    const showEdges = soleKind !== 'arrow' && all((el) => el.type === 'line' || el.type === 'arrow');
+    // The Edges row is a shaft's curvature (round curve vs sharp polyline), which the `edges` capability
+    // answers — freedraw stores a roundness but does not offer one. An all-arrow selection asks it in the
+    // arrow's own section instead, where it is the elbow's corner style and shows only for an elbow.
+    const showEdges = soleKind !== 'arrow' && all((el) => capabilitiesOf(el).edges);
     const showShape = showCorners || showEdges;
 
     // Same fields on every selected element — one transact, one undo step.

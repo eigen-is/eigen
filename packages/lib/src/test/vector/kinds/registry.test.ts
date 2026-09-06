@@ -158,6 +158,12 @@ describe('ELEMENT_KINDS', () => {
         }
     });
 
+    test('the Edges row belongs to the two drawn polylines, not to a freehand stroke', () => {
+        // freedraw stores a roundness too, so the capability is what separates "has the field" from
+        // "the user picks it".
+        expect(TYPES.filter((type) => ELEMENT_KINDS[type].capabilities.edges)).toEqual(['line', 'arrow']);
+    });
+
     test('capabilities answer the questions the panel used to ask by type', () => {
         expect(ELEMENT_KINDS.ellipse.capabilities.corners).toBe(false);
         expect(ELEMENT_KINDS.rectangle.capabilities.bindable).toBe(true);
