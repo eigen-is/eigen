@@ -11,7 +11,7 @@ import {
 import { MediaResolverProvider, useRecordHistory } from '@workspace/lib/drive';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CommentEntry } from '@workspace/lib/types/chat';
-import type { CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
+import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
@@ -205,11 +205,7 @@ export function StickiesBoard({
     const [scrollToTopOf, setScrollToTopOf] = useState<{ columnId: string; n: number } | null>(null);
 
     const onSaveNew = useCallback(
-        async (
-            patch: { title?: string; description?: string; color?: string },
-            attachments?: CardAttachmentDraft[],
-            assignee?: string | null,
-        ) => {
+        async (patch: CardFormPatch, attachments?: CardAttachmentDraft[], assignee?: string | null) => {
             if (!yjsDoc || !addTargetColumn) return;
             const targetColumnId = addTargetColumn;
             const card = await createCard({ ...patch, attachments }, (card) => {

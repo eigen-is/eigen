@@ -1,5 +1,5 @@
 import type { ChatAttachment } from '@workspace/lib/types/chat';
-import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
+import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { Dialog, DialogContent } from '@workspace/ui/components/dialog';
 import { CardForm } from './card-form';
@@ -17,7 +17,7 @@ type CardFormDialogProps = {
     currentUserEmail?: string;
     initialAssignee?: string | null;
     onSave: (
-        patch: { title?: string; description?: string; color?: string },
+        patch: CardFormPatch,
         attachments?: CardAttachmentDraft[],
         assignee?: string | null,
     ) => void | Promise<void>;

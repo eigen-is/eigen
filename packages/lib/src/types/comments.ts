@@ -12,6 +12,9 @@ export type CommentCard = {
     attachments?: ChatAttachment[];
 };
 
+// What a card form emits on Save: only the fields the user actually changed.
+export type CardFormPatch = Partial<Pick<CommentCard, 'title' | 'description' | 'color'>>;
+
 // What the card form stages before Save: settled entries (edit mode), drive picks, device files.
 // Resolved to ChatAttachment[] by useResolveCardAttachments at save time.
 export type CardAttachmentDraft = ChatAttachment | DrivePath | File;

@@ -11,7 +11,7 @@ import {
     useZombieMediaSweep,
 } from '@workspace/lib/drive';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
-import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
+import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { fitImageSize, type ImageSize } from '@workspace/lib/vector';
 import { type Image as SheetImage, Workbook, type WorkbookInstance } from '@workspace/sheet';
@@ -273,11 +273,7 @@ function SheetEditorInner({
     );
 
     const handleSaveNew = useCallback(
-        async (
-            patch: { title?: string; description?: string; color?: string },
-            attachments?: CardAttachmentDraft[],
-            assignee?: string | null,
-        ) => {
+        async (patch: CardFormPatch, attachments?: CardAttachmentDraft[], assignee?: string | null) => {
             if (!addTargetCell || !workbookRef.current) return;
             const cell = addTargetCell;
             const card = await createCard({ title: addInitialTitle, ...patch, attachments }, (card) => {
