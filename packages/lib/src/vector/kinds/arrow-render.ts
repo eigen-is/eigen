@@ -8,7 +8,7 @@ import { getFontFamily } from '../../constants/fonts';
 import { escapeXml } from '../../core/html';
 import { headingIsHorizontal, vectorToHeading } from '../elbow-heading';
 import { getLineHeightPx, getVerticalOffset } from '../font-metrics';
-import { arrowheadGeometry, type Point, round } from '../geometry';
+import { arrowheadGeometry, distance, type Point, round } from '../geometry';
 import type { Arrowhead, VectorArrowElement } from '../types';
 import { baseRoughOptions, drawableToSvg } from './render-utils';
 
@@ -28,7 +28,7 @@ export function elbowRoundedShaftPath(points: Point[]): string {
         const prev = points[i - 1];
         const point = points[i];
         const next = points[i + 1];
-        const corner = Math.min(radius, segmentLength(point, prev) / 2, segmentLength(point, next) / 2);
+        const corner = Math.min(radius, distance(point, prev) / 2, distance(point, next) / 2);
         sub.push(insetToward(point, prev, corner));
         sub.push(point);
         sub.push(insetToward(point, next, corner));
@@ -51,10 +51,6 @@ function insetToward(point: Point, neighbour: Point, corner: number): Point {
         return { x: neighbour.x < point.x ? point.x - corner : point.x + corner, y: point.y };
     }
     return { x: point.x, y: neighbour.y < point.y ? point.y - corner : point.y + corner };
-}
-
-function segmentLength(a: Point, b: Point): number {
-    return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
 // One arrowhead's roughjs fragment in the arrow's local frame. Barbs (arrow/bar/triangle) share the
