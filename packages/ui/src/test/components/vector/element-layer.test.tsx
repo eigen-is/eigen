@@ -3,8 +3,11 @@ import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_SKETCH_PROPS,
     ELEMENT_KINDS,
+    serializeBinding,
+    serializePoints,
     solidFill,
     VECTOR_STYLE_DEFAULTS,
+    type VectorArrowElement,
     type VectorRichTextElement,
     type VectorShapeElement,
 } from '@workspace/lib/vector';
@@ -79,6 +82,28 @@ const rect = (over: Partial<VectorShapeElement> = {}): VectorShapeElement => ({
     ...over,
 });
 
+// An elbow arrow bound to `r1` at its start: the one layer whose drawing depends on the scene map.
+const elbow = (): VectorArrowElement => ({
+    ...DEFAULT_ELEMENT_PROPS,
+    ...DEFAULT_SKETCH_PROPS,
+    ...ELEMENT_KINDS.arrow.defaults(VECTOR_STYLE_DEFAULTS),
+    id: 'a1',
+    type: 'arrow',
+    x: 40,
+    y: 0,
+    width: 40,
+    height: 40,
+    angle: 0,
+    seed: 1,
+    index: 'a1',
+    elbow: true,
+    points: serializePoints([
+        { x: 0, y: 0 },
+        { x: 40, y: 40 },
+    ]),
+    startBinding: serializeBinding({ elementId: 'r1', fixedPoint: [1, 0.5] }),
+});
+
 const richtext = (html: string): VectorRichTextElement => ({
     ...DEFAULT_ELEMENT_PROPS,
     ...ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS),
@@ -120,6 +145,30 @@ describe('sameLayerProps', () => {
         const b = new Map([[el.id, el]]);
         // A plain rectangle derives no route, so a fresh map identity is not a reason to re-render.
         expect(sameLayerProps({ el, byId: a }, { el, byId: b })).toBe(true);
+    });
+
+    test('a rebuilt scene map leaves an elbow arrow alone while its bound shapes hold still', () => {
+        // Every pointermove of a drag rebuilds the map, so this is the frame-by-frame common case: the
+        // arrow keeps its route without the router ever being asked.
+        const el = elbow();
+        const target = rect();
+        expect(
+            sameLayerProps({ el, byId: new Map([[target.id, target]]) }, { el, byId: new Map([[target.id, rect()]]) }),
+        ).toBe(true);
+    });
+
+    test('an elbow arrow re-renders when the shape it is bound to moves', () => {
+        const el = elbow();
+        const a = rect();
+        expect(
+            sameLayerProps({ el, byId: new Map([[a.id, a]]) }, { el, byId: new Map([[a.id, rect({ y: 30 })]]) }),
+        ).toBe(false);
+    });
+
+    test('an elbow arrow re-renders when its bound shape leaves the scene', () => {
+        const el = elbow();
+        const a = rect();
+        expect(sameLayerProps({ el, byId: new Map([[a.id, a]]) }, { el, byId: new Map() })).toBe(false);
     });
 });
 
