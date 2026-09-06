@@ -18,7 +18,7 @@ import {
 import { drawingPage } from '../canvas/render';
 import { canvasHtmlDocument } from '../canvas/transform';
 import { getFontFaceCSSForFamilies } from '../fonts';
-import { sanitizeExportHtml } from '../sanitize';
+import { sanitizeExportHtml, sanitizeSceneHtml } from '../sanitize';
 
 // A rich-text box renders as an HTML <div> inside <foreignObject>, and DOMPurify drops both by
 // default: foreignObject is not in its SVG allowlist, and HTML nested in SVG survives only under a
@@ -40,13 +40,15 @@ export function renderEigenvectorExport(
     title: string,
     media: TransformMedia[],
 ): { data: ArrayBuffer; warnings: TransformWarning[] } {
-    const scene = readVectorFromDoc(doc);
+    // Rich text is filtered per element here rather than in the assembled output, which carries the
+    // generated @font-face rules and so cannot forbid the <style> element a text box must not hold.
+    const scene = sanitizeSceneHtml(readVectorFromDoc(doc));
     const dataUriMap = toDataUriMap(media);
 
     if (format === 'svg') {
-        // A collaborator can put arbitrary strings in the schemaless scene — including a rich-text
-        // box's raw HTML — so the assembled SVG runs through the shared sanitizer (the documented
-        // SSRF closure) exactly like slides/sheets and the preview.
+        // A collaborator can put arbitrary strings in the schemaless scene, so the assembled SVG runs
+        // through the shared sanitizer (the documented SSRF closure) exactly like slides/sheets and
+        // the preview.
         const svg = sanitizeExportHtml(renderSceneSvg(scene, dataUriMap), RICH_TEXT_TAGS);
         return { data: toTransferableText(toXmlDocument(svg)), warnings: [] };
     }

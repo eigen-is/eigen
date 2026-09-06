@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test';
+import * as Y from 'yjs';
+import type { DocumentExportFormat } from '../../lib/document/transform/protocol';
 import type { CanvasPage } from '../../lib/export/canvas/render';
-import { canvasHtmlDocument } from '../../lib/export/canvas/transform';
+import { canvasHtmlDocument, renderEigenslidesExport } from '../../lib/export/canvas/transform';
+import { buildGoldenDeckScene, seedDeckDoc } from '../fixtures/golden-documents';
 
 // The standalone HTML document a canvas export leaves through. The screen document must fit a
 // fixed-size page to whatever viewport opens it; the PDF document must not, because WeasyPrint
@@ -38,5 +41,29 @@ describe('canvasHtmlDocument', () => {
         const html = deckHtml('pdf');
         expect(html).not.toContain('page-fit');
         expect(html).toContain('@page { size: 960px 540px; margin: 0; }');
+    });
+});
+
+// A rich-text box is a schemaless collaborator string, and a <style> element in it is document-wide
+// CSS in whatever embeds the body — the downloaded .html and the sheet WeasyPrint prints.
+function deckExportHtml(format: DocumentExportFormat, html: string): string {
+    const scene = buildGoldenDeckScene();
+    const doc = new Y.Doc();
+    seedDeckDoc(doc, {
+        ...scene,
+        elements: scene.elements.map((el) => ('html' in el ? { ...el, html } : el)),
+    });
+    return new TextDecoder().decode(renderEigenslidesExport(doc, format, 'Deck', []).data);
+}
+
+describe('renderEigenslidesExport', () => {
+    test.each(['html', 'pdf-html'] as const)('drops a <style> block a rich-text box carries (%s)', (format) => {
+        const html = deckExportHtml(format, '<style>*{display:none}</style><p>hi</p>');
+        expect(html).not.toContain('display:none');
+        expect(html).toContain('<p>hi</p>');
+    });
+
+    test('keeps the embedded font faces the document needs', () => {
+        expect(deckExportHtml('html', '<p>hi</p>')).toContain('@font-face');
     });
 });

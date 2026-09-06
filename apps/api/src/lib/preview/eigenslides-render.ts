@@ -11,9 +11,9 @@ import {
 import type * as Y from 'yjs';
 import type { TransformWarning } from '../document/transform/protocol';
 import { emptyPage, framePages, renderFittedPage } from '../export/canvas/render';
-import { sanitizeExportHtml } from '../export/sanitize';
+import { sanitizeExportHtml, sanitizeSceneHtml } from '../export/sanitize';
 import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-marker';
-import { capPreviewElements, sanitizeSceneHtml } from './preview-scene';
+import { capPreviewElements } from './preview-scene';
 
 // Materialized doc → the deck's first slides as compositor pages, the same HTML the PDF export
 // prints. Runs inside the transform Worker (worker.ts owns execution; the main-thread orchestration

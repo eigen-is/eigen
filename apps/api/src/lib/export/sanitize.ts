@@ -1,3 +1,4 @@
+import type { VectorScene } from '@workspace/lib/vector';
 import DOMPurify from 'isomorphic-dompurify';
 
 type SanitizeConfig = Parameters<typeof DOMPurify.sanitize>[1];
@@ -91,4 +92,24 @@ export function sanitizeExportHtml(html: string, options?: SanitizeOptions): str
         DOMPurify.removeHook('afterSanitizeAttributes');
         DOMPurify.removeHook('uponSanitizeElement');
     }
+}
+
+// A rich-text box's `html` is a schemaless collaborator string, and a <style> element in it styles
+// whatever embeds the box rather than the box itself — the drive hero's live DOM, the downloaded
+// .html, the sheet WeasyPrint prints, the .svg file. Nothing a rich-text box legitimately holds is a
+// style element; <link>, <meta> and <base> are not in DOMPurify's allowlist to begin with. The
+// assembled document cannot forbid the tag instead: it carries the generated @font-face block.
+const RICH_TEXT_TAGS: SanitizeConfig = { FORBID_TAGS: ['style'] };
+
+// Every canvas scene element that carries an `html` body, with that body filtered: DOMPurify plus the
+// shared restriction to data: refs, so nothing a collaborator wrote in it can fetch from anywhere.
+// Every renderer of an untrusted scene — both previews, the deck export, the drawing export — reads
+// the scene through here first, then sanitizes its own assembled output.
+export function sanitizeSceneHtml(scene: VectorScene): VectorScene {
+    return {
+        ...scene,
+        elements: scene.elements.map((el) =>
+            'html' in el ? { ...el, html: sanitizeExportHtml(el.html, RICH_TEXT_TAGS) } : el,
+        ),
+    };
 }

@@ -3,9 +3,9 @@ import { readVectorFromDoc } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import type { TransformWarning } from '../document/transform/protocol';
 import { type CanvasPage, drawingPage, emptyPage, renderFittedPage, sceneBackground } from '../export/canvas/render';
-import { sanitizeExportHtml } from '../export/sanitize';
+import { sanitizeExportHtml, sanitizeSceneHtml } from '../export/sanitize';
 import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-marker';
-import { capPreviewElements, sanitizeSceneHtml } from './preview-scene';
+import { capPreviewElements } from './preview-scene';
 
 const EMPTY_PREVIEW_HEIGHT = 120;
 
