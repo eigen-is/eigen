@@ -1,4 +1,6 @@
 import { beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import type { JSONContent } from '@tiptap/core';
 import { decodeSheetsSnapshot, encodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
 import {
@@ -339,6 +341,47 @@ describe('document transform (eigensheets preview)', () => {
             // Exactly one — not "at least one" — once everything has settled.
             expect(callsOfKind(runSpy, 'preview')).toHaveLength(1);
         } finally {
+            runSpy.mockRestore();
+        }
+    }, 60_000);
+
+    test('a request that finds no previous version joins the in-flight regeneration instead of starting a second job', async () => {
+        const sheetsPath = await seedDoc('cache-regen-landed');
+        const first = await previewRequest(sheetsPath.id);
+        expect(first.status).toBe(200);
+        await bumpUpdatedAt(sheetsPath.id);
+        const home = await getHome(ctx.alice.user.id);
+        const { mount } = await home.drive.resolveFile(mountId, sheetsPath.id);
+
+        // Hold the background regeneration open so the second request arrives while it is
+        // in flight — the moment a landing regeneration's prune can take the previous version.
+        const real = documentTransformRunner.run.bind(documentTransformRunner);
+        let release: (() => void) | undefined;
+        const held = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const runSpy = spyOn(documentTransformRunner, 'run').mockImplementation(async (request, opts) => {
+            if (request.kind === 'preview') await held;
+            return real(request, opts);
+        });
+        try {
+            const stale = await previewRequest(sheetsPath.id);
+            expect(stale.headers.get('cache-control')).toBe('no-store');
+            for (let i = 0; i < 80 && callsOfKind(runSpy, 'preview').length === 0; i++) await Bun.sleep(50);
+
+            // The previous version is gone (as after a prune), so nothing is left to serve stale.
+            for (const name of await fs.promises.readdir(mount.previewsDir)) {
+                if (name.startsWith(`${sheetsPath.id}-`)) await fs.promises.unlink(path.join(mount.previewsDir, name));
+            }
+            const pending = previewRequest(sheetsPath.id);
+            await Bun.sleep(50);
+            release?.();
+            const fresh = await pending;
+            expect(fresh.status).toBe(200);
+            expect(fresh.headers.get('cache-control')).not.toBe('no-store');
+            expect(callsOfKind(runSpy, 'preview')).toHaveLength(1);
+        } finally {
+            release?.();
             runSpy.mockRestore();
         }
     }, 60_000);

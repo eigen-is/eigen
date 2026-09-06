@@ -106,6 +106,16 @@ const inFlightText = new Map<string, Promise<void>>();
 // share one generation (mirrors inFlightImage above).
 const inFlightFirstText = new Map<string, Promise<ServedTextPreview | null>>();
 
+// The cached current version, or null when the file is missing, mid-write or corrupt.
+async function readCachedText(cacheFile: string): Promise<TextPreviewResult | null> {
+    if (!fs.existsSync(cacheFile)) return null;
+    try {
+        return await Bun.file(cacheFile).json();
+    } catch {
+        return null;
+    }
+}
+
 // Read-through cache for a text preview artifact (the JSON { body, mode } envelope).
 async function getOrCacheText(
     previewsDir: string,
@@ -115,14 +125,8 @@ async function getOrCacheText(
     generate: TextPreviewGenerator,
 ): Promise<ServedTextPreview | null> {
     const cacheFile = path.join(previewsDir, cacheName);
-    if (fs.existsSync(cacheFile)) {
-        try {
-            const value: TextPreviewResult = await Bun.file(cacheFile).json();
-            return { value, stale: false };
-        } catch {
-            // File is mid-write or corrupt — fall through to serve a prior version / regenerate.
-        }
-    }
+    const current = await readCachedText(cacheFile);
+    if (current) return { value: current, stale: false };
 
     // Current version missing. If a previous version is cached, serve it immediately and
     // regenerate the current one in the background (stale-while-revalidate).
@@ -131,6 +135,13 @@ async function getOrCacheText(
         regenerateTextInBackground(previewsDir, pathId, cacheName, mode, generate);
         return { value: stale, stale: true };
     }
+
+    // No previous version either. A regeneration that landed during the reads above pruned
+    // the previous version and wrote the current one: join it rather than start a foreground
+    // generation of a file that exists (or is about to).
+    await inFlightText.get(cacheName);
+    const landed = await readCachedText(cacheFile);
+    if (landed) return { value: landed, stale: false };
 
     // First-ever preview for this path: nothing to serve, so generate synchronously.
     const existing = inFlightFirstText.get(cacheName);
@@ -200,6 +211,8 @@ async function readNewestStaleText(
 // Fire-and-forget regeneration of the current-version text preview, deduped on cacheName so
 // concurrent requests for the same stale path share one generation. A failed or dropped
 // (runner-overload) regeneration leaves the stale file in place — a later request retries.
+// Checked synchronously: the caller read the cache before its stale read, and a regeneration
+// that landed in between has either its in-flight entry or its finished file to show for it.
 function regenerateTextInBackground(
     previewsDir: string,
     pathId: string,
@@ -207,16 +220,19 @@ function regenerateTextInBackground(
     mode: TextPreviewResult['mode'],
     generate: TextPreviewGenerator,
 ): void {
-    if (inFlightText.has(cacheName)) return;
+    const cacheFile = path.join(previewsDir, cacheName);
+    if (inFlightText.has(cacheName) || fs.existsSync(cacheFile)) return;
     const task = (async () => {
         try {
             const body = await generate('background');
             if (!body) return;
             const result: TextPreviewResult = { body, mode };
-            await Bun.write(path.join(previewsDir, cacheName), JSON.stringify(result));
+            await Bun.write(cacheFile, JSON.stringify(result));
             pruneOldVersions(previewsDir, pathId, cacheName).catch(() => {});
         } catch (err) {
             console.error(`[preview] Background regeneration failed for ${mode} preview ${pathId}:`, err);
+            // A partial file would pass the existence check above and pin the stale version.
+            await fs.promises.unlink(cacheFile).catch(() => {});
         } finally {
             inFlightText.delete(cacheName);
         }
