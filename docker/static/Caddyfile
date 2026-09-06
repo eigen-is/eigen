@@ -26,6 +26,13 @@
 :8080 {
     encode gzip zstd
 
+    # Baseline security headers for every deployment shape (the CSP + referrer meta ride in each app's
+    # HTML). HSTS is intentionally absent: a host webserver terminates HTTPS in front of this plain :8080.
+    header X-Frame-Options SAMEORIGIN
+    header X-Content-Type-Options nosniff
+    header Referrer-Policy "strict-origin-when-cross-origin"
+    header Permissions-Policy "camera=(), microphone=(), geolocation=()"
+
     @static path *.js *.css *.png *.jpg *.svg *.woff2 *.ttf *.woff *.eot
     header @static Cache-Control "public, max-age=31536000, immutable"
 

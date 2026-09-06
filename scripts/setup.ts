@@ -390,6 +390,13 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Baseline security headers (the CSP + referrer meta ride in each app's HTML).
+        add_header X-Frame-Options SAMEORIGIN always;
+        add_header X-Content-Type-Options nosniff always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+
         proxy_buffering off;       # SSE streams chunks immediately
         proxy_cache off;
         proxy_read_timeout 24h;    # SSE / WebSocket: long-lived connections
@@ -402,6 +409,13 @@ server {
     const caddyConf = `# Eigen reverse-proxy snippet for Caddy. Append to your host Caddyfile.
 ${domain} {
     encode gzip zstd
+
+    # Baseline security headers (the CSP + referrer meta ride in each app's HTML).
+    header X-Frame-Options SAMEORIGIN
+    header X-Content-Type-Options nosniff
+    header Referrer-Policy "strict-origin-when-cross-origin"
+    header Permissions-Policy "camera=(), microphone=(), geolocation=()"
+
     reverse_proxy 127.0.0.1:8080 {
         flush_interval -1
         header_up X-Forwarded-Proto {scheme}
@@ -433,6 +447,12 @@ ${domain} {
     ProxyTimeout 86400              # SSE / WebSocket: long-lived connections
     RequestHeader set X-Forwarded-Proto "https"
     RequestHeader set X-Real-IP "%{REAL_CLIENT_IP}e"   # the gateway keys rate limits on this
+
+    # Baseline security headers (the CSP + referrer meta ride in each app's HTML).
+    Header always set X-Frame-Options SAMEORIGIN
+    Header always set X-Content-Type-Options nosniff
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
 
     # WebSocket upgrade (collab editing on sheets, slides, stickies, docs)
     RewriteEngine On
