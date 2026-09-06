@@ -73,12 +73,7 @@ Full architecture in [IMAP.md](../IMAP.md). The facts that drive this design:
   `milter_default_action = accept` (`docker/postfix/main.cf.template:33-37`). But the
   OpenDKIM-failure fallback runs `sed -i '/milter/d'` (`docker/postfix/entrypoint.sh:95`),
   which would also delete any rspamd milter line — the fallback must become targeted.
-- **The Docker subnet is configurable, and Postfix doesn't know it.** Setup falls back through
-  `172.30.0.0/24`, `172.31.0.0/24`, `10.20.0.0/24` when `172.20.0.0/24` conflicts
-  (`scripts/setup.ts:127`), yet `mynetworks` and OpenDKIM's TrustedHosts hardcode
-  `172.16.0.0/12` (`main.cf.template:11`, `entrypoint.sh:68-72`). On the `10.20.0.0/24`
-  fallback the API is *outside* `mynetworks` today — a latent bug this proposal fixes by
-  templating the subnet.
+- **The Docker subnet is configurable, and Postfix templates it.** Setup falls back through `172.30.0.0/24`, `172.31.0.0/24`, `10.20.0.0/24` when `172.20.0.0/24` conflicts (`scripts/setup.ts:127`), and `mynetworks` and OpenDKIM's TrustedHosts render from `EIGEN_SUBNET` (compose passes it to the postfix container; entrypoint envsubst), scoped to loopback plus the bridge subnet. The API stays inside `mynetworks` on any fallback subnet, and rspamd reads the same `EIGEN_SUBNET` for its trusted networks.
 - **A recursive resolver already runs**: the `mail` profile includes `unbound`
   (`docker-compose.yml:106`), which Postfix uses via `dns:`. This matters — DNSBL/URIBL lookups
   are refused or lied to through public resolvers like 8.8.8.8, and are the usual pain point of
@@ -201,11 +196,7 @@ the header simply never appears, and mail routes to INBOX. rspamd's own `milter_
 remove-then-add semantics additionally sanitize the informational `X-Spam-*` headers whenever
 it is running.
 
-**Subnet templating.** `mynetworks` and OpenDKIM's TrustedHosts are rendered from
-`EIGEN_SUBNET` (compose passes it to the postfix container; entrypoint envsubst), replacing the
-`172.16.0.0/12` hardcodes — fixing the latent `10.20.0.0/24`-fallback mismatch for Postfix and
-rspamd from one value. Setup should derive the API-side `TRUSTED_NETWORKS` default from the
-same chosen subnet while it's in there.
+**Subnet templating.** `mynetworks` and OpenDKIM's TrustedHosts already render from `EIGEN_SUBNET` (compose passes it to the postfix container; entrypoint envsubst), scoped to loopback plus the bridge subnet, so there is no `10.20.0.0/24`-fallback mismatch to fix. rspamd reads the same `EIGEN_SUBNET` for its trusted networks, so all three agree from one value. Setup should still derive the API-side `TRUSTED_NETWORKS` default from the same chosen subnet while it's in there.
 
 **Targeted OpenDKIM fallback.** Replace `sed -i '/milter/d'` in `entrypoint.sh` with additive
 generation: the entrypoint composes the effective `smtpd_milters` / `non_smtpd_milters` values

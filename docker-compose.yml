@@ -144,6 +144,11 @@ services:
       QUEUE_CHECK_INTERVAL: ${QUEUE_CHECK_INTERVAL:-300}
       QUEUE_ALERT_THRESHOLD: ${QUEUE_ALERT_THRESHOLD:-200}
       QUEUE_ALERT_COOLDOWN: ${QUEUE_ALERT_COOLDOWN:-21600}
+      # The docker bridge subnet, kept in lockstep with the `eigen` network below (same default).
+      # entrypoint.sh scopes Postfix `mynetworks` + OpenDKIM `InternalHosts` to loopback plus this
+      # value, so eigen-api (172.20.0.x by default) can submit and get its mail DKIM-signed without
+      # trusting the whole 172.16/12 range. Unset → loopback only (fail closed).
+      EIGEN_SUBNET: ${EIGEN_SUBNET:-172.20.0.0/24}
     depends_on:
       eigen-api:
         condition: service_healthy

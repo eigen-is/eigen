@@ -6,13 +6,21 @@ set -e
 : "${MAIL_DOMAIN:=$DOMAIN}"
 export MAIL_DOMAIN
 
+# Trust range shared by Postfix `mynetworks` and OpenDKIM `InternalHosts`: loopback always, plus
+# the docker bridge subnet so eigen-api (172.20.0.x by default) can submit and get its mail
+# DKIM-signed. EIGEN_SUBNET comes from docker-compose.yml, kept in step with the `eigen` network.
+# Unset → loopback only (fail closed), never the whole 172.16/12 range.
+export MAIL_TRUST_NETWORKS="127.0.0.0/8${EIGEN_SUBNET:+ ${EIGEN_SUBNET}}"
+
 echo "=== Eigen Postfix Container ==="
 echo "Hostname:    ${DOMAIN}"
 echo "Mail domain: ${MAIL_DOMAIN}"
+echo "Trust range: ${MAIL_TRUST_NETWORKS}"
 
 # --- Config templating ---
-# Substitute $DOMAIN and $MAIL_DOMAIN; leave Postfix's own variables ($mydomain, ${recipient}) alone.
-envsubst '$DOMAIN $MAIL_DOMAIN' < /etc/postfix/main.cf.template > /etc/postfix/main.cf
+# Substitute $DOMAIN, $MAIL_DOMAIN and $MAIL_TRUST_NETWORKS; leave Postfix's own variables
+# ($mydomain, ${recipient}) alone.
+envsubst '$DOMAIN $MAIL_DOMAIN $MAIL_TRUST_NETWORKS' < /etc/postfix/main.cf.template > /etc/postfix/main.cf
 envsubst '$DOMAIN $MAIL_DOMAIN' < /etc/postfix/master.cf.template > /etc/postfix/master.cf
 
 # --- TLS cert fallback ---
@@ -63,13 +71,14 @@ chown opendkim:opendkim /data/dkim /data/dkim/eigen.private /data/dkim/eigen.txt
 # Hosts whose mail OpenDKIM signs (rather than just verifying). Must include the
 # docker bridge subnet — eigen-api submits SMTP from 172.20.0.x, and OpenDKIM's
 # default InternalHosts is loopback only, which would silently fall back to
-# verify-only and ship mail unsigned.
+# verify-only and ship mail unsigned. Scoped to EIGEN_SUBNET (see MAIL_TRUST_NETWORKS
+# above); loopback only when it is unset, never the whole 172.16/12 range.
 mkdir -p /etc/opendkim
-cat > /etc/opendkim/TrustedHosts <<EOF
-127.0.0.0/8
-::1
-172.16.0.0/12
-EOF
+{
+    echo "127.0.0.0/8"
+    echo "::1"
+    if [ -n "${EIGEN_SUBNET:-}" ]; then echo "${EIGEN_SUBNET}"; fi
+} > /etc/opendkim/TrustedHosts
 
 # OpenDKIM config — signs outbound mail as ${MAIL_DOMAIN} and, in verify mode (Mode sv), stamps
 # inbound mail with an Authentication-Results header the API trusts for auto-processing iMIP invites.

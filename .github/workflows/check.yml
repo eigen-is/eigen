@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+# The job only checks out and runs lint/typecheck/test — it writes nothing back, comments on
+# nothing, publishes nothing. Read-only token, no per-job override needed.
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
