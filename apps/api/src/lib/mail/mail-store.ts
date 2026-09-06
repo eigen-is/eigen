@@ -1,4 +1,13 @@
-import type { Attachment, DraftAttachmentUpload, Email, EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
+import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
+import type {
+    AddressObject,
+    Attachment,
+    DraftAttachmentUpload,
+    Email,
+    EmailSummary,
+    MaildirMailbox,
+    RecipientSummary,
+} from '@workspace/lib/types/mail';
 import type { FileSink } from 'bun';
 
 export type MailSearchOptions = {
@@ -7,6 +16,23 @@ export type MailSearchOptions = {
     mailboxes?: string[];
     from?: string;
     to?: string;
+};
+
+export type DraftMeta = {
+    subject: string;
+    to?: AddressObject;
+    cc?: AddressObject;
+    bcc?: AddressObject;
+    text: string;
+    // "Clean" body as typed by the user — without the reference-card HTML that the EML
+    // on disk has baked in. Overlaid on messageGet so the compose view shows what the
+    // user typed, not the rendered card block at the bottom.
+    html: string;
+    attachments: Array<{ filename: string; contentType: string; size: number }>;
+    driveReferences?: AttachmentReference[];
+    inReplyTo?: string;
+    references?: string[] | string;
+    lastFullSaveAt?: number;
 };
 
 export type MailFlag = 'seen' | 'replied' | 'flagged' | 'draft' | 'trashed' | 'forwarded';
@@ -19,8 +45,8 @@ export type MailStoreEvents = {
     deleted: (messageId: string, mailbox: string) => void;
 };
 
-// The swappable mail storage contract held by the Mail domain class (AUDIT_MAIL.md
-// § Backend abstraction). MaildirStore (+ MailDB) is the only implementation today.
+// The swappable mail storage contract held by the Mail domain class. MaildirStore
+// (+ MailDB) is the only implementation today.
 export interface MailStore {
     // Resolves true when a fresh (empty) store was created.
     init(events: MailStoreEvents): Promise<boolean>;
@@ -49,15 +75,10 @@ export interface MailStore {
     delete(messageId: string): Promise<void>;
     move(messageId: string, targetMailbox: string): Promise<void>;
     setFlags(messageId: string, changes: Partial<Record<MailFlag, boolean>>): Promise<void>;
-    updateDraftContent(
-        id: string,
-        subject: string,
-        text: string,
-        recipients?: { toShort: string; toAddress: string; recipientsAll: string },
-    ): void;
+    updateDraftContent(id: string, subject: string, text: string, recipients?: RecipientSummary): void;
 
-    writeDraftMeta(draftId: string, meta: Record<string, unknown>): Promise<void>;
-    readDraftMeta<T = Record<string, unknown>>(draftId: string): Promise<T | null>;
+    writeDraftMeta(draftId: string, meta: DraftMeta): Promise<void>;
+    readDraftMeta(draftId: string): Promise<DraftMeta | null>;
     deleteDraftMeta(draftId: string): Promise<void>;
     listDraftMetaIds(): Promise<string[]>;
 
@@ -68,5 +89,5 @@ export interface MailStore {
     ): Promise<DraftAttachmentUpload>;
     readDraftTempFile(tempId: string): Promise<{ content: Buffer; filename: string; contentType: string } | null>;
     cleanupDraftTemp(tempId: string): Promise<void>;
-    cleanupStaleDraftTemps(maxAgeMs?: number): Promise<void>;
+    cleanupStaleDraftTemps(): Promise<void>;
 }

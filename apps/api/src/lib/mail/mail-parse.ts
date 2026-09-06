@@ -38,7 +38,7 @@ export async function parseEmlBytes(messageId: string, mailbox: string, bytes: B
         isFlagged: false,
         isDraft: false,
         isReplied: false,
-        hasAttachments: parsedMail.attachments?.length > 0,
+        hasAttachments: parsedMail.attachments.length > 0,
         fromShort: parsedMail.from?.value[0]?.name || parsedMail.from?.value[0]?.address || 'Unknown',
         fromAddress: parsedMail.from?.value[0]?.address || '',
         toShort,

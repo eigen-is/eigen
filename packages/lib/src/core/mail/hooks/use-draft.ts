@@ -4,6 +4,7 @@ import { useAuth } from '@workspace/lib/auth';
 import type {
     DraftAttachmentUpload,
     DraftInput,
+    DraftUpdateOptions,
     EmailDraft,
     NewDraft,
     SentMailResult,
@@ -27,17 +28,11 @@ export function createDraftEmail(input: DraftInput): NewDraft {
     };
 }
 
-type DraftUpdateOptions = {
-    tempAttachmentIds?: string[];
-    keepAttachmentIndexes?: number[];
-    forceFullSave?: boolean;
-};
-
-export async function updateDraftEmail(
+async function updateDraftEmail(
     draft: NewDraft,
     ownerId: string,
     options: DraftUpdateOptions = {},
-): Promise<EmailDraft | null> {
+): Promise<EmailDraft> {
     const response = await mailApi({ ownerId }).message.draft.put({
         mail: draft,
         tempAttachmentIds: options.tempAttachmentIds,
@@ -45,20 +40,16 @@ export async function updateDraftEmail(
         forceFullSave: options.forceFullSave,
     });
     if (response.error) throw new AppError(response);
-    return response.data || null;
+    return response.data;
 }
 
-export async function sendDraftEmail(
-    draft: NewDraft,
-    ownerId: string,
-    grantAccessRefIds?: string[],
-): Promise<SentMailResult | null> {
+async function sendDraftEmail(draft: NewDraft, ownerId: string, grantAccessRefIds?: string[]): Promise<SentMailResult> {
     const response = await mailApi({ ownerId }).message.send.post({
         mail: draft,
         grantAccessRefIds,
     });
     if (response.error) throw new AppError(response);
-    return response.data || null;
+    return response.data;
 }
 
 // Multipart upload bypasses Eden Treaty (which serializes bodies as JSON) and goes through raw
@@ -81,12 +72,8 @@ export function useUpdateDraft() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (input: { draft: NewDraft } & DraftUpdateOptions) =>
-            updateDraftEmail(input.draft, ownerId, {
-                tempAttachmentIds: input.tempAttachmentIds,
-                keepAttachmentIndexes: input.keepAttachmentIndexes,
-                forceFullSave: input.forceFullSave,
-            }),
+        mutationFn: ({ draft, ...options }: { draft: NewDraft } & DraftUpdateOptions) =>
+            updateDraftEmail(draft, ownerId, options),
         // Optimistically merge the user's edits into the cached detail. This matters for
         // fire-and-forget unmount saves: if the user navigates away then immediately back, the
         // detail query is observed before the network save completes, and useEmail's
@@ -102,8 +89,6 @@ export function useUpdateDraft() {
             queryClient.setQueryData<EmailDraft | null>(key, {
                 ...previous,
                 subject: draft.subject ?? '',
-                // to/cc/bcc are direct assignments — undefined means the user cleared the
-                // field (stringToAddressObject returns undefined for empty input).
                 to: draft.to,
                 cc: draft.cc,
                 bcc: draft.bcc,
@@ -116,7 +101,7 @@ export function useUpdateDraft() {
             // Push the parsed response into the cache so the next observe doesn't need a
             // refetch. The list still gets invalidated because per-message metadata (date,
             // attachment count) may have changed.
-            if (data?.id) queryClient.setQueryData(emailKeys.detail(ownerId, data.id), data);
+            if (data.id) queryClient.setQueryData(emailKeys.detail(ownerId, data.id), data);
             queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, 'Drafts') });
             invalidateMailboxes(queryClient, ownerId);
             invalidateHomeSize(queryClient, ownerId);
@@ -137,7 +122,7 @@ export function useSendDraft() {
             invalidateMailboxes(queryClient, ownerId);
             queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, 'Drafts') });
             invalidateHomeSize(queryClient, ownerId);
-            if (data?.failedRecipients?.length) {
+            if (data.failedRecipients?.length) {
                 toast.error(`Delivery to ${data.failedRecipients.join(', ')} failed`);
             } else {
                 toast.success('Email sent');

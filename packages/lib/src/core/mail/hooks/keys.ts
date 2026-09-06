@@ -19,7 +19,6 @@ export const mailboxKeys = {
     all: ['mailboxes'] as const,
     owner: (ownerId: string) => [...mailboxKeys.all, ownerId] as const,
     lists: (ownerId: string) => [...mailboxKeys.owner(ownerId), 'list'] as const,
-    list: (ownerId: string, filters: Record<string, unknown>) => [...mailboxKeys.lists(ownerId), { filters }] as const,
 };
 
 // Invalidation functions (ownerId-scoped, used from mutation onSuccess)
@@ -27,7 +26,7 @@ export function invalidateMailboxes(queryClient: QueryClient, ownerId: string): 
     queryClient.invalidateQueries({ queryKey: mailboxKeys.lists(ownerId) });
 }
 
-export function invalidateMailReceived(queryClient: QueryClient, ownerId: string, mailbox: string = 'inbox'): void {
+export function invalidateMailReceived(queryClient: QueryClient, ownerId: string, mailbox: string): void {
     queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, mailbox) });
 }
 
@@ -55,17 +54,8 @@ export function invalidateMailMoved(
     }
 }
 
-export function invalidateMailReadChanged(
-    queryClient: QueryClient,
-    ownerId: string,
-    messageId: string,
-    mailbox: string,
-): void {
-    queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, messageId) });
-    queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, mailbox) });
-}
-
-export function invalidateMailFlagsChanged(
+// Read and flag changes touch the same two keys: the message and the list it sits in.
+export function invalidateMailMessageChanged(
     queryClient: QueryClient,
     ownerId: string,
     messageId: string,

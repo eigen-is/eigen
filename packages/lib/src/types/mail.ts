@@ -77,6 +77,8 @@ export type EmailSummary = {
     size: number;
 };
 
+export type RecipientSummary = Pick<EmailSummary, 'toShort' | 'toAddress' | 'recipientsAll'>;
+
 export type Email = ParsedMail &
     EmailSummary & {
         // Populated only on drafts (read from the sidecar). Absent on sent/received mail —
@@ -124,15 +126,14 @@ export type NewDraft = {
     driveReferences?: AttachmentReference[];
 };
 
-export type DraftInput = {
-    to?: AddressObject;
-    cc?: AddressObject;
-    bcc?: AddressObject;
-    subject?: string;
-    text?: string;
-    html?: string;
-    inReplyTo?: string;
-    references?: string[] | string;
+export type DraftInput = Pick<NewDraft, 'to' | 'cc' | 'bcc' | 'subject' | 'text' | 'html' | 'inReplyTo' | 'references'>;
+
+// Sent with a draft save: staged uploads to embed, parsed attachments to keep, and whether to force
+// the EML rebuild (MAIL.md § Compose, drafts, and send).
+export type DraftUpdateOptions = {
+    tempAttachmentIds?: string[];
+    keepAttachmentIndexes?: number[];
+    forceFullSave?: boolean;
 };
 
 export type DraftAttachmentUpload = {

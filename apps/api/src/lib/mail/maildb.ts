@@ -1,5 +1,6 @@
-import type { EmailSummary } from '@workspace/lib/types/mail';
-import { and, count, desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
+import { MAIL_PREVIEW_CHARS } from '@workspace/lib/constants/mail';
+import type { EmailSummary, RecipientSummary } from '@workspace/lib/types/mail';
+import { and, count, desc, eq, inArray, lt, or, type SQL, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { PATHS, sanitizeFtsQuery } from '../core';
 import type { ManagedDatabase } from '../core/managed-database';
@@ -25,29 +26,30 @@ export default class MailDB {
         this.db = this.managedDb.db;
     }
 
+    // Picks the summary fields by name: callers hand in a full parsed Email, whose extra
+    // ParsedMail fields have no column here.
     private toRecord(email: EmailSummary) {
-        const date = email.date instanceof Date ? email.date : email.date ? new Date(email.date) : new Date();
-
+        const now = new Date();
         return {
             id: email.id,
             filename: email.filename,
-            subject: email.subject?.toString() || '',
-            fromShort: String(email.fromShort || ''),
-            fromAddress: String(email.fromAddress || ''),
-            toShort: String(email.toShort || ''),
-            toAddress: String(email.toAddress || ''),
-            recipientsAll: String(email.recipientsAll || ''),
-            textShort: String(email.textShort || ''),
-            date,
+            subject: email.subject,
+            fromShort: email.fromShort,
+            fromAddress: email.fromAddress,
+            toShort: email.toShort,
+            toAddress: email.toAddress,
+            recipientsAll: email.recipientsAll,
+            textShort: email.textShort,
+            date: email.date,
             size: email.size,
-            isRead: Boolean(email.isRead),
-            isFlagged: Boolean(email.isFlagged),
-            isDraft: Boolean(email.isDraft),
-            isReplied: Boolean(email.isReplied),
-            hasAttachments: Boolean(email.hasAttachments),
-            mailbox: String(email.mailbox || ''),
-            createdAt: new Date(),
-            updatedAt: new Date(),
+            isRead: email.isRead,
+            isFlagged: email.isFlagged,
+            isDraft: email.isDraft,
+            isReplied: email.isReplied,
+            hasAttachments: email.hasAttachments,
+            mailbox: email.mailbox,
+            createdAt: now,
+            updatedAt: now,
         };
     }
 
@@ -57,7 +59,7 @@ export default class MailDB {
         const existing = this.db.select().from(schema.emails).where(eq(schema.emails.id, record.id)).get();
         let inserted: boolean;
         if (existing) {
-            const { id, ...rest } = record;
+            const { id: _id, ...rest } = record;
             this.db.update(schema.emails).set(rest).where(eq(schema.emails.id, email.id)).run();
             inserted = false;
         } else {
@@ -89,7 +91,7 @@ export default class MailDB {
     }
 
     size() {
-        return (this.db.select({ size: sql`SUM(size)` }).from(schema.emails).get()?.size as number) || 0;
+        return this.db.select({ size: sql<number>`SUM(size)` }).from(schema.emails).get()?.size || 0;
     }
 
     getEmailsCount(mailbox: string) {
@@ -148,17 +150,12 @@ export default class MailDB {
     // `text` is the full draft body, but emails.textShort stores a truncated preview for
     // list views — the same shape as received mail. The FTS5 trigger on emails picks up
     // whatever lands in textShort, so drafts get indexed at preview granularity.
-    updateDraftContent(
-        id: string,
-        subject: string,
-        text: string,
-        recipients?: { toShort: string; toAddress: string; recipientsAll: string },
-    ): void {
+    updateDraftContent(id: string, subject: string, text: string, recipients?: RecipientSummary): void {
         this.db
             .update(schema.emails)
             .set({
                 subject,
-                textShort: text.slice(0, 200),
+                textShort: text.slice(0, MAIL_PREVIEW_CHARS),
                 updatedAt: new Date(),
                 ...(recipients && {
                     toShort: recipients.toShort,
@@ -178,13 +175,13 @@ export default class MailDB {
     // values in practice; `id` (TEXT PK) is the tiebreak. Drizzle serializes the Date param to the
     // column's second unit, matching the stored value.
     listMessages(mailbox: string, opts: { limit: number; before?: { date: Date; id: string } }): EmailSummary[] {
-        const conditions = [eq(schema.emails.mailbox, mailbox)];
+        const conditions: (SQL | undefined)[] = [eq(schema.emails.mailbox, mailbox)];
         if (opts.before) {
             conditions.push(
                 or(
                     lt(schema.emails.date, opts.before.date),
                     and(eq(schema.emails.date, opts.before.date), lt(schema.emails.id, opts.before.id)),
-                )!,
+                ),
             );
         }
         const rows = this.db
@@ -195,7 +192,9 @@ export default class MailDB {
             .limit(opts.limit)
             .all();
         // Cap the list-view preview at the response seam — the FULL textShort stays in the DB for FTS5.
-        return rows.map((r) => (r.textShort.length > 200 ? { ...r, textShort: r.textShort.slice(0, 200) } : r));
+        return rows.map((r) =>
+            r.textShort.length > MAIL_PREVIEW_CHARS ? { ...r, textShort: r.textShort.slice(0, MAIL_PREVIEW_CHARS) } : r,
+        );
     }
 
     searchMail(opts: MailSearchOptions): EmailSummary[] {
@@ -253,14 +252,14 @@ export default class MailDB {
 
         // Pass 1: rank via FTS5, return ordered ids only. No Drizzle column-mode conversion
         // applies to raw `sql``` results, so we deliberately stay in id-space here.
-        const ranked = this.db.all(sql`
+        const ranked = this.db.all<{ id: string }>(sql`
             SELECT e.id AS id
             FROM emails_fts
             JOIN emails e ON e.rowid = emails_fts.rowid
             WHERE emails_fts MATCH ${match}${mailboxFilter}${candidateFilter}
             ORDER BY bm25(emails_fts), e.date DESC, e.id DESC
             LIMIT ${opts.limit}
-        `) as { id: string }[];
+        `);
         if (ranked.length === 0) return [];
 
         // Pass 2: re-fetch the ranked rows through Drizzle so `date` / `createdAt` /

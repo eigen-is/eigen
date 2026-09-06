@@ -3,7 +3,10 @@ import type { OutboundAttachment, OutboundMail } from '../core/mailer';
 import { buildMessageId } from './mailutils';
 import { canonicalizeRecipients } from './recipients';
 
-export function draftToOutboundMail(draft: EmailDraft, fallbackEmail: string): OutboundMail {
+// `from` is the draft's own address, else the account's — never absent, so callers can read it directly.
+type OutboundMailWithFrom = OutboundMail & { from: NonNullable<OutboundMail['from']> };
+
+export function draftToOutboundMail(draft: EmailDraft, fallbackEmail: string): OutboundMailWithFrom {
     const fromValue = draft.from?.value?.[0];
 
     // Flatten groups, dedupe and validate once, then split back into the three fields.
@@ -15,7 +18,7 @@ export function draftToOutboundMail(draft: EmailDraft, fallbackEmail: string): O
         byField[field].push({ name, address });
     }
 
-    const message: OutboundMail = {
+    const message: OutboundMailWithFrom = {
         from: fromValue?.address
             ? { name: fromValue.name || '', address: fromValue.address }
             : { name: '', address: fallbackEmail },
@@ -32,8 +35,7 @@ export function draftToOutboundMail(draft: EmailDraft, fallbackEmail: string): O
     if (draft.inReplyTo) message.inReplyTo = draft.inReplyTo;
     if (draft.references) message.references = draft.references;
 
-    const html = draft.html;
-    if (html) message.html = html;
+    if (draft.html) message.html = draft.html;
 
     if (draft.attachments?.length) {
         message.attachments = draft.attachments.flatMap((a): OutboundAttachment[] =>

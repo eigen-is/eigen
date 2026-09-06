@@ -1,12 +1,19 @@
 import type { FSWatcher } from 'node:fs';
-import type { Attachment, DraftAttachmentUpload, Email, EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
+import type {
+    Attachment,
+    DraftAttachmentUpload,
+    Email,
+    EmailSummary,
+    MaildirMailbox,
+    RecipientSummary,
+} from '@workspace/lib/types/mail';
 import type { BunFile, FileSink } from 'bun';
 import { Semaphore } from '../../utils/semaphore';
 import { invalidateMailSize } from '../config/enforcement';
 import { ApiError, LocalFilesystem, PATHS, STANDARD_MAILBOXES } from '../core';
 import type { Home } from '../home';
 import { parseEml, parseEmlBytes } from './mail-parse';
-import type { MailFlag, MailSearchOptions, MailStore, MailStoreEvents } from './mail-store';
+import type { DraftMeta, MailFlag, MailSearchOptions, MailStore, MailStoreEvents } from './mail-store';
 import MailDB from './maildb';
 import {
     applyFlagsFromFilename,
@@ -18,6 +25,8 @@ import {
     rebuildFlagsSuffix,
 } from './mailutils';
 
+const STALE_DRAFT_TEMP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
 export class MaildirStore implements MailStore {
     readonly basePath: string;
     readonly storage: LocalFilesystem;
@@ -27,17 +36,10 @@ export class MaildirStore implements MailStore {
     // Reconciliation (doSyncMailbox) must not straddle a mutation's fs+db pair, or its delete phase drops just-moved rows.
     private storeLock = new Semaphore(1);
     private watchers: FSWatcher[] = [];
-    private readonly CUR: string;
-    private readonly NEW: string;
-    private readonly TMP: string;
 
     constructor(private home: Home) {
-        const { ROOT, MAILDIR, CUR, NEW, TMP } = PATHS.MAIL;
-        this.basePath = MAILDIR;
-        this.storage = new LocalFilesystem(`${home.homeDir}/${ROOT}`);
-        this.CUR = CUR;
-        this.NEW = NEW;
-        this.TMP = TMP;
+        this.basePath = PATHS.MAIL.MAILDIR;
+        this.storage = new LocalFilesystem(`${home.homeDir}/${PATHS.MAIL.ROOT}`);
     }
 
     // -- Lifecycle --
@@ -56,7 +58,7 @@ export class MaildirStore implements MailStore {
     watch(): void {
         for (const mailbox of STANDARD_MAILBOXES) {
             const mailboxPath = this.mailboxDir(mailbox);
-            for (const subdir of [this.CUR, this.NEW]) {
+            for (const subdir of [PATHS.MAIL.CUR, PATHS.MAIL.NEW]) {
                 try {
                     const watcher = this.storage.watch(this.storage.pathJoin(mailboxPath, subdir), () =>
                         this.syncMailbox(mailbox).catch((err) => console.error('maildir: mailbox sync failed', err)),
@@ -78,6 +80,7 @@ export class MaildirStore implements MailStore {
     }
 
     async destruct(): Promise<void> {
+        // init() can throw before the db opens, and the home destructs regardless.
         if (this.db) {
             await this.db.destruct();
         }
@@ -138,17 +141,15 @@ export class MaildirStore implements MailStore {
         return this.db.getEmail(messageId);
     }
 
-    // null means "not found" ONLY: no summary row (real cache-miss) or the .eml isn't
-    // locatable. A parse/read/DB fault propagates — never masked as a missing message.
+    // null means "not found" ONLY: no summary row (a real cache-miss). A parse/read/DB
+    // fault propagates — never masked as a missing message.
     async getMessage(messageId: string): Promise<Email | null> {
         const cached = this.db.getEmail(messageId);
         if (!cached) return null;
 
         const parsed = await this.readAndParse(messageId, cached.mailbox, cached.filename);
-        if (!parsed) return null;
-
         applyFlagsFromFilename(parsed, cached.filename);
-        return { ...parsed, ...cached } as Email;
+        return { ...parsed, ...cached };
     }
 
     async getRawMessage(messageId: string): Promise<ArrayBuffer> {
@@ -161,7 +162,7 @@ export class MaildirStore implements MailStore {
         const email = this.db.getEmail(messageId);
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
         const parsed = await this.readAndParse(messageId, email.mailbox, email.filename);
-        return parsed?.attachments ?? [];
+        return parsed.attachments;
     }
 
     async append(mailbox: string, message: Buffer, opts?: { skipSync?: boolean }): Promise<string> {
@@ -186,7 +187,7 @@ export class MaildirStore implements MailStore {
             applyFlagsFromFilename(parsed, filename);
             parsed.filename = filename;
             parsed.mailbox = 'Drafts';
-            this.db.addEmail(parsed as EmailSummary);
+            this.db.addEmail(parsed);
             return parsed;
         });
     }
@@ -237,12 +238,7 @@ export class MaildirStore implements MailStore {
         });
     }
 
-    updateDraftContent(
-        id: string,
-        subject: string,
-        text: string,
-        recipients?: { toShort: string; toAddress: string; recipientsAll: string },
-    ): void {
+    updateDraftContent(id: string, subject: string, text: string, recipients?: RecipientSummary): void {
         this.db.updateDraftContent(id, subject, text, recipients);
     }
 
@@ -265,10 +261,8 @@ export class MaildirStore implements MailStore {
     }
 
     private async doSyncMailbox(mailbox: string): Promise<void> {
-        // Phase 1: Move new/ → cur/
         await this.moveNewToCur(mailbox);
 
-        // Phase 2: Build disk state from cur/
         const diskFiles = new Map<string, string>();
         for (const fileName of await this.listCurFiles(mailbox)) {
             if (!fileName.startsWith('.')) {
@@ -276,7 +270,6 @@ export class MaildirStore implements MailStore {
             }
         }
 
-        // Phase 3: Get DB state
         const dbRecords = this.db.getAllEmails(mailbox);
         const dbById = new Map(dbRecords.map((r) => [r.id, r]));
 
@@ -340,25 +333,30 @@ export class MaildirStore implements MailStore {
 
     // -- Draft meta sidecar (lightweight body-only saves) --
 
+    private getDraftMetaDir(): string {
+        return 'draft-meta';
+    }
+
     private getDraftMetaPath(draftId: string): string {
-        return this.storage.pathJoin('draft-meta', `${this.sanitizeTempId(draftId)}.json`);
+        return this.storage.pathJoin(this.getDraftMetaDir(), `${this.sanitizeTempId(draftId)}.json`);
     }
 
     private async ensureDraftMetaDir(): Promise<void> {
-        if (!(await this.storage.dirExists('draft-meta'))) {
-            await this.storage.mkdir('draft-meta');
+        const dir = this.getDraftMetaDir();
+        if (!(await this.storage.dirExists(dir))) {
+            await this.storage.mkdir(dir);
         }
     }
 
-    async writeDraftMeta(draftId: string, meta: Record<string, unknown>): Promise<void> {
+    async writeDraftMeta(draftId: string, meta: DraftMeta): Promise<void> {
         await this.ensureDraftMetaDir();
         await this.storage.write(this.getDraftMetaPath(draftId), JSON.stringify(meta));
     }
 
-    async readDraftMeta<T = Record<string, unknown>>(draftId: string): Promise<T | null> {
+    async readDraftMeta(draftId: string): Promise<DraftMeta | null> {
         const path = this.getDraftMetaPath(draftId);
         if (!(await this.storage.fileExists(path))) return null;
-        return (await this.storage.file(path).json()) as T;
+        return this.storage.file(path).json();
     }
 
     async deleteDraftMeta(draftId: string): Promise<void> {
@@ -371,8 +369,9 @@ export class MaildirStore implements MailStore {
     }
 
     async listDraftMetaIds(): Promise<string[]> {
-        if (!(await this.storage.dirExists('draft-meta'))) return [];
-        const files = await this.storage.readdir('draft-meta');
+        const dir = this.getDraftMetaDir();
+        if (!(await this.storage.dirExists(dir))) return [];
+        const files = await this.storage.readdir(dir);
         return files.filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5));
     }
 
@@ -424,8 +423,8 @@ export class MaildirStore implements MailStore {
         const file = this.storage.file(tempPath);
         if (!(await file.exists())) return null;
         const metaFile = this.storage.file(metaPath);
-        const meta = (await metaFile.exists())
-            ? ((await metaFile.json()) as { filename: string; contentType: string })
+        const meta: { filename: string; contentType: string } = (await metaFile.exists())
+            ? await metaFile.json()
             : { filename: tempId, contentType: 'application/octet-stream' };
         return {
             content: Buffer.from(await file.arrayBuffer()),
@@ -473,7 +472,7 @@ export class MaildirStore implements MailStore {
         } catch {}
     }
 
-    async cleanupStaleDraftTemps(maxAgeMs: number = 24 * 60 * 60 * 1000): Promise<void> {
+    async cleanupStaleDraftTemps(): Promise<void> {
         const dir = this.getDraftTempDir();
         if (!(await this.storage.dirExists(dir))) return;
         const now = Date.now();
@@ -481,7 +480,7 @@ export class MaildirStore implements MailStore {
             const filePath = this.storage.pathJoin(dir, name);
             try {
                 const stat = await this.storage.stat(filePath);
-                if (now - stat.mtimeMs > maxAgeMs) {
+                if (now - stat.mtimeMs > STALE_DRAFT_TEMP_MAX_AGE_MS) {
                     await this.storage.unlink(filePath);
                 }
             } catch {}
@@ -512,27 +511,24 @@ export class MaildirStore implements MailStore {
     private async createMailboxDir(mailbox: string): Promise<void> {
         const mailboxPath = this.mailboxDir(mailbox);
         await this.storage.mkdir(mailboxPath);
-        await this.storage.mkdir(this.storage.pathJoin(mailboxPath, this.CUR));
-        await this.storage.mkdir(this.storage.pathJoin(mailboxPath, this.NEW));
-        await this.storage.mkdir(this.storage.pathJoin(mailboxPath, this.TMP));
+        await this.storage.mkdir(this.storage.pathJoin(mailboxPath, PATHS.MAIL.CUR));
+        await this.storage.mkdir(this.storage.pathJoin(mailboxPath, PATHS.MAIL.NEW));
+        await this.storage.mkdir(this.storage.pathJoin(mailboxPath, PATHS.MAIL.TMP));
         if (mailbox !== '') {
             await this.storage.write(this.storage.pathJoin(mailboxPath, 'maildirfolder'), '');
         }
     }
 
-    private async deliverAtomic(
-        message: string | Buffer,
-        mailbox: string,
-    ): Promise<{ uniqueId: string; size: number }> {
+    private async deliverAtomic(message: Buffer, mailbox: string): Promise<{ uniqueId: string; size: number }> {
         const uniqueId = createUniqueMessageId();
-        const size = typeof message === 'string' ? Buffer.byteLength(message, 'utf-8') : message.byteLength;
+        const size = message.byteLength;
         const filename = `${uniqueId},S=${size}`;
         const mailboxPath = this.mailboxDir(mailbox);
 
-        const tmpPath = this.storage.pathJoin(mailboxPath, this.TMP, filename);
+        const tmpPath = this.storage.pathJoin(mailboxPath, PATHS.MAIL.TMP, filename);
         await this.storage.write(tmpPath, message);
 
-        const newPath = this.storage.pathJoin(mailboxPath, this.NEW, filename);
+        const newPath = this.storage.pathJoin(mailboxPath, PATHS.MAIL.NEW, filename);
         await this.storage.rename(tmpPath, newPath);
 
         return { uniqueId, size };
@@ -541,37 +537,36 @@ export class MaildirStore implements MailStore {
     private async deliverToCur(
         mailbox: string,
         message: string,
-        flags: Record<string, boolean>,
-        existingId?: string,
+        flags: Partial<Record<MailFlag, boolean>>,
+        existingId: string,
     ): Promise<{
         uniqueId: string;
         size: number;
         filename: string;
     }> {
-        const uniqueId = existingId ?? createUniqueMessageId();
         const size = Buffer.byteLength(message, 'utf-8');
-        const filename = buildMaildirFilename(uniqueId, flags, size);
+        const filename = buildMaildirFilename(existingId, flags, size);
         const mailboxPath = this.mailboxDir(mailbox);
 
-        const tmpPath = this.storage.pathJoin(mailboxPath, this.TMP, filename);
+        const tmpPath = this.storage.pathJoin(mailboxPath, PATHS.MAIL.TMP, filename);
         await this.storage.write(tmpPath, message);
 
-        const curPath = this.storage.pathJoin(mailboxPath, this.CUR, filename);
+        const curPath = this.storage.pathJoin(mailboxPath, PATHS.MAIL.CUR, filename);
         await this.storage.rename(tmpPath, curPath);
 
-        return { uniqueId, size, filename };
+        return { uniqueId: existingId, size, filename };
     }
 
     private async moveNewToCur(mailbox: string): Promise<void> {
         const mailboxPath = this.mailboxDir(mailbox);
-        const newPath = this.storage.pathJoin(mailboxPath, this.NEW);
+        const newPath = this.storage.pathJoin(mailboxPath, PATHS.MAIL.NEW);
         if (!(await this.storage.dirExists(newPath))) return;
 
         for (const fileName of await this.storage.readdir(newPath)) {
             if (fileName.startsWith('.')) continue;
             const src = this.storage.pathJoin(newPath, fileName);
             const curName = fileName.includes(':') ? fileName : `${fileName}:2,`;
-            const dst = this.storage.pathJoin(mailboxPath, this.CUR, curName);
+            const dst = this.storage.pathJoin(mailboxPath, PATHS.MAIL.CUR, curName);
             try {
                 await this.storage.rename(src, dst);
             } catch (e: unknown) {
@@ -581,24 +576,24 @@ export class MaildirStore implements MailStore {
     }
 
     private async listCurFiles(mailbox: string): Promise<string[]> {
-        const curPath = this.storage.pathJoin(this.mailboxDir(mailbox), this.CUR);
+        const curPath = this.storage.pathJoin(this.mailboxDir(mailbox), PATHS.MAIL.CUR);
         if (!(await this.storage.dirExists(curPath))) return [];
         return this.storage.readdir(curPath);
     }
 
     getMessageFile(mailbox: string, filename: string): BunFile {
-        const filePath = this.storage.pathJoin(this.mailboxDir(mailbox), this.CUR, filename);
+        const filePath = this.storage.pathJoin(this.mailboxDir(mailbox), PATHS.MAIL.CUR, filename);
         return this.storage.file(filePath);
     }
 
     private async moveMessage(fromMailbox: string, fromFilename: string, toMailbox: string): Promise<void> {
-        const srcPath = this.storage.pathJoin(this.mailboxDir(fromMailbox), this.CUR, fromFilename);
-        const dstPath = this.storage.pathJoin(this.mailboxDir(toMailbox), this.CUR, fromFilename);
+        const srcPath = this.storage.pathJoin(this.mailboxDir(fromMailbox), PATHS.MAIL.CUR, fromFilename);
+        const dstPath = this.storage.pathJoin(this.mailboxDir(toMailbox), PATHS.MAIL.CUR, fromFilename);
         await this.storage.rename(srcPath, dstPath);
     }
 
     private async renameInCur(mailbox: string, oldFilename: string, newFilename: string): Promise<void> {
-        const curPath = this.storage.pathJoin(this.mailboxDir(mailbox), this.CUR);
+        const curPath = this.storage.pathJoin(this.mailboxDir(mailbox), PATHS.MAIL.CUR);
         await this.storage.rename(
             this.storage.pathJoin(curPath, oldFilename),
             this.storage.pathJoin(curPath, newFilename),
@@ -606,15 +601,10 @@ export class MaildirStore implements MailStore {
     }
 
     private async deleteMessage(mailbox: string, filename: string): Promise<void> {
-        const filePath = this.storage.pathJoin(this.mailboxDir(mailbox), this.CUR, filename);
+        const filePath = this.storage.pathJoin(this.mailboxDir(mailbox), PATHS.MAIL.CUR, filename);
         if (await this.storage.fileExists(filePath)) {
             await this.storage.unlink(filePath);
         }
-    }
-
-    private async findFileByUniqueId(uniqueId: string, mailbox: string): Promise<string | undefined> {
-        const files = await this.listCurFiles(mailbox);
-        return files.find((f) => f.startsWith(uniqueId));
     }
 
     private async dirSize(): Promise<number> {
@@ -631,33 +621,17 @@ export class MaildirStore implements MailStore {
 
     // -- Private helpers --
 
-    // Returns null ONLY when the .eml is genuinely not locatable (no filename, not on disk).
     // A parse/read fault propagates from parseEml — callers must not treat it as "not found".
-    private async readAndParse(messageId: string, mailbox: string, filename?: string): Promise<Email | null> {
-        if (!filename) {
-            const record = this.db.getEmail(messageId);
-            filename = record?.filename;
-        }
-        if (!filename) {
-            console.warn(`readAndParse: filename not in DB for ${messageId}, scanning disk`);
-            filename = await this.findFileByUniqueId(messageId, mailbox);
-        }
-        if (!filename) return null;
-
+    private async readAndParse(messageId: string, mailbox: string, filename: string): Promise<Email> {
         return parseEml(messageId, mailbox, this.getMessageFile(mailbox, filename));
     }
 
     private getMailboxInfo(mailboxName: string): MaildirMailbox {
-        const flags = getStandardMailboxFlags(mailboxName);
-        if (!mailboxName && !flags.includes('\\Inbox')) {
-            flags.push('\\Inbox');
-        }
-
         return {
             path: mailboxName,
             name: mailboxName ? mailboxName.split('.').pop() || mailboxName : 'INBOX',
             delimiter: '.',
-            flags,
+            flags: getStandardMailboxFlags(mailboxName),
             total: this.db.getEmailsCount(mailboxName),
             unread: this.db.getEmailsCountUnread(mailboxName),
         };
