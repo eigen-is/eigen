@@ -1,6 +1,6 @@
 import type { TextPreviewMode } from '@workspace/lib/constants';
 import { escapeHtml } from '@workspace/lib/html';
-import DOMPurify from 'isomorphic-dompurify';
+import { sanitizeExportHtml } from '../export/sanitize';
 
 const LANGUAGE_MAP: Record<string, string> = {
     '.js': 'javascript',
@@ -75,7 +75,10 @@ export async function generateTextPreview(
     if (mode === 'markdown') {
         const MarkdownIt = (await import('markdown-it')).default;
         const md = new MarkdownIt({ html: false, linkify: true, typographer: true });
-        const body = DOMPurify.sanitize(md.render(content), { FORCE_BODY: true });
+        // Shared body sanitizer like every other preview: a `![](http://…)` image would else
+        // render an <img src> that beacons every viewer of the drive hero. No allowedRefs —
+        // nothing resolves a `.md`'s relative/remote image paths, so only data: URIs may stay.
+        const body = sanitizeExportHtml(md.render(content));
         return { body, mode };
     }
 

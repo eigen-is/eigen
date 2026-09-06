@@ -59,7 +59,7 @@ stale content after an inline edit.
 
 | Mode           | Rendering                                       |
 |----------------|-------------------------------------------------|
-| `markdown`     | `markdown-it` → HTML, sanitized with DOMPurify |
+| `markdown`     | `markdown-it` → HTML, sanitized with `sanitizeExportHtml` (no refs — a `![](http://…)` image can't beacon a viewer of the drive hero) |
 | `code`         | `lowlight` syntax highlighting → HTML spans     |
 | `plaintext`    | prose paragraphs — HTML-escaped `<p>` blocks, single newlines as `<br>` |
 | `eigendoc`     | Yjs blobs → transform Worker → PM JSON (first 20 blocks) → tiptap static renderer → HTML |
@@ -200,7 +200,7 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 | File                                                                      | Purpose                                          |
 |---------------------------------------------------------------------------|--------------------------------------------------|
 | `apps/api/src/lib/preview/preview-cache.ts`                               | Orchestration: check cache, generate, serve      |
-| `apps/api/src/lib/preview/text-preview.ts`                                | markdown-it + lowlight → HTML body + DOMPurify   |
+| `apps/api/src/lib/preview/text-preview.ts`                                | markdown-it + lowlight → HTML body + `sanitizeExportHtml` |
 | `apps/api/src/lib/preview/exiftool-preview.ts`                            | Embedded JPEG extraction for RAW/PSD/AI/HEIC     |
 | `apps/api/src/lib/shared/thumbnails.ts`                                   | Unified image processing (sharp + heic-convert + exiftool) |
 | `apps/api/src/lib/shared/video-thumbnail.ts`                              | ffmpeg-based video frame extractor + `isFfmpegAvailable`   |
