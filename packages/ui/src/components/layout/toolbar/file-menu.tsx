@@ -122,14 +122,14 @@ export function FileMenu({
 
                     {/* Section 2: Export & Rename */}
                     {(canDownload || canWrite) && <DropdownMenuSeparator />}
-                    {canDownload && (
+                    {canDownload && onExport && (
                         <DropdownMenuSub>
                             <DropdownMenuSubTrigger>
                                 <Download className="h-4 w-4 mr-2" /> Download
                             </DropdownMenuSubTrigger>
                             <DropdownMenuSubContent>
                                 {downloadFormats.map((format) => (
-                                    <DropdownMenuItem key={format} onClick={() => onExport?.(format)}>
+                                    <DropdownMenuItem key={format} onClick={() => onExport(format)}>
                                         {formatDownloadLabel(format)}
                                     </DropdownMenuItem>
                                 ))}
