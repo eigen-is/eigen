@@ -44,7 +44,7 @@ storage type is the backend given to a **new** user or team drive; existing moun
 `mapStorageType()` translates it to the mount-level type (`local-id` → `local-key`, `local-fullnames` → `local`,
 `s3` → `s3`), and `UserHome`/`TeamHome` call it when they create a default mount. See [STORAGE.md](STORAGE.md).
 
-**`onboarding`** — `waitlist.enabled` puts the "Join Waitlist" form on the landing page and gates every waitlist
+**`onboarding`** — `openSignup` allows self-registration through the public `POST /auth/sign-up/email` endpoint (off by default; invites, the waitlist and admin user creation are the normal paths, so server-side `auth.api.signUpEmail` is unaffected); `waitlist.enabled` puts the "Join Waitlist" form on the landing page and gates every waitlist
 route (`requireWaitlistEnabled`); `autoAddOwnerContact` seeds a new user's contacts with the org owner;
 `welcomeMail` (enabled, subject, body) goes to a new account; `inviteEmail` (subject, body) is the mail a waitlist
 accept sends. Bodies are HTML with `{name}` / `{orgName}` / `{domain}` / `{inviteLink}` placeholders.

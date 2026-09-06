@@ -1,6 +1,7 @@
 import { Elysia } from 'elysia';
 import { auth } from '../lib/auth/auth';
 import { isDemo } from '../lib/config/env';
+import { getServerSettings } from '../lib/config/server-settings';
 import { ApiError } from '../lib/core';
 
 // Auth mutations a demo visitor must not reach: api keys are live IMAP/CalDAV/WebDAV credentials,
@@ -15,14 +16,20 @@ const DEMO_BLOCKED_AUTH_PATHS = new Set([
 ]);
 
 // user middleware (compute user and session and pass to routes)
-// The demo guard MUST be chained before `.mount(auth.handler)`: Elysia snapshots an instance's
+// This guard MUST be chained before `.mount(auth.handler)`: Elysia snapshots an instance's
 // lifecycle hooks at route registration, so a hook added after `.mount()` never runs for the
-// mounted handler. Inert on real instances (isDemo() false).
+// mounted handler.
 export const betterAuth = new Elysia({ name: 'better-auth' })
     .onBeforeHandle(({ request }) => {
-        if (!isDemo()) return;
         const path = new URL(request.url).pathname;
-        if (DEMO_BLOCKED_AUTH_PATHS.has(path)) throw new ApiError(403, 'Disabled in demo mode');
+        // better-auth mounts POST /auth/sign-up/email with no gate of its own; the product onboards
+        // through invites, the waitlist and admin user creation, so self-registration is off by default.
+        // Server-side auth.api.signUpEmail calls (setup, tests) don't pass through this hook, so they
+        // keep working — not better-auth's disableSignUp, which would break those too.
+        if (path === '/auth/sign-up/email' && !getServerSettings().onboarding.openSignup) {
+            throw new ApiError(403, 'Sign-up is disabled');
+        }
+        if (isDemo() && DEMO_BLOCKED_AUTH_PATHS.has(path)) throw new ApiError(403, 'Disabled in demo mode');
     })
     .mount(auth.handler)
     .macro({

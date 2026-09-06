@@ -7,9 +7,7 @@ verification too.
 
 ## Test users
 
-- **Dev signup is open**: `POST localhost:8000/auth/sign-up/email` with `{email, password, name}`
-  creates a user and returns a `better-auth.session_token` cookie. Sign in to an existing
-  account via `POST /auth/sign-in/email`.
+- **Dev signup**: self-registration is off by default (`onboarding.openSignup`); enable it in the admin onboarding settings (or `await updateServerSettings({ onboarding: { openSignup: true } })`) before `POST localhost:8000/auth/sign-up/email` with `{email, password, name}` creates a user and returns a `better-auth.session_token` cookie. Sign in to an existing account via `POST /auth/sign-in/email`.
 - **Convention**: one throwaway account per task, named `<task>-verify@eigen.test`, password
   `<account>-password-123` (e.g. `cycle8-verify@eigen.test` / `cycle8-verify@eigen.test-password-123`).
   Never verify in a real user's drive. Leave the account's documents in place when they are
