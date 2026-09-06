@@ -21,6 +21,16 @@ import { loadYjsState } from './yjs-loader';
 export const MESSAGE_SYNC = 0;
 export const MESSAGE_AWARENESS = 1;
 
+// A real y-websocket client owns exactly one awareness client id per doc; a tab that reloads or
+// reconnects opens a fresh socket with a new id, so one connection never legitimately declares many.
+// 8 tolerates a client that churns a few ids on one socket while stopping a flood that bloats the
+// shared map (fanned out to every peer, replayed to every joiner).
+const MAX_AWARENESS_CLIENT_IDS = 8;
+// A legitimate awareness state is name + colour + userId + a cursor/selection — ~100-300 bytes, a
+// few KiB for a large multi-element canvas selection. 16 KiB leaves generous headroom while capping
+// the per-state bytes fanned out to every peer and replayed to every joiner.
+const MAX_AWARENESS_STATE_BYTES = 16 * 1024;
+
 const SNAPSHOT_INTERVAL = 100;
 // Sheets' flushSnapshot dumps the whole sheet JSON into one update row on tab
 // close; a count-only threshold lets data.db balloon to ~100× the doc size
@@ -139,6 +149,20 @@ class DbProvider {
 // Yjs and awareness hand back whatever origin was passed in; ours is the socket, anything else is server-side.
 function isConnection(origin: unknown): origin is ServerWebSocket<undefined> {
     return origin !== null && typeof origin === 'object' && 'readyState' in origin;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
+}
+
+// A client may publish presence for itself only: an awareness `user` field must carry the session
+// user's id, so a reader can't paint another person's name/colour. A state with no `user` field (the
+// initial empty handshake state) carries no identity to spoof.
+function awarenessIdentityMatches(state: unknown, userId: string): boolean {
+    if (!isRecord(state)) return true;
+    const identity = state['user'];
+    if (identity === undefined || identity === null) return true;
+    return isRecord(identity) && identity['userId'] === userId;
 }
 
 export default class CollabDocument {
@@ -377,23 +401,34 @@ export default class CollabDocument {
             }
         } else if (messageType === MESSAGE_AWARENESS) {
             const awarenessUpdate = decoding.readVarUint8Array(decoder);
-            // Applying fires the awareness 'update' handler, which is the one fan-out to the other peers.
-            awarenessProtocol.applyAwarenessUpdate(this.awareness, awarenessUpdate, conn);
+            const user = this.connections.get(conn);
+            if (!user) return;
 
+            // Validate before applying: a read-only peer could otherwise flood the shared awareness
+            // map (fanned out to every peer, replayed to every joiner) with unbounded client ids or
+            // state, or spoof another user's identity. Drop the whole frame on any violation; removals
+            // (state === null) always pass so a departing client's own cleanup still lands.
+            const owned = new Set(this.connectionClientIds.get(conn));
             try {
                 const trackDecoder = decoding.createDecoder(awarenessUpdate);
                 const len = decoding.readVarUint(trackDecoder);
-                let ids = this.connectionClientIds.get(conn);
-                if (!ids) {
-                    ids = new Set();
-                    this.connectionClientIds.set(conn, ids);
-                }
                 for (let i = 0; i < len; i++) {
-                    ids.add(decoding.readVarUint(trackDecoder));
+                    const clientId = decoding.readVarUint(trackDecoder);
+                    decoding.readVarUint(trackDecoder); // clock
+                    const stateJson = decoding.readVarString(trackDecoder);
+                    if (stateJson === 'null') continue;
+                    if (Buffer.byteLength(stateJson) > MAX_AWARENESS_STATE_BYTES) return;
+                    if (!awarenessIdentityMatches(JSON.parse(stateJson), user.id)) return;
+                    owned.add(clientId);
+                    if (owned.size > MAX_AWARENESS_CLIENT_IDS) return;
                 }
             } catch {
-                // ignore parsing errors
+                return; // malformed frame
             }
+
+            // Applying fires the awareness 'update' handler, which is the one fan-out to the other peers.
+            awarenessProtocol.applyAwarenessUpdate(this.awareness, awarenessUpdate, conn);
+            this.connectionClientIds.set(conn, owned);
         } else {
             console.warn(`Unknown message type: ${messageType}`);
         }

@@ -236,7 +236,9 @@ describe('Collab', () => {
             try {
                 const remoteDoc = new Y.Doc();
                 const remoteAwareness = new awarenessProtocol.Awareness(remoteDoc);
-                remoteAwareness.setLocalState({ user: { name: 'fanout-probe' } });
+                // Identity must carry the session user's id — the server drops awareness states that
+                // spoof another user (audit finding #12).
+                remoteAwareness.setLocalState({ user: { name: 'fanout-probe', userId: home.user.id } });
 
                 const originBase = originConn.sent.length;
                 const otherBase = otherConn.sent.length;
