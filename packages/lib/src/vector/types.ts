@@ -98,9 +98,8 @@ export type VectorImageElement = VectorElementBase & {
 };
 
 // The one text kind: TipTap HTML in a box, styled by its own typography fields.
-// `strokeColor`/`strokeWidth`/`strokeStyle` are its border, `fill` its box background. A hachured text
-// box is not a thing, so its renderer paints the fill's paint half and ignores the hatch style
-// (capabilities.fillStyle: false) — the stored field is the same one every fillable kind carries.
+// `strokeColor`/`strokeWidth`/`strokeStyle` are its border, `fill` its box background — both painted as
+// the same roughjs drawable a rectangle draws, behind the text, hatch style included.
 export type VectorRichTextElement = VectorElementBase &
     Fillable & {
         type: 'richtext';

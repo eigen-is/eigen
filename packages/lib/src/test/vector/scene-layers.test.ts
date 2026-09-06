@@ -36,10 +36,12 @@ describe('sceneLayers', () => {
         expect('html' in content && content.style).toContain('font-family');
     });
 
-    test('padding rides the box style, and only when the box has some', () => {
-        const padded = sceneLayers(scene([richtext({ id: 't', html: '<p>hi</p>', padding: 12 })]))[0].content;
+    test('the inset rides the box style, and only when the box has one', () => {
+        // Unbordered, so the inset is the user's padding alone (a drawn border adds its width to it).
+        const box = { id: 't', html: '<p>hi</p>', strokeColor: 'transparent' };
+        const padded = sceneLayers(scene([richtext({ ...box, padding: 12 })]))[0].content;
         expect('html' in padded && padded.style).toContain('padding:12px;box-sizing:border-box');
-        const plain = sceneLayers(scene([richtext({ id: 't', html: '<p>hi</p>' })]))[0].content;
+        const plain = sceneLayers(scene([richtext(box)]))[0].content;
         expect('html' in plain && plain.style).not.toContain('padding');
     });
 
@@ -169,16 +171,23 @@ describe('elementLayer', () => {
         expect(sceneLayers(framed).map((l) => l.id)).toEqual(['b', 'a', 'c']);
     });
 
-    test('layerInnerHtml wraps rich text in the same styled div the foreignObject arm emits', () => {
-        const html = layerInnerHtml({ html: '<p>hi</p>', style: 'color:#111;width:100%' });
+    test('an unpainted rich-text box is the styled div alone', () => {
+        const html = layerInnerHtml({ html: '<p>hi</p>', style: 'color:#111;width:100%', svg: '' });
         expect(html).toBe(`<div class="${RICH_TEXT_CLASS}" style="color:#111;width:100%"><p>hi</p></div>`);
+    });
+
+    test('a painted box draws its backdrop first, and the text div stacks above it', () => {
+        const html = layerInnerHtml({ html: '<p>hi</p>', style: 'color:#111', svg: '<path d="M0 0"/>' });
+        expect(html.startsWith('<svg xmlns="http://www.w3.org/2000/svg"')).toBe(true);
+        expect(html).toContain('<path d="M0 0"/>');
+        expect(html).toContain(`</svg><div class="${RICH_TEXT_CLASS}" style="color:#111;position:relative">`);
     });
 
     test('a rich-text body carries the shared class, so lists and quotes are styled', () => {
         const layer = elementLayer(richtext({ id: 't', html: '<ul><li>one</li></ul>' }));
         expect(layer).not.toBeNull();
         const html = layer === null ? '' : layerInnerHtml(layer.content);
-        expect(html.startsWith(`<div class="${RICH_TEXT_CLASS}" style="`)).toBe(true);
+        expect(html).toContain(`<div class="${RICH_TEXT_CLASS}" style="`);
         expect(html).toContain('<ul><li>one</li></ul>');
     });
 
@@ -188,7 +197,7 @@ describe('elementLayer', () => {
     });
 
     test('layerInnerHtml escapes the style attribute', () => {
-        expect(layerInnerHtml({ html: '', style: 'font-family:"x"' })).toContain('font-family:&quot;x&quot;');
+        expect(layerInnerHtml({ html: '', style: 'font-family:"x"', svg: '' })).toContain('font-family:&quot;x&quot;');
     });
 
     test('layerInnerHtml gives an svg fragment the viewport a DOM host mounts it in', () => {

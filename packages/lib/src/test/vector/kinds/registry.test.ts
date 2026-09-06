@@ -241,12 +241,12 @@ describe('capabilities agree with the stored fields', () => {
     });
 
     test('only the kinds roughjs hatches honour the fill style half', () => {
-        // The hatch style rides the stored `fill`, so it is NOT derivable from the field list: rich text
-        // paints its box background as CSS and an arrow's fill is its arrowheads'.
+        // The hatch style rides the stored `fill`, so it is NOT derivable from the field list: an image
+        // carries no fill at all and an arrow's is its arrowheads'.
         const hatched = Object.entries(ELEMENT_KINDS)
             .filter(([, kind]) => kind.capabilities.fillStyle)
             .map(([type]) => type);
-        expect(hatched.sort()).toEqual(['diamond', 'ellipse', 'freedraw', 'line', 'rectangle']);
+        expect(hatched.sort()).toEqual(['diamond', 'ellipse', 'freedraw', 'line', 'rectangle', 'richtext']);
     });
 
     test('every kind but freedraw honours the stroke dash style', () => {

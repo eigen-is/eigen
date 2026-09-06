@@ -203,6 +203,22 @@ describe('the layer body', () => {
         expect(html).toContain('min-width:1px');
         expect(html).toContain('overflow:visible');
     });
+
+    test('a painted text box draws its backdrop before the text div', () => {
+        const html = renderToStaticMarkup(<ElementLayer el={richtext('<p>one</p>')} />);
+        expect(html.indexOf('<svg')).toBeGreaterThan(-1);
+        expect(html.indexOf('<svg')).toBeLessThan(html.indexOf('eigen-canvas-text'));
+    });
+
+    test('the in-place editor is drawn over the box paint, not instead of it', () => {
+        const html = renderToStaticMarkup(
+            <ElementLayer el={richtext('<p>one</p>')}>
+                <p>editing</p>
+            </ElementLayer>,
+        );
+        expect(html.indexOf('<svg')).toBeGreaterThan(-1);
+        expect(html.indexOf('<svg')).toBeLessThan(html.indexOf('editing'));
+    });
 });
 
 describe('rich text is sanitized at the mount seam', () => {

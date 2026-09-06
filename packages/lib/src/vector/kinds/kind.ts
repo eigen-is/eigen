@@ -67,8 +67,9 @@ type RenderContext = {
 };
 
 // SVG for everything drawn; HTML for rich text, which the live canvas and the server compositor mount as
-// a div (elementToSvg wraps it in a foreignObject for the SVG arms).
-export type RenderOutput = { svg: string } | { html: string; style: string };
+// a div (elementToSvg wraps it in a foreignObject for the SVG arms). The html arm's `svg` is the backdrop
+// painted BEHIND that div — '' when the box paints neither fill nor border.
+export type RenderOutput = { svg: string } | { html: string; style: string; svg: string };
 
 // A kind's OWN stored fields: its element minus the base every kind shares. Distributive, so a
 // union-typed T (the generic registry lookup) yields the union of the members' field sets, not the

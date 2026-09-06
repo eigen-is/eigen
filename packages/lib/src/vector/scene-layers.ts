@@ -84,12 +84,14 @@ export const RICH_TEXT_CLASS = 'eigen-canvas-text';
 
 // The layer's body as one HTML string — everything a DOM host mounts inside the layer box, so the live
 // canvas and the compositor cannot drift: an svg fragment in its own viewport, rich text in the styled
-// wrapper div. No <p> reset here — a live layer sits in the app, whose CSS already resets block margins;
-// a standalone SVG carries its own (scene-to-svg.ts).
+// wrapper div over its own backdrop viewport. No <p> reset here — a live layer sits in the app, whose CSS
+// already resets block margins; a standalone SVG carries its own (scene-to-svg.ts).
 export function layerInnerHtml(content: RenderOutput): string {
-    return 'html' in content
-        ? `<div class="${RICH_TEXT_CLASS}" style="${escapeXml(content.style)}">${content.html}</div>`
-        : svgViewport(content.svg);
+    if (!('html' in content)) return svgViewport(content.svg);
+    // The backdrop viewport is absolute, so the text div takes a position of its own to stack over it.
+    const backdrop = content.svg === '' ? '' : svgViewport(content.svg);
+    const style = backdrop === '' ? content.style : `${content.style};position:relative`;
+    return `${backdrop}<div class="${RICH_TEXT_CLASS}" style="${escapeXml(style)}">${content.html}</div>`;
 }
 
 // min-*-px: a horizontal arrow's box is 0 high, and a zero-extent viewport disables rendering entirely

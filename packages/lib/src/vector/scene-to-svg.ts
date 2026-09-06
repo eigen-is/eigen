@@ -73,9 +73,10 @@ export function elementToSvg(
     // arrowRoute self-guards (not an arrow, or not elbow ⇒ undefined), so no element-type test is needed
     // here — and none survives anywhere outside kinds/.
     const out = ELEMENT_KINDS[el.type].render(el, { resolveMedia: opts.resolveMedia, route: arrowRoute(el, byId) });
+    // The backdrop is already in the element's local frame, so it rides in the same <g>, before the text.
     const body =
         'html' in out
-            ? `<foreignObject x="0" y="0" width="${round(el.width)}" height="${round(el.height)}" overflow="visible"><div xmlns="http://www.w3.org/1999/xhtml" class="${RICH_TEXT_CLASS}" style="${escapeXml(out.style)}">${HTML_WRAPPER_RESET}${out.html}</div></foreignObject>`
+            ? `${out.svg}<foreignObject x="0" y="0" width="${round(el.width)}" height="${round(el.height)}" overflow="visible"><div xmlns="http://www.w3.org/1999/xhtml" class="${RICH_TEXT_CLASS}" style="${escapeXml(out.style)}">${HTML_WRAPPER_RESET}${out.html}</div></foreignObject>`
             : out.svg;
     if (body === '') return '';
     return `${groupOpen(el)}${body}</g>`;

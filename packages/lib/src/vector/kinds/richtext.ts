@@ -1,7 +1,5 @@
-import { backgroundCss } from '../../background';
 import { getFontFamily } from '../../constants/fonts';
 import { stripTagsServer } from '../../core/html';
-import { isTransparentFill, parseFill } from '../fill';
 import { hitTestBox, round } from '../geometry';
 import { cornerRadius, rectOutline } from '../outline';
 import {
@@ -28,14 +26,14 @@ import {
     lineHeightField,
     oneOf,
 } from './read-fields';
-import { isBordered, isUnpainted } from './render-utils';
+import { isBordered, isUnpainted, renderRoughShape } from './render-utils';
 
 export const richTextKind = defineKind<VectorRichTextElement>({
     type: 'richtext',
     is: (el): el is VectorRichTextElement => el.type === 'richtext',
     capabilities: {
         fill: true,
-        fillStyle: false,
+        fillStyle: true,
         strokeStyle: true,
         corners: true,
         edges: false,
@@ -79,14 +77,15 @@ export const richTextKind = defineKind<VectorRichTextElement>({
         rectOutline({ x: el.x, y: el.y, width: el.width, height: el.height }, cornerRadius(el, 'rectangle'), inflate),
     // An empty box with no paint of its own draws literally nothing — the case the canvas rings.
     paintsNothing: (el) => isUnpainted(el) && stripTagsServer(el.html).trim() === '',
-    render: (el) => ({ html: el.html, style: richTextCssText(el) }),
+    render: (el) => ({ html: el.html, style: richTextCssText(el), svg: isUnpainted(el) ? '' : renderRoughShape(el) }),
     // The search collector and ⌘F both read plain text; stripTagsServer is the React/DOM-free stripper
     // (core/html.ts), so this works in the API Worker as well as the browser.
     searchText: (el) => stripTagsServer(el.html).trim(),
 });
 
-// The box's paint + typography as CSS, the one body the foreignObject wrapper, the live layer renderer
-// and the in-place editor share. No highlight colour on the box: a highlight is a text mark inside `html`.
+// The box's TYPOGRAPHY as CSS, the one body the foreignObject wrapper, the live layer renderer and the
+// in-place editor share; its paint is the roughjs backdrop drawn behind it. No highlight colour on the
+// box: a highlight is a text mark inside `html`.
 export function richTextCssText(el: VectorRichTextElement): string {
     const justify =
         el.verticalAlign === 'center' ? 'center' : el.verticalAlign === 'bottom' ? 'flex-end' : 'flex-start';
@@ -109,20 +108,10 @@ export function richTextCssText(el: VectorRichTextElement): string {
         `letter-spacing:${round(el.letterSpacing)}px`,
         `line-height:${round(el.lineHeight)}`,
     ];
-    // The box background: the same Fill codec and the same CSS the frame/scene backgrounds speak. A
-    // transparent fill is passed as "no fill" — `background-color:transparent` is a paint declaration
-    // for a colour that paints nothing.
-    const fill = parseFill(el.fill);
-    style.push(...backgroundCss(isTransparentFill(fill) ? null : fill));
-    // The stroke fields are this kind's BORDER (types.ts) — CSS border-style shares our vocabulary.
-    const bordered = isBordered(el);
-    if (bordered) style.push(`border:${round(el.strokeWidth)}px ${el.strokeStyle} ${el.strokeColor}`);
-    const radius = cornerRadius(el, 'rectangle');
-    if (radius > 0) style.push(`border-radius:${round(radius)}px`);
-    if (el.padding > 0) style.push(`padding:${round(el.padding)}px`);
-    // border-box once, whatever caused it: the inset and the border eat into the stored width/height
-    // instead of growing the box, so the layer box and the drawn box are the same rectangle.
-    if (bordered || el.padding > 0) style.push('box-sizing:border-box');
+    // The drawn border sits ON the box edge, so the text clears it as well as the user's inset; border-box
+    // keeps both inside the stored width/height, so the layer box and the drawn box are one rectangle.
+    const inset = el.padding + (isBordered(el) ? el.strokeWidth : 0);
+    if (inset > 0) style.push(`padding:${round(inset)}px`, 'box-sizing:border-box');
     return style.join(';');
 }
 

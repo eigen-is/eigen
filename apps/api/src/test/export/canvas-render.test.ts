@@ -127,13 +127,16 @@ describe('renderCanvasPage', () => {
         expect(html).toContain('<path ');
     });
 
-    test('a rich text layer is the styled div, with no svg viewport around it', () => {
+    test('a painted rich text layer is its backdrop viewport plus the styled div', () => {
         const page = drawingPage(sceneOf('v-text'), noMedia);
         if (!page) throw new Error('expected a page');
         const html = renderCanvasPage(page, 1);
         expect(html).toContain('<p>Vector &lt;sketch&gt;</p>');
         expect(html).toContain('font-family:');
-        expect(html).not.toContain('<svg');
+        // The box's border is the roughjs drawable, drawn before the text div rather than a CSS border.
+        expect(html.indexOf('<svg')).toBeLessThan(html.indexOf('eigen-canvas-text'));
+        expect(html).not.toContain('border:2px');
+        // The compositor mounts a div; the foreignObject is the standalone-SVG arm's wrapper.
         expect(html).not.toContain('<foreignObject');
     });
 

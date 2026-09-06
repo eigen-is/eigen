@@ -25,7 +25,7 @@ type ElementLayerProps = {
     // The whole scene map, so an elbow arrow can resolve its bound shapes and derive its route.
     byId?: Map<string, VectorElement>;
     // An in-place editor for this element. While present the layer takes pointer events and the kind's
-    // own body is not drawn — the editor IS what the user sees.
+    // own text body is not drawn — the editor IS what the user reads — but its box paint still is.
     children?: React.ReactNode;
     // Rich text's height follows its text: pass a writer and the layer measures its own body and fits
     // the box (text-fit.ts). Omitted by every read-only surface — a thumbnail must not write.
@@ -108,8 +108,16 @@ export const ElementLayer = memo(function ElementLayer({
     const { content } = layer;
     const style = layerStyle(layer);
     if (children) {
+        // display:contents, so the backdrop's absolute viewport resolves against the layer box and the
+        // editor stays the layer's last element child, which is the node the auto-fit measures.
         return (
             <div ref={hostRef} data-element-id={el.id} className="pointer-events-auto absolute" style={style}>
+                {content.svg === '' ? null : (
+                    <span
+                        className="contents pointer-events-none"
+                        dangerouslySetInnerHTML={{ __html: layerInnerHtml({ svg: content.svg }) }}
+                    />
+                )}
                 {children}
             </div>
         );
