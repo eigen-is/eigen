@@ -21,8 +21,9 @@ export function textBodyHeight(body: Element): number | null {
 // as part of the keystroke that caused it rather than as bookkeeping.
 export type FitHeight = (id: string, height: number, editing: boolean) => void;
 
-// `host` is the element's layer div; its single child is the styled text body — the rendered one, or
-// the in-place editor's box, which carries the same CSS and holds the editor as its one block child.
+// `host` is the element's layer div; its LAST element child is the styled text body — the rendered one,
+// or the in-place editor's box, which carries the same CSS and holds the editor as its one block child.
+// Last, not first: a painted box draws its backdrop svg before the body, in both of those states.
 // No handler (a thumbnail, present mode, a read-only canvas) means no measuring at all.
 export function useRichTextAutoFit(
     host: RefObject<HTMLDivElement | null>,
@@ -31,7 +32,7 @@ export function useRichTextAutoFit(
     editing: boolean,
 ) {
     useLayoutEffect(() => {
-        const body = host.current?.firstElementChild;
+        const body = host.current?.lastElementChild;
         if (!onFit || el.type !== 'richtext' || !body) return;
         const box = el;
         const fit = () => {
