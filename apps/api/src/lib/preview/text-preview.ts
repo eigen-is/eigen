@@ -75,9 +75,7 @@ export async function generateTextPreview(
     if (mode === 'markdown') {
         const MarkdownIt = (await import('markdown-it')).default;
         const md = new MarkdownIt({ html: false, linkify: true, typographer: true });
-        // Shared body sanitizer like every other preview: a `![](http://…)` image would else
-        // render an <img src> that beacons every viewer of the drive hero. No allowedRefs —
-        // nothing resolves a `.md`'s relative/remote image paths, so only data: URIs may stay.
+        // Same ref-stripping sanitizer as every preview body: a `![](http://…)` image must not beacon viewers
         const body = sanitizeExportHtml(md.render(content));
         return { body, mode };
     }
