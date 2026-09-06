@@ -1,4 +1,4 @@
-import { decodeSheetsSnapshot, encodeSheetsSnapshot, type Op, type Sheet } from '@workspace/lib/sheets';
+import { decodeSheetsSnapshot, type Op, type Sheet } from '@workspace/lib/sheets';
 import {
     createDefaultSheets,
     recalcSheets,
@@ -17,7 +17,7 @@ export function readSheetsFromDoc(
     doc: Y.Doc,
     { recalc = true }: { recalc?: boolean } = {},
 ): { sheets: Sheet[]; recalcError: string | null } {
-    const snapshot = doc.getMap('state').get('snapshot') as string | undefined;
+    const snapshot = doc.getMap<string>('state').get('snapshot');
     const opBatches = doc.getArray<Op[]>('ops').toArray();
     // No snapshot + pending ops = a fresh doc closed before its first
     // flushSnapshot. The ops were recorded against the editor's default sheets
@@ -51,16 +51,8 @@ export function readSheetsFromDoc(
 // doc, so the Worker's snapshot JSON is never parsed and re-stringified here.
 export function writeSheetsSnapshotToYjs(doc: Y.Doc, snapshotJson: string): void {
     doc.transact(() => {
-        doc.getMap('state').set('snapshot', snapshotJson);
+        doc.getMap<string>('state').set('snapshot', snapshotJson);
         const ops = doc.getArray('ops');
         if (ops.length > 0) ops.delete(0, ops.length);
     });
-}
-
-// `computed` declares whether these sheets carry engine-computed values: it seeds
-// the decoded calcChain, which is what the read-path recalc gate keys off. Only
-// pass true for value-complete sheets — false makes an export recompute, which is
-// the safe direction.
-export function writeSheetsToYjs(doc: Y.Doc, sheets: Sheet[], opts: { computed: boolean }): void {
-    writeSheetsSnapshotToYjs(doc, encodeSheetsSnapshot(sheets, opts));
 }

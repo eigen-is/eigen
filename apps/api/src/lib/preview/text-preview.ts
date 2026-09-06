@@ -1,5 +1,6 @@
-import type { TextPreviewMode } from '@workspace/lib/constants';
+import { getExtension, type TextPreviewMode } from '@workspace/lib/constants/preview';
 import { escapeHtml } from '@workspace/lib/html';
+import { hastToHtml } from '../export/doc/render';
 import { sanitizeExportHtml } from '../export/sanitize';
 
 const LANGUAGE_MAP: Record<string, string> = {
@@ -58,8 +59,7 @@ const LANGUAGE_MAP: Record<string, string> = {
 };
 
 function getLanguageFromFileName(fileName: string): string | undefined {
-    const ext = fileName.slice(fileName.lastIndexOf('.')).toLowerCase();
-    return LANGUAGE_MAP[ext];
+    return LANGUAGE_MAP[getExtension(fileName)];
 }
 
 export type TextPreviewResult = {
@@ -82,18 +82,17 @@ export async function generateTextPreview(
 
     if (mode === 'code') {
         try {
-            const { createLowlight } = await import('lowlight');
-            const { common } = await import('lowlight');
+            const { common, createLowlight } = await import('lowlight');
             const lowlight = createLowlight(common);
 
             const lang = getLanguageFromFileName(fileName);
             let highlighted: string;
             if (lang && lowlight.registered(lang)) {
                 const tree = lowlight.highlight(lang, content);
-                highlighted = toHtml(tree);
+                highlighted = hastToHtml(tree);
             } else {
                 const tree = lowlight.highlightAuto(content);
-                highlighted = toHtml(tree);
+                highlighted = hastToHtml(tree);
             }
             return { body: `<pre><code>${highlighted}</code></pre>`, mode };
         } catch {
@@ -109,26 +108,4 @@ export async function generateTextPreview(
         .filter((block) => block.trim() !== '')
         .map((block) => `<p>${escapeHtml(block).replace(/\n/g, '<br>')}</p>`);
     return { body: paragraphs.join('\n') || '<p></p>', mode };
-}
-
-type HastNode = {
-    type: string;
-    children?: HastNode[];
-    value?: string;
-    tagName?: string;
-    properties?: Record<string, unknown>;
-};
-
-function toHtml(tree: HastNode): string {
-    if (tree.type === 'text') return escapeHtml(tree.value || '');
-    if (tree.type === 'element' && tree.tagName) {
-        const props = tree.properties || {};
-        const className = props['className'] ? ` class="${(props['className'] as string[]).join(' ')}"` : '';
-        const children = (tree.children || []).map(toHtml).join('');
-        return `<${tree.tagName}${className}>${children}</${tree.tagName}>`;
-    }
-    if (tree.type === 'root' && tree.children) {
-        return tree.children.map(toHtml).join('');
-    }
-    return '';
 }

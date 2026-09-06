@@ -1,3 +1,4 @@
+import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 
 // A TipTap figure node can carry a mediaName, an external `src`, or both; the caller decides which
@@ -12,10 +13,10 @@ type Lowlight = {
 
 // The caller passes its lowlight instance so this module stays side-effect-free.
 export function renderCodeBlockNode(
-    node: { attrs: Record<string, unknown>; textContent?: string; content?: unknown },
+    node: { attrs: { language?: string | null }; textContent?: string; content?: unknown },
     lowlight: Lowlight,
 ): string {
-    const language = (node.attrs['language'] as string) || '';
+    const language = node.attrs.language || '';
     const code = node.textContent ?? '';
 
     const highlighted =
@@ -27,19 +28,19 @@ export function renderCodeBlockNode(
     return `<pre><code class="hljs${langClass}">${highlighted}</code></pre>`;
 }
 
-type HastNode = {
+export type HastNode = {
     type: string;
     children?: HastNode[];
     value?: string;
     tagName?: string;
-    properties?: Record<string, unknown>;
+    properties?: { className?: string[] };
 };
 
-function hastToHtml(tree: HastNode): string {
+export function hastToHtml(tree: HastNode): string {
     if (tree.type === 'text') return escapeHtml(tree.value || '');
     if (tree.type === 'element' && tree.tagName) {
-        const cls = tree.properties?.['className'];
-        const classAttr = cls ? ` class="${(cls as string[]).join(' ')}"` : '';
+        const cls = tree.properties?.className;
+        const classAttr = cls ? ` class="${cls.join(' ')}"` : '';
         const children = (tree.children || []).map(hastToHtml).join('');
         return `<${tree.tagName}${classAttr}>${children}</${tree.tagName}>`;
     }
@@ -51,10 +52,10 @@ function hastToHtml(tree: HastNode): string {
 
 // The tiptap static renderer drops the `checked` attribute, so the checkbox is rendered here.
 export function renderTaskItemNode(
-    node: { attrs: Record<string, unknown> },
+    node: { attrs: { checked?: boolean | null } },
     children: string | string[] | undefined,
 ): string {
-    const checked = node.attrs['checked'] === true;
+    const checked = node.attrs.checked === true;
     const checkedAttr = checked ? ' checked' : '';
     const dataChecked = checked ? 'true' : 'false';
     const content = Array.isArray(children) ? children.join('') : (children ?? '');
@@ -63,17 +64,17 @@ export function renderTaskItemNode(
 
 // `resolveImgSrc` decides what a media reference becomes: a data URI for export, an embed URL for preview.
 export function renderFigureNode(
-    attrs: Record<string, unknown>,
+    attrs: FigureAttrs,
     resolveImgSrc: FigureImgSrcResolver,
     options?: { lazy?: boolean },
 ): string {
-    const mediaName = attrs['mediaName'] as string | null;
-    const src = attrs['src'] as string | null;
-    const alt = escapeHtml(String(attrs['alt'] || ''));
-    const caption = attrs['caption'] as string | null;
-    const rawWidth = attrs['width'];
+    const mediaName = attrs.mediaName ?? null;
+    const src = attrs.src ?? null;
+    const alt = escapeHtml(String(attrs.alt || ''));
+    const caption = attrs.caption;
+    const rawWidth = attrs.width;
     const width = typeof rawWidth === 'number' && Number.isFinite(rawWidth) ? Math.round(rawWidth) : null;
-    const alignment = attrs['alignment'] as string | null;
+    const alignment = attrs.alignment;
 
     const imgSrc = resolveImgSrc(mediaName, src);
 
@@ -84,7 +85,7 @@ export function renderFigureNode(
         : '';
     const cap = caption ? `<figcaption>${escapeHtml(caption)}</figcaption>` : '';
 
-    const layout = (attrs['layout'] as string) || 'block';
+    const layout = attrs.layout || 'block';
 
     if (layout === 'wrap-left') return `<figure style="float: left; margin: 0.25em 1em 0.5em 0">${img}${cap}</figure>`;
     if (layout === 'wrap-right')

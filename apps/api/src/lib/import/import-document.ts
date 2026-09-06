@@ -65,7 +65,7 @@ export async function convertToDocument(
     mount: Mount,
     sourcePath: DrivePath,
     targetType: 'eigensheets' | 'eigendoc',
-    user?: User,
+    user: User,
 ): Promise<DrivePath> {
     if (!sourcePath.parentId) throw new ApiError(400, 'Cannot convert a root file');
 
@@ -89,20 +89,16 @@ export async function convertToDocument(
         return newPath;
     }
 
-    if (targetType === 'eigendoc') {
-        if (!sourcePath.name.toLowerCase().endsWith('.docx')) {
-            throw new ApiError(400, 'Only .docx files can be converted to documents');
-        }
-        const { update, images } = await importDocxUpdate(buffer);
-        const name = sourcePath.name.replace(/\.docx$/i, '');
-        const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, 'doc', user);
-        const collabDoc = await drive.getCollabDocument(sourcePath.mountId, newPath.id);
-        writeEigendocUpdateToYjs(collabDoc.doc, new Uint8Array(update));
-        await saveDocImages(mount, newPath, images);
-        return newPath;
+    if (!sourcePath.name.toLowerCase().endsWith('.docx')) {
+        throw new ApiError(400, 'Only .docx files can be converted to documents');
     }
-
-    throw new ApiError(400, `Conversion to "${targetType}" is not supported`);
+    const { update, images } = await importDocxUpdate(buffer);
+    const name = sourcePath.name.replace(/\.docx$/i, '');
+    const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, 'doc', user);
+    const collabDoc = await drive.getCollabDocument(sourcePath.mountId, newPath.id);
+    writeEigendocUpdateToYjs(collabDoc.doc, new Uint8Array(update));
+    await saveDocImages(mount, newPath, images);
+    return newPath;
 }
 
 export async function importIntoDocument(

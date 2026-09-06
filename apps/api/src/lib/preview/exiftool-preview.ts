@@ -21,7 +21,6 @@ let cachedExiftoolPath: string | null = null;
 async function getExiftoolPath(): Promise<string> {
     if (cachedExiftoolPath) return cachedExiftoolPath;
 
-    // Try system exiftool first, fall back to vendored
     try {
         const { stdout } = await execFileAsync('exiftool', ['-ver'], {
             timeout: EXIFTOOL_TIMEOUT_MS,
@@ -74,5 +73,7 @@ export async function cleanupExtract(extractPath: string): Promise<void> {
         if (fs.existsSync(extractPath)) {
             fs.unlinkSync(extractPath);
         }
-    } catch {}
+    } catch {
+        /* best-effort: a temp file already gone is nothing to clean up */
+    }
 }

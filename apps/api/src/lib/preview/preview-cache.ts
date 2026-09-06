@@ -13,17 +13,13 @@ import { inlineSvgMediaRefs } from './svg-media-inline';
 import { generateTextPreview, type TextPreviewResult } from './text-preview';
 
 type ImagePreview = { type: 'image'; data: Buffer; contentType: string };
-type PreviewResult = ImagePreview | { type: 'redirect'; url: string } | null;
-
-function versionStamp(updatedAt: Date | string): number {
-    return updatedAt instanceof Date ? updatedAt.getTime() : new Date(updatedAt).getTime();
-}
+type ScreenPreviewResult = ImagePreview | { type: 'redirect'; url: string } | null;
 
 // Cache filenames are content-addressed by updatedAt: a new version writes a new file
 // instead of overwriting, so HTTP responses can use a long max-age (the URL carries the
 // same stamp). Prior versions are pruned on write — see pruneOldVersions.
 function screenCacheName(drivePath: DrivePath, ext: 'webp' | 'svg'): string {
-    return `${drivePath.id}-${versionStamp(drivePath.updatedAt)}.screen.${ext}`;
+    return `${drivePath.id}-${drivePath.updatedAt.getTime()}.screen.${ext}`;
 }
 
 // Renderer format version — bump when generated HTML changes shape (e.g. plaintext moved
@@ -35,7 +31,7 @@ function screenCacheName(drivePath: DrivePath, ext: 'webp' | 'svg'): string {
 const TEXT_FORMAT = 'f5';
 
 function textCacheName(drivePath: DrivePath): string {
-    return `${drivePath.id}-${versionStamp(drivePath.updatedAt)}.${TEXT_FORMAT}.json`;
+    return `${drivePath.id}-${drivePath.updatedAt.getTime()}.${TEXT_FORMAT}.json`;
 }
 
 // Delete previously-cached versions of this path (older updatedAt stamps) so previewsDir
@@ -121,7 +117,8 @@ async function getOrCacheText(
     const cacheFile = path.join(previewsDir, cacheName);
     if (fs.existsSync(cacheFile)) {
         try {
-            return { value: (await Bun.file(cacheFile).json()) as TextPreviewResult, stale: false };
+            const value: TextPreviewResult = await Bun.file(cacheFile).json();
+            return { value, stale: false };
         } catch {
             // File is mid-write or corrupt — fall through to serve a prior version / regenerate.
         }
@@ -191,7 +188,8 @@ async function readNewestStaleText(
 
     for (const { name } of candidates) {
         try {
-            return (await Bun.file(path.join(previewsDir, name)).json()) as TextPreviewResult;
+            const cached: TextPreviewResult = await Bun.file(path.join(previewsDir, name)).json();
+            return cached;
         } catch {
             // Pruned between readdir and read — try the next-newest version.
         }
@@ -226,10 +224,13 @@ function regenerateTextInBackground(
     inFlightText.set(cacheName, task);
 }
 
-export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embedUrl: string): Promise<PreviewResult> {
+export async function getScreenPreview(
+    mount: Mount,
+    drivePath: DrivePath,
+    embedUrl: string,
+): Promise<ScreenPreviewResult> {
     const mime = drivePath.mimeType || '';
 
-    // Video/audio/PDF → redirect to embed for native playback
     if (mime.startsWith('video/') || mime.startsWith('audio/') || mime === 'application/pdf') {
         return { type: 'redirect', url: embedUrl };
     }
@@ -264,7 +265,6 @@ export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embed
             screenCacheName(drivePath, 'webp'),
             'image/webp',
             async () => {
-                // Pass the storage file reference directly to avoid an extra copy
                 const file = await mount.readFile(drivePath.id);
                 if (!file) return null;
                 const result = await generateImagePreview(file, mime, drivePath.name, mount.previewsDir, drivePath.id, {
@@ -295,7 +295,6 @@ async function getFileTextPreview(mount: Mount, drivePath: DrivePath): Promise<S
     if (mode === null) return null;
 
     return getOrCacheText(mount.previewsDir, drivePath.id, textCacheName(drivePath), mode, async () => {
-        // Read file as text directly — no intermediate ArrayBuffer
         const file = await mount.readFile(drivePath.id);
         if (!file) return null;
         let content: string;

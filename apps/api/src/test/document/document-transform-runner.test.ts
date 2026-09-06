@@ -4,9 +4,8 @@ import type { DocumentTransformRequest, DocumentTransformResponse } from '../../
 import { DocumentTransformRunner, TRANSFORM_LIMITS } from '../../lib/document/transform/runner';
 import { exportBytes, importSnapshot, previewBody } from '../fixtures/transform-results';
 
-// Runner behavior suite (proposal § Runner tests), driven through the scriptable
-// test worker so no document code runs. The real preview operation is covered in
-// document-transform.test.ts.
+// Runner behavior suite, driven through the scriptable test worker so no document
+// code runs. The real preview operation is covered in document-transform.test.ts.
 
 const TEST_WORKER_URL = new URL('../fixtures/transform-test-worker.ts', import.meta.url).href;
 
@@ -71,8 +70,19 @@ const PREVIEW_OPTIONS = { ...TRANSFORM_LIMITS.preview, priority: 'foreground' } 
 const EXPORT_OPTIONS = { ...TRANSFORM_LIMITS.export, priority: 'foreground' } as const;
 const BACKGROUND_OPTIONS = { ...PREVIEW_OPTIONS, priority: 'background' } as const;
 
-function makeRunner(opts: ConstructorParameters<typeof DocumentTransformRunner>[0] = {}) {
-    return new DocumentTransformRunner({ workerUrl: TEST_WORKER_URL, ...opts });
+// The admission bounds are private production constants — no caller configures them,
+// so an admission test dials them in place instead.
+type RunnerBounds = {
+    maxQueued: number;
+    maxQueuedBackground: number;
+    maxPredictedWaitMs: number;
+    closeGraceMs: number;
+};
+
+function makeRunner(bounds: Partial<RunnerBounds> = {}) {
+    const runner = new DocumentTransformRunner({ workerUrl: TEST_WORKER_URL });
+    Object.assign(runner as unknown as RunnerBounds, bounds);
+    return runner;
 }
 
 function timings(response: DocumentTransformResponse): { startedAt: number; endedAt: number } {
@@ -126,9 +136,9 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
-    // Proposal § Observability: an overload has to leave a trace, and a job's record
-    // needs its format and Worker startup time (total minus the Worker's own transform
-    // time) to tell a slow document from a slow spawn.
+    // DOCUMENT-TRANSFORMS.md § Observability: an overload has to leave a trace, and a
+    // job's record needs its format and Worker startup time (total minus the Worker's
+    // own transform time) to tell a slow document from a slow spawn.
     test('logs every refused admission with the queue state', async () => {
         const runner = makeRunner({ maxQueued: 1 });
         const active = runner.run(makeRequest({ behavior: 'sleep', ms: 100 }), PREVIEW_OPTIONS);

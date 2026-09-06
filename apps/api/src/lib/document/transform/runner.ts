@@ -15,8 +15,8 @@ import {
 // dynamically imports. Deliberately a "runner", not a scheduler: lib/scheduler/
 // owns periodic jobs; the closest sibling shape is ContentReindexQueue.
 //
-// Policy (proposal § Runner and Worker lifetime): one active Worker so a single
-// ExcelJS/Yjs heap exists at a time, a bounded queue with two priorities, one-shot
+// Policy (docs/DOCUMENT-TRANSFORMS.md § Worker lifecycle): one active Worker so a
+// single ExcelJS/Yjs heap exists at a time, a bounded queue with two priorities, one-shot
 // Workers terminated after every outcome, and NEVER a main-thread fallback — an
 // overloaded or failing runner must not reintroduce the event-loop freeze it
 // exists to remove.
@@ -156,30 +156,19 @@ function formatWarning(warning: TransformWarning): string {
 
 export class DocumentTransformRunner {
     private readonly workerUrl: string;
-    private readonly maxQueued: number;
-    private readonly maxQueuedBackground: number;
-    private readonly maxPredictedWaitMs: number;
-    private readonly closeGraceMs: number;
+    // Production always runs the constants above; only the runner suite dials these down.
+    private readonly maxQueued = MAX_QUEUED_JOBS;
+    private readonly maxQueuedBackground = MAX_QUEUED_BACKGROUND;
+    private readonly maxPredictedWaitMs = MAX_PREDICTED_WAIT_MS;
+    private readonly closeGraceMs = CLOSE_GRACE_MS;
     private foreground: Job[] = [];
     private background: Job[] = [];
     private active = new Map<number, ActiveJob>();
     private nextJobId = 1;
     private closing = false;
 
-    constructor(
-        opts: {
-            workerUrl?: string;
-            maxQueued?: number;
-            maxQueuedBackground?: number;
-            maxPredictedWaitMs?: number;
-            closeGraceMs?: number;
-        } = {},
-    ) {
+    constructor(opts: { workerUrl?: string } = {}) {
         this.workerUrl = opts.workerUrl ?? new URL('./worker', import.meta.url).href;
-        this.maxQueued = opts.maxQueued ?? MAX_QUEUED_JOBS;
-        this.maxQueuedBackground = opts.maxQueuedBackground ?? MAX_QUEUED_BACKGROUND;
-        this.maxPredictedWaitMs = opts.maxPredictedWaitMs ?? MAX_PREDICTED_WAIT_MS;
-        this.closeGraceMs = opts.closeGraceMs ?? CLOSE_GRACE_MS;
     }
 
     // Throws ApiError(503) synchronously when the job cannot be admitted. Callable
@@ -198,8 +187,8 @@ export class DocumentTransformRunner {
         }
     }
 
-    // Overload is an outcome too (proposal § Observability): a 503 flood must be
-    // visible in the logs, with the queue state that caused it.
+    // Overload is an outcome too (DOCUMENT-TRANSFORMS.md § Observability): a 503 flood
+    // must be visible in the logs, with the queue state that caused it.
     private refuse(priority: TransformPriority, reason: string, predictedWaitMs?: number): never {
         console.warn(
             `[transform] admission refused reason=${reason} priority=${priority} ` +

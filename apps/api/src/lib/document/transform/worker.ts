@@ -1,10 +1,13 @@
 import type * as Y from 'yjs';
+import { ApiError } from '../../core/errors';
 import {
+    type CollabTransformJob,
     type DocumentTransformRequest,
     type DocumentTransformResponse,
     type ExportTransformJob,
     type ImportTransformJob,
     type PreviewTransformJob,
+    type TransformResult,
     type TransformWarning,
     transferListOfResult,
     type WorkerRequestEnvelope,
@@ -79,6 +82,29 @@ async function runImport(request: ImportTransformJob & { data: ArrayBuffer }): P
     }
 }
 
+// The three document-sourced kinds dispatch off one materialized doc, so the
+// skipped-blob warning is appended once by the caller rather than in every arm.
+async function renderCollabRequest(
+    request: CollabTransformJob,
+    doc: Y.Doc,
+): Promise<{ result: TransformResult; warnings: TransformWarning[] }> {
+    switch (request.kind) {
+        case 'preview': {
+            const { body, warnings } = await renderPreview(request, doc);
+            return { result: { body }, warnings };
+        }
+        case 'export': {
+            const { data, warnings } = await renderExport(request, doc);
+            return { result: { data }, warnings };
+        }
+        case 'extract-text': {
+            const { extractCollabText } = await import('../../search/extract-render');
+            const { text, warnings } = await extractCollabText(request.documentType, doc);
+            return { result: { text }, warnings };
+        }
+    }
+}
+
 async function handleRequest(request: DocumentTransformRequest): Promise<DocumentTransformResponse> {
     // Imports convert uploaded bytes — no document to materialize.
     if (request.kind === 'import') return runImport(request);
@@ -87,24 +113,9 @@ async function handleRequest(request: DocumentTransformRequest): Promise<Documen
     const { materializeYjsState } = await import('../../collab/yjs-loader');
     const { doc, blobsSkipped } = materializeYjsState(request.source, undefined, 'transform-worker');
 
-    switch (request.kind) {
-        case 'preview': {
-            const { body, warnings } = await renderPreview(request, doc);
-            if (blobsSkipped > 0) warnings.push({ code: 'corrupt-blobs-skipped', count: blobsSkipped });
-            return { ok: true, result: { body }, warnings };
-        }
-        case 'export': {
-            const { data, warnings } = await renderExport(request, doc);
-            if (blobsSkipped > 0) warnings.push({ code: 'corrupt-blobs-skipped', count: blobsSkipped });
-            return { ok: true, result: { data }, warnings };
-        }
-        case 'extract-text': {
-            const { extractCollabText } = await import('../../search/extract-render');
-            const { text, warnings } = await extractCollabText(request.documentType, doc);
-            if (blobsSkipped > 0) warnings.push({ code: 'corrupt-blobs-skipped', count: blobsSkipped });
-            return { ok: true, result: { text }, warnings };
-        }
-    }
+    const { result, warnings } = await renderCollabRequest(request, doc);
+    if (blobsSkipped > 0) warnings.push({ code: 'corrupt-blobs-skipped', count: blobsSkipped });
+    return { ok: true, result, warnings };
 }
 
 declare var self: Worker;
@@ -117,14 +128,13 @@ self.onmessage = async (event: MessageEvent<WorkerRequestEnvelope>) => {
         response = await handleRequest(request);
     } catch (err) {
         // Never structured-clone Error instances — send a small stable shape. An
-        // ApiError-like status survives so controlled document errors keep their
-        // HTTP semantics across the boundary.
-        const status = (err as { status?: unknown }).status;
+        // ApiError's status survives so controlled document errors keep their HTTP
+        // semantics across the boundary.
         response = {
             ok: false,
             error: {
                 code: 'transform-failed',
-                ...(typeof status === 'number' && { status }),
+                ...(err instanceof ApiError && { status: err.status }),
                 message: err instanceof Error ? err.message : String(err),
             },
         };

@@ -24,7 +24,7 @@ const FONT_FILES = [
 let _fontCSS: string | undefined;
 
 export function getFontCSS(): string {
-    return (_fontCSS ??= buildFontFaceCSS(FONT_FILES));
+    return (_fontCSS ??= FONT_FILES.map(fontFaceCSS).join('\n'));
 }
 
 // The @font-face blocks for just the given families (each an EIGEN_FONTS name, the same
@@ -32,27 +32,28 @@ export function getFontCSS(): string {
 // the whole faces its text actually uses; an unrecognized family contributes nothing.
 export function getFontFaceCSSForFamilies(families: Iterable<string>): string {
     const wanted = new Set(families);
-    return buildFontFaceCSS(FONT_FILES.filter((font) => wanted.has(font.family)));
+    return FONT_FILES.filter((font) => wanted.has(font.family))
+        .map(fontFaceCSS)
+        .join('\n');
 }
 
-function buildFontFaceCSS(fonts: readonly (typeof FONT_FILES)[number][]): string {
-    return fonts
-        .map((font) => {
-            try {
-                const buf = fs.readFileSync(font.path);
-                const dataUri = `data:font/woff2;base64,${buf.toString('base64')}`;
-                return `@font-face {
+// Read + base64 once per bundled font (~2 MB resident): the main-thread SVG preview path
+// asks for faces on every request, while a one-shot export Worker pays it once anyway.
+// A bundled asset that cannot be read is a build defect, so the read is unguarded.
+const faceCSSByFont = new Map<(typeof FONT_FILES)[number], string>();
+
+function fontFaceCSS(font: (typeof FONT_FILES)[number]): string {
+    let css = faceCSSByFont.get(font);
+    if (css === undefined) {
+        const dataUri = `data:font/woff2;base64,${fs.readFileSync(font.path).toString('base64')}`;
+        css = `@font-face {
     font-family: "${font.family}";
     src: url("${dataUri}") format("woff2");
     font-weight: ${font.weight};
     font-style: ${font.style};
     font-display: swap;
 }`;
-            } catch {
-                console.warn(`[export/fonts] Failed to read font: ${font.path}`);
-                return '';
-            }
-        })
-        .filter(Boolean)
-        .join('\n');
+        faceCSSByFont.set(font, css);
+    }
+    return css;
 }

@@ -51,7 +51,7 @@ export type TextPreviewMode =
 export const CANVAS_PREVIEW_WIDTH = 960;
 export const CANVAS_PREVIEW_HEIGHT = 540;
 
-function getExtension(fileName: string): string {
+export function getExtension(fileName: string): string {
     const dot = fileName.lastIndexOf('.');
     return dot === -1 ? '' : fileName.slice(dot).toLowerCase();
 }

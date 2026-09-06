@@ -1,10 +1,9 @@
 /// <reference path="../modules.d.ts" />
 import type { JSONContent } from '@tiptap/core';
 import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
-import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
+import { type FigureAttrs, getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
-// CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
 import eigenProseCSSRaw from '@workspace/ui/styles/eigen-prose.css' with { type: 'text' };
 import { common, createLowlight } from 'lowlight';
 import type * as Y from 'yjs';
@@ -39,8 +38,6 @@ export async function renderEigendocExport(
     if (format !== 'docx') return { data: toTransferableText(html), warnings: [] };
 
     const HTMLtoDOCX = (await import('@turbodocx/html-to-docx')).default;
-    // The HTML <title> keeps the full container name (frozen output); the docx
-    // document property carries the stripped one, as it always has.
     const docx = await HTMLtoDOCX(html, undefined, {
         title: stripEigenExtension(title),
         margins: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
@@ -51,12 +48,7 @@ export async function renderEigendocExport(
 const lowlight = createLowlight(common);
 const extensions = getDocExtensions({ lowlight });
 
-// Lazy-initialized cached assets
-let _proseCSS: string | undefined;
-
-function getProseCSS() {
-    return (_proseCSS ??= flattenEigenProseCSS(eigenProseCSSRaw as string));
-}
+const proseCSS = flattenEigenProseCSS(eigenProseCSSRaw);
 
 function renderEigendocDocument(json: JSONContent, dataUriMap: Map<string, string>, title: string): string {
     const bodyHtml = renderToHTMLString({
@@ -66,7 +58,7 @@ function renderEigendocDocument(json: JSONContent, dataUriMap: Map<string, strin
             nodeMapping: {
                 codeBlock: ({ node }) => renderCodeBlockNode(node, lowlight),
                 taskItem: ({ node, children }) => renderTaskItemNode(node, children),
-                figure: ({ node }: { node: { attrs: Record<string, unknown> } }) =>
+                figure: ({ node }: { node: { attrs: FigureAttrs } }) =>
                     renderFigureNode(node.attrs, (mediaName, src) =>
                         mediaName ? (dataUriMap.get(mediaName) ?? null) : src,
                     ),
@@ -83,7 +75,7 @@ function wrapInDocument(title: string, bodyHtml: string): string {
 <head>
     <meta charset="utf-8">
     <title>${escapeHtml(title)}</title>
-    <style>${getFontCSS()}${getProseCSS()}${PRINT_EXTRAS}</style>
+    <style>${getFontCSS()}${proseCSS}${PRINT_EXTRAS}</style>
 </head>
 <body>
     <div class="page">

@@ -17,6 +17,7 @@ export async function collectExportMedia(mount: Mount, drivePath: DrivePath): Pr
 }
 
 async function prepareMedia(mount: Mount, name: string, file: DrivePath): Promise<TransformMedia | null> {
+    // Empty embedUrl: only the redirect branch reads it, and the next line drops redirects.
     const result = await getScreenPreview(mount, file, '');
     if (result?.type !== 'image') return null;
     // SVG media is served as-is (raw user bytes, an uploaded or pasted drawing). Embedded as a data:

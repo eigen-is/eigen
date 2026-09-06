@@ -303,7 +303,7 @@ describe('document transform (eigensheets preview)', () => {
         }
     }, 60_000);
 
-    test('stale preview serves immediately and queues one background regeneration', async () => {
+    test('concurrent stale previews serve immediately and share one background regeneration', async () => {
         const sheetsPath = await seedDoc('cache-stale-regen');
         const first = await previewRequest(sheetsPath.id);
         expect(first.status).toBe(200);
@@ -311,12 +311,21 @@ describe('document transform (eigensheets preview)', () => {
 
         const runSpy = spyOn(documentTransformRunner, 'run');
         try {
-            const stale = await previewRequest(sheetsPath.id);
-            expect(stale.status).toBe(200);
-            expect(stale.headers.get('cache-control')).toBe('no-store');
+            // Three tiles of one stale document arrive together: all served stale, and the
+            // in-flight map folds them into ONE background regeneration.
+            const staleResponses = await Promise.all([
+                previewRequest(sheetsPath.id),
+                previewRequest(sheetsPath.id),
+                previewRequest(sheetsPath.id),
+            ]);
+            for (const stale of staleResponses) {
+                expect(stale.status).toBe(200);
+                expect(stale.headers.get('cache-control')).toBe('no-store');
+            }
 
-            // The regeneration was enqueued as background work.
-            expect(callsOfKind(runSpy, 'preview')).toHaveLength(1);
+            // The regeneration is enqueued off the response path, so wait for it rather than
+            // asserting on how many ticks the capture takes before the runner sees the job.
+            for (let i = 0; i < 80 && callsOfKind(runSpy, 'preview').length === 0; i++) await Bun.sleep(50);
             expect(callsOfKind(runSpy, 'preview')[0][1].priority).toBe('background');
 
             // It converges: a later request serves the fresh current version.
@@ -327,6 +336,8 @@ describe('document transform (eigensheets preview)', () => {
             }
             expect(fresh.status).toBe(200);
             expect(fresh.headers.get('cache-control')).not.toBe('no-store');
+            // Exactly one — not "at least one" — once everything has settled.
+            expect(callsOfKind(runSpy, 'preview')).toHaveLength(1);
         } finally {
             runSpy.mockRestore();
         }
@@ -1155,11 +1166,12 @@ describe('document transform (admission)', () => {
             },
         } as unknown as Mount;
         const path = { id: 'refused', parentId: 'parent', name: 'refused.xlsx' } as DrivePath;
+        const user = {} as unknown as User;
 
         const refuse = refuseAdmissionOnce();
         let error: unknown;
         try {
-            await convertToDocument({} as unknown as Drive, mount, path, 'eigensheets');
+            await convertToDocument({} as unknown as Drive, mount, path, 'eigensheets', user);
         } catch (err) {
             error = err;
         } finally {
