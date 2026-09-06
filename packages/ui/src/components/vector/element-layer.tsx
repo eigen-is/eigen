@@ -51,7 +51,11 @@ function sameElement(a: VectorElement, b: VectorElement): boolean {
 // A derived elbow arrow is the one layer whose output reads the scene map, and it reads it ONLY for the
 // shapes its two ends are bound to (elbowRoute's obstacles are the bound shapes, nothing else). So the
 // same two shapes mean the same route — answered without running A* to find out.
-function sameRouteContext(el: VectorElement, prev?: Map<string, VectorElement>, next?: Map<string, VectorElement>) {
+function sameRouteContext(
+    el: VectorElement,
+    prev?: Map<string, VectorElement>,
+    next?: Map<string, VectorElement>,
+): boolean {
     if (el.type !== 'arrow' || !el.elbow || el.fixedSegments !== '') return true;
     // Without a map an elbow arrow draws its stored endpoints instead, which is a different polyline.
     if (!prev || !next) return false;

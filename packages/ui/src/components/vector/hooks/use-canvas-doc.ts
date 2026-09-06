@@ -116,21 +116,22 @@ function followBoundArrows(elementsMap: Y.Map<unknown>, patchedIds: Set<string>)
     if (arrowById.size === 0) return;
 
     const bound = arrowsBoundTo([...arrowById.values()]);
-    const arrowIds = new Set<string>();
+    const arrows = new Set<VectorArrowElement>();
     for (const id of patchedIds) {
-        for (const aid of bound.get(id) ?? []) arrowIds.add(aid);
-        const el = arrowById.get(id);
-        if (el && (el.startBinding !== '' || el.endBinding !== '')) arrowIds.add(id);
+        for (const aid of bound.get(id) ?? []) {
+            const arrow = arrowById.get(aid);
+            if (arrow) arrows.add(arrow);
+        }
+        const patched = arrowById.get(id);
+        if (patched && (patched.startBinding !== '' || patched.endBinding !== '')) arrows.add(patched);
     }
-    if (arrowIds.size === 0) return;
+    if (arrows.size === 0) return;
 
     // The other half of what followBindings reads: the shapes those arrows dock on, and only those —
     // it reaches the map through boundShape on the arrow's own two bindings. A binding whose target is
     // gone resolves to null there, which is what an unbound end already means.
     const byId = new Map<string, VectorElement>();
-    for (const aid of arrowIds) {
-        const arrow = arrowById.get(aid);
-        if (!arrow) continue;
+    for (const arrow of arrows) {
         for (const binding of [arrow.startBinding, arrow.endBinding]) {
             const target = parseBinding(binding);
             if (!target || byId.has(target.elementId)) continue;
@@ -138,11 +139,9 @@ function followBoundArrows(elementsMap: Y.Map<unknown>, patchedIds: Set<string>)
             if (el) byId.set(el.id, el);
         }
     }
-    for (const aid of arrowIds) {
-        const arrow = arrowById.get(aid);
-        if (!arrow) continue;
+    for (const arrow of arrows) {
         const next = followBindings(arrow, byId);
-        const arrowMap = elementsMap.get(aid);
+        const arrowMap = elementsMap.get(arrow.id);
         if (!next || !(arrowMap instanceof Y.Map)) continue;
         arrowMap.set('x', next.x);
         arrowMap.set('y', next.y);
