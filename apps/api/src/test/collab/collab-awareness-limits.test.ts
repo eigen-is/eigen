@@ -157,4 +157,98 @@ describe('Collab awareness limits (audit findings #7, #12)', () => {
             collab.unsubscribe(peer);
         }
     });
+
+    test("a second connection cannot remove the first connection's client id", async () => {
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(aliceMountId, docId);
+        const owner = makeSpyConn();
+        const attacker = makeSpyConn();
+        const peer = makeSpyConn();
+        collab.subscribe(home.user, owner);
+        collab.subscribe(home.user, attacker);
+        collab.subscribe(home.user, peer);
+        try {
+            const clientId = clientIdSeq++;
+            const declare = awarenessFrame([
+                { clientId, clock: 1, state: { user: { userId: home.user.id, name: home.user.name } } },
+            ]);
+            collab.handleMessage(owner, declare, true);
+            const base = peer.sent.length;
+            // Attacker knows the victim's clientId + clock from the broadcast and tries to evict it.
+            collab.handleMessage(attacker, awarenessFrame([{ clientId, clock: 2, state: null }]), true);
+            expect(peer.sent.length).toBe(base);
+        } finally {
+            collab.unsubscribe(owner);
+            collab.unsubscribe(attacker);
+            collab.unsubscribe(peer);
+        }
+    });
+
+    test("a second connection cannot overwrite the first connection's client id", async () => {
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(aliceMountId, docId);
+        const owner = makeSpyConn();
+        const attacker = makeSpyConn();
+        const peer = makeSpyConn();
+        collab.subscribe(home.user, owner);
+        collab.subscribe(home.user, attacker);
+        collab.subscribe(home.user, peer);
+        try {
+            const clientId = clientIdSeq++;
+            collab.handleMessage(
+                owner,
+                awarenessFrame([
+                    { clientId, clock: 1, state: { user: { userId: home.user.id, name: home.user.name } } },
+                ]),
+                true,
+            );
+            const base = peer.sent.length;
+            // Higher clock + self identity: applyAwarenessUpdate would overwrite the victim's slot.
+            collab.handleMessage(
+                attacker,
+                awarenessFrame([{ clientId, clock: 2, state: { user: { userId: home.user.id, name: 'Hijack' } } }]),
+                true,
+            );
+            expect(peer.sent.length).toBe(base);
+        } finally {
+            collab.unsubscribe(owner);
+            collab.unsubscribe(attacker);
+            collab.unsubscribe(peer);
+        }
+    });
+
+    test('a client id is free again after its owning connection disconnects', async () => {
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(aliceMountId, docId);
+        const owner = makeSpyConn();
+        const attacker = makeSpyConn();
+        const peer = makeSpyConn();
+        collab.subscribe(home.user, owner);
+        collab.subscribe(home.user, attacker);
+        collab.subscribe(home.user, peer);
+        try {
+            const clientId = clientIdSeq++;
+            collab.handleMessage(
+                owner,
+                awarenessFrame([
+                    { clientId, clock: 1, state: { user: { userId: home.user.id, name: home.user.name } } },
+                ]),
+                true,
+            );
+            collab.unsubscribe(owner); // releases the id (and broadcasts the removal)
+            const base = peer.sent.length;
+            // A reconnecting tab reusing the same clientID must be able to claim it again.
+            collab.handleMessage(
+                attacker,
+                awarenessFrame([
+                    { clientId, clock: 2, state: { user: { userId: home.user.id, name: home.user.name } } },
+                ]),
+                true,
+            );
+            expect(peer.sent.length).toBe(base + 1);
+        } finally {
+            collab.unsubscribe(attacker);
+            collab.unsubscribe(peer);
+        }
+    });
 });

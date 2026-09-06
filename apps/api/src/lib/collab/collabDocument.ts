@@ -179,6 +179,10 @@ export default class CollabDocument {
         return this.connections.size;
     }
     private connectionClientIds: Map<ServerWebSocket<undefined>, Set<number>> = new Map();
+    // Reverse index of connectionClientIds: which connection currently owns each awareness client id.
+    // An id may only be written or removed by the connection that first declared it, so a reader can't
+    // evict or overwrite a peer's presence. Released on removal and on disconnect.
+    private clientIdOwners: Map<number, ServerWebSocket<undefined>> = new Map();
     private closed: boolean = false;
     private lastTouchedAt = 0;
     private lastEditRecordedAt: Map<string, number> = new Map(); // userId -> ts
@@ -345,8 +349,12 @@ export default class CollabDocument {
     private dropConnection(conn: ServerWebSocket<undefined>): void {
         this.connections.delete(conn);
         const clientIds = this.connectionClientIds.get(conn);
-        if (clientIds && clientIds.size > 0) {
-            awarenessProtocol.removeAwarenessStates(this.awareness, Array.from(clientIds), null);
+        if (clientIds) {
+            // Release ownership so a reconnecting tab reusing the same clientID isn't locked out.
+            for (const id of clientIds) this.clientIdOwners.delete(id);
+            if (clientIds.size > 0) {
+                awarenessProtocol.removeAwarenessStates(this.awareness, Array.from(clientIds), null);
+            }
         }
         this.connectionClientIds.delete(conn);
     }
@@ -406,9 +414,10 @@ export default class CollabDocument {
 
             // Validate before applying: a read-only peer could otherwise flood the shared awareness
             // map (fanned out to every peer, replayed to every joiner) with unbounded client ids or
-            // state, or spoof another user's identity. Drop the whole frame on any violation; removals
-            // (state === null) always pass so a departing client's own cleanup still lands.
+            // state, spoof another user's identity, or evict/overwrite a peer's presence. Drop the
+            // whole frame on any violation.
             const owned = new Set(this.connectionClientIds.get(conn));
+            const removed: number[] = [];
             try {
                 const trackDecoder = decoding.createDecoder(awarenessUpdate);
                 const len = decoding.readVarUint(trackDecoder);
@@ -416,7 +425,13 @@ export default class CollabDocument {
                     const clientId = decoding.readVarUint(trackDecoder);
                     decoding.readVarUint(trackDecoder); // clock
                     const stateJson = decoding.readVarString(trackDecoder);
-                    if (stateJson === 'null') continue;
+                    // A client id may only be written or removed by the connection that first declared it.
+                    const ownerConn = this.clientIdOwners.get(clientId);
+                    if (ownerConn !== undefined && ownerConn !== conn) return;
+                    if (stateJson === 'null') {
+                        removed.push(clientId);
+                        continue;
+                    }
                     if (Buffer.byteLength(stateJson) > MAX_AWARENESS_STATE_BYTES) return;
                     if (!awarenessIdentityMatches(JSON.parse(stateJson), user.id)) return;
                     owned.add(clientId);
@@ -428,6 +443,12 @@ export default class CollabDocument {
 
             // Applying fires the awareness 'update' handler, which is the one fan-out to the other peers.
             awarenessProtocol.applyAwarenessUpdate(this.awareness, awarenessUpdate, conn);
+            // Removals shrink the owned set (and free the id) so a client that recycles clientIDs isn't wedged at the cap.
+            for (const id of removed) {
+                owned.delete(id);
+                this.clientIdOwners.delete(id);
+            }
+            for (const id of owned) this.clientIdOwners.set(id, conn);
             this.connectionClientIds.set(conn, owned);
         } else {
             console.warn(`Unknown message type: ${messageType}`);
