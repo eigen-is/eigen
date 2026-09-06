@@ -13,6 +13,16 @@ export type DocxImage = {
     contentType: string;
 };
 
+const IMAGE_EXTENSION_BY_MIME: Record<string, string> = {
+    'image/png': 'png',
+    'image/jpeg': 'jpeg',
+    'image/gif': 'gif',
+    'image/webp': 'webp',
+    'image/svg+xml': 'svg',
+    'image/tiff': 'tiff',
+    'image/bmp': 'bmp',
+};
+
 const extensions = getDocExtensions();
 const schema = getSchema(extensions);
 const parser = PmDOMParser.fromSchema(schema);
@@ -51,19 +61,9 @@ export async function docxToPmJson(buffer: Buffer): Promise<{ json: JSONContent;
     const dom = new JSDOM(`<!DOCTYPE html><html><body>${sanitized}</body></html>`);
     const pmDoc = parser.parse(dom.window.document.body);
 
-    // ProseMirror's toJSON() returns the correct JSONContent shape
-    return { json: pmDoc.toJSON() as JSONContent, images };
+    return { json: pmDoc.toJSON(), images };
 }
 
 function extensionFromMime(contentType: string): string {
-    const map: Record<string, string> = {
-        'image/png': 'png',
-        'image/jpeg': 'jpeg',
-        'image/gif': 'gif',
-        'image/webp': 'webp',
-        'image/svg+xml': 'svg',
-        'image/tiff': 'tiff',
-        'image/bmp': 'bmp',
-    };
-    return map[contentType] ?? 'png';
+    return IMAGE_EXTENSION_BY_MIME[contentType] ?? 'png';
 }

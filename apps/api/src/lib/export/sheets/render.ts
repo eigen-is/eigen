@@ -26,6 +26,7 @@ import {
 import { FONT_STACK_SANS } from '../font-stacks';
 import { getFontCSS } from '../fonts';
 import { sanitizeExportHtml } from '../sanitize';
+import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from './cell-style';
 import { resolveFontFamily } from './fonts';
 
 // Sheet[] -> HTML: the full-workbook export document, the budgeted preview body and
@@ -42,18 +43,6 @@ const DEFAULT_ROW_HEIGHT = 19;
 // always emits one (`middle`, `top`, `bottom`, …) so we never end up with two competing
 // declarations for one cell.
 const BASE_TD_STYLE = 'overflow:hidden;white-space:nowrap;padding:1px 2px';
-
-const HORIZONTAL_ALIGN: Record<number, string> = {
-    0: 'center',
-    1: 'left',
-    2: 'right',
-};
-
-const VERTICAL_ALIGN: Record<number, string> = {
-    0: 'middle',
-    1: 'top',
-    2: 'bottom',
-};
 
 const PAGE_MARGIN = 40;
 const PAGE_SLACK = 20;
@@ -107,9 +96,9 @@ function fontQuote(forStylesheet: boolean): string {
 }
 
 // Dimensions are schemaless at the Yjs boundary — a collaborator can store a string.
-// getSheetContentSize coerces for the same reason (its result reaches the @page rule);
-// these reach the width/height declarations, so they get the same treatment at the
-// source rather than relying on the structural strip above.
+// Coerced at the source rather than left to the structural strip above, because these
+// reach the width/height declarations and, through getSheetContentSize, the @page rule
+// wrapInDocument derives from them and never sanitizes.
 function cssLength(value: number | undefined, fallback: number): number {
     const n = Number(value ?? fallback);
     return Number.isFinite(n) ? n : fallback;
@@ -146,8 +135,8 @@ export function renderSheetsPdfDocument(sheets: Sheet[], title: string): string 
     return wrapInDocument(title, sanitized, pageSize);
 }
 
-// Preview budget (proposal § Preview output budget): rendered from the top-left
-// of the used range. maxCells is an independent ceiling so tuning rows/columns
+// Preview budget (docs/PREVIEWS.md § Compact Previews vs Full Export): rendered from
+// the top-left of the used range. maxCells is an independent ceiling so tuning rows/columns
 // against fixtures can never silently remove the bound (at the defaults it never
 // binds: 200 × 50 = 10,000).
 export type SheetPreviewBudget = { maxRows: number; maxCols: number; maxCells: number };
@@ -175,7 +164,7 @@ export function renderSheetsHtml(sheets: Sheet[]): { html: string; css: string }
     const { engine, resolver } = createRenderContext(sheets);
     const styles: StyleRegistry = new Map();
     const html = sheets
-        .map((sheet, i) => renderSheet(sheet, i === sheets.length - 1, engine, resolver, undefined, styles).html)
+        .map((sheet, i) => renderSheet(sheet, i === sheets.length - 1, engine, resolver, { styles }).html)
         .join('\n');
     return { html, css: serializeStyleRules(styles) };
 }
@@ -188,7 +177,7 @@ export function renderSheetsHtml(sheets: Sheet[]): { html: string; css: string }
 export function renderSheetsPreviewHtml(sheets: Sheet[]): { html: string; truncated: boolean } {
     if (sheets.length === 0) return { html: '', truncated: false };
     const { engine, resolver } = createRenderContext(sheets);
-    const first = renderSheet(sheets[0], true, engine, resolver, PREVIEW_SHEET_BUDGET);
+    const first = renderSheet(sheets[0], true, engine, resolver, { budget: PREVIEW_SHEET_BUDGET });
     return { html: first.html, truncated: first.truncated || sheets.length > 1 };
 }
 
@@ -259,37 +248,34 @@ export function getSheetContentSize(sheet: Sheet): { width: number; height: numb
     const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, config.borderInfo ?? {});
     if (maxRow < 0 || maxCol < 0) return { width: 0, height: 0 };
 
-    // The dimension maps are schemaless at the Yjs boundary — coerce so a stray string can never
-    // concatenate itself into the un-sanitized @page CSS that pdf.ts derives from this size.
     let width = 0;
     for (let c = minCol; c <= maxCol; c++) {
         if (config.colhidden?.[c]) continue;
-        const w = Number(config.columnlen?.[c] ?? DEFAULT_COL_WIDTH);
-        width += Number.isFinite(w) ? w : DEFAULT_COL_WIDTH;
+        width += cssLength(config.columnlen?.[c], DEFAULT_COL_WIDTH);
     }
 
     let height = 0;
     for (let r = minRow; r <= maxRow; r++) {
         if (config.rowhidden?.[r]) continue;
-        const h = Number(config.rowlen?.[r] ?? DEFAULT_ROW_HEIGHT);
-        height += Number.isFinite(h) ? h : DEFAULT_ROW_HEIGHT;
+        height += cssLength(config.rowlen?.[r], DEFAULT_ROW_HEIGHT);
     }
 
     return { width, height };
 }
 
+// `styles` present is the full-document export (interned classes, stylesheet escaping);
+// absent is the preview fragment, which embeds without a <head> and stays inline-styled.
 function renderSheet(
     sheet: Sheet,
     isLast: boolean,
     engine: FormulaEngine,
     resolver: CellResolver,
-    budget?: SheetPreviewBudget,
-    styles?: StyleRegistry,
+    { budget, styles }: { budget?: SheetPreviewBudget; styles?: StyleRegistry } = {},
 ): { html: string; truncated: boolean } {
+    const forStylesheet = styles !== undefined;
     const config = sheet.config ?? {};
     const showGrid = sheet.showGridLines !== false && sheet.showGridLines !== 0;
 
-    // Find the minimal bounding box containing all visible content
     const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, config.borderInfo ?? {});
     if (maxRow < 0 || maxCol < 0) {
         return { html: `<div class="sheet"></div>`, truncated: false };
@@ -349,7 +335,6 @@ function renderSheet(
     const mergeAnchors = new Map<string, MergeCell>();
     for (const m of merges) mergeAnchors.set(`${m.r},${m.c}`, m);
 
-    // Build cell lookup: "r,c" -> CellWithRowAndCol
     const cellMap = new Map<string, CellWithRowAndCol>();
     if (sheet.celldata) {
         for (const cd of sheet.celldata) {
@@ -357,7 +342,6 @@ function renderSheet(
         }
     }
 
-    // Colgroup
     const cols: string[] = [];
     let tableWidth = 0;
     for (const c of renderCols) {
@@ -367,7 +351,6 @@ function renderSheet(
     }
     const colgroup = `<colgroup>${cols.join('')}</colgroup>`;
 
-    // Rows
     const rows: string[] = [];
     for (const r of renderRows) {
         const h = cssLength(config.rowlen?.[r], DEFAULT_ROW_HEIGHT);
@@ -377,7 +360,6 @@ function renderSheet(
         for (const c of renderCols) {
             const key = `${r},${c}`;
 
-            // Skip cells covered by a merge anchored elsewhere
             if (rowMerges.some((m) => c >= m.c && c < m.c + m.cs && (m.r !== r || m.c !== c))) continue;
 
             const cd = cellMap.get(key);
@@ -396,8 +378,8 @@ function renderSheet(
                 if (rs > 1) attrs.push(`rowspan="${rs}"`);
             }
 
-            const cellStyle = buildCellStyle(v, borderMap[`${r}_${c}`], showGrid, cfStyle, styles !== undefined);
-            if (styles) {
+            const cellStyle = buildCellStyle(v, borderMap[`${r}_${c}`], showGrid, cfStyle, forStylesheet);
+            if (forStylesheet) {
                 // The base td declarations live in the shared td{} rule; an unstyled
                 // cell needs no class at all.
                 if (cellStyle) attrs.push(styleAttr(styles, cellStyle));
@@ -423,11 +405,11 @@ function renderSheet(
         rows.push(`<tr ${styleAttr(styles, `height:${h}px`)}>${cells.join('')}</tr>`);
     }
 
-    // The .sheet div already carries a class, so the page-break style joins it as a
-    // second class token rather than going through styleAttr.
-    const divClass = isLast || !styles ? 'sheet' : `sheet ${internStyle(styles, 'page-break-after:always')}`;
-    const pageBreak = isLast || styles ? '' : ' style="page-break-after:always"';
-    const q = fontQuote(styles !== undefined);
+    // The .sheet div already carries a class, so in stylesheet mode the page-break style
+    // joins it as a second class token rather than going through styleAttr.
+    const divClass = isLast || !forStylesheet ? 'sheet' : `sheet ${internStyle(styles, 'page-break-after:always')}`;
+    const pageBreak = isLast || forStylesheet ? '' : ' style="page-break-after:always"';
+    const q = fontQuote(forStylesheet);
     const tableStyle = `border-collapse:collapse;table-layout:fixed;font-family:${q}Inter${q},system-ui,sans-serif;font-size:11px;color:#1a1a2e;background:#fff;width:${tableWidth}px`;
     const html = `<div class="${divClass}"${pageBreak}>
 <table ${styleAttr(styles, tableStyle)}>${colgroup}<tbody>${rows.join('')}</tbody></table>
@@ -444,7 +426,7 @@ function getCellDisplay(v: Cell | null): string {
 }
 
 // Mirrors the dataBar geometry + colors from the canvas painter
-// (packages/sheet/src/state/canvas.ts ~line 1660). For a "minus" entry the bar fills
+// (packages/sheet/src/state/render/data-bar.ts). For a "minus" entry the bar fills
 // the negative half (left of the zero line); for "plus" it fills the positive half.
 // Colors match canvas exactly: positive bars use `format` (user-configurable), negative
 // bars use a hardcoded red — that's a long-standing canvas behavior, intentionally
@@ -556,15 +538,12 @@ function buildCellStyle(
     return parts.join(';');
 }
 
-function isNumericRotation(v: Cell | null): v is Cell & { rt: number } {
-    return !!v && typeof v.rt === 'number' && v.rt !== 0 && v.rt >= -90 && v.rt <= 90;
-}
-
 // Render the cell's content with rotation applied. The td has `position:relative` (set in
 // buildCellStyle), so the span anchors itself absolutely at the cell corner the rotation
 // pivots around — no inline-flow / vertical-align gymnastics, no zero-height wrapper.
 //
-// Geometry mirrors the canvas painter (text.ts ~line 1692). Three pieces:
+// Geometry mirrors the canvas painter — the rotation in state/render/cell-text.ts, the
+// pivot offsets getCellTextInfo computes in state/modules/text.ts. Three pieces:
 //
 //   1. Anchor: positive rt (CCW / "up") pins to left+bottom; negative rt (CW / "down")
 //      pins to left+top. transform-origin matches the same corner so the pivot stays

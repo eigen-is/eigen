@@ -24,16 +24,7 @@ import {
     unquoteSheetName,
     update,
 } from '@workspace/sheet/engine';
-import type {
-    Alignment,
-    AutoFilter,
-    Border,
-    CellRichTextValue,
-    CellValue,
-    Workbook,
-    Worksheet,
-    Cell as XlsxCell,
-} from 'exceljs';
+import type { Alignment, AutoFilter, Border, CellValue, Workbook, Worksheet, Cell as XlsxCell } from 'exceljs';
 import he from 'he';
 import JSZip from 'jszip';
 import { ApiError } from '../../core/errors';
@@ -42,6 +33,9 @@ import { assertDecompressedSizeWithinBounds } from '../zip-size-guard';
 // Excel's date epoch is 1899-12-30 (not 1900-01-01 — Lotus 1-2-3 1900 leap-year bug).
 const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
 const DAY_MS = 86_400_000;
+
+const DEFAULT_ROW_HEIGHT_PT = 15.75;
+const DEFAULT_ROW_HEIGHT_PX = 20;
 
 const HORIZONTAL_MAP: Record<NonNullable<Alignment['horizontal']>, 0 | 1 | 2> = {
     left: 1,
@@ -105,14 +99,11 @@ const FONT_CATEGORY_MAP: Record<string, EigenFont['category']> = {
 
 // The one bundled font per visual category, sourced from the canonical registry so a font
 // rename never drifts from what the export embeds.
-const BUNDLED_FONT_BY_CATEGORY = Object.fromEntries(EIGEN_FONTS.map((font) => [font.category, font.name])) as Record<
-    EigenFont['category'],
-    string
->;
+const BUNDLED_FONT_BY_CATEGORY = new Map(EIGEN_FONTS.map((font) => [font.category, font.name]));
 
 function mapToSupportedFont(name: string): string | null {
     const category = FONT_CATEGORY_MAP[name.trim().toLowerCase()];
-    return category ? BUNDLED_FONT_BY_CATEGORY[category] : null;
+    return (category && BUNDLED_FONT_BY_CATEGORY.get(category)) ?? null;
 }
 
 // xlsx style name → ordinal, derived from the shared ordinal table (the reverse of its `name`).
@@ -191,9 +182,6 @@ function worksheetToSheet(
         // exceljs expands <col min/max hidden> ranges to per-column flags.
         if (col?.hidden) colhidden[String(i)] = 0;
     }
-
-    const DEFAULT_ROW_HEIGHT_PT = 15.75;
-    const DEFAULT_ROW_HEIGHT_PX = 20;
 
     worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
         const r = rowNumber - 1;
@@ -941,29 +929,8 @@ function xmlAttribute(tag: string, name: string): string | null {
 
 function extractValueAndDisplay(cell: XlsxCell): { value?: string | number | boolean; display?: string } {
     const raw = cell.value;
-    if (raw === null || raw === undefined) return {};
 
-    if (typeof raw === 'number') {
-        return { value: raw, display: numberDisplay(raw, cell.numFmt) };
-    }
-
-    if (typeof raw === 'boolean') {
-        return { value: raw, display: booleanDisplay(raw) };
-    }
-
-    if (typeof raw === 'string') {
-        return { value: raw, display: raw };
-    }
-
-    if (raw instanceof Date) {
-        return dateToSerialAndDisplay(raw, cell.numFmt);
-    }
-
-    if (isFormulaValue(raw)) {
-        return resolveFormulaResult(raw.result, cell.numFmt);
-    }
-
-    if (isSharedFormula(raw)) {
+    if (isFormulaValue(raw) || isSharedFormula(raw)) {
         return resolveFormulaResult(raw.result, cell.numFmt);
     }
 
@@ -977,11 +944,8 @@ function extractValueAndDisplay(cell: XlsxCell): { value?: string | number | boo
         return { value: text, display: text };
     }
 
-    if (isError(raw)) {
-        return { value: raw.error, display: raw.error };
-    }
-
-    return {};
+    // The remaining shapes are exactly the scalars a formula resolves to.
+    return resolveFormulaResult(raw, cell.numFmt);
 }
 
 function resolveFormulaResult(
@@ -1409,7 +1373,7 @@ function isSharedFormula(value: CellValue): value is Extract<CellValue, { shared
     return typeof value === 'object' && value !== null && 'sharedFormula' in value;
 }
 
-function isRichText(value: CellValue): value is Extract<CellValue, { richText: unknown }> {
+function isRichText(value: unknown): value is Extract<CellValue, { richText: unknown }> {
     return typeof value === 'object' && value !== null && 'richText' in value;
 }
 
@@ -1423,9 +1387,7 @@ function isHyperlink(value: CellValue): value is Extract<CellValue, { hyperlink:
 function hyperlinkText(raw: { text: unknown }): string {
     const t = raw.text;
     if (typeof t === 'string') return t;
-    if (t && typeof t === 'object' && 'richText' in t) {
-        return (t as CellRichTextValue).richText.map((r) => r.text).join('');
-    }
+    if (isRichText(t)) return t.richText.map((r) => r.text).join('');
     return '';
 }
 

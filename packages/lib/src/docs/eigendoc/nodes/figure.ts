@@ -2,16 +2,21 @@ import { type CommandProps, Node } from '@tiptap/core';
 
 export type FigureLayout = 'block' | 'wrap-left' | 'wrap-right';
 
+// The node's attribute set, as it comes back off a stored document (every attr defaults to null).
+export type FigureAttrs = {
+    mediaName?: string | null;
+    src?: string | null;
+    alt?: string | null;
+    caption?: string | null;
+    width?: number | null;
+    alignment?: string | null;
+    layout?: FigureLayout | null;
+};
+
 declare module '@tiptap/core' {
     interface Commands<ReturnType> {
         figure: {
-            setFigure: (options: {
-                mediaName: string;
-                alt?: string;
-                width?: number;
-                caption?: string;
-                layout?: FigureLayout;
-            }) => ReturnType;
+            setFigure: (options: FigureAttrs & { mediaName: string }) => ReturnType;
         };
     }
 }

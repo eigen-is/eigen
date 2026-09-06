@@ -18,8 +18,6 @@ export async function importXlsxToSheetsSnapshot(
     return { snapshotJson: toTransferableText(encodeSheetsSnapshot(sheets, { computed })), warnings };
 }
 
-// xlsx is a zip-based format — the parser needs the full file in memory to read
-// the central directory and extract parts. Callers size-check before this point.
 async function parseXlsxOrThrow(buffer: Buffer): Promise<Sheet[]> {
     try {
         return await xlsxToSheets(buffer);

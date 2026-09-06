@@ -1,5 +1,5 @@
 import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
-import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
+import { type FigureAttrs, getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { common, createLowlight } from 'lowlight';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../document/doc';
@@ -42,7 +42,7 @@ export function renderEigendocPreviewBody(
             nodeMapping: {
                 codeBlock: ({ node }) => renderCodeBlockNode(node, lowlight),
                 taskItem: ({ node, children }) => renderTaskItemNode(node, children),
-                figure: ({ node }: { node: { attrs: Record<string, unknown> } }) =>
+                figure: ({ node }: { node: { attrs: FigureAttrs } }) =>
                     renderFigureNode(
                         node.attrs,
                         (mediaName, src) => (mediaName ? (mediaUrls.get(mediaName) ?? null) : src),

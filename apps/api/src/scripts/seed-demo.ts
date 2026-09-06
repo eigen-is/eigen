@@ -25,6 +25,7 @@ import type { JSONContent } from '@tiptap/core';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
+import { DOCX_MIME } from '@workspace/lib/constants/mime';
 import type { Attendee, EventData } from '@workspace/lib/types/calendar';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import { DRIVE_MIME_FOLDER, DRIVE_TYPE_FOLDER, type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
@@ -61,7 +62,6 @@ import {
 import { buildDeckDoc } from './demo/deck-build';
 import { buildVectorDoc } from './demo/vector-build';
 
-const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const SQLITE_MIME = 'application/x-sqlite3';
 const FIXTURES_DIR = join(import.meta.dir, 'demo', 'fixtures');
 const AVATARS_DIR = join(FIXTURES_DIR, 'avatars');

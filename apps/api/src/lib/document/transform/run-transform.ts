@@ -1,21 +1,17 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type { YjsStatePayload } from '../../collab/yjs-loader';
 import { ApiError } from '../../core/errors';
 import type { Mount } from '../../mount';
 import { captureCollabSource } from './collab-source';
 import type {
-    CollabTransformJob,
     DocImportJob,
     DocImportWorkerResult,
     DocumentTransformRequest,
     ExportTransformJob,
-    ExportWorkerResult,
     ExtractTextJob,
-    ExtractTextResult,
-    PreviewResult,
     PreviewTransformJob,
     SheetsImportJob,
-    SheetsImportWorkerResult,
-    TransformResult,
+    TransformResultFor,
     TransformWarning,
 } from './protocol';
 import { documentTransformRunner, type RunOptions, TRANSFORM_LIMITS, type TransformPriority } from './runner';
@@ -38,10 +34,10 @@ type TransformOptions = Omit<RunOptions, 'priority' | 'deadlineMs' | 'admissionC
     priority?: TransformPriority;
 };
 
-async function runTransformRequest(
-    request: DocumentTransformRequest,
+async function runTransformRequest<R extends DocumentTransformRequest>(
+    request: R,
     opts: TransformOptions & { captureMs?: number },
-): Promise<TransformResult> {
+): Promise<TransformResultFor<R>> {
     const { priority = 'foreground', ...rest } = opts;
     const response = await documentTransformRunner.run(request, {
         ...rest,
@@ -55,15 +51,20 @@ async function runTransformRequest(
         throw new Error(`${what} transform failed (${response.error.code}): ${response.error.message}`);
     }
     for (const warning of response.warnings) surfaceWarning(warning, request.kind);
-    return response.result;
+    // The one seam the kind→result mapping crosses: the runner settles every kind of job
+    // through one widened response, having already proved this result pairs with this
+    // request (resultMatchesRequest). Past here every caller reads its field with no cast.
+    return response.result as TransformResultFor<R>;
 }
 
-async function runDocumentTransform(
+// `toRequest` completes the caller's own job with the captured source, so the request
+// keeps its kind here and the result narrows with it.
+async function runDocumentTransform<R extends DocumentTransformRequest>(
     mount: Mount,
     drivePath: DrivePath,
-    job: CollabTransformJob,
     opts: TransformOptions,
-): Promise<TransformResult> {
+    toRequest: (source: YjsStatePayload) => R,
+): Promise<TransformResultFor<R>> {
     // Refuse before the capture: a job the runner will not admit must not pay for a
     // full read of the document's blobs (a refused reindex drain did, per row).
     const priority = opts.priority ?? 'foreground';
@@ -71,14 +72,11 @@ async function runDocumentTransform(
 
     const captureStart = performance.now();
     const source = await captureCollabSource(mount, drivePath);
-    return runTransformRequest(
-        { ...job, source },
-        {
-            ...opts,
-            priority,
-            captureMs: performance.now() - captureStart,
-        },
-    );
+    return runTransformRequest(toRequest(source), {
+        ...opts,
+        priority,
+        captureMs: performance.now() - captureStart,
+    });
 }
 
 // Only recalc-failed needs a line here: the Worker already logs every skipped blob
@@ -103,8 +101,8 @@ export async function runTransformToText(
     job: PreviewTransformJob,
     opts: TransformOptions,
 ): Promise<string> {
-    const result = (await runDocumentTransform(mount, drivePath, job, opts)) as PreviewResult;
-    return result.body;
+    const { body } = await runDocumentTransform(mount, drivePath, opts, (source) => ({ ...job, source }));
+    return body;
 }
 
 export async function runTransformToExtractedText(
@@ -113,8 +111,8 @@ export async function runTransformToExtractedText(
     job: ExtractTextJob,
     opts: TransformOptions,
 ): Promise<string> {
-    const result = (await runDocumentTransform(mount, drivePath, job, opts)) as ExtractTextResult;
-    return result.text;
+    const { text } = await runDocumentTransform(mount, drivePath, opts, (source) => ({ ...job, source }));
+    return text;
 }
 
 export async function runTransformToBytes(
@@ -123,8 +121,8 @@ export async function runTransformToBytes(
     job: ExportTransformJob,
     opts: TransformOptions,
 ): Promise<Buffer> {
-    const result = (await runDocumentTransform(mount, drivePath, job, opts)) as ExportWorkerResult;
-    return Buffer.from(result.data);
+    const { data } = await runDocumentTransform(mount, drivePath, opts, (source) => ({ ...job, source }));
+    return Buffer.from(data);
 }
 
 // Imports carry uploaded bytes instead of a captured document, and hand back what
@@ -135,7 +133,7 @@ export async function runImportToSnapshotJson(
     data: ArrayBuffer,
     opts: TransformOptions,
 ): Promise<string> {
-    const result = (await runTransformRequest({ ...job, data }, opts)) as SheetsImportWorkerResult;
+    const result = await runTransformRequest({ ...job, data }, opts);
     return new TextDecoder().decode(result.snapshotJson);
 }
 
@@ -144,5 +142,5 @@ export async function runImportToDocumentUpdate(
     data: ArrayBuffer,
     opts: TransformOptions,
 ): Promise<DocImportWorkerResult> {
-    return (await runTransformRequest({ ...job, data }, opts)) as DocImportWorkerResult;
+    return runTransformRequest({ ...job, data }, opts);
 }

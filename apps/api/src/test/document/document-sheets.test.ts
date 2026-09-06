@@ -4,10 +4,11 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { normalizeSheetConfig, sheetsNeedRecalc } from '@workspace/sheet/engine';
 import ExcelJS from 'exceljs';
 import * as Y from 'yjs';
-import { readSheetsFromDoc, writeSheetsSnapshotToYjs, writeSheetsToYjs } from '../../lib/document/sheets';
+import { readSheetsFromDoc, writeSheetsSnapshotToYjs } from '../../lib/document/sheets';
 import { getHome } from '../../lib/home/get-home';
 import { importIntoDocument } from '../../lib/import/import-document';
 import type { Mount } from '../../lib/mount';
+import { writeSheetsToYjs } from '../fixtures/heavy-sheets';
 import { readPersistedDoc } from '../fixtures/transform-results';
 import { driveGet, drivePost, getTestContext } from '../setup';
 

@@ -1,3 +1,4 @@
+import { DOCX_MIME, XLSX_MIME } from '@workspace/lib/constants/mime';
 import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES, DRIVE_MIME_VECTOR } from '@workspace/lib/types';
 import { type DrivePath, EIGEN_DOC_TYPE_INFO, isCollabType, stripEigenExtension } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
@@ -26,16 +27,8 @@ const EXPORT_ENVELOPES = {
     html: { workerFormat: 'html', contentType: 'text/html; charset=utf-8', extension: 'html' },
     pdf: { workerFormat: 'pdf-html', contentType: 'application/pdf', extension: 'pdf' },
     svg: { workerFormat: 'svg', contentType: 'image/svg+xml', extension: 'svg' },
-    xlsx: {
-        workerFormat: 'xlsx',
-        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        extension: 'xlsx',
-    },
-    docx: {
-        workerFormat: 'docx',
-        contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        extension: 'docx',
-    },
+    xlsx: { workerFormat: 'xlsx', contentType: XLSX_MIME, extension: 'xlsx' },
+    docx: { workerFormat: 'docx', contentType: DOCX_MIME, extension: 'docx' },
 } as const;
 
 type ExportEnvelope = (typeof EXPORT_ENVELOPES)[keyof typeof EXPORT_ENVELOPES];
