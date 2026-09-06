@@ -19,9 +19,10 @@ export function presentStep(index: number, count: number, delta: number): number
     return Math.max(next, 0);
 }
 
-// A click on a link belongs to the link: the presenter opening a source must not also move the deck
-// on behind it. Every other spot on the slide is the next-slide surface.
-export function clickAdvances(target: EventTarget | null): boolean {
+// A press on a link belongs to the link: the presenter opening a source, or right-clicking it for
+// "open in new tab", must not also move the deck behind it. Every other spot on the slide is the
+// deck's own surface — left for the next slide, right for the previous one.
+export function deckOwnsClick(target: EventTarget | null): boolean {
     return !(target instanceof Element) || target.closest('a[href]') === null;
 }
 
@@ -88,9 +89,11 @@ export function PresentMode({ frame, elements, onNext, onPrev, onExit }: Present
             onPointerMove={revealControls}
             onClick={(e) => {
                 revealControls();
-                if (clickAdvances(e.target)) onNext();
+                if (deckOwnsClick(e.target)) onNext();
             }}
             onContextMenu={(e) => {
+                revealControls();
+                if (!deckOwnsClick(e.target)) return;
                 e.preventDefault();
                 onPrev();
             }}
