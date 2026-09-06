@@ -54,14 +54,15 @@ export function creatingElement(c: CreatingState, style: StyleDefaults): VectorE
         angle: 0,
         // The same base paint the committed element gets (addElement reads the same helper), so a kind
         // whose stroke is a border — rich text — previews unframed instead of popping on release.
-        ...baseDefaultsFor(c.type),
+        ...baseDefaultsFor(c.type, style),
+        seed: c.seed,
         index: 'a0',
     };
     // The preview takes its style from the same kind defaults the committed element will (addElement
     // reads the host's own table), so the two can't drift; only the gesture's seed carries over. One
     // branch per kind because each composes its OWN element type — a union-typed
-    // `ELEMENT_KINDS[c.type].defaults()` spread would need a cast — and because rich text is seedless
-    // and previews with an outline no committed box has.
+    // `ELEMENT_KINDS[c.type].defaults()` spread would need a cast — and because an empty rich-text box
+    // previews with an outline no committed box has.
     if (c.type === 'ellipse') {
         return { ...box, ...ELEMENT_KINDS.ellipse.defaults(style), type: 'ellipse', seed: c.seed };
     }

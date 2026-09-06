@@ -15,6 +15,7 @@ import {
     type VectorScene,
 } from '../../vector/types';
 
+// A fixed seed and the host's roughness, since the shared table's are the reader's fallbacks (0/0).
 const BASE = {
     ...DEFAULT_ELEMENT_PROPS,
     x: 0,
@@ -23,10 +24,12 @@ const BASE = {
     height: 60,
     angle: 0,
     index: 'a0',
+    roughness: VECTOR_STYLE_DEFAULTS.roughness,
+    seed: 1,
 };
 
 // Typed as the rectangle so `corners` is present, spread-only so the ellipse case doesn't trip the
-// excess-property check on it. A fixed seed, since the kind's own default (0) is the writer's placeholder.
+// excess-property check on it.
 const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
     ...BASE,
     ...ELEMENT_KINDS.rectangle.defaults(VECTOR_STYLE_DEFAULTS),

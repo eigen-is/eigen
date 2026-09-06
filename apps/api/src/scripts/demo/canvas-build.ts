@@ -39,8 +39,9 @@ export function toYMap(source: object, fields: readonly string[]): Y.Map<unknown
 export function baseElement(
     type: VectorElementType,
     id: string,
+    style: StyleDefaults,
 ): Omit<VectorElementBase, 'type' | 'x' | 'y' | 'width' | 'height' | 'angle'> {
-    return { ...baseDefaultsFor(type), id, index: '' };
+    return { ...baseDefaultsFor(type, style), id, index: '' };
 }
 
 // What a builder supplies on top of the kind's defaults: its box, plus whatever it overrides. `id` and
@@ -54,7 +55,12 @@ export function richTextElement(
     style: StyleDefaults,
     fields: ElementFields<VectorRichTextElement>,
 ): VectorRichTextElement {
-    return { ...baseElement('richtext', id), ...ELEMENT_KINDS.richtext.defaults(style), type: 'richtext', ...fields };
+    return {
+        ...baseElement('richtext', id, style),
+        ...ELEMENT_KINDS.richtext.defaults(style),
+        type: 'richtext',
+        ...fields,
+    };
 }
 
 export function imageElement(
@@ -62,7 +68,7 @@ export function imageElement(
     style: StyleDefaults,
     fields: ElementFields<VectorImageElement>,
 ): VectorImageElement {
-    return { ...baseElement('image', id), ...ELEMENT_KINDS.image.defaults(style), type: 'image', ...fields };
+    return { ...baseElement('image', id, style), ...ELEMENT_KINDS.image.defaults(style), type: 'image', ...fields };
 }
 
 // Settle a bound arrow's endpoints exactly where the editor would leave them at rest, keeping the

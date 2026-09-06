@@ -143,7 +143,7 @@ export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
 
 function buildShape(s: SitePlanShape): VectorShapeElement {
     const box = {
-        ...baseElement(s.kind, `el-${s.key}`),
+        ...baseElement(s.kind, `el-${s.key}`, SITE_PLAN_STYLE),
         x: s.x,
         y: s.y,
         width: s.width,
@@ -166,7 +166,7 @@ function buildLine(l: SitePlanLine, i: number): VectorLinearElement {
     const points = l.points.map(([x, y]) => ({ x, y }));
     const norm = normalizeLinear(ZERO_BOX, points);
     return {
-        ...baseElement(l.freedraw ? 'freedraw' : 'line', `el-line-${i}`),
+        ...baseElement(l.freedraw ? 'freedraw' : 'line', `el-line-${i}`, SITE_PLAN_STYLE),
         type: l.freedraw ? 'freedraw' : 'line',
         x: norm.x,
         y: norm.y,
@@ -208,7 +208,7 @@ function buildArrow(
     const fontSize = a.labelSize ?? DEFAULT_ARROW_LABEL_SIZE;
     const label = a.label ?? '';
     const arrow: VectorArrowElement = {
-        ...baseElement('arrow', `el-arrow-${i}`),
+        ...baseElement('arrow', `el-arrow-${i}`, SITE_PLAN_STYLE),
         type: 'arrow',
         x: norm.x,
         y: norm.y,

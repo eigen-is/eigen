@@ -47,7 +47,7 @@ function elementDefaults(type: VectorElementType, style: StyleDefaults): Record<
         // The shared base paint under the kind's overrides: rich text and images use the stroke as a
         // border, so a fresh one is unframed until the user picks a stroke colour. The panel's reset
         // rows read the same helper, so a reset restores what creation gave.
-        ...baseDefaultsFor(type),
+        ...baseDefaultsFor(type, style),
         ...ELEMENT_KINDS[type].defaults(style),
     };
 }

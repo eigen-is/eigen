@@ -71,6 +71,10 @@ export type VectorElementBase = {
     strokeColor: string;
     strokeWidth: number;
     strokeStyle: StrokeStyle;
+    // roughjs jitter, on every kind — the two DOM boxes included, so one table answers how sketchy
+    // an element is.
+    roughness: number;
+    seed: number;
 };
 
 // A serialized Fill — paint + hatch style (see fill.ts): a JSON scalar, '' or malformed ⇒ the
@@ -221,6 +225,8 @@ export const BASE_ELEMENT_FIELDS = [
     'strokeColor',
     'strokeWidth',
     'strokeStyle',
+    'roughness',
+    'seed',
 ] as const;
 
 export const DEFAULT_FONT_SIZE = 20;
@@ -249,9 +255,13 @@ export const DEFAULT_ELEMENT_PROPS = {
     opacity: 100,
     frameId: '',
     commentCardIds: '',
+    // The READER's fallback, not creation's: a stored element with no roughness stays crisp in both
+    // hosts, while a new one is as sketchy as its host's style table says.
+    roughness: 0,
+    seed: 0,
 } satisfies Pick<
     VectorElementBase,
-    'strokeColor' | 'strokeWidth' | 'strokeStyle' | 'opacity' | 'frameId' | 'commentCardIds'
+    'strokeColor' | 'strokeWidth' | 'strokeStyle' | 'opacity' | 'frameId' | 'commentCardIds' | 'roughness' | 'seed'
 >;
 
 // roughjs tuning, on the six sketched kinds only.
