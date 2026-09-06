@@ -21,6 +21,7 @@ const settingsStore = new JsonStore<ServerSettings>(serverFs, 'settings.json', {
         },
     },
     onboarding: {
+        openSignup: false,
         waitlist: {
             enabled: false,
         },
