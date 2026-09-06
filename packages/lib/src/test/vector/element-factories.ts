@@ -86,3 +86,8 @@ export function arrow(over: Partial<VectorArrowElement> & Pick<VectorArrowElemen
 export function scene(elements: VectorElement[], background = 'transparent'): VectorScene {
     return { meta: { background }, frames: [], elements };
 }
+
+// The scene lookup every geometry entry point takes, from the elements a test cares about.
+export function byIdOf(...els: VectorElement[]): Map<string, VectorElement> {
+    return new Map(els.map((el) => [el.id, el]));
+}
