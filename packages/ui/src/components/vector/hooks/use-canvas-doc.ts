@@ -7,9 +7,12 @@ import {
     followBindings,
     generateNKeysBetween,
     isVectorElementType,
+    parseBinding,
+    readElementFromFields,
     readVectorFromDoc,
     type StyleDefaults,
     type VectorArrowElement,
+    type VectorElement,
     type VectorElementType,
     type VectorFrame,
     type VectorImageElement,
@@ -91,7 +94,7 @@ export type NewVectorElement = { type: VectorElementType } & VectorElementPatch;
 // arrow alone re-glues its endpoints to the stationary shape instead of leaving them detached until the
 // shape's next move teleports them (bound endpoints stay glued, Excalidraw's model; only a drag past the
 // unbind threshold detaches). A shape+arrow moved rigidly no-ops via followBindings' null return.
-function followBoundArrows(doc: Y.Doc, elementsMap: Y.Map<unknown>, patchedIds: Set<string>): void {
+function followBoundArrows(elementsMap: Y.Map<unknown>, patchedIds: Set<string>): void {
     let touched = false;
     for (const id of patchedIds) {
         const m = elementsMap.get(id);
@@ -102,30 +105,42 @@ function followBoundArrows(doc: Y.Doc, elementsMap: Y.Map<unknown>, patchedIds: 
     }
     if (!touched) return;
 
-    // An arrow-free scene skips the full doc read a shape patch would otherwise pay on every gesture.
-    let hasArrow = false;
+    // Only the arrows are materialized, not the scene: this runs inside every gesture's transact, and
+    // the reverse index needs each arrow's two bindings and nothing else. An arrow-free scene stops here.
+    const arrowById = new Map<string, VectorArrowElement>();
     for (const value of elementsMap.values()) {
-        if (value instanceof Y.Map && value.get('type') === 'arrow') {
-            hasArrow = true;
-            break;
-        }
+        if (!(value instanceof Y.Map) || value.get('type') !== 'arrow') continue;
+        const el = readElementFromFields(value);
+        if (el?.type === 'arrow') arrowById.set(el.id, el);
     }
-    if (!hasArrow) return;
+    if (arrowById.size === 0) return;
 
-    const elements = readVectorFromDoc(doc).elements;
-    const bound = arrowsBoundTo(elements);
-    const byId = new Map(elements.map((el) => [el.id, el]));
+    const bound = arrowsBoundTo([...arrowById.values()]);
     const arrowIds = new Set<string>();
     for (const id of patchedIds) {
         for (const aid of bound.get(id) ?? []) arrowIds.add(aid);
-        // A dangling binding reads as '' here, so only live-bound patched arrows re-follow.
-        const el = byId.get(id);
-        if (el?.type === 'arrow' && (el.startBinding !== '' || el.endBinding !== '')) arrowIds.add(id);
+        const el = arrowById.get(id);
+        if (el && (el.startBinding !== '' || el.endBinding !== '')) arrowIds.add(id);
     }
     if (arrowIds.size === 0) return;
+
+    // The other half of what followBindings reads: the shapes those arrows dock on, and only those —
+    // it reaches the map through boundShape on the arrow's own two bindings. A binding whose target is
+    // gone resolves to null there, which is what an unbound end already means.
+    const byId = new Map<string, VectorElement>();
     for (const aid of arrowIds) {
-        const arrow = byId.get(aid);
-        if (arrow?.type !== 'arrow') continue;
+        const arrow = arrowById.get(aid);
+        if (!arrow) continue;
+        for (const binding of [arrow.startBinding, arrow.endBinding]) {
+            const target = parseBinding(binding);
+            if (!target || byId.has(target.elementId)) continue;
+            const el = readElementFromFields(elementsMap.get(target.elementId));
+            if (el) byId.set(el.id, el);
+        }
+    }
+    for (const aid of arrowIds) {
+        const arrow = arrowById.get(aid);
+        if (!arrow) continue;
         const next = followBindings(arrow, byId);
         const arrowMap = elementsMap.get(aid);
         if (!next || !(arrowMap instanceof Y.Map)) continue;
@@ -228,7 +243,7 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
                 }
                 // Arrows follow their bound shapes in the SAME transact (one undo step, one broadcast), so
                 // every caller — nudge, drag-commit, align, paste-move — gets it for free.
-                followBoundArrows(doc, elementsMap, patchedIds);
+                followBoundArrows(elementsMap, patchedIds);
             }, origin);
         },
         [],
