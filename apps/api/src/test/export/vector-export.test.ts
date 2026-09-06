@@ -88,6 +88,21 @@ describe('Eigenvector export route — response contract', () => {
         expect(svg).not.toMatch(/href="https?:/);
     }, 120_000);
 
+    test('the DOM-box kinds export their paint as the roughjs drawable', async () => {
+        const res = await exportRequest(vectorPath.id, 'svg');
+        const svg = await res.text();
+        // The image's border is the same drawable the shapes draw, inside the element's own <g> and
+        // after the clipped picture, so a border never sits under the pixels it frames.
+        expect(svg).toMatch(/<g clip-path="url\(#image-clip-v-image\)"><image[^>]*\/><\/g><g stroke-linecap="round">/);
+        // A rich-text box paints its backdrop BEFORE its foreignObject, so the text stacks over it.
+        const foreign = svg.indexOf('<foreignObject');
+        const textGroup = svg.slice(svg.lastIndexOf('<g transform=', foreign), foreign);
+        expect(textGroup).toContain('<g stroke-linecap="round">');
+        expect(textGroup).toContain('<path ');
+        // And the box's border is that drawable, not a CSS border on the text div.
+        expect(svg).not.toMatch(/class="eigen-canvas-text" style="[^"]*border:/);
+    }, 120_000);
+
     test('an unsupported format is rejected with 400', async () => {
         const res = await exportRequest(vectorPath.id, 'xlsx');
         expect(res.status).toBe(400);
