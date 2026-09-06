@@ -31,18 +31,14 @@ export async function messageGet(user: User, messageId: string): Promise<Email> 
     return message;
 }
 
-async function messageMoveToSpecial(user: User, messageId: string, flag: string) {
+export async function messageMoveToTrash(user: User, messageId: string) {
     const mail = await getMailClient(user);
     const mailboxes = await mail.mailboxesList();
-    const target = mailboxes.find((mailbox) => mailbox.flags.includes(flag));
+    const target = mailboxes.find((mailbox) => mailbox.flags.includes('\\Trash'));
     if (!target) {
-        throw new ApiError(404, `Mailbox with flag '${flag}' not found`);
+        throw new ApiError(404, "Mailbox with flag '\\Trash' not found");
     }
     return await mail.messageMove(messageId, target.path);
-}
-
-export async function messageMoveToTrash(user: User, messageId: string) {
-    return messageMoveToSpecial(user, messageId, '\\Trash');
 }
 
 export async function uploadDraftAttachment(user: User, request: Request) {

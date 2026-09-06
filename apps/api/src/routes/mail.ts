@@ -1,6 +1,6 @@
 import { MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
-import type { SentMailResult } from '@workspace/lib/types/mail';
-import { Elysia, t } from 'elysia';
+import type { NewDraft, SentMailResult } from '@workspace/lib/types/mail';
+import { Elysia, type Static, t } from 'elysia';
 import { contentDisposition, setCacheHeaders } from '../lib/core';
 import { requireLocalhost, requireNonGuest, requireSelf } from '../lib/core/access';
 import {
@@ -40,6 +40,12 @@ const MailDraftSchema = t.Object({
     references: t.Optional(t.Union([t.Array(t.String()), t.String()])),
     driveReferences: t.Optional(t.Array(attachmentReferenceSchema, { maxItems: MAX_SEND_REFERENCES })),
 });
+// Compile-time guard: a field added to NewDraft without a schema entry here would be stripped by Elysia's
+// normalize, so the key sets must match (a structural `extends` check would not catch it).
+type _MailDraftSchemaCoversNewDraft =
+    Exclude<keyof NewDraft, keyof Static<typeof MailDraftSchema>> extends never ? true : never;
+const _mailDraftSchemaCheck: _MailDraftSchemaCoversNewDraft = true;
+void _mailDraftSchemaCheck;
 
 export const mailRouter = new Elysia({ name: 'mail' })
     .use(betterAuth)
@@ -53,7 +59,8 @@ export const mailRouter = new Elysia({ name: 'mail' })
         },
         {
             parse: 'arrayBuffer',
-            body: t.Any({ maxLength: 25 * 1024 * 1024 }), // 25 MB per-message size limit
+            // The per-message size cap is Postfix's `message_size_limit` (docker/postfix/main.cf.template).
+            body: t.Any(),
         },
     )
     // All authenticated mail routes require ownerId === user.id (mail is personal-only, no shared access)

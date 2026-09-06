@@ -13,7 +13,7 @@ function normalizeDomain(domain: string): string {
 
 // The authserv-id is the first token of the header value, before the first ';' and any version number.
 function authservIdOf(value: string): string {
-    return (value.split(';', 1)[0] ?? '').trim().split(/\s+/)[0]?.toLowerCase() ?? '';
+    return value.split(';', 1)[0].trim().split(/\s+/)[0].toLowerCase();
 }
 
 // DMARC-style relaxed alignment: equal, or one is a subdomain of the other. A full organisational-domain

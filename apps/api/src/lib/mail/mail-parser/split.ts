@@ -112,7 +112,7 @@ function isInlineMessage(headers: PartHeaders): boolean {
 }
 
 // 1 = delimiter (a new part follows), 2 = closing delimiter, false = not a boundary line. A stray leading
-// line break is tolerated: only a real CRLF is a 2-byte prefix, a lone CR is a 1-byte prefix (the #14 fix).
+// line break is tolerated: only a real CRLF is a 2-byte prefix, a lone CR is a 1-byte prefix.
 // No transport padding is accepted after the boundary.
 function matchBoundary(line: Buffer, boundary: Buffer | null): 1 | 2 | false {
     if (!boundary) return false;

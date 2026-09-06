@@ -106,11 +106,6 @@ describe('Maildir Utility Functions', () => {
         expect(filename).toBe('unique123,S=500:2,DFS');
     });
 
-    test('buildMaildirFilename without size hint', () => {
-        const filename = buildMaildirFilename('unique123', { seen: true });
-        expect(filename).toBe('unique123:2,S');
-    });
-
     test('buildMaildirFilename with no flags', () => {
         const filename = buildMaildirFilename('unique123', {}, 100);
         expect(filename).toBe('unique123,S=100:2,');

@@ -479,13 +479,13 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         utimesSync(join(homeDir, staleId), oldTime, oldTime);
         utimesSync(join(homeDir, `${staleId}.json`), oldTime, oldTime);
 
-        // Trigger cleanup with a 1-hour max age
+        // The file is 48h old, past the 24h stale age.
         const { getHome } = await import('../../lib/home');
         const home = await getHome(ctx.alice.user.id);
         const maildir = home.mail as unknown as {
-            store: { cleanupStaleDraftTemps: (ms: number) => Promise<void> };
+            store: { cleanupStaleDraftTemps: () => Promise<void> };
         };
-        await maildir.store.cleanupStaleDraftTemps(60 * 60 * 1000);
+        await maildir.store.cleanupStaleDraftTemps();
 
         // Fresh file should still exist (uploaded moments ago)
         const { existsSync } = await import('node:fs');

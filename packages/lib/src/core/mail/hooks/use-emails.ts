@@ -10,6 +10,7 @@ import { getMailComposeUrl, mailApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { Email, EmailSummary } from '@workspace/lib/types/mail';
+import type { SSEventMail } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { useMemo } from 'react';
 import { AppError, onMutationError } from '../../api-error';
@@ -18,8 +19,7 @@ import { emailKeys, invalidateMailboxes } from './keys';
 const MAIL_PAGE_SIZE = 200;
 
 // Newest-first paginated mailbox. Composite cursor (beforeDate=epoch MS, beforeId) matches the
-// server's date-desc/id-desc order. Returns a flat `emails` array alongside the paging controls;
-// the sole caller (the mail route) consumes the flat shape.
+// server's date-desc/id-desc order. Returns a flat `emails` array alongside the paging controls.
 export function useEmails(mailboxPath: string) {
     const { user } = useAuth();
     const ownerId = user?.id || '';
@@ -262,7 +262,7 @@ export async function beginOptimisticMailMutation(
     ownerId: string,
     messageId: string,
     patch: EmailListPatch,
-    event: string,
+    event: SSEventMail['type'],
 ): Promise<MailMutationContext> {
     await queryClient.cancelQueries({ queryKey: emailKeys.lists(ownerId) });
     const snapshot = queryClient.getQueriesData<InfiniteData<EmailSummary[]>>({ queryKey: emailKeys.lists(ownerId) });
@@ -316,14 +316,14 @@ function patchEmailInLists(queryClient: QueryClient, ownerId: string, messageId:
 const RECENT_MAIL_MUTATION_TTL_MS = 5_000;
 const recentMailMutations = new Map<string, number>();
 
-function markRecentMailMutation(event: string, messageId: string): void {
+function markRecentMailMutation(event: SSEventMail['type'], messageId: string): void {
     const now = Date.now();
     // Prune expired entries so a dropped echo can't leak them forever.
     for (const [key, expiry] of recentMailMutations) if (expiry <= now) recentMailMutations.delete(key);
     recentMailMutations.set(`${event}:${messageId}`, now + RECENT_MAIL_MUTATION_TTL_MS);
 }
 
-export function consumeRecentMailMutation(event: string, messageId: string): boolean {
+export function consumeRecentMailMutation(event: SSEventMail['type'], messageId: string): boolean {
     const key = `${event}:${messageId}`;
     const expiry = recentMailMutations.get(key);
     if (expiry === undefined) return false;

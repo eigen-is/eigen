@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1320 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1321 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -450,7 +450,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (319)
+## Types (321)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -533,6 +533,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DeepPartial` | `@workspace/lib/types` | packages/lib/src/types/util.ts |
 | `DraftAttachmentUpload` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `DraftInput` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
+| `DraftUpdateOptions` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `DriveAccessCheckResult` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveAccessRecipient` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveACL` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -611,6 +612,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PathWatchStatus` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `PublicConfig` | `@workspace/lib/types` | packages/lib/src/types/public.ts |
 | `PublicUser` | `@workspace/lib/types` | packages/lib/src/types/public.ts |
+| `RecipientSummary` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `Reminder` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `RoomMember` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `S3CheckResult` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
@@ -774,7 +776,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (582)
+## Utilities & constants (581)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -958,6 +960,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isLightColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `isSearchableTextFile` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `lightenColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
+| `MAIL_PREVIEW_CHARS` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `MAX_PUBLIC_USERS_PER_BATCH` | `@workspace/lib/constants` | packages/lib/src/constants/public.ts |
 | `MAX_SEND_RECIPIENTS` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `MAX_SEND_REFERENCES` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
@@ -1018,8 +1021,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `createDraftEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
 | `flattenAddresses` | `@workspace/lib/mail` | packages/lib/src/core/mail/addresses.ts |
 | `handleMailSSEvent` | `@workspace/lib/mail` | packages/lib/src/core/mail/sse-handlers.ts |
-| `sendDraftEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
-| `updateDraftEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
 | `CHAT_TEXT_NOTIFICATION_TYPES` | `@workspace/lib/notification` | packages/lib/src/core/notification/describe.ts |
 | `describeNotification` | `@workspace/lib/notification` | packages/lib/src/core/notification/describe.ts |
 | `handleNotificationSSEvent` | `@workspace/lib/notification` | packages/lib/src/core/notification/sse-handlers.ts |

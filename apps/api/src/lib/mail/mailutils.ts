@@ -1,5 +1,5 @@
 import { hostname } from 'node:os';
-import type { AddressObject, EmailSummary } from '@workspace/lib/types/mail';
+import type { AddressObject, EmailSummary, RecipientSummary } from '@workspace/lib/types/mail';
 import { getMailDomain } from '../config/server-config';
 import type { MailFlag } from './mail-store';
 
@@ -14,18 +14,29 @@ const STANDARD_MAILBOX_FLAGS: Record<string, string[]> = {
     Archive: ['\\HasNoChildren', '\\Archive'],
 };
 
-const FLAG_MAP: Record<MailFlag, string> = {
-    seen: 'S',
-    replied: 'R',
-    flagged: 'F',
-    draft: 'D',
-    trashed: 'T',
-    forwarded: 'P',
-};
+const FLAG_CHARS: readonly (readonly [MailFlag, string])[] = [
+    ['seen', 'S'],
+    ['replied', 'R'],
+    ['flagged', 'F'],
+    ['draft', 'D'],
+    ['trashed', 'T'],
+    ['forwarded', 'P'],
+];
+
+const FLAGS_SUFFIX_RE = /:2,([A-Za-z]*)/;
+
+// Maildir orders the standard flag chars by ASCII, so the char sort — not FLAG_CHARS order — decides.
+function serializeFlags(flags: Partial<Record<MailFlag, boolean>>): string {
+    return FLAG_CHARS.filter(([flag]) => flags[flag])
+        .map(([, char]) => char)
+        .sort()
+        .join('');
+}
 
 export function createUniqueMessageId(): string {
-    const time = Math.floor(Date.now() / 1000);
-    const usec = (Date.now() % 1000) * 1000;
+    const now = Date.now();
+    const time = Math.floor(now / 1000);
+    const usec = (now % 1000) * 1000;
     const pid = process.pid;
     const seq = deliveryCounter++;
     const host = hostname().replace(/\//g, '\\057').replace(/:/g, '\\072');
@@ -45,21 +56,19 @@ export function getMailIDfromFileName(fileName: string): string {
 
 export function getStandardMailboxFlags(mailbox: string): string[] {
     const flags = STANDARD_MAILBOX_FLAGS[mailbox];
-    return flags ? [...flags] : ['\\HasNoChildren'];
+    return flags ?? ['\\HasNoChildren'];
 }
 
-export function buildMaildirFilename(uniqueId: string, flags: Record<string, boolean>, size?: number): string {
-    const sizeHint = size != null ? `,S=${size}` : '';
-    const flagStr = Object.entries(FLAG_MAP)
-        .filter(([key]) => flags[key])
-        .map(([, char]) => char)
-        .sort()
-        .join('');
-    return `${uniqueId}${sizeHint}:2,${flagStr}`;
+export function buildMaildirFilename(
+    uniqueId: string,
+    flags: Partial<Record<MailFlag, boolean>>,
+    size: number,
+): string {
+    return `${uniqueId},S=${size}:2,${serializeFlags(flags)}`;
 }
 
 export function parseFlagsFromFilename(fileName: string) {
-    const match = fileName.match(/:2,([A-Za-z]*)/);
+    const match = fileName.match(FLAGS_SUFFIX_RE);
     const flagStr = match?.[1] || '';
     return {
         seen: flagStr.includes('S'),
@@ -72,17 +81,11 @@ export function parseFlagsFromFilename(fileName: string) {
 }
 
 export function rebuildFlagsSuffix(currentFilename: string, changes: Partial<Record<MailFlag, boolean>>): string {
-    const match = currentFilename.match(/:2,([A-Za-z]*)/);
+    const match = currentFilename.match(FLAGS_SUFFIX_RE);
     const existing = match?.[1] || '';
     const keywords = existing.replace(/[A-Z]/g, '');
     const current = parseFlagsFromFilename(currentFilename);
-    const merged = { ...current, ...changes };
-    const standardFlags = Object.entries(FLAG_MAP)
-        .filter(([key]) => merged[key as MailFlag])
-        .map(([, char]) => char)
-        .sort()
-        .join('');
-    return standardFlags + keywords;
+    return serializeFlags({ ...current, ...changes }) + keywords;
 }
 
 export function applyFlagsFromFilename(email: EmailSummary, filename: string): void {
@@ -96,7 +99,7 @@ export function applyFlagsFromFilename(email: EmailSummary, filename: string): v
 export function buildRecipientSummary(
     to: AddressObject | AddressObject[] | undefined,
     cc: AddressObject | AddressObject[] | undefined,
-): { toShort: string; toAddress: string; recipientsAll: string } {
+): RecipientSummary {
     const toList = to ? (Array.isArray(to) ? to : [to]) : [];
     const ccList = cc ? (Array.isArray(cc) ? cc : [cc]) : [];
     const firstTo = toList[0]?.value[0];

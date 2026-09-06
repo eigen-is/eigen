@@ -13,7 +13,7 @@ import {
     useToggleReadEmail,
     useUpdateDraft,
 } from '@workspace/lib/mail';
-import type { DraftInput, Email, NewDraft } from '@workspace/lib/types/mail';
+import type { DraftInput, DraftUpdateOptions, Email, NewDraft } from '@workspace/lib/types/mail';
 import { useRef } from 'react';
 import { toast } from 'sonner';
 import { Route } from '../../../routes/_auth.$filterType.$filterId';
@@ -429,10 +429,7 @@ export function useMailActions() {
         handleForwardEmail,
         handleSendEmail,
         handleToggleMailRead,
-        saveDraft: (
-            draft: NewDraft,
-            options: { tempAttachmentIds?: string[]; keepAttachmentIndexes?: number[]; forceFullSave?: boolean } = {},
-        ) =>
+        saveDraft: (draft: NewDraft, options: DraftUpdateOptions = {}) =>
             updateDraft.mutateAsync({
                 draft,
                 tempAttachmentIds: options.tempAttachmentIds,

@@ -7,9 +7,8 @@ import {
     invalidateDraftUpdated,
     invalidateMailboxes,
     invalidateMailDeleted,
-    invalidateMailFlagsChanged,
+    invalidateMailMessageChanged,
     invalidateMailMoved,
-    invalidateMailReadChanged,
     invalidateMailReceived,
 } from './hooks/keys';
 import { consumeRecentMailMutation } from './hooks/use-emails';
@@ -57,7 +56,7 @@ export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, user
 
         case SSEventType.MAIL_READ_CHANGED:
             if (!consumeRecentMailMutation(event.type, mail.messageId)) {
-                invalidateMailReadChanged(queryClient, userId, mail.messageId, mailbox);
+                invalidateMailMessageChanged(queryClient, userId, mail.messageId, mailbox);
             }
             invalidateMailboxes(queryClient, userId);
             // Palette mail rows carry isRead on the EmailSummary and bold-on-unread —
@@ -67,7 +66,7 @@ export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, user
 
         case SSEventType.MAIL_FLAGS_CHANGED:
             if (!consumeRecentMailMutation(event.type, mail.messageId)) {
-                invalidateMailFlagsChanged(queryClient, userId, mail.messageId, mailbox);
+                invalidateMailMessageChanged(queryClient, userId, mail.messageId, mailbox);
             }
             invalidateSearchOwner(queryClient, userId);
             return true;
