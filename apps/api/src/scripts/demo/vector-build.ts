@@ -119,8 +119,9 @@ export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
     for (const [i, el] of ordered.entries()) {
         el.index = keys[i];
         // One draw per element, in z-order: the images and text boxes keep the draw already spent on
-        // them, so no shape's jitter moves.
-        el.seed = Math.floor(seed() * 2 ** 31);
+        // them, so no shape's jitter moves. Same 1..2³¹ range randomSeed() draws from in the editor,
+        // because the reader clamps a stored 0 to 1.
+        el.seed = 1 + Math.floor(seed() * (2 ** 31 - 1));
     }
 
     // The spec is authored in its own top-left frame; the editor opens on the scene origin, so shift the
@@ -152,7 +153,6 @@ function buildShape(s: SitePlanShape): VectorShapeElement {
         strokeWidth: s.strokeWidth ?? DEFAULT_ELEMENT_PROPS.strokeWidth,
         strokeStyle: s.strokeStyle ?? DEFAULT_ELEMENT_PROPS.strokeStyle,
         fill: solidFill(s.fill ?? 'transparent', s.fillStyle ?? DEFAULT_FILL_STYLE),
-        seed: 0,
     };
     // An ellipse has no corners to treat, so it carries no `corners` field.
     if (s.kind === 'ellipse') return { ...box, type: 'ellipse' };
@@ -176,7 +176,6 @@ function buildLine(l: SitePlanLine, i: number): VectorLinearElement {
         strokeWidth: l.strokeWidth ?? DEFAULT_ELEMENT_PROPS.strokeWidth,
         strokeStyle: l.strokeStyle ?? DEFAULT_ELEMENT_PROPS.strokeStyle,
         fill: solidFill('transparent'),
-        seed: 0,
         roundness: l.roundness ?? DEFAULT_LINE_ROUNDNESS,
         points: norm.points,
         pressures: '',
@@ -216,7 +215,6 @@ function buildArrow(
         angle: 0,
         strokeColor: a.stroke ?? DEFAULT_ELEMENT_PROPS.strokeColor,
         strokeStyle: a.strokeStyle ?? DEFAULT_ELEMENT_PROPS.strokeStyle,
-        seed: 0,
         roundness: DEFAULT_ARROW_PROPS.roundness,
         points: norm.points,
         elbow: a.elbow ?? false,

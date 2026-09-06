@@ -51,8 +51,8 @@ export function buildDeckDoc(doc: Y.Doc, slides: DeckSlide[]): void {
 
     // One global z-order across the deck; a frame clips to its own elements, so the run per slide is
     // what orders a slide's painting.
-    // A deck holds only rich text and pictures, neither of which roughjs draws, so there is no seed to
-    // settle here the way vector-build.ts does.
+    // No per-element seed draw the way vector-build.ts does: the deck's style table is roughness 0, so
+    // every element is drawn crisp and the shared seed from baseDefaultsFor changes nothing.
     const keys = generateNKeysBetween(null, null, ordered.length);
     for (const [i, element] of ordered.entries()) element.index = keys[i];
 

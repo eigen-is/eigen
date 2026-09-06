@@ -32,8 +32,9 @@ import type { InPlaceEditorProps, KindPanelSectionProps } from './index';
 
 // The box the user types in IS the box the renderer paints: same CSS string, applied through
 // setAttribute because React's `style` prop takes an object and an object form of the builder would be a
-// second source of truth for typography and paint. Every keystroke writes `html` straight through, so
-// the session coalesces into one undo step and peers see it live.
+// second source of truth for the typography (the paint is the layer's roughjs backdrop, behind this box).
+// Every keystroke writes `html` straight through, so the session coalesces into one undo step and peers
+// see it live.
 export function RichTextInPlaceEditor({ element, onChange, onExit }: InPlaceEditorProps) {
     const boxRef = useRef<HTMLDivElement>(null);
     // Not a state mirror: the element's own paint/typography, re-applied when a panel row changes it

@@ -9,8 +9,8 @@
 import {
     arrowRoute,
     type Box,
+    baseDefaultsFor,
     type CanvasViewport,
-    DEFAULT_ELEMENT_PROPS,
     distance,
     ELEMENT_KINDS,
     elbowBindPoint,
@@ -68,17 +68,22 @@ const LINE_DRAG_SCREEN = 4;
 const PREVIEW_ID = '__drawing__';
 const EMPTY_IDS: Set<string> = new Set();
 
-// The geometry + base props every live preview element (draw draft) shares. Its callers spread the kind's
-// own create defaults under it — the same table the commit writes through addElement, so a preview can
-// never drift from the element that lands. normalizeLinear runs here because the renderer scales roughness
-// by the box, so a 0×0 box would pop on release.
-function previewBase(origin: Point, points: Point[], seed: number, style: StyleDefaults) {
+// The geometry + base props every live preview element (draw draft) shares. baseDefaultsFor is the same
+// helper addElement writes through, so a preview can never drift from the element that lands; only the
+// gesture's seed carries over. normalizeLinear runs here because the renderer scales roughness by the box,
+// so a 0×0 box would pop on release.
+function previewBase(
+    type: 'freedraw' | 'line' | 'arrow',
+    origin: Point,
+    points: Point[],
+    seed: number,
+    style: StyleDefaults,
+) {
     return {
         id: PREVIEW_ID,
         angle: 0,
         index: 'a0',
-        ...DEFAULT_ELEMENT_PROPS,
-        roughness: style.roughness,
+        ...baseDefaultsFor(type, style),
         seed,
         ...normalizeLinear({ x: origin.x, y: origin.y, width: 0, height: 0, angle: 0 }, points),
     };
@@ -93,7 +98,7 @@ function previewElement(
 ): VectorLinearElement {
     return {
         ...ELEMENT_KINDS[type].defaults(style),
-        ...previewBase(origin, points, seed, style),
+        ...previewBase(type, origin, points, seed, style),
         type,
         // The live preview always simulates; real per-point pressure is written on commit (finishFreedraw).
         pressures: '',
@@ -106,7 +111,7 @@ function previewElement(
 function arrowElement(origin: Point, points: Point[], seed: number, style: StyleDefaults): VectorArrowElement {
     return {
         ...ELEMENT_KINDS.arrow.defaults(style),
-        ...previewBase(origin, points, seed, style),
+        ...previewBase('arrow', origin, points, seed, style),
         type: 'arrow',
     };
 }

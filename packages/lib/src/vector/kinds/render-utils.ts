@@ -72,8 +72,9 @@ function shapeDrawable(gen: RoughGenerator, el: RoughBoxElement): Drawable {
 }
 
 // Options assembly, replicated from Excalidraw's generateRoughOptions, minus the
-// dark-mode filter. Determinism comes from the persisted per-element `seed`. The base fields are
-// shared by shapes and linear elements; fill differs (shapes always, lines only when they loop).
+// dark-mode filter. Determinism comes from the persisted per-element `seed`. The base fields are shared
+// by every rough element — boxes (shapes, image, rich text) and linear ones; fill differs (a box that
+// carries one always, lines only when they loop).
 export function baseRoughOptions(
     el: RoughBoxElement | VectorLinearElement | VectorArrowElement,
     continuousPath: boolean,
