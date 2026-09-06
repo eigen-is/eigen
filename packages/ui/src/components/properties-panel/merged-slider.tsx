@@ -31,6 +31,16 @@ export function MergedSlider({ value, onChange, beginGesture, min, max, step = 1
         release.current?.();
         release.current = null;
     }, []);
+    // Both controls write per change — the slider per drag frame, the field per keystroke — so the
+    // gesture opens on the first of them and stays open until a commit or a blur closes it. Typed
+    // digits are ONE edit that way: without the hold, "100" seals three undo steps (1, 10, 100).
+    const write = useCallback(
+        (v: number) => {
+            release.current ??= beginGesture();
+            onChange(v);
+        },
+        [beginGesture, onChange],
+    );
     // A gesture the component never sees end: Escape mid-drag deselects and unmounts this section, and
     // so does a peer deleting the element. An unreleased hold leaves captureTimeout at Infinity for the
     // rest of the session, so every later edit would merge into one undo step.
@@ -47,10 +57,7 @@ export function MergedSlider({ value, onChange, beginGesture, min, max, step = 1
                 step={step}
                 data-mixed={mixed ? '' : undefined}
                 className={cn('flex-1', mixed && '[&_[data-slot=slider-range]]:opacity-0')}
-                onValueChange={([v]) => {
-                    release.current ??= beginGesture();
-                    onChange(v);
-                }}
+                onValueChange={([v]) => write(v)}
                 onValueCommit={endGesture}
                 onPointerUp={endGesture}
                 onPointerCancel={endGesture}
@@ -59,19 +66,7 @@ export function MergedSlider({ value, onChange, beginGesture, min, max, step = 1
             {/* Wide enough for "100" at the panel's 14px input text, with px-2 rather than the
                 default px-3 so the slider keeps most of the row. */}
             <div className="w-16 shrink-0">
-                <MergedNumberInput
-                    value={value}
-                    // Typed digits are ONE edit: the field writes per keystroke, so the gesture opens on
-                    // the first and closes when the user leaves the field — as the drag's does on commit.
-                    onChange={(v) => {
-                        release.current ??= beginGesture();
-                        onChange(v);
-                    }}
-                    min={min}
-                    max={max}
-                    step={step}
-                    className="px-2"
-                />
+                <MergedNumberInput value={value} onChange={write} min={min} max={max} step={step} className="px-2" />
             </div>
         </div>
     );
