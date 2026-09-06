@@ -1,7 +1,27 @@
 import { describe, expect, test } from 'bun:test';
+import { Window } from 'happy-dom';
 import * as Y from 'yjs';
 import { readCards } from '../../../../core/comments/hooks/use-comment-cards';
+import type { CommentCard } from '../../../../types/comments';
 import type { AttachmentReference } from '../../../../types/drive-reference';
+
+// readCards sanitizes each card's description (it reaches us verbatim from a hostile peer's Y.Doc
+// write and is rendered via dangerouslySetInnerHTML) — install happy-dom the way html-dom.test.ts does.
+const window = new Window();
+Object.assign(globalThis, { DOMParser: window.DOMParser, document: window.document, Node: window.Node });
+
+function cardWithDescription(html: string): CommentCard {
+    const doc = new Y.Doc();
+    const tasks = doc.getMap<Y.Map<unknown>>('tasks');
+    doc.transact(() => {
+        const c = new Y.Map<unknown>();
+        c.set('id', 'c1');
+        c.set('title', 'Card');
+        c.set('description', html);
+        tasks.set('c1', c);
+    });
+    return readCards(tasks)['c1'];
+}
 
 describe('readCards (BC for legacy stickies cards)', () => {
     test('preserves legacy creator/createdAt fields', () => {
@@ -115,5 +135,37 @@ describe('readCards (BC for legacy stickies cards)', () => {
         const result = readCards(tasks);
         expect(result['legacy'].creator).toBe('old@example.com');
         expect(result['fresh'].creator).toBeUndefined();
+    });
+});
+
+describe('readCards sanitizes hostile description HTML', () => {
+    test('strips an <img onerror> handler and a <script> tag, keeps LightEditor markup', () => {
+        const card = cardWithDescription(
+            '<p><strong>bold</strong> <a href="https://eigen.is">link</a></p>' +
+                '<img src=x onerror="alert(1)"><script>alert(2)</script>',
+        );
+        expect(card.description).not.toContain('onerror');
+        expect(card.description).not.toContain('<img');
+        expect(card.description).not.toContain('<script');
+        expect(card.description).toContain('<strong>bold</strong>');
+        expect(card.description).toContain(
+            '<a target="_blank" rel="noopener noreferrer" href="https://eigen.is">link</a>',
+        );
+    });
+
+    test('preserves task-list markup while dropping a payload smuggled inside a task item', () => {
+        const card = cardWithDescription(
+            '<ul data-type="taskList">' +
+                '<li data-checked="true" data-type="taskItem"><label><input type="checkbox" checked="checked"><span></span></label><div><p>Done</p></div></li>' +
+                '<li data-checked="false" data-type="taskItem"><label><input type="checkbox"><span></span></label><div><p>Todo <img src=x onerror="alert(1)"></p></div></li>' +
+                '</ul>',
+        );
+        expect(card.description).toContain('data-type="taskList"');
+        expect(card.description).toContain('data-checked="true"');
+        expect(card.description).toContain('data-checked="false"');
+        expect(card.description).toContain('type="checkbox"');
+        expect(card.description).toContain('<div><p>Done</p></div>');
+        expect(card.description).not.toContain('onerror');
+        expect(card.description).not.toContain('<img');
     });
 });

@@ -30,15 +30,55 @@ const HEADING_TAGS = new Set(['H1', 'H2', 'H3', 'H4', 'H5', 'H6']);
 const DROP_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'IFRAME', 'OBJECT', 'EMBED', 'TEMPLATE', 'HEAD', 'TITLE']);
 
 // Only http(s)/mailto links survive — a javascript:/data:/vbscript: href is an XSS vector (the
-// sanitized HTML is rendered via dangerouslySetInnerHTML by the canvas' rich-text layer). An unsafe
-// href unwraps the anchor to its text.
+// sanitized HTML is rendered via dangerouslySetInnerHTML by the canvas' rich-text layer and the
+// comment-card notes). An unsafe href unwraps the anchor to its text.
 function safeHref(href: string | null): string | null {
     if (!href) return null;
     const trimmed = href.trim();
     return /^(https?:|mailto:)/i.test(trimmed) ? trimmed : null;
 }
 
-function appendSanitized(node: Node, parent: HTMLElement): void {
+// Comment-card descriptions come from a LightEditor with `taskList` enabled, so they carry TipTap
+// task lists (ul[data-type=taskList] > li[data-checked] > label>input[type=checkbox] + div) that the
+// base allowlist would strip. `taskList: true` keeps exactly that structure with only its own
+// constrained attributes — no other attribute or tag is trusted, so the XSS boundary is unchanged.
+type SanitizeOptions = { taskList?: boolean };
+
+function appendTaskListNode(el: HTMLElement, parent: HTMLElement, recurseInto: (target: HTMLElement) => void): boolean {
+    const tag = el.tagName;
+    if (tag === 'UL' && el.getAttribute('data-type') === 'taskList') {
+        const ul = document.createElement('ul');
+        ul.setAttribute('data-type', 'taskList');
+        recurseInto(ul);
+        parent.appendChild(ul);
+        return true;
+    }
+    if (tag === 'LI' && el.hasAttribute('data-checked')) {
+        const li = document.createElement('li');
+        li.setAttribute('data-checked', el.getAttribute('data-checked') === 'true' ? 'true' : 'false');
+        li.setAttribute('data-type', 'taskItem');
+        recurseInto(li);
+        parent.appendChild(li);
+        return true;
+    }
+    if (tag === 'LABEL' || tag === 'DIV') {
+        const clean = document.createElement(tag.toLowerCase());
+        recurseInto(clean);
+        parent.appendChild(clean);
+        return true;
+    }
+    if (tag === 'INPUT') {
+        // Forced to a checkbox with no other attribute: an onfocus/autofocus/value never survives.
+        const input = document.createElement('input');
+        input.setAttribute('type', 'checkbox');
+        if (el.hasAttribute('checked')) input.setAttribute('checked', '');
+        parent.appendChild(input);
+        return true;
+    }
+    return false;
+}
+
+function appendSanitized(node: Node, parent: HTMLElement, opts: SanitizeOptions): void {
     if (node.nodeType === Node.TEXT_NODE) {
         parent.appendChild(document.createTextNode(node.textContent ?? ''));
         return;
@@ -53,8 +93,9 @@ function appendSanitized(node: Node, parent: HTMLElement): void {
         return;
     }
     const recurseInto = (target: HTMLElement) => {
-        for (const child of Array.from(el.childNodes)) appendSanitized(child, target);
+        for (const child of Array.from(el.childNodes)) appendSanitized(child, target, opts);
     };
+    if (opts.taskList && appendTaskListNode(el, parent, recurseInto)) return;
     // Headings collapse to paragraphs (LightEditor has no heading node).
     if (HEADING_TAGS.has(tag)) {
         const p = document.createElement('p');
@@ -94,7 +135,7 @@ function appendSanitized(node: Node, parent: HTMLElement): void {
     }
     // Unknown/disallowed element (span, div, font, styled wrappers, unsafe <a>) — unwrap, keep
     // children. All attributes (style/class/data-*/on*) are dropped by never copying them.
-    for (const child of Array.from(el.childNodes)) appendSanitized(child, parent);
+    for (const child of Array.from(el.childNodes)) appendSanitized(child, parent, opts);
 }
 
 // Alignment of pasted prose (docs → slides/vector). Docs' Tiptap TextAlign extension stores it as a
@@ -120,6 +161,16 @@ export function readDominantTextAlign(html: string): (typeof TEXT_ALIGN_VALUES)[
 export function sanitizeToLightEditorHtml(html: string): string {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const out = document.createElement('div');
-    for (const child of Array.from(doc.body.childNodes)) appendSanitized(child, out);
+    for (const child of Array.from(doc.body.childNodes)) appendSanitized(child, out, {});
+    return out.innerHTML;
+}
+
+// Same allowlist as sanitizeToLightEditorHtml plus TipTap task lists — the schema a comment-card
+// description is authored in. Run at the readCards seam because a card's description reaches every
+// viewer verbatim from a peer's Y.Doc write and is rendered via dangerouslySetInnerHTML.
+export function sanitizeCommentCardHtml(html: string): string {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const out = document.createElement('div');
+    for (const child of Array.from(doc.body.childNodes)) appendSanitized(child, out, { taskList: true });
     return out.innerHTML;
 }

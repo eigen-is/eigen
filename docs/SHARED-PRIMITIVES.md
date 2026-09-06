@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1316 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1317 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -775,7 +775,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorToolEntry` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (577)
+## Utilities & constants (578)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1005,6 +1005,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `unescapeHtml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `htmlToPlainText` | `@workspace/lib/html-dom` | packages/lib/src/core/html-dom.ts |
 | `readDominantTextAlign` | `@workspace/lib/html-dom` | packages/lib/src/core/html-dom.ts |
+| `sanitizeCommentCardHtml` | `@workspace/lib/html-dom` | packages/lib/src/core/html-dom.ts |
 | `sanitizeToLightEditorHtml` | `@workspace/lib/html-dom` | packages/lib/src/core/html-dom.ts |
 | `beginOptimisticMailMutation` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-emails.ts |
 | `canonicalRecipients` | `@workspace/lib/mail` | packages/lib/src/core/mail/addresses.ts |
