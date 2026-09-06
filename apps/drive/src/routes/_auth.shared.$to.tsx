@@ -72,7 +72,6 @@ function DriveRoute() {
             onBackToList={handleBackToList}
             capabilities={{
                 ...DRIVE_CAPABILITIES.listing,
-                canDelete: to === 'by-me',
                 canRename: to === 'by-me',
             }}
             title={to === 'by-me' ? 'Shared by me' : 'Shared with me'}
