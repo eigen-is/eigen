@@ -15,6 +15,7 @@ import {
     TEXT_DECORATIONS,
     VERTICAL_ALIGNS,
     type VectorElement,
+    type VectorRichTextElement,
 } from './types';
 
 function storedRecord(el: VectorElement): Record<string, string | number | boolean> {
@@ -99,7 +100,12 @@ export function pasteAnchorOffset(
 // document reader runs, so a pasted box is exactly a box a peer could have written. The three the
 // CALLER reads — fontFamily, fontSize, color — ride in unclamped and are clamped on the way out
 // instead, by the reader every render, export and preview goes through.
-export function readClipboardTypography(typo: EigenClipboardTypography) {
+export function readClipboardTypography(
+    typo: EigenClipboardTypography,
+): Pick<
+    VectorRichTextElement,
+    'textAlign' | 'fontWeight' | 'fontStyle' | 'textDecoration' | 'verticalAlign' | 'letterSpacing' | 'lineHeight'
+> {
     return {
         textAlign: oneOf(typo.textAlign, TEXT_ALIGNS, DEFAULT_RICHTEXT_PROPS.textAlign),
         fontWeight: oneOf(typo.fontWeight, FONT_WEIGHTS, DEFAULT_RICHTEXT_PROPS.fontWeight),
