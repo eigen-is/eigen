@@ -935,8 +935,10 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 return true;
             }
             if (lineRef.current) {
-                // Escape keeps the committed points, dropping the trailing one.
-                finishLineWith(lineRef.current.committed);
+                // Escape CANCELS a mid-gesture create, here as everywhere else on the canvas (and as the
+                // draft's own hint says); Enter and a double-click are the finish triggers. The tool stays
+                // active, like a cancelled freehand stroke.
+                clearLine();
                 return true;
             }
             // Layered Escape: a selected point releases BEFORE the element does. Clear it here (capture
