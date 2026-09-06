@@ -2,7 +2,7 @@ import { hitTestEllipse } from '../geometry';
 import { ellipseOutline } from '../outline';
 import type { VectorEllipseElement } from '../types';
 import { defineKind } from './kind';
-import { fillField, roughness, seed } from './read-fields';
+import { fillField } from './read-fields';
 import { isUnpainted, renderRoughShape } from './render-utils';
 
 export const ellipseKind = defineKind<VectorEllipseElement>({
@@ -13,7 +13,6 @@ export const ellipseKind = defineKind<VectorEllipseElement>({
         fill: true,
         fillStyle: true,
         strokeStyle: true,
-        roughness: true,
         corners: false,
         edges: false,
         strokeOptional: true,
@@ -23,15 +22,11 @@ export const ellipseKind = defineKind<VectorEllipseElement>({
     },
     defaults: (style) => ({
         fill: style.fill,
-        roughness: style.roughness,
-        seed: 0, // the writer replaces it with a random one; 0 keeps `defaults` pure
     }),
     read: (src, base) => ({
         ...base,
         type: 'ellipse',
         fill: fillField(src.get('fill')),
-        roughness: roughness(src.get('roughness')),
-        seed: seed(src.get('seed')),
     }),
     hitTest: (el, point) => hitTestEllipse(el, point),
     outline: (el, inflate) => ellipseOutline({ x: el.x, y: el.y, width: el.width, height: el.height }, inflate),

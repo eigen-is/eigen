@@ -16,7 +16,7 @@ import { diamondKind } from './diamond';
 import { ellipseKind } from './ellipse';
 import { freedrawKind } from './freedraw';
 import { imageKind } from './image';
-import type { Capabilities, ElementKind } from './kind';
+import type { Capabilities, ElementKind, StyleDefaults } from './kind';
 import { lineKind } from './line';
 import { fontFamily } from './read-fields';
 import { rectangleKind } from './rectangle';
@@ -75,8 +75,12 @@ export function isVectorElementType(v: unknown): v is VectorElementType {
 // the two the creation path spreads before the kind's own fields. The panel's reset affordances read
 // the same table, so "reset" restores exactly what "create" would have given: an image's border resets
 // to none, a rectangle's to the shared ink colour.
-export function baseDefaultsFor(type: VectorElementType): Pick<VectorElementBase, keyof typeof DEFAULT_ELEMENT_PROPS> {
-    return { ...DEFAULT_ELEMENT_PROPS, ...ELEMENT_KINDS[type].baseDefaults };
+export function baseDefaultsFor(
+    type: VectorElementType,
+    style: StyleDefaults,
+): Pick<VectorElementBase, keyof typeof DEFAULT_ELEMENT_PROPS> {
+    // The shared table's roughness is the READER's 0; a new element is as sketchy as its host says.
+    return { ...DEFAULT_ELEMENT_PROPS, roughness: style.roughness, ...ELEMENT_KINDS[type].baseDefaults };
 }
 
 // Toolbar order (Excalidraw's), the order ELEMENT_FIELDS walks the kinds in. Every type appears

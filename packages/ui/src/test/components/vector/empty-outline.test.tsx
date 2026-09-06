@@ -2,7 +2,6 @@ import { describe, expect, test } from 'bun:test';
 import {
     type Box,
     DEFAULT_ELEMENT_PROPS,
-    DEFAULT_SKETCH_PROPS,
     ELEMENT_KINDS,
     solidFill,
     VECTOR_STYLE_DEFAULTS,
@@ -32,7 +31,7 @@ const richtext = (over: Partial<VectorRichTextElement> = {}): VectorRichTextElem
 
 const rect = (over: Partial<VectorShapeElement> = {}): VectorShapeElement => ({
     ...DEFAULT_ELEMENT_PROPS,
-    ...DEFAULT_SKETCH_PROPS,
+    roughness: 1,
     id: 'r1',
     type: 'rectangle',
     fill: solidFill('#dddddd'),

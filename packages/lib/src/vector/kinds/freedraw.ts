@@ -16,7 +16,7 @@ import {
 import { polylineOutline } from '../outline';
 import { DEFAULT_LINEAR_ROUNDNESS, ROUNDNESS, type VectorLinearElement } from '../types';
 import { defineKind } from './kind';
-import { bool, clampCoord, fillField, oneOf, roughness, seed, str } from './read-fields';
+import { bool, clampCoord, fillField, oneOf, str } from './read-fields';
 import { drawableToSvg, fillDefs, getSvgPathFromStroke, linearRoughOptions } from './render-utils';
 
 export const freedrawKind = defineKind<VectorLinearElement>({
@@ -26,7 +26,6 @@ export const freedrawKind = defineKind<VectorLinearElement>({
         fill: true,
         fillStyle: true,
         strokeStyle: false,
-        roughness: true,
         corners: false,
         edges: false,
         strokeOptional: false,
@@ -37,8 +36,6 @@ export const freedrawKind = defineKind<VectorLinearElement>({
     capabilitiesOf: (el) => ({ fill: isClosedLinear(el) }),
     defaults: (style) => ({
         fill: style.fill,
-        roughness: style.roughness,
-        seed: 0, // the writer replaces it with a random one; 0 keeps `defaults` pure
         points: '',
         roundness: DEFAULT_LINEAR_ROUNDNESS,
         pressures: '',
@@ -62,8 +59,6 @@ export const freedrawKind = defineKind<VectorLinearElement>({
             ...base,
             type: 'freedraw',
             fill: fillField(src.get('fill')),
-            roughness: roughness(src.get('roughness')),
-            seed: seed(src.get('seed')),
             roundness: oneOf(src.get('roundness'), ROUNDNESS, DEFAULT_LINEAR_ROUNDNESS),
             points: serializePoints(clamped),
             pressures: useReal ? serializePressures(pressures) : '',

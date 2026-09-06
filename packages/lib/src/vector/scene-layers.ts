@@ -13,6 +13,10 @@ import { ELEMENT_KINDS, type RenderOutput } from './kinds';
 import type { MediaResolver } from './scene-to-svg';
 import type { VectorElement, VectorScene } from './types';
 
+// The SVG namespace, one spelling for every surface that writes it: the viewports this module emits,
+// the documents scene-to-svg serializes and the live <svg> nodes the canvas mounts.
+export const SVG_NS = 'http://www.w3.org/2000/svg';
+
 export type Layer = {
     id: string;
     // The element's box in the layer's own coordinate space: scene coordinates on the infinite canvas,
@@ -43,7 +47,7 @@ type ElementLayerOptions = {
 // function over a whole scene.
 export function elementLayer(el: VectorElement, opts: ElementLayerOptions = {}): Layer | null {
     const content = ELEMENT_KINDS[el.type].render(el, { resolveMedia: opts.resolveMedia, route: opts.route });
-    if ('svg' in content && content.svg === '') return null;
+    if (!('html' in content) && content.svg === '') return null;
     return {
         id: el.id,
         // An elbow arrow's derived route can spill outside its stored box; the box stays the element's,
@@ -78,13 +82,23 @@ export function layerBoxCss({ box, opacity }: Pick<Layer, 'box' | 'opacity'>): L
 // which the app imports and the standalone export document embeds).
 export const RICH_TEXT_CLASS = 'eigen-canvas-text';
 
-// The layer's body as one HTML string: an svg fragment passes through, rich text gets the styled
-// wrapper div. No <p> reset here — a live layer sits in the app, whose CSS already resets block
-// margins; a standalone SVG carries its own (scene-to-svg.ts).
+// The layer's body as one HTML string — everything a DOM host mounts inside the layer box, so the live
+// canvas and the compositor cannot drift: an svg fragment in its own viewport, rich text in the styled
+// wrapper div over its own backdrop viewport. No <p> reset here — a live layer sits in the app, whose CSS
+// already resets block margins; a standalone SVG carries its own (scene-to-svg.ts).
 export function layerInnerHtml(content: RenderOutput): string {
-    return 'svg' in content
-        ? content.svg
-        : `<div class="${RICH_TEXT_CLASS}" style="${escapeXml(content.style)}">${content.html}</div>`;
+    if (!('html' in content)) return svgViewport(content.svg);
+    // The backdrop viewport is absolute, so the text div takes a position of its own to stack over it.
+    const backdrop = content.svg === '' ? '' : svgViewport(content.svg);
+    const style = backdrop === '' ? content.style : `${content.style};position:relative`;
+    return `${backdrop}<div class="${RICH_TEXT_CLASS}" style="${escapeXml(style)}">${content.html}</div>`;
+}
+
+// min-*-px: a horizontal arrow's box is 0 high, and a zero-extent viewport disables rendering entirely
+// (SVG 2 §8.2); overflow is visible, so the floor never clips and roughjs's overshoot stays drawn.
+function svgViewport(fragment: string): string {
+    const style = 'position:absolute;top:0;left:0;width:100%;height:100%;min-width:1px;min-height:1px;overflow:visible';
+    return `<svg xmlns="${SVG_NS}" overflow="visible" style="${style}">${fragment}</svg>`;
 }
 
 export function sceneLayers(scene: VectorScene, opts: SceneLayersOptions = {}): Layer[] {

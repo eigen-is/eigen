@@ -4,7 +4,7 @@ import { cornerRadius, outlinePath, rectOutline } from '../outline';
 import { CORNERS, DEFAULT_CORNERS, DEFAULT_OBJECT_FIT, OBJECT_FITS, type VectorImageElement } from '../types';
 import { defineKind } from './kind';
 import { oneOf, str } from './read-fields';
-import { dashArray, isBordered, svgId } from './render-utils';
+import { isBordered, renderRoughShape, svgId } from './render-utils';
 
 // The dashed grey box a picture with no resolvable file draws in its place.
 const MISSING_MEDIA_COLOR = '#9ca3af';
@@ -13,12 +13,10 @@ const MISSING_MEDIA_DASH = '6 6';
 export const imageKind = defineKind<VectorImageElement>({
     type: 'image',
     is: (el): el is VectorImageElement => el.type === 'image',
-    // no `roughness`/`seed`: an image is a DOM box, roughjs never touches it
     capabilities: {
         fill: false,
         fillStyle: false,
         strokeStyle: true,
-        roughness: false,
         corners: true,
         edges: false,
         strokeOptional: true,
@@ -47,14 +45,11 @@ export const imageKind = defineKind<VectorImageElement>({
     paintsNothing: (el) => el.mediaName === '' && !isBordered(el),
     render: (el, ctx) => {
         const radius = cornerRadius(el, 'rectangle');
-        // The same outline path the shape kinds draw: one silhouette, clipped, stroked and placeheld.
+        // The same outline path the shape kinds draw: one silhouette, clipped and placeheld.
         const d = outlinePath(rectOutline({ x: 0, y: 0, width: el.width, height: el.height }, radius, 0));
-        // The stroke fields are this kind's BORDER (types.ts), the way they are rich text's. It is drawn
-        // after the picture, so a border never sits under the pixels it frames.
-        const dash = dashArray(el.strokeStyle, el.strokeWidth);
-        const border = isBordered(el)
-            ? `<path d="${d}" fill="none" stroke="${escapeXml(el.strokeColor)}" stroke-width="${round(el.strokeWidth)}"${dash ? ` stroke-dasharray="${dash.map(round).join(' ')}"` : ''}/>`
-            : '';
+        // The stroke fields are this kind's BORDER (types.ts), the same roughjs drawable the shapes
+        // draw. Drawn after the picture, so a border never sits under the pixels it frames.
+        const border = isBordered(el) ? renderRoughShape(el) : '';
         const href = ctx.resolveMedia?.(el.mediaName) ?? null;
         if (!href) {
             // Media that is deleted, still uploading or on another mount: draw the box so the element

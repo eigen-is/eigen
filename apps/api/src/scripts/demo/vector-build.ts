@@ -13,7 +13,6 @@ import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_FILL_STYLE,
     DEFAULT_LINE_ROUNDNESS,
-    DEFAULT_SKETCH_PROPS,
     ELEMENT_FIELDS,
     elbowBindPoint,
     generateNKeysBetween,
@@ -119,9 +118,10 @@ export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
     const seed = mulberry32(SEED_SALT);
     for (const [i, el] of ordered.entries()) {
         el.index = keys[i];
-        // One draw per element either way, so adding an unsketched kind never shifts the others' jitter.
-        const drawn = Math.floor(seed() * 2 ** 31);
-        if ('seed' in el) el.seed = drawn;
+        // One draw per element, in z-order: the images and text boxes keep the draw already spent on
+        // them, so no shape's jitter moves. Same 1..2³¹ range randomSeed() draws from in the editor,
+        // because the reader clamps a stored 0 to 1.
+        el.seed = 1 + Math.floor(seed() * (2 ** 31 - 1));
     }
 
     // The spec is authored in its own top-left frame; the editor opens on the scene origin, so shift the
@@ -143,7 +143,7 @@ export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
 
 function buildShape(s: SitePlanShape): VectorShapeElement {
     const box = {
-        ...baseElement(s.kind, `el-${s.key}`),
+        ...baseElement(s.kind, `el-${s.key}`, SITE_PLAN_STYLE),
         x: s.x,
         y: s.y,
         width: s.width,
@@ -153,7 +153,6 @@ function buildShape(s: SitePlanShape): VectorShapeElement {
         strokeWidth: s.strokeWidth ?? DEFAULT_ELEMENT_PROPS.strokeWidth,
         strokeStyle: s.strokeStyle ?? DEFAULT_ELEMENT_PROPS.strokeStyle,
         fill: solidFill(s.fill ?? 'transparent', s.fillStyle ?? DEFAULT_FILL_STYLE),
-        ...DEFAULT_SKETCH_PROPS,
     };
     // An ellipse has no corners to treat, so it carries no `corners` field.
     if (s.kind === 'ellipse') return { ...box, type: 'ellipse' };
@@ -166,7 +165,7 @@ function buildLine(l: SitePlanLine, i: number): VectorLinearElement {
     const points = l.points.map(([x, y]) => ({ x, y }));
     const norm = normalizeLinear(ZERO_BOX, points);
     return {
-        ...baseElement(l.freedraw ? 'freedraw' : 'line', `el-line-${i}`),
+        ...baseElement(l.freedraw ? 'freedraw' : 'line', `el-line-${i}`, SITE_PLAN_STYLE),
         type: l.freedraw ? 'freedraw' : 'line',
         x: norm.x,
         y: norm.y,
@@ -177,7 +176,6 @@ function buildLine(l: SitePlanLine, i: number): VectorLinearElement {
         strokeWidth: l.strokeWidth ?? DEFAULT_ELEMENT_PROPS.strokeWidth,
         strokeStyle: l.strokeStyle ?? DEFAULT_ELEMENT_PROPS.strokeStyle,
         fill: solidFill('transparent'),
-        ...DEFAULT_SKETCH_PROPS,
         roundness: l.roundness ?? DEFAULT_LINE_ROUNDNESS,
         points: norm.points,
         pressures: '',
@@ -208,7 +206,7 @@ function buildArrow(
     const fontSize = a.labelSize ?? DEFAULT_ARROW_LABEL_SIZE;
     const label = a.label ?? '';
     const arrow: VectorArrowElement = {
-        ...baseElement('arrow', `el-arrow-${i}`),
+        ...baseElement('arrow', `el-arrow-${i}`, SITE_PLAN_STYLE),
         type: 'arrow',
         x: norm.x,
         y: norm.y,
@@ -217,7 +215,6 @@ function buildArrow(
         angle: 0,
         strokeColor: a.stroke ?? DEFAULT_ELEMENT_PROPS.strokeColor,
         strokeStyle: a.strokeStyle ?? DEFAULT_ELEMENT_PROPS.strokeStyle,
-        ...DEFAULT_SKETCH_PROPS,
         roundness: DEFAULT_ARROW_PROPS.roundness,
         points: norm.points,
         elbow: a.elbow ?? false,

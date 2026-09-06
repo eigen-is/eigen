@@ -4,13 +4,7 @@
 
 import { EIGEN_FONT_NAMES } from '../../constants/fonts';
 import { isColorToken, parseFill, serializeFill } from '../fill';
-import {
-    DEFAULT_ELEMENT_PROPS,
-    DEFAULT_FONT_FAMILY,
-    DEFAULT_FONT_SIZE,
-    DEFAULT_RICHTEXT_PROPS,
-    DEFAULT_SKETCH_PROPS,
-} from '../types';
+import { DEFAULT_ELEMENT_PROPS, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE, DEFAULT_RICHTEXT_PROPS } from '../types';
 
 // Sanity bound on spatial fields. Without a cap one client's corrupt write (say 1e15 from a math bug)
 // freezes every other peer — rough fill cost scales with element area.
@@ -86,11 +80,11 @@ export function strokeWidth(v: unknown): number {
 }
 
 export function roughness(v: unknown): number {
-    return clampNum(v, 0, 10, DEFAULT_SKETCH_PROPS.roughness);
+    return clampNum(v, 0, 10, DEFAULT_ELEMENT_PROPS.roughness);
 }
 
 export function seed(v: unknown): number {
-    return clampNum(v, 0, 2 ** 31, DEFAULT_SKETCH_PROPS.seed);
+    return clampNum(v, 1, 2 ** 31, DEFAULT_ELEMENT_PROPS.seed);
 }
 
 export function clampCoord(n: number): number {

@@ -77,6 +77,15 @@ describe('ELEMENT_KIND_UI', () => {
         expect(text.type === 'richtext' && text.fontFamily).toBe(SLIDES_STYLE_DEFAULTS.fontFamily);
     });
 
+    test('a preview box carries the host roughness and the gesture seed, whatever the kind', () => {
+        // The DOM-box kinds are sketched too, so a rich-text preview jitters like the committed box
+        // instead of taking the shared table's reader fallback (roughness 0, seed 0).
+        const box = { x: 0, y: 0, width: 10, height: 10, angle: 0 };
+        const text = creatingElement({ type: 'richtext', seed: 7, box }, VECTOR_STYLE_DEFAULTS);
+        expect(text.roughness).toBe(VECTOR_STYLE_DEFAULTS.roughness);
+        expect(text.seed).toBe(7);
+    });
+
     test('only rich text has an in-place editor', () => {
         for (const type of vectorElementTypes()) {
             expect(Boolean(ELEMENT_KIND_UI[type].InPlaceEditor)).toBe(type === 'richtext');

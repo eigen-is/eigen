@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
     DEFAULT_ELEMENT_PROPS,
-    DEFAULT_SKETCH_PROPS,
     FRAME_HEIGHT,
     FRAME_WIDTH,
     solidFill,
@@ -24,7 +23,7 @@ const frame = (over: Partial<VectorFrame> = {}): VectorFrame => ({
 
 const rect = (over: Partial<VectorShapeElement> = {}): VectorShapeElement => ({
     ...DEFAULT_ELEMENT_PROPS,
-    ...DEFAULT_SKETCH_PROPS,
+    roughness: 1,
     id: 'r1',
     type: 'rectangle',
     fill: solidFill('#dddddd'),

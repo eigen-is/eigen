@@ -6,7 +6,6 @@ import {
     boundEndpoint,
     DEFAULT_ARROW_PROPS,
     DEFAULT_ELEMENT_PROPS,
-    DEFAULT_SKETCH_PROPS,
     ELEMENT_KINDS,
     parseBinding,
     projectFixedPointOntoDiagonal,
@@ -33,7 +32,7 @@ function dist(a: { x: number; y: number }, b: { x: number; y: number }): number 
 
 const rect = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id'>): VectorShapeElement => ({
     ...DEFAULT_ELEMENT_PROPS,
-    ...DEFAULT_SKETCH_PROPS,
+    roughness: 1,
     type: 'rectangle',
     // A filled shape binds anywhere inside (a transparent one binds only in the outline band), so a
     // dropped-inside endpoint reaches it.
@@ -51,7 +50,7 @@ const rect = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id'>
 
 const arrow = (over: Partial<VectorArrowElement> & { points: string }): VectorArrowElement => ({
     ...DEFAULT_ELEMENT_PROPS,
-    ...DEFAULT_SKETCH_PROPS,
+    roughness: 1,
     ...DEFAULT_ARROW_PROPS,
     id: 'ar',
     type: 'arrow',

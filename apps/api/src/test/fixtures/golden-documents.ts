@@ -7,7 +7,6 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_RICHTEXT_PROPS,
-    DEFAULT_SKETCH_PROPS,
     FRAME_FIELDS,
     FRAME_HEIGHT,
     FRAME_WIDTH,
@@ -290,6 +289,8 @@ export function buildGoldenDeckScene(): VectorScene {
         width: 640,
         height: 360,
         angle: 0,
+        // The border is a roughjs drawable, and roughjs reads seed 0 as "pick a random one".
+        seed: 1,
         strokeColor: '#1a5fb4',
         strokeWidth: 4,
         mediaName: GOLDEN_MEDIA_NAME,
@@ -387,14 +388,15 @@ export const GOLDEN_VECTOR_TEXT = 'Vector <sketch>';
 export const GOLDEN_VECTOR_LABEL = 'Bound label';
 
 export function buildGoldenVectorScene(): VectorScene {
-    const base = { ...DEFAULT_ELEMENT_PROPS, angle: 0 };
+    // Sketched throughout: the shared table's roughness is the reader's 0, so the fixture states the
+    // host's own value once.
+    const base = { ...DEFAULT_ELEMENT_PROPS, angle: 0, roughness: 1 };
     // The fill codec's transparent solid — what every element painted before `fill` existed.
     const filled = { fill: solidFill('transparent') } as const;
     const elements: VectorElement[] = [
         {
             ...base,
             ...filled,
-            ...DEFAULT_SKETCH_PROPS,
             id: 'v-rect',
             type: 'rectangle',
             x: 0,
@@ -408,7 +410,6 @@ export function buildGoldenVectorScene(): VectorScene {
         {
             ...base,
             ...filled,
-            ...DEFAULT_SKETCH_PROPS,
             id: 'v-ellipse',
             type: 'ellipse',
             x: 140,
@@ -427,6 +428,7 @@ export function buildGoldenVectorScene(): VectorScene {
             y: 100,
             width: 160,
             height: 50,
+            seed: 10,
             index: 'a2',
             // The XSS payload rides in as escaped markup, the way the editor stores it: the
             // search collector must strip the <p> back off and the export must keep it escaped.
@@ -447,7 +449,6 @@ export function buildGoldenVectorScene(): VectorScene {
         {
             ...base,
             ...filled,
-            ...DEFAULT_SKETCH_PROPS,
             id: 'v-freedraw',
             type: 'freedraw',
             x: 0,
@@ -464,7 +465,6 @@ export function buildGoldenVectorScene(): VectorScene {
         {
             ...base,
             ...filled,
-            ...DEFAULT_SKETCH_PROPS,
             id: 'v-line',
             type: 'line',
             x: 140,
@@ -480,7 +480,6 @@ export function buildGoldenVectorScene(): VectorScene {
         },
         {
             ...base,
-            ...DEFAULT_SKETCH_PROPS,
             id: 'v-arrow',
             type: 'arrow',
             elbow: false,
@@ -510,6 +509,7 @@ export function buildGoldenVectorScene(): VectorScene {
             y: 340,
             width: 120,
             height: 120,
+            seed: 11,
             index: 'a6',
             mediaName: GOLDEN_MEDIA_NAME,
             corners: 'round',
@@ -519,7 +519,6 @@ export function buildGoldenVectorScene(): VectorScene {
         // and export exercise the server-side elbowRoute path end-to-end.
         {
             ...base,
-            ...DEFAULT_SKETCH_PROPS,
             id: 'v-elbow',
             type: 'arrow',
             elbow: true,
@@ -546,7 +545,6 @@ export function buildGoldenVectorScene(): VectorScene {
         // inside the element's own <svg>. The export golden is what keeps that true.
         {
             ...base,
-            ...DEFAULT_SKETCH_PROPS,
             id: 'v-gradient',
             type: 'rectangle',
             x: 260,

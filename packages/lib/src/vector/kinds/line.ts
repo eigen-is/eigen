@@ -3,7 +3,7 @@ import { hitTestLinear, isClosedLinear, linearLocalToScene, parsePoints, seriali
 import { polylineOutline } from '../outline';
 import { DEFAULT_LINE_ROUNDNESS, DEFAULT_LINEAR_ROUNDNESS, ROUNDNESS, type VectorLinearElement } from '../types';
 import { defineKind } from './kind';
-import { clampCoord, fillField, oneOf, roughness, seed, str } from './read-fields';
+import { clampCoord, fillField, oneOf, str } from './read-fields';
 import { drawableToSvg, fillDefs, linearRoughOptions } from './render-utils';
 
 export const lineKind = defineKind<VectorLinearElement>({
@@ -13,7 +13,6 @@ export const lineKind = defineKind<VectorLinearElement>({
         fill: true,
         fillStyle: true,
         strokeStyle: true,
-        roughness: true,
         corners: false,
         edges: true,
         strokeOptional: false,
@@ -24,8 +23,6 @@ export const lineKind = defineKind<VectorLinearElement>({
     capabilitiesOf: (el) => ({ fill: isClosedLinear(el) }),
     defaults: (style) => ({
         fill: style.fill,
-        roughness: style.roughness,
-        seed: 0, // the writer replaces it with a random one; 0 keeps `defaults` pure
         points: '',
         roundness: DEFAULT_LINE_ROUNDNESS,
         // `pressures`/`simulatePressure` are the linear family's, and a line stores the "no pressure" pair
@@ -41,8 +38,6 @@ export const lineKind = defineKind<VectorLinearElement>({
             ...base,
             type: 'line',
             fill: fillField(src.get('fill')),
-            roughness: roughness(src.get('roughness')),
-            seed: seed(src.get('seed')),
             roundness: oneOf(src.get('roundness'), ROUNDNESS, DEFAULT_LINEAR_ROUNDNESS),
             points: serializePoints(clamped),
             pressures: '',

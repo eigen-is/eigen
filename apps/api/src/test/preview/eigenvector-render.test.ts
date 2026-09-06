@@ -34,6 +34,13 @@ function previewOf(html: string): string {
     });
 }
 
+// One layer's markup: the compositor emits an absolutely-positioned div per element, in scene order.
+function layerOf(body: string, marker: string): string {
+    const layer = body.split('<div style="position:absolute').find((chunk) => chunk.includes(marker));
+    if (!layer) throw new Error(`no layer carrying ${marker}`);
+    return layer;
+}
+
 // The compositor rounds every length to two decimals.
 function round(n: number): number {
     return Math.round(n * 100) / 100;
@@ -71,6 +78,18 @@ describe('renderEigenvectorPreviewBody', () => {
         expect(previewOf(`<p>${GOLDEN_VECTOR_TEXT.replace('<', '&lt;').replace('>', '&gt;')}</p>`)).toContain(
             '<p>Vector &lt;sketch&gt;</p>',
         );
+    });
+
+    test("a bordered image's border is the roughjs drawable, drawn over the picture", () => {
+        const layer = layerOf(previewOf('<p>hi</p>'), 'image-clip-v-image');
+        expect(layer).toMatch(/<image[^>]*><\/image><\/g><g stroke-linecap="round">/);
+    });
+
+    test("a painted text box's backdrop is drawn before its text, not as a CSS border", () => {
+        const layer = layerOf(previewOf('<p>hi</p>'), 'eigen-canvas-text');
+        expect(layer).toContain('<g stroke-linecap="round">');
+        expect(layer.indexOf('<g stroke-linecap="round">')).toBeLessThan(layer.indexOf('eigen-canvas-text'));
+        expect(layer).not.toMatch(/class="eigen-canvas-text" style="[^"]*border:/);
     });
 
     test('media resolves through the URL map the main thread prepared', () => {

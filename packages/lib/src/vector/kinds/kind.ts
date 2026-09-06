@@ -34,14 +34,12 @@ export type Capabilities = {
     // Whether the kind paints a Fill at all. GEOMETRY-DEPENDENT on the linear kinds (an open stroke has
     // nothing to fill), so read it through capabilitiesOf(el), never off this table.
     fill: boolean;
-    // Whether the kind's renderer honours the hatch style HALF of that fill. Rich text paints its box
-    // background as CSS and an arrow's fill is its arrowheads', so neither hatches.
+    // Whether the kind's renderer honours the hatch style HALF of that fill. An arrow's fill is its
+    // arrowheads', so it hatches nothing.
     fillStyle: boolean;
     // Whether the kind's renderer honours the dash style of that stroke. A freehand stroke is a filled
     // outline rather than a drawn line, so dashes mean nothing to it.
     strokeStyle: boolean;
-    // Also "is this kind drawn by roughjs at all": the sketch paint rows follow it.
-    roughness: boolean;
     corners: boolean;
     // Whether the shaft's curvature is the user's to pick (the Edges row): a drawn polyline's is, a
     // freehand stroke's is not — its roundness is how the stroke is rendered, not a style it offers.
@@ -69,8 +67,9 @@ type RenderContext = {
 };
 
 // SVG for everything drawn; HTML for rich text, which the live canvas and the server compositor mount as
-// a div (elementToSvg wraps it in a foreignObject for the SVG arms).
-export type RenderOutput = { svg: string } | { html: string; style: string };
+// a div (elementToSvg wraps it in a foreignObject for the SVG arms). The html arm's `svg` is the backdrop
+// painted BEHIND that div — '' when the box paints neither fill nor border.
+export type RenderOutput = { svg: string } | { html: string; style: string; svg: string };
 
 // A kind's OWN stored fields: its element minus the base every kind shares. Distributive, so a
 // union-typed T (the generic registry lookup) yields the union of the members' field sets, not the

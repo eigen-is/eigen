@@ -1,7 +1,6 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import {
     DEFAULT_ELEMENT_PROPS,
-    DEFAULT_SKETCH_PROPS,
     ELEMENT_KINDS,
     serializeBinding,
     serializePoints,
@@ -67,7 +66,7 @@ const { createRoot } = await import('react-dom/client');
 
 const rect = (over: Partial<VectorShapeElement> = {}): VectorShapeElement => ({
     ...DEFAULT_ELEMENT_PROPS,
-    ...DEFAULT_SKETCH_PROPS,
+    roughness: 1,
     id: 'r1',
     type: 'rectangle',
     fill: solidFill('#dddddd'),
@@ -85,7 +84,7 @@ const rect = (over: Partial<VectorShapeElement> = {}): VectorShapeElement => ({
 // An elbow arrow bound to `r1` at its start: the one layer whose drawing depends on the scene map.
 const elbow = (): VectorArrowElement => ({
     ...DEFAULT_ELEMENT_PROPS,
-    ...DEFAULT_SKETCH_PROPS,
+    roughness: 1,
     ...ELEMENT_KINDS.arrow.defaults(VECTOR_STYLE_DEFAULTS),
     id: 'a1',
     type: 'arrow',
@@ -194,6 +193,31 @@ describe('the layer box', () => {
     test('opacity rides on the layer, and only below full', () => {
         expect(renderToStaticMarkup(<ElementLayer el={rect({ ...box, opacity: 40 })} />)).toContain('opacity:0.4');
         expect(renderToStaticMarkup(<ElementLayer el={rect({ ...box, opacity: 100 })} />)).not.toContain('opacity');
+    });
+});
+
+describe('the layer body', () => {
+    test('an svg kind mounts the overflow-visible viewport layerInnerHtml writes', () => {
+        const html = renderToStaticMarkup(<ElementLayer el={rect()} />);
+        expect(html.match(/<svg/g)).toHaveLength(1);
+        expect(html).toContain('min-width:1px');
+        expect(html).toContain('overflow:visible');
+    });
+
+    test('a painted text box draws its backdrop before the text div', () => {
+        const html = renderToStaticMarkup(<ElementLayer el={richtext('<p>one</p>')} />);
+        expect(html.indexOf('<svg')).toBeGreaterThan(-1);
+        expect(html.indexOf('<svg')).toBeLessThan(html.indexOf('eigen-canvas-text'));
+    });
+
+    test('the in-place editor is drawn over the box paint, not instead of it', () => {
+        const html = renderToStaticMarkup(
+            <ElementLayer el={richtext('<p>one</p>')}>
+                <p>editing</p>
+            </ElementLayer>,
+        );
+        expect(html.indexOf('<svg')).toBeGreaterThan(-1);
+        expect(html.indexOf('<svg')).toBeLessThan(html.indexOf('editing'));
     });
 });
 

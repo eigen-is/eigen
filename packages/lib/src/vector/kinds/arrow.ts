@@ -30,19 +30,7 @@ import {
 } from '../types';
 import { elbowRoundedShaftPath, labelClipPath, renderArrowhead, renderArrowLabel } from './arrow-render';
 import { defineKind } from './kind';
-import {
-    bool,
-    clampCoord,
-    fontFamily,
-    fontSize,
-    labelText,
-    MAX_COORD,
-    num,
-    oneOf,
-    roughness,
-    seed,
-    str,
-} from './read-fields';
+import { bool, clampCoord, fontFamily, fontSize, labelText, MAX_COORD, num, oneOf, str } from './read-fields';
 import { baseRoughOptions, drawableToSvg, svgId } from './render-utils';
 
 export const arrowKind = defineKind<VectorArrowElement>({
@@ -52,7 +40,6 @@ export const arrowKind = defineKind<VectorArrowElement>({
         fill: false,
         fillStyle: false,
         strokeStyle: true,
-        roughness: true,
         corners: false,
         edges: true,
         strokeOptional: false,
@@ -61,8 +48,6 @@ export const arrowKind = defineKind<VectorArrowElement>({
     },
     defaults: (style) => ({
         ...DEFAULT_ARROW_PROPS,
-        roughness: style.roughness,
-        seed: 0, // the writer replaces it with a random one; 0 keeps `defaults` pure
         points: '',
         fontSize: style.fontSize,
         fontFamily: style.fontFamily,
@@ -85,8 +70,6 @@ export const arrowKind = defineKind<VectorArrowElement>({
             // An elbow arrow's route is derived in the unrotated local frame, so it pins angle 0 (the
             // panel hides rotation for it) — the reader forces it regardless of what a peer stored.
             angle: elbow ? 0 : base.angle,
-            roughness: roughness(src.get('roughness')),
-            seed: seed(src.get('seed')),
             roundness: oneOf(src.get('roundness'), ROUNDNESS, DEFAULT_LINEAR_ROUNDNESS),
             points: stored,
             elbow,

@@ -8,7 +8,6 @@ import {
     ELEMENT_KINDS,
     generateNKeysBetween,
     isValidFractionalIndex,
-    isVectorElementType,
     remapBinding,
     type StyleDefaults,
     storedFields,
@@ -25,13 +24,7 @@ export function newElementId(): string {
 // A fresh roughjs jitter seed. One source: the creation paths, the duplicate pass and the draw drafts
 // must draw from the same range or a preview pops on release.
 export function randomSeed(): number {
-    return Math.floor(Math.random() * 2 ** 31);
-}
-
-// Only the roughjs kinds declare a seed; writing one onto an image or a rich-text box is exactly the
-// drift the ELEMENT_FIELDS whitelist exists to prevent.
-export function hasSeed(type: unknown): boolean {
-    return isVectorElementType(type) && ELEMENT_KINDS[type].fields.includes('seed');
+    return 1 + Math.floor(Math.random() * (2 ** 31 - 1));
 }
 
 // Per-type defaults: the geometry box, the shared base props, and the kind's own fields straight from
@@ -47,7 +40,7 @@ function elementDefaults(type: VectorElementType, style: StyleDefaults): Record<
         // The shared base paint under the kind's overrides: rich text and images use the stroke as a
         // border, so a fresh one is unframed until the user picks a stroke colour. The panel's reset
         // rows read the same helper, so a reset restores what creation gave.
-        ...baseDefaultsFor(type),
+        ...baseDefaultsFor(type, style),
         ...ELEMENT_KINDS[type].defaults(style),
     };
 }
@@ -55,10 +48,9 @@ function elementDefaults(type: VectorElementType, style: StyleDefaults): Record<
 // One element into the doc's `elements` map at the given fractional index, under the kind's defaults
 // and the host's style table — THE element writer, shared by the editor's add path and the deck
 // seeder. Honors a caller-supplied seed so a drag-create preview and its committed element share the
-// same roughjs jitter (no visual pop on release); a seedless kind stores none. A caller-supplied `id`
-// is the seeder's: two peers seeding one empty deck write the same key, so they converge on one
-// element instead of two. Nested in a live transact it joins that one, so a caller's origin and
-// single-atom guarantee both survive.
+// same roughjs jitter (no visual pop on release). A caller-supplied `id` is the seeder's: two peers
+// seeding one empty deck write the same key, so they converge on one element instead of two. Nested
+// in a live transact it joins that one, so a caller's origin and single-atom guarantee both survive.
 export function writeElementInDoc(
     doc: Y.Doc,
     partial: NewVectorElement,
@@ -66,7 +58,7 @@ export function writeElementInDoc(
     style: StyleDefaults,
     id: string = newElementId(),
 ): string {
-    const seed = hasSeed(partial.type) ? (partial.seed ?? randomSeed()) : undefined;
+    const seed = partial.seed ?? randomSeed();
     const record = { ...elementDefaults(partial.type, style), ...partial, id, type: partial.type, seed, index };
     const element = new Y.Map<unknown>();
     for (const [field, value] of storedFields(record, ELEMENT_FIELDS)) element.set(field, value);
@@ -128,7 +120,7 @@ export function duplicateElementsInDoc(doc: Y.Doc, ids: string[], dx: number, dy
                 if (v !== undefined) clone.set(field, v);
             }
             clone.set('id', id);
-            if (hasSeed(src.get('type'))) clone.set('seed', randomSeed());
+            clone.set('seed', randomSeed());
             clone.set('index', keys[i]);
             // A copy starts with no comments; the cards belong to the element that was commented on.
             clone.set('commentCardIds', '');

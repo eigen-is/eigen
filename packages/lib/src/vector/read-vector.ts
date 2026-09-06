@@ -15,6 +15,8 @@ import {
     isYMapLike,
     num,
     oneOf,
+    roughness,
+    seed,
     size,
     str,
     strokeWidth,
@@ -104,6 +106,8 @@ function readBase(value: YMapLike, id: string, type: VectorElementType): VectorE
         strokeColor: color(value.get('strokeColor'), DEFAULT_ELEMENT_PROPS.strokeColor),
         strokeWidth: strokeWidth(value.get('strokeWidth')),
         strokeStyle: oneOf(value.get('strokeStyle'), STROKE_STYLES, DEFAULT_ELEMENT_PROPS.strokeStyle),
+        roughness: roughness(value.get('roughness')),
+        seed: seed(value.get('seed')),
     };
 }
 

@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1321 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1320 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -774,7 +774,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (583)
+## Utilities & constants (582)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1147,7 +1147,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DEFAULT_PADDING` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
 | `DEFAULT_RICHTEXT_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_SCENE_META` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `DEFAULT_SKETCH_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `diamondOutline` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `distance` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `distanceToPolyline` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1304,7 +1303,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `stripEigenMediaRefs` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
 | `STROKE_STYLES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `STROKE_WIDTH_OPTIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `SVG_NS` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
+| `SVG_NS` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `syncInvalidIndices` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `TEXT_ALIGNS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `TEXT_DECORATIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |

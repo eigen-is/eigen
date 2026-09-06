@@ -82,8 +82,8 @@ describe('planElementsPaste', () => {
     test('a partial is the whole stored record minus what the writer allocates', () => {
         const el = rect('r1');
         const { partials } = planElementsPaste([el], [], 'media-1');
-        // id and index are the writer's; a copy starts with no comments.
-        const { id, index, commentCardIds, ...rest } = el;
+        // id, index and the seed are the writer's (a copy takes fresh jitter); a copy starts with no comments.
+        const { id, index, seed, commentCardIds, ...rest } = el;
         expect(partials[0]).toEqual({ ...rest, commentCardIds: '' });
     });
 

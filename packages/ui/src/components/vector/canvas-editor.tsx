@@ -1321,8 +1321,8 @@ export function CanvasEditor({
                 // Only an arrow label opens the overlay, so the element under edit keeps its
                 // shaft/heads and hides just the label the textarea draws (render text='').
                 if (editing?.id === el.id && el.type === 'arrow') return node(renderEl({ ...el, text: '' }));
-                // The box being edited draws nothing of its own: the in-place editor inside its layer
-                // IS the rendering, painted with the same CSS the renderer would have emitted.
+                // The layer still paints the box's backdrop; only its text body gives way to the
+                // in-place editor inside it, styled with the same CSS the renderer would have emitted.
                 if (el.id === richTextEditId) {
                     const Editor = ELEMENT_KIND_UI[el.type].InPlaceEditor;
                     return Editor

@@ -11,12 +11,8 @@ import { isTransparentColor } from './fill';
 import { orderByFractionalIndex } from './fractional-index';
 import { type Box, round } from './geometry';
 import { ELEMENT_KINDS } from './kinds';
-import { RICH_TEXT_CLASS } from './scene-layers';
+import { RICH_TEXT_CLASS, SVG_NS } from './scene-layers';
 import type { VectorElement, VectorScene } from './types';
-
-// The SVG namespace, one spelling for every surface that writes it: the documents this module
-// serializes and the live <svg> nodes the canvas mounts.
-export const SVG_NS = 'http://www.w3.org/2000/svg';
 
 // The margin left around a drawing, so a standalone SVG and a compositor page frame it alike.
 // sceneBounds is the geometric union of the element boxes and the derived elbow routes; it does not
@@ -77,10 +73,11 @@ export function elementToSvg(
     // arrowRoute self-guards (not an arrow, or not elbow ⇒ undefined), so no element-type test is needed
     // here — and none survives anywhere outside kinds/.
     const out = ELEMENT_KINDS[el.type].render(el, { resolveMedia: opts.resolveMedia, route: arrowRoute(el, byId) });
+    // The backdrop is already in the element's local frame, so it rides in the same <g>, before the text.
     const body =
-        'svg' in out
-            ? out.svg
-            : `<foreignObject x="0" y="0" width="${round(el.width)}" height="${round(el.height)}" overflow="visible"><div xmlns="http://www.w3.org/1999/xhtml" class="${RICH_TEXT_CLASS}" style="${escapeXml(out.style)}">${HTML_WRAPPER_RESET}${out.html}</div></foreignObject>`;
+        'html' in out
+            ? `${out.svg}<foreignObject x="0" y="0" width="${round(el.width)}" height="${round(el.height)}" overflow="visible"><div xmlns="http://www.w3.org/1999/xhtml" class="${RICH_TEXT_CLASS}" style="${escapeXml(out.style)}">${HTML_WRAPPER_RESET}${out.html}</div></foreignObject>`
+            : out.svg;
     if (body === '') return '';
     return `${groupOpen(el)}${body}</g>`;
 }

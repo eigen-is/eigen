@@ -4,7 +4,6 @@ import { elementLayer, layerBoxCss, layerInnerHtml, RICH_TEXT_CLASS, sceneLayers
 import {
     DEFAULT_ARROW_PROPS,
     DEFAULT_ELEMENT_PROPS,
-    DEFAULT_SKETCH_PROPS,
     type VectorArrowElement,
     type VectorImageElement,
 } from '../../vector/types';
@@ -26,8 +25,8 @@ describe('sceneLayers', () => {
     test('svg content is the UNPOSITIONED fragment — the box carries the position', () => {
         const layers = sceneLayers(scene([shape({ id: 'a', type: 'rectangle', x: 30, y: 40, angle: 25 })]));
         const content = layers[0].content;
-        expect('svg' in content && content.svg).not.toContain('translate(');
-        expect('svg' in content && content.svg).not.toContain('rotate(');
+        expect(!('html' in content) && content.svg).not.toContain('translate(');
+        expect(!('html' in content) && content.svg).not.toContain('rotate(');
     });
 
     test('rich text is the only html content, with its box style', () => {
@@ -37,10 +36,12 @@ describe('sceneLayers', () => {
         expect('html' in content && content.style).toContain('font-family');
     });
 
-    test('padding rides the box style, and only when the box has some', () => {
-        const padded = sceneLayers(scene([richtext({ id: 't', html: '<p>hi</p>', padding: 12 })]))[0].content;
+    test('the inset rides the box style, and only when the box has one', () => {
+        // Unbordered, so the inset is the user's padding alone (a drawn border adds its width to it).
+        const box = { id: 't', html: '<p>hi</p>', strokeColor: 'transparent' };
+        const padded = sceneLayers(scene([richtext({ ...box, padding: 12 })]))[0].content;
         expect('html' in padded && padded.style).toContain('padding:12px;box-sizing:border-box');
-        const plain = sceneLayers(scene([richtext({ id: 't', html: '<p>hi</p>' })]))[0].content;
+        const plain = sceneLayers(scene([richtext(box)]))[0].content;
         expect('html' in plain && plain.style).not.toContain('padding');
     });
 
@@ -85,16 +86,19 @@ describe('sceneLayers', () => {
         };
         const pending = sceneLayers(scene([img]));
         expect(pending.map((l) => l.id)).toEqual(['img']);
-        expect('svg' in pending[0].content && pending[0].content.svg).not.toContain('<image');
+        expect(!('html' in pending[0].content) && pending[0].content.svg).not.toContain('<image');
         const resolved = sceneLayers(scene([img]), { resolveMedia: () => 'data:image/png;base64,AAA' });
         expect(resolved.map((l) => l.id)).toEqual(['img']);
-        expect('svg' in resolved[0].content && resolved[0].content.svg).toContain('href="data:image/png;base64,AAA"');
+        expect(!('html' in resolved[0].content) && resolved[0].content.svg).toContain(
+            'href="data:image/png;base64,AAA"',
+        );
     });
 
     test('an elbow arrow renders through its scene-derived route, not its stored endpoints', () => {
         const arrow: VectorArrowElement = {
             ...DEFAULT_ELEMENT_PROPS,
-            ...DEFAULT_SKETCH_PROPS,
+            roughness: 1,
+            seed: 0,
             ...DEFAULT_ARROW_PROPS,
             id: 'ar',
             type: 'arrow',
@@ -119,7 +123,7 @@ describe('sceneLayers', () => {
         const content = layers[2].content;
         // Rendered without the scene there is no route to derive, so the same arrow draws differently.
         const unrouted = elementLayer(arrow)?.content;
-        expect('svg' in content && content.svg).not.toBe(unrouted && 'svg' in unrouted && unrouted.svg);
+        expect(!('html' in content) && content.svg).not.toBe(unrouted && !('html' in unrouted) && unrouted.svg);
         expect(layers[2].box).toEqual({ x: 100, y: 30, width: 200, height: 160, angle: 0 });
     });
 
@@ -136,7 +140,7 @@ describe('elementLayer', () => {
         expect(layer?.box).toEqual({ x: 12, y: 34, width: 100, height: 50, angle: 30 });
         expect(layer?.opacity).toBe(60);
         // The fragment must NOT carry the placing transform — the box does.
-        expect(layer && 'svg' in layer.content && layer.content.svg).not.toContain('translate(12 34)');
+        expect(layer && !('html' in layer.content) && layer.content.svg).not.toContain('translate(12 34)');
     });
 
     test('an element whose content renders nothing is not a layer', () => {
@@ -167,30 +171,41 @@ describe('elementLayer', () => {
         expect(sceneLayers(framed).map((l) => l.id)).toEqual(['b', 'a', 'c']);
     });
 
-    test('layerInnerHtml wraps rich text in the same styled div the foreignObject arm emits', () => {
-        const html = layerInnerHtml({ html: '<p>hi</p>', style: 'color:#111;width:100%' });
+    test('an unpainted rich-text box is the styled div alone', () => {
+        const html = layerInnerHtml({ html: '<p>hi</p>', style: 'color:#111;width:100%', svg: '' });
         expect(html).toBe(`<div class="${RICH_TEXT_CLASS}" style="color:#111;width:100%"><p>hi</p></div>`);
+    });
+
+    test('a painted box draws its backdrop first, and the text div stacks above it', () => {
+        const html = layerInnerHtml({ html: '<p>hi</p>', style: 'color:#111', svg: '<path d="M0 0"/>' });
+        expect(html.startsWith('<svg xmlns="http://www.w3.org/2000/svg"')).toBe(true);
+        expect(html).toContain('<path d="M0 0"/>');
+        expect(html).toContain(`</svg><div class="${RICH_TEXT_CLASS}" style="color:#111;position:relative">`);
     });
 
     test('a rich-text body carries the shared class, so lists and quotes are styled', () => {
         const layer = elementLayer(richtext({ id: 't', html: '<ul><li>one</li></ul>' }));
         expect(layer).not.toBeNull();
         const html = layer === null ? '' : layerInnerHtml(layer.content);
-        expect(html.startsWith(`<div class="${RICH_TEXT_CLASS}" style="`)).toBe(true);
+        expect(html).toContain(`<div class="${RICH_TEXT_CLASS}" style="`);
         expect(html).toContain('<ul><li>one</li></ul>');
     });
 
-    test('an svg body is the fragment itself, unwrapped', () => {
+    test('an svg body carries no rich-text wrapper', () => {
         const layer = elementLayer(shape({ id: 'r', type: 'rectangle' }));
         expect(layer === null ? '' : layerInnerHtml(layer.content)).not.toContain(RICH_TEXT_CLASS);
     });
 
     test('layerInnerHtml escapes the style attribute', () => {
-        expect(layerInnerHtml({ html: '', style: 'font-family:"x"' })).toContain('font-family:&quot;x&quot;');
+        expect(layerInnerHtml({ html: '', style: 'font-family:"x"', svg: '' })).toContain('font-family:&quot;x&quot;');
     });
 
-    test('layerInnerHtml passes an svg fragment through untouched', () => {
-        expect(layerInnerHtml({ svg: '<path d="M0 0"/>' })).toBe('<path d="M0 0"/>');
+    test('layerInnerHtml gives an svg fragment the viewport a DOM host mounts it in', () => {
+        const html = layerInnerHtml({ svg: '<path d="M0 0"/>' });
+        expect(html.startsWith('<svg xmlns="http://www.w3.org/2000/svg"')).toBe(true);
+        expect(html).toContain('min-width:1px');
+        expect(html).toContain('overflow:visible');
+        expect(html).toContain('<path d="M0 0"/>');
     });
 });
 
