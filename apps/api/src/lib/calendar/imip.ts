@@ -5,9 +5,11 @@ import type { AddressObject, Attachment, CalendarInvite } from '@workspace/lib/t
 import { externalOwnerId } from '@workspace/lib/types/owner';
 import { parseIcs } from '../caldav/ical-parse';
 import { serializeEventForImip } from '../caldav/ical-serialize';
+import { getMailDomain } from '../config/server-config';
 import { renderEigenEmail } from '../core/mail-template';
 import type { OutboundICalEvent, OutboundMail } from '../core/mailer';
 import type { Home } from '../home';
+import { verifyImipSender } from '../mail/imip-auth';
 import { computeOccurrenceTimes } from './recurrence';
 import type { ReceiveInvitationPayload } from './types';
 
@@ -182,7 +184,10 @@ export function summarizeCalendarInvite(attachment: Attachment): CalendarInvite 
     }
 }
 
-export function processInboundImip(home: Home, mail: { attachments: Attachment[]; from?: AddressObject }): void {
+export function processInboundImip(
+    home: Home,
+    mail: { attachments: Attachment[]; from?: AddressObject; authenticationResults?: string[] },
+): void {
     const calAttachment = extractCalendarAttachment(mail);
     if (!calAttachment) return;
 
@@ -190,10 +195,19 @@ export function processInboundImip(home: Home, mail: { attachments: Attachment[]
     const method = parsedMethod ?? calAttachment.method;
     if (!method || events.length === 0) return;
 
-    // The ICS body carries attacker-controlled identities: a forged REPLY (UIDs ship in every invite)
-    // could set another attendee's status, and a forged REQUEST/CANCEL could inject or drop events under
-    // a spoofed organizer. Bind every mutation to the envelope sender; fail closed if it's unknown.
+    // Every mutation below binds to the `From:` address (a forged REPLY could set another attendee's
+    // status, a forged REQUEST/CANCEL could inject or drop events under a spoofed organizer). That
+    // binding is only trustworthy once the sender is authenticated, so act automatically only when our
+    // own verifying MTA recorded an aligned DKIM pass in an Authentication-Results header. Fail closed
+    // on anything else — no header, a fail, an unaligned domain, or a header forged from outside — and
+    // leave the invite as a plain calendar attachment instead of applying it.
     const sender = mail.from?.value?.[0]?.address?.toLowerCase() ?? null;
+    const verdict = verifyImipSender(mail.authenticationResults, getMailDomain(), sender?.split('@')[1] ?? null);
+    if (!verdict.verified) {
+        console.info(`iMIP: not acting on ${method} from ${sender ?? 'unknown sender'} — ${verdict.reason}`);
+        return;
+    }
+
     const sentBy = (email: string | undefined): email is string => !!sender && email?.toLowerCase() === sender;
 
     const calendar = home.calendar;
@@ -249,7 +263,7 @@ export function processInboundImip(home: Home, mail: { attachments: Attachment[]
                     });
                 }
             } else {
-                // New invites are attributed to the sender, so the ICS organizer must equal the envelope From.
+                // New invites are attributed to the sender, so the ICS organizer must equal the From address.
                 const organizerEmail = parsed.data?.organizer?.email;
                 if (!sentBy(organizerEmail)) continue;
                 // A lone exception REQUEST with no known master has nothing to attach to — ignore it

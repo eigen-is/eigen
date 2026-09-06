@@ -10,8 +10,15 @@ import {
     composeUpdateEmail,
     processInboundImip,
 } from '../../lib/calendar/imip';
+import { getMailDomain } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home/get-home';
 import { app, assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
+
+// Inbound iMIP acts only on a message our verifying MTA authenticated. These helpers stand in for
+// the Authentication-Results header OpenDKIM would prepend: a DKIM pass aligned with the sender's
+// domain. getMailDomain() is read lazily (after setup writes the test domain) so the authserv-id matches.
+const arHeaderValue = (fromDomain: string) => `${getMailDomain()}; dkim=pass header.d=${fromDomain}`;
+const arHeaderLine = (fromEmail: string) => `Authentication-Results: ${arHeaderValue(fromEmail.split('@')[1])}`;
 
 const MOCK_EVENT: CalendarEvent = {
     id: 'evt-1',
@@ -277,6 +284,7 @@ describe('iMIP Inbound Processing (integration)', () => {
 
         const email = [
             'From: organizer@external.com',
+            arHeaderLine('organizer@external.com'),
             `To: ${ctx.alice.user.email}`,
             'Subject: Invitation: External Lunch',
             'MIME-Version: 1.0',
@@ -331,6 +339,7 @@ describe('iMIP Inbound Processing (integration)', () => {
 
         const email = [
             'From: organizer@external.com',
+            arHeaderLine('organizer@external.com'),
             `To: ${ctx.alice.user.email}`,
             'Subject: Cancelled: External Lunch',
             'MIME-Version: 1.0',
@@ -388,6 +397,7 @@ describe('iMIP Inbound Processing (integration)', () => {
 
         const email = [
             'From: organizer@external.com',
+            arHeaderLine('organizer@external.com'),
             `To: ${ctx.alice.user.email}`,
             'Subject: Invitation: Reversed External',
             'MIME-Version: 1.0',
@@ -558,6 +568,7 @@ describe('iMIP METHOD:REPLY inbound (integration)', () => {
 
         const replyEmail = [
             'From: reply-tester@external.com',
+            arHeaderLine('reply-tester@external.com'),
             `To: ${ctx.alice.user.email}`,
             'Subject: Accepted: Reply Flow Test',
             'MIME-Version: 1.0',
@@ -622,6 +633,7 @@ describe('iMIP RSVP Reply to External Organizer', () => {
 
         const email = [
             'From: ext-org@external.com',
+            arHeaderLine('ext-org@external.com'),
             `To: ${ctx.alice.user.email}`,
             'Subject: External RSVP Test',
             'MIME-Version: 1.0',
@@ -807,6 +819,7 @@ describe('Calendar timezone crash (audit P1-7b, integration)', () => {
         ].join('\r\n');
         const email = [
             'From: outlook-org@external.com',
+            arHeaderLine('outlook-org@external.com'),
             `To: ${ctx.alice.user.email}`,
             'Subject: Invitation: Outlook Invite',
             'MIME-Version: 1.0',
@@ -989,6 +1002,7 @@ describe('iMIP inbound sender binding (audit P1-7a)', () => {
         ].join('\r\n');
         const forgedEmail = [
             'From: attacker@evil.com',
+            arHeaderLine('attacker@evil.com'),
             `To: ${ctx.bob.user.email}`,
             'Subject: RE: Forged Reply Target',
             'MIME-Version: 1.0',
@@ -1038,6 +1052,7 @@ describe('iMIP inbound sender binding (audit P1-7a)', () => {
         ].join('\r\n');
         const forgedEmail = [
             'From: attacker@evil.com',
+            arHeaderLine('attacker@evil.com'),
             `To: ${ctx.bob.user.email}`,
             'Subject: Invitation: Forged Injected Event',
             'MIME-Version: 1.0',
@@ -1089,6 +1104,7 @@ describe('iMIP inbound sender binding (audit P1-7a)', () => {
         ].join('\r\n');
         const inviteEmail = [
             'From: real-org@corp.example',
+            arHeaderLine('real-org@corp.example'),
             `To: ${ctx.bob.user.email}`,
             'Subject: Invitation: Quarterly Review',
             'MIME-Version: 1.0',
@@ -1127,6 +1143,7 @@ describe('iMIP inbound sender binding (audit P1-7a)', () => {
         ].join('\r\n');
         const forgedEmail = [
             'From: mallory@evil.com',
+            arHeaderLine('mallory@evil.com'),
             `To: ${ctx.bob.user.email}`,
             'Subject: Updated invitation: Quarterly Review',
             'MIME-Version: 1.0',
@@ -1182,6 +1199,7 @@ describe('iMIP inbound sender binding (audit P1-7a)', () => {
             ].join('\r\n');
             const email = [
                 'From: real-org@corp.example',
+                arHeaderLine('real-org@corp.example'),
                 `To: ${ctx.bob.user.email}`,
                 'Subject: Invitation',
                 'MIME-Version: 1.0',
@@ -1260,7 +1278,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
         ics: string,
         method: ImipMethod,
         from = ORG,
-    ): { attachments: Attachment[]; from: AddressObject } => ({
+    ): { attachments: Attachment[]; from: AddressObject; authenticationResults: string[] } => ({
         attachments: [
             {
                 contentType: 'text/calendar',
@@ -1271,6 +1289,8 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             },
         ],
         from: { value: [{ address: from, name: 'Ext Org' }], text: '' },
+        // A verified sender: DKIM pass aligned with the From domain, as our MTA would record.
+        authenticationResults: [arHeaderValue(from.split('@')[1])],
     });
 
     beforeAll(async () => {

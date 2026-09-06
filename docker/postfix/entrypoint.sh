@@ -71,7 +71,11 @@ cat > /etc/opendkim/TrustedHosts <<EOF
 172.16.0.0/12
 EOF
 
-# OpenDKIM config — signs outbound mail as ${MAIL_DOMAIN}.
+# OpenDKIM config — signs outbound mail as ${MAIL_DOMAIN} and, in verify mode (Mode sv), stamps
+# inbound mail with an Authentication-Results header the API trusts for auto-processing iMIP invites.
+# AuthservID fixes that header's authserv-id to our mail domain (default would be the container
+# hostname); RemoveARFrom strips any pre-existing Authentication-Results claiming our authserv-id
+# before delivery, so an attacker can't forge one — the header the API reads is only ever ours.
 cat > /etc/opendkim.conf <<EOF
 Syslog              yes
 LogWhy              yes
@@ -83,6 +87,8 @@ KeyFile             /data/dkim/eigen.private
 Canonicalization    relaxed/simple
 UserID              opendkim
 InternalHosts       /etc/opendkim/TrustedHosts
+AuthservID          ${MAIL_DOMAIN}
+RemoveARFrom        ${MAIL_DOMAIN}
 EOF
 
 # --- Start services ---

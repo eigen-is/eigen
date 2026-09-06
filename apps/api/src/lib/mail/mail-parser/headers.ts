@@ -14,6 +14,8 @@ export type PartHeaders = Pick<
     contentDisposition: StructuredValue;
     transferEncoding: string;
     contentId: string | undefined;
+    // Raw `Authentication-Results` values in document order — the MTA prepends its own on receipt.
+    authenticationResults: string[];
 };
 
 type HeaderLine = { key: string; value: string };
@@ -41,8 +43,12 @@ export function parseHeaders(head: Buffer): PartHeaders {
     const references = lines
         .filter((line) => line.key === 'references')
         .flatMap((line) => libmime.decodeWords(line.value).split(/\s+/).filter(Boolean).map(messageIdFormat));
+    const authenticationResults = lines
+        .filter((line) => line.key === 'authentication-results')
+        .map((line) => line.value);
 
     return {
+        authenticationResults,
         contentType,
         contentDisposition,
         transferEncoding:
