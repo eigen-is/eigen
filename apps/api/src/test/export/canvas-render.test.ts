@@ -147,7 +147,7 @@ describe('renderCanvasPage', () => {
         const page = drawingPage(sceneOf('v-image'), noMedia);
         expect(page?.layers).toHaveLength(1);
         const svg = page?.layers[0].content;
-        expect(svg && 'svg' in svg && svg.svg).not.toContain('<image');
+        expect(svg && !('html' in svg) && svg.svg).not.toContain('<image');
         expect(GOLDEN_MEDIA_NAME).toBe('pixel.png');
     });
 

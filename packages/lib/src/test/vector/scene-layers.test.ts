@@ -26,8 +26,8 @@ describe('sceneLayers', () => {
     test('svg content is the UNPOSITIONED fragment — the box carries the position', () => {
         const layers = sceneLayers(scene([shape({ id: 'a', type: 'rectangle', x: 30, y: 40, angle: 25 })]));
         const content = layers[0].content;
-        expect('svg' in content && content.svg).not.toContain('translate(');
-        expect('svg' in content && content.svg).not.toContain('rotate(');
+        expect(!('html' in content) && content.svg).not.toContain('translate(');
+        expect(!('html' in content) && content.svg).not.toContain('rotate(');
     });
 
     test('rich text is the only html content, with its box style', () => {
@@ -85,10 +85,12 @@ describe('sceneLayers', () => {
         };
         const pending = sceneLayers(scene([img]));
         expect(pending.map((l) => l.id)).toEqual(['img']);
-        expect('svg' in pending[0].content && pending[0].content.svg).not.toContain('<image');
+        expect(!('html' in pending[0].content) && pending[0].content.svg).not.toContain('<image');
         const resolved = sceneLayers(scene([img]), { resolveMedia: () => 'data:image/png;base64,AAA' });
         expect(resolved.map((l) => l.id)).toEqual(['img']);
-        expect('svg' in resolved[0].content && resolved[0].content.svg).toContain('href="data:image/png;base64,AAA"');
+        expect(!('html' in resolved[0].content) && resolved[0].content.svg).toContain(
+            'href="data:image/png;base64,AAA"',
+        );
     });
 
     test('an elbow arrow renders through its scene-derived route, not its stored endpoints', () => {
@@ -119,7 +121,7 @@ describe('sceneLayers', () => {
         const content = layers[2].content;
         // Rendered without the scene there is no route to derive, so the same arrow draws differently.
         const unrouted = elementLayer(arrow)?.content;
-        expect('svg' in content && content.svg).not.toBe(unrouted && 'svg' in unrouted && unrouted.svg);
+        expect(!('html' in content) && content.svg).not.toBe(unrouted && !('html' in unrouted) && unrouted.svg);
         expect(layers[2].box).toEqual({ x: 100, y: 30, width: 200, height: 160, angle: 0 });
     });
 
@@ -136,7 +138,7 @@ describe('elementLayer', () => {
         expect(layer?.box).toEqual({ x: 12, y: 34, width: 100, height: 50, angle: 30 });
         expect(layer?.opacity).toBe(60);
         // The fragment must NOT carry the placing transform — the box does.
-        expect(layer && 'svg' in layer.content && layer.content.svg).not.toContain('translate(12 34)');
+        expect(layer && !('html' in layer.content) && layer.content.svg).not.toContain('translate(12 34)');
     });
 
     test('an element whose content renders nothing is not a layer', () => {
@@ -180,7 +182,7 @@ describe('elementLayer', () => {
         expect(html).toContain('<ul><li>one</li></ul>');
     });
 
-    test('an svg body is the fragment itself, unwrapped', () => {
+    test('an svg body carries no rich-text wrapper', () => {
         const layer = elementLayer(shape({ id: 'r', type: 'rectangle' }));
         expect(layer === null ? '' : layerInnerHtml(layer.content)).not.toContain(RICH_TEXT_CLASS);
     });
@@ -189,8 +191,12 @@ describe('elementLayer', () => {
         expect(layerInnerHtml({ html: '', style: 'font-family:"x"' })).toContain('font-family:&quot;x&quot;');
     });
 
-    test('layerInnerHtml passes an svg fragment through untouched', () => {
-        expect(layerInnerHtml({ svg: '<path d="M0 0"/>' })).toBe('<path d="M0 0"/>');
+    test('layerInnerHtml gives an svg fragment the viewport a DOM host mounts it in', () => {
+        const html = layerInnerHtml({ svg: '<path d="M0 0"/>' });
+        expect(html.startsWith('<svg xmlns="http://www.w3.org/2000/svg"')).toBe(true);
+        expect(html).toContain('min-width:1px');
+        expect(html).toContain('overflow:visible');
+        expect(html).toContain('<path d="M0 0"/>');
     });
 });
 
