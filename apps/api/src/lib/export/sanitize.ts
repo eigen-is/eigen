@@ -99,7 +99,7 @@ export function sanitizeExportHtml(html: string, options?: SanitizeOptions): str
 // .html, the sheet WeasyPrint prints, the .svg file. Nothing a rich-text box legitimately holds is a
 // style element; <link>, <meta> and <base> are not in DOMPurify's allowlist to begin with. The
 // assembled document cannot forbid the tag instead: it carries the generated @font-face block.
-const RICH_TEXT_TAGS: SanitizeConfig = { FORBID_TAGS: ['style'] };
+const FORBID_STYLE_TAG: SanitizeConfig = { FORBID_TAGS: ['style'] };
 
 // Every canvas scene element that carries an `html` body, with that body filtered: DOMPurify plus the
 // shared restriction to data: refs, so nothing a collaborator wrote in it can fetch from anywhere.
@@ -109,7 +109,7 @@ export function sanitizeSceneHtml(scene: VectorScene): VectorScene {
     return {
         ...scene,
         elements: scene.elements.map((el) =>
-            'html' in el ? { ...el, html: sanitizeExportHtml(el.html, RICH_TEXT_TAGS) } : el,
+            'html' in el ? { ...el, html: sanitizeExportHtml(el.html, FORBID_STYLE_TAG) } : el,
         ),
     };
 }

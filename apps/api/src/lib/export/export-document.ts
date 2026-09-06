@@ -59,11 +59,11 @@ export async function exportDocument(
     // The container TYPE gates the dispatch: mimeType is caller-controlled on upload, so a plain
     // file wearing an eigen mime falls through to the 400 rather than into a render with no data.db.
     const containerMime = isCollabType(path.type) ? path.mimeType : '';
-    if (containerMime === DRIVE_MIME_DOC && offers(EIGEN_DOC_TYPE_INFO.doc, format)) {
+    if (containerMime === DRIVE_MIME_DOC && offers(EIGEN_DOC_TYPE_INFO.doc.exportFormats, format)) {
         const envelope = EXPORT_ENVELOPES[format];
         return serveExport({ documentType: 'eigendoc', format: envelope.workerFormat }, envelope, mount, path, signal);
     }
-    if (containerMime === DRIVE_MIME_SHEETS && offers(EIGEN_DOC_TYPE_INFO.sheets, format)) {
+    if (containerMime === DRIVE_MIME_SHEETS && offers(EIGEN_DOC_TYPE_INFO.sheets.exportFormats, format)) {
         const envelope = EXPORT_ENVELOPES[format];
         return serveExport(
             { documentType: 'eigensheets', format: envelope.workerFormat },
@@ -73,7 +73,7 @@ export async function exportDocument(
             signal,
         );
     }
-    if (containerMime === DRIVE_MIME_SLIDES && offers(EIGEN_DOC_TYPE_INFO.slides, format)) {
+    if (containerMime === DRIVE_MIME_SLIDES && offers(EIGEN_DOC_TYPE_INFO.slides.exportFormats, format)) {
         const envelope = EXPORT_ENVELOPES[format];
         return serveExport(
             { documentType: 'eigenslides', format: envelope.workerFormat },
@@ -83,7 +83,7 @@ export async function exportDocument(
             signal,
         );
     }
-    if (containerMime === DRIVE_MIME_VECTOR && offers(EIGEN_DOC_TYPE_INFO.vector, format)) {
+    if (containerMime === DRIVE_MIME_VECTOR && offers(EIGEN_DOC_TYPE_INFO.vector.exportFormats, format)) {
         const envelope = EXPORT_ENVELOPES[format];
         return serveExport(
             { documentType: 'eigenvector', format: envelope.workerFormat },
@@ -98,8 +98,8 @@ export async function exportDocument(
 
 // The gate AND the narrowing: the type's own list is what the Download menus offer, and each entry
 // narrows to a literal, so a format added there without a Worker envelope for it fails to compile.
-function offers<const T extends readonly string[]>(info: { exportFormats: T }, format: string): format is T[number] {
-    return info.exportFormats.includes(format);
+function offers<T extends readonly string[]>(formats: T, format: string): format is T[number] {
+    return formats.includes(format);
 }
 
 async function serveExport(
