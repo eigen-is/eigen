@@ -1,5 +1,5 @@
 import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES, DRIVE_MIME_VECTOR } from '@workspace/lib/types';
-import { type DrivePath, isCollabType, stripEigenExtension } from '@workspace/lib/types/drive';
+import { type DrivePath, EIGEN_DOC_TYPE_INFO, isCollabType, stripEigenExtension } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
 import type {
     DocumentExportFormat,
@@ -59,11 +59,11 @@ export async function exportDocument(
     // The container TYPE gates the dispatch: mimeType is caller-controlled on upload, so a plain
     // file wearing an eigen mime falls through to the 400 rather than into a render with no data.db.
     const containerMime = isCollabType(path.type) ? path.mimeType : '';
-    if (containerMime === DRIVE_MIME_DOC && (format === 'html' || format === 'pdf' || format === 'docx')) {
+    if (containerMime === DRIVE_MIME_DOC && offers(EIGEN_DOC_TYPE_INFO.doc, format)) {
         const envelope = EXPORT_ENVELOPES[format];
         return serveExport({ documentType: 'eigendoc', format: envelope.workerFormat }, envelope, mount, path, signal);
     }
-    if (containerMime === DRIVE_MIME_SHEETS && (format === 'html' || format === 'pdf' || format === 'xlsx')) {
+    if (containerMime === DRIVE_MIME_SHEETS && offers(EIGEN_DOC_TYPE_INFO.sheets, format)) {
         const envelope = EXPORT_ENVELOPES[format];
         return serveExport(
             { documentType: 'eigensheets', format: envelope.workerFormat },
@@ -73,7 +73,7 @@ export async function exportDocument(
             signal,
         );
     }
-    if (containerMime === DRIVE_MIME_SLIDES && (format === 'html' || format === 'pdf')) {
+    if (containerMime === DRIVE_MIME_SLIDES && offers(EIGEN_DOC_TYPE_INFO.slides, format)) {
         const envelope = EXPORT_ENVELOPES[format];
         return serveExport(
             { documentType: 'eigenslides', format: envelope.workerFormat },
@@ -83,7 +83,7 @@ export async function exportDocument(
             signal,
         );
     }
-    if (containerMime === DRIVE_MIME_VECTOR && (format === 'svg' || format === 'pdf')) {
+    if (containerMime === DRIVE_MIME_VECTOR && offers(EIGEN_DOC_TYPE_INFO.vector, format)) {
         const envelope = EXPORT_ENVELOPES[format];
         return serveExport(
             { documentType: 'eigenvector', format: envelope.workerFormat },
@@ -94,6 +94,12 @@ export async function exportDocument(
         );
     }
     throw new ApiError(400, `Format "${format}" is not supported for ${path.mimeType}`);
+}
+
+// The gate AND the narrowing: the type's own list is what the Download menus offer, and each entry
+// narrows to a literal, so a format added there without a Worker envelope for it fails to compile.
+function offers<const T extends readonly string[]>(info: { exportFormats: T }, format: string): format is T[number] {
+    return info.exportFormats.includes(format);
 }
 
 async function serveExport(

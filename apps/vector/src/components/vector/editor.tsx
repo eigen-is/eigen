@@ -132,7 +132,6 @@ export function VectorEditor({
                         setToolLocked={setToolLocked}
                         onInsertImage={canEdit && mediaFolderId ? () => setImagePickerOpen(true) : undefined}
                         onAccessDialogOpen={onAccessDialogOpen}
-                        exportFormats={['svg', 'pdf']}
                         createLabel="New vector"
                         createIcon={Diamond}
                         createType="vector"

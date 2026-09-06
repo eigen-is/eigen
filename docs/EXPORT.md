@@ -158,16 +158,20 @@ bundles fine and stays in.
 `useExportDocument()` returns `{ exportDocument, isExporting }`. Handles fetch, blob download, filename
 extraction from Content-Disposition, and error handling via `onMutationError`.
 
+### Which formats a type offers
+
+`EIGEN_DOC_TYPE_INFO[type].exportFormats` (`packages/lib/src/types/drive.ts`) is the one list, in menu order: `docx/pdf/html` for a doc, `xlsx/pdf/html` for a sheet, `pdf/html` for a deck, `svg/pdf` for a drawing, nothing for stickies and chat. `exportFormatsFor(type)` reads it. The export route gates on the same list — and each entry narrows to a literal there, so a format added to a type without a Worker envelope for it fails to compile rather than reaching a user as a 400.
+
 ### FileMenu (`packages/ui/src/components/layout/toolbar/file-menu.tsx`)
 
-Export submenu rendered via `onExport` prop, positioned after Rename:
+Export submenu rendered when the host passes `onExport` and the type offers formats, positioned after Rename:
 ```
 New document > Open > Rename > Export > [separator] > Share > ... > Print > Delete
 ```
 
 ### Drive Context Menu (`packages/ui/src/components/drive/drive-table.tsx`)
 
-Export submenu for eigendoc, eigenslides, eigensheets and eigenvector files, driven by `onExport` callback. The offered formats follow the type: `docx/pdf/html` for a doc, `xlsx/pdf/html` for a sheet, `svg/pdf` for a drawing, `pdf/html` for everything else.
+The same submenu on a drive row, driven by the `onExport` callback and the same per-type list.
 
 ## Dependencies
 

@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1309 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1311 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -448,7 +448,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (317)
+## Types (318)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -573,6 +573,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EmailSignature` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `EmailSummary` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `EventData` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
+| `ExportFormat` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `FileEditorContent` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `FileEvent` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `FileEventDetailsMap` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
@@ -770,7 +771,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (575)
+## Utilities & constants (576)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1051,6 +1052,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EIGEN_DOC_TYPES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EIGEN_DOCUMENT_TYPES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EMPTY_S3` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
+| `exportFormatsFor` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `externalOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `getEigenDocInfoByMime` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `getEigenDocInfoByType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |

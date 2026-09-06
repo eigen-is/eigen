@@ -327,7 +327,6 @@ function SlideEditorInner({
                     setToolLocked={setToolLocked}
                     onInsertImage={canEdit && mediaFolderId ? () => setImagePickerOpen(true) : undefined}
                     onAccessDialogOpen={onAccessDialogOpen}
-                    exportFormats={['pdf', 'html']}
                     createLabel="New slides"
                     createIcon={Presentation}
                     createType="slides"

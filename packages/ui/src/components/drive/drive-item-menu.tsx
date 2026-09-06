@@ -1,6 +1,6 @@
 import { getDriveItemUrl, getDriveShareUrl, openMailComposeWith } from '@workspace/lib/api';
 import { copyToClipboard } from '@workspace/lib/clipboard';
-import { type DrivePath, isFolderType, isOpenable } from '@workspace/lib/types';
+import { type DrivePath, type ExportFormat, exportFormatsFor, isFolderType, isOpenable } from '@workspace/lib/types';
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
@@ -41,7 +41,7 @@ type DriveItemMenuItemsProps = {
     onQuickLook?: (item: DrivePath) => void;
     onDownload?: (item: DrivePath) => void;
     onConvert?: (item: DrivePath, target: 'eigensheets' | 'eigendoc') => void;
-    onExport?: (item: DrivePath, format: string) => void;
+    onExport?: (item: DrivePath, format: ExportFormat) => void;
     onRename?: (item: DrivePath) => void;
     onMoveTo?: (items: DrivePath[]) => void;
     onCopyTo?: (items: DrivePath[]) => void;
@@ -79,9 +79,9 @@ export function DriveItemMenuItems({
     const canDownloadFile = item.type === 'file' && !!onDownload;
     const canConvertXlsx = item.type === 'file' && nameLower.endsWith('.xlsx') && !!onConvert;
     const canConvertDocx = item.type === 'file' && nameLower.endsWith('.docx') && !!onConvert;
-    const canExport =
-        (item.type === 'doc' || item.type === 'slides' || item.type === 'sheets' || item.type === 'vector') &&
-        !!onExport;
+    // Which formats a type offers is the registry's answer, so this menu and the editors' File menu
+    // draw the same rows and the export route gates on the same list.
+    const exportFormats = exportFormatsFor(item.type);
     const accessible = !!item.acl?.length || item.visibility !== 'private';
 
     const { direct, label, isPending, toggle } = useWatchToggle(item.ownerId, item.mountId, item.id);
@@ -115,7 +115,7 @@ export function DriveItemMenuItems({
             {(canDownloadFile ||
                 canConvertXlsx ||
                 canConvertDocx ||
-                canExport ||
+                exportFormats.length > 0 ||
                 !!onRename ||
                 !!onMoveTo ||
                 !!onCopyTo ||
@@ -138,21 +138,14 @@ export function DriveItemMenuItems({
                     Convert to Document
                 </DropdownMenuItem>
             )}
-            {canExport && onExport && (
+            {exportFormats.length > 0 && onExport && (
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>
                         <FileDown className="h-4 w-4 mr-2" />
                         Download
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent>
-                        {(item.type === 'doc'
-                            ? ['docx', 'pdf', 'html']
-                            : item.type === 'sheets'
-                              ? ['xlsx', 'pdf', 'html']
-                              : item.type === 'vector'
-                                ? ['svg', 'pdf']
-                                : ['pdf', 'html']
-                        ).map((format) => (
+                        {exportFormats.map((format) => (
                             <DropdownMenuItem key={format} onClick={run(() => onExport(item, format))}>
                                 {formatDownloadLabel(format)}
                             </DropdownMenuItem>
