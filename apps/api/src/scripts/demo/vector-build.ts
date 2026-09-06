@@ -7,17 +7,14 @@
 import { basename } from 'node:path';
 import { textToParagraphHtml } from '@workspace/lib/html';
 import {
-    baseDefaultsFor,
     bindingAnchor,
     DEFAULT_ARROW_PROPS,
     DEFAULT_CORNERS,
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_FILL_STYLE,
     DEFAULT_LINE_ROUNDNESS,
-    DEFAULT_OBJECT_FIT,
     DEFAULT_SKETCH_PROPS,
     ELEMENT_FIELDS,
-    ELEMENT_KINDS,
     elbowBindPoint,
     generateNKeysBetween,
     getFontMetrics,
@@ -32,15 +29,23 @@ import {
     VECTOR_STYLE_DEFAULTS,
     type VectorArrowElement,
     type VectorElement,
-    type VectorElementBase,
-    type VectorElementType,
     type VectorImageElement,
     type VectorLinearElement,
     type VectorRichTextElement,
     type VectorShapeElement,
 } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
-import { type CanvasSide, mulberry32, SIDE_INDEX, settleEndpoints, toYMap, ZERO_BOX } from './canvas-build';
+import {
+    baseElement,
+    type CanvasSide,
+    imageElement,
+    mulberry32,
+    richTextElement,
+    SIDE_INDEX,
+    settleEndpoints,
+    toYMap,
+    ZERO_BOX,
+} from './canvas-build';
 import type {
     SITE_PLAN,
     SitePlanArrow,
@@ -136,16 +141,6 @@ export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
     });
 }
 
-// The base every element shares, under the KIND's own overrides — the same table the apps create with
-// (deck-build.ts does this too), so a seeded image or text box arrives unframed rather than wearing the
-// shared 2px ink border.
-function baseElement(
-    type: VectorElementType,
-    id: string,
-): Omit<VectorElementBase, 'type' | 'x' | 'y' | 'width' | 'height' | 'angle'> {
-    return { ...baseDefaultsFor(type), id, index: '' };
-}
-
 function buildShape(s: SitePlanShape): VectorShapeElement {
     const box = {
         ...baseElement(s.kind, `el-${s.key}`),
@@ -191,18 +186,14 @@ function buildLine(l: SitePlanLine, i: number): VectorLinearElement {
 }
 
 function buildImage(im: SitePlanImage, i: number): VectorImageElement {
-    return {
-        ...baseElement('image', `el-image-${i}`),
-        type: 'image',
+    return imageElement(`el-image-${i}`, SITE_PLAN_STYLE, {
         x: im.x,
         y: im.y,
         width: im.width,
         height: im.height,
         angle: 0,
         mediaName: basename(im.file),
-        corners: DEFAULT_CORNERS,
-        objectFit: DEFAULT_OBJECT_FIT,
-    };
+    });
 }
 
 function buildArrow(
@@ -310,15 +301,12 @@ type RichTextSpec = Pick<
 >;
 
 // Both text builders go through one place: the box the seeder measured plus the typography the drawing
-// is authored in, over the rich-text kind's own defaults.
+// is authored in, over the shared rich-text factory.
 function buildRichText(id: string, text: string, box: RichTextSpec): VectorRichTextElement {
-    return {
-        ...baseElement('richtext', id),
-        ...ELEMENT_KINDS.richtext.defaults(SITE_PLAN_STYLE),
+    return richTextElement(id, SITE_PLAN_STYLE, {
         ...box,
-        type: 'richtext',
         html: textToParagraphHtml(text),
         // The line height measureExcalifont sized the box with, so the text fills exactly that box.
         lineHeight: getFontMetrics(SITE_PLAN_STYLE.fontFamily).lineHeight,
-    };
+    });
 }

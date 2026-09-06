@@ -7,11 +7,8 @@
 
 import { basename } from 'node:path';
 import {
-    baseDefaultsFor,
-    DEFAULT_OBJECT_FIT,
     DEFAULT_RICHTEXT_PROPS,
     ELEMENT_FIELDS,
-    ELEMENT_KINDS,
     FRAME_FIELDS,
     generateNKeysBetween,
     SLIDES_STYLE_DEFAULTS,
@@ -23,7 +20,7 @@ import {
     type VectorRichTextElement,
 } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
-import { toYMap } from './canvas-build';
+import { imageElement, richTextElement, toYMap } from './canvas-build';
 import { DECK_INK, type DeckImage, type DeckSlide, type DeckText } from './content';
 
 // The deck's style table: the slides app's own, in the deck's ink — what an editor-authored element inherits.
@@ -70,12 +67,7 @@ export function buildDeckDoc(doc: Y.Doc, slides: DeckSlide[]): void {
 }
 
 function buildText(t: DeckText, slideKey: string, frameId: string, i: number): VectorRichTextElement {
-    return {
-        ...baseDefaultsFor('richtext'),
-        ...ELEMENT_KINDS.richtext.defaults(DECK_STYLE),
-        id: `el-${slideKey}-text-${i}`,
-        type: 'richtext',
-        index: '',
+    return richTextElement(`el-${slideKey}-text-${i}`, DECK_STYLE, {
         frameId,
         x: t.x,
         y: t.y,
@@ -89,15 +81,11 @@ function buildText(t: DeckText, slideKey: string, frameId: string, i: number): V
         color: t.color ?? DECK_STYLE.color,
         textAlign: t.align ?? DEFAULT_RICHTEXT_PROPS.textAlign,
         verticalAlign: t.valign ?? DEFAULT_RICHTEXT_PROPS.verticalAlign,
-    };
+    });
 }
 
 function buildImage(im: DeckImage, slideKey: string, frameId: string, i: number): VectorImageElement {
-    return {
-        ...baseDefaultsFor('image'),
-        id: `el-${slideKey}-image-${i}`,
-        type: 'image',
-        index: '',
+    return imageElement(`el-${slideKey}-image-${i}`, DECK_STYLE, {
         frameId,
         x: im.x,
         y: im.y,
@@ -105,7 +93,5 @@ function buildImage(im: DeckImage, slideKey: string, frameId: string, i: number)
         height: im.height,
         angle: 0,
         mediaName: basename(im.file),
-        corners: DECK_STYLE.corners,
-        objectFit: DEFAULT_OBJECT_FIT,
-    };
+    });
 }

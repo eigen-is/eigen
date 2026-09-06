@@ -1,4 +1,17 @@
-import { followBindings, storedFields, type VectorArrowElement, type VectorElement } from '@workspace/lib/vector';
+import {
+    type Box,
+    baseDefaultsFor,
+    ELEMENT_KINDS,
+    followBindings,
+    type StyleDefaults,
+    storedFields,
+    type VectorArrowElement,
+    type VectorElement,
+    type VectorElementBase,
+    type VectorElementType,
+    type VectorImageElement,
+    type VectorRichTextElement,
+} from '@workspace/lib/vector';
 import * as Y from 'yjs';
 
 // What the two canvas builders share. deck-build.ts and vector-build.ts write the same element
@@ -19,6 +32,37 @@ export function toYMap(source: object, fields: readonly string[]): Y.Map<unknown
     const map = new Y.Map<unknown>();
     for (const [field, value] of storedFields(source, fields)) map.set(field, value);
     return map;
+}
+
+// The base every element shares, under the KIND's own overrides — the same table the apps create with,
+// so a seeded image or text box arrives unframed rather than wearing the shared 2px ink border.
+export function baseElement(
+    type: VectorElementType,
+    id: string,
+): Omit<VectorElementBase, 'type' | 'x' | 'y' | 'width' | 'height' | 'angle'> {
+    return { ...baseDefaultsFor(type), id, index: '' };
+}
+
+// What a builder supplies on top of the kind's defaults: its box, plus whatever it overrides. `id` and
+// `type` are the factory's own, so a caller cannot make an element the registry would not recognise.
+type ElementFields<T extends VectorElement> = Omit<Partial<T>, 'id' | 'type'> & Box;
+
+// The two kinds both demos write, built the way the editor's own addElement builds them: shared base,
+// the kind's defaults under the HOST's style table, then the caller's box and overrides.
+export function richTextElement(
+    id: string,
+    style: StyleDefaults,
+    fields: ElementFields<VectorRichTextElement>,
+): VectorRichTextElement {
+    return { ...baseElement('richtext', id), ...ELEMENT_KINDS.richtext.defaults(style), type: 'richtext', ...fields };
+}
+
+export function imageElement(
+    id: string,
+    style: StyleDefaults,
+    fields: ElementFields<VectorImageElement>,
+): VectorImageElement {
+    return { ...baseElement('image', id), ...ELEMENT_KINDS.image.defaults(style), type: 'image', ...fields };
 }
 
 // Settle a bound arrow's endpoints exactly where the editor would leave them at rest, keeping the
