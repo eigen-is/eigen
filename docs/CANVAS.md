@@ -6,7 +6,7 @@
 
 `packages/lib/src/vector/types.ts`. Every stored field is a scalar or a string — arrays and objects ride JSON scalars (`points`, `pressures`, `commentCardIds`, `fill`, the bindings, `fixedSegments`) — so a Yjs element map is a flat set of primitive reads and the write/read whitelist (`ELEMENT_FIELDS`) stays a list of key names.
 
-Base fields on every element: `id`, `type`, `x`, `y`, `width`, `height`, `angle` (degrees, clockwise, y-down — SVG's `rotate()`), `index` (a fractional-index z-order string), `frameId`, `commentCardIds`, `opacity` (0..100), `locked`, `strokeColor`, `strokeWidth`, `strokeStyle`. The kinds are `rectangle`, `diamond`, `ellipse`, `image`, `richtext`, `freedraw`, `line`, `arrow`.
+Base fields on every element: `id`, `type`, `x`, `y`, `width`, `height`, `angle` (degrees, clockwise, y-down — SVG's `rotate()`), `index` (a fractional-index z-order string), `frameId`, `commentCardIds`, `opacity` (0..100), `strokeColor`, `strokeWidth`, `strokeStyle`. The kinds are `rectangle`, `diamond`, `ellipse`, `image`, `richtext`, `freedraw`, `line`, `arrow`.
 
 | Field | On | Shape |
 |---|---|---|
