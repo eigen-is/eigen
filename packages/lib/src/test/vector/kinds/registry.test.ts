@@ -49,7 +49,7 @@ describe('ELEMENT_KINDS', () => {
         bare.set('type', 'image');
         const el = readElementFromFields(bare);
         expect(el?.roughness).toBe(0);
-        expect(el?.seed).toBe(0);
+        expect(el?.seed).toBe(1);
     });
 
     test('a kind ignores an element of another kind instead of throwing', () => {

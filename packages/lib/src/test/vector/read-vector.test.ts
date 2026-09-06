@@ -452,8 +452,17 @@ describe('readVectorFromDoc', () => {
         const [neg, huge] = readVectorFromDoc(doc).elements;
         expect(neg).toMatchObject({ strokeWidth: 0 });
         expect(huge).toMatchObject({ strokeWidth: 100 });
-        expect(neg.type === 'rectangle' && [neg.roughness, neg.seed]).toEqual([0, 0]);
+        expect(neg.type === 'rectangle' && [neg.roughness, neg.seed]).toEqual([0, 1]);
         expect(huge.type === 'rectangle' && [huge.roughness, huge.seed]).toEqual([10, 2 ** 31]);
+    });
+
+    test('a missing or zero seed reads as a fixed non-zero one, so roughjs never picks its own', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'none', { type: 'rectangle', index: 'a0' });
+            writeElement(elements, 'zero', { type: 'rectangle', index: 'a1', seed: 0 });
+        });
+        const [none, zero] = readVectorFromDoc(doc).elements;
+        expect([none.seed, zero.seed]).toEqual([1, 1]);
     });
 
     test('normalizes the stored angle into [0, 360)', () => {

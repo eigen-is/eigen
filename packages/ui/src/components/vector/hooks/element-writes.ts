@@ -24,7 +24,7 @@ export function newElementId(): string {
 // A fresh roughjs jitter seed. One source: the creation paths, the duplicate pass and the draw drafts
 // must draw from the same range or a preview pops on release.
 export function randomSeed(): number {
-    return Math.floor(Math.random() * 2 ** 31);
+    return 1 + Math.floor(Math.random() * (2 ** 31 - 1));
 }
 
 // Per-type defaults: the geometry box, the shared base props, and the kind's own fields straight from

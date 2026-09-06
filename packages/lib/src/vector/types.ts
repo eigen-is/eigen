@@ -250,9 +250,10 @@ export const DEFAULT_ELEMENT_PROPS = {
     frameId: '',
     commentCardIds: '',
     // The READER's fallback, not creation's: a stored element with no roughness stays crisp in both
-    // hosts, while a new one is as sketchy as its host's style table says.
+    // hosts, while a new one is as sketchy as its host's style table says. Never 0 for the seed:
+    // roughjs reads 0 as "pick a random one", and a re-rolled seed redraws the jitter on every render.
     roughness: 0,
-    seed: 0,
+    seed: 1,
 } satisfies Pick<
     VectorElementBase,
     'strokeColor' | 'strokeWidth' | 'strokeStyle' | 'opacity' | 'frameId' | 'commentCardIds' | 'roughness' | 'seed'

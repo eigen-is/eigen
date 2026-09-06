@@ -84,7 +84,7 @@ export function roughness(v: unknown): number {
 }
 
 export function seed(v: unknown): number {
-    return clampNum(v, 0, 2 ** 31, DEFAULT_ELEMENT_PROPS.seed);
+    return clampNum(v, 1, 2 ** 31, DEFAULT_ELEMENT_PROPS.seed);
 }
 
 export function clampCoord(n: number): number {
