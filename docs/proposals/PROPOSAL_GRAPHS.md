@@ -1,5 +1,7 @@
 # Charts & Graphs: Integration Proposal
 
+> **Status:** Superseded by [PROPOSAL_GRAPHS_CANVAS.md](PROPOSAL_GRAPHS_CANVAS.md) (2026-09-07), which keeps the data-first model and bar/line/pie scope but replaces Recharts and the per-app object models with one native canvas-engine kind. Kept for the research and the phase reasoning.
+
 ## TLDR
 
 Use **Recharts** (not Nivo) for chart rendering across Sheets, Docs, and Slides. Charts are stored as JSON
