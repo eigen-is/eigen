@@ -1,4 +1,7 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { auth } from '../../lib/auth/auth';
+import { getUserByEmail } from '../../lib/user';
 import { authedRequest, getTestContext } from '../setup';
 
 describe('Auth', () => {
@@ -71,5 +74,38 @@ describe('Auth', () => {
     test('Alice and Bob are different users', () => {
         expect(ctx.alice.user.id).not.toBe(ctx.bob.user.id);
         expect(ctx.alice.user.email).not.toBe(ctx.bob.user.email);
+    });
+});
+
+describe('user create hook', () => {
+    beforeAll(async () => {
+        await getTestContext();
+    });
+
+    test('a failing default-org join does not fail the created account', async () => {
+        const email = `hook-org-fail-${randomUUID()}@test.eigen.is`;
+        // The user.create.after hook auto-joins the default org via auth.api.addMember; make it fail.
+        const spy = spyOn(auth.api, 'addMember').mockRejectedValue(new Error('boom'));
+        try {
+            await expect(
+                auth.api.signUpEmail({ body: { email, password: 'testpassword123', name: 'Hook Fail' } }),
+            ).resolves.toBeDefined();
+            expect(await getUserByEmail(email)).not.toBeNull();
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    test('a user created while org-join fails can still sign in', async () => {
+        const email = `hook-signin-${randomUUID()}@test.eigen.is`;
+        const password = 'testpassword123';
+        const spy = spyOn(auth.api, 'addMember').mockRejectedValue(new Error('boom'));
+        try {
+            await auth.api.signUpEmail({ body: { email, password, name: 'Hook SignIn' } });
+        } finally {
+            spy.mockRestore();
+        }
+        const signIn = await auth.api.signInEmail({ body: { email, password } });
+        expect(signIn.user.email).toBe(email);
     });
 });
