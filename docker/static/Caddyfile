@@ -6,9 +6,11 @@
     auto_https off
     admin off
     servers {
-        # The gateway only ever sees the host proxy over the docker bridge / loopback, so private ranges are the trust boundary.
+        # The gateway only ever sees the host proxy over the docker bridge / loopback, so private
+        # ranges are the trust boundary. Trust X-Real-IP only: it is single-valued and every host
+        # snippet overwrites it, whereas a client can prepend to X-Forwarded-For and pick its key.
         trusted_proxies static private_ranges
-        client_ip_headers X-Real-IP X-Forwarded-For
+        client_ip_headers X-Real-IP
     }
 }
 
