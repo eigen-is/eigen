@@ -105,7 +105,7 @@ Eigen doesn't lock you into its web interface. Standard protocols let you use yo
 
 ### Prerequisites
 
-- [Bun](https://bun.sh) (runtime for both server and client)
+- [Bun](https://bun.sh) (runtime for both server and client). The pinned version is in `.bun-version`; install it with `curl -fsSL https://bun.sh/install | bash -s "bun-v$(cat .bun-version)"`
 - [Git](https://git-scm.com)
 
 ### Quick start

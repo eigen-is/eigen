@@ -1,4 +1,5 @@
-FROM oven/bun:1-slim
+# Pinned, same version as .bun-version (CI) and the host: Bun 1.4.2 blows past memory late in the API suite.
+FROM oven/bun:1.3.14-slim
 
 WORKDIR /app
 
