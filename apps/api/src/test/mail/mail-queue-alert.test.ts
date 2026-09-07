@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import type { Notification } from '@workspace/lib/types/notification';
 import { getHome } from '../../lib/home';
 import { getOrgOwner } from '../../lib/user';
-import { app } from '../setup';
+import { app, ensureServer } from '../setup';
 
 function queueAlert(queued: unknown, headers: Record<string, string> = {}): Promise<Response> {
     return app.handle(
@@ -21,6 +21,7 @@ describe('Mail queue alert', () => {
     let ownerId: string;
 
     beforeAll(async () => {
+        await ensureServer();
         const owner = await getOrgOwner();
         ownerId = owner!.id;
     });
