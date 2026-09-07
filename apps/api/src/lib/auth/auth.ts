@@ -105,8 +105,18 @@ export const auth = betterAuth({
                     // looser shape through.
                     const user = hookUser as User;
                     if (user.role === 'guest') return;
-                    await authAddUserToDefaultOrg(user);
-                    await reconcileSharesForNewUser(user);
+                    // The row is committed; a failure here must not turn a created account into a 500.
+                    // Guard the two steps independently so an org-join failure still runs the reconcile.
+                    try {
+                        await authAddUserToDefaultOrg(user);
+                    } catch (error) {
+                        console.error(`Failed to auto-join new user ${user.id} to default org:`, error);
+                    }
+                    try {
+                        await reconcileSharesForNewUser(user);
+                    } catch (error) {
+                        console.error(`Failed to reconcile shares for new user ${user.id}:`, error);
+                    }
                 },
             },
             delete: {
@@ -212,20 +222,13 @@ export async function authAddUserToDefaultOrg(user: User): Promise<void> {
 
     if (!org) return;
 
-    try {
-        await auth.api.addMember({
-            body: {
-                userId: user.id,
-                organizationId: org.id,
-                role: 'member',
-            },
-        });
-    } catch (error) {
-        throw new ApiError(
-            500,
-            `Failed to auto-join user ${user.id} to default org: ${error instanceof Error ? error.message : String(error)}`,
-        );
-    }
+    await auth.api.addMember({
+        body: {
+            userId: user.id,
+            organizationId: org.id,
+            role: 'member',
+        },
+    });
 }
 
 // Membership deletion also sweeps rows whose user is already gone, so instances that
