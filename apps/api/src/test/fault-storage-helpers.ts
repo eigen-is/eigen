@@ -5,6 +5,7 @@ import type { BunFile } from 'bun';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
 import type Drive from '../lib/drive/drive';
 import { Mount } from '../lib/mount/mount';
+import { UPLOAD_PUT_TIMEOUT_MS } from '../lib/mount/upload-queue';
 import type { StorageBackend, StorageFile } from '../lib/storage';
 import { LocalStorage } from '../lib/storage/local-storage';
 
@@ -233,6 +234,12 @@ export async function countBackingRows(mount: Mount, id: string, tmpDir: string)
 
 export function shrinkPutTimeout(mount: Mount, ms: number): void {
     (mount.uploadQueue as unknown as { putTimeoutMs: number }).putTimeoutMs = ms;
+}
+
+// Restores the production PUT deadline after a shrink. A shrink is a device to make a specific PUT
+// orphan fast; a later healthy retry must not inherit that tiny deadline, or a loaded CPU orphans it too.
+export function restorePutTimeout(mount: Mount): void {
+    shrinkPutTimeout(mount, UPLOAD_PUT_TIMEOUT_MS);
 }
 
 export async function waitFor(cond: () => boolean | Promise<boolean>, timeoutMs = 2_000): Promise<void> {

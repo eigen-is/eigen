@@ -20,7 +20,7 @@ type OrphanState = { count: number; cancelled: boolean; lastAcked?: Buffer };
 // adjacent) would otherwise never resolve: the drain loop can't advance past the await, the
 // destination semaphore stays held, and backoff never triggers — four such hangs starve every mount
 // sharing the limiter. Generous so a genuinely slow-but-live PUT still completes.
-const UPLOAD_PUT_TIMEOUT_MS = 120_000;
+export const UPLOAD_PUT_TIMEOUT_MS = 120_000;
 
 export type UploadQueueDeps = {
     db: Db; // the mount's metadata.db (owns the pending_uploads table)

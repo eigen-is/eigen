@@ -11,6 +11,7 @@ import {
     type FaultStorage,
     type ParkedWrite,
     provisionDoc,
+    restorePutTimeout,
     shrinkPutTimeout,
     waitFor,
 } from '../fault-storage-helpers';
@@ -160,8 +161,10 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
         await parkedWithRows(fault, 1);
         await Bun.sleep(120); // orphan the PUT
 
-        // Retry with a healthy backend: same staged bytes re-PUT and ack.
+        // Retry with a healthy backend: same staged bytes re-PUT and ack. Restore the real PUT deadline
+        // first — the 50ms shrink only existed to orphan the first PUT; a loaded CPU can exceed it here too.
         fault.parkWrites = false;
+        restorePutTimeout(mount);
         await mount.drainPendingUploads({ flushNow: true });
         expect(mount.pendingUploadCount).toBe(0);
         expect(await countBackingRows(mount, fault, dataDbId)).toBe(1);
