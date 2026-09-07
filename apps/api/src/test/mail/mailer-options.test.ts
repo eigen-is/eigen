@@ -1,9 +1,15 @@
-import { describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type { EmailDraft } from '@workspace/lib/types/mail';
 import { renderAttachmentLinksText } from '../../lib/core/mail-template';
 import { buildMailOptions, composeRfc822, type OutboundMail } from '../../lib/core/mailer';
 import { draftToOutboundMail } from '../../lib/mail/sender';
+import { ensureServer } from '../setup';
+
+// The mail-template + sender helpers read the configured domain, written by the setup wizard.
+beforeAll(async () => {
+    await ensureServer();
+});
 
 const base: OutboundMail = { to: [{ name: '', address: 'a@x.com' }], subject: 's', text: 't' };
 

@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, spyOn, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -22,6 +22,7 @@ import {
     stageAvatar,
     validContact,
 } from '../contacts-test-helpers';
+import { ensureServer } from '../setup';
 
 afterAll(() => {
     try {
@@ -1289,6 +1290,10 @@ describe('crash recovery (durable journals)', () => {
 // Seeding the org owner into a fresh book is one-shot, latched in book.ownerSeeded once a real owner has been
 // considered — and only then, so an instance that has no owner yet still seeds the one it gets later.
 describe('owner-contact seeding (one-shot latch)', () => {
+    // getOrgOwner resolves the admin created by the setup wizard.
+    beforeAll(async () => {
+        await ensureServer();
+    });
     const ownerSeededFlag = (db: Awaited<ReturnType<typeof makeContacts>>['db']) =>
         db.select().from(contactsSchema.book).where(eq(contactsSchema.book.id, 1)).get()!.ownerSeeded;
 

@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { mkdtempSync } from 'node:fs';
 import { DRIVE_MIME_SLIDES } from '@workspace/lib/types/drive';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
 import { getHome } from '../../lib/home/get-home';
@@ -213,7 +214,7 @@ describe('Preview', () => {
 });
 
 describe('generateImagePreview', () => {
-    const tmpDir = `/tmp/eigen-preview-test-${Date.now()}`;
+    const tmpDir = mkdtempSync('/tmp/eigen-preview-test-');
 
     async function writeTempFile(name: string, data: Buffer): Promise<string> {
         const { mkdirSync } = await import('node:fs');
@@ -303,7 +304,7 @@ describe('isVideoCandidate', () => {
 
 describe('saveThumbnail (video)', () => {
     const fixtureDir = `${import.meta.dir}/../fixtures`;
-    const thumbsDir = `/tmp/eigen-video-thumbs-test-${Date.now()}`;
+    const thumbsDir = mkdtempSync('/tmp/eigen-video-thumbs-test-');
 
     test('generates a webp thumbnail for an mp4', async () => {
         const { isFfmpegAvailable } = await import('../../lib/shared/video-thumbnail');
@@ -366,7 +367,7 @@ describe('pruneOldVersions', () => {
         const { pruneOldVersions } = await import('../../lib/preview/preview-cache');
         const { existsSync, mkdirSync } = await import('node:fs');
 
-        const dir = `/tmp/eigen-prune-test-${Date.now()}`;
+        const dir = mkdtempSync('/tmp/eigen-prune-test-');
         mkdirSync(dir, { recursive: true });
 
         // pathIds are UUIDs (contain dashes) — the prefix match must not bleed across paths.
@@ -402,7 +403,7 @@ function createGetLocalDatabase(baseDir: string) {
 describe('getTextPreview (stale-while-revalidate)', () => {
     test('serves the prior version while the current one regenerates, then converges on it', async () => {
         const { mkdirSync } = await import('node:fs');
-        const tmpDir = `/tmp/eigen-stale-preview-test-${Date.now()}`;
+        const tmpDir = mkdtempSync('/tmp/eigen-stale-preview-test-');
         mkdirSync(tmpDir, { recursive: true });
 
         const config = createTestMountConfig('test-stale-preview', 'local-key');
@@ -445,7 +446,7 @@ describe('getTextPreview (stale-while-revalidate)', () => {
         // format's body would hand every post-deploy reader of an untouched document a body its
         // own CSS mis-sizes, until an edit finally regenerated it.
         const { mkdirSync, writeFileSync } = await import('node:fs');
-        const tmpDir = `/tmp/eigen-stale-format-test-${Date.now()}`;
+        const tmpDir = mkdtempSync('/tmp/eigen-stale-format-test-');
         mkdirSync(tmpDir, { recursive: true });
 
         const config = createTestMountConfig('test-stale-format', 'local-key');
@@ -473,7 +474,7 @@ describe('getTextPreview (stale-while-revalidate)', () => {
         // document. Dispatching on the mime alone sent a plain text file into the Yjs preview path,
         // where it fails and loses the plaintext preview it should have had.
         const { mkdirSync } = await import('node:fs');
-        const tmpDir = `/tmp/eigen-mime-spoof-test-${Date.now()}`;
+        const tmpDir = mkdtempSync('/tmp/eigen-mime-spoof-test-');
         mkdirSync(tmpDir, { recursive: true });
 
         const config = createTestMountConfig('test-mime-spoof', 'local-key');

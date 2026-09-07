@@ -1,46 +1,44 @@
+// test-env sets EIGEN_DATA_ROOT before the app/auth imports below open their SQLite files. Keep it first.
+import './test-env';
 import { expect } from 'bun:test';
-import { mkdirSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { treaty } from '@elysiajs/eden';
 import { type DrivePath, type MountInfo, type OrgTeam, teamOwnerId } from '@workspace/lib/types';
 import type { SSEvent } from '@workspace/lib/types/sse';
-
-const TEST_DATA_ROOT = join(import.meta.dir, '../../../../data-test');
-// clear TEST_DATA_ROOT - remove all files and directories from previous test runs
-rmSync(TEST_DATA_ROOT, { recursive: true, force: true });
-
-const TEST_DATA_DIR = join(TEST_DATA_ROOT, `test-${Date.now()}`);
-process.env['EIGEN_DATA_ROOT'] = TEST_DATA_DIR;
-process.env['API_URL'] = 'http://localhost';
-
-mkdirSync(join(TEST_DATA_DIR, 'server'), { recursive: true });
-mkdirSync(join(TEST_DATA_DIR, 'home'), { recursive: true });
-
-const { app } = await import('../app');
-
-const setupResponse = await app.handle(
-    new Request('http://localhost/setup/complete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            domain: 'test.eigen.is',
-            orgName: 'Test Organization',
-            storageType: 'local-id',
-            adminEmail: 'alice@test.eigen.is',
-            adminPassword: 'testpassword123',
-            adminName: 'Alice Test',
-        }),
-    }),
-);
-if (!setupResponse.ok) {
-    throw new Error(`Setup failed (${setupResponse.status}): ${await setupResponse.text()}`);
-}
-
-const { auth } = await import('../lib/auth/auth');
-const { treaty } = await import('@elysiajs/eden');
-const { drainACLFanOuts } = await import('../lib/drive/acl-propagation');
-const { getHome } = await import('../lib/home');
+import { app } from '../app';
+import { auth } from '../lib/auth/auth';
+import { drainACLFanOuts } from '../lib/drive/acl-propagation';
+import { getHome } from '../lib/home';
+import { TEST_DATA_DIR } from './test-env';
 
 type App = typeof app;
+
+// Runs the setup wizard exactly once per worker process. No top-level await: under `bun test --parallel`
+// (which implies `--isolate`), a suspended setup module is observed mid-evaluation by the importing test
+// file, so its exports must be defined synchronously and the server booted lazily behind this gate.
+let serverReady: Promise<void> | null = null;
+export function ensureServer(): Promise<void> {
+    if (!serverReady) serverReady = bootServer();
+    return serverReady;
+}
+async function bootServer(): Promise<void> {
+    const setupResponse = await app.handle(
+        new Request('http://localhost/setup/complete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                domain: 'test.eigen.is',
+                orgName: 'Test Organization',
+                storageType: 'local-id',
+                adminEmail: 'alice@test.eigen.is',
+                adminPassword: 'testpassword123',
+                adminName: 'Alice Test',
+            }),
+        }),
+    );
+    if (!setupResponse.ok) {
+        throw new Error(`Setup failed (${setupResponse.status}): ${await setupResponse.text()}`);
+    }
+}
 
 // In-process SSE listener: subscribes to a user's Home broadcast stream and
 // collects every event until stop() is called.
@@ -133,6 +131,7 @@ async function createTestUser(email: string, password: string, name: string): Pr
 
 export async function getTestContext(): Promise<TestContext> {
     if (context) return context;
+    await ensureServer();
 
     const alice = await createTestUser('alice@test.eigen.is', 'testpassword123', 'Alice Test');
     const bob = await createTestUser('bob@test.eigen.is', 'testpassword123', 'Bob Test');
@@ -162,6 +161,7 @@ export async function getTestContext(): Promise<TestContext> {
 }
 
 export async function authedRequest(sessionToken: string, path: string, options?: RequestInit): Promise<Response> {
+    await ensureServer();
     // ACL fan-out to recipient homes is async (fire-and-forget after the mutation returns).
     // Draining here gives every test read-your-fanout consistency: a cross-user assertion
     // that follows a share/revoke/rename/trash sees the delivered mirror state, matching

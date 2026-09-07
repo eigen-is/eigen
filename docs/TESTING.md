@@ -1,6 +1,6 @@
 # Testing
 
-> **TLDR**: Every workspace keeps its tests in `<workspace>/src/test/` — nothing named `*.test.ts` lives anywhere else, and `bun scripts/check-test-layout.ts` enforces it. API integration tests use the Bun test runner + real Elysia app via `app.handle()` + Eden Treaty. No HTTP server needed. Temp data dir per run. Test users: Alice, Bob, Charlie. Run: `bun run test`.
+> **TLDR**: Every workspace keeps its tests in `<workspace>/src/test/` — nothing named `*.test.ts` lives anywhere else, and `bun scripts/check-test-layout.ts` enforces it. API integration tests use the Bun test runner + real Elysia app via `app.handle()` + Eden Treaty. No HTTP server needed. The API suite runs in parallel across worker processes, each with its own temp data dir and its own booted server. Test users: Alice, Bob, Charlie. Run: `bun run test`.
 
 ## Where tests live
 
@@ -38,12 +38,21 @@ bun test --preload ./src/test/preload.ts
 - `--preload ./src/test/preload.ts` registers an `afterAll` hook that calls `cleanup()`
 - No path argument: the layout rule already says where tests are, and a path here would mean a stray
   test file silently never runs
-- The suite needs test files to run one at a time, because they share SQLite via the Home singleton.
-  That comes free — Bun runs test files sequentially by default. This command used to carry
-  `--concurrency 1`, which never did anything: Bun has no such flag (it has `--concurrent` and
-  `--max-concurrency=<val>`), so `--concurrency` was ignored and the `1` was parsed as a positional
-  test-name filter. It went unnoticed because the `./src/test/` path argument was a second filter that
-  matched everything
+- Files run sequentially by default. `--parallel=N` is supported and safe: it implies `--isolate`, so
+  every test file evaluates in a fresh module graph, gets its own `EIGEN_DATA_ROOT` (a per-process dir
+  under `data-test/`, see below) and boots its own server on first use. No two files share a Home
+  singleton or a SQLite file, which is what makes running them concurrently safe. Setup is lazy:
+  `setup.ts` exports `ensureServer()`, and the wizard POST (`/setup/complete`) runs once per file, the
+  first time a test awaits `getTestContext()`, `authedRequest()`, or `ensureServer()`. A pure-unit test
+  that needs a setup side effect (the configured mail domain, the org owner, the auth schema) awaits one
+  of those in a `beforeAll`; it cannot rely on another file having booted the server
+- Why sequential stays the default: the per-file server boot (~1 s) is the price of `--isolate`, and it
+  eats most of the parallel gain. Measured on the 2810-test suite: sequential 166 s; `--parallel=4` (the
+  CI runner's core count) 159 s; `--parallel=6` on a 10-core laptop 125-145 s. One worker per core on a
+  high-core machine oversubscribes CPU, because many files spawn their own transform/thumbnail Worker
+  threads on top of the test worker, and heavy work then tips over Bun's 5 s default timeout. Use
+  `--parallel=6` on a machine with cores to spare; the route to a fast CI step is `--shard=i/N` across
+  jobs, where each shard is a plain sequential process that boots once
 
 ### One file at a time
 
@@ -61,11 +70,16 @@ cd apps/api && bun test --preload ./src/test/preload.ts ./src/test/drive/drive.t
 Test -> Eden Treaty / authedRequest() -> app.handle() -> Real business logic -> Temp data dir
 ```
 
-- **Data isolation**: `EIGEN_DATA_ROOT` points to `data-test/test-<timestamp>` (relative to repo root), previous runs
-  are cleaned on startup in `setup.ts`
+- **Data isolation**: `apps/api/src/test/test-env.ts` (imported first by `setup.ts`, before the app/auth modules
+  open their SQLite files) sets `EIGEN_DATA_ROOT` to `data-test/test-<pid>-<random>` — a fresh dir per worker
+  process. It prunes by age alone, once per worker process: anything under `data-test/` older than ten minutes is a
+  dead run. A live sibling's dir is never that old, so the many unit tests that keep their own
+  `data-test/test-<name>-<ts>` scratch dir survive a concurrent run
 - **Test users**: Alice (`alice@test.eigen.is`), Bob (`bob@test.eigen.is`), Charlie (`charlie@test.eigen.is`)
-- **Setup**: `apps/api/src/test/setup.ts` clears old test data, creates temp dir, runs setup wizard, creates users,
-  exports `getTestContext()` and helper functions (`authedRequest`, `drivePost`, `chatGet`, etc.)
+- **Setup**: `apps/api/src/test/setup.ts` boots the server lazily via `ensureServer()` (runs the setup wizard),
+  seeds the three users on first `getTestContext()`, and exports the helper functions (`authedRequest`,
+  `drivePost`, `chatGet`, etc.). It has no top-level `await` — under `--isolate` a suspended module would be
+  observed mid-evaluation by the importing file, so its exports are all defined synchronously
 - **Preload**: `apps/api/src/test/preload.ts` registers an `afterAll` cleanup hook
 
 ## Test Files
@@ -84,9 +98,10 @@ document transforms — run it from `apps/api` with `bun src/test/transform-benc
 
 - **Treaty**: Used for static path routes. `authedRequest()` for dynamic `:mountId` params
 - **Contacts**: `addContact`/`addLabel` return plain UUID strings. Auto-seeds user as contact on first access
-- **One shared auth DB**: `setup.ts` POSTs `/setup/complete` once for the whole run, so every test file
-  sees the same users/orgs table. Exact global count assertions (`users.length === 3`) break as soon as
-  another file creates a user — scope assertions to the entities the test itself created
+- **One auth DB per file**: under `--isolate` each test file boots its own server in its own data dir, so
+  it sees only the users/orgs it (or its `getTestContext()`) created; files share no users/orgs
+  table. Still scope assertions to the entities the test itself created: a single file that creates users
+  beyond Alice/Bob/Charlie breaks an exact global count (`users.length === 3`) the same way
 
 ## CI
 
