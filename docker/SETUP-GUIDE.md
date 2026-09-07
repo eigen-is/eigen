@@ -427,7 +427,7 @@ sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/eigen.sh
 
 **Pick this when** you don't want public ports on your host.
 
-Set `COMPOSE_PROFILES=static,mail` in `.env.production`. Eigen runs the bundled static container on `127.0.0.1:8080`; the tunnel is your edge. WebSocket and SSE pass through transparently.
+Set `COMPOSE_PROFILES=static,mail` in `.env.production`. Eigen runs the bundled static container on `127.0.0.1:8080`; the tunnel is your edge. WebSocket and SSE pass through transparently. Neither tunnel sets `X-Real-IP`, so all their visitors share one rate-limit and login-lockout bucket; put nginx, Caddy or Apache between the tunnel and the gateway if per-visitor limits matter.
 
 **Cloudflare Tunnel:**
 
