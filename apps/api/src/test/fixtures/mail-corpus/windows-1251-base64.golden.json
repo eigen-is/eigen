@@ -4,8 +4,8 @@
   "from": {
     "value": [
       {
-        "address": "sender@example.com",
-        "name": ""
+        "name": "",
+        "address": "sender@example.com"
       }
     ],
     "text": "sender@example.com"
@@ -13,14 +13,14 @@
   "to": {
     "value": [
       {
-        "address": "recipient@example.com",
-        "name": ""
+        "name": "",
+        "address": "recipient@example.com"
       }
     ],
     "text": "recipient@example.com"
   },
   "text": "Привет, как дела?",
   "html": null,
-  "textAsHtml": "<p>&Pcy;&rcy;&icy;&vcy;&iecy;&tcy;, &kcy;&acy;&kcy; &dcy;&iecy;&lcy;&acy;?</p>",
+  "textAsHtml": "<p>Привет, как дела?</p>",
   "attachments": []
 }

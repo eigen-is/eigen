@@ -1,6 +1,6 @@
+import { escapeHtml } from '@workspace/lib/html';
 import { IMIP_METHODS } from '@workspace/lib/types/calendar';
 import type { AddressObject, Attachment, ParsedMail } from '@workspace/lib/types/mail';
-import he from 'he';
 import libmime from 'libmime';
 import { decodeText, decodeTransfer } from './decode';
 import { addressesHtml, type CidImage, htmlToText, inlineCidImages, textToHtml } from './html';
@@ -75,7 +75,7 @@ export function parseMail(bytes: Buffer): ParsedMail {
             rows.push({
                 key: 'Subject',
                 text: headers.subject,
-                html: `<strong>${he.encode(headers.subject)}</strong>`,
+                html: `<strong>${escapeHtml(headers.subject)}</strong>`,
             });
         }
         if (headers.date)

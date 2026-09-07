@@ -1,5 +1,5 @@
+import { escapeHtml } from '@workspace/lib/html';
 import type { EmailAddress } from '@workspace/lib/types/mail';
-import he from 'he';
 import { convert } from 'html-to-text';
 import { findLinks } from './linkify';
 
@@ -26,18 +26,17 @@ export function textToHtml(str: string): string {
     return `<p>${body}</p>`;
 }
 
-function encode(text: string): string {
-    return he.encode(text, { useNamedReferences: true });
-}
-
 function linkifyText(str: string): string {
     const parts: string[] = [];
     let last = 0;
     for (const { start, end, href } of findLinks(str)) {
-        parts.push(encode(str.slice(last, start)), `<a href="${encode(href)}">${encode(str.slice(start, end))}</a>`);
+        parts.push(
+            escapeHtml(str.slice(last, start)),
+            `<a href="${escapeHtml(href)}">${escapeHtml(str.slice(start, end))}</a>`,
+        );
         last = end;
     }
-    parts.push(encode(str.slice(last)));
+    parts.push(escapeHtml(str.slice(last)));
     return parts.join('');
 }
 
@@ -54,9 +53,9 @@ export function addressesHtml(list: EmailAddress[]): string {
         .map((entry) => {
             let str = '<span class="mp_address_group">';
             if (entry.name)
-                str += `<span class="mp_address_name">${he.encode(entry.name)}${entry.group ? ': ' : ''}</span>`;
+                str += `<span class="mp_address_name">${escapeHtml(entry.name)}${entry.group ? ': ' : ''}</span>`;
             if (entry.address) {
-                const link = `<a href="mailto:${he.encode(entry.address)}" class="mp_address_email">${he.encode(entry.address)}</a>`;
+                const link = `<a href="mailto:${escapeHtml(entry.address)}" class="mp_address_email">${escapeHtml(entry.address)}</a>`;
                 str += entry.name ? ` &lt;${link}&gt;` : link;
             }
             if (entry.group) str += `${addressesHtml(entry.group)};`;

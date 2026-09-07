@@ -4,8 +4,8 @@
   "from": {
     "value": [
       {
-        "address": "sender@example.com",
-        "name": ""
+        "name": "",
+        "address": "sender@example.com"
       }
     ],
     "text": "sender@example.com"
@@ -13,14 +13,14 @@
   "to": {
     "value": [
       {
-        "address": "recipient@example.com",
-        "name": ""
+        "name": "",
+        "address": "recipient@example.com"
       }
     ],
     "text": "recipient@example.com"
   },
   "text": "シフトJISの本文です。",
   "html": null,
-  "textAsHtml": "<p>&#x30B7;&#x30D5;&#x30C8;JIS&#x306E;&#x672C;&#x6587;&#x3067;&#x3059;&#x3002;</p>",
+  "textAsHtml": "<p>シフトJISの本文です。</p>",
   "attachments": []
 }

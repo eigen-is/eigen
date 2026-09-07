@@ -4,8 +4,8 @@
   "from": {
     "value": [
       {
-        "address": "sender@example.com",
-        "name": ""
+        "name": "",
+        "address": "sender@example.com"
       }
     ],
     "text": "sender@example.com"
@@ -13,14 +13,14 @@
   "to": {
     "value": [
       {
-        "address": "recipient@example.com",
-        "name": ""
+        "name": "",
+        "address": "recipient@example.com"
       }
     ],
     "text": "recipient@example.com"
   },
   "text": "こんにちは、日本語のテストです。\n",
   "html": null,
-  "textAsHtml": "<p>&#x3053;&#x3093;&#x306B;&#x3061;&#x306F;&#x3001;&#x65E5;&#x672C;&#x8A9E;&#x306E;&#x30C6;&#x30B9;&#x30C8;&#x3067;&#x3059;&#x3002;</p>",
+  "textAsHtml": "<p>こんにちは、日本語のテストです。</p>",
   "attachments": []
 }

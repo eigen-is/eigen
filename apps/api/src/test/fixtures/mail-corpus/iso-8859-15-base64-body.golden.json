@@ -21,6 +21,6 @@
   },
   "text": "Price: 5 € (five euro).\nŒuvre.\n",
   "html": null,
-  "textAsHtml": "<p>Price: 5 &euro; (five euro).<br/>&OElig;uvre.</p>",
+  "textAsHtml": "<p>Price: 5 € (five euro).<br/>Œuvre.</p>",
   "attachments": []
 }

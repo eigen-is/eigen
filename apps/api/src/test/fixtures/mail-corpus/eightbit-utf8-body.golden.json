@@ -4,8 +4,8 @@
   "from": {
     "value": [
       {
-        "address": "sender@example.com",
-        "name": ""
+        "name": "",
+        "address": "sender@example.com"
       }
     ],
     "text": "sender@example.com"
@@ -13,14 +13,14 @@
   "to": {
     "value": [
       {
-        "address": "recipient@example.com",
-        "name": ""
+        "name": "",
+        "address": "recipient@example.com"
       }
     ],
     "text": "recipient@example.com"
   },
   "text": "Raw 8bit UTF-8: café €uro 日本語.\n",
   "html": null,
-  "textAsHtml": "<p>Raw 8bit UTF-8: caf&eacute; &euro;uro &#x65E5;&#x672C;&#x8A9E;.</p>",
+  "textAsHtml": "<p>Raw 8bit UTF-8: café €uro 日本語.</p>",
   "attachments": []
 }

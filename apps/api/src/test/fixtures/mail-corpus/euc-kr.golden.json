@@ -4,8 +4,8 @@
   "from": {
     "value": [
       {
-        "address": "sender@example.com",
-        "name": ""
+        "name": "",
+        "address": "sender@example.com"
       }
     ],
     "text": "sender@example.com"
@@ -13,14 +13,14 @@
   "to": {
     "value": [
       {
-        "address": "recipient@example.com",
-        "name": ""
+        "name": "",
+        "address": "recipient@example.com"
       }
     ],
     "text": "recipient@example.com"
   },
   "text": "한국어 본문입니다.",
   "html": null,
-  "textAsHtml": "<p>&#xD55C;&#xAD6D;&#xC5B4; &#xBCF8;&#xBB38;&#xC785;&#xB2C8;&#xB2E4;.</p>",
+  "textAsHtml": "<p>한국어 본문입니다.</p>",
   "attachments": []
 }
