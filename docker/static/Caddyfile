@@ -5,6 +5,11 @@
 {
     auto_https off
     admin off
+    servers {
+        # The gateway only ever sees the host proxy over the docker bridge / loopback, so private ranges are the trust boundary.
+        trusted_proxies static private_ranges
+        client_ip_headers X-Real-IP X-Forwarded-For
+    }
 }
 
 (app) {
@@ -37,8 +42,8 @@
     handle_path /eigen/* {
         reverse_proxy eigen-api:8000 {
             flush_interval -1
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {client_ip}
+            header_up X-Forwarded-For {client_ip}
             header_up X-Forwarded-Proto {scheme}
         }
     }
@@ -47,7 +52,7 @@
     # can't spoof its rate-limit bucket (matches /eigen/*).
     handle /dav/* {
         reverse_proxy eigen-api:8000 {
-            header_up X-Real-IP {remote_host}
+            header_up X-Real-IP {client_ip}
             header_up -X-Forwarded-For
         }
     }
@@ -75,7 +80,7 @@
     handle @caldav_root {
         rewrite * /dav/
         reverse_proxy eigen-api:8000 {
-            header_up X-Real-IP {remote_host}
+            header_up X-Real-IP {client_ip}
             header_up -X-Forwarded-For
         }
     }
