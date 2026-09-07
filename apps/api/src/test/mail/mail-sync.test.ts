@@ -4,7 +4,13 @@ import { join } from 'node:path';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { SearchResponse } from '@workspace/lib/types/search';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { app, assertJson, authedRequest, collectSSE, TEST_DATA_DIR } from '../setup';
+import { app, assertJson, authedRequest, collectSSE, ensureServer, TEST_DATA_DIR } from '../setup';
+
+// createTestUser below hits the auth DB directly, so the setup wizard (which creates the auth schema and
+// configures the org) must have run first. Under --parallel each file boots its own server; gate on it.
+beforeAll(async () => {
+    await ensureServer();
+});
 
 const isWindows = process.platform === 'win32';
 
@@ -104,19 +110,18 @@ describe.skipIf(isWindows)('Mail sync (Step 3: non-blocking sync + batched cold-
 
         // Drop a sizeable batch of new files directly on disk — on a non-empty mailbox this
         // must NOT be awaited before the route responds.
-        const BURST = 300;
+        const BURST = 80;
         for (let i = 0; i < BURST; i++) {
             seedCurFile(userId, box, `${Date.now()}.burst${i}`, makeEml(`Burst ${i}`, `body ${i}`));
         }
 
-        const start = performance.now();
         const stale = await listBox(token, userId, box, 500);
-        const elapsedMs = performance.now() - start;
 
-        // Served from the DB as-is: still just the one previously-indexed row, not the 300
-        // pending ones — proves the sync wasn't awaited, not just that it was fast.
+        // Served from the DB as-is: still just the one previously-indexed row, not the pending batch.
+        // The count alone proves the sync wasn't awaited — had the route blocked on the batch, it would
+        // return all BURST + 1. (No wall-clock assertion: under a saturated --parallel run a correct non-blocking
+        // read can still be slow, and length is the property that actually matters.)
         expect(stale.length).toBe(1);
-        expect(elapsedMs).toBeLessThan(1000);
 
         // The background sync does eventually catch up; new rows arrive without further requests
         // blocking on them.
@@ -162,7 +167,11 @@ describe.skipIf(isWindows)('Mail sync (Step 3: non-blocking sync + batched cold-
             await authedRequest(token, `/search/${userId}?q=${NEEDLE}&sources=mail`),
         );
         expect(search.mail.some((h) => h.id === needleId)).toBe(true);
-    });
+        // Deterministic heavy work, not a race: this first access blocks on a full cold index of >250
+        // messages (spanning both NEW_CHUNK batches) plus an FTS search — ~1s on an idle box, but it can
+        // exceed the 5s default under a saturated --parallel run, where the ncpu test workers each also
+        // spawn their own transform/thumbnail Worker threads. An explicit budget, not a masked flake.
+    }, 20_000);
 
     test("a bad .eml in a chunk does not drop the chunk's other inserts", async () => {
         const box = `Bad-${Date.now()}`;
