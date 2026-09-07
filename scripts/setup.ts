@@ -433,9 +433,12 @@ ${domain} {
     ProxyPreserveHost On
     ProxyTimeout 86400              # SSE / WebSocket: long-lived connections
     RequestHeader set X-Forwarded-Proto "https"
+    RequestHeader set X-Real-IP "%{REAL_CLIENT_IP}e"   # the gateway keys rate limits on this
 
     # WebSocket upgrade (collab editing on sheets, slides, stickies, docs)
     RewriteEngine On
+    # Stash the client IP so mod_headers can fill X-Real-IP (it can't read REMOTE_ADDR directly).
+    RewriteRule .* - [E=REAL_CLIENT_IP:%{REMOTE_ADDR}]
     RewriteCond %{HTTP:Upgrade} websocket [NC]
     RewriteCond %{HTTP:Connection} upgrade [NC]
     RewriteRule ^/?(.*) "ws://127.0.0.1:8080/$1" [P,L]

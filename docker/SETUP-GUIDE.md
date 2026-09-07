@@ -373,7 +373,9 @@ In step 3, when `bun run setup` asks "Run Eigen behind an existing webserver?", 
 - `eigen.Caddyfile` — append to your existing `Caddyfile`
 - `eigen.apache.conf` — `a2ensite` it
 
-Each snippet covers SSL termination, the WebSocket upgrade map, and the SSE buffering settings collaborative editing needs. They proxy to the bundled `eigen-static` container on `127.0.0.1:8080`.
+Each snippet covers SSL termination, the WebSocket upgrade map, and the SSE buffering settings collaborative editing needs, and sets `X-Real-IP` to the real visitor. They proxy to the bundled `eigen-static` container on `127.0.0.1:8080`.
+
+The `eigen-static` gateway only ever receives connections from your host proxy over the docker bridge / loopback, so it trusts private-range peers and forwards their `X-Real-IP` through to the API. That is what keeps rate limiting, login lockout, and OTP throttling keyed on the actual visitor rather than collapsing every user into one bucket — so the proxy must set `X-Real-IP` to the visitor's address (the generated snippets do). `X-Forwarded-For` alone is not trusted, because a client can prepend its own value and pick its rate-limit key.
 
 **Apache notes:** the config header lists modules to enable (`a2enmod proxy proxy_http proxy_wstunnel rewrite ssl headers`) and a one-liner to switch from `mpm_prefork` to `mpm_event` — prefork uses one process per long-lived SSE/WebSocket connection and runs out of slots fast.
 
@@ -383,9 +385,9 @@ When the webserver itself runs in docker, `127.0.0.1` inside that container is i
 
 - **Bind eigen-static on the LAN.** In `.env.production`:
   ```
-  EIGEN_STATIC_BIND=0.0.0.0:8080
+  EIGEN_STATIC_HOST=0.0.0.0
   ```
-  Then point your dockerised webserver upstream at `<host-LAN-IP>:8080`. Simple, but exposes plain HTTP on the LAN.
+  Then point your dockerised webserver upstream at `<host-LAN-IP>:8080`. Simple, but exposes plain HTTP on the LAN — and a LAN client that reaches `8080` directly is a trusted private-range peer, so it can send its own `X-Real-IP` and choose its rate-limit key. Prefer the shared-network option below, or firewall the port to the proxy.
 - **Share the eigen docker network.** Attach the webserver container to the `eigen_eigen` network and proxy to `eigen-static:8080` directly. In the webserver's compose file:
   ```yaml
   services:
@@ -425,7 +427,7 @@ sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/eigen.sh
 
 **Pick this when** you don't want public ports on your host.
 
-Set `COMPOSE_PROFILES=static,mail` in `.env.production`. Eigen runs the bundled static container on `127.0.0.1:8080`; the tunnel is your edge. WebSocket and SSE pass through transparently.
+Set `COMPOSE_PROFILES=static,mail` in `.env.production`. Eigen runs the bundled static container on `127.0.0.1:8080`; the tunnel is your edge. WebSocket and SSE pass through transparently. Neither tunnel sets `X-Real-IP`, so all their visitors share one rate-limit and login-lockout bucket; put nginx, Caddy or Apache between the tunnel and the gateway if per-visitor limits matter.
 
 **Cloudflare Tunnel:**
 
