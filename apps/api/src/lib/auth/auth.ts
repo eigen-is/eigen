@@ -105,13 +105,17 @@ export const auth = betterAuth({
                     // looser shape through.
                     const user = hookUser as User;
                     if (user.role === 'guest') return;
+                    // The row is committed; a failure here must not turn a created account into a 500.
+                    // Guard the two steps independently so an org-join failure still runs the reconcile.
                     try {
-                        // Row is committed; a failure here must not turn a created account into a 500.
-                        // Home bootstrap is lazy and idempotent, so a skipped reconcile self-heals.
                         await authAddUserToDefaultOrg(user);
+                    } catch (error) {
+                        console.error(`Failed to auto-join new user ${user.id} to default org:`, error);
+                    }
+                    try {
                         await reconcileSharesForNewUser(user);
                     } catch (error) {
-                        console.error(`Post-create setup failed for new user ${user.id}:`, error);
+                        console.error(`Failed to reconcile shares for new user ${user.id}:`, error);
                     }
                 },
             },

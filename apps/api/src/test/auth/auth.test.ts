@@ -1,8 +1,9 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import type { DrivePath } from '@workspace/lib/types';
 import { auth } from '../../lib/auth/auth';
 import { getUserByEmail } from '../../lib/user';
-import { authedRequest, getTestContext } from '../setup';
+import { assertJson, authedRequest, getTestContext } from '../setup';
 
 describe('Auth', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -96,16 +97,50 @@ describe('user create hook', () => {
         }
     });
 
-    test('a user created while org-join fails can still sign in', async () => {
-        const email = `hook-signin-${randomUUID()}@test.eigen.is`;
-        const password = 'testpassword123';
+    test('a failing default-org join still runs share reconciliation', async () => {
+        const ctx = await getTestContext();
+        const email = `hook-reconcile-${randomUUID()}@test.eigen.is`;
+
+        // Alice shares a fresh folder with the not-yet-existing email, so a registry entry
+        // exists for it before the account is created — reconcile must deliver it on create.
+        const rootRes = await authedRequest(ctx.alice.user.sessionToken, `/drive/${ctx.alice.user.id}/default/root`);
+        const root = await assertJson<DrivePath>(rootRes);
+        const folderRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/default/folder/${root.id}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ folderName: `hook-reconcile-${randomUUID()}` }),
+            },
+        );
+        const folder = await assertJson<DrivePath>(folderRes);
+        await authedRequest(ctx.alice.user.sessionToken, `/drive/${ctx.alice.user.id}/default/path/${folder.id}/acl`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ add: [{ id: email, read: true, write: false }] }),
+        });
+
+        // Create the account with the org-join failing: the reconcile step must still run.
         const spy = spyOn(auth.api, 'addMember').mockRejectedValue(new Error('boom'));
+        let sessionToken: string;
         try {
-            await auth.api.signUpEmail({ body: { email, password, name: 'Hook SignIn' } });
+            const signUp = await auth.api.signUpEmail({
+                returnHeaders: true,
+                body: { email, password: 'testpassword123', name: 'Hook Reconcile' },
+            });
+            const setCookie = signUp.headers.get('set-cookie') || '';
+            const match = setCookie.match(/better-auth\.session_token=([^;]+)/);
+            if (!match) throw new Error(`No session cookie: ${setCookie}`);
+            sessionToken = match[1]!;
         } finally {
             spy.mockRestore();
         }
-        const signIn = await auth.api.signInEmail({ body: { email, password } });
-        expect(signIn.user.email).toBe(email);
+
+        const created = await getUserByEmail(email);
+        expect(created).not.toBeNull();
+        const sharedRes = await authedRequest(sessionToken, `/drive/${created!.id}/shared/with-me`);
+        const shared = await assertJson<DrivePath[]>(sharedRes);
+        expect(shared.some((p) => p.id === folder.id)).toBe(true);
     });
 });
