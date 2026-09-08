@@ -8,23 +8,33 @@ import { authClient } from '../../auth/hooks/use-auth-client';
 import { useIsGuest } from '../../auth/hooks/use-is-guest';
 import { adminKeys, invalidateAdminMembers, invalidateAdminUsers } from './keys';
 
+const MEMBERS_PAGE_SIZE = 100;
+
 export function useMembers(organizationId?: string) {
     const isGuest = useIsGuest();
     return useQuery({
         queryKey: adminKeys.members(organizationId ?? ''),
         queryFn: async (): Promise<OrgMember[]> => {
-            const { data } = await authClient.organization.listMembers({
-                query: { organizationId: organizationId! },
-            });
-            if (!data?.members) return [];
-            return data.members.map((m) => ({
-                id: m.id,
-                userId: m.userId,
-                role: m.role,
-                email: m.user?.email ?? '',
-                name: m.user?.name ?? '',
-                createdAt: new Date(m.createdAt),
-            }));
+            // better-auth serves at most 100 members per call, so page until total is reached
+            const members: OrgMember[] = [];
+            for (let offset = 0; ; offset += MEMBERS_PAGE_SIZE) {
+                const { data } = await authClient.organization.listMembers({
+                    query: { organizationId: organizationId!, limit: MEMBERS_PAGE_SIZE, offset },
+                });
+                if (!data?.members.length) break;
+                for (const m of data.members) {
+                    members.push({
+                        id: m.id,
+                        userId: m.userId,
+                        role: m.role,
+                        email: m.user?.email ?? '',
+                        name: m.user?.name ?? '',
+                        createdAt: new Date(m.createdAt),
+                    });
+                }
+                if (members.length >= data.total) break;
+            }
+            return members;
         },
         enabled: !!organizationId && !isGuest,
         staleTime: STALE_TIME.TWO_MINUTES,
