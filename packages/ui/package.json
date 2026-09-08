@@ -37,11 +37,11 @@
     "yjs": "^13.6.32"
   },
   "peerDependencies": {
-    "@tiptap/core": "^3.31.3",
-    "@tiptap/extension-list": "^3.31.3",
-    "@tiptap/pm": "^3.31.3",
-    "@tiptap/react": "^3.31.3",
-    "@tiptap/starter-kit": "^3.31.3"
+    "@tiptap/core": "~3.21.0",
+    "@tiptap/extension-list": "~3.21.0",
+    "@tiptap/pm": "~3.21.0",
+    "@tiptap/react": "~3.21.0",
+    "@tiptap/starter-kit": "~3.21.0"
   },
   "exports": {
     ".": "./src/index.ts",
