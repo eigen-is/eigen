@@ -20,7 +20,13 @@ export async function parseEmlBytes(messageId: string, mailbox: string, bytes: B
     if (parsedMail.html) {
         // ADD_ATTR keeps `target` on anchors so eigen-doc attachment pills (and any other
         // sender-set target=_blank link) open in a new tab instead of replacing the mail view.
-        parsedMail.html = DOMPurify.sanitize(parsedMail.html, { FORCE_BODY: true, ADD_ATTR: ['target'] });
+        // FORBID_TAGS drops <form>: DOMPurify keeps it by default, and a form inside the mail view
+        // is a phishing surface (it can post the reader's input anywhere).
+        parsedMail.html = DOMPurify.sanitize(parsedMail.html, {
+            FORCE_BODY: true,
+            ADD_ATTR: ['target'],
+            FORBID_TAGS: ['form'],
+        });
         parsedMail.html = parsedMail.html.replace(/\s+/g, ' ').trim();
     }
 
