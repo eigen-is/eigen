@@ -383,9 +383,11 @@ const TiptapEditor = ({
                 }),
                 CollaborationCaret.configure({
                     provider,
+                    // userId is what the server's awareness gate checks; without it every frame is dropped
                     user: {
                         name: auth.user!.name,
                         color: userColor(auth.user!.id),
+                        userId: auth.user!.id,
                     },
                     render: (user: Record<string, string>) =>
                         renderPresenceCaret({ name: user.name, color: user.color }),
