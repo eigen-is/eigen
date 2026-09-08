@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { escapeHtml } from '@workspace/lib/html';
 import { createServer } from 'vite';
+import { withInlineScriptHashes } from '../../../vite.security-headers';
 import type { ArticleBody, ContentManifest } from './lib/content-types';
 
 const ROOT = process.cwd(); // apps/index
@@ -217,7 +218,8 @@ async function main() {
                 // (<script src="/src/main.tsx"> / the hashed bundle in <head>) — so
                 // $_TSR exists by the time RouterClient's hydrate() reads it.
                 .replace('<div id="app"></div>', `<div id="app">${appBody}</div>${inlined}${dehydrationHtml}`);
-            writeFileSync(outFile(route.path), page);
+            // The dehydration scripts differ per page, so the CSP meta gets this page's hashes.
+            writeFileSync(outFile(route.path), withInlineScriptHashes(page));
             console.log(`Prerendered ${route.path}`);
         }
         if (PUBLIC_ORIGIN) writeFileSync(join(DIST, 'sitemap.xml'), sitemap(all));

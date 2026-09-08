@@ -71,3 +71,24 @@ export function buildSecurityMetaTags(options: SecurityPolicyOptions): string {
     const csp = buildContentSecurityPolicy(options);
     return `<meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="referrer" content="strict-origin-when-cross-origin">`;
 }
+
+// Executable inline scripts: no src, and no type other than a JavaScript one. JSON and ld+json
+// script blocks are data, which script-src does not govern.
+const INLINE_SCRIPT = /<script(?![^>]*\ssrc=)([^>]*)>([\s\S]*?)<\/script>/g;
+const NON_JS_TYPE = /\stype=["'](?!(?:module|text\/javascript|application\/javascript)["'])/i;
+
+// Pin every executable inline script in an assembled page to the page's CSP meta. The index app's
+// prerender appends TanStack Router's dehydration scripts, whose content differs per page, so the
+// hashes can only be computed once the page is final. Hashes already present (the theme script) are
+// kept; a page without a CSP meta is returned unchanged.
+export function withInlineScriptHashes(html: string): string {
+    const hashes: string[] = [];
+    for (const [, attrs, body] of html.matchAll(INLINE_SCRIPT)) {
+        if (NON_JS_TYPE.test(attrs)) continue;
+        hashes.push(`'sha256-${createHash('sha256').update(body).digest('base64')}'`);
+    }
+    return html.replace(/(<meta http-equiv="Content-Security-Policy" content="[^"]*?script-src[^;"]*)/, (directive) => {
+        const missing = hashes.filter((hash) => !directive.includes(hash));
+        return missing.length === 0 ? directive : `${directive} ${missing.join(' ')}`;
+    });
+}

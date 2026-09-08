@@ -5,6 +5,7 @@ import {
     buildSecurityMetaTags,
     THEME_FLASH_SCRIPT,
     themeScriptCspSource,
+    withInlineScriptHashes,
 } from '../../../../vite.security-headers';
 
 const DEV_API = 'http://localhost:8000';
@@ -52,5 +53,38 @@ describe('buildContentSecurityPolicy', () => {
         expect(connectOf(dev)).not.toBe(connectOf(prod));
         expect(connectOf(dev)).toContain('ws://localhost:8000');
         expect(connectOf(prod)).toBe("connect-src 'self'");
+    });
+});
+
+describe('withInlineScriptHashes', () => {
+    const sha = (body: string) => `'sha256-${createHash('sha256').update(body).digest('base64')}'`;
+    const page = (scripts: string) =>
+        `<html><head>${buildSecurityMetaTags({ dev: false, apiHost: '/eigen' })}<script>${THEME_FLASH_SCRIPT}</script></head><body>${scripts}</body></html>`;
+
+    test('pins every executable inline script the prerender appended, keeping the theme hash', () => {
+        const out = withInlineScriptHashes(page('<script>self.$_TSR={}</script><script></script>'));
+        const scriptSrc = out.match(/script-src[^;]*/)?.[0] ?? '';
+        expect(scriptSrc).toContain(themeScriptCspSource());
+        expect(scriptSrc).toContain(sha('self.$_TSR={}'));
+        expect(scriptSrc).toContain(sha(''));
+        expect(scriptSrc).not.toContain("'unsafe-inline'");
+    });
+
+    test('data blocks and external scripts get no hash', () => {
+        const out = withInlineScriptHashes(
+            page(
+                '<script type="application/json" id="x">{"a":1}</script><script type="application/ld+json">{}</script><script src="/assets/a.js"></script>',
+            ),
+        );
+        const scriptSrc = out.match(/script-src[^;]*/)?.[0] ?? '';
+        expect(scriptSrc).toBe(`script-src 'self' ${themeScriptCspSource()}`);
+    });
+
+    test('is idempotent and leaves a page without a CSP meta alone', () => {
+        const once = withInlineScriptHashes(page('<script>x()</script>'));
+        expect(withInlineScriptHashes(once)).toBe(once);
+        expect(withInlineScriptHashes('<html><head></head><body><script>x()</script></body></html>')).toBe(
+            '<html><head></head><body><script>x()</script></body></html>',
+        );
     });
 });
