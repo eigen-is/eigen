@@ -16,6 +16,7 @@ g.KeyboardEvent = window.KeyboardEvent;
 g.Event = window.Event;
 g.Element = window.Element;
 g.HTMLElement = window.HTMLElement;
+g.HTMLFormElement = window.HTMLFormElement;
 g.IS_REACT_ACT_ENVIRONMENT = true;
 class FakeResizeObserver {
     observe() {}
@@ -38,6 +39,7 @@ afterAll(() => {
     g.Event = undefined;
     g.Element = undefined;
     g.HTMLElement = undefined;
+    g.HTMLFormElement = undefined;
     g.ResizeObserver = undefined;
     g.requestAnimationFrame = undefined;
     g.cancelAnimationFrame = undefined;

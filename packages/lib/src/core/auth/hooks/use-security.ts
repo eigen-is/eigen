@@ -20,8 +20,9 @@ export function useChangePassword() {
 export function useInitialize2FA() {
     return useMutation({
         mutationFn: async (password: string) => {
-            const result = await authClient.twoFactor.enable({ password });
+            const result = await authClient.twoFactor.enable({ password, method: 'totp' });
             if (result.error) throw new Error(result.error.message ?? 'Failed to initialize two-factor authentication');
+            if (result.data.method !== 'totp') throw new Error('Unexpected two-factor method');
             return result.data;
         },
         onError: onMutationError,
