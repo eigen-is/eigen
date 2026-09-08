@@ -30,6 +30,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+# Docker build transcript (`docker compose build > build.log`) — never committed
+/build.log
 
 
 # vercel

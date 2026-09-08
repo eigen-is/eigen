@@ -315,7 +315,6 @@ API_URL=https://${domain}
 # hostname. Don't hardcode an absolute URL here unless API and apps live on
 # different origins (rare; would also need CORS + cookie tweaks).
 VITE_API_HOST=/eigen
-TRUSTED_NETWORKS=127.0.0.0/8,::1,172.16.0.0/12
 
 VITE_APP_SPACE_URL=/space
 VITE_APP_MAIL_URL=/mail
