@@ -86,7 +86,10 @@ async function resetAuthDatabase(): Promise<void> {
         "id" text PRIMARY KEY NOT NULL,
         "secret" text NOT NULL,
         "backup_codes" text NOT NULL,
-        "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE
+        "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+        "verified" integer,
+        "failed_verification_count" integer,
+        "locked_until" integer
     )`);
 
     await db.run(`CREATE TABLE IF NOT EXISTS "organization" (
@@ -113,7 +116,9 @@ async function resetAuthDatabase(): Promise<void> {
         "role" text,
         "status" text NOT NULL,
         "expires_at" integer NOT NULL,
-        "inviter_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE
+        "inviter_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+        "team_id" text,
+        "created_at" integer
     )`);
 
     await db.run(`CREATE TABLE IF NOT EXISTS "team" (
@@ -121,14 +126,16 @@ async function resetAuthDatabase(): Promise<void> {
         "name" text NOT NULL,
         "organization_id" text NOT NULL REFERENCES "organization"("id") ON DELETE CASCADE,
         "created_at" integer NOT NULL,
-        "updated_at" integer
+        "updated_at" integer,
+        "member_count" integer NOT NULL DEFAULT 0
     )`);
 
     await db.run(`CREATE TABLE IF NOT EXISTS "team_member" (
         "id" text PRIMARY KEY NOT NULL,
         "team_id" text NOT NULL REFERENCES "team"("id") ON DELETE CASCADE,
         "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
-        "created_at" integer
+        "created_at" integer,
+        "membership_key" text UNIQUE
     )`);
 
     await db.run(`CREATE TABLE IF NOT EXISTS "apikey"
