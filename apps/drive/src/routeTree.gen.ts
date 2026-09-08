@@ -9,43 +9,38 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AuthWatchedRouteImport } from './routes/_auth.watched'
+import { Route as AuthRouteImport } from './routes/_auth'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthTrashRouteImport } from './routes/_auth.trash'
-import { Route as AuthSharedToRouteImport } from './routes/_auth.shared.$to'
+import { Route as AuthWatchedRouteImport } from './routes/_auth.watched'
 import { Route as AuthMimeMimeTypeRouteImport } from './routes/_auth.mime.$mimeType'
-import { Route as AuthFsOwnerIdMountIdPathIdRouteImport } from './routes/_auth.fs.$ownerId.$mountId.$pathId'
+import { Route as AuthSharedToRouteImport } from './routes/_auth.shared.$to'
 import { Route as AuthEditOwnerIdMountIdPathIdRouteImport } from './routes/_auth.edit.$ownerId.$mountId.$pathId'
+import { Route as AuthFsOwnerIdMountIdPathIdRouteImport } from './routes/_auth.fs.$ownerId.$mountId.$pathId'
 
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
   id: '/_auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
-} as any)
-const AuthWatchedRoute = AuthWatchedRouteImport.update({
-  id: '/watched',
-  path: '/watched',
-  getParentRoute: () => AuthRoute,
 } as any)
 const AuthTrashRoute = AuthTrashRouteImport.update({
   id: '/trash',
   path: '/trash',
   getParentRoute: () => AuthRoute,
 } as any)
-const AuthSharedToRoute = AuthSharedToRouteImport.update({
-  id: '/shared/$to',
-  path: '/shared/$to',
+const AuthWatchedRoute = AuthWatchedRouteImport.update({
+  id: '/watched',
+  path: '/watched',
   getParentRoute: () => AuthRoute,
 } as any)
 const AuthMimeMimeTypeRoute = AuthMimeMimeTypeRouteImport.update({
@@ -53,16 +48,21 @@ const AuthMimeMimeTypeRoute = AuthMimeMimeTypeRouteImport.update({
   path: '/mime/$mimeType',
   getParentRoute: () => AuthRoute,
 } as any)
-const AuthFsOwnerIdMountIdPathIdRoute =
-  AuthFsOwnerIdMountIdPathIdRouteImport.update({
-    id: '/fs/$ownerId/$mountId/$pathId',
-    path: '/fs/$ownerId/$mountId/$pathId',
-    getParentRoute: () => AuthRoute,
-  } as any)
+const AuthSharedToRoute = AuthSharedToRouteImport.update({
+  id: '/shared/$to',
+  path: '/shared/$to',
+  getParentRoute: () => AuthRoute,
+} as any)
 const AuthEditOwnerIdMountIdPathIdRoute =
   AuthEditOwnerIdMountIdPathIdRouteImport.update({
     id: '/edit/$ownerId/$mountId/$pathId',
     path: '/edit/$ownerId/$mountId/$pathId',
+    getParentRoute: () => AuthRoute,
+  } as any)
+const AuthFsOwnerIdMountIdPathIdRoute =
+  AuthFsOwnerIdMountIdPathIdRouteImport.update({
+    id: '/fs/$ownerId/$mountId/$pathId',
+    path: '/fs/$ownerId/$mountId/$pathId',
     getParentRoute: () => AuthRoute,
   } as any)
 
@@ -140,11 +140,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_auth': {
@@ -154,19 +154,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
-    }
-    '/_auth/watched': {
-      id: '/_auth/watched'
-      path: '/watched'
-      fullPath: '/watched'
-      preLoaderRoute: typeof AuthWatchedRouteImport
-      parentRoute: typeof AuthRoute
     }
     '/_auth/trash': {
       id: '/_auth/trash'
@@ -175,11 +168,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthTrashRouteImport
       parentRoute: typeof AuthRoute
     }
-    '/_auth/shared/$to': {
-      id: '/_auth/shared/$to'
-      path: '/shared/$to'
-      fullPath: '/shared/$to'
-      preLoaderRoute: typeof AuthSharedToRouteImport
+    '/_auth/watched': {
+      id: '/_auth/watched'
+      path: '/watched'
+      fullPath: '/watched'
+      preLoaderRoute: typeof AuthWatchedRouteImport
       parentRoute: typeof AuthRoute
     }
     '/_auth/mime/$mimeType': {
@@ -189,11 +182,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthMimeMimeTypeRouteImport
       parentRoute: typeof AuthRoute
     }
-    '/_auth/fs/$ownerId/$mountId/$pathId': {
-      id: '/_auth/fs/$ownerId/$mountId/$pathId'
-      path: '/fs/$ownerId/$mountId/$pathId'
-      fullPath: '/fs/$ownerId/$mountId/$pathId'
-      preLoaderRoute: typeof AuthFsOwnerIdMountIdPathIdRouteImport
+    '/_auth/shared/$to': {
+      id: '/_auth/shared/$to'
+      path: '/shared/$to'
+      fullPath: '/shared/$to'
+      preLoaderRoute: typeof AuthSharedToRouteImport
       parentRoute: typeof AuthRoute
     }
     '/_auth/edit/$ownerId/$mountId/$pathId': {
@@ -201,6 +194,13 @@ declare module '@tanstack/react-router' {
       path: '/edit/$ownerId/$mountId/$pathId'
       fullPath: '/edit/$ownerId/$mountId/$pathId'
       preLoaderRoute: typeof AuthEditOwnerIdMountIdPathIdRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/fs/$ownerId/$mountId/$pathId': {
+      id: '/_auth/fs/$ownerId/$mountId/$pathId'
+      path: '/fs/$ownerId/$mountId/$pathId'
+      fullPath: '/fs/$ownerId/$mountId/$pathId'
+      preLoaderRoute: typeof AuthFsOwnerIdMountIdPathIdRouteImport
       parentRoute: typeof AuthRoute
     }
   }

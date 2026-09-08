@@ -83,19 +83,20 @@ export function useUpdateDraft() {
         // than silently reverting to the previous value.
         onMutate: ({ draft }) => {
             if (!draft.id) return;
-            const key = emailKeys.detail(ownerId, draft.id);
-            const previous = queryClient.getQueryData<EmailDraft | null>(key);
-            if (!previous) return;
-            queryClient.setQueryData<EmailDraft | null>(key, {
-                ...previous,
-                subject: draft.subject ?? '',
-                to: draft.to,
-                cc: draft.cc,
-                bcc: draft.bcc,
-                text: draft.text ?? '',
-                html: draft.html ?? '',
-                driveReferences: draft.driveReferences ?? previous.driveReferences,
-            });
+            queryClient.setQueryData<EmailDraft | null>(emailKeys.detail(ownerId, draft.id), (previous) =>
+                previous
+                    ? {
+                          ...previous,
+                          subject: draft.subject ?? '',
+                          to: draft.to,
+                          cc: draft.cc,
+                          bcc: draft.bcc,
+                          text: draft.text ?? '',
+                          html: draft.html ?? '',
+                          driveReferences: draft.driveReferences ?? previous.driveReferences,
+                      }
+                    : previous,
+            );
         },
         onSuccess: (data) => {
             // Push the parsed response into the cache so the next observe doesn't need a

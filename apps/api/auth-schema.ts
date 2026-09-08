@@ -66,6 +66,9 @@ export const twoFactor = sqliteTable('two_factor', {
     userId: text('user_id')
         .notNull()
         .references(() => user.id, { onDelete: 'cascade' }),
+    verified: integer('verified', { mode: 'boolean' }),
+    failedVerificationCount: integer('failed_verification_count'),
+    lockedUntil: integer('locked_until', { mode: 'timestamp' }),
 });
 
 export const organization = sqliteTable('organization', {
@@ -101,6 +104,8 @@ export const invitation = sqliteTable('invitation', {
     inviterId: text('inviter_id')
         .notNull()
         .references(() => user.id, { onDelete: 'cascade' }),
+    teamId: text('team_id'),
+    createdAt: integer('created_at', { mode: 'timestamp' }),
 });
 
 export const team = sqliteTable('team', {
@@ -111,6 +116,7 @@ export const team = sqliteTable('team', {
         .references(() => organization.id, { onDelete: 'cascade' }),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp' }),
+    memberCount: integer('member_count').notNull().default(0),
 });
 
 export const teamMember = sqliteTable('team_member', {
@@ -122,6 +128,7 @@ export const teamMember = sqliteTable('team_member', {
         .notNull()
         .references(() => user.id, { onDelete: 'cascade' }),
     createdAt: integer('created_at', { mode: 'timestamp' }),
+    membershipKey: text('membership_key').unique(),
 });
 
 export const apikey = sqliteTable('apikey', {

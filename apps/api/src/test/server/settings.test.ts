@@ -691,6 +691,47 @@ describe('lastLoginAt', () => {
         const cols = db.query<{ name: string }, []>(`PRAGMA table_info(user)`).all();
         expect(cols.some((c) => c.name === 'last_login_at')).toBe(true);
     });
+
+    test('ensureAuthSchemaColumns adds the better-auth 1.7 columns and seeds member_count', () => {
+        const db = new Database(':memory:');
+        db.run(`CREATE TABLE "user" ("id" text PRIMARY KEY NOT NULL, "name" text NOT NULL)`);
+        db.run(`CREATE TABLE "team" ("id" text PRIMARY KEY NOT NULL, "name" text NOT NULL)`);
+        db.run(
+            `CREATE TABLE "team_member" ("id" text PRIMARY KEY NOT NULL, "team_id" text NOT NULL, "user_id" text NOT NULL)`,
+        );
+        db.run(`CREATE TABLE "two_factor" ("id" text PRIMARY KEY NOT NULL, "secret" text NOT NULL)`);
+        db.run(`CREATE TABLE "invitation" ("id" text PRIMARY KEY NOT NULL, "email" text NOT NULL)`);
+        db.run(`INSERT INTO "team" VALUES ('t1', 'one'), ('t2', 'two')`);
+        db.run(`INSERT INTO "team_member" VALUES ('m1', 't1', 'u1'), ('m2', 't1', 'u2'), ('m3', 't2', 'u1')`);
+        ensureAuthSchemaColumns(db);
+        ensureAuthSchemaColumns(db); // idempotent
+        const columns = (table: string) =>
+            db
+                .query<{ name: string }, []>(`PRAGMA table_info("${table}")`)
+                .all()
+                .map((c) => c.name);
+        expect(columns('team')).toContain('member_count');
+        expect(columns('team_member')).toContain('membership_key');
+        expect(columns('two_factor')).toEqual(
+            expect.arrayContaining(['verified', 'failed_verification_count', 'locked_until']),
+        );
+        expect(columns('invitation')).toEqual(expect.arrayContaining(['team_id', 'created_at']));
+        const counts = db
+            .query<{ id: string; member_count: number }, []>(`SELECT id, member_count FROM "team" ORDER BY id`)
+            .all();
+        expect(counts).toEqual([
+            { id: 't1', member_count: 2 },
+            { id: 't2', member_count: 1 },
+        ]);
+        db.run(
+            `INSERT INTO "team_member" ("id", "team_id", "user_id", "membership_key") VALUES ('m4', 't2', 'u2', 'k')`,
+        );
+        expect(() =>
+            db.run(
+                `INSERT INTO "team_member" ("id", "team_id", "user_id", "membership_key") VALUES ('m5', 't2', 'u3', 'k')`,
+            ),
+        ).toThrow();
+    });
 });
 
 describe('S3 Config Persistence', () => {

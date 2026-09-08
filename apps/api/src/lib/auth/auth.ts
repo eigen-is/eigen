@@ -53,10 +53,36 @@ export const trustedOrigins = [
 // additive columns are ensured here at boot. Skip when the table doesn't exist yet —
 // setup's CREATE TABLE includes every column.
 export function ensureAuthSchemaColumns(db: Database): void {
-    const cols = db.query<{ name: string }, []>(`PRAGMA table_info(user)`).all();
-    if (cols.length === 0) return;
-    if (!cols.some((c) => c.name === 'last_login_at')) {
+    const missing = (table: string, column: string): boolean => {
+        const cols = db.query<{ name: string }, []>(`PRAGMA table_info("${table}")`).all();
+        return cols.length > 0 && !cols.some((c) => c.name === column);
+    };
+    if (missing('user', 'last_login_at')) {
         db.run(`ALTER TABLE "user" ADD COLUMN "last_login_at" integer`);
+    }
+    // better-auth 1.7 keeps a member counter per team; seed it from the rows that exist
+    if (missing('team', 'member_count')) {
+        db.run(`ALTER TABLE "team" ADD COLUMN "member_count" integer NOT NULL DEFAULT 0`);
+        db.run(
+            `UPDATE "team" SET "member_count" = (SELECT count(*) FROM "team_member" WHERE "team_member"."team_id" = "team"."id")`,
+        );
+    }
+    // SQLite can't ALTER-add a UNIQUE column; old rows stay NULL and better-auth falls back to the (team, user) pair
+    if (missing('team_member', 'membership_key')) {
+        db.run(`ALTER TABLE "team_member" ADD COLUMN "membership_key" text`);
+        db.run(
+            `CREATE UNIQUE INDEX IF NOT EXISTS "team_member_membership_key_unique" ON "team_member" ("membership_key")`,
+        );
+    }
+    // Both were in the 1.5 model too but never in the DDL; 1.7's startup schema check refuses the gap
+    if (missing('invitation', 'team_id')) {
+        db.run(`ALTER TABLE "invitation" ADD COLUMN "team_id" text`);
+        db.run(`ALTER TABLE "invitation" ADD COLUMN "created_at" integer`);
+    }
+    if (missing('two_factor', 'verified')) {
+        db.run(`ALTER TABLE "two_factor" ADD COLUMN "verified" integer`);
+        db.run(`ALTER TABLE "two_factor" ADD COLUMN "failed_verification_count" integer`);
+        db.run(`ALTER TABLE "two_factor" ADD COLUMN "locked_until" integer`);
     }
 }
 
