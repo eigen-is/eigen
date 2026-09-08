@@ -9,21 +9,21 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthRouteImport } from './routes/_auth'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthSidebarRouteImport } from './routes/_auth._sidebar'
 import { Route as AuthSidebarIndexRouteImport } from './routes/_auth._sidebar.index'
 import { Route as AuthSidebarSharedToRouteImport } from './routes/_auth._sidebar.shared.$to'
-import { Route as AuthVectorOwnerIdMountIdPathIdRouteImport } from './routes/_auth.vector.$ownerId.$mountId.$pathId'
 import { Route as AuthSidebarDriveOwnerIdMountIdRouteImport } from './routes/_auth._sidebar.drive.$ownerId.$mountId'
+import { Route as AuthVectorOwnerIdMountIdPathIdRouteImport } from './routes/_auth.vector.$ownerId.$mountId.$pathId'
 
+const AuthRoute = AuthRouteImport.update({
+  id: '/_auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthRoute = AuthRouteImport.update({
-  id: '/_auth',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthSidebarRoute = AuthSidebarRouteImport.update({
@@ -40,17 +40,17 @@ const AuthSidebarSharedToRoute = AuthSidebarSharedToRouteImport.update({
   path: '/shared/$to',
   getParentRoute: () => AuthSidebarRoute,
 } as any)
-const AuthVectorOwnerIdMountIdPathIdRoute =
-  AuthVectorOwnerIdMountIdPathIdRouteImport.update({
-    id: '/vector/$ownerId/$mountId/$pathId',
-    path: '/vector/$ownerId/$mountId/$pathId',
-    getParentRoute: () => AuthRoute,
-  } as any)
 const AuthSidebarDriveOwnerIdMountIdRoute =
   AuthSidebarDriveOwnerIdMountIdRouteImport.update({
     id: '/drive/$ownerId/$mountId',
     path: '/drive/$ownerId/$mountId',
     getParentRoute: () => AuthSidebarRoute,
+  } as any)
+const AuthVectorOwnerIdMountIdPathIdRoute =
+  AuthVectorOwnerIdMountIdPathIdRouteImport.update({
+    id: '/vector/$ownerId/$mountId/$pathId',
+    path: '/vector/$ownerId/$mountId/$pathId',
+    getParentRoute: () => AuthRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -110,18 +110,18 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/_auth': {
       id: '/_auth'
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_auth/_sidebar': {
@@ -145,19 +145,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthSidebarSharedToRouteImport
       parentRoute: typeof AuthSidebarRoute
     }
-    '/_auth/vector/$ownerId/$mountId/$pathId': {
-      id: '/_auth/vector/$ownerId/$mountId/$pathId'
-      path: '/vector/$ownerId/$mountId/$pathId'
-      fullPath: '/vector/$ownerId/$mountId/$pathId'
-      preLoaderRoute: typeof AuthVectorOwnerIdMountIdPathIdRouteImport
-      parentRoute: typeof AuthRoute
-    }
     '/_auth/_sidebar/drive/$ownerId/$mountId': {
       id: '/_auth/_sidebar/drive/$ownerId/$mountId'
       path: '/drive/$ownerId/$mountId'
       fullPath: '/drive/$ownerId/$mountId'
       preLoaderRoute: typeof AuthSidebarDriveOwnerIdMountIdRouteImport
       parentRoute: typeof AuthSidebarRoute
+    }
+    '/_auth/vector/$ownerId/$mountId/$pathId': {
+      id: '/_auth/vector/$ownerId/$mountId/$pathId'
+      path: '/vector/$ownerId/$mountId/$pathId'
+      fullPath: '/vector/$ownerId/$mountId/$pathId'
+      preLoaderRoute: typeof AuthVectorOwnerIdMountIdPathIdRouteImport
+      parentRoute: typeof AuthRoute
     }
   }
 }
