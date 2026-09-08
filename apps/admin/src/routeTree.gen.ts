@@ -9,60 +9,35 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AuthWaitlistRouteImport } from './routes/_auth.waitlist'
-import { Route as AuthUsersRouteImport } from './routes/_auth.users'
-import { Route as AuthTeamsRouteImport } from './routes/_auth.teams'
-import { Route as AuthSettingsRouteImport } from './routes/_auth.settings'
-import { Route as AuthOnboardingRouteImport } from './routes/_auth.onboarding'
-import { Route as AuthMembersRouteImport } from './routes/_auth.members'
-import { Route as AuthGuestsRouteImport } from './routes/_auth.guests'
+import { Route as AuthRouteImport } from './routes/_auth'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthGuestSettingsRouteImport } from './routes/_auth.guest-settings'
+import { Route as AuthGuestsRouteImport } from './routes/_auth.guests'
+import { Route as AuthMembersRouteImport } from './routes/_auth.members'
+import { Route as AuthOnboardingRouteImport } from './routes/_auth.onboarding'
+import { Route as AuthSettingsRouteImport } from './routes/_auth.settings'
+import { Route as AuthTeamsRouteImport } from './routes/_auth.teams'
+import { Route as AuthUsersRouteImport } from './routes/_auth.users'
+import { Route as AuthWaitlistRouteImport } from './routes/_auth.waitlist'
 
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
   id: '/_auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthWaitlistRoute = AuthWaitlistRouteImport.update({
-  id: '/waitlist',
-  path: '/waitlist',
-  getParentRoute: () => AuthRoute,
-} as any)
-const AuthUsersRoute = AuthUsersRouteImport.update({
-  id: '/users',
-  path: '/users',
-  getParentRoute: () => AuthRoute,
-} as any)
-const AuthTeamsRoute = AuthTeamsRouteImport.update({
-  id: '/teams',
-  path: '/teams',
-  getParentRoute: () => AuthRoute,
-} as any)
-const AuthSettingsRoute = AuthSettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => AuthRoute,
-} as any)
-const AuthOnboardingRoute = AuthOnboardingRouteImport.update({
-  id: '/onboarding',
-  path: '/onboarding',
-  getParentRoute: () => AuthRoute,
-} as any)
-const AuthMembersRoute = AuthMembersRouteImport.update({
-  id: '/members',
-  path: '/members',
+const AuthGuestSettingsRoute = AuthGuestSettingsRouteImport.update({
+  id: '/guest-settings',
+  path: '/guest-settings',
   getParentRoute: () => AuthRoute,
 } as any)
 const AuthGuestsRoute = AuthGuestsRouteImport.update({
@@ -70,9 +45,34 @@ const AuthGuestsRoute = AuthGuestsRouteImport.update({
   path: '/guests',
   getParentRoute: () => AuthRoute,
 } as any)
-const AuthGuestSettingsRoute = AuthGuestSettingsRouteImport.update({
-  id: '/guest-settings',
-  path: '/guest-settings',
+const AuthMembersRoute = AuthMembersRouteImport.update({
+  id: '/members',
+  path: '/members',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthOnboardingRoute = AuthOnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthSettingsRoute = AuthSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthTeamsRoute = AuthTeamsRouteImport.update({
+  id: '/teams',
+  path: '/teams',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthUsersRoute = AuthUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthWaitlistRoute = AuthWaitlistRouteImport.update({
+  id: '/waitlist',
+  path: '/waitlist',
   getParentRoute: () => AuthRoute,
 } as any)
 
@@ -162,11 +162,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_auth': {
@@ -176,53 +176,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_auth/waitlist': {
-      id: '/_auth/waitlist'
-      path: '/waitlist'
-      fullPath: '/waitlist'
-      preLoaderRoute: typeof AuthWaitlistRouteImport
-      parentRoute: typeof AuthRoute
-    }
-    '/_auth/users': {
-      id: '/_auth/users'
-      path: '/users'
-      fullPath: '/users'
-      preLoaderRoute: typeof AuthUsersRouteImport
-      parentRoute: typeof AuthRoute
-    }
-    '/_auth/teams': {
-      id: '/_auth/teams'
-      path: '/teams'
-      fullPath: '/teams'
-      preLoaderRoute: typeof AuthTeamsRouteImport
-      parentRoute: typeof AuthRoute
-    }
-    '/_auth/settings': {
-      id: '/_auth/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof AuthSettingsRouteImport
-      parentRoute: typeof AuthRoute
-    }
-    '/_auth/onboarding': {
-      id: '/_auth/onboarding'
-      path: '/onboarding'
-      fullPath: '/onboarding'
-      preLoaderRoute: typeof AuthOnboardingRouteImport
-      parentRoute: typeof AuthRoute
-    }
-    '/_auth/members': {
-      id: '/_auth/members'
-      path: '/members'
-      fullPath: '/members'
-      preLoaderRoute: typeof AuthMembersRouteImport
+    '/_auth/guest-settings': {
+      id: '/_auth/guest-settings'
+      path: '/guest-settings'
+      fullPath: '/guest-settings'
+      preLoaderRoute: typeof AuthGuestSettingsRouteImport
       parentRoute: typeof AuthRoute
     }
     '/_auth/guests': {
@@ -232,11 +197,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthGuestsRouteImport
       parentRoute: typeof AuthRoute
     }
-    '/_auth/guest-settings': {
-      id: '/_auth/guest-settings'
-      path: '/guest-settings'
-      fullPath: '/guest-settings'
-      preLoaderRoute: typeof AuthGuestSettingsRouteImport
+    '/_auth/members': {
+      id: '/_auth/members'
+      path: '/members'
+      fullPath: '/members'
+      preLoaderRoute: typeof AuthMembersRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/onboarding': {
+      id: '/_auth/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof AuthOnboardingRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/settings': {
+      id: '/_auth/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AuthSettingsRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/teams': {
+      id: '/_auth/teams'
+      path: '/teams'
+      fullPath: '/teams'
+      preLoaderRoute: typeof AuthTeamsRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/users': {
+      id: '/_auth/users'
+      path: '/users'
+      fullPath: '/users'
+      preLoaderRoute: typeof AuthUsersRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/waitlist': {
+      id: '/_auth/waitlist'
+      path: '/waitlist'
+      fullPath: '/waitlist'
+      preLoaderRoute: typeof AuthWaitlistRouteImport
       parentRoute: typeof AuthRoute
     }
   }

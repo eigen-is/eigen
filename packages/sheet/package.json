@@ -15,21 +15,21 @@
     "@formulajs/formulajs": "^2.9.3",
     "@workspace/lib": "workspace:*",
     "@workspace/ui": "workspace:*",
-    "dayjs": "^1.11.0",
-    "es-toolkit": "^1.46.0",
-    "immer": "^9.0.12",
+    "dayjs": "^1.11.23",
+    "es-toolkit": "^1.52.0",
+    "immer": "^9.0.21",
     "numeral": "^2.0.6",
     "numfmt": "^3.2.6",
     "tiny-emitter": "^2.1.0",
-    "uuid": "^9.0.0"
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
     "@types/numeral": "^2.0.5",
-    "@types/uuid": "^9.0.0",
-    "happy-dom": "^20.10.6"
+    "@types/uuid": "^9.0.8",
+    "happy-dom": "^20.14.0"
   },
   "peerDependencies": {
-    "react": ">= 18.2",
-    "react-dom": ">= 18.2"
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   }
 }
