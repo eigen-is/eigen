@@ -67,6 +67,11 @@
   // backend-shared layers explodes at module-eval, not at typecheck. See AGENTS.md.
   "overrides": [
     {
+      // Vite loads these with Node's native TS loader, which needs full specifiers.
+      "includes": ["**/vite.config.ts", "vite.shared.config.ts"],
+      "linter": { "rules": { "style": { "noRestrictedImports": "off" } } }
+    },
+    {
       // The sheet engine is imported by apps/api — it MUST stay React-free.
       "includes": ["packages/sheet/src/engine/**"],
       "linter": {

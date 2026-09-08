@@ -5,7 +5,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig, mergeConfig, type Plugin, type UserConfig } from 'vite';
-import { buildSecurityMetaTags, THEME_FLASH_SCRIPT } from './vite.security-headers';
+import { buildSecurityMetaTags, THEME_FLASH_SCRIPT } from './vite.security-headers.ts';
 
 const sharedWebAssetDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), 'apps/index/public');
 const sharedWebAssets = [

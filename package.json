@@ -2,6 +2,7 @@
   "name": "eigen",
   "version": "0.2.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
     "release": "bun scripts/release.ts",
