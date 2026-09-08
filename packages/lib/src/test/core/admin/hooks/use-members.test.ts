@@ -64,7 +64,7 @@ function Harness({ onRender }: { onRender: (r: Result) => void }) {
 }
 
 test('useMembers pages through list-members until every member is loaded', async () => {
-    let latest: Result | null = null;
+    const seen: { latest: Result | null } = { latest: null };
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const container = window.document.createElement('div');
     const root = createRoot(container as unknown as Element);
@@ -73,14 +73,14 @@ test('useMembers pages through list-members until every member is loaded', async
             createElement(
                 QueryClientProvider,
                 { client: queryClient },
-                createElement(Harness, { onRender: (r) => (latest = r) }),
+                createElement(Harness, { onRender: (r) => (seen.latest = r) }),
             ),
         );
     });
-    for (let i = 0; i < 50 && !latest?.data; i++) await act(() => new Promise((r) => setTimeout(r, 10)));
+    for (let i = 0; i < 50 && !seen.latest?.data; i++) await act(() => new Promise((r) => setTimeout(r, 10)));
 
-    expect(latest?.data?.length).toBe(TOTAL);
-    expect(latest?.data?.at(-1)).toMatchObject({ id: 'm102', userId: 'u102', email: 'u102@eigen.test' });
+    expect(seen.latest?.data?.length).toBe(TOTAL);
+    expect(seen.latest?.data?.at(-1)).toMatchObject({ id: 'm102', userId: 'u102', email: 'u102@eigen.test' });
     expect(calls.map((c) => [c.limit, c.offset])).toEqual([
         [PAGE, 0],
         [PAGE, PAGE],
