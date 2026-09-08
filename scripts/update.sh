@@ -52,6 +52,10 @@ export EIGEN_COMMIT=$(git rev-parse --short HEAD)
 export EIGEN_BUILT_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 echo "Installing dependencies..."
+# Always from scratch: after a lockfile dedupe, `bun install` can report "no changes" yet keep
+# stale symlinks into node_modules/.bun, and the frontend build then bundles two copies of a
+# package (2026-09-08: two prosemirror-view copies broke opening documents on eigen.is).
+rm -rf node_modules apps/*/node_modules packages/*/node_modules
 bun install --frozen-lockfile
 
 echo "Building frontend (sequential)..."
