@@ -373,7 +373,7 @@ In step 3, when `bun run setup` asks "Run Eigen behind an existing webserver?", 
 - `eigen.Caddyfile` — append to your existing `Caddyfile`
 - `eigen.apache.conf` — `a2ensite` it
 
-Each snippet covers SSL termination, the WebSocket upgrade map, and the SSE buffering settings collaborative editing needs, and sets `X-Real-IP` to the real visitor. They proxy to the bundled `eigen-static` container on `127.0.0.1:8080`.
+Each snippet covers SSL termination, the WebSocket upgrade map, the SSE buffering settings collaborative editing needs, and a baseline set of security response headers (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`), and sets `X-Real-IP` to the real visitor. They proxy to the bundled `eigen-static` container on `127.0.0.1:8080`, which sets the same headers itself, so the two shapes stay consistent. The Content-Security-Policy and referrer meta ride inside each app's HTML, so every deployment shape inherits them without proxy config.
 
 The `eigen-static` gateway only ever receives connections from your host proxy over the docker bridge / loopback, so it trusts private-range peers and forwards their `X-Real-IP` through to the API. That is what keeps rate limiting, login lockout, and OTP throttling keyed on the actual visitor rather than collapsing every user into one bucket — so the proxy must set `X-Real-IP` to the visitor's address (the generated snippets do). `X-Forwarded-For` alone is not trusted, because a client can prepend its own value and pick its rate-limit key.
 

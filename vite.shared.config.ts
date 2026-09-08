@@ -5,6 +5,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig, mergeConfig, type Plugin, type UserConfig } from 'vite';
+import { buildSecurityMetaTags, THEME_FLASH_SCRIPT } from './vite.security-headers';
 
 const sharedWebAssetDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), 'apps/index/public');
 const sharedWebAssets = [
@@ -48,15 +49,22 @@ function webAppMetadataPlugin(): Plugin {
     };
 }
 
-// Keep in sync with applyTheme/getCachedTheme in theme-provider.tsx
-function themeFlashPlugin(): Plugin {
+// The security policy (CSP + referrer meta) and the theme-flash script are injected together, in that
+// order: the CSP <meta> must precede the inline script so its script-src hash actually governs it.
+// buildContentSecurityPolicy owns THEME_FLASH_SCRIPT and its hash, so the two can never drift.
+function securityAndThemePlugin(): Plugin {
+    let apiHost = '';
     return {
-        name: 'eigen-theme-flash',
-        transformIndexHtml(html) {
-            return html.replace(
-                '<head>',
-                `<head><script>try{var t=localStorage.getItem("eigen-theme");var d=t==="dark"||(t==="system"&&matchMedia("(prefers-color-scheme:dark)").matches);if(d)document.documentElement.classList.add("dark")}catch{}</script>`,
-            );
+        name: 'eigen-security-and-theme',
+        configResolved(config) {
+            apiHost = config.env.VITE_API_HOST ?? '';
+        },
+        transformIndexHtml: {
+            order: 'pre',
+            handler(html, ctx) {
+                const meta = buildSecurityMetaTags({ dev: Boolean(ctx.server), apiHost });
+                return html.replace('<head>', `<head>${meta}<script>${THEME_FLASH_SCRIPT}</script>`);
+            },
         },
     };
 }
@@ -86,7 +94,7 @@ export function createAppConfig(appName: string, extraConfig?: UserConfig) {
         envDir: './../../',
         plugins: [
             webAppMetadataPlugin(),
-            themeFlashPlugin(),
+            securityAndThemePlugin(),
             tanstackRouter({
                 target: 'react',
                 autoCodeSplitting: true,
