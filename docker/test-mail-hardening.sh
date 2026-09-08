@@ -540,17 +540,23 @@ else
 fi
 
 ##############################################################################
-header "Probe 12 — mynetworks and OpenDKIM InternalHosts are scoped to the bridge subnet"
+header "Probe 12 — mynetworks, OpenDKIM InternalHosts and the API trust range are scoped to the bridge subnet"
 ##############################################################################
 # Finding #19: the trust range must be loopback plus the actual docker bridge subnet, not the
-# whole 172.16.0.0/12. Both Postfix's mynetworks and OpenDKIM's TrustedHosts render from
-# EIGEN_SUBNET in the entrypoint; assert neither still carries the /12 and both carry the subnet.
+# whole 172.16.0.0/12. Postfix's mynetworks and OpenDKIM's TrustedHosts render from EIGEN_SUBNET in
+# the entrypoint, and compose derives the API's TRUSTED_NETWORKS from the same value; assert none
+# still carries the /12 and all three carry the subnet.
 # Needs no login, so it runs whether or not ALICE_* are set.
 if should_run 12; then
     expect_subnet="${EIGEN_SUBNET:-172.20.0.0/24}"
     mynetworks=$(dc exec -T postfix postconf -h mynetworks | tr -d '\r' || true)
     trusted=$(dc exec -T postfix cat /etc/opendkim/TrustedHosts | tr -d '\r' || true)
-    if printf '%s' "$mynetworks" | grep -q '172\.16\.0\.0/12'; then
+    api_trusted=$(dc exec -T eigen-api sh -c 'echo "$TRUSTED_NETWORKS"' | tr -d '\r' || true)
+    if printf '%s' "$api_trusted" | grep -q '172\.16\.0\.0/12'; then
+        fail "the API's TRUSTED_NETWORKS still carries the 172.16.0.0/12 range: $(oneline "$api_trusted")"
+    elif ! printf '%s' "$api_trusted" | grep -qF "$expect_subnet"; then
+        fail "the API's TRUSTED_NETWORKS is missing the bridge subnet $expect_subnet: $(oneline "$api_trusted")"
+    elif printf '%s' "$mynetworks" | grep -q '172\.16\.0\.0/12'; then
         fail "mynetworks still carries the 172.16.0.0/12 range: $(oneline "$mynetworks")"
     elif ! printf '%s' "$mynetworks" | grep -qF "$expect_subnet"; then
         fail "mynetworks is missing the bridge subnet $expect_subnet: $(oneline "$mynetworks")"
@@ -561,7 +567,7 @@ if should_run 12; then
     elif ! printf '%s' "$trusted" | grep -qF "$expect_subnet"; then
         fail "OpenDKIM InternalHosts is missing the bridge subnet $expect_subnet: $(oneline "$trusted")"
     else
-        ok "mynetworks + InternalHosts scoped to loopback + $expect_subnet (no 172.16/12)"
+        ok "mynetworks + InternalHosts + API TRUSTED_NETWORKS scoped to loopback + $expect_subnet (no 172.16/12)"
     fi
 else
     skip "probe 12 not selected"
