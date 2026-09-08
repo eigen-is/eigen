@@ -6,8 +6,6 @@ Scope follows [SECURITY.md](../SECURITY.md). Severity: **Medium** = a missing se
 
 | # | Sev | Item | Minimal fix | Where |
 |---|-----|------|-------------|-------|
-| 8 | Medium | No Content-Security-Policy on any deployment shape | A `<meta http-equiv="Content-Security-Policy">` injected by the shared Vite plugin covers every shape (edge, static, host proxies). The API cannot set it: Caddy's file server serves the HTML. Needs a browser pass over all apps before merge. | branch `worktree-agent-ace5dc7677d82b1ed` (unmerged, tests green, not browser-verified) |
-| 18 | Low | `static` shape and generated host-proxy snippets ship no security headers | Copy the three `header` lines from `/Caddyfile` into `docker/static/Caddyfile` and the nginx/Caddy/Apache snippets in `scripts/setup.ts`, plus `Referrer-Policy: strict-origin-when-cross-origin` in all of them. | same branch as #8 |
 | 21 | Low | API `TRUSTED_NETWORKS` also trusts `172.16/12`, and the setup fallback subnet `10.20.0.0/24` falls outside it | Derive from `EIGEN_SUBNET` in `docker-compose.yml`, `scripts/setup.ts`, `scripts/generate-env.sh`. | `apps/api/src/lib/core/access.ts` |
 | 10 | Low | HTML mail keeps `<form>` and positioned CSS inside the closed shadow root | `FORBID_TAGS: ['form']` in `mail-parse.ts`. The body is server-purified and stays in the shadow root by decision; no iframe. | `apps/api/src/lib/mail/mail-parse.ts` |
 | 11 | Low | HTML mail auto-loads remote images | Parked: every fix is a feature (opt-in toggle or image proxy). | `apps/api/src/lib/mail/mail-parse.ts` |
