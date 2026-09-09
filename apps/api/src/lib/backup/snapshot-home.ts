@@ -33,10 +33,11 @@ const HOME_DATABASES: [DatabaseConfig<SchemaType>, string][] = [
     [NOTIFICATION_CENTER_DB_CONFIG, PATHS.NOTIFICATIONS.DB],
 ];
 
-// `mounts` is walked from its paths tables instead (snapshotMountData); the rest are caches and
-// scratch space: mount thumbnails, temp working copies, the Maildir delivery spool, frozen upload
-// payloads and the contacts avatar cache, all rebuilt from what the archive does carry.
-const SKIPPED_HOME_DIRS = new Set(['mounts', 'thumbs', 'tmp', 'staging', 'avatars']);
+// `mounts/` is walked from its paths tables instead (snapshotMountData); the Maildir delivery spool
+// holds half-written deliveries, and the contacts avatar cache is derived from the cards.
+const SKIPPED_HOME_DIRS = new Set<string>([PATHS.DRIVE.ROOT, PATHS.MAIL.TMP, PATHS.CONTACTS.AVATARS]);
+
+const KNOWN_DATABASES = new Set(HOME_DATABASES.map(([, relPath]) => relPath));
 
 // Databases are captured with VACUUM INTO through the live handle, never as a file copy, and their
 // journals belong to the running server.
@@ -47,9 +48,18 @@ function listHomeFiles(dir: string, relDir: string, out: string[]): void {
         const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
         if (entry.isDirectory()) {
             if (!SKIPPED_HOME_DIRS.has(entry.name)) listHomeFiles(path.join(dir, entry.name), rel, out);
-        } else if (entry.isFile() && !DB_FILE.test(entry.name)) {
-            out.push(rel);
+            continue;
         }
+        if (!entry.isFile()) continue;
+        if (DB_FILE.test(entry.name)) {
+            // A home database missing from HOME_DATABASES would be dropped from every archive in
+            // silence. Fail loudly instead, so a new subsystem's db is noticed the day it lands.
+            if (entry.name.endsWith('.db') && !KNOWN_DATABASES.has(rel)) {
+                throw new Error(`snapshotHome: unlisted home database ${rel} — add it to HOME_DATABASES`);
+            }
+            continue;
+        }
+        out.push(rel);
     }
 }
 
@@ -86,6 +96,13 @@ export async function snapshotHome(
     fs.mkdirSync(folder, { recursive: true });
     const entries: BackupEntry[] = [];
 
+    // Every tick doubles as a keep-alive: a home whose idle timer (5 minutes for a user) fires
+    // mid-walk destructs itself, and the next stageCopy hits a closed database.
+    const report: SnapshotProgress = (step, done, total) => {
+        home.touch();
+        onProgress?.(step, done, total);
+    };
+
     const stageDatabase = async (config: DatabaseConfig<SchemaType>, relPath: string): Promise<void> => {
         const managed = await home.getLocalDatabase(config, relPath);
         const destPath = path.join(folder, 'home', relPath);
@@ -95,35 +112,38 @@ export async function snapshotHome(
     };
 
     for (const [index, [config, relPath]] of HOME_DATABASES.entries()) {
-        onProgress?.('databases', index, HOME_DATABASES.length);
-        if (!fs.existsSync(path.join(home.homeDir, relPath))) continue;
-        await stageDatabase(config, relPath);
+        if (fs.existsSync(path.join(home.homeDir, relPath))) await stageDatabase(config, relPath);
+        report('databases', index + 1, HOME_DATABASES.length);
     }
 
     const mounts = home.drive.getMounts();
     const mountSummaries: BackupManifest['mounts'] = [];
     for (const [index, mount] of mounts.entries()) {
-        onProgress?.('mounts', index, mounts.length);
         const relPrefix = `home/mounts/${mount.id}`;
-        const before = entries.length;
         await stageDatabase(MOUNT_DB_CONFIG, `mounts/${mount.id}/${PATHS.DRIVE.METADATA_DB}`);
-        entries.push(...(await snapshotMountData(mount, path.join(folder, relPrefix, 'data'), `${relPrefix}/data`)));
-        const mine = entries.slice(before);
+        // Counted from here, so the summary means the mount's data files — metadata.db is a database,
+        // and counts.databases already has it.
+        const data = await snapshotMountData(mount, path.join(folder, relPrefix, 'data'), `${relPrefix}/data`, report);
+        entries.push(...data);
         mountSummaries.push({
             id: mount.id,
             storageType: mount.config.storageType,
-            files: mine.length,
-            bytes: mine.reduce((sum, entry) => sum + entry.bytes, 0),
+            files: data.length,
+            bytes: data.reduce((sum, entry) => sum + entry.bytes, 0),
         });
+        report('mounts', index + 1, mounts.length);
     }
 
     const homeFiles: string[] = [];
     listHomeFiles(home.homeDir, '', homeFiles);
     for (const [index, rel] of homeFiles.entries()) {
-        onProgress?.('home files', index, homeFiles.length);
-        entries.push(
-            await captureFile(Bun.file(path.join(home.homeDir, rel)), path.join(folder, 'home', rel), `home/${rel}`),
-        );
+        const source = Bun.file(path.join(home.homeDir, rel));
+        // A file can vanish between the listing and the read — a Maildir new/→cur/ move, a card
+        // rewrite. It is out of the archive either way; losing the whole snapshot over it is not.
+        if (await source.exists()) {
+            entries.push(await captureFile(source, path.join(folder, 'home', rel), `home/${rel}`));
+        }
+        report('home files', index + 1, homeFiles.length);
     }
 
     if (owner.type === 'user') {
@@ -175,6 +195,6 @@ export async function snapshotHome(
         entries,
     };
     await Bun.write(path.join(folder, 'manifest.json'), JSON.stringify(manifest, null, 2));
-    onProgress?.('done', 1, 1);
+    report('done', 1, 1);
     return manifest;
 }

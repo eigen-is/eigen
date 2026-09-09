@@ -1,36 +1,108 @@
+import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupEntry } from '@workspace/lib/types/backup';
+import { isDocumentType } from '@workspace/lib/types/drive';
 import { buildStorageKey } from '../mount/helpers';
 import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
 import { stageManagedDbCopy } from '../versioning/snapshot';
-import { captureFile, captureWrittenFile, normalizeArchiveDatabase } from './capture';
+import { VERSIONS_FOLDER_NAME } from '../versioning/versions-folder';
+import { captureFile, captureWrittenFile } from './capture';
+import type { SnapshotProgress } from './snapshot-home';
 
-type PathRow = Pick<typeof paths.$inferSelect, 'id' | 'name' | 'type' | 'parentId' | 'trashedFrom'>;
+type PathRow = Pick<typeof paths.$inferSelect, 'id' | 'file' | 'name' | 'type' | 'parentId' | 'trashedFrom'>;
+
+// The two databases a container owns; a mount never manages any other (see mount/document-db.ts).
+const CONTAINER_DB_NAMES = new Set(['data.db', 'comments.db']);
+
+// Ancestors of `row`, nearest first. Guarded against a corrupt parentId cycle, which would
+// otherwise spin forever on a table the backup does not get to trust.
+function* ancestors(row: PathRow, byId: Map<string, PathRow>): Generator<PathRow> {
+    const seen = new Set<string>([row.id]);
+    let current = row.parentId ? byId.get(row.parentId) : undefined;
+    while (current && !seen.has(current.id)) {
+        seen.add(current.id);
+        yield current;
+        current = current.parentId ? byId.get(current.parentId) : undefined;
+    }
+}
 
 // Where a row's bytes go inside the archive: the storage key it WOULD have on a `local` mount —
-// the name chain from the root, with a trash root under `.trash/{id}.{ext}` as trashPath spells it.
+// the name chain from the root, with a trash root at `.trash/{id}.{ext}` as trashPath spells it.
 // Deriving it from metadata.db instead of the mount's own keys is what makes the archive
 // storage-independent: local-key and s3 mounts store flat keys, and restore re-derives whichever
 // shape the target mount needs.
 function archivePath(row: PathRow, byId: Map<string, PathRow>): string {
-    const segments: string[] = [];
-    let current: PathRow | undefined = row;
-    while (current && current.parentId !== null) {
-        segments.unshift(current.trashedFrom ? `.trash/${buildStorageKey(current.id, current.name)}` : current.name);
-        current = byId.get(current.parentId);
+    const segment = (r: PathRow) => (r.trashedFrom ? `.trash/${buildStorageKey(r.id, r.name)}` : r.name);
+    const segments = [segment(row)];
+    for (const parent of ancestors(row, byId)) {
+        if (parent.parentId === null) break; // the mount root contributes no segment
+        segments.unshift(segment(parent));
     }
     return segments.join('/');
+}
+
+// Mirrors Mount.resolveStoragePath / getStorageKey, resolved from the tree we already hold rather
+// than one recursive-CTE query per file.
+function storageKeyOf(mount: Mount, row: PathRow, byId: Map<string, PathRow>): string {
+    if (!mount.isPathBased) return row.file || row.id;
+    const segments = row.file ? [row.file] : [];
+    for (const parent of ancestors(row, byId)) {
+        if (parent.parentId === null) break;
+        if (parent.file) segments.unshift(parent.file);
+    }
+    return segments.join('/');
+}
+
+// The databases the mount itself manages: a container's data.db/comments.db, and the versions/
+// snapshots of one. Returns the container to lock while copying, or null for anything else — a
+// user's own upload that happens to be SQLite must round-trip byte-identical.
+function managedDbContainer(row: PathRow, byId: Map<string, PathRow>): PathRow | null {
+    const parent = row.parentId ? byId.get(row.parentId) : undefined;
+    if (!parent) return null;
+    if (parent.name === VERSIONS_FOLDER_NAME) {
+        const container = parent.parentId ? byId.get(parent.parentId) : undefined;
+        return container && isDocumentType(container.type) ? container : null;
+    }
+    return CONTAINER_DB_NAMES.has(row.name) && isDocumentType(parent.type) ? parent : null;
+}
+
+// A WAL-mode database cannot be opened at all — not even read-only — without the `-wal` beside it,
+// and an archive carries main files only: the journals belong to the running server. Rewrite the
+// copy's journal mode so every database in the archive stands alone. Only reached for mount-owned
+// databases, whose copied bytes are already whole (the live handle is captured with VACUUM INTO,
+// and a closed one was checkpointed TRUNCATE by ManagedDatabase.close). A corrupt container must
+// not cost the user the rest of the backup, so a failure keeps the copied bytes and verify's
+// quick_check flags them.
+function normalizeArchiveDatabase(destPath: string): void {
+    try {
+        const db = new Database(destPath, { readwrite: true, create: false });
+        try {
+            db.run('PRAGMA journal_mode = DELETE');
+        } finally {
+            db.close();
+        }
+    } catch (e) {
+        console.warn(`[backup] could not reset the journal mode of ${destPath}:`, e);
+    }
+    fs.rmSync(`${destPath}-wal`, { force: true });
+    fs.rmSync(`${destPath}-shm`, { force: true });
 }
 
 // Copy every file the mount's paths table knows about into `targetDir`. Walking the table rather
 // than the filesystem is what keeps `thumbs/`, `tmp/` and `staging/` out and `.trash/` + `versions/`
 // in, on every backend.
-export async function snapshotMountData(mount: Mount, targetDir: string, relPrefix: string): Promise<BackupEntry[]> {
+export async function snapshotMountData(
+    mount: Mount,
+    targetDir: string,
+    relPrefix: string,
+    onProgress: SnapshotProgress,
+): Promise<BackupEntry[]> {
     const rows = await mount.db
         .select({
             id: paths.id,
+            file: paths.file,
             name: paths.name,
             type: paths.type,
             parentId: paths.parentId,
@@ -41,44 +113,34 @@ export async function snapshotMountData(mount: Mount, targetDir: string, relPref
     const byId = new Map(rows.map((row) => [row.id, row]));
 
     const entries: BackupEntry[] = [];
-    for (const row of rows) {
+    for (const [index, row] of rows.entries()) {
         if (row.type !== 'file') continue;
         const relPath = archivePath(row, byId);
         const destPath = path.join(targetDir, relPath);
         const entryPath = `${relPrefix}/${relPath}`;
 
-        // A container's managed db (data.db, comments.db) has a live handle whose VACUUM INTO holds
-        // writes no other source has. The container's path lock keeps the copy off a mid-close
-        // checkpoint; the skip-if-contended variant (as versioning/snapshot.ts uses) never parks on
-        // a close, and a contended lock falls through to the read below rather than dropping the
-        // file — staged and stored bytes are both whole databases.
-        if (mount.documentDbs.has(row.id) && row.parentId) {
-            const staged = await mount.tryWithPathLock(row.parentId, async () => {
-                fs.mkdirSync(path.dirname(destPath), { recursive: true });
-                await stageManagedDbCopy(mount, row.id, destPath, 'open-handle-first');
-                return true;
-            });
-            if (staged) {
-                entries.push(await captureWrittenFile(destPath, entryPath));
-                continue;
-            }
-        }
-
-        // readFile is itself freshest-first (pending staged copy, then the stored object). Null means
-        // the row has no bytes yet (a touched file whose upload never landed); the archive mirrors
-        // that absence rather than inventing an empty object.
-        const file = await mount.readFile(row.id);
-        if (!file) continue;
-        // A closed container db and every versions/ snapshot arrive as plain bytes, so they still
-        // carry the live server's journal mode — hash after normalizing, not during the copy.
-        if (row.name.endsWith('.db')) {
+        const container = managedDbContainer(row, byId);
+        if (container) {
             fs.mkdirSync(path.dirname(destPath), { recursive: true });
-            await Bun.write(destPath, file);
+            // Blocking lock, like snapshotContainerDataDb: a contended lock must never degrade to a
+            // raw read of the live main file, which would drop every commit still sitting in the WAL.
+            // Deadlock-safe by the same argument — a close never parks on the container lock (its own
+            // snapshot try-locks and skips) and the backup holds no closing slot of its own.
+            await mount.withPathLock(container.id, () =>
+                stageManagedDbCopy(mount, row.id, destPath, 'open-handle-first'),
+            );
             normalizeArchiveDatabase(destPath);
             entries.push(await captureWrittenFile(destPath, entryPath));
+            onProgress('mount files', index + 1, rows.length);
             continue;
         }
-        entries.push(await captureFile(file, destPath, entryPath));
+
+        // readKey is freshest-first (pending staged copy, then the stored object). Null means the row
+        // has no bytes yet (a touched file whose upload never landed); the archive mirrors that
+        // absence rather than inventing an empty object.
+        const file = await mount.readKey(storageKeyOf(mount, row, byId));
+        if (file) entries.push(await captureFile(file, destPath, entryPath));
+        onProgress('mount files', index + 1, rows.length);
     }
     return entries;
 }

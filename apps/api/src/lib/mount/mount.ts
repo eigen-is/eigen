@@ -53,7 +53,8 @@ export class Mount {
 
     private baseDir: string;
     storage: StorageBackend; // internal — used by mount/*.ts + versioning/snapshot.ts
-    // internal — used by mount/*.ts + versioning/snapshot.ts + drive/history.ts (constructor-injected)
+    // internal — used by mount/*.ts + versioning/snapshot.ts + lib/backup + drive/history.ts
+    // (the last one constructor-injected)
     db!: BunSQLiteDatabase<typeof schema>;
     private getLocalDatabase: LocalDatabaseGetter;
     private ownerId: string;
@@ -591,7 +592,8 @@ export class Mount {
         return this.createFile(parentId, name, mimeType, 0, undefined);
     }
 
-    // internal — used by mount/*.ts + versioning/snapshot.ts + Drive.withPathLock (ChatRoom.init)
+    // internal — used by mount/*.ts + versioning/snapshot.ts + lib/backup + Drive.withPathLock
+    // (ChatRoom.init)
     async withPathLock<T>(pathId: string, fn: () => Promise<T>): Promise<T> {
         while (this.pathLocks.has(pathId)) {
             await this.pathLocks.get(pathId);
@@ -847,10 +849,16 @@ export class Mount {
     }
 
     async readFile(pathId: string): Promise<StorageFile | null> {
-        const storageKey = await this.getStorageKey(pathId);
-        // Freshest-first: an un-acked upload's frozen staged copy holds bytes newer than the storage
-        // object, so serve it — copy/download must never capture stale/absent storage. Only container
-        // dbs are ever staged, so a served file gets fresher-or-equal bytes, never staler.
+        return this.readKey(await this.getStorageKey(pathId));
+    }
+
+    // Read by storage key, for callers that already resolved it (lib/backup walks a whole paths
+    // table and derives every key from the tree it holds, rather than re-querying per file).
+    // Freshest-first: an un-acked upload's frozen staged copy holds bytes newer than the storage
+    // object, so serve it — copy/download must never capture stale/absent storage. Only container
+    // dbs are ever staged, so a served file gets fresher-or-equal bytes, never staler.
+    // internal — used by mount/*.ts + lib/backup
+    async readKey(storageKey: string): Promise<StorageFile | null> {
         const staged = this.pendingStagedCopy(storageKey);
         if (staged) return Bun.file(staged);
         const file = this.storage.read(storageKey);
@@ -992,7 +1000,7 @@ export class Mount {
         return this.config.storageType !== 'local-key' && this.config.storageType !== 'local';
     }
 
-    // internal — used by mount/*.ts
+    // internal — used by mount/*.ts + lib/backup
     get isPathBased(): boolean {
         return this.config.storageType === 'local';
     }

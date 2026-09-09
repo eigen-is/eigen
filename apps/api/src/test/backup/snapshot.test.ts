@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
-import { beforeAll, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync } from 'node:fs';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { BackupEntry, BackupManifest } from '@workspace/lib/types/backup';
@@ -9,6 +9,8 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import * as encoding from 'lib0/encoding';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
+import { twoFactor as twoFactorScheme } from '../../../auth-schema';
+import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { buildArtifactName, buildHomeFolderName, parseArtifactName } from '../../lib/backup/paths';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
@@ -18,6 +20,7 @@ import { getServerConfig } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home/get-home';
 import { createMountConfig } from '../../lib/mount';
 import {
+    addMember,
     addTeamMount,
     assertJson,
     authedRequest,
@@ -38,6 +41,8 @@ const LOCAL_MOUNT_ID = 'backup-local';
 const PROBE_TEXT = 'backup-probe';
 // A share to an address with no account is what writes a share_registry row (acl-propagation.ts).
 const SHARE_TARGET = 'outsider@external.test';
+// A user's own SQLite upload, in WAL mode — the file the archive must never rewrite.
+const USER_DB_NAME = 'user-upload.db';
 
 async function listArchiveFiles(root: string): Promise<string[]> {
     const found: string[] = [];
@@ -68,6 +73,9 @@ describe('Backup snapshotHome', () => {
     let defaultMountId: string;
     let docId: string;
     let liveUpdateCount: number;
+    let apiKeyId: string;
+    let twoFactorId: string;
+    let userDbBytes: ArrayBuffer;
 
     beforeAll(async () => {
         ctx = await getTestContext();
@@ -195,7 +203,49 @@ describe('Backup snapshotHome', () => {
             }),
         });
 
+        // A user's own database in drive. Journal mode and all, it must come out of the archive
+        // byte-identical — the normalization only ever touches container-owned databases.
+        const seedPath = join(mkdtempSync(join(TEST_DATA_DIR, 'user-db-')), USER_DB_NAME);
+        const seedDb = new Database(seedPath, { create: true });
+        seedDb.run('PRAGMA journal_mode = WAL;');
+        seedDb.run('CREATE TABLE notes (body TEXT)');
+        seedDb.run("INSERT INTO notes VALUES ('mine')");
+        seedDb.run('PRAGMA wal_checkpoint(TRUNCATE);');
+        seedDb.close(true);
+        userDbBytes = await Bun.file(seedPath).arrayBuffer();
+        await driveUpload(
+            alice.sessionToken,
+            alice.id,
+            LOCAL_MOUNT_ID,
+            localRoot.id,
+            new File([userDbBytes], USER_DB_NAME, { type: 'application/x-sqlite3' }),
+        );
+
         await Bun.write(join(getAvatarsDir(), `${alice.id}.webp`), TEST_PNG_BYTES);
+
+        // One row of every auth table the archive carries, for alice and for bob, so the queries are
+        // pinned to their user. An app password goes through the real endpoint; a two_factor row is
+        // inserted directly, because really enabling 2FA would gate every other test's sign-in.
+        const cookie = (token: string) => ({ cookie: `better-auth.session_token=${token}` });
+        apiKeyId = (await auth.api.createApiKey({
+            body: { name: 'backup-app-password' },
+            headers: cookie(alice.sessionToken),
+        }))!.id;
+        await auth.api.createApiKey({
+            body: { name: 'backup-bob-password' },
+            headers: cookie(ctx.bob.user.sessionToken),
+        });
+        twoFactorId = `backup-2fa-${Date.now()}`;
+        getAuthDrizzleDb()
+            .insert(twoFactorScheme)
+            .values([
+                { id: twoFactorId, secret: 'seeded', backupCodes: 'seeded', userId: alice.id },
+                { id: `${twoFactorId}-bob`, secret: 'seeded', backupCodes: 'seeded', userId: ctx.bob.user.id },
+            ])
+            .run();
+        const authTeamId = await createTeam(ctx, getServerConfig()!.orgId, `Backup Auth Team ${Date.now()}`);
+        await addMember(ctx, authTeamId, alice.id);
+        await addMember(ctx, authTeamId, ctx.bob.user.id);
 
         const target = mkdtempSync(join(TEST_DATA_DIR, 'backup-'));
         manifest = await snapshotHome(home, target);
@@ -254,7 +304,9 @@ describe('Backup snapshotHome', () => {
     });
 
     test('every copied database passes quick_check', () => {
-        const dbs = files.filter((f) => f.endsWith('.db'));
+        // Eigen's own databases. A user's SQLite upload is copied verbatim, so its journal mode is
+        // whatever they uploaded and a read-only open of it may refuse — see the round-trip test.
+        const dbs = files.filter((f) => f.endsWith('.db') && !f.endsWith(`/${USER_DB_NAME}`));
         expect(dbs.length).toBeGreaterThan(4);
         for (const rel of dbs) {
             let db: Database;
@@ -302,15 +354,36 @@ describe('Backup snapshotHome', () => {
     });
 
     test('auth.json carries this user rows only', async () => {
-        const auth = (await Bun.file(join(folder, 'auth.json')).json()) as Record<string, { id?: string }[]>;
-        expect(Object.keys(auth).sort()).toEqual(
+        const rows = (await Bun.file(join(folder, 'auth.json')).json()) as {
+            user: { id: string }[];
+            account: { userId: string }[];
+            apikey: { id: string; referenceId: string }[];
+            two_factor: { id: string; userId: string }[];
+            member: { userId: string }[];
+            team_member: { userId: string }[];
+        };
+        expect(Object.keys(rows).sort()).toEqual(
             ['account', 'apikey', 'member', 'team_member', 'two_factor', 'user'].sort(),
         );
-        expect(auth['user'].length).toBe(1);
-        expect(auth['account'].length).toBeGreaterThanOrEqual(1);
-        for (const key of ['apikey', 'member', 'team_member', 'two_factor']) {
-            expect(Array.isArray(auth[key])).toBe(true);
-        }
+        const alice = ctx.alice.user;
+        const bob = ctx.bob.user;
+
+        expect(rows.user.map((r) => r.id)).toEqual([alice.id]);
+        expect(rows.account.length).toBeGreaterThanOrEqual(1);
+        expect(rows.account.every((r) => r.userId === alice.id)).toBe(true);
+
+        expect(rows.apikey.map((r) => r.id)).toContain(apiKeyId);
+        expect(rows.apikey.every((r) => r.referenceId === alice.id)).toBe(true);
+        expect(rows.two_factor.map((r) => r.id)).toEqual([twoFactorId]);
+        expect(rows.two_factor.every((r) => r.userId === alice.id)).toBe(true);
+
+        expect(rows.member.length).toBeGreaterThanOrEqual(1);
+        expect(rows.member.every((r) => r.userId === alice.id)).toBe(true);
+        expect(rows.team_member.length).toBeGreaterThanOrEqual(1);
+        expect(rows.team_member.every((r) => r.userId === alice.id)).toBe(true);
+
+        // Bob has a row of his own in each of these tables; none of them may be here.
+        expect(JSON.stringify(rows)).not.toContain(bob.id);
     });
 
     test('shares.json holds the seeded registry row', async () => {
@@ -322,6 +395,14 @@ describe('Backup snapshotHome', () => {
         expect(shares.every((s) => s.fromUserId === ctx.alice.user.id)).toBe(true);
     });
 
+    test("a user's own SQLite upload round-trips byte-identical", () => {
+        const entry = findOrFail(manifest.entries, (e) => e.path.endsWith(`/${USER_DB_NAME}`));
+        const hasher = new Bun.CryptoHasher('sha256');
+        hasher.update(new Uint8Array(userDbBytes));
+        expect(entry.bytes).toBe(userDbBytes.byteLength);
+        expect(entry.sha256).toBe(hasher.digest('hex'));
+    });
+
     test('the snapshot leaves the live drive intact', async () => {
         const contents = await driveGetList(
             ctx.alice.user.sessionToken,
@@ -330,6 +411,111 @@ describe('Backup snapshotHome', () => {
             `folder/${(await assertJson<DrivePath>(await authedRequest(ctx.alice.user.sessionToken, `/drive/${ctx.alice.user.id}/${defaultMountId}/root`))).id}`,
         );
         expect(contents.some((c) => c.id === docId)).toBe(true);
+    });
+});
+
+describe('Backup snapshotHome under contention', () => {
+    let ctx: TestCtx;
+    let home: Awaited<ReturnType<typeof getHome>>;
+    let mountId: string;
+
+    const UPDATE_COUNT = 10;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        home = await getHome(ctx.alice.user.id);
+        const mounts = await assertJson<{ id: string }[]>(
+            await authedRequest(ctx.alice.user.sessionToken, `/drive/${ctx.alice.user.id}/mounts`),
+        );
+        mountId = mounts[0].id;
+    });
+
+    // The regression: falling back to a raw read of an open container's main file drops every commit
+    // still sitting in the WAL, and the journal-mode reset then makes that loss permanent.
+    test('waits out a held container lock and keeps WAL-resident commits', async () => {
+        const alice = ctx.alice.user;
+        const root = await assertJson<DrivePath>(
+            await authedRequest(alice.sessionToken, `/drive/${alice.id}/${mountId}/root`),
+        );
+        const docName = `Backup Race ${Date.now()}`;
+        const doc = await drivePost(alice.sessionToken, alice.id, mountId, `folder/${root.id}/create/doc`, {
+            fileName: docName,
+        });
+
+        // Written through the live handle and never checkpointed: only a VACUUM INTO of that handle
+        // sees them, a copy of the main file does not.
+        const collab = await home.drive.getCollabDocument(mountId, doc.id);
+        const conn = { send() {}, readyState: 1 } as unknown as Parameters<typeof collab.handleMessage>[0];
+        for (let i = 0; i < UPDATE_COUNT; i++) {
+            const edit = new Y.Doc();
+            edit.getText(`probe-${i}`).insert(0, `${PROBE_TEXT}-${i}`);
+            collab.handleMessage(conn, syncUpdateMessage(edit), true);
+        }
+
+        const mount = findOrFail(home.drive.getMounts(), (m) => m.id === mountId);
+        let release!: () => void;
+        const held = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const lockHolder = mount.withPathLock(doc.id, () => held);
+
+        const target = mkdtempSync(join(TEST_DATA_DIR, 'backup-race-'));
+        let settled = false;
+        const running = snapshotHome(home, target).then((m) => {
+            settled = true;
+            return m;
+        });
+        await Bun.sleep(200);
+        expect(settled).toBe(false);
+        release();
+        const manifest = await running;
+        await lockHolder;
+
+        const folder = join(target, buildHomeFolderName(alice.id));
+        const entry = findOrFail(
+            manifest.entries,
+            (e) => e.path === `home/mounts/${mountId}/data/${docName}.eigendoc/data.db`,
+        );
+        const db = new Database(join(folder, entry.path), { readonly: true });
+        try {
+            const rows = db.query('SELECT updateData FROM doc_updates').all() as { updateData: Uint8Array }[];
+            const replay = new Y.Doc();
+            for (const row of rows) Y.applyUpdate(replay, new Uint8Array(row.updateData));
+            for (let i = 0; i < UPDATE_COUNT; i++) {
+                expect(replay.getText(`probe-${i}`).toString()).toBe(`${PROBE_TEXT}-${i}`);
+            }
+        } finally {
+            db.close();
+        }
+    });
+
+    test('touches the home along the walk so its idle timer cannot destruct it mid-snapshot', async () => {
+        const touch = spyOn(home, 'touch');
+        try {
+            await snapshotHome(home, mkdtempSync(join(TEST_DATA_DIR, 'backup-touch-')));
+            expect(touch.mock.calls.length).toBeGreaterThan(10);
+        } finally {
+            touch.mockRestore();
+        }
+    });
+
+    test('tolerates a home file that vanishes between the listing and the read', async () => {
+        // Stands in for a Maildir new/→cur/ move or a card rewrite landing mid-walk.
+        const raceDir = join(home.homeDir, 'backup-vanish');
+        mkdirSync(raceDir, { recursive: true });
+        for (let i = 0; i < 20; i++) await Bun.write(join(raceDir, `vanish-${i}.txt`), `payload ${i}`);
+
+        const target = mkdtempSync(join(TEST_DATA_DIR, 'backup-vanish-'));
+        try {
+            const manifest = await snapshotHome(home, target, (step) => {
+                if (step === 'home files') rmSync(raceDir, { recursive: true, force: true });
+            });
+            const folder = join(target, buildHomeFolderName(ctx.alice.user.id));
+            expect(manifest.entries.filter((e) => e.path.startsWith('home/backup-vanish/')).length).toBeLessThan(20);
+            for (const entry of manifest.entries) expect(existsSync(join(folder, entry.path))).toBe(true);
+        } finally {
+            rmSync(raceDir, { recursive: true, force: true });
+        }
     });
 });
 
