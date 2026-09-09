@@ -4,7 +4,7 @@ import * as schema from './schema';
 
 export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'mount-metadata',
-    currentVersion: 7,
+    currentVersion: 8,
     schema,
     migrations: [
         {
@@ -287,6 +287,14 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     `CREATE UNIQUE INDEX IF NOT EXISTS idx_paths_unique_active_name ON paths(parentId, LOWER(name)) WHERE trashedAt IS NULL;`,
                 );
             },
+        },
+        {
+            version: 8,
+            up: (db) =>
+                // Until now every staged copy was a managed database, so the queue could judge one by
+                // its SQLite header. A restore stages plain files too; they say so on the row. The
+                // default keeps every existing row on the old, guarded meaning.
+                db.exec(`ALTER TABLE pending_uploads ADD COLUMN isDatabase INTEGER NOT NULL DEFAULT 1;`),
         },
     ],
 };

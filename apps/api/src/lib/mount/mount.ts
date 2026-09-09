@@ -17,7 +17,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import type { AsyncSingleton } from '../../utils/singleton';
 import { getServerSettings } from '../config/server-settings';
-import { ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType } from '../core';
+import { ApiError, type DatabaseConfig, type ManagedDatabase, PATHS, type SchemaType } from '../core';
 import { FileHistory } from '../drive/history';
 import { deleteThumbnail } from '../shared/thumbnails';
 import { LocalStorage, S3Storage, type StorageBackend, type StorageFile, wrapWithStorageFault } from '../storage';
@@ -140,7 +140,7 @@ export class Mount {
     // cleanupStaleFiles sweep must never purge a staged copy whose PUT hasn't acked yet
     // (invariant 2). Only used by isRemote mounts.
     get stagingDir(): string {
-        return path.join(this.baseDir, 'staging');
+        return path.join(this.baseDir, PATHS.DRIVE.STAGING_DIR);
     }
 
     get previewsDir(): string {

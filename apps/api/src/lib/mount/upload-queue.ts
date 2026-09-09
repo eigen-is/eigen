@@ -205,7 +205,7 @@ export class UploadQueue {
                 .limit(1)
                 .get();
             if (!row) break;
-            await semaphore.run(() => this.performUpload(row.storageKey, row.stagingPath, row.attempt));
+            await semaphore.run(() => this.performUpload(row.storageKey, row.stagingPath, row.attempt, row.isDatabase));
         }
         if (this.closing) return;
         // Re-drive backed-off rows exactly when the earliest becomes due — our own timer, no sweep.
@@ -231,7 +231,12 @@ export class UploadQueue {
     // cancel/restore/supersede that landed since dequeue aborts it. On success: clear the row iff
     // still ours, delete the staged copy, and — if the row was cancelled mid-PUT — delete the object
     // the PUT just resurrected. On failure: back off and leave both for a later retry. Never throws.
-    private async performUpload(storageKey: string, storedStaging: string, attempt: number): Promise<void> {
+    private async performUpload(
+        storageKey: string,
+        storedStaging: string,
+        attempt: number,
+        isDatabase: boolean,
+    ): Promise<void> {
         if (this.closing) return;
         // storedStaging is the row's stagingPath column (a basename for new rows, absolute for legacy);
         // resolve it for filesystem ops but key DB writes off the stored value it was matched on.
@@ -249,7 +254,10 @@ export class UploadQueue {
             if (!this.closing) this.deletePendingRow(storageKey, storedStaging);
             return;
         }
-        if (!isSqliteFile(stagingPath)) {
+        // The check only means something for a managed database: a VACUUM INTO copy that lost its
+        // SQLite header is a disk fault. A restore's staged plain files (isDatabase false) are PNGs,
+        // PDFs and text, and dropping them here would discard most of a restored s3 mount.
+        if (isDatabase && !isSqliteFile(stagingPath)) {
             // Poison staged copy (disk fault after VACUUM INTO): uploading it would ack garbage
             // over the good object. Drop it — the object stays last-good, the loss is bounded to
             // the writes in this copy, and the next dirty sync re-stages from the live temp.

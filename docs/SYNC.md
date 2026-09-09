@@ -96,8 +96,10 @@ fix (Phase 1a) · §2 upload pipeline (Phase 1b) · §3 staging + consistent ver
   lands unrepaired (logged when detectable; bucket versioning is the recovery).
 
 - **Commit order is distrusted.** An ack whose orphans all settled while its own PUT was in flight re-PUTs
-  immediately. A staged copy that fails the SQLite magic check (`isSqliteFile`) is dropped loudly before the
-  PUT — the object stays last-good instead of acking garbage.
+  immediately. A staged copy of a database that fails the SQLite magic check (`isSqliteFile`) is dropped
+  loudly before the PUT — the object stays last-good instead of acking garbage. The row says which copies
+  those are: `isDatabase` is true for the managed databases the queue was built for and false for the plain
+  files a restore stages (`lib/backup/restore.ts`), which have no header to check.
 
 - **Backoff is local.** Failed uploads back off (full-jitter, capped) and the queue **self-schedules** its
   own retry — there is no global registry or sweep. The only process-global state is the
@@ -125,7 +127,7 @@ temp-copy backend.
 | `lib/sync/index.ts` | Process-global bits: per-destination semaphore map, backoff, shutdown deadline |
 | `lib/mount/document-db.ts` | The `onSync` / `onOpen` / `onClose` callbacks + snapshot wiring. Open-vs-close is serialized per pathId: a close registers in `Mount.closingDocumentDbs` and a concurrent open of the same pathId waits for it before building, so a fresh instance never shares the closing one's temp/journal files |
 | `lib/core/managed-database.ts` | `markDirty` (crash recovery), `stageCopy` (`VACUUM INTO`), `mustExist` open guard (refuse a missing/0-byte working copy) |
-| `lib/mount/schema.ts` + `db-config.ts` | The `pending_uploads` table (additive migration v4) |
+| `lib/mount/schema.ts` + `db-config.ts` | The `pending_uploads` table (additive migration v4; `isDatabase` in v8) |
 
 ## Ops
 
