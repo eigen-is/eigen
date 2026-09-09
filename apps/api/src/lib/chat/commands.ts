@@ -49,7 +49,7 @@ export function parseCommand(raw: string): ParsedCommand {
     return { kind: 'error', error: 'Unknown command' };
 }
 
-export function formatEmoteForViewer(content: string, authorEmail: string, viewerEmail?: string): string {
+export function formatEmoteForViewer(content: string, authorEmail: string, viewerEmail: string): string {
     // Emit full emails; the client renders them as resolved, hoverable display names.
     if (content.startsWith('$')) {
         const raw = content.slice(1);
