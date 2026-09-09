@@ -6,14 +6,21 @@ import { COLLAB_HOME_REPLACED_CLOSE } from '@workspace/lib/constants/collab';
 import type { BackupManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { eq } from 'drizzle-orm';
-import { user as userScheme } from '../../../auth-schema';
+import { apikey as apikeyScheme, user as userScheme } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
-import { buildArtifactName, buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
+import {
+    buildArtifactName,
+    buildHomeFolderName,
+    FAILED_RESTORE_SUFFIX,
+    getBackupsDir,
+    PRE_RESTORE_SUFFIX,
+} from '../../lib/backup/paths';
 import { restoreHome } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { getHome } from '../../lib/home/get-home';
 import { createMountConfig } from '../../lib/mount';
+import { paths } from '../../lib/mount/schema';
 import { getEigenDb } from '../../lib/share/db';
 import { shareRegistry } from '../../lib/share/schema';
 import {
@@ -49,14 +56,20 @@ async function createUser(email: string, name: string): Promise<TestUser> {
 }
 
 // One artifact of the home as it stands now, in the backups folder restoreHome reads from.
-// `patch` doctors the manifest before packing, which is how a restore is made to fail late.
-async function backup(userId: string, at: Date, patch?: (manifest: BackupManifest) => void): Promise<string> {
+// `patch` doctors the unpacked folder before it is packed, which is how a restore is made to fail
+// after the move-aside — the manifest itself is not hashed, so a doctored file only has to restate
+// its own entry (restateEntry) to get past verify and be judged by the step under test.
+async function backup(
+    userId: string,
+    at: Date,
+    patch?: (manifest: BackupManifest, folder: string) => Promise<void> | void,
+): Promise<string> {
     const home = await getHome(userId);
     const staging = mkdtempSync(join(TEST_DATA_DIR, 'restore-backup-'));
     const folder = join(staging, buildHomeFolderName(userId));
     const manifest = await snapshotHome(home, staging);
     if (patch) {
-        patch(manifest);
+        await patch(manifest, folder);
         writeFileSync(join(folder, 'manifest.json'), JSON.stringify(manifest, null, 2));
     }
     const name = buildArtifactName(userId, at);
@@ -82,6 +95,29 @@ function rootNames(token: string, ownerId: string, mountId: string, rootId: stri
     return driveGetList(token, ownerId, mountId, `folder/${rootId}`).then((items) =>
         items.map((item) => item.name).sort(),
     );
+}
+
+// Re-state one manifest entry for the bytes now on disk, so a deliberate change is judged by the
+// step under test instead of by verify's hashes.
+async function restateEntry(manifest: BackupManifest, folder: string, relPath: string): Promise<void> {
+    const entry = manifest.entries.find((e) => e.path === relPath);
+    if (!entry) throw new Error(`${relPath} is not in the manifest`);
+    const hasher = new Bun.CryptoHasher('sha256');
+    hasher.update(new Uint8Array(await Bun.file(join(folder, relPath)).arrayBuffer()));
+    entry.bytes = Bun.file(join(folder, relPath)).size;
+    entry.sha256 = hasher.digest('hex');
+}
+
+// Stamp an archived database with a schema version: higher than this build supports (a backup from a
+// newer server) or lower than a restore can write (an archive from before a migration).
+async function stampSchemaVersion(manifest: BackupManifest, folder: string, relPath: string, version: number) {
+    const db = new Database(join(folder, relPath));
+    try {
+        db.run('UPDATE __schema_version SET version = ? WHERE id = 1', [version]);
+    } finally {
+        db.close();
+    }
+    await restateEntry(manifest, folder, relPath);
 }
 
 function safetyCopies(userId: string, suffix: string): string[] {
@@ -110,6 +146,7 @@ describe('Backup restoreHome', () => {
     let artifact: string;
     let docId: string;
     let keptFileId: string;
+    let trashedFileId: string;
     let localRootId: string;
     let nestedFileId: string;
     let port: number;
@@ -144,6 +181,32 @@ describe('Backup restoreHome', () => {
         });
         expect(aclRes.status).toBe(200);
         keptFileId = kept.id;
+        // A trashed file and two version snapshots: both live in the paths table under their own key
+        // shapes (`.trash/{id}.{ext}`, `{container}/versions/*.db`), so both have to come back.
+        const trashed = await driveUpload<DrivePath>(
+            target.sessionToken,
+            target.id,
+            mountId,
+            rootId,
+            new File([TEST_PNG_BYTES], 'trashed.png', { type: 'image/png' }),
+        );
+        trashedFileId = trashed.id;
+        expect(
+            (
+                await authedRequest(target.sessionToken, `/drive/${target.id}/${mountId}/path/${trashed.id}`, {
+                    method: 'DELETE',
+                })
+            ).status,
+        ).toBe(200);
+        for (const _ of [0, 1]) {
+            const saved = await authedRequest(
+                target.sessionToken,
+                `/drive/${target.id}/${mountId}/file/${doc.id}/versions/save`,
+                { method: 'POST' },
+            );
+            expect(saved.status).toBe(200);
+        }
+
         await deliverMail(target.email, 'Before the backup');
         await authedRequest(target.sessionToken, `/mail/${target.id}/mailbox/`);
 
@@ -226,6 +289,21 @@ describe('Backup restoreHome', () => {
         expect(keptDownload.status).toBe(200);
         expect(new Uint8Array(await keptDownload.arrayBuffer())).toEqual(TEST_PNG_BYTES);
 
+        // The trash and the version history are the file states nothing else keeps a copy of.
+        const trash = await driveGetList(target.sessionToken, target.id, mountId, 'trash');
+        expect(trash.map((item) => item.name)).toEqual(['trashed.png']);
+        // The archive holds a trashed file under `.trash/{id}.{ext}`; this mount stores it under its
+        // flat key like any other file, so the bytes are checked where the mount will look for them
+        // (the download route refuses a trashed path, restore or no restore).
+        const trashedBytes = await Bun.file(
+            join(TEST_DATA_DIR, 'home', target.id, 'mounts', mountId, 'data', `${trashedFileId}.png`),
+        ).arrayBuffer();
+        expect(new Uint8Array(trashedBytes)).toEqual(TEST_PNG_BYTES);
+        const versions = await assertJson<{ name: string }[]>(
+            await authedRequest(target.sessionToken, `/drive/${target.id}/${mountId}/file/${docId}/versions`),
+        );
+        expect(versions.length).toBe(2);
+
         const home = await getHome(target.id);
         const restoredMail = mailSubjectsIn(home.homeDir);
         expect(restoredMail).toContain('Before the backup');
@@ -247,7 +325,7 @@ describe('Backup restoreHome', () => {
             existsSync(join(TEST_DATA_DIR, 'home', target.id, 'mounts', LOCAL_MOUNT_ID, 'data', 'Empty Folder')),
         ).toBe(true);
 
-        const [preRestore] = safetyCopies(target.id, '.pre-restore-');
+        const [preRestore] = safetyCopies(target.id, PRE_RESTORE_SUFFIX);
         expect(preRestore).toBeTruthy();
         expect(mailSubjectsIn(join(TEST_DATA_DIR, 'home', preRestore))).toContain('After the backup');
     });
@@ -270,6 +348,60 @@ describe('Backup restoreHome', () => {
         expect(await closed).toEqual({ code: COLLAB_HOME_REPLACED_CLOSE, reason: 'home-replaced' });
     });
 
+    test('a socket that connects while the mark is set is closed 1012, never 1013', async () => {
+        const { markHomeRestoring, clearHomeRestoring } = await import('../../lib/home/get-home');
+        markHomeRestoring(target.id);
+        try {
+            const ws = new WebSocket(`ws://localhost:${port}/ws/collab/${target.id}/${mountId}/${docId}`, {
+                headers: { cookie: `better-auth.session_token=${target.sessionToken}` },
+            } as unknown as string[]);
+            const closed = await new Promise<{ code: number; reason: string }>((resolve, reject) => {
+                ws.onclose = (event) => resolve({ code: event.code, reason: event.reason });
+                ws.onerror = (event) => reject(event);
+            });
+            // 1013 would make this tab keep its document and retry — straight back over the restore.
+            expect(closed).toEqual({ code: COLLAB_HOME_REPLACED_CLOSE, reason: 'home-replaced' });
+        } finally {
+            clearHomeRestoring(target.id);
+        }
+    });
+
+    test('a second restore of one home is refused and touches nothing', async () => {
+        const { markHomeRestoring, clearHomeRestoring } = await import('../../lib/home/get-home');
+        const before = safetyCopies(target.id, PRE_RESTORE_SUFFIX).length;
+        markHomeRestoring(target.id);
+        try {
+            await expect(restoreHome(artifact, target.id, `restore-second-${Date.now()}`)).rejects.toThrow(
+                'Restore already in progress',
+            );
+        } finally {
+            clearHomeRestoring(target.id);
+        }
+        expect(safetyCopies(target.id, PRE_RESTORE_SUFFIX).length).toBe(before);
+        // The mark the first restore holds is still its own: this one did not clear it on its way out.
+        expect((await authedRequest(target.sessionToken, `/drive/${target.id}/mounts`)).status).toBe(200);
+    });
+
+    test('a path-based row whose name and file differ comes back readable', async () => {
+        // What mount migration v7 leaves behind: it renamed the NAME of a deduplicated row and left
+        // its `file` alone, so the archive's by-name tree and the mount's storage key disagree.
+        const home = await getHome(target.id);
+        const localMount = home.drive.getMounts().find((m) => m.id === LOCAL_MOUNT_ID);
+        expect(localMount).toBeTruthy();
+        await localMount!.db.update(paths).set({ name: 'renamed.png' }).where(eq(paths.id, nestedFileId));
+
+        const artifactV7 = await backup(target.id, new Date(Date.now() + 120_000));
+        await restoreHome(artifactV7, target.id, `restore-renamed-${Date.now()}`);
+
+        const download = await authedRequest(
+            target.sessionToken,
+            `/drive/${target.id}/${LOCAL_MOUNT_ID}/file/${nestedFileId}/download`,
+        );
+        expect(download.status).toBe(200);
+        expect(new Uint8Array(await download.arrayBuffer())).toEqual(TEST_PNG_BYTES);
+        rmSync(join(getBackupsDir(), artifactV7), { force: true });
+    });
+
     test('the home is refused while the mark is set and served again once it clears', async () => {
         const { markHomeRestoring, clearHomeRestoring } = await import('../../lib/home/get-home');
         markHomeRestoring(target.id);
@@ -287,7 +419,7 @@ describe('Backup restoreHome', () => {
         await expect(restoreHome(artifact, ctx.bob.user.id, `restore-mismatch-${Date.now()}`)).rejects.toThrow(
             /another home|not for/i,
         );
-        expect(safetyCopies(ctx.bob.user.id, '.pre-restore-')).toEqual([]);
+        expect(safetyCopies(ctx.bob.user.id, PRE_RESTORE_SUFFIX)).toEqual([]);
         expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual(before);
     });
 
@@ -301,10 +433,72 @@ describe('Backup restoreHome', () => {
 
         await expect(restoreHome(doctored, target.id, `restore-ghost-${Date.now()}`)).rejects.toThrow(/ghost-mount/);
 
-        expect(safetyCopies(target.id, '.failed-restore-').length).toBe(1);
+        expect(safetyCopies(target.id, FAILED_RESTORE_SUFFIX).length).toBe(1);
         expect(existsSync(join(TEST_DATA_DIR, 'home', target.id))).toBe(true);
         // The mark is cleared, so the home serves again — from the folder that was put back.
         expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual(before);
+    });
+});
+
+describe('Backup restore refuses an archive this server cannot open', () => {
+    let user: TestUser;
+    let mountId: string;
+    let rootId: string;
+
+    beforeAll(async () => {
+        await getTestContext();
+        user = await createUser('restore-schema@test.eigen.is', 'Restore Schema');
+        const mounts = await assertJson<{ id: string }[]>(
+            await authedRequest(user.sessionToken, `/drive/${user.id}/mounts`),
+        );
+        mountId = mounts[0].id;
+        rootId = (
+            await assertJson<DrivePath>(await authedRequest(user.sessionToken, `/drive/${user.id}/${mountId}/root`))
+        ).id;
+        await driveUpload(
+            user.sessionToken,
+            user.id,
+            mountId,
+            rootId,
+            new File([TEST_PNG_BYTES], 'still-here.png', { type: 'image/png' }),
+        );
+    });
+
+    test('a database from a newer server is refused and the home is put back', async () => {
+        const before = await rootNames(user.sessionToken, user.id, mountId, rootId);
+        const failedBefore = safetyCopies(user.id, FAILED_RESTORE_SUFFIX).length;
+        // quick_check would pass this file; ManagedDatabase's forward-version guard would not, and it
+        // fails the WHOLE home on the next load — long after the job said the restore was done.
+        const artifact = await backup(user.id, new Date(), (manifest, folder) =>
+            stampSchemaVersion(manifest, folder, 'home/eigen.mail/mail.db', 999),
+        );
+
+        await expect(restoreHome(artifact, user.id, `restore-newer-${Date.now()}`)).rejects.toThrow(
+            /newer than this server/,
+        );
+
+        expect(safetyCopies(user.id, FAILED_RESTORE_SUFFIX).length).toBe(failedBefore + 1);
+        expect(await rootNames(user.sessionToken, user.id, mountId, rootId)).toEqual(before);
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+    });
+
+    test('a mount archived before pending_uploads carried its kind is refused', async () => {
+        const before = await rootNames(user.sessionToken, user.id, mountId, rootId);
+        const failedBefore = safetyCopies(user.id, FAILED_RESTORE_SUFFIX).length;
+        // A restore writes the pending rows itself, naming the isDatabase column; on an older
+        // metadata.db that column does not exist, and taking its DEFAULT would let the queue drop
+        // every restored plain file as corrupt.
+        const artifact = await backup(user.id, new Date(Date.now() + 60_000), (manifest, folder) =>
+            stampSchemaVersion(manifest, folder, `home/mounts/${mountId}/metadata.db`, 7),
+        );
+
+        await expect(restoreHome(artifact, user.id, `restore-older-${Date.now()}`)).rejects.toThrow(
+            /too old to restore/,
+        );
+
+        expect(safetyCopies(user.id, FAILED_RESTORE_SUFFIX).length).toBe(failedBefore + 1);
+        expect(await rootNames(user.sessionToken, user.id, mountId, rootId)).toEqual(before);
+        rmSync(join(getBackupsDir(), artifact), { force: true });
     });
 });
 
@@ -373,5 +567,45 @@ describe('Backup restore after the user is deleted', () => {
         const token = (signIn.headers.get('set-cookie') || '').match(/better-auth\.session_token=([^;]+)/);
         expect(token).toBeTruthy();
         expect(await rootNames(token![1], deleted.id, mountId, rootId)).toEqual([CHATS_FOLDER, 'gone-with-me.png']);
+    });
+});
+
+describe('Backup restore when an auth row cannot be re-inserted', () => {
+    test('the whole identity rolls back, so a retry is not locked out by a half-inserted user', async () => {
+        const ctx = await getTestContext();
+        const user = await createUser('restore-authclash@test.eigen.is', 'Restore Auth Clash');
+        await authedRequest(user.sessionToken, `/drive/${user.id}/mounts`);
+        const apiKeyId = (await auth.api.createApiKey({
+            body: { name: 'restore-app-password' },
+            headers: { cookie: `better-auth.session_token=${user.sessionToken}` },
+        }))!.id;
+        const artifact = await backup(user.id, new Date());
+
+        expect(
+            (await authedRequest(ctx.alice.user.sessionToken, `/settings/user/${user.id}`, { method: 'DELETE' }))
+                .status,
+        ).toBe(200);
+        const authDb = getAuthDrizzleDb();
+        // Somebody else's row already holds the id the archive wants to insert: the user row goes in
+        // first, this one clashes on the primary key, and without one transaction the restore would
+        // leave a user that exists but has no password row — and every retry would see that user and
+        // return early, never trying again.
+        authDb
+            .insert(apikeyScheme)
+            .values({
+                id: apiKeyId,
+                configId: 'clash',
+                referenceId: ctx.alice.user.id,
+                key: 'clash',
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            })
+            .run();
+
+        await expect(restoreHome(artifact, user.id, `restore-clash-${Date.now()}`)).rejects.toThrow();
+
+        expect(authDb.select().from(userScheme).where(eq(userScheme.id, user.id)).all()).toEqual([]);
+        authDb.delete(apikeyScheme).where(eq(apikeyScheme.id, apiKeyId)).run();
+        rmSync(join(getBackupsDir(), artifact), { force: true });
     });
 });

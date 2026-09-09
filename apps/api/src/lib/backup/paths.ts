@@ -40,6 +40,12 @@ export function getBackupTempPath(suffix: string): string {
 // snapshotHome writes it and verifyFolder reads it back — one spelling for both.
 export const ARCHIVE_HOME_DIR = 'home';
 
+// The three things beside `home/` that a user's archive carries: the users3.db rows, the
+// share-registry rows, and the avatar from data/server/avatars. A team archive has none of them.
+export const ARCHIVE_AUTH_FILE = 'auth.json';
+export const ARCHIVE_SHARES_FILE = 'shares.json';
+export const ARCHIVE_AVATAR_DIR = 'avatar';
+
 export function archiveHomePath(relPath: string): string {
     return `${ARCHIVE_HOME_DIR}/${relPath}`;
 }

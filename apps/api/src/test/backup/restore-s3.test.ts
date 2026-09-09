@@ -64,6 +64,8 @@ describe('Backup restore of an s3 mount', () => {
     let pngKey: string;
     let textKey: string;
     let dataDbKey: string;
+    let trashedKey: string;
+    let versionKey: string;
 
     beforeAll(async () => {
         await getTestContext();
@@ -104,9 +106,29 @@ describe('Backup restore of an s3 mount', () => {
                 body: JSON.stringify({ fileName: 'Bucket Doc' }),
             }),
         );
+        // A trashed file and a version snapshot: on this backend both are flat keys like any other
+        // file, and both are archived under a path shape of their own (`.trash/…`, `…/versions/…`).
+        const binned = await driveUpload<DrivePath>(
+            token,
+            userId,
+            MOUNT_ID,
+            root.id,
+            new File([TEXT_BYTES], 'binned.txt', { type: 'text/plain' }),
+        );
+        expect(
+            (await authedRequest(token, `/drive/${userId}/${MOUNT_ID}/path/${binned.id}`, { method: 'DELETE' })).status,
+        ).toBe(200);
+        const savedVersion = await assertJson<DrivePath>(
+            await authedRequest(token, `/drive/${userId}/${MOUNT_ID}/file/${doc.id}/versions/save`, {
+                method: 'POST',
+            }),
+        );
+
         await settleContainer(mount, doc.id);
         await mount.drainPendingUploads({ flushNow: true });
 
+        trashedKey = await mount.getStorageKey(binned.id);
+        versionKey = await mount.getStorageKey(savedVersion.id);
         pngKey = await mount.getStorageKey(png.id);
         textKey = await mount.getStorageKey(text.id);
         dataDbKey = await mount.getStorageKey((await mount.getChildByName(doc.id, 'data.db'))!.id);
@@ -143,6 +165,10 @@ describe('Backup restore of an s3 mount', () => {
         expect(pending.find((row) => row.storageKey === dataDbKey)?.isDatabase).toBe(1);
         expect(pending.find((row) => row.storageKey === pngKey)?.isDatabase).toBe(0);
         expect(pending.find((row) => row.storageKey === textKey)?.isDatabase).toBe(0);
+        // A trashed file and a version snapshot are file rows like any other: both are staged, and
+        // the snapshot is a database while the trashed text file is not.
+        expect(pending.find((row) => row.storageKey === trashedKey)?.isDatabase).toBe(0);
+        expect(pending.find((row) => row.storageKey === versionKey)?.isDatabase).toBe(1);
         // The local data/ tree is not an s3 mount's storage; the bytes belong in the bucket.
         expect(existsSync(join(TEST_DATA_DIR, 'home', userId, 'mounts', MOUNT_ID, 'data'))).toBe(false);
     });
@@ -158,6 +184,8 @@ describe('Backup restore of an s3 mount', () => {
 
             expect(await bytesInBucket(restored, pngKey)).toEqual(TEST_PNG_BYTES);
             expect(await bytesInBucket(restored, textKey)).toEqual(TEXT_BYTES);
+            expect(await bytesInBucket(restored, trashedKey)).toEqual(TEXT_BYTES);
+            expect(await bytesInBucket(restored, versionKey)).not.toBeNull();
             const dataDb = await bytesInBucket(restored, dataDbKey);
             expect(dataDb).not.toBeNull();
             expect(new TextDecoder().decode(dataDb!.subarray(0, 15))).toBe('SQLite format 3');
