@@ -18,7 +18,7 @@ import { NOTIFICATION_CENTER_DB_CONFIG } from '../notification-center/db-config'
 import { getEigenDb } from '../share/db';
 import { shareRegistry } from '../share/schema';
 import { captureFile, captureWrittenFile } from './capture';
-import { buildHomeFolderName } from './paths';
+import { ARCHIVE_HOME_DIR, archiveHomePath, archiveMountPath, buildHomeFolderName } from './paths';
 import { snapshotMountData } from './snapshot-mount';
 
 export type SnapshotProgress = (step: string, done: number, total: number) => void;
@@ -107,10 +107,10 @@ export async function snapshotHome(
 
     const stageDatabase = async (config: DatabaseConfig<SchemaType>, relPath: string): Promise<void> => {
         const managed = await home.getLocalDatabase(config, relPath);
-        const destPath = path.join(folder, 'home', relPath);
+        const destPath = path.join(folder, ARCHIVE_HOME_DIR, relPath);
         fs.mkdirSync(path.dirname(destPath), { recursive: true });
         managed.stageCopy(destPath);
-        entries.push(await captureWrittenFile(destPath, `home/${relPath}`));
+        entries.push(await captureWrittenFile(destPath, archiveHomePath(relPath)));
     };
 
     for (const [index, [config, relPath]] of HOME_DATABASES.entries()) {
@@ -121,11 +121,11 @@ export async function snapshotHome(
     const mounts = home.drive.getMounts();
     const mountSummaries: BackupManifest['mounts'] = [];
     for (const [index, mount] of mounts.entries()) {
-        const relPrefix = `home/mounts/${mount.id}`;
-        await stageDatabase(MOUNT_DB_CONFIG, `mounts/${mount.id}/${PATHS.DRIVE.METADATA_DB}`);
+        const relData = archiveMountPath(mount.id, PATHS.DRIVE.DATA_DIR);
+        await stageDatabase(MOUNT_DB_CONFIG, `${PATHS.DRIVE.ROOT}/${mount.id}/${PATHS.DRIVE.METADATA_DB}`);
         // Counted from here, so the summary means the mount's data files — metadata.db is a database,
         // and counts.databases already has it.
-        const data = await snapshotMountData(mount, path.join(folder, relPrefix, 'data'), `${relPrefix}/data`, report);
+        const data = await snapshotMountData(mount, path.join(folder, relData), relData, report);
         entries.push(...data);
         mountSummaries.push({
             id: mount.id,
@@ -143,7 +143,7 @@ export async function snapshotHome(
         // A file can vanish between the listing and the read — a Maildir new/→cur/ move, a card
         // rewrite. It is out of the archive either way; losing the whole snapshot over it is not.
         if (await source.exists()) {
-            entries.push(await captureFile(source, path.join(folder, 'home', rel), `home/${rel}`));
+            entries.push(await captureFile(source, path.join(folder, ARCHIVE_HOME_DIR, rel), archiveHomePath(rel)));
         }
         report('home files', index + 1, homeFiles.length);
     }

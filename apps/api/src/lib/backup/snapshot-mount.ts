@@ -21,7 +21,9 @@ export type MountPathRow = Pick<
 export type ManagedArchiveDatabase = {
     // Relative to the mount's data/ folder in the archive.
     path: string;
-    role: 'data' | 'comments' | 'version';
+    // The container's own data.db — the one a Yjs decode can be run on. False for comments.db and
+    // for a versions/ snapshot.
+    isContainerData: boolean;
     containerType: DrivePathType;
 };
 
@@ -91,10 +93,9 @@ export function listManagedDatabases(rows: MountPathRow[]): ManagedArchiveDataba
         const container = managedDbContainer(row, byId);
         if (!container) continue;
         // managedDbContainer returns the parent for a container database and the grandparent for a
-        // version snapshot, which is what tells the two apart.
-        const inContainer = container.id === row.parentId;
-        const role = inContainer ? (row.name === 'data.db' ? 'data' : 'comments') : 'version';
-        found.push({ path: archivePath(row, byId), role, containerType: container.type });
+        // version snapshot, which is what tells a live data.db from an archived copy of one.
+        const isContainerData = container.id === row.parentId && row.name === 'data.db';
+        found.push({ path: archivePath(row, byId), isContainerData, containerType: container.type });
     }
     return found;
 }

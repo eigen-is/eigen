@@ -1,59 +1,83 @@
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { BackupManifest, BackupVerifyRecord } from '@workspace/lib/types/backup';
-import { type DrivePathType, getEigenDocInfoByType, isCollabType } from '@workspace/lib/types/drive';
+import type { BackupVerifyRecord } from '@workspace/lib/types/backup';
+import { isCollabType } from '@workspace/lib/types/drive';
+import { parseBackupManifest } from '@workspace/lib/validation';
 import * as Y from 'yjs';
 import { readYjsStateFromFile } from '../collab/yjs-loader';
 import { PATHS } from '../core';
 import { hashFile } from '../drive/streaming';
+import { ARCHIVE_HOME_DIR, archiveHomePath, archiveMountPath } from './paths';
 import { HOME_DATABASE_PATHS, type SnapshotProgress } from './snapshot-home';
 import { listManagedDatabases, type MountPathRow } from './snapshot-mount';
 
 // Stage 3 samples rather than decodes everything: the ten heaviest documents plus ten of the rest.
 const SAMPLE_LARGEST = 10;
-const SAMPLE_RANDOM = 10;
+const SAMPLE_REST = 10;
 // A wrecked archive can fail on every entry; the record is a sidecar and an SSE payload, not a log.
 const MAX_FAILURES = 100;
 
-// An Eigen-owned database inside the archive. `collabType` is set only for the data.db of a
-// Yjs container, the one thing stage 3 can decode (chat's data.db is plain SQLite).
-type ArchiveDatabase = { path: string; collabType: DrivePathType | null };
+// An Eigen-owned database inside the archive. `isYjsDocument` marks the data.db of a collab
+// container — the only kind stage 3 can decode (chat's data.db is plain SQLite).
+type ArchiveDatabase = { path: string; isYjsDocument: boolean };
 
 function describeError(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
 }
 
+function hasControlCharacter(text: string): boolean {
+    for (let index = 0; index < text.length; index++) {
+        const code = text.charCodeAt(index);
+        if (code < 0x20 || code === 0x7f) return true;
+    }
+    return false;
+}
+
+// An archive comes from outside: its manifest and its mount trees name the paths this reads and
+// opens. Anything that would leave the folder — absolute, a `..` hop, a control character — is
+// refused before it reaches the filesystem.
+function resolveInside(dir: string, relPath: string): string | null {
+    if (relPath === '' || path.isAbsolute(relPath) || hasControlCharacter(relPath)) return null;
+    if (relPath.split(/[\\/]/).includes('..')) return null;
+    const abs = path.resolve(dir, relPath);
+    return abs.startsWith(`${path.resolve(dir)}${path.sep}`) ? abs : null;
+}
+
 function listArchiveDatabases(dir: string, fail: (message: string) => void): ArchiveDatabase[] {
     const found: ArchiveDatabase[] = [];
     for (const relPath of HOME_DATABASE_PATHS) {
-        if (fs.existsSync(path.join(dir, 'home', relPath))) found.push({ path: `home/${relPath}`, collabType: null });
+        const archivePath = archiveHomePath(relPath);
+        if (fs.existsSync(path.join(dir, archivePath))) found.push({ path: archivePath, isYjsDocument: false });
     }
 
-    const mountsDir = path.join(dir, 'home', PATHS.DRIVE.ROOT);
+    const mountsDir = path.join(dir, ARCHIVE_HOME_DIR, PATHS.DRIVE.ROOT);
     if (!fs.existsSync(mountsDir)) return found;
     for (const entry of fs.readdirSync(mountsDir, { withFileTypes: true })) {
         if (!entry.isDirectory()) continue;
-        const relMetadata = `home/${PATHS.DRIVE.ROOT}/${entry.name}/${PATHS.DRIVE.METADATA_DB}`;
-        if (!fs.existsSync(path.join(dir, relMetadata))) continue;
-        found.push({ path: relMetadata, collabType: null });
+        const relMetadata = archiveMountPath(entry.name, PATHS.DRIVE.METADATA_DB);
+        const metadata = resolveInside(dir, relMetadata);
+        if (!metadata || !fs.existsSync(metadata)) continue;
+        found.push({ path: relMetadata, isYjsDocument: false });
 
         // Which of a mount's files are Eigen's own databases follows from its tree, so the archived
         // metadata.db is read back for it. One too broken to read is a failure of its own; stage 2
         // opens the same file right after and says the same thing in SQLite's words.
         try {
-            const db = new Database(path.join(dir, relMetadata), { readonly: true });
+            const db = new Database(metadata, { readonly: true });
             try {
                 const rows = db
                     .query<MountPathRow, []>('SELECT id, file, name, type, parentId, trashedFrom FROM paths')
                     .all();
                 for (const managed of listManagedDatabases(rows)) {
+                    const archivePath = archiveMountPath(entry.name, `${PATHS.DRIVE.DATA_DIR}/${managed.path}`);
+                    if (!resolveInside(dir, archivePath)) {
+                        fail(`${archivePath}: leaves the backup folder`);
+                        continue;
+                    }
                     found.push({
-                        path: `home/${PATHS.DRIVE.ROOT}/${entry.name}/${PATHS.DRIVE.DATA_DIR}/${managed.path}`,
-                        collabType:
-                            managed.role === 'data' && isCollabType(managed.containerType)
-                                ? managed.containerType
-                                : null,
+                        path: archivePath,
+                        isYjsDocument: managed.isContainerData && isCollabType(managed.containerType),
                     });
                 }
             } finally {
@@ -80,41 +104,21 @@ function countYjsBlobs(dbPath: string): number {
     }
 }
 
-// Y.applyUpdate hydrates roots as AbstractType, so the declared roots are re-typed here before they
-// are read — the same trick restoreYjsDoc uses before walking a snapshot.
-function hasContent(doc: Y.Doc, type: DrivePathType): boolean {
-    const roots = getEigenDocInfoByType(type)?.yjsRoots;
-    if (!roots) return false;
-    for (const [name, kind] of Object.entries(roots)) {
-        switch (kind) {
-            case 'map':
-                if (doc.getMap(name).size > 0) return true;
-                break;
-            case 'array':
-                if (doc.getArray(name).length > 0) return true;
-                break;
-            case 'text':
-                if (doc.getText(name).length > 0) return true;
-                break;
-            case 'xmlfragment':
-                if (doc.getXmlFragment(name).length > 0) return true;
-                break;
-        }
-    }
-    return false;
-}
-
 // Decides whether an unpacked backup folder counts as good: every file is the one the manifest
 // describes (transport), every Eigen database is structurally sound (structure), and a sample of
 // the collab documents still decodes into a document with content (content). Works on any folder
 // with a manifest — a staging folder straight after a backup, or a fresh extract before a restore.
+// Every database is opened read-only: a verify never changes a byte of what it is checking.
 export async function verifyFolder(dir: string, onProgress?: SnapshotProgress): Promise<BackupVerifyRecord> {
     const checkedAt = new Date().toISOString();
     const manifestPath = path.join(dir, 'manifest.json');
     if (!fs.existsSync(manifestPath)) {
         return { status: 'failed', checkedAt, failures: ['manifest.json is missing'] };
     }
-    const manifest: BackupManifest = await Bun.file(manifestPath).json();
+    const manifest = parseBackupManifest(await Bun.file(manifestPath).text());
+    if (!manifest) {
+        return { status: 'failed', checkedAt, failures: ['manifest.json is not a version 1 backup manifest'] };
+    }
 
     const failures: string[] = [];
     let suppressed = 0;
@@ -130,10 +134,13 @@ export async function verifyFolder(dir: string, onProgress?: SnapshotProgress): 
     }
     present.delete('manifest.json');
     for (const [index, entry] of manifest.entries.entries()) {
-        if (!present.delete(entry.path)) {
+        const abs = resolveInside(dir, entry.path);
+        if (!abs) {
+            fail(`${entry.path}: leaves the backup folder`);
+        } else if (!present.delete(entry.path)) {
             fail(`${entry.path}: missing from the folder`);
         } else {
-            const { size, hash } = await hashFile(path.join(dir, entry.path));
+            const { size, hash } = await hashFile(abs);
             if (size !== entry.bytes) fail(`${entry.path}: ${size} bytes, the manifest says ${entry.bytes}`);
             else if (hash !== entry.sha256) fail(`${entry.path}: sha256 does not match the manifest`);
         }
@@ -158,35 +165,37 @@ export async function verifyFolder(dir: string, onProgress?: SnapshotProgress): 
                     db.close();
                 }
             } catch (error) {
-                fail(`${database.path}: could not be opened (${describeError(error)})`);
+                // SQLite raises on a badly broken file rather than returning a quick_check row; both
+                // answers mean the same thing here.
+                fail(`${database.path}: quick_check could not complete (${describeError(error)})`);
             }
         }
         onProgress?.('verify databases', index + 1, databases.length);
     }
 
-    // Stage 3 — content: the bytes are a document, not just a well-formed database.
+    // Stage 3 — content: the bytes are a document, not just a well-formed database. The sample is
+    // deterministic — largest first, then by hashed path — so two verifies of a folder agree.
     const collab = databases.flatMap((database) => {
         const abs = path.join(dir, database.path);
-        if (!database.collabType || !fs.existsSync(abs)) return [];
-        return [{ path: database.path, collabType: database.collabType, bytes: fs.statSync(abs).size }];
+        if (!database.isYjsDocument || !fs.existsSync(abs)) return [];
+        const order = new Bun.CryptoHasher('sha256').update(database.path).digest('hex');
+        return [{ path: database.path, bytes: fs.statSync(abs).size, order }];
     });
     collab.sort((a, b) => b.bytes - a.bytes);
-    const sampled = collab
-        .slice(SAMPLE_LARGEST)
-        .map((database) => ({ database, order: Math.random() }))
-        .sort((a, b) => a.order - b.order)
-        .slice(0, SAMPLE_RANDOM)
-        .map((entry) => entry.database);
-    const targets = [...collab.slice(0, SAMPLE_LARGEST), ...sampled];
+    const rest = collab.slice(SAMPLE_LARGEST).sort((a, b) => a.order.localeCompare(b.order));
+    const targets = [...collab.slice(0, SAMPLE_LARGEST), ...rest.slice(0, SAMPLE_REST)];
     for (const [index, target] of targets.entries()) {
         const abs = path.join(dir, target.path);
         try {
-            // A document nobody has typed in holds no blobs at all, and a backup of one must not
-            // come out failed; with blobs present, they have to decode into actual content.
+            // A document nobody has typed in holds no blobs at all, and a backup of one must not come
+            // out failed. With blobs present, every one of them has to decode (the loader throws
+            // otherwise) into a document that has shared types. Which types, and what is in them, is
+            // not verify's business: a document written by an older app version keeps its content
+            // under names this build no longer knows, and that is not corruption.
             if (countYjsBlobs(abs) > 0) {
                 const doc = new Y.Doc();
-                Y.applyUpdate(doc, readYjsStateFromFile(abs));
-                if (!hasContent(doc, target.collabType)) fail(`${target.path}: decodes to an empty document`);
+                Y.applyUpdate(doc, readYjsStateFromFile(abs, { readonly: true }));
+                if (doc.share.size === 0) fail(`${target.path}: its Yjs blobs decode to an empty document`);
             }
         } catch (error) {
             fail(`${target.path}: the Yjs state could not be read (${describeError(error)})`);

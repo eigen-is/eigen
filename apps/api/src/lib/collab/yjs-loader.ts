@@ -112,14 +112,18 @@ export function loadYjsState(
 // Unlike a live load, a corrupt blob here fails loud: silently skipping would
 // let a restore "succeed" into a half-empty doc (PROPOSAL_DATA_INTEGRITY seam F).
 //
-// `readonly: true` is intentionally NOT set — bun:sqlite is flaky opening
-// freshly-copied data.db files read-only (SQLITE_CANTOPEN). The handle isn't
-// written to, so read-write is safe here.
-export function readYjsStateFromFile(localPath: string, label?: string): Uint8Array {
-    const rawDb = new BunDatabase(localPath);
+// The handle is never written to, and it opens read-write by default: bun:sqlite
+// is flaky opening a freshly-copied data.db read-only (SQLITE_CANTOPEN), which is
+// exactly what a version restore hands it. `readonly` is for the backup verify,
+// which reads databases it must not touch at all — an open alone can leave a
+// journal beside a file whose bytes it just hashed.
+export function readYjsStateFromFile(localPath: string, options?: { label?: string; readonly?: boolean }): Uint8Array {
+    // `{ readonly: false }` is not the same as no options: bun:sqlite then builds flags with neither
+    // READONLY nor READWRITE and refuses the open.
+    const rawDb = options?.readonly ? new BunDatabase(localPath, { readonly: true }) : new BunDatabase(localPath);
     try {
         const doc = new Y.Doc();
-        const { blobsSkipped } = materializeYjsState(readPayload(drizzle(rawDb, { schema })), doc, label);
+        const { blobsSkipped } = materializeYjsState(readPayload(drizzle(rawDb, { schema })), doc, options?.label);
         if (blobsSkipped > 0) {
             throw new ApiError(422, `Snapshot is corrupted (${blobsSkipped} unreadable Yjs blobs); restore aborted`);
         }
