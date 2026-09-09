@@ -78,16 +78,41 @@ export function buildArtifactName(ownerId: string, at: Date): string {
 export const PRE_RESTORE_SUFFIX = '.pre-restore-';
 export const FAILED_RESTORE_SUFFIX = '.failed-restore-';
 
+// buildStamp's shape as capture groups, so both names it appears in are read by one rule.
+const STAMP_GROUPS = String.raw`(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})`;
+
+function stampToDate(groups: string[]): Date | null {
+    const [year, month, day, hours, minutes, seconds] = groups;
+    const at = new Date(`${year}-${month}-${day}T${hours}:${minutes}:${seconds}Z`);
+    return Number.isNaN(at.getTime()) ? null : at;
+}
+
 // Owner ids are UUIDs or `team_{id}`, both of which contain dashes, so the timestamp is matched
 // from the end and the owner id is whatever is left. The character class keeps `/` and `..` out
 // of a name that later reaches the filesystem.
-const ARTIFACT_NAME = /^home-([A-Za-z0-9_-]+)-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})\.tar\.zst$/;
+const ARTIFACT_NAME = new RegExp(String.raw`^home-([A-Za-z0-9_-]+)-${STAMP_GROUPS}\.tar\.zst$`);
 
 export function parseArtifactName(name: string): { ownerId: string; at: Date } | null {
     const match = ARTIFACT_NAME.exec(name);
     if (!match) return null;
-    const [, ownerId, year, month, day, hours, minutes, seconds] = match;
-    const at = new Date(`${year}-${month}-${day}T${hours}:${minutes}:${seconds}Z`);
-    if (Number.isNaN(at.getTime())) return null;
-    return { ownerId, at };
+    const at = stampToDate(match.slice(2));
+    return at ? { ownerId: match[1], at } : null;
+}
+
+// `{homeFolderName}{suffix}{stamp}`, plus the `-2` tail a restore appends when two of them land in
+// the same second. The caller compares `homeName` against the home it asked about: that equality,
+// not the character class, is what keeps a delete inside the right directory.
+const SAFETY_COPY_SUFFIXES = [PRE_RESTORE_SUFFIX, FAILED_RESTORE_SUFFIX]
+    .map((suffix) => suffix.replaceAll('.', String.raw`\.`))
+    .join('|');
+const SAFETY_COPY_NAME = new RegExp(String.raw`^(.+)(${SAFETY_COPY_SUFFIXES})${STAMP_GROUPS}(?:-\d+)?$`);
+
+export function parseSafetyCopyName(
+    name: string,
+): { homeName: string; kind: 'pre-restore' | 'failed-restore'; at: Date } | null {
+    const match = SAFETY_COPY_NAME.exec(name);
+    if (!match) return null;
+    const at = stampToDate(match.slice(3));
+    if (!at) return null;
+    return { homeName: match[1], kind: match[2] === PRE_RESTORE_SUFFIX ? 'pre-restore' : 'failed-restore', at };
 }

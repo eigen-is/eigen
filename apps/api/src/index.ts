@@ -1,4 +1,5 @@
 import { app } from './app';
+import { wipeBackupStaging } from './lib/backup/paths';
 import { documentTransformRunner } from './lib/document/transform/runner';
 import { drainACLFanOuts } from './lib/drive/acl-propagation';
 import { shutdownAllHomes } from './lib/home';
@@ -10,6 +11,10 @@ import { setShutdownDrainDeadline } from './lib/sync';
 // docker-compose's stop_grace_period so the drain finishes before SIGKILL; anything
 // not drained in time stays in pending_uploads and replays on the next boot.
 const SHUTDOWN_DRAIN_BUDGET_MS = 20_000;
+
+// A backup, verify or restore interrupted by a restart left a half-written staging folder behind and
+// nothing ever resumes it. Cleared before the first request can start a job of its own.
+wipeBackupStaging();
 
 const server = app.listen({
     port: 8000,

@@ -41,7 +41,7 @@ type VersionedDatabase = { filePath: string; config: DatabaseConfig<SchemaType> 
 
 // Where this owner's home folder lives. Org homes hold no databases and guest homes are disposable
 // (guest-cleanup deletes them), so neither is backed up and neither can be restored.
-async function resolveHomeDir(ownerId: string): Promise<string> {
+export async function resolveHomeDir(ownerId: string): Promise<string> {
     const owner = parseOwnerId(ownerId);
     if (owner.type === 'team') return getTeamDataPath(owner.id);
     if (owner.type !== 'user') throw new ApiError(400, `Cannot restore a ${owner.type} home`);

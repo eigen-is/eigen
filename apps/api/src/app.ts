@@ -11,6 +11,7 @@ import { clientIpKey } from './lib/core/access';
 import { ApiError } from './lib/core/errors';
 import { webdavRouter } from './lib/webdav/webdav-router';
 import { betterAuth } from './routes/auth';
+import { backupRouter } from './routes/backup';
 import { calendarRouter } from './routes/calendar';
 import { chatRouter } from './routes/chat';
 import { collabRouter } from './routes/collab';
@@ -116,6 +117,7 @@ export const app = new Elysia({
     .use(calendarRouter)
     .use(teamRouter)
     .use(settingsRouter)
+    .use(backupRouter)
     .use(waitlistRouter)
     .use(spaceRouter)
     .use(publicRouter)

@@ -32,3 +32,37 @@ export type BackupVerifyRecord = {
     // Human-readable, one per failed check.
     failures: string[];
 };
+
+// A backup, verify or restore running on the server. The job map in the API is the truth; the
+// `backup:job-updated` SSE event only tells the admin's browser to refetch this.
+export type BackupJob = {
+    id: string;
+    kind: 'backup' | 'verify' | 'restore';
+    ownerId: string;
+    // The admin who started it: the job's SSE pokes and notifications go to their home.
+    startedBy: string;
+    state: 'running' | 'done' | 'failed';
+    progress: { step: string; done: number; total: number };
+    artifact?: string;
+    error?: string;
+    startedAt: string;
+    finishedAt?: string;
+};
+
+// One artifact in the backups folder as the admin pane sees it. `manifest` is null for an artifact
+// with no sidecar (one copied in by hand) — the list never opens an archive to find out.
+export type BackupArtifact = {
+    name: string;
+    bytes: number;
+    createdAt: string;
+    manifest: Pick<BackupManifest, 'kind' | 'ownerId' | 'email' | 'name' | 'appVersion' | 'counts' | 'mounts'> | null;
+    verify: BackupVerifyRecord;
+};
+
+// A home folder a restore left beside the live one. Nothing deletes these automatically.
+export type BackupSafetyCopy = {
+    name: string;
+    kind: 'pre-restore' | 'failed-restore';
+    createdAt: string;
+    bytes: number;
+};
