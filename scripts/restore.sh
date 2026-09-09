@@ -23,7 +23,7 @@ if [ -e data ]; then
     mv data "$ASIDE"
 fi
 
-# Archive carries data/ + .env.production (mirror of snapshot.sh/backup.sh), so this is a full restore.
+# Archive carries data/ + .env.production (mirror of backup.sh), so this is a full restore.
 echo "Restoring from ${ARCHIVE} ..."
 tar -xzf "$ARCHIVE"
 

@@ -207,29 +207,24 @@ Pulls latest code, rebuilds the frontend, restarts containers. Active SSE/WebSoc
 ./scripts/backup.sh
 ```
 
-Saves all data (mail, files, contacts, calendars, settings) to `./backups/`. This runs against the
-**live** tree, so an in-flight SQLite WAL can be caught mid-write — fine for routine daily copies.
-Schedule daily:
+Saves all data (mail, files, contacts, calendars, settings) to `./backups/`. It briefly stops `eigen-api`, tars the quiesced `data/` and `.env.production` (WAL/`-shm` files included, so the two never-checkpointed server databases are captured intact), then restarts it — a few seconds of downtime for a crash-consistent archive. Schedule daily:
 
 ```bash
 crontab -e
 # 0 3 * * * /opt/eigen/scripts/backup.sh
 ```
 
-For a **consistent** archive, `snapshot.sh` briefly stops `eigen-api`, tars the quiesced tree
-(WAL/`-shm` files included, so the two never-checkpointed server databases are captured intact),
-then restarts it — seconds of downtime for a crash-consistent copy:
+Pass a path to write somewhere other than the default `./backups/eigen-<timestamp>.tar.gz`:
 
 ```bash
-./scripts/snapshot.sh                             # -> ./backups/eigen-snapshot-<timestamp>.tar.gz
-./scripts/snapshot.sh /path/to/backup.tar.gz      # custom output path
+./scripts/backup.sh /path/to/backup.tar.gz      # custom output path
 ```
 
-Restore either archive with `restore.sh`. It stops `eigen-api`, moves the current `data/` aside to
+Restore an archive with `restore.sh`. It stops `eigen-api`, moves the current `data/` aside to
 `data.pre-restore-<timestamp>` (never deleted), unpacks the archive, and starts `eigen-api`:
 
 ```bash
-./scripts/restore.sh ./backups/eigen-snapshot-<timestamp>.tar.gz
+./scripts/restore.sh ./backups/eigen-<timestamp>.tar.gz
 ```
 
 ### Demo instance
