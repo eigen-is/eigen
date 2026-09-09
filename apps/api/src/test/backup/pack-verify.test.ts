@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -208,8 +208,8 @@ describe('Backup pack and verify', () => {
         const record = await verifyFolder(folder);
         expect(record.status).toBe('verified');
         // A read-write open of a container data.db would leave a journal beside it and change the
-        // very hashes stage 1 just checked.
-        expect(await listFiles(folder)).toEqual(await listFiles(folder));
+        // very hashes stage 1 just checked. hashTree covers both: it walks the folder and folds
+        // every path and its bytes in, so a stray -wal file moves the hash too.
         expect(await hashTree(folder)).toBe(before);
     });
 
@@ -278,6 +278,25 @@ describe('Backup pack and verify', () => {
         expect(record.status).toBe('failed');
         expect(record.failures).toContain('../outside.txt: leaves the backup folder');
         expect(record.failures).toContain('/etc/hosts: leaves the backup folder');
+        expect(record.failures.some((f) => f.includes('sha256'))).toBe(false);
+    });
+
+    test('a symlink in the folder fails stage 1 and its target is never read', async () => {
+        const dir = await extractFresh('extract-symlink-');
+        const folder = join(dir, folderName);
+        // What a hostile archive would carry: a link out of the folder, and a manifest entry that
+        // reads through it. packFolder never writes one.
+        symlinkSync('/etc', join(folder, 'home/escape'));
+
+        const manifestPath = join(folder, 'manifest.json');
+        const patched: BackupManifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+        patched.entries.push({ path: 'home/escape/hosts', bytes: 1, sha256: 'z'.repeat(64) });
+        writeFileSync(manifestPath, JSON.stringify(patched, null, 2));
+
+        const record = await verifyFolder(folder);
+        expect(record.status).toBe('failed');
+        expect(record.failures).toContain('home/escape: is a symbolic link');
+        expect(record.failures).toContain('home/escape/hosts: leaves the backup folder');
         expect(record.failures.some((f) => f.includes('sha256'))).toBe(false);
     });
 
