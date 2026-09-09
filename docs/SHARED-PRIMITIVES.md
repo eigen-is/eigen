@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1320 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1323 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -450,7 +450,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (320)
+## Types (323)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -648,6 +648,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BackgroundFill` | `@workspace/lib/types/background` | packages/lib/src/types/background.ts |
 | `Fill` | `@workspace/lib/types/background` | packages/lib/src/types/background.ts |
 | `FillPaint` | `@workspace/lib/types/background` | packages/lib/src/types/background.ts |
+| `BackupEntry` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
+| `BackupManifest` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
+| `BackupVerifyRecord` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `Command` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `CommandContext` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `PaletteResult` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |

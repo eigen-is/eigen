@@ -80,6 +80,23 @@ export async function streamFilesToTemp(
     return results;
 }
 
+// The one streaming loop behind writeTempWithHash and hashFile: pulls the stream chunk by chunk
+// and reports the total, so neither of them holds the payload in memory.
+async function consumeStream(
+    stream: ReadableStream<Uint8Array>,
+    onChunk: (chunk: Uint8Array) => void,
+): Promise<number> {
+    const reader = stream.getReader();
+    let size = 0;
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        onChunk(value);
+        size += value.byteLength;
+    }
+    return size;
+}
+
 // Stream a buffer, StorageFile (BunFile/S3File), or ReadableStream into a temp path while
 // computing the sha256 hash in a single pass. Avoids holding the full payload in memory twice.
 export async function writeTempWithHash(
@@ -96,20 +113,22 @@ export async function writeTempWithHash(
 
     const stream = data instanceof ReadableStream ? data : data.stream();
     const writer = Bun.file(tempPath).writer({ highWaterMark: 256 * 1024 });
-    const reader = stream.getReader();
-    let size = 0;
     try {
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            hasher.update(value);
-            writer.write(value);
-            size += value.byteLength;
-        }
+        const size = await consumeStream(stream, (chunk) => {
+            hasher.update(chunk);
+            writer.write(chunk);
+        });
         await writer.end();
+        return { size, hash: hasher.digest('hex') };
     } catch (e) {
         await writer.end();
         throw e;
     }
+}
+
+// Read-only twin of writeTempWithHash, for bytes something else produced (a VACUUM INTO copy).
+export async function hashFile(filePath: string): Promise<{ size: number; hash: string }> {
+    const hasher = new Bun.CryptoHasher('sha256');
+    const size = await consumeStream(Bun.file(filePath).stream(), (chunk) => hasher.update(chunk));
     return { size, hash: hasher.digest('hex') };
 }
