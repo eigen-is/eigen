@@ -1,31 +1,40 @@
 import * as fs from 'node:fs';
+import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
-import type { BackupArtifact, BackupManifest, BackupSafetyCopy } from '@workspace/lib/types/backup';
+import type { BackupArtifact, BackupSafetyCopy } from '@workspace/lib/types/backup';
 import { ApiError } from '../core';
 import { readSidecar, sidecarPath } from './archive';
-import { getBackupsDir, parseArtifactName, parseSafetyCopyName } from './paths';
-import { resolveHomeDir } from './restore';
+import { backupsDirPath, getBackupsDir, parseArtifactName, parseSafetyCopyName, resolveHomeDir } from './paths';
 
 // A safety copy holds a whole home; its size is a line in a list, not an accounting figure, so the
 // walk stops here and the number becomes a floor rather than taking a minute on a huge home.
 const MAX_WALKED_FILES = 50_000;
 
-function summarizeManifest(manifest: BackupManifest): BackupArtifact['manifest'] {
-    const { kind, ownerId, email, name, appVersion, counts, mounts } = manifest;
-    return { kind, ownerId, email, name, appVersion, counts, mounts };
-}
+// A safety copy never changes after the restore that made it, so it is measured once per process.
+// The artifact list is refetched on every job poke — up to twice a second while a job runs — and
+// walking a whole home on each of those would stall the event loop for every user on the server.
+const measuredBytes = new Map<string, number>();
 
-function folderBytes(dir: string): number {
+async function folderBytes(dir: string): Promise<number> {
     let bytes = 0;
     let walked = 0;
     const stack = [dir];
     for (let current = stack.pop(); current !== undefined; current = stack.pop()) {
-        for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+        for (const entry of await fsp.readdir(current, { withFileTypes: true })) {
             if (walked++ >= MAX_WALKED_FILES) return bytes;
-            if (entry.isDirectory()) stack.push(path.join(current, entry.name));
-            else if (entry.isFile()) bytes += fs.statSync(path.join(current, entry.name)).size;
+            const abs = path.join(current, entry.name);
+            if (entry.isDirectory()) stack.push(abs);
+            else if (entry.isFile()) bytes += (await fsp.stat(abs)).size;
         }
     }
+    return bytes;
+}
+
+async function measureSafetyCopy(dir: string): Promise<number> {
+    const known = measuredBytes.get(dir);
+    if (known !== undefined) return known;
+    const bytes = await folderBytes(dir);
+    measuredBytes.set(dir, bytes);
     return bytes;
 }
 
@@ -33,18 +42,39 @@ function folderBytes(dir: string): number {
 // page load would decompress the whole thing. An artifact with no sidecar (one copied in by hand)
 // lists as unverified with no manifest until a verify job writes one.
 export async function listArtifacts(ownerId: string): Promise<BackupArtifact[]> {
-    const dir = getBackupsDir();
+    const dir = backupsDirPath();
+    if (!fs.existsSync(dir)) return [];
+
     const artifacts: BackupArtifact[] = [];
-    for (const name of fs.readdirSync(dir)) {
+    for (const name of await fsp.readdir(dir)) {
         const parsed = parseArtifactName(name);
         if (!parsed || parsed.ownerId !== ownerId) continue;
         const artifactPath = path.join(dir, name);
-        const sidecar = await readSidecar(artifactPath);
+        let bytes: number;
+        try {
+            bytes = (await fsp.stat(artifactPath)).size;
+        } catch {
+            continue; // deleted while this folder was being read
+        }
+        // Missing, unreadable, or not a sidecar all say the same thing to the list: nothing is known
+        // about this archive yet, run a verify. One bad file must not blank the whole page.
+        const sidecar = await readSidecar(artifactPath).catch(() => null);
+        const manifest = sidecar?.manifest;
         artifacts.push({
             name,
-            bytes: fs.statSync(artifactPath).size,
+            bytes,
             createdAt: parsed.at.toISOString(),
-            manifest: sidecar ? summarizeManifest(sidecar.manifest) : null,
+            manifest: manifest
+                ? {
+                      kind: manifest.kind,
+                      ownerId: manifest.ownerId,
+                      email: manifest.email,
+                      name: manifest.name,
+                      appVersion: manifest.appVersion,
+                      counts: manifest.counts,
+                      mounts: manifest.mounts,
+                  }
+                : null,
             verify: sidecar?.verify ?? { status: 'unverified', failures: [] },
         });
     }
@@ -60,7 +90,7 @@ export async function listSafetyCopies(ownerId: string): Promise<BackupSafetyCop
     if (!fs.existsSync(parent)) return [];
 
     const copies: BackupSafetyCopy[] = [];
-    for (const entry of fs.readdirSync(parent, { withFileTypes: true })) {
+    for (const entry of await fsp.readdir(parent, { withFileTypes: true })) {
         if (!entry.isDirectory()) continue;
         const parsed = parseSafetyCopyName(entry.name);
         if (!parsed || parsed.homeName !== homeName) continue;
@@ -68,7 +98,7 @@ export async function listSafetyCopies(ownerId: string): Promise<BackupSafetyCop
             name: entry.name,
             kind: parsed.kind,
             createdAt: parsed.at.toISOString(),
-            bytes: folderBytes(path.join(parent, entry.name)),
+            bytes: await measureSafetyCopy(path.join(parent, entry.name)),
         });
     }
     return copies.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -96,4 +126,9 @@ export async function resolveSafetyCopyPath(ownerId: string, name: string): Prom
         throw new ApiError(400, 'Not a safety copy of this home');
     }
     return path.join(path.dirname(homeDir), name);
+}
+
+export function deleteSafetyCopy(folder: string): void {
+    fs.rmSync(folder, { recursive: true, force: true });
+    measuredBytes.delete(folder);
 }

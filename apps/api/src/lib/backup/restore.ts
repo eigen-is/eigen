@@ -3,20 +3,18 @@ import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
-import { parseOwnerId } from '@workspace/lib/types/owner';
 import { parseBackupAuthRows, parseBackupManifest, parseBackupShares } from '@workspace/lib/validation';
 import { eq, getTableColumns } from 'drizzle-orm';
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core';
 import { user as userTable } from '../../../auth-schema';
 import { getAuthDrizzleDb } from '../auth/auth';
 import { closeCollabConnectionsForHome } from '../collab/connections';
-import { getAvatarsDir, getTeamDataPath, getUserHomePath } from '../config/paths';
+import { getAvatarsDir } from '../config/paths';
 import { ApiError, type DatabaseConfig, PATHS, type SchemaType } from '../core';
 import { clearHomeRestoring, evictHome, markHomeRestoring } from '../home/get-home';
 import { MOUNT_DB_CONFIG, PENDING_UPLOAD_KIND_VERSION } from '../mount/db-config';
 import { getEigenDb } from '../share/db';
 import { shareRegistry } from '../share/schema';
-import { getUserById } from '../user/user';
 import { extractArtifact } from './archive';
 import { AUTH_TABLES } from './auth-tables';
 import {
@@ -29,8 +27,11 @@ import {
     FAILED_RESTORE_SUFFIX,
     getBackupStagingDir,
     getBackupsDir,
+    homeRootDirs,
     PRE_RESTORE_SUFFIX,
     parseArtifactName,
+    parseSafetyCopyName,
+    resolveHomeDir,
 } from './paths';
 import { HOME_DATABASES, type SnapshotProgress } from './snapshot-home';
 import { archivePath, listManagedDatabases, readMountPathRows, storageKeyOf } from './snapshot-mount';
@@ -38,17 +39,6 @@ import { verifyFolder } from './verify';
 
 // A restored database and the schema this build expects of it.
 type VersionedDatabase = { filePath: string; config: DatabaseConfig<SchemaType> };
-
-// Where this owner's home folder lives. Org homes hold no databases and guest homes are disposable
-// (guest-cleanup deletes them), so neither is backed up and neither can be restored.
-export async function resolveHomeDir(ownerId: string): Promise<string> {
-    const owner = parseOwnerId(ownerId);
-    if (owner.type === 'team') return getTeamDataPath(owner.id);
-    if (owner.type !== 'user') throw new ApiError(400, `Cannot restore a ${owner.type} home`);
-    const existing = await getUserById(owner.id);
-    if (existing?.role === 'guest') throw new ApiError(400, 'Guest homes are not backed up');
-    return getUserHomePath(owner.id);
-}
 
 // The backups folder may sit on another disk than the data root, and a rename across the two fails
 // with EXDEV — so fall back to a copy.
@@ -427,5 +417,33 @@ export async function restoreHome(
     } finally {
         // 8 — unlock. Set.delete cannot throw, so this never masks the failure that brought us here.
         clearHomeRestoring(ownerId);
+    }
+}
+
+// Boot: a restore killed between the move-aside and the install left the home folder gone and its
+// contents under `{id}.pre-restore-{ts}`. The process that knew about it is dead, so nothing else
+// will ever put it back — this does, loudly. A `.failed-restore-{ts}` beside the home is a finished
+// restore that rolled back and is left where it is; a safety copy whose home folder is there is a
+// normal one, and the admin deletes it when they are satisfied.
+export function recoverInterruptedRestores(): void {
+    for (const root of homeRootDirs()) {
+        if (!fs.existsSync(root)) continue;
+        const copies = new Map<string, string[]>();
+        for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+            if (!entry.isDirectory()) continue;
+            const parsed = parseSafetyCopyName(entry.name);
+            if (parsed?.kind !== 'pre-restore') continue;
+            copies.set(parsed.homeName, [...(copies.get(parsed.homeName) ?? []), entry.name]);
+        }
+        for (const [homeName, names] of copies) {
+            if (fs.existsSync(path.join(root, homeName))) continue;
+            // The names share a prefix and a fixed-width stamp, so the last one is the newest.
+            const newest = names.sort().at(-1);
+            if (!newest) continue;
+            fs.renameSync(path.join(root, newest), path.join(root, homeName));
+            console.error(
+                `[backup] a restore of ${homeName} was interrupted: ${newest} is back in place as the home folder`,
+            );
+        }
     }
 }

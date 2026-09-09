@@ -96,7 +96,7 @@ bun run --sequential --filter './apps/*' build
 ### 5. Start Eigen
 
 ```bash
-mkdir -p data && chown -R 1000:1000 data
+mkdir -p data backups && chown -R 1000:1000 data backups
 docker compose --env-file .env.production up -d
 ```
 

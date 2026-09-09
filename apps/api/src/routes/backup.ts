@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { BACKUP_UPLOAD_MAX_BYTES } from '@workspace/lib/constants/backup';
 import type { BackupArtifact, BackupJob, BackupSafetyCopy } from '@workspace/lib/types/backup';
 import { parseOwnerId } from '@workspace/lib/types/owner';
@@ -6,13 +7,14 @@ import { Elysia, t } from 'elysia';
 import { readArtifactManifest, writeSidecar } from '../lib/backup/archive';
 import {
     deleteArtifact,
+    deleteSafetyCopy,
     listArtifacts,
     listSafetyCopies,
     resolveArtifact,
     resolveSafetyCopyPath,
 } from '../lib/backup/artifacts';
 import { getBackupJob, listBackupJobs, runArtifactVerify, runHomeBackup, startBackupJob } from '../lib/backup/jobs';
-import { getBackupTempPath, parseArtifactName } from '../lib/backup/paths';
+import { getBackupsDir, getBackupTempPath, OWNER_ID, parseArtifactName } from '../lib/backup/paths';
 import { restoreHome } from '../lib/backup/restore';
 import { ApiError } from '../lib/core';
 import { requireAdmin } from '../lib/core/access';
@@ -23,27 +25,28 @@ import { getTeam } from '../lib/team/team';
 import { getUserById } from '../lib/user';
 import { betterAuth } from './auth';
 
-// Owner ids reach the filesystem through the home folder they name, so the shape is checked before
-// anything is resolved: this class holds a uuid and a `team_{id}`, and holds no `/`, `..` or dot.
-const OWNER_ID = /^[A-Za-z0-9_-]+$/;
-
 // Guest homes are disposable (guest-cleanup deletes them) and org homes hold no databases, so
-// neither is backed up. A user who no longer exists is a valid restore target — that is the
-// restore-after-deletion case — and never a valid backup target.
-async function requireHomeOwner(ownerId: string, mustExist: boolean): Promise<void> {
+// neither is backed up. The ownerId ends up naming a home folder, so its shape is checked here,
+// against the one class paths.ts allows, before anything is resolved.
+async function requireRestorableHome(ownerId: string): Promise<void> {
     if (!OWNER_ID.test(ownerId)) throw new ApiError(400, 'Invalid ownerId');
     const owner = parseOwnerId(ownerId);
+    if (owner.type !== 'user' && owner.type !== 'team') throw new ApiError(400, 'Not a user or team home');
+    if (owner.type === 'user' && (await getUserById(owner.id))?.role === 'guest') {
+        throw new ApiError(400, 'Guest homes are not backed up');
+    }
+}
+
+// A backup also needs the home to be there. A restore does not: restoring a user who was deleted is
+// what the auth rows inside the archive are for.
+async function requireExistingHome(ownerId: string): Promise<void> {
+    await requireRestorableHome(ownerId);
+    const owner = parseOwnerId(ownerId);
     if (owner.type === 'team') {
-        if (mustExist && !(await getTeam(owner.id))) throw new ApiError(404, 'Team not found');
+        if (!(await getTeam(owner.id))) throw new ApiError(404, 'Team not found');
         return;
     }
-    if (owner.type !== 'user') throw new ApiError(400, `Cannot back up a ${owner.type} home`);
-    const target = await getUserById(owner.id);
-    if (!target) {
-        if (mustExist) throw new ApiError(404, 'User not found');
-        return;
-    }
-    if (target.role === 'guest') throw new ApiError(400, 'Guest homes are not backed up');
+    if (!(await getUserById(owner.id))) throw new ApiError(404, 'User not found');
 }
 
 // The uploaded artifact's name rides in Content-Disposition, the header a browser upload already
@@ -66,11 +69,13 @@ export const backupRouter = new Elysia({ name: 'backup' })
         '/admin/backup/home/:ownerId',
         async ({ params, user }): Promise<{ jobId: string }> => {
             await requireAdmin(user.id);
-            await requireHomeOwner(params.ownerId, true);
-            // Resolved here and handed to the job: lib/backup never reaches for a home of its own.
+            await requireExistingHome(params.ownerId);
+            // Another user's home, resolved here and handed to the job: lib/backup never reaches for
+            // a home of its own. Phase ③ runs the job on the server that owns the home, and this
+            // lookup moves behind home-relay with it (ROADMAP, cheap wins).
             const home = await getHome(params.ownerId);
-            const job = startBackupJob('backup', params.ownerId, user.id, (jobId, onProgress) =>
-                runHomeBackup(home, user.id, jobId, onProgress),
+            const job = startBackupJob('backup', params.ownerId, user.id, (started, onProgress) =>
+                runHomeBackup(home, started, onProgress),
             );
             return { jobId: job.id };
         },
@@ -101,7 +106,7 @@ export const backupRouter = new Elysia({ name: 'backup' })
         '/admin/backup/artifacts',
         async ({ query, user }): Promise<{ artifacts: BackupArtifact[]; safetyCopies: BackupSafetyCopy[] }> => {
             await requireAdmin(user.id);
-            await requireHomeOwner(query.ownerId, false);
+            await requireRestorableHome(query.ownerId);
             return {
                 artifacts: await listArtifacts(query.ownerId),
                 safetyCopies: await listSafetyCopies(query.ownerId),
@@ -117,25 +122,32 @@ export const backupRouter = new Elysia({ name: 'backup' })
             const { name, ownerId } = uploadName(request.headers.get('content-disposition'));
             const declared = Number(request.headers.get('content-length'));
             if (!Number.isSafeInteger(declared) || declared <= 0 || declared > BACKUP_UPLOAD_MAX_BYTES) {
-                throw new ApiError(413, 'A backup upload must declare a Content-Length of at most 1 GB');
+                const limit = BACKUP_UPLOAD_MAX_BYTES / 1024 ** 3;
+                throw new ApiError(413, `A backup upload must declare a Content-Length of at most ${limit} GB`);
             }
-            const { artifactPath } = resolveArtifact(name);
+            const artifactPath = path.join(getBackupsDir(), name);
             if (fs.existsSync(artifactPath)) throw new ApiError(409, 'That artifact is already in the backups folder');
             if (!request.body) throw new ApiError(400, 'Upload has no body');
 
-            // Staged next to the backups folder so the rename below is atomic: an interrupted upload
-            // never leaves a short archive under a name the list would offer for restore.
-            // writeTempWithHash is the repo's stream-into-a-temp seam; its sha256 is incidental here.
+            // Staged next to the backups folder so the landing below is one filesystem operation: an
+            // interrupted upload never leaves a short archive under a name the list would offer for
+            // restore. writeTempWithHash is the stream-into-a-temp seam; its sha256 is incidental.
             const tempPath = getBackupTempPath('.tar.zst');
             try {
                 const { size } = await writeTempWithHash(tempPath, request.body);
                 // Content-Length is the client's word for it; the bytes are what count.
-                if (size > BACKUP_UPLOAD_MAX_BYTES) throw new ApiError(413, 'Upload too large');
+                if (size !== declared) throw new ApiError(400, 'Upload does not match its Content-Length');
+                // link, not rename: rename would silently overwrite an artifact that appeared while
+                // this body was streaming (another upload of the same name, or a job's own pack).
+                fs.linkSync(tempPath, artifactPath);
             } catch (error) {
-                fs.rmSync(tempPath, { force: true });
+                if (error instanceof Error && 'code' in error && error.code === 'EEXIST') {
+                    throw new ApiError(409, 'That artifact is already in the backups folder');
+                }
                 throw error;
+            } finally {
+                fs.rmSync(tempPath, { force: true });
             }
-            fs.renameSync(tempPath, artifactPath);
 
             try {
                 const manifest = await readArtifactManifest(artifactPath);
@@ -145,8 +157,9 @@ export const backupRouter = new Elysia({ name: 'backup' })
                 await writeSidecar(artifactPath, manifest, { status: 'unverified', failures: [] });
             } catch (error) {
                 // An archive nothing can read is not an artifact; keeping it would put a row in the
-                // list that every later action fails on.
-                deleteArtifact(artifactPath);
+                // list that every later action fails on. Only the file this request landed goes —
+                // the sidecar, if there is one, belongs to whatever wrote it.
+                fs.rmSync(artifactPath, { force: true });
                 if (error instanceof ApiError) throw error;
                 // Anything that is not a readable .tar.zst fails deep inside the decompressor.
                 throw new ApiError(400, 'That upload is not a readable Eigen backup archive');
@@ -158,7 +171,7 @@ export const backupRouter = new Elysia({ name: 'backup' })
 
     .get(
         '/admin/backup/artifacts/:name',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<Response> => {
             await requireAdmin(user.id);
             const { artifactPath } = resolveArtifact(params.name);
             const file = Bun.file(artifactPath);
@@ -179,7 +192,9 @@ export const backupRouter = new Elysia({ name: 'backup' })
         '/admin/backup/artifacts/:name',
         async ({ params, user }): Promise<{ success: boolean }> => {
             await requireAdmin(user.id);
-            deleteArtifact(resolveArtifact(params.name).artifactPath);
+            const { artifactPath } = resolveArtifact(params.name);
+            if (!fs.existsSync(artifactPath)) throw new ApiError(404, 'Artifact not found');
+            deleteArtifact(artifactPath);
             return { success: true };
         },
         { auth: true },
@@ -191,8 +206,8 @@ export const backupRouter = new Elysia({ name: 'backup' })
             await requireAdmin(user.id);
             const { artifactPath, ownerId } = resolveArtifact(params.name);
             if (!fs.existsSync(artifactPath)) throw new ApiError(404, 'Artifact not found');
-            const job = startBackupJob('verify', ownerId, user.id, (jobId, onProgress) =>
-                runArtifactVerify(params.name, jobId, onProgress),
+            const job = startBackupJob('verify', ownerId, user.id, (started, onProgress) =>
+                runArtifactVerify(params.name, started, onProgress),
             );
             return { jobId: job.id };
         },
@@ -208,9 +223,9 @@ export const backupRouter = new Elysia({ name: 'backup' })
             // restore itself judges the manifest inside the archive, which is the canonical answer.
             if (ownerId !== body.ownerId) throw new ApiError(400, 'That artifact is a backup of another home');
             if (!fs.existsSync(artifactPath)) throw new ApiError(404, 'Artifact not found');
-            await requireHomeOwner(body.ownerId, false);
-            const job = startBackupJob('restore', body.ownerId, user.id, async (jobId, onProgress) => {
-                await restoreHome(params.name, body.ownerId, jobId, onProgress);
+            await requireRestorableHome(body.ownerId);
+            const job = startBackupJob('restore', body.ownerId, user.id, async (started, onProgress) => {
+                await restoreHome(params.name, body.ownerId, started.id, onProgress);
                 return params.name;
             });
             return { jobId: job.id };
@@ -222,10 +237,10 @@ export const backupRouter = new Elysia({ name: 'backup' })
         '/admin/backup/safety/:ownerId/:name',
         async ({ params, user }): Promise<{ success: boolean }> => {
             await requireAdmin(user.id);
-            await requireHomeOwner(params.ownerId, false);
+            await requireRestorableHome(params.ownerId);
             const folder = await resolveSafetyCopyPath(params.ownerId, params.name);
             if (!fs.existsSync(folder)) throw new ApiError(404, 'Safety copy not found');
-            fs.rmSync(folder, { recursive: true, force: true });
+            deleteSafetyCopy(folder);
             return { success: true };
         },
         { auth: true },

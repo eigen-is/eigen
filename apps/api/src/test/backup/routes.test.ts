@@ -1,8 +1,9 @@
-import { beforeAll, describe, expect, setSystemTime, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { beforeAll, describe, expect, setSystemTime, spyOn, test } from 'bun:test';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BackupArtifact, BackupJob, BackupSafetyCopy } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type { Notification } from '@workspace/lib/types/notification';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
 import { user as userScheme } from '../../../auth-schema';
@@ -10,6 +11,7 @@ import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
 import { buildArtifactName, buildHomeFolderName, getBackupsDir, PRE_RESTORE_SUFFIX } from '../../lib/backup/paths';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
+import * as verifyModule from '../../lib/backup/verify';
 import { getHome } from '../../lib/home/get-home';
 import {
     assertJson,
@@ -178,11 +180,13 @@ describe('Backup routes', () => {
         expect(job.kind).toBe('backup');
         expect(job.ownerId).toBe(target.id);
         expect(job.startedBy).toBe(ctx.alice.user.id);
-        expect(job.artifact).toBeTruthy();
+        if (!job.artifact) throw new Error('the backup job produced no artifact');
         expect(job.finishedAt).toBeTruthy();
-        expect(sse.events.filter((event) => event.type === SSEventType.BACKUP_JOB_UPDATED).length).toBeGreaterThan(0);
+        const pokes = sse.events.filter((event) => event.type === SSEventType.BACKUP_JOB_UPDATED);
+        expect(pokes.length).toBeGreaterThan(0);
+        expect(pokes.every((poke) => poke.jobId === job.id && poke.ownerId === target.id)).toBe(true);
 
-        artifactName = job.artifact as string;
+        artifactName = job.artifact;
         finishedJobId = job.id;
         const { artifacts } = await listArtifacts(target.id);
         const artifact = artifacts.find((entry) => entry.name === artifactName);
@@ -333,6 +337,149 @@ describe('Backup routes', () => {
         const del = await adminRequest(`/admin/backup/safety/${target.id}/${copy?.name}`, { method: 'DELETE' });
         expect(del.status).toBe(200);
         expect((await listArtifacts(target.id)).safetyCopies.some((entry) => entry.name === copy?.name)).toBe(false);
+    });
+
+    test('refuses a second upload of a name already in the folder and keeps the first', async () => {
+        const name = buildArtifactName(target.id, new Date('2020-05-05T03:04:05Z'));
+        const packed = await packTargetHome(name);
+        const first = await uploadRequest(name, Uint8Array.from(readFileSync(packed)));
+        expect(first.status).toBe(200);
+        const landed = readFileSync(join(getBackupsDir(), name));
+
+        const second = await uploadRequest(name, Uint8Array.from([1, 2, 3, 4]));
+        expect(second.status).toBe(409);
+        expect(Buffer.compare(readFileSync(join(getBackupsDir(), name)), landed)).toBe(0);
+        expect(existsSync(join(getBackupsDir(), `${name}.manifest.json`))).toBe(true);
+        const listed = (await listArtifacts(target.id)).artifacts.find((entry) => entry.name === name);
+        expect(listed?.manifest?.ownerId).toBe(target.id);
+
+        expect((await adminRequest(`/admin/backup/artifacts/${name}`, { method: 'DELETE' })).status).toBe(200);
+    });
+
+    // The pre-flight existsSync only sees a name that was already there when the request arrived.
+    // An artifact that appears while a body streams — another admin's upload, or a job's own pack —
+    // must not be overwritten when this one lands.
+    test('an artifact that appears while the body streams is not overwritten', async () => {
+        const name = buildArtifactName(target.id, new Date('2020-05-05T04:04:05Z'));
+        const packed = readFileSync(await packTargetHome(name));
+        const half = Math.floor(packed.byteLength / 2);
+        let release = (): void => {};
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const body = new ReadableStream<Uint8Array>({
+            async start(controller) {
+                controller.enqueue(Uint8Array.from(packed.subarray(0, half)));
+                await gate;
+                controller.enqueue(Uint8Array.from(packed.subarray(half)));
+                controller.close();
+            },
+        });
+
+        const upload = adminRequest('/admin/backup/artifacts', {
+            method: 'POST',
+            headers: {
+                'Content-Disposition': `attachment; filename="${name}"`,
+                'Content-Length': String(packed.byteLength),
+            },
+            body,
+        });
+        await Bun.sleep(50);
+        writeFileSync(join(getBackupsDir(), name), 'someone else was here');
+        release();
+
+        expect((await upload).status).toBe(409);
+        expect(readFileSync(join(getBackupsDir(), name), 'utf8')).toBe('someone else was here');
+        rmSync(join(getBackupsDir(), name));
+    });
+
+    test('lists an artifact with a missing or unreadable sidecar as unverified', async () => {
+        const name = buildArtifactName(target.id, new Date('2020-06-06T03:04:05Z'));
+        const packed = await packTargetHome(name);
+        expect((await uploadRequest(name, Uint8Array.from(readFileSync(packed)))).status).toBe(200);
+        const sidecar = join(getBackupsDir(), `${name}.manifest.json`);
+
+        rmSync(sidecar);
+        const withoutSidecar = (await listArtifacts(target.id)).artifacts.find((entry) => entry.name === name);
+        expect(withoutSidecar?.verify.status).toBe('unverified');
+        expect(withoutSidecar?.manifest).toBeNull();
+
+        writeFileSync(sidecar, 'not json at all');
+        const withGarbage = (await listArtifacts(target.id)).artifacts.find((entry) => entry.name === name);
+        expect(withGarbage?.verify.status).toBe('unverified');
+        expect(withGarbage?.manifest).toBeNull();
+
+        expect((await adminRequest(`/admin/backup/artifacts/${name}`, { method: 'DELETE' })).status).toBe(200);
+        expect((await adminRequest(`/admin/backup/artifacts/${name}`, { method: 'DELETE' })).status).toBe(404);
+    });
+
+    test('refuses a backup of a home that does not exist', async () => {
+        expect((await adminRequest(`/admin/backup/home/${'a'.repeat(32)}`, { method: 'POST' })).status).toBe(404);
+        expect((await adminRequest(`/admin/backup/home/team_${'b'.repeat(32)}`, { method: 'POST' })).status).toBe(404);
+    });
+
+    test('measures a safety copy once and forgets it when it is deleted', async () => {
+        const homeDir = join(TEST_DATA_DIR, 'home', target.id);
+        const copyName = `${target.id}${PRE_RESTORE_SUFFIX}20200707-030405`;
+        const copyDir = join(homeDir, '..', copyName);
+        mkdirSync(copyDir, { recursive: true });
+        writeFileSync(join(copyDir, 'a.bin'), Buffer.alloc(2048));
+
+        const sized = (await listArtifacts(target.id)).safetyCopies.find((entry) => entry.name === copyName);
+        expect(sized?.bytes).toBe(2048);
+
+        // Measured once per process: a safety copy never changes after the restore that made it, and
+        // the list is refetched on every job poke.
+        writeFileSync(join(copyDir, 'b.bin'), Buffer.alloc(4096));
+        const again = (await listArtifacts(target.id)).safetyCopies.find((entry) => entry.name === copyName);
+        expect(again?.bytes).toBe(2048);
+
+        expect((await adminRequest(`/admin/backup/safety/${target.id}/${copyName}`, { method: 'DELETE' })).status).toBe(
+            200,
+        );
+        expect(existsSync(copyDir)).toBe(false);
+
+        // The memo went with it: the same name measured again is the new folder's size.
+        mkdirSync(copyDir, { recursive: true });
+        writeFileSync(join(copyDir, 'c.bin'), Buffer.alloc(1024));
+        const remeasured = (await listArtifacts(target.id)).safetyCopies.find((entry) => entry.name === copyName);
+        expect(remeasured?.bytes).toBe(1024);
+        rmSync(copyDir, { recursive: true, force: true });
+    });
+
+    test('a failed verify fails the backup job, keeps the artifact and tells the admin', async () => {
+        const spy = spyOn(verifyModule, 'verifyFolder').mockResolvedValue({
+            status: 'failed',
+            checkedAt: new Date().toISOString(),
+            failures: ['seeded: home/mounts/x/metadata.db is missing from the folder'],
+        });
+        try {
+            const job = await startAndFinish(`/admin/backup/home/${target.id}`);
+            expect(job.state).toBe('failed');
+            expect(job.error).toContain('did not verify');
+
+            const failed = (await listArtifacts(target.id)).artifacts.find((entry) => entry.verify.status === 'failed');
+            expect(failed?.verify.failures[0]).toContain('seeded:');
+            expect(failed?.manifest?.ownerId).toBe(target.id);
+
+            // The notification is fire-and-forget, so it lands just after the job ends.
+            const home = await getHome(ctx.alice.user.id);
+            let alert: Notification | undefined;
+            for (let attempt = 0; attempt < 40 && !alert; attempt++) {
+                alert = home.notifications.list().find((entry) => entry.type === 'admin-alert');
+                if (!alert) await Bun.sleep(25);
+            }
+            expect(alert?.title).toContain('did not verify');
+            expect(alert?.body).toContain('seeded:');
+
+            if (failed) {
+                expect(
+                    (await adminRequest(`/admin/backup/artifacts/${failed.name}`, { method: 'DELETE' })).status,
+                ).toBe(200);
+            }
+        } finally {
+            spy.mockRestore();
+        }
     });
 
     test('drops a finished job an hour after it finished', async () => {

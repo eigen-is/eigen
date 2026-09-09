@@ -22,8 +22,6 @@ const MAX_OCTAL_SIZE = 0o77777777777;
 const BLOCKING_FACTOR = 20 * BLOCK;
 const SIDECAR_SUFFIX = '.manifest.json';
 
-// The manifest + verify record beside an artifact. Written by every job, read by the artifact list,
-// removed with the artifact it describes.
 export function sidecarPath(artifactPath: string): string {
     return `${artifactPath}${SIDECAR_SUFFIX}`;
 }
