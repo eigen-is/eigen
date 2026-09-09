@@ -23,6 +23,7 @@ import { createMountConfig } from '../../lib/mount';
 import { paths } from '../../lib/mount/schema';
 import { getEigenDb } from '../../lib/share/db';
 import { shareRegistry } from '../../lib/share/schema';
+import { createHomeFaultMount, registerFaultMount, unregisterFaultMount } from '../fault-storage-helpers';
 import {
     assertJson,
     authedRequest,
@@ -441,6 +442,10 @@ describe('Backup restoreHome', () => {
 });
 
 describe('Backup restore refuses an archive this server cannot open', () => {
+    // A remote mount, for the gate that only remote mounts meet. Its fake bucket sits outside the
+    // home, the way createHomeFaultMount wants it.
+    const S3_MOUNT_ID = 'restore-schema-s3';
+    const S3_BACKING = join(TEST_DATA_DIR, 'restore-schema-backing');
     let user: TestUser;
     let mountId: string;
     let rootId: string;
@@ -482,22 +487,67 @@ describe('Backup restore refuses an archive this server cannot open', () => {
         rmSync(join(getBackupsDir(), artifact), { force: true });
     });
 
-    test('a mount archived before pending_uploads carried its kind is refused', async () => {
+    test('an s3 mount archived before pending_uploads carried its kind is refused', async () => {
         const before = await rootNames(user.sessionToken, user.id, mountId, rootId);
         const failedBefore = safetyCopies(user.id, FAILED_RESTORE_SUFFIX).length;
-        // A restore writes the pending rows itself, naming the isDatabase column; on an older
-        // metadata.db that column does not exist, and taking its DEFAULT would let the queue drop
-        // every restored plain file as corrupt.
-        const artifact = await backup(user.id, new Date(Date.now() + 60_000), (manifest, folder) =>
-            stampSchemaVersion(manifest, folder, `home/mounts/${mountId}/metadata.db`, 7),
+        // A restore writes the pending rows of a REMOTE mount itself, naming the isDatabase column;
+        // on an older metadata.db that column does not exist, and taking its DEFAULT would let the
+        // queue drop every restored plain file as corrupt. A local mount gets no such rows, so the
+        // same archive is fine for it.
+        const home = await getHome(user.id);
+        const { mount } = createHomeFaultMount(home, S3_MOUNT_ID, S3_BACKING);
+        await mount.init();
+        registerFaultMount(home.drive, mount);
+        try {
+            const remoteRoot = await assertJson<DrivePath>(
+                await authedRequest(user.sessionToken, `/drive/${user.id}/${S3_MOUNT_ID}/root`),
+            );
+            await driveUpload(
+                user.sessionToken,
+                user.id,
+                S3_MOUNT_ID,
+                remoteRoot.id,
+                new File([TEST_PNG_BYTES], 'remote.png', { type: 'image/png' }),
+            );
+            await mount.drainPendingUploads({ flushNow: true });
+            const artifact = await backup(user.id, new Date(Date.now() + 60_000), (manifest, folder) =>
+                stampSchemaVersion(manifest, folder, `home/mounts/${S3_MOUNT_ID}/metadata.db`, 7),
+            );
+
+            await expect(restoreHome(artifact, user.id, `restore-older-${Date.now()}`)).rejects.toThrow(
+                /too old to restore/,
+            );
+
+            expect(safetyCopies(user.id, FAILED_RESTORE_SUFFIX).length).toBe(failedBefore + 1);
+            expect(await rootNames(user.sessionToken, user.id, mountId, rootId)).toEqual(before);
+            rmSync(join(getBackupsDir(), artifact), { force: true });
+        } finally {
+            unregisterFaultMount(home.drive, S3_MOUNT_ID);
+            await mount.closeAllDatabases().catch(() => {});
+            rmSync(S3_BACKING, { recursive: true, force: true });
+        }
+    });
+
+    test('a deleted user is not re-created by an archive that fails the check', async () => {
+        const ctx = await getTestContext();
+        const doomed = await createUser('restore-schema-deleted@test.eigen.is', 'Restore Schema Deleted');
+        expect((await authedRequest(doomed.sessionToken, `/drive/${doomed.id}/mounts`)).status).toBe(200);
+        const artifact = await backup(doomed.id, new Date(), (manifest, folder) =>
+            stampSchemaVersion(manifest, folder, 'home/eigen.mail/mail.db', 999),
+        );
+        expect(
+            (await authedRequest(ctx.alice.user.sessionToken, `/settings/user/${doomed.id}`, { method: 'DELETE' }))
+                .status,
+        ).toBe(200);
+
+        await expect(restoreHome(artifact, doomed.id, `restore-deleted-newer-${Date.now()}`)).rejects.toThrow(
+            /newer than this server/,
         );
 
-        await expect(restoreHome(artifact, user.id, `restore-older-${Date.now()}`)).rejects.toThrow(
-            /too old to restore/,
-        );
-
-        expect(safetyCopies(user.id, FAILED_RESTORE_SUFFIX).length).toBe(failedBefore + 1);
-        expect(await rootNames(user.sessionToken, user.id, mountId, rootId)).toEqual(before);
+        // The rollback moves folders; nothing takes a users3.db row back. So the check has to run
+        // before the identity write, or this user could sign in with no home — and never be restored,
+        // because the next attempt would find the user row and skip the insert.
+        expect(getAuthDrizzleDb().select().from(userScheme).where(eq(userScheme.id, doomed.id)).all()).toEqual([]);
         rmSync(join(getBackupsDir(), artifact), { force: true });
     });
 });

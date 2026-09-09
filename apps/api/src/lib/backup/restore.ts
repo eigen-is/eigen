@@ -100,11 +100,12 @@ function materializeMount(homeDir: string, summary: BackupManifest['mounts'][num
     }
     const isPathBased = summary.storageType === 'local';
     const isRemote = summary.storageType === 's3';
-    // The pending rows carry the kind of each staged copy (schema.ts, `isDatabase`), and the insert
-    // below names that column. An archive from before it would take the DEFAULT and every restored
-    // plain file would later be dropped as a corrupt staged copy, so refuse it in the open.
+    // Only a remote mount gets pending rows written for it, and those name the column that carries
+    // the kind of each staged copy (schema.ts, `isDatabase`). An archive from before that column
+    // would take its DEFAULT and every restored plain file would later be dropped as a corrupt
+    // staged copy — so refuse it here, and leave a local mount's older archive alone.
     const metadataVersion = schemaVersionOf(metadataPath);
-    if (metadataVersion < PENDING_UPLOAD_KIND_VERSION) {
+    if (isRemote && metadataVersion < PENDING_UPLOAD_KIND_VERSION) {
         throw new ApiError(
             400,
             `Mount ${summary.id} was archived at metadata schema v${metadataVersion}, too old to restore ` +
@@ -391,13 +392,17 @@ export async function restoreHome(
                 onProgress?.('mounts', index + 1, manifest.mounts.length);
             }
 
-            // 6 — the rows that live outside the home folder (users only).
+            // 6 — what landed is still a database this server can open. Before the identity write,
+            // not after it (the spec has these the other way around): the rollback moves folders, and
+            // nothing takes a users3.db row back. A restore of a deleted user that failed this check
+            // after re-inserting would leave a user who can sign in with no home — and whose retry
+            // would find that user and skip the insert for good.
+            checkRestoredDatabases(homeDir, manifest, containerDatabases);
+
+            // 7 — the rows that live outside the home folder (users only).
             restoreAuthRows(ownerId, manifest, folder);
             await restoreShares(ownerId, folder);
             await restoreAvatar(folder);
-
-            // 7 — what landed is still a database this server can open.
-            checkRestoredDatabases(homeDir, manifest, containerDatabases);
         } catch (error) {
             // Nothing is deleted, ever: the half-restored folder keeps a name of its own and the home
             // as it was goes back. A failure while putting it back must not hide the original one.
