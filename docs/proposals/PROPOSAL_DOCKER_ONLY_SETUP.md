@@ -113,9 +113,9 @@ Publish measured runtime memory and peak build memory separately. The guide's "2
 
 ## Updates and recovery
 
-`update.sh` gains a release mode: download the matching bundle, verify checksums, `docker compose pull` everything first, run `scripts/snapshot.sh`, then `docker compose up -d` with the same project name and data locations. No `git pull`, no `bun install`, no host build, and no `docker image prune`. Source mode keeps working through the build overlay. The API's 30 s `stop_grace_period` and upload drain stay as they are.
+`update.sh` gains a release mode: download the matching bundle, verify checksums, `docker compose pull` everything first, run `scripts/backup.sh`, then `docker compose up -d` with the same project name and data locations. No `git pull`, no `bun install`, no host build, and no `docker image prune`. Source mode keeps working through the build overlay. The API's 30 s `stop_grace_period` and upload drain stay as they are.
 
-[`snapshot.sh`](../../scripts/snapshot.sh) archives `data/` and `.env.production` after stopping the API. `caddy-data`, the `postfix-queue` volume, and `data/certs` are outside it, and Postfix and Dovecot keep writing while it runs. Whole-stack recovery is the [backup proposal's](PROPOSAL_BACKUP_RESTORE.md) job; this proposal only requires that the update path calls the snapshot and that a rollback keeps the prior release's bundle and snapshot together, because rolling images back after a schema migration is not safe on its own.
+[`backup.sh`](../../scripts/backup.sh) archives `data/` and `.env.production` after stopping the API. `caddy-data`, the `postfix-queue` volume, and `data/certs` are outside it, and Postfix and Dovecot keep writing while it runs. Whole-stack recovery is the [backup proposal's](PROPOSAL_BACKUP_RESTORE.md) job; this proposal only requires that the update path calls the snapshot and that a rollback keeps the prior release's bundle and snapshot together, because rolling images back after a schema migration is not safe on its own.
 
 ## Delivery plan
 
