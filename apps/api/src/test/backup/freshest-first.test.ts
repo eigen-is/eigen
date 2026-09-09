@@ -9,12 +9,11 @@ import { snapshotHome } from '../../lib/backup/snapshot-home';
 import type { DatabaseConfig } from '../../lib/core';
 import type { Home } from '../../lib/home';
 import { getHome } from '../../lib/home/get-home';
-import { Mount } from '../../lib/mount/mount';
-import { LocalStorage } from '../../lib/storage/local-storage';
+import type { Mount } from '../../lib/mount/mount';
 import {
     countBackingRows,
-    createS3MountConfig,
-    FaultStorage,
+    createHomeFaultMount,
+    type FaultStorage,
     provisionDoc,
     registerFaultMount,
     settleContainer,
@@ -48,18 +47,6 @@ let fullMount: Mount;
 let docFolderName: string;
 let nestedFileBytes: Uint8Array;
 let trashedFileId: string;
-
-// An `s3`-type mount whose backend is a FaultStorage over a local directory. Not createFaultMount:
-// that one roots the mount outside the home, and snapshotHome stages every mount's metadata.db
-// through home.getLocalDatabase — a mount rooted elsewhere would be archived alongside a freshly
-// created empty one. The fake bucket stays out of the home, where a `.db` object would trip
-// listHomeFiles' unlisted-database guard.
-function createHomeFaultMount(id: string): { mount: Mount; fault: FaultStorage } {
-    const mount = new Mount(home.user.id, home.homeDir, createS3MountConfig(id), home.getLocalDatabase.bind(home));
-    const fault = new FaultStorage(new LocalStorage(join(backingRoot, id)));
-    mount.storage = fault;
-    return { mount, fault };
-}
 
 // A real, minimal SQLite database at `filePath`, holding one marker row. Staged copies have to be
 // SQLite: the upload queue drops one without the magic header as a poisoned payload.
@@ -98,11 +85,11 @@ beforeAll(async () => {
     home = await getHome(ctx.alice.user.id);
     backingRoot = mkdtempSync(join(TEST_DATA_DIR, 'backup-s3-backing-'));
 
-    ({ mount: staleMount, fault: staleFault } = createHomeFaultMount(STALE_MOUNT_ID));
+    ({ mount: staleMount, fault: staleFault } = createHomeFaultMount(home, STALE_MOUNT_ID, backingRoot));
     await staleMount.init();
     registerFaultMount(home.drive, staleMount);
 
-    ({ mount: fullMount } = createHomeFaultMount(FULL_MOUNT_ID));
+    ({ mount: fullMount } = createHomeFaultMount(home, FULL_MOUNT_ID, backingRoot));
     await fullMount.init();
     registerFaultMount(home.drive, fullMount);
 
@@ -181,6 +168,31 @@ describe('Backup freshest-first on an s3 mount', () => {
                 .map((e) => e.path)
                 .filter((p) => p.startsWith(mountPrefix) && !p.startsWith(`${mountPrefix}data/`)),
         ).toEqual([`${mountPrefix}metadata.db`]);
+    });
+
+    test('an open container database beats both the staged copy and the stored object', async () => {
+        const { containerId, dataDbId } = await provisionDoc(staleMount);
+        const containerName = (await staleMount.getPath(containerId))!.name;
+        const managed = await staleMount.createDatabase(docConfig, dataDbId);
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'acked' }).run();
+        await managed.flush();
+        await staleMount.drainPendingUploads({ flushNow: true });
+
+        // Three rungs, each one commit apart: the stored object has 'acked', the parked staged copy
+        // adds 'staged', and 'live' only ever exists in the open handle. Nothing flushes it, so a
+        // capture that settled for the staged copy would silently drop it.
+        staleFault.parkWrites = true;
+        managed.db.insert(docSchema.items).values({ id: 2, data: 'staged' }).run();
+        await managed.flush();
+        const storageKey = await staleMount.getStorageKey(dataDbId);
+        await staleFault.waitForParked((p) => p.key === storageKey);
+        managed.db.insert(docSchema.items).values({ id: 3, data: 'live' }).run();
+        expect(await countBackingRows(staleMount, dataDbId, backingRoot)).toBe(1);
+
+        const { manifest, folder } = await snapshot();
+        const relPath = `home/mounts/${STALE_MOUNT_ID}/data/${containerName}/data.db`;
+        expect(manifest.entries.map((e) => e.path)).toContain(relPath);
+        expect(readMarkers(join(folder, relPath))).toEqual(['acked', 'staged', 'live']);
     });
 
     test('a plain file whose upload is parked is archived from the staged copy', async () => {
