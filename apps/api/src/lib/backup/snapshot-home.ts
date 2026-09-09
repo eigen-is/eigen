@@ -34,8 +34,8 @@ const HOME_DATABASES: [DatabaseConfig<SchemaType>, string][] = [
 ];
 
 // `mounts` is walked from its paths tables instead (snapshotMountData); the rest are caches and
-// scratch space: mount thumbnails, temp working copies, frozen upload payloads and the contacts
-// avatar cache, all rebuilt from what the archive does carry.
+// scratch space: mount thumbnails, temp working copies, the Maildir delivery spool, frozen upload
+// payloads and the contacts avatar cache, all rebuilt from what the archive does carry.
 const SKIPPED_HOME_DIRS = new Set(['mounts', 'thumbs', 'tmp', 'staging', 'avatars']);
 
 // Databases are captured with VACUUM INTO through the live handle, never as a file copy, and their
@@ -70,7 +70,7 @@ function readAuthRows(userId: string) {
 // Writes a complete, storage-independent copy of one home into `{targetDir}/home-{ownerId}/` and
 // returns the manifest describing it. Every database copy is internally consistent (VACUUM INTO);
 // the folder as a whole is not one instant, which is the standard guarantee for a live-system
-// backup — the home keeps serving its user throughout. See docs/superpowers specs / BACKUP.md.
+// backup — the home keeps serving its user throughout.
 export async function snapshotHome(
     home: Home,
     targetDir: string,
