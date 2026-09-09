@@ -37,7 +37,9 @@ const HOME_DATABASES: [DatabaseConfig<SchemaType>, string][] = [
 // holds half-written deliveries, and the contacts avatar cache is derived from the cards.
 const SKIPPED_HOME_DIRS = new Set<string>([PATHS.DRIVE.ROOT, PATHS.MAIL.TMP, PATHS.CONTACTS.AVATARS]);
 
-const KNOWN_DATABASES = new Set(HOME_DATABASES.map(([, relPath]) => relPath));
+// Home-relative paths of the databases above; verify reads them back to know which archived .db
+// files are Eigen's own.
+export const HOME_DATABASE_PATHS = new Set(HOME_DATABASES.map(([, relPath]) => relPath));
 
 // Databases are captured with VACUUM INTO through the live handle, never as a file copy, and their
 // journals belong to the running server.
@@ -54,7 +56,7 @@ function listHomeFiles(dir: string, relDir: string, out: string[]): void {
         if (DB_FILE.test(entry.name)) {
             // A home database missing from HOME_DATABASES would be dropped from every archive in
             // silence. Fail loudly instead, so a new subsystem's db is noticed the day it lands.
-            if (entry.name.endsWith('.db') && !KNOWN_DATABASES.has(rel)) {
+            if (entry.name.endsWith('.db') && !HOME_DATABASE_PATHS.has(rel)) {
                 throw new Error(`snapshotHome: unlisted home database ${rel} — add it to HOME_DATABASES`);
             }
             continue;
