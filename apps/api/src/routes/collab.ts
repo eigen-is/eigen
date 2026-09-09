@@ -1,4 +1,4 @@
-import { COLLAB_STORAGE_UNAVAILABLE_CLOSE } from '@workspace/lib/constants/collab';
+import { COLLAB_HOME_REPLACED_CLOSE, COLLAB_STORAGE_UNAVAILABLE_CLOSE } from '@workspace/lib/constants/collab';
 import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
 import { type EffectiveMember, stripEigenExtension } from '@workspace/lib/types/drive';
 import type { ServerWebSocket } from 'bun';
@@ -11,7 +11,7 @@ import { startLoadingHeartbeat } from '../lib/collab/loading-heartbeat';
 import { ApiError } from '../lib/core/errors';
 import { getSharedDrive } from '../lib/drive';
 import type { DriveLike } from '../lib/drive/get-drive';
-import { touchHomeIfLoaded } from '../lib/home';
+import { HomeRestoringError, touchHomeIfLoaded } from '../lib/home';
 import { sendToHome } from '../lib/home/home-relay';
 import { getUserByEmail, type User } from '../lib/user';
 import { keepWebSocketAlive } from '../utils/websockets';
@@ -199,6 +199,10 @@ export const collabRouter = new Elysia({
                 const loadStart = performance.now();
 
                 const { ownerId, mountId, pathId } = data.params;
+                // Registered before the awaits below, not after them: a socket still resolving its
+                // document when a restore starts must be in the sweep too. cleanupSession drops it
+                // again on close, whichever way this open ends.
+                registerCollabConnection(ownerId, rawWs);
                 const drive = await getSharedDrive(ownerId, user);
                 if (!drive || !(await drive.canRead(mountId, pathId, user))) {
                     ws.close(1008, 'Authentication failed');
@@ -207,8 +211,6 @@ export const collabRouter = new Elysia({
 
                 const document = await drive.getCollabDocument(mountId, pathId);
                 document.subscribe(user, rawWs);
-                // Tracked per home so a restore of THIS owner can close the socket (connections.ts).
-                registerCollabConnection(ownerId, rawWs);
                 console.log(
                     `[collab] open path=${pathId} loadMs=${(performance.now() - loadStart).toFixed(0)} ` +
                         `connections=${document.connectionCount}`,
@@ -225,9 +227,14 @@ export const collabRouter = new Elysia({
                 );
             } catch (err) {
                 console.error('Error opening collab session:', err);
-                // A 503 means the storage behind the document is unreachable, not that the user may not
-                // open it: close with 1013 so the client shows "retrying" instead of an access error.
-                if (err instanceof ApiError && err.status === 503) {
+                // A home being replaced by a restore and unreachable storage are both 503s with
+                // opposite orders for the client: reload without syncing (or this tab merges the
+                // document it still holds back over the restored copy), against keep the document and
+                // retry. So they never share a close code, and the first is a class of its own rather
+                // than a message this route would have to match on.
+                if (err instanceof HomeRestoringError) {
+                    ws.close(COLLAB_HOME_REPLACED_CLOSE, 'home-replaced');
+                } else if (err instanceof ApiError && err.status === 503) {
                     ws.close(COLLAB_STORAGE_UNAVAILABLE_CLOSE, 'storage-unavailable');
                 } else {
                     ws.close(1008, 'Failed to open document');

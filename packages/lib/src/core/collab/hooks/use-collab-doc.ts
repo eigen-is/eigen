@@ -156,7 +156,11 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
                 // A restore replaced the document on the server. Reconnecting would sync the copy
                 // this tab still holds in memory back over it and silently undo the restore, so the
                 // provider stays down and the page reloads onto the restored document. No editor
-                // persists to IndexedDB, so a reload is a clean slate.
+                // persists to IndexedDB, so a reload is a clean slate. Unsynced edits are dropped
+                // with it — they belong to a document that no longer exists, and leaving the guard
+                // armed would put a "leave without saving?" prompt in front of the reload.
+                pendingUpdateRef.current = false;
+                setUnsyncedEdits(false);
                 provider.disconnect();
                 window.location.reload();
                 return;

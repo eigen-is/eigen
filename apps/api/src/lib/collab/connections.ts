@@ -30,11 +30,5 @@ export function closeCollabConnectionsForHome(ownerId: string): void {
     const sockets = connectionsByOwner.get(ownerId);
     if (!sockets) return;
     connectionsByOwner.delete(ownerId);
-    for (const ws of sockets) {
-        try {
-            ws.close(COLLAB_HOME_REPLACED_CLOSE, 'home-replaced');
-        } catch (error) {
-            console.error(`[collab] could not close a socket on ${ownerId}:`, error);
-        }
-    }
+    for (const ws of sockets) ws.close(COLLAB_HOME_REPLACED_CLOSE, 'home-replaced');
 }

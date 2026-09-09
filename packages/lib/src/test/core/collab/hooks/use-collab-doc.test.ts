@@ -294,10 +294,15 @@ describe('useCollabDoc connection state', () => {
         // happy-dom's Location.reload navigates; the hook only has to call it.
         Object.defineProperty(window.location, 'reload', { value: reload, configurable: true });
 
+        // An edit this tab never got to send: the guard is armed, and it must not prompt in front of
+        // the reload — those edits belong to a document the server no longer has.
+        act(() => h.doc.getMap('items').set('unsent', 1));
+        expect(h.state.unsyncedEdits).toBe(false);
         act(() => h.provider.close(COLLAB_HOME_REPLACED_CLOSE));
 
         expect(reload).toHaveBeenCalledTimes(1);
         expect(h.provider.disconnected).toBe(true);
+        expect(h.state.unsyncedEdits).toBe(false);
         // Not a storage outage and not a plain drop: nothing retries, nothing syncs this tab back.
         expect(h.state.storageUnavailable).toBe(false);
     });
