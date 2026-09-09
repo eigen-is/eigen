@@ -55,6 +55,8 @@ export const SSEventType = {
     LABEL_CREATED: 'contacts:label-created',
     LABEL_UPDATED: 'contacts:label-updated',
     LABEL_DELETED: 'contacts:label-deleted',
+    // Backup events (admin only)
+    BACKUP_JOB_UPDATED: 'backup:job-updated',
 } as const;
 
 // --- Event data types (minimal — only what frontend handlers need for cache invalidation) ---
@@ -106,6 +108,14 @@ type SSEventSpace = {
     type: typeof SSEventType.SPACE_SETTINGS_UPDATED;
 };
 
+// Sent to the admin who started the job on every state or progress change. The payload is a poke:
+// the admin pane refetches the job and artifact lists, which the server answers from the job map.
+type SSEventBackup = {
+    type: typeof SSEventType.BACKUP_JOB_UPDATED;
+    jobId: string;
+    ownerId: string;
+};
+
 type SSEventTeam = {
     type: typeof SSEventType.TEAM_SETTINGS_UPDATED;
     teamId: string;
@@ -113,6 +123,7 @@ type SSEventTeam = {
 
 // Union of all events
 export type SSEvent =
+    | SSEventBackup
     | SSEventDrive
     | SSEventMail
     | SSEventCalendar
@@ -125,6 +136,7 @@ export type SSEvent =
     | SSEventTeam;
 
 export type {
+    SSEventBackup,
     SSEventCalendar,
     SSEventChat,
     SSEventContact,

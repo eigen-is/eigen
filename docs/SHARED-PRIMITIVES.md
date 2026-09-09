@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1329 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1334 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -450,7 +450,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (323)
+## Types (327)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -626,6 +626,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ServerStorageType` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `SharedCalendar` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `SSEvent` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
+| `SSEventBackup` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventCalendar` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventChat` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventContact` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
@@ -648,8 +649,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BackgroundFill` | `@workspace/lib/types/background` | packages/lib/src/types/background.ts |
 | `Fill` | `@workspace/lib/types/background` | packages/lib/src/types/background.ts |
 | `FillPaint` | `@workspace/lib/types/background` | packages/lib/src/types/background.ts |
+| `BackupArtifact` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BackupEntry` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
+| `BackupJob` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BackupManifest` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
+| `BackupSafetyCopy` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BackupVerifyRecord` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `Command` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `CommandContext` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
@@ -778,7 +782,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (587)
+## Utilities & constants (588)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -932,6 +936,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `matchesCommentFilter` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
 | `readCards` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-cards.ts |
 | `writeCardToDoc` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
+| `BACKUP_UPLOAD_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/backup.ts |
 | `CANVAS_PREVIEW_HEIGHT` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `CANVAS_PREVIEW_WIDTH` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `CELL_INDICATOR_SIZE` | `@workspace/lib/constants` | packages/lib/src/constants/comment-indicator.ts |

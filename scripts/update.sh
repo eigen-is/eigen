@@ -44,6 +44,15 @@ if [ -f .env.production ]; then
     fi
 fi
 
+# --- migration: backup artifacts live in ./backups, bind-mounted into the API container. Docker
+# creates a missing mount point as root, and the API runs as 1000:1000 — so make it here, the same
+# way the setup guide makes ./data.
+if [ ! -d backups ]; then
+    mkdir -p backups
+    chown -R 1000:1000 backups 2>/dev/null || true
+    echo "  Migrated: created ./backups for backup artifacts"
+fi
+
 echo "Loading environment..."
 set -a && source .env.production && set +a
 

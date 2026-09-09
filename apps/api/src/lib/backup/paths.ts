@@ -1,19 +1,29 @@
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { getDataRoot } from '../config/paths';
-import { PATHS } from '../core';
+import { parseOwnerId } from '@workspace/lib/types/owner';
+import { getDataRoot, getTeamDataPath, getUserHomePath } from '../config/paths';
+import { ApiError, PATHS } from '../core';
+import { getUserById } from '../user/user';
 
 // Where backup artifacts live. Outside `data/` on purpose — the same place scripts/backup.sh
-// writes, so one wipe of the data directory can never take the backups with it.
+// writes on the host, so one wipe of the data directory can never take the backups with it. In the
+// container it is the `./backups` bind mount, named by EIGEN_BACKUPS_DIR.
+export function backupsDirPath(): string {
+    return process.env['EIGEN_BACKUPS_DIR'] || path.join(getDataRoot(), '..', 'backups');
+}
+
+// Only the writers ensure the folder: a server that has never made a backup should not grow one
+// because an admin opened the pane, and in the container the path may not be writable at all.
+// Readers take backupsDirPath() and treat a missing folder as an empty one.
 export function getBackupsDir(): string {
-    const dir = process.env['EIGEN_BACKUPS_DIR'] || path.join(getDataRoot(), '..', 'backups');
+    const dir = backupsDirPath();
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     return dir;
 }
 
 function getStagingRoot(): string {
-    return path.join(getBackupsDir(), '.staging');
+    return path.join(backupsDirPath(), '.staging');
 }
 
 export function getBackupStagingDir(jobId: string): string {
@@ -23,7 +33,7 @@ export function getBackupStagingDir(jobId: string): string {
 }
 
 // Called on server start: a job interrupted by a restart leaves a half-written folder behind,
-// and nothing ever resumes it.
+// and nothing ever resumes it. Creates nothing — at boot the backups folder may not exist yet.
 export function wipeBackupStaging(): void {
     fs.rmSync(getStagingRoot(), { recursive: true, force: true });
 }
@@ -78,16 +88,63 @@ export function buildArtifactName(ownerId: string, at: Date): string {
 export const PRE_RESTORE_SUFFIX = '.pre-restore-';
 export const FAILED_RESTORE_SUFFIX = '.failed-restore-';
 
+// buildStamp's shape as named groups, so both names it appears in are read by one rule.
+const STAMP_GROUPS = String.raw`(?<year>\d{4})(?<month>\d{2})(?<day>\d{2})-(?<hours>\d{2})(?<minutes>\d{2})(?<seconds>\d{2})`;
+
+function stampToDate(groups: Record<string, string | undefined>): Date | null {
+    const at = new Date(
+        `${groups['year']}-${groups['month']}-${groups['day']}T${groups['hours']}:${groups['minutes']}:${groups['seconds']}Z`,
+    );
+    return Number.isNaN(at.getTime()) ? null : at;
+}
+
+// The character class an owner id may use. It ends up in an artifact name and in the home folder a
+// route resolves, so `/`, `..` and control characters are out of both by construction.
+const OWNER_ID_CHARS = '[A-Za-z0-9_-]+';
+export const OWNER_ID = new RegExp(`^${OWNER_ID_CHARS}$`);
+
 // Owner ids are UUIDs or `team_{id}`, both of which contain dashes, so the timestamp is matched
-// from the end and the owner id is whatever is left. The character class keeps `/` and `..` out
-// of a name that later reaches the filesystem.
-const ARTIFACT_NAME = /^home-([A-Za-z0-9_-]+)-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})\.tar\.zst$/;
+// from the end and the owner id is whatever is left.
+const ARTIFACT_NAME = new RegExp(String.raw`^home-(?<ownerId>${OWNER_ID_CHARS})-${STAMP_GROUPS}\.tar\.zst$`);
 
 export function parseArtifactName(name: string): { ownerId: string; at: Date } | null {
-    const match = ARTIFACT_NAME.exec(name);
-    if (!match) return null;
-    const [, ownerId, year, month, day, hours, minutes, seconds] = match;
-    const at = new Date(`${year}-${month}-${day}T${hours}:${minutes}:${seconds}Z`);
-    if (Number.isNaN(at.getTime())) return null;
-    return { ownerId, at };
+    const groups = ARTIFACT_NAME.exec(name)?.groups;
+    if (!groups) return null;
+    const at = stampToDate(groups);
+    return at ? { ownerId: groups['ownerId'] ?? '', at } : null;
+}
+
+// `{homeFolderName}{suffix}{stamp}`, plus the `-2` tail a restore appends when two of them land in
+// the same second. The caller compares `homeName` against the home it asked about: that equality,
+// not the character class, is what keeps a delete inside the right directory.
+const SAFETY_COPY_SUFFIXES = [PRE_RESTORE_SUFFIX, FAILED_RESTORE_SUFFIX]
+    .map((suffix) => suffix.replaceAll('.', String.raw`\.`))
+    .join('|');
+const SAFETY_COPY_NAME = new RegExp(
+    String.raw`^(?<homeName>.+)(?<suffix>${SAFETY_COPY_SUFFIXES})${STAMP_GROUPS}(?:-\d+)?$`,
+);
+
+export function parseSafetyCopyName(
+    name: string,
+): { homeName: string; kind: 'pre-restore' | 'failed-restore'; at: Date } | null {
+    const groups = SAFETY_COPY_NAME.exec(name)?.groups;
+    if (!groups) return null;
+    const at = stampToDate(groups);
+    if (!at) return null;
+    return {
+        homeName: groups['homeName'] ?? '',
+        kind: groups['suffix'] === PRE_RESTORE_SUFFIX ? 'pre-restore' : 'failed-restore',
+        at,
+    };
+}
+
+// Where this owner's home folder lives. Org homes hold no databases and guest homes are disposable
+// (guest-cleanup deletes them), so neither is backed up and neither can be restored.
+export async function resolveHomeDir(ownerId: string): Promise<string> {
+    const owner = parseOwnerId(ownerId);
+    if (owner.type === 'team') return getTeamDataPath(owner.id);
+    if (owner.type !== 'user') throw new ApiError(400, `Cannot back up a ${owner.type} home`);
+    const existing = await getUserById(owner.id);
+    if (existing?.role === 'guest') throw new ApiError(400, 'Guest homes are not backed up');
+    return getUserHomePath(owner.id);
 }

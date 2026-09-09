@@ -1,3 +1,4 @@
+/// <reference path="./node-zstd.d.ts" />
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Readable } from 'node:stream';
@@ -20,6 +21,10 @@ const MAX_OCTAL_SIZE = 0o77777777777;
 // tar's traditional blocking factor. `tar` reads a short archive fine, but every writer pads.
 const BLOCKING_FACTOR = 20 * BLOCK;
 const SIDECAR_SUFFIX = '.manifest.json';
+
+export function sidecarPath(artifactPath: string): string {
+    return `${artifactPath}${SIDECAR_SUFFIX}`;
+}
 
 const ENCODER = new TextEncoder();
 
@@ -219,7 +224,6 @@ export async function writeSidecar(
     manifest: BackupManifest,
     verify: BackupVerifyRecord,
 ): Promise<void> {
-    const sidecarPath = `${artifactPath}${SIDECAR_SUFFIX}`;
     const tempPath = getBackupTempPath(SIDECAR_SUFFIX);
     try {
         await Bun.write(tempPath, JSON.stringify({ manifest, verify }, null, 2));
@@ -227,7 +231,7 @@ export async function writeSidecar(
         fs.rmSync(tempPath, { force: true });
         throw error;
     }
-    fs.renameSync(tempPath, sidecarPath);
+    fs.renameSync(tempPath, sidecarPath(artifactPath));
 }
 
 // Null when there is no sidecar at all — an artifact copied in by hand has none, and the caller
@@ -236,9 +240,9 @@ export async function writeSidecar(
 export async function readSidecar(
     artifactPath: string,
 ): Promise<{ manifest: BackupManifest; verify: BackupVerifyRecord } | null> {
-    const sidecarPath = `${artifactPath}${SIDECAR_SUFFIX}`;
-    if (!fs.existsSync(sidecarPath)) return null;
-    const sidecar = parseBackupSidecar(await Bun.file(sidecarPath).text());
-    if (!sidecar) throw new ApiError(400, `${path.basename(sidecarPath)} is not a backup manifest sidecar`);
+    const filePath = sidecarPath(artifactPath);
+    if (!fs.existsSync(filePath)) return null;
+    const sidecar = parseBackupSidecar(await Bun.file(filePath).text());
+    if (!sidecar) throw new ApiError(400, `${path.basename(filePath)} is not a backup manifest sidecar`);
     return sidecar;
 }
