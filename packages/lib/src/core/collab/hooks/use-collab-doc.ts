@@ -1,5 +1,5 @@
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
-import { COLLAB_STORAGE_UNAVAILABLE_CLOSE } from '@workspace/lib/constants/collab';
+import { COLLAB_HOME_REPLACED_CLOSE, COLLAB_STORAGE_UNAVAILABLE_CLOSE } from '@workspace/lib/constants/collab';
 import { type RefObject, useEffect, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
@@ -152,6 +152,15 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
         // pause. disconnect() re-enters with a null event, which the code check ignores.
         let retryTimer: ReturnType<typeof setTimeout> | undefined;
         const handleConnectionClose = (event: CloseEvent | null) => {
+            if (event?.code === COLLAB_HOME_REPLACED_CLOSE) {
+                // A restore replaced the document on the server. Reconnecting would sync the copy
+                // this tab still holds in memory back over it and silently undo the restore, so the
+                // provider stays down and the page reloads onto the restored document. No editor
+                // persists to IndexedDB, so a reload is a clean slate.
+                provider.disconnect();
+                window.location.reload();
+                return;
+            }
             if (event?.code !== COLLAB_STORAGE_UNAVAILABLE_CLOSE) return;
             setStorageUnavailable(true);
             provider.disconnect();

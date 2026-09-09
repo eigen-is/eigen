@@ -6,6 +6,7 @@ import { Elysia, t } from 'elysia';
 import { getCommentIndex } from '../lib/chat/comment-index';
 import { broadcastCommentIndexUpdated } from '../lib/chat/sse-events';
 import type CollabDocument from '../lib/collab/collabDocument';
+import { registerCollabConnection, unregisterCollabConnection } from '../lib/collab/connections';
 import { startLoadingHeartbeat } from '../lib/collab/loading-heartbeat';
 import { ApiError } from '../lib/core/errors';
 import { getSharedDrive } from '../lib/drive';
@@ -31,6 +32,7 @@ type CollabWsData = {
 function cleanupSession(data: CollabWsData, ws: ServerWebSocket<undefined>) {
     if (data.pingInterval) clearInterval(data.pingInterval);
     data.pingInterval = undefined;
+    unregisterCollabConnection(data.params.ownerId, ws);
     if (data.collabDocument) {
         data.collabDocument.unsubscribe(ws);
     }
@@ -205,6 +207,8 @@ export const collabRouter = new Elysia({
 
                 const document = await drive.getCollabDocument(mountId, pathId);
                 document.subscribe(user, rawWs);
+                // Tracked per home so a restore of THIS owner can close the socket (connections.ts).
+                registerCollabConnection(ownerId, rawWs);
                 console.log(
                     `[collab] open path=${pathId} loadMs=${(performance.now() - loadStart).toFixed(0)} ` +
                         `connections=${document.connectionCount}`,

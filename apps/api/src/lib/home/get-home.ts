@@ -22,7 +22,23 @@ export function touchHomeIfLoaded(ownerId: string): void {
     homeFactories.get(ownerId)?.peek()?.touch();
 }
 
+// Homes whose folder is being replaced by a restore. Every surface that resolves a home per request
+// — HTTP, SSE, collab WS, CalDAV, CardDAV, WebDAV — is refused for the duration by the check in
+// getHome, so nothing lazily re-creates the folder being moved aside. Set by lib/backup/restore.ts.
+const restoringHomes = new Set<string>();
+
+export function markHomeRestoring(ownerId: string): void {
+    restoringHomes.add(ownerId);
+}
+
+export function clearHomeRestoring(ownerId: string): void {
+    restoringHomes.delete(ownerId);
+}
+
 export async function getHome(ownerId: string): Promise<Home> {
+    if (restoringHomes.has(ownerId)) {
+        throw new ApiError(503, 'Restore in progress');
+    }
     // Retry to resolve races with a concurrently-destructing home or a competing installer. This
     // settles in one or two iterations in practice; the bound is only a runaway safety net.
     for (let attempt = 0; attempt < 100; attempt++) {
