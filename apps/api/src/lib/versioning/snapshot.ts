@@ -123,7 +123,7 @@ async function snapshotDataDbToVersionStaged(
     const versionKey = await mount.getStorageKey(versionPathId);
     const queue = mount.uploadQueue!; // isRemote-only path (snapshotContainerDataDb branch)
     const versionStaging = queue.newStagingPath();
-    await stageDataDbSnapshot(mount, dataDb.id, versionStaging);
+    await stageManagedDbCopy(mount, dataDb.id, versionStaging, 'staged-first');
     const size = fs.statSync(versionStaging).size;
     await mount.db.update(paths).set({ size, updatedAt: new Date() }).where(eq(paths.id, versionPathId));
     await mount.invalidateAncestorsOf(versionPathId);
@@ -133,12 +133,31 @@ async function snapshotDataDbToVersionStaged(
     return created;
 }
 
-// Produce a local copy of data.db's current bytes at destPath, freshest source first.
-async function stageDataDbSnapshot(mount: Mount, dataDbPathId: string, destPath: string): Promise<void> {
-    const storageKey = await mount.getStorageKey(dataDbPathId);
-    // The caller (snapshotContainerDataDb) flushed the cached db first, so the pending staged
-    // copy already holds the current bytes — reuse it instead of a second VACUUM INTO. Copy it
-    // SYNCHRONOUSLY: with no await between pendingStagedCopy's existsSync and the copy, a
+// Produce a local copy of a managed container db's current bytes at destPath, freshest source first.
+// 'staged-first' is the version-snapshot order: its caller flushed the cached db into the pending
+// staged copy already, so reusing that copy beats a second VACUUM INTO. 'open-handle-first' is the
+// backup order: nothing flushed, so a live handle is the only source holding writes made since the
+// last stage — and a close mid-flight is waited out (a backup holds no closing slot of its own, so
+// unlike takeSnapshot's tick path this can't wedge on itself).
+export async function stageManagedDbCopy(
+    mount: Mount,
+    pathId: string,
+    destPath: string,
+    order: 'staged-first' | 'open-handle-first',
+): Promise<void> {
+    if (order === 'open-handle-first') {
+        const closing = mount.closingDocumentDbs.get(pathId);
+        if (closing) await closing.catch(() => {});
+    }
+    const storageKey = await mount.getStorageKey(pathId);
+    // peek() as in takeSnapshot's flush step: awaiting an unresolved factory mid-close wedges on
+    // the close's own deferred (C→F→C), and an unresolved getter has no live db with pending writes.
+    const cached = mount.documentDbs.get(pathId)?.peek();
+    if (cached && order === 'open-handle-first') {
+        cached.stageCopy(destPath);
+        return;
+    }
+    // Copy SYNCHRONOUSLY: with no await between pendingStagedCopy's existsSync and the copy, a
     // concurrent enqueue can't unlink it mid-read.
     const pendingStaging = mount.pendingStagedCopy(storageKey);
     if (pendingStaging) {
@@ -146,10 +165,7 @@ async function stageDataDbSnapshot(mount: Mount, dataDbPathId: string, destPath:
         return;
     }
     // Nothing pending: a live VACUUM INTO if the doc is open, else the storage object — which is
-    // current because every upload acked (§3). peek() as in takeSnapshot's flush step: awaiting
-    // an unresolved factory mid-close wedges on the close's own deferred (C→F→C), and an
-    // unresolved getter has no live db with pending writes anyway.
-    const cached = mount.documentDbs.get(dataDbPathId)?.peek();
+    // current because every upload acked (§3).
     if (cached) {
         cached.stageCopy(destPath);
         return;

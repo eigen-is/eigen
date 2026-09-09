@@ -193,6 +193,12 @@ export default class Drive {
         this.mounts.delete(mountId);
     }
 
+    // Called by: lib/backup/snapshot-home.ts — a whole-home snapshot walks every live mount's paths
+    // table. Not route-callable; routes address one mount by id through getSharedDrive.
+    getMounts(): Mount[] {
+        return [...this.mounts.values()];
+    }
+
     async listMounts(): Promise<MountInfo[]> {
         const infos: MountInfo[] = [];
         for (const [id, mount] of this.mounts) {

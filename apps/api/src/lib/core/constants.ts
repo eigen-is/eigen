@@ -28,6 +28,10 @@ export const PATHS = {
         ROOT: 'eigen.calendar',
         DB: 'eigen.calendar/calendar.db',
     },
+    NOTIFICATIONS: {
+        ROOT: 'eigen.notifications',
+        DB: 'eigen.notifications/notifications.db',
+    },
 } as const;
 
 export const STANDARD_MAILBOXES = ['', 'Sent', 'Drafts', 'Trash', 'Junk', 'Archive'] as const;
