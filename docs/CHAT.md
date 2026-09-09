@@ -15,7 +15,7 @@
 
 ```
 my-chat.eigenchat/
-├── data.db              (messages + read state)
+├── data.db              (messages)
 └── media/               (uploaded attachments)
 ```
 
@@ -36,26 +36,19 @@ my-document.eigendoc/
 | Column        | Type    | Description                                |
 |---------------|---------|--------------------------------------------|
 | `id`          | TEXT PK | UUID                                       |
-| `authorId`    | TEXT    | User ID                                    |
 | `authorEmail` | TEXT    | Author email address                       |
 | `type`        | TEXT    | `message` / `emote` / `whisper` / `system` |
 | `content`     | TEXT    | Plain text (not Markdown)                  |
 | `attachments` | TEXT    | JSON array of file names                   |
-| `whisperTo`   | TEXT    | Email or user ID (whisper only)            |
+| `whisperTo`   | TEXT    | Recipient email address (whisper only)     |
 | `replyTo`     | TEXT    | Message ID (threaded replies)              |
 | `editedAt`    | INTEGER | Null if not edited                         |
 | `deletedAt`   | INTEGER | Soft delete                                |
 | `createdAt`   | INTEGER | Timestamp                                  |
 
-Indexes: `createdAt`, `replyTo`, `authorId`.
+Indexes: `createdAt`, `replyTo`.
 
-### read_state
-
-| Column              | Type    | Description       |
-|---------------------|---------|-------------------|
-| `userId`            | TEXT PK | User ID           |
-| `lastReadMessageId` | TEXT    | Last read message |
-| `lastReadAt`        | INTEGER | Timestamp         |
+The room `data.db` is at schema v2 and holds no user ids: authorship and whisper targets are email-only, because a chat container is a portable unit and must be id-free. Edit/delete ownership and whisper visibility compare the caller's email (lowercased) against `authorEmail`. Notification fan-out resolves each participant email to a user through `getUserByEmail`.
 
 ## API Routes
 
@@ -71,7 +64,6 @@ POST   /chat/:ownerId/:mountId/:chatId/messages
 PATCH  /chat/:ownerId/:mountId/:chatId/messages/:messageId
 DELETE /chat/:ownerId/:mountId/:chatId/messages/:messageId
 POST   /chat/:ownerId/:mountId/:chatId/invite
-POST   /chat/:ownerId/:mountId/:chatId/read
 ```
 
 The `:chatId` routes go through `getSharedDrive()` (ACL checks; write routes additionally check `canWrite`). The two

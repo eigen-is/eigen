@@ -25,7 +25,7 @@ import { RichContent } from './rich-content';
 type ChatMessageListProps = {
     messages: ChatMessage[];
     isLoading: boolean;
-    currentUserId: string;
+    currentUserEmail: string;
     ownerId?: string;
     mountId?: string;
     mediaFolderId?: string | null;
@@ -42,7 +42,7 @@ type ChatMessageListProps = {
 };
 
 function isSameAuthorAndClose(prev: ChatMessage, curr: ChatMessage): boolean {
-    if (prev.authorId !== curr.authorId) return false;
+    if (prev.authorEmail !== curr.authorEmail) return false;
     const diff = new Date(curr.createdAt).getTime() - new Date(prev.createdAt).getTime();
     return diff < 5 * 60 * 1000;
 }
@@ -50,7 +50,7 @@ function isSameAuthorAndClose(prev: ChatMessage, curr: ChatMessage): boolean {
 export function ChatMessageList({
     messages,
     isLoading,
-    currentUserId,
+    currentUserEmail,
     ownerId,
     mountId,
     mediaFolderId,
@@ -87,7 +87,7 @@ export function ChatMessageList({
     // One gating source shared by the hover bar and the context menu so the two action sets never drift.
     const getMessageActions = useCallback(
         (message: ChatMessage) => {
-            const isOwn = message.authorId === currentUserId;
+            const isOwn = message.authorEmail === currentUserEmail;
             const hasFileAttachments = !!message.attachments?.some((a) => typeof a === 'string');
             return {
                 canSaveAttachments: hasFileAttachments && !!ownerId && !!mountId,
@@ -95,7 +95,7 @@ export function ChatMessageList({
                 canDelete: isOwn && !!onDeleteMessage,
             };
         },
-        [currentUserId, ownerId, mountId, onEditMessage, onDeleteMessage],
+        [currentUserEmail, ownerId, mountId, onEditMessage, onDeleteMessage],
     );
 
     const downloadTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -152,10 +152,10 @@ export function ChatMessageList({
 
         if (!prevLastId || lastId === prevLastId) return;
 
-        if (lastMessage?.authorId === currentUserId || wasNearBottomRef.current) {
+        if (lastMessage?.authorEmail === currentUserEmail || wasNearBottomRef.current) {
             scrollToBottom();
         }
-    }, [messages, currentUserId, scrollToBottom]);
+    }, [messages, currentUserEmail, scrollToBottom]);
 
     // Load more when scrolling near the top
     const onLoadMoreRef = useRef(onLoadMore);

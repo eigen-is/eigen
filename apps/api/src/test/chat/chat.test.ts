@@ -1,7 +1,13 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { Database as BunDatabase } from 'bun:sqlite';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { mkdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import type { ChatMessage, DrivePath } from '@workspace/lib/types';
 import { DRIVE_MIME_CHAT } from '@workspace/lib/types';
 import type { Notification } from '@workspace/lib/types/notification';
+import { sql } from 'drizzle-orm';
+import { CHAT_ROOM_DB_CONFIG } from '../../lib/chat/db-config';
+import { ManagedDatabase } from '../../lib/core';
 import { authedRequest, chatGet, chatPost, driveGet, drivePost, findOrFail, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -127,8 +133,9 @@ describe('Chat', () => {
             expect(data.id).toBeDefined();
             expect(data.content).toBe('Hello, world!');
             expect(data.type).toBe('message');
-            expect(data.authorId).toBe(ctx.alice.user.id);
             expect(data.authorEmail).toBe(ctx.alice.user.email);
+            // Containers reference users by email only — no user id ever rides in the message JSON.
+            expect('authorId' in data).toBe(false);
             messageId = data.id;
         });
 
@@ -180,25 +187,6 @@ describe('Chat', () => {
                 },
             );
             const data = (await res.json()) as { success: boolean };
-            expect(data.success).toBe(true);
-        });
-
-        test('mark as read', async () => {
-            const msgs = await chatGet<ChatMessage[]>(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                aliceMountId,
-                `${chatId}/messages`,
-            );
-            const lastMsg = msgs[msgs.length - 1];
-
-            const data = await chatPost<{ success: boolean }>(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                aliceMountId,
-                `${chatId}/read`,
-                { messageId: lastMsg.id },
-            );
             expect(data.success).toBe(true);
         });
 
@@ -1208,6 +1196,27 @@ describe('Chat', () => {
             expect(delRes.status).toBe(404);
         });
 
+        test('edit message by non-owner fails', async () => {
+            const msg = await chatPost<ChatMessage>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `${chatId}/messages`,
+                { content: 'Alice message to edit' },
+            );
+
+            const editRes = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/chat/${ctx.alice.user.id}/${aliceMountId}/${chatId}/messages/${msg.id}`,
+                {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content: 'Bob should not edit this' }),
+                },
+            );
+            expect(editRes.status).toBe(404);
+        });
+
         test('/tell alias with non-email target returns 400', async () => {
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
@@ -1451,5 +1460,103 @@ describe('Chat', () => {
             expect(commentNotif!.body).toBe('Reply comment');
             expect(commentNotif!.details).toEqual({ pathType: 'doc' });
         });
+    });
+});
+
+// The v1 migration SQL copied verbatim from chat/db-config.ts — the shape a pre-email-only
+// chat data.db carries on disk, with an authorId column and a read_state table.
+const V1_SQL = `
+                CREATE TABLE IF NOT EXISTS messages (
+                    id TEXT PRIMARY KEY,
+                    authorId TEXT NOT NULL,
+                    authorEmail TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    attachments TEXT,
+                    whisperTo TEXT,
+                    replyTo TEXT,
+                    editedAt INTEGER,
+                    deletedAt INTEGER,
+                    createdAt INTEGER NOT NULL DEFAULT (unixepoch())
+                );
+                CREATE TABLE IF NOT EXISTS read_state (
+                    userId TEXT PRIMARY KEY,
+                    lastReadMessageId TEXT,
+                    lastReadAt INTEGER
+                );
+                CREATE INDEX IF NOT EXISTS idx_messages_createdAt ON messages(createdAt);
+                CREATE INDEX IF NOT EXISTS idx_messages_replyTo ON messages(replyTo);
+                CREATE INDEX IF NOT EXISTS idx_messages_authorId ON messages(authorId);
+            `;
+
+describe('Chat room-db schema migrations', () => {
+    const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-chat-mig-${Date.now()}`);
+    let counter = 0;
+    const nextDbPath = () => join(TEST_DIR, `chatroom-${counter++}.db`);
+
+    beforeAll(() => mkdirSync(TEST_DIR, { recursive: true }));
+    afterAll(() => {
+        try {
+            rmSync(TEST_DIR, { recursive: true, force: true });
+        } catch {}
+    });
+
+    test('a fresh chat db reaches v2 with no authorId column and no read_state table', async () => {
+        const mdb = new ManagedDatabase(CHAT_ROOM_DB_CONFIG, nextDbPath());
+        await mdb.open(0);
+
+        expect(
+            (mdb.db.all(sql`SELECT version FROM __schema_version WHERE id = 1`)[0] as { version: number }).version,
+        ).toBe(2);
+
+        const cols = (mdb.db.all(sql`PRAGMA table_info(messages)`) as { name: string }[]).map((c) => c.name);
+        expect(cols).toContain('authorEmail');
+        expect(cols).not.toContain('authorId');
+
+        const tables = (mdb.db.all(sql`SELECT name FROM sqlite_master WHERE type='table'`) as { name: string }[]).map(
+            (r) => r.name,
+        );
+        expect(tables).not.toContain('read_state');
+
+        const indexes = (mdb.db.all(sql`SELECT name FROM sqlite_master WHERE type='index'`) as { name: string }[]).map(
+            (r) => r.name,
+        );
+        expect(indexes).not.toContain('idx_messages_authorId');
+
+        await mdb.close();
+    });
+
+    test('v1 → v2 migration drops authorId + read_state while message rows survive', async () => {
+        const dbPath = nextDbPath();
+        const raw = new BunDatabase(dbPath, { create: true });
+        raw.exec(V1_SQL);
+        raw.exec(`INSERT INTO messages (id, authorId, authorEmail, type, content)
+                  VALUES ('m1', 'user-alice', 'alice@eigen.is', 'message', 'Hello');
+                  INSERT INTO read_state (userId, lastReadMessageId) VALUES ('user-alice', 'm1');
+                  CREATE TABLE __schema_version (id INTEGER PRIMARY KEY CHECK (id = 1), version INTEGER NOT NULL DEFAULT 0);
+                  INSERT INTO __schema_version (id, version) VALUES (1, 1);`);
+        raw.close();
+
+        const mdb = new ManagedDatabase(CHAT_ROOM_DB_CONFIG, dbPath, {}, true);
+        await mdb.open(0);
+
+        expect(
+            (mdb.db.all(sql`SELECT version FROM __schema_version WHERE id = 1`)[0] as { version: number }).version,
+        ).toBe(2);
+
+        const cols = (mdb.db.all(sql`PRAGMA table_info(messages)`) as { name: string }[]).map((c) => c.name);
+        expect(cols).not.toContain('authorId');
+
+        const tables = (mdb.db.all(sql`SELECT name FROM sqlite_master WHERE type='table'`) as { name: string }[]).map(
+            (r) => r.name,
+        );
+        expect(tables).not.toContain('read_state');
+
+        // The row rides through untouched apart from the dropped column.
+        expect(mdb.db.all(sql`SELECT id, authorEmail, content FROM messages`)).toEqual([
+            { id: 'm1', authorEmail: 'alice@eigen.is', content: 'Hello' },
+        ]);
+
+        await mdb.close();
     });
 });

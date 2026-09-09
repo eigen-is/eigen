@@ -49,13 +49,7 @@ export function parseCommand(raw: string): ParsedCommand {
     return { kind: 'error', error: 'Unknown command' };
 }
 
-export function formatEmoteForViewer(
-    content: string,
-    authorEmail: string,
-    authorId: string,
-    viewerId: string,
-    viewerEmail?: string,
-): string {
+export function formatEmoteForViewer(content: string, authorEmail: string, viewerEmail: string): string {
     // Emit full emails; the client renders them as resolved, hoverable display names.
     if (content.startsWith('$')) {
         const raw = content.slice(1);
@@ -66,8 +60,9 @@ export function formatEmoteForViewer(
         const emote = BUILT_IN_EMOTES[emoteKey];
         if (!emote) return `${authorEmail} does something mysterious.`;
 
+        const isAuthor = viewerEmail?.toLowerCase() === authorEmail.toLowerCase();
+
         if (targetEmail) {
-            const isAuthor = authorId === viewerId;
             const isTarget = viewerEmail?.toLowerCase() === targetEmail.toLowerCase();
 
             if (isAuthor)
@@ -79,7 +74,7 @@ export function formatEmoteForViewer(
                 .replace('{target}', targetEmail);
         }
 
-        if (authorId === viewerId) return emote.firstPerson ?? `You do something.`;
+        if (isAuthor) return emote.firstPerson ?? `You do something.`;
         return (emote.thirdPerson ?? `${authorEmail} does something.`).replace('{name}', authorEmail);
     }
 
