@@ -2,9 +2,13 @@ import { isSearchableTextFile } from '@workspace/lib/constants';
 import type { DatabaseConfig } from '../core/managed-database';
 import * as schema from './schema';
 
+// The version that gave `pending_uploads` its `isDatabase` column. A restore writes those rows
+// itself, so it refuses an archived metadata.db older than this rather than take the DEFAULT.
+export const PENDING_UPLOAD_KIND_VERSION = 8;
+
 export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'mount-metadata',
-    currentVersion: 8,
+    currentVersion: PENDING_UPLOAD_KIND_VERSION,
     schema,
     migrations: [
         {
@@ -289,7 +293,7 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
             },
         },
         {
-            version: 8,
+            version: PENDING_UPLOAD_KIND_VERSION,
             up: (db) =>
                 // Until now every staged copy was a managed database, so the queue could judge one by
                 // its SQLite header. A restore stages plain files too; they say so on the row. The

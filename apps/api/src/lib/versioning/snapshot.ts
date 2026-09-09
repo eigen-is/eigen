@@ -129,7 +129,7 @@ async function snapshotDataDbToVersionStaged(
     const size = fs.statSync(versionStaging).size;
     await mount.db.update(paths).set({ size, updatedAt: new Date() }).where(eq(paths.id, versionPathId));
     await mount.invalidateAncestorsOf(versionPathId);
-    queue.enqueueStaged(versionKey, versionStaging);
+    queue.enqueueStaged(versionKey, versionStaging, true);
     const created = await mount.getPath(versionPathId);
     if (!created) throw new ApiError(500, 'Failed to create version snapshot');
     return created;

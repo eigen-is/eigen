@@ -129,11 +129,11 @@ export class Mount {
     }
 
     get thumbsDir(): string {
-        return path.join(this.baseDir, 'thumbs');
+        return path.join(this.baseDir, PATHS.DRIVE.THUMBS_DIR);
     }
 
     get tmpDir(): string {
-        return path.join(this.baseDir, 'tmp');
+        return path.join(this.baseDir, PATHS.DRIVE.TMP_DIR);
     }
 
     // Frozen VACUUM INTO upload payloads (Phase 1b) live here, NOT in tmpDir — the
