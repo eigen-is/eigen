@@ -46,8 +46,8 @@ function* ancestors(row: MountPathRow, byId: Map<string, MountPathRow>): Generat
 // the name chain from the root, with a trash root at `.trash/{id}.{ext}` as trashPath spells it.
 // Deriving it from metadata.db instead of the mount's own keys is what makes the archive
 // storage-independent: local-key and s3 mounts store flat keys, and restore re-derives whichever
-// shape the target mount needs.
-function archivePath(row: MountPathRow, byId: Map<string, MountPathRow>): string {
+// shape the target mount needs. Exported for restore, which reads the same tree back.
+export function archivePath(row: MountPathRow, byId: Map<string, MountPathRow>): string {
     const segment = (r: MountPathRow) => (r.trashedFrom ? `.trash/${buildStorageKey(r.id, r.name)}` : r.name);
     const segments = [segment(row)];
     for (const parent of ancestors(row, byId)) {
@@ -58,9 +58,10 @@ function archivePath(row: MountPathRow, byId: Map<string, MountPathRow>): string
 }
 
 // Mirrors Mount.resolveStoragePath / getStorageKey, resolved from the tree we already hold rather
-// than one recursive-CTE query per file.
-function storageKeyOf(mount: Mount, row: MountPathRow, byId: Map<string, MountPathRow>): string {
-    if (!mount.isPathBased) return row.file || row.id;
+// than one recursive-CTE query per file. Exported for restore, which puts every file back at the
+// key the restored mount will look for it under — one spelling of the rule for both directions.
+export function storageKeyOf(row: MountPathRow, byId: Map<string, MountPathRow>, isPathBased: boolean): string {
+    if (!isPathBased) return row.file || row.id;
     const segments = row.file ? [row.file] : [];
     for (const parent of ancestors(row, byId)) {
         if (parent.parentId === null) break;
@@ -171,7 +172,7 @@ export async function snapshotMountData(
             // readKey is freshest-first (pending staged copy, then the stored object). Null means the
             // row has no bytes yet (a touched file whose upload never landed); the archive mirrors
             // that absence rather than inventing an empty object.
-            const file = await mount.readKey(storageKeyOf(mount, row, byId));
+            const file = await mount.readKey(storageKeyOf(row, byId, mount.isPathBased));
             if (file) entries.push(await captureFile(file, destPath, entryPath));
         }
         onProgress('mount files', index + 1, fileRows.length);

@@ -57,10 +57,20 @@ function pad(value: number, width: number): string {
     return String(value).padStart(width, '0');
 }
 
-export function buildArtifactName(ownerId: string, at: Date): string {
-    const stamp = `${at.getUTCFullYear()}${pad(at.getUTCMonth() + 1, 2)}${pad(at.getUTCDate(), 2)}-${pad(at.getUTCHours(), 2)}${pad(at.getUTCMinutes(), 2)}${pad(at.getUTCSeconds(), 2)}`;
-    return `${buildHomeFolderName(ownerId)}-${stamp}.tar.zst`;
+// The one timestamp shape in the backups folder: artifact names and the two safety copies a restore
+// leaves beside a home folder all read the same.
+export function buildStamp(at: Date): string {
+    return `${at.getUTCFullYear()}${pad(at.getUTCMonth() + 1, 2)}${pad(at.getUTCDate(), 2)}-${pad(at.getUTCHours(), 2)}${pad(at.getUTCMinutes(), 2)}${pad(at.getUTCSeconds(), 2)}`;
 }
+
+export function buildArtifactName(ownerId: string, at: Date): string {
+    return `${buildHomeFolderName(ownerId)}-${buildStamp(at)}.tar.zst`;
+}
+
+// The home folder a restore moved aside (the state before it) and the incomplete folder a failed
+// restore left behind. Nothing deletes either automatically; the admin pane lists and removes them.
+export const PRE_RESTORE_SUFFIX = '.pre-restore-';
+export const FAILED_RESTORE_SUFFIX = '.failed-restore-';
 
 // Owner ids are UUIDs or `team_{id}`, both of which contain dashes, so the timestamp is matched
 // from the end and the owner id is whatever is left. The character class keeps `/` and `..` out

@@ -1,0 +1,169 @@
+import { Database } from 'bun:sqlite';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { auth } from '../../lib/auth/auth';
+import { packFolder } from '../../lib/backup/archive';
+import { buildArtifactName, buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
+import { restoreHome } from '../../lib/backup/restore';
+import { snapshotHome } from '../../lib/backup/snapshot-home';
+import { getHome } from '../../lib/home/get-home';
+import type { Mount } from '../../lib/mount/mount';
+import {
+    createHomeFaultMount,
+    registerFaultMount,
+    settleContainer,
+    unregisterFaultMount,
+} from '../fault-storage-helpers';
+import { assertJson, authedRequest, driveUpload, getTestContext, TEST_DATA_DIR, TEST_PNG_BYTES } from '../setup';
+
+const MOUNT_ID = 'restore-s3';
+const PASSWORD = 'testpassword123';
+// The fake bucket, outside the home so a restore of the home folder never touches it.
+const BACKING = join(TEST_DATA_DIR, 'restore-s3-backing');
+const TEXT_BYTES = new TextEncoder().encode('a restored plain file, not a database');
+
+type PendingRow = { storageKey: string; stagingPath: string; isDatabase: number };
+
+function pendingUploadsOf(metadataPath: string): PendingRow[] {
+    const db = new Database(metadataPath, { readonly: true });
+    try {
+        return db.query<PendingRow, []>('SELECT storageKey, stagingPath, isDatabase FROM pending_uploads').all();
+    } finally {
+        db.close();
+    }
+}
+
+function fileKeysOf(metadataPath: string): string[] {
+    const db = new Database(metadataPath, { readonly: true });
+    try {
+        // An s3 mount stores flat keys, so the key of a file row is its own `file` value.
+        return db
+            .query<{ file: string }, []>("SELECT file FROM paths WHERE type = 'file'")
+            .all()
+            .map((row) => row.file);
+    } finally {
+        db.close();
+    }
+}
+
+async function bytesInBucket(mount: Mount, storageKey: string): Promise<Uint8Array | null> {
+    // storage.read goes straight to the backing store — never the staged copy mount.readKey prefers.
+    const file = mount.storage.read(storageKey);
+    if (!(await file.exists())) return null;
+    return new Uint8Array(await file.arrayBuffer());
+}
+
+describe('Backup restore of an s3 mount', () => {
+    let userId: string;
+    let token: string;
+    let mount: Mount;
+    let artifact: string;
+    let metadataPath: string;
+    let pngKey: string;
+    let textKey: string;
+    let dataDbKey: string;
+
+    beforeAll(async () => {
+        await getTestContext();
+        const email = 'restore-s3@test.eigen.is';
+        const signUp = await auth.api.signUpEmail({ body: { email, password: PASSWORD, name: 'Restore S3' } });
+        const signIn = await auth.api.signInEmail({ returnHeaders: true, body: { email, password: PASSWORD } });
+        const match = (signIn.headers.get('set-cookie') || '').match(/better-auth\.session_token=([^;]+)/);
+        if (!match) throw new Error('no session cookie');
+        userId = signUp.user.id;
+        token = match[1];
+
+        mkdirSync(BACKING, { recursive: true });
+        const home = await getHome(userId);
+        ({ mount } = createHomeFaultMount(home, MOUNT_ID, BACKING));
+        await mount.init();
+        registerFaultMount(home.drive, mount);
+        metadataPath = join(home.homeDir, 'mounts', MOUNT_ID, 'metadata.db');
+
+        const root = await assertJson<DrivePath>(await authedRequest(token, `/drive/${userId}/${MOUNT_ID}/root`));
+        const png = await driveUpload<DrivePath>(
+            token,
+            userId,
+            MOUNT_ID,
+            root.id,
+            new File([TEST_PNG_BYTES], 'bucket.png', { type: 'image/png' }),
+        );
+        const text = await driveUpload<DrivePath>(
+            token,
+            userId,
+            MOUNT_ID,
+            root.id,
+            new File([TEXT_BYTES], 'notes.txt', { type: 'text/plain' }),
+        );
+        const doc = await assertJson<DrivePath>(
+            await authedRequest(token, `/drive/${userId}/${MOUNT_ID}/folder/${root.id}/create/doc`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fileName: 'Bucket Doc' }),
+            }),
+        );
+        await settleContainer(mount, doc.id);
+        await mount.drainPendingUploads({ flushNow: true });
+
+        pngKey = await mount.getStorageKey(png.id);
+        textKey = await mount.getStorageKey(text.id);
+        dataDbKey = await mount.getStorageKey((await mount.getChildByName(doc.id, 'data.db'))!.id);
+        expect(await bytesInBucket(mount, pngKey)).not.toBeNull();
+
+        const staging = mkdtempSync(join(TEST_DATA_DIR, 'restore-s3-backup-'));
+        const manifest = await snapshotHome(home, staging);
+        expect(manifest.mounts.find((m) => m.id === MOUNT_ID)?.storageType).toBe('s3');
+        artifact = buildArtifactName(userId, new Date());
+        await packFolder(join(staging, buildHomeFolderName(userId)), join(getBackupsDir(), artifact));
+        rmSync(staging, { recursive: true, force: true });
+
+        // Restore onto an empty bucket, the shape of a restore onto a fresh server: every object has
+        // to be re-uploaded from the archive, nothing may pass because it happened to still be there.
+        unregisterFaultMount(home.drive, MOUNT_ID);
+        await mount.closeAllDatabases();
+        rmSync(join(BACKING, MOUNT_ID), { recursive: true, force: true });
+
+        await restoreHome(artifact, userId, `restore-s3-${Date.now()}`);
+    });
+
+    afterAll(() => {
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+        rmSync(BACKING, { recursive: true, force: true });
+    });
+
+    test('every file lands in staging with a pending upload', () => {
+        const pending = pendingUploadsOf(metadataPath);
+        expect(pending.map((row) => row.storageKey).sort()).toEqual(fileKeysOf(metadataPath).sort());
+        const stagingDir = join(TEST_DATA_DIR, 'home', userId, 'mounts', MOUNT_ID, 'staging');
+        for (const row of pending) expect(existsSync(join(stagingDir, row.stagingPath))).toBe(true);
+        // The container's data.db is a database and keeps the queue's SQLite guard; the PNG and the
+        // text file are plain files, and the guard would drop them before the PUT.
+        expect(pending.find((row) => row.storageKey === dataDbKey)?.isDatabase).toBe(1);
+        expect(pending.find((row) => row.storageKey === pngKey)?.isDatabase).toBe(0);
+        expect(pending.find((row) => row.storageKey === textKey)?.isDatabase).toBe(0);
+        // The local data/ tree is not an s3 mount's storage; the bytes belong in the bucket.
+        expect(existsSync(join(TEST_DATA_DIR, 'home', userId, 'mounts', MOUNT_ID, 'data'))).toBe(false);
+    });
+
+    test('the upload queue drains them to the bucket, plain files included', async () => {
+        const home = await getHome(userId);
+        // A fresh Mount over the restored metadata.db and the same bucket: init reconciles the
+        // pending rows and the queue drains them, exactly as it does after a server restart.
+        const { mount: restored } = createHomeFaultMount(home, MOUNT_ID, BACKING);
+        await restored.init();
+        try {
+            await restored.drainPendingUploads({ flushNow: true });
+
+            expect(await bytesInBucket(restored, pngKey)).toEqual(TEST_PNG_BYTES);
+            expect(await bytesInBucket(restored, textKey)).toEqual(TEXT_BYTES);
+            const dataDb = await bytesInBucket(restored, dataDbKey);
+            expect(dataDb).not.toBeNull();
+            expect(new TextDecoder().decode(dataDb!.subarray(0, 15))).toBe('SQLite format 3');
+            expect(pendingUploadsOf(metadataPath)).toEqual([]);
+        } finally {
+            await restored.closeAllDatabases();
+        }
+    });
+});
