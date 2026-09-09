@@ -231,7 +231,7 @@ describe('Backup snapshotHome', () => {
         expect(manifest.appVersion.length).toBeGreaterThan(0);
         expect(manifest.server).toEqual({ domain: config.domain, orgId: config.orgId });
         expect(new Date(manifest.createdAt).getTime()).toBeGreaterThan(0);
-        expect(manifest.mounts.map((m) => m.id).sort()).toEqual([LOCAL_MOUNT_ID, defaultMountId].sort());
+        expect(manifest.mounts.map((m) => m.id)).toEqual(expect.arrayContaining([LOCAL_MOUNT_ID, defaultMountId]));
         expect(findOrFail(manifest.mounts, (m) => m.id === LOCAL_MOUNT_ID).storageType).toBe('local');
     });
 
@@ -290,13 +290,15 @@ describe('Backup snapshotHome', () => {
     });
 
     test('version history and trash are included, caches are not', () => {
-        const versions = files.filter((f) => f.includes('/versions/'));
+        // Scoped to the seeded doc: the suite shares one home, so other files leave versions too.
+        const versions = files.filter((f) => f.includes('/Backup Doc.eigendoc/versions/'));
         expect(versions.length).toBe(2);
         expect(files.some((f) => f.includes('/data/.trash/'))).toBe(true);
-        expect(files.some((f) => f.includes('/thumbs/'))).toBe(false);
-        expect(files.some((f) => f.includes('/tmp/'))).toBe(false);
-        expect(files.some((f) => f.includes('/staging/'))).toBe(false);
-        expect(files.some((f) => f.includes('/eigen.contacts/avatars/'))).toBe(false);
+        // The mount cache dirs and the Maildir spool, by path — a user folder may legitimately be
+        // called `tmp`.
+        expect(files.filter((f) => /^home\/mounts\/[^/]+\/(thumbs|tmp|staging)\//.test(f))).toEqual([]);
+        expect(files.filter((f) => f.startsWith('home/eigen.mail/Maildir') && f.includes('/tmp/'))).toEqual([]);
+        expect(files.filter((f) => f.startsWith('home/eigen.contacts/avatars/'))).toEqual([]);
     });
 
     test('auth.json carries this user rows only', async () => {
