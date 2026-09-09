@@ -9,6 +9,7 @@ export const PATHS = {
         DATA_DIR: 'data',
         THUMBS_DIR: 'thumbs',
         TMP_DIR: 'tmp',
+        STAGING_DIR: 'staging',
         DOCS_DIR: 'docs',
     },
     MAIL: {

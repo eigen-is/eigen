@@ -10,7 +10,7 @@ import { PATHS } from '../core';
 import { hashFile } from '../drive/streaming';
 import { ARCHIVE_HOME_DIR, archiveHomePath, archiveMountPath } from './paths';
 import { HOME_DATABASE_PATHS, type SnapshotProgress } from './snapshot-home';
-import { listManagedDatabases, type MountPathRow } from './snapshot-mount';
+import { listManagedDatabases, readMountPathRows } from './snapshot-mount';
 
 // Stage 3 samples rather than decodes everything: the ten heaviest documents plus ten of the rest.
 const SAMPLE_LARGEST = 10;
@@ -86,10 +86,7 @@ function listArchiveDatabases(root: string, fail: (message: string) => void): Ar
         try {
             const db = new Database(metadata, { readonly: true });
             try {
-                const rows = db
-                    .query<MountPathRow, []>('SELECT id, file, name, type, parentId, trashedFrom FROM paths')
-                    .all();
-                for (const managed of listManagedDatabases(rows)) {
+                for (const managed of listManagedDatabases(readMountPathRows(db))) {
                     const archivePath = archiveMountPath(entry.name, `${PATHS.DRIVE.DATA_DIR}/${managed.path}`);
                     const abs = resolveInside(root, archivePath);
                     if (!abs) {

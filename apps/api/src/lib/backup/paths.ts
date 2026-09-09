@@ -40,6 +40,12 @@ export function getBackupTempPath(suffix: string): string {
 // snapshotHome writes it and verifyFolder reads it back — one spelling for both.
 export const ARCHIVE_HOME_DIR = 'home';
 
+// The three things beside `home/` that a user's archive carries: the users3.db rows, the
+// share-registry rows, and the avatar from data/server/avatars. A team archive has none of them.
+export const ARCHIVE_AUTH_FILE = 'auth.json';
+export const ARCHIVE_SHARES_FILE = 'shares.json';
+export const ARCHIVE_AVATAR_DIR = 'avatar';
+
 export function archiveHomePath(relPath: string): string {
     return `${ARCHIVE_HOME_DIR}/${relPath}`;
 }
@@ -57,10 +63,20 @@ function pad(value: number, width: number): string {
     return String(value).padStart(width, '0');
 }
 
-export function buildArtifactName(ownerId: string, at: Date): string {
-    const stamp = `${at.getUTCFullYear()}${pad(at.getUTCMonth() + 1, 2)}${pad(at.getUTCDate(), 2)}-${pad(at.getUTCHours(), 2)}${pad(at.getUTCMinutes(), 2)}${pad(at.getUTCSeconds(), 2)}`;
-    return `${buildHomeFolderName(ownerId)}-${stamp}.tar.zst`;
+// The one timestamp shape in the backups folder: artifact names and the two safety copies a restore
+// leaves beside a home folder all read the same.
+export function buildStamp(at: Date): string {
+    return `${at.getUTCFullYear()}${pad(at.getUTCMonth() + 1, 2)}${pad(at.getUTCDate(), 2)}-${pad(at.getUTCHours(), 2)}${pad(at.getUTCMinutes(), 2)}${pad(at.getUTCSeconds(), 2)}`;
 }
+
+export function buildArtifactName(ownerId: string, at: Date): string {
+    return `${buildHomeFolderName(ownerId)}-${buildStamp(at)}.tar.zst`;
+}
+
+// The home folder a restore moved aside (the state before it) and the incomplete folder a failed
+// restore left behind. Nothing deletes either automatically; the admin pane lists and removes them.
+export const PRE_RESTORE_SUFFIX = '.pre-restore-';
+export const FAILED_RESTORE_SUFFIX = '.failed-restore-';
 
 // Owner ids are UUIDs or `team_{id}`, both of which contain dashes, so the timestamp is matched
 // from the end and the owner id is whatever is left. The character class keeps `/` and `..` out

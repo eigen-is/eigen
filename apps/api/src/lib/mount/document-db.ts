@@ -166,7 +166,7 @@ async function buildDocumentDb<S extends SchemaType>(
                       if (mount.uploadQueue) {
                           const stagingPath = mount.uploadQueue.newStagingPath();
                           managed.stageCopy(stagingPath);
-                          mount.uploadQueue.enqueueStaged(currentKey, stagingPath);
+                          mount.uploadQueue.enqueueStaged(currentKey, stagingPath, true);
                       } else {
                           await mount.uploadFromTemp(currentKey, pathId);
                       }

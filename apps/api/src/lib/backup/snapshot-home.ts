@@ -3,8 +3,6 @@ import * as path from 'node:path';
 import type { BackupEntry, BackupManifest } from '@workspace/lib/types/backup';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { eq } from 'drizzle-orm';
-import { account, apikey, member, teamMember, twoFactor, user } from '../../../auth-schema';
-import { getAuthDrizzleDb } from '../auth/auth';
 import { CALENDAR_DB_CONFIG } from '../calendar/db-config';
 import { getAvatarsDir } from '../config/paths';
 import { getPublicConfig } from '../config/server-config';
@@ -17,15 +15,24 @@ import { MOUNT_DB_CONFIG } from '../mount/db-config';
 import { NOTIFICATION_CENTER_DB_CONFIG } from '../notification-center/db-config';
 import { getEigenDb } from '../share/db';
 import { shareRegistry } from '../share/schema';
+import { readAuthRows } from './auth-tables';
 import { captureFile, captureWrittenFile } from './capture';
-import { ARCHIVE_HOME_DIR, archiveHomePath, archiveMountPath, buildHomeFolderName } from './paths';
+import {
+    ARCHIVE_AUTH_FILE,
+    ARCHIVE_AVATAR_DIR,
+    ARCHIVE_HOME_DIR,
+    ARCHIVE_SHARES_FILE,
+    archiveHomePath,
+    archiveMountPath,
+    buildHomeFolderName,
+} from './paths';
 import { snapshotMountData } from './snapshot-mount';
 
 export type SnapshotProgress = (step: string, done: number, total: number) => void;
 
 // Home-level databases outside the mounts. Absent files are skipped: a team home has no mail,
 // contacts or notifications, and opening one through getLocalDatabase would create it empty.
-const HOME_DATABASES: [DatabaseConfig<SchemaType>, string][] = [
+export const HOME_DATABASES: [DatabaseConfig<SchemaType>, string][] = [
     [SHARED_DB_CONFIG, PATHS.DRIVE.SHARED_DB],
     [MAIL_DB_CONFIG, PATHS.MAIL.DB],
     [CONTACTS_DB_CONFIG, PATHS.CONTACTS.DB],
@@ -63,20 +70,6 @@ function listHomeFiles(dir: string, relDir: string, out: string[]): void {
         }
         out.push(rel);
     }
-}
-
-function readAuthRows(userId: string) {
-    const db = getAuthDrizzleDb();
-    // Sessions and verification rows are deliberately absent — a restore re-inserts identity, not
-    // live logins. Every column of the rest rides along so the insert on restore is complete.
-    return {
-        user: db.select().from(user).where(eq(user.id, userId)).all(),
-        account: db.select().from(account).where(eq(account.userId, userId)).all(),
-        apikey: db.select().from(apikey).where(eq(apikey.referenceId, userId)).all(),
-        two_factor: db.select().from(twoFactor).where(eq(twoFactor.userId, userId)).all(),
-        member: db.select().from(member).where(eq(member.userId, userId)).all(),
-        team_member: db.select().from(teamMember).where(eq(teamMember.userId, userId)).all(),
-    };
 }
 
 // Writes a complete, storage-independent copy of one home into `{targetDir}/home-{ownerId}/` and
@@ -153,8 +146,8 @@ export async function snapshotHome(
         entries.push(
             await captureFile(
                 encoder.encode(JSON.stringify(readAuthRows(ownerId), null, 2)),
-                path.join(folder, 'auth.json'),
-                'auth.json',
+                path.join(folder, ARCHIVE_AUTH_FILE),
+                ARCHIVE_AUTH_FILE,
             ),
         );
         const shares = (await getEigenDb())
@@ -165,15 +158,21 @@ export async function snapshotHome(
         entries.push(
             await captureFile(
                 encoder.encode(JSON.stringify(shares, null, 2)),
-                path.join(folder, 'shares.json'),
-                'shares.json',
+                path.join(folder, ARCHIVE_SHARES_FILE),
+                ARCHIVE_SHARES_FILE,
             ),
         );
 
         const avatarName = `${ownerId}.webp`;
         const avatar = Bun.file(path.join(getAvatarsDir(), avatarName));
         if (await avatar.exists()) {
-            entries.push(await captureFile(avatar, path.join(folder, 'avatar', avatarName), `avatar/${avatarName}`));
+            entries.push(
+                await captureFile(
+                    avatar,
+                    path.join(folder, ARCHIVE_AVATAR_DIR, avatarName),
+                    `${ARCHIVE_AVATAR_DIR}/${avatarName}`,
+                ),
+            );
         }
     }
 

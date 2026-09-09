@@ -35,6 +35,9 @@ if (!process.env['__EIGEN_TEST_ROOT_PRUNED']) {
 
 export const TEST_DATA_DIR = mkdtempSync(join(TEST_DATA_ROOT, `test-${process.pid}-`));
 process.env['EIGEN_DATA_ROOT'] = TEST_DATA_DIR;
+// Backup artifacts live outside the data root in production; inside the run dir here, so parallel
+// workers never share a backups folder and the run's leftovers are pruned with everything else.
+process.env['EIGEN_BACKUPS_DIR'] = join(TEST_DATA_DIR, 'backups');
 process.env['API_URL'] = 'http://localhost';
 
 mkdirSync(join(TEST_DATA_DIR, 'server'), { recursive: true });

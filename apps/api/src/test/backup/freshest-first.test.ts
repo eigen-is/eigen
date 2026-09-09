@@ -215,7 +215,7 @@ describe('Backup freshest-first on an s3 mount', () => {
         staleFault.parkWrites = true;
         const stagingPath = queue.newStagingPath();
         const stagedBytes = await writeMarkerDb(stagingPath, 'staged');
-        queue.enqueueStaged(storageKey, stagingPath);
+        queue.enqueueStaged(storageKey, stagingPath, true);
         await staleFault.waitForParked((p) => p.key === storageKey);
 
         const { manifest, folder } = await snapshot();

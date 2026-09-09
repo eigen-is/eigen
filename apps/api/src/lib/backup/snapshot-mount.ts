@@ -2,7 +2,11 @@ import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupEntry } from '@workspace/lib/types/backup';
-import { type DrivePathType, isDocumentType } from '@workspace/lib/types/drive';
+import { type DrivePathType, isCollabType, isDocumentType } from '@workspace/lib/types/drive';
+import { COMMENT_INDEX_DB_CONFIG } from '../chat/comment-db-config';
+import { CHAT_ROOM_DB_CONFIG } from '../chat/db-config';
+import { COLLAB_DB_CONFIG } from '../collab/db-config';
+import type { DatabaseConfig, SchemaType } from '../core';
 import { buildStorageKey } from '../mount/helpers';
 import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
@@ -25,10 +29,23 @@ export type ManagedArchiveDatabase = {
     // for a versions/ snapshot.
     isContainerData: boolean;
     containerType: DrivePathType;
+    // The schema this file was written against, so a restore can tell a database from a newer server
+    // (which ManagedDatabase would then refuse to open) before it hands the home back.
+    config: DatabaseConfig<SchemaType>;
+    // The row this file belongs to, so a restore can put it back at the key its mount will look for.
+    row: MountPathRow;
 };
 
 // The two databases a container owns; a mount never manages any other (see mount/document-db.ts).
 const CONTAINER_DB_NAMES = new Set(['data.db', 'comments.db']);
+
+// Which schema a managed file carries: a comment index, or the container's own document database —
+// Yjs for every collab type, chat's own for a chat room. A versions/ snapshot is a copy of the
+// container's data.db, so it answers the same.
+function configOf(name: string, containerType: DrivePathType): DatabaseConfig<SchemaType> {
+    if (name === 'comments.db') return COMMENT_INDEX_DB_CONFIG;
+    return isCollabType(containerType) ? COLLAB_DB_CONFIG : CHAT_ROOM_DB_CONFIG;
+}
 
 // Ancestors of `row`, nearest first. Guarded against a corrupt parentId cycle, which would
 // otherwise spin forever on a table the backup does not get to trust.
@@ -46,8 +63,8 @@ function* ancestors(row: MountPathRow, byId: Map<string, MountPathRow>): Generat
 // the name chain from the root, with a trash root at `.trash/{id}.{ext}` as trashPath spells it.
 // Deriving it from metadata.db instead of the mount's own keys is what makes the archive
 // storage-independent: local-key and s3 mounts store flat keys, and restore re-derives whichever
-// shape the target mount needs.
-function archivePath(row: MountPathRow, byId: Map<string, MountPathRow>): string {
+// shape the target mount needs. Exported for restore, which reads the same tree back.
+export function archivePath(row: MountPathRow, byId: Map<string, MountPathRow>): string {
     const segment = (r: MountPathRow) => (r.trashedFrom ? `.trash/${buildStorageKey(r.id, r.name)}` : r.name);
     const segments = [segment(row)];
     for (const parent of ancestors(row, byId)) {
@@ -58,9 +75,10 @@ function archivePath(row: MountPathRow, byId: Map<string, MountPathRow>): string
 }
 
 // Mirrors Mount.resolveStoragePath / getStorageKey, resolved from the tree we already hold rather
-// than one recursive-CTE query per file.
-function storageKeyOf(mount: Mount, row: MountPathRow, byId: Map<string, MountPathRow>): string {
-    if (!mount.isPathBased) return row.file || row.id;
+// than one recursive-CTE query per file. Exported for restore, which puts every file back at the
+// key the restored mount will look for it under — one spelling of the rule for both directions.
+export function storageKeyOf(row: MountPathRow, byId: Map<string, MountPathRow>, isPathBased: boolean): string {
+    if (!isPathBased) return row.file || row.id;
     const segments = row.file ? [row.file] : [];
     for (const parent of ancestors(row, byId)) {
         if (parent.parentId === null) break;
@@ -82,6 +100,12 @@ function managedDbContainer(row: MountPathRow, byId: Map<string, MountPathRow>):
     return CONTAINER_DB_NAMES.has(row.name) && isDocumentType(parent.type) ? parent : null;
 }
 
+// The rows of an archived metadata.db, in the shape every reader of one wants. The columns are
+// listed once here rather than in each caller's own SELECT (verify, restore).
+export function readMountPathRows(db: Database): MountPathRow[] {
+    return db.query<MountPathRow, []>('SELECT id, file, name, type, parentId, trashedFrom FROM paths').all();
+}
+
 // The same rule, read back from an archived metadata.db: which of a mount's archived files are
 // Eigen's own databases. Verify needs it to know what it may open — a user's own SQLite upload is
 // stored byte-identical, journal header and all, and opening it is not verify's business.
@@ -95,7 +119,13 @@ export function listManagedDatabases(rows: MountPathRow[]): ManagedArchiveDataba
         // managedDbContainer returns the parent for a container database and the grandparent for a
         // version snapshot, which is what tells a live data.db from an archived copy of one.
         const isContainerData = container.id === row.parentId && row.name === 'data.db';
-        found.push({ path: archivePath(row, byId), isContainerData, containerType: container.type });
+        found.push({
+            path: archivePath(row, byId),
+            isContainerData,
+            containerType: container.type,
+            config: configOf(row.name, container.type),
+            row,
+        });
     }
     return found;
 }
@@ -171,7 +201,7 @@ export async function snapshotMountData(
             // readKey is freshest-first (pending staged copy, then the stored object). Null means the
             // row has no bytes yet (a touched file whose upload never landed); the archive mirrors
             // that absence rather than inventing an empty object.
-            const file = await mount.readKey(storageKeyOf(mount, row, byId));
+            const file = await mount.readKey(storageKeyOf(row, byId, mount.isPathBased));
             if (file) entries.push(await captureFile(file, destPath, entryPath));
         }
         onProgress('mount files', index + 1, fileRows.length);
