@@ -1,4 +1,5 @@
 export { validateACLEntries } from './acl';
+export { BACKUP_FORMAT_VERSION, parseBackupManifest, parseBackupSidecar } from './backup';
 export type { CommandValidationResult } from './command';
 export { validateCommand } from './command';
 export type { ParsedContactInput } from './contact-input';

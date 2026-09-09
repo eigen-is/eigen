@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupEntry } from '@workspace/lib/types/backup';
-import { isDocumentType } from '@workspace/lib/types/drive';
+import { type DrivePathType, isDocumentType } from '@workspace/lib/types/drive';
 import { buildStorageKey } from '../mount/helpers';
 import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
@@ -11,14 +11,28 @@ import { VERSIONS_FOLDER_NAME } from '../versioning/versions-folder';
 import { captureFile, captureWrittenFile } from './capture';
 import type { SnapshotProgress } from './snapshot-home';
 
-type PathRow = Pick<typeof paths.$inferSelect, 'id' | 'file' | 'name' | 'type' | 'parentId' | 'trashedFrom'>;
+export type MountPathRow = Pick<
+    typeof paths.$inferSelect,
+    'id' | 'file' | 'name' | 'type' | 'parentId' | 'trashedFrom'
+>;
+
+// The databases a mount owns inside an archive: a container's data.db/comments.db and the versions/
+// snapshots of one, each with the container type behind it.
+export type ManagedArchiveDatabase = {
+    // Relative to the mount's data/ folder in the archive.
+    path: string;
+    // The container's own data.db — the one a Yjs decode can be run on. False for comments.db and
+    // for a versions/ snapshot.
+    isContainerData: boolean;
+    containerType: DrivePathType;
+};
 
 // The two databases a container owns; a mount never manages any other (see mount/document-db.ts).
 const CONTAINER_DB_NAMES = new Set(['data.db', 'comments.db']);
 
 // Ancestors of `row`, nearest first. Guarded against a corrupt parentId cycle, which would
 // otherwise spin forever on a table the backup does not get to trust.
-function* ancestors(row: PathRow, byId: Map<string, PathRow>): Generator<PathRow> {
+function* ancestors(row: MountPathRow, byId: Map<string, MountPathRow>): Generator<MountPathRow> {
     const seen = new Set<string>([row.id]);
     let current = row.parentId ? byId.get(row.parentId) : undefined;
     while (current && !seen.has(current.id)) {
@@ -33,8 +47,8 @@ function* ancestors(row: PathRow, byId: Map<string, PathRow>): Generator<PathRow
 // Deriving it from metadata.db instead of the mount's own keys is what makes the archive
 // storage-independent: local-key and s3 mounts store flat keys, and restore re-derives whichever
 // shape the target mount needs.
-function archivePath(row: PathRow, byId: Map<string, PathRow>): string {
-    const segment = (r: PathRow) => (r.trashedFrom ? `.trash/${buildStorageKey(r.id, r.name)}` : r.name);
+function archivePath(row: MountPathRow, byId: Map<string, MountPathRow>): string {
+    const segment = (r: MountPathRow) => (r.trashedFrom ? `.trash/${buildStorageKey(r.id, r.name)}` : r.name);
     const segments = [segment(row)];
     for (const parent of ancestors(row, byId)) {
         if (parent.parentId === null) break; // the mount root contributes no segment
@@ -45,7 +59,7 @@ function archivePath(row: PathRow, byId: Map<string, PathRow>): string {
 
 // Mirrors Mount.resolveStoragePath / getStorageKey, resolved from the tree we already hold rather
 // than one recursive-CTE query per file.
-function storageKeyOf(mount: Mount, row: PathRow, byId: Map<string, PathRow>): string {
+function storageKeyOf(mount: Mount, row: MountPathRow, byId: Map<string, MountPathRow>): string {
     if (!mount.isPathBased) return row.file || row.id;
     const segments = row.file ? [row.file] : [];
     for (const parent of ancestors(row, byId)) {
@@ -58,7 +72,7 @@ function storageKeyOf(mount: Mount, row: PathRow, byId: Map<string, PathRow>): s
 // The databases the mount itself manages: a container's data.db/comments.db, and the versions/
 // snapshots of one. Returns the container to lock while copying, or null for anything else — a
 // user's own upload that happens to be SQLite must round-trip byte-identical.
-function managedDbContainer(row: PathRow, byId: Map<string, PathRow>): PathRow | null {
+function managedDbContainer(row: MountPathRow, byId: Map<string, MountPathRow>): MountPathRow | null {
     const parent = row.parentId ? byId.get(row.parentId) : undefined;
     if (!parent) return null;
     if (parent.name === VERSIONS_FOLDER_NAME) {
@@ -66,6 +80,24 @@ function managedDbContainer(row: PathRow, byId: Map<string, PathRow>): PathRow |
         return container && isDocumentType(container.type) ? container : null;
     }
     return CONTAINER_DB_NAMES.has(row.name) && isDocumentType(parent.type) ? parent : null;
+}
+
+// The same rule, read back from an archived metadata.db: which of a mount's archived files are
+// Eigen's own databases. Verify needs it to know what it may open — a user's own SQLite upload is
+// stored byte-identical, journal header and all, and opening it is not verify's business.
+export function listManagedDatabases(rows: MountPathRow[]): ManagedArchiveDatabase[] {
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const found: ManagedArchiveDatabase[] = [];
+    for (const row of rows) {
+        if (row.type !== 'file') continue;
+        const container = managedDbContainer(row, byId);
+        if (!container) continue;
+        // managedDbContainer returns the parent for a container database and the grandparent for a
+        // version snapshot, which is what tells a live data.db from an archived copy of one.
+        const isContainerData = container.id === row.parentId && row.name === 'data.db';
+        found.push({ path: archivePath(row, byId), isContainerData, containerType: container.type });
+    }
+    return found;
 }
 
 // A WAL-mode database cannot be opened at all — not even read-only — without the `-wal` beside it,

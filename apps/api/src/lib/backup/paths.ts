@@ -1,6 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getDataRoot } from '../config/paths';
+import { PATHS } from '../core';
 
 // Where backup artifacts live. Outside `data/` on purpose — the same place scripts/backup.sh
 // writes, so one wipe of the data directory can never take the backups with it.
@@ -24,6 +26,26 @@ export function getBackupStagingDir(jobId: string): string {
 // and nothing ever resumes it.
 export function wipeBackupStaging(): void {
     fs.rmSync(getStagingRoot(), { recursive: true, force: true });
+}
+
+// Scratch space for packing and unpacking: the half-written artifact, the decompressed tar. Under
+// the staging root so a crash leaves nothing behind that the boot-time wipe does not clear, and on
+// the same filesystem as the artifacts, so the last rename of a pack is atomic.
+export function getBackupTempPath(suffix: string): string {
+    return path.join(getBackupStagingDir('archive'), `${randomUUID()}${suffix}`);
+}
+
+// The layout inside a backup folder: `home/` mirrors the home directory one-for-one, and every
+// mount keeps its metadata.db beside a `data/` tree of the files its paths table knows about.
+// snapshotHome writes it and verifyFolder reads it back — one spelling for both.
+export const ARCHIVE_HOME_DIR = 'home';
+
+export function archiveHomePath(relPath: string): string {
+    return `${ARCHIVE_HOME_DIR}/${relPath}`;
+}
+
+export function archiveMountPath(mountId: string, relPath: string): string {
+    return archiveHomePath(`${PATHS.DRIVE.ROOT}/${mountId}/${relPath}`);
 }
 
 // The folder snapshotHome writes, and the single top-level folder inside an artifact.
