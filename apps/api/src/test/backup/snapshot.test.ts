@@ -499,6 +499,30 @@ describe('Backup snapshotHome under contention', () => {
         }
     });
 
+    test('skips a container database whose stored bytes are gone and finishes the snapshot', async () => {
+        const alice = ctx.alice.user;
+        const root = await assertJson<DrivePath>(
+            await authedRequest(alice.sessionToken, `/drive/${alice.id}/${mountId}/root`),
+        );
+        const docName = `Backup Gone ${Date.now()}`;
+        const doc = await drivePost(alice.sessionToken, alice.id, mountId, `folder/${root.id}/create/doc`, {
+            fileName: docName,
+        });
+
+        const mount = findOrFail(home.drive.getMounts(), (m) => m.id === mountId);
+        const dataDb = (await mount.getChildByName(doc.id, 'data.db'))!;
+        // Close the handle first — with a live one the copy comes from VACUUM INTO and never reaches
+        // storage. Then take the object away, leaving the paths row behind: a container deleted, or a
+        // versions/ snapshot pruned, between the tree read and the copy looks exactly like this.
+        await mount.closeDatabase(dataDb.id, { skipFinalSnapshot: true });
+        await mount.storage.delete(await mount.getStorageKey(dataDb.id));
+
+        const manifest = await snapshotHome(home, mkdtempSync(join(TEST_DATA_DIR, 'backup-gone-')));
+        const prefix = `home/mounts/${mountId}/data/${docName}.eigendoc`;
+        expect(manifest.entries.some((e) => e.path === `${prefix}/data.db`)).toBe(false);
+        expect(manifest.entries.some((e) => e.path === `${prefix}/comments.db`)).toBe(true);
+    });
+
     test('tolerates a home file that vanishes between the listing and the read', async () => {
         // Stands in for a Maildir new/→cur/ move or a card rewrite landing mid-walk.
         const raceDir = join(home.homeDir, 'backup-vanish');

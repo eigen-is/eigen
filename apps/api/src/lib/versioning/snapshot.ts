@@ -123,7 +123,9 @@ async function snapshotDataDbToVersionStaged(
     const versionKey = await mount.getStorageKey(versionPathId);
     const queue = mount.uploadQueue!; // isRemote-only path (snapshotContainerDataDb branch)
     const versionStaging = queue.newStagingPath();
-    await stageManagedDbCopy(mount, dataDb.id, versionStaging, 'staged-first');
+    if (!(await stageManagedDbCopy(mount, dataDb.id, versionStaging, 'staged-first'))) {
+        throw new ApiError(503, `Cannot snapshot ${dataDb.id}: its stored object is not available`);
+    }
     const size = fs.statSync(versionStaging).size;
     await mount.db.update(paths).set({ size, updatedAt: new Date() }).where(eq(paths.id, versionPathId));
     await mount.invalidateAncestorsOf(versionPathId);
@@ -134,6 +136,8 @@ async function snapshotDataDbToVersionStaged(
 }
 
 // Produce a local copy of a managed container db's current bytes at destPath, freshest source first.
+// False when there is nothing left to copy: no live handle, nothing staged, and no stored object —
+// the container was deleted, or a versions/ snapshot pruned, since the caller read the paths table.
 // 'staged-first' is the version-snapshot order: its caller flushed the cached db into the pending
 // staged copy already, so reusing that copy beats a second VACUUM INTO. 'open-handle-first' is the
 // backup order: nothing flushed, so a live handle is the only source holding writes made since the
@@ -144,7 +148,7 @@ export async function stageManagedDbCopy(
     pathId: string,
     destPath: string,
     order: 'staged-first' | 'open-handle-first',
-): Promise<void> {
+): Promise<boolean> {
     if (order === 'open-handle-first') {
         const closing = mount.closingDocumentDbs.get(pathId);
         if (closing) await closing.catch(() => {});
@@ -155,22 +159,25 @@ export async function stageManagedDbCopy(
     const cached = mount.documentDbs.get(pathId)?.peek();
     if (cached && order === 'open-handle-first') {
         cached.stageCopy(destPath);
-        return;
+        return true;
     }
     // Copy SYNCHRONOUSLY: with no await between pendingStagedCopy's existsSync and the copy, a
     // concurrent enqueue can't unlink it mid-read.
     const pendingStaging = mount.pendingStagedCopy(storageKey);
     if (pendingStaging) {
         fs.copyFileSync(pendingStaging, destPath);
-        return;
+        return true;
     }
     // Nothing pending: a live VACUUM INTO if the doc is open, else the storage object — which is
     // current because every upload acked (§3).
     if (cached) {
         cached.stageCopy(destPath);
-        return;
+        return true;
     }
-    await Bun.write(destPath, mount.storage.read(storageKey));
+    const stored = mount.storage.read(storageKey);
+    if (!(await stored.exists())) return false;
+    await Bun.write(destPath, stored);
+    return true;
 }
 
 // Replaces the container's data.db with the file at `sourcePath` — a snapshot the

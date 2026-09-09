@@ -112,9 +112,9 @@ export async function snapshotMountData(
         .all();
     const byId = new Map(rows.map((row) => [row.id, row]));
 
+    const fileRows = rows.filter((row) => row.type === 'file');
     const entries: BackupEntry[] = [];
-    for (const [index, row] of rows.entries()) {
-        if (row.type !== 'file') continue;
+    for (const [index, row] of fileRows.entries()) {
         const relPath = archivePath(row, byId);
         const destPath = path.join(targetDir, relPath);
         const entryPath = `${relPrefix}/${relPath}`;
@@ -126,21 +126,23 @@ export async function snapshotMountData(
             // raw read of the live main file, which would drop every commit still sitting in the WAL.
             // Deadlock-safe by the same argument — a close never parks on the container lock (its own
             // snapshot try-locks and skips) and the backup holds no closing slot of its own.
-            await mount.withPathLock(container.id, () =>
+            // False = the container was deleted, or the version pruned, since the tree read above; the
+            // entry drops out of the archive rather than costing the home its whole backup.
+            const copied = await mount.withPathLock(container.id, () =>
                 stageManagedDbCopy(mount, row.id, destPath, 'open-handle-first'),
             );
-            normalizeArchiveDatabase(destPath);
-            entries.push(await captureWrittenFile(destPath, entryPath));
-            onProgress('mount files', index + 1, rows.length);
-            continue;
+            if (copied) {
+                normalizeArchiveDatabase(destPath);
+                entries.push(await captureWrittenFile(destPath, entryPath));
+            }
+        } else {
+            // readKey is freshest-first (pending staged copy, then the stored object). Null means the
+            // row has no bytes yet (a touched file whose upload never landed); the archive mirrors
+            // that absence rather than inventing an empty object.
+            const file = await mount.readKey(storageKeyOf(mount, row, byId));
+            if (file) entries.push(await captureFile(file, destPath, entryPath));
         }
-
-        // readKey is freshest-first (pending staged copy, then the stored object). Null means the row
-        // has no bytes yet (a touched file whose upload never landed); the archive mirrors that
-        // absence rather than inventing an empty object.
-        const file = await mount.readKey(storageKeyOf(mount, row, byId));
-        if (file) entries.push(await captureFile(file, destPath, entryPath));
-        onProgress('mount files', index + 1, rows.length);
+        onProgress('mount files', index + 1, fileRows.length);
     }
     return entries;
 }
