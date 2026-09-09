@@ -137,7 +137,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
         async ({ params, query, user }): Promise<ChatMessage[]> => {
             const drive = await getSharedDrive(params.ownerId, user);
             const chat = await drive.getChat(params.mountId, params.chatId);
-            return await chat.getMessagesForUser(user.id, user.email, query.limit ?? 50, query.before || undefined);
+            return await chat.getMessagesForUser(user.email, query.limit ?? 50, query.before || undefined);
         },
         {
             query: t.Object({
@@ -185,7 +185,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
                 throw new ApiError(403, 'No write permission');
             }
             const chat = await drive.getChat(params.mountId, params.chatId);
-            return await chat.editMessage(params.messageId, body.content, user.id);
+            return await chat.editMessage(params.messageId, body.content, user.email);
         },
         {
             body: t.Object({ content: t.String() }),
@@ -201,7 +201,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
                 throw new ApiError(403, 'No write permission');
             }
             const chat = await drive.getChat(params.mountId, params.chatId);
-            await chat.deleteMessage(params.messageId, user.id);
+            await chat.deleteMessage(params.messageId, user.email);
             return { success: true };
         },
         { auth: true },
@@ -215,20 +215,6 @@ export const chatRouter = new Elysia({ name: 'chat' })
         },
         {
             body: t.Object({ email: t.String({ maxLength: MAX_EMAIL_LENGTH }) }),
-            auth: true,
-        },
-    )
-
-    .post(
-        '/chat/:ownerId/:mountId/:chatId/read',
-        async ({ params, body, user }) => {
-            const drive = await getSharedDrive(params.ownerId, user);
-            const chat = await drive.getChat(params.mountId, params.chatId);
-            await chat.markRead(user.id, body.messageId);
-            return { success: true };
-        },
-        {
-            body: t.Object({ messageId: t.String() }),
             auth: true,
         },
     );

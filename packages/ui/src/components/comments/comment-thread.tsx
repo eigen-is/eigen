@@ -34,7 +34,7 @@ function CommentThreadInner({
             <ChatMessageList
                 messages={chat.messages}
                 isLoading={chat.isLoading}
-                currentUserId={chat.currentUserId}
+                currentUserEmail={chat.currentUserEmail}
                 ownerId={ownerId}
                 mountId={mountId}
                 mediaFolderId={chat.mediaFolderId}

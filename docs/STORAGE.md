@@ -146,6 +146,10 @@ Contacts follow the mail model: the `.vcf` files under `cards/` are canonical (e
 Team data: `data/team/{teamId}/` — Drive + Calendar only, plus `settings.json` for mount/calendar config.
 Org data: `data/org/{orgId}/` — minimal (filesystem only, no domain services).
 
+### Users by email inside containers
+
+A container (`.eigenchat`, `.eigendoc`, …) is the portable unit — copied, moved, and version-restored as a self-contained blob — so its databases reference users by email only, never by user id. Home-level databases (`metadata.db`, `contacts.db`, `calendar.db`, `notifications.db`) sit next to their owner's `ownerId` and may hold user ids. Because containers carry no ids, backup and restore preserve every user reference verbatim: an email survives a copy or a restore regardless of which server or id space it lands in.
+
 ## Key Types
 
 - `DrivePath` (`packages/lib/src/types/drive.ts`) — file/folder metadata (id, mountId, name, type, parentId,

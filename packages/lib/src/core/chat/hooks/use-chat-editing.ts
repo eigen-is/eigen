@@ -33,7 +33,7 @@ export function useChatEditing(chat: ChatRoom) {
             if (e.key === 'ArrowUp' && !content.trim()) {
                 const lastOwn = [...chat.messages]
                     .reverse()
-                    .find((m) => m.authorId === chat.currentUserId && !m.deletedAt && m.type === 'message');
+                    .find((m) => m.authorEmail === chat.currentUserEmail && !m.deletedAt && m.type === 'message');
                 if (lastOwn) {
                     e.preventDefault();
                     setEditingMessageId(lastOwn.id);
@@ -42,7 +42,7 @@ export function useChatEditing(chat: ChatRoom) {
             }
             return undefined;
         },
-        [chat.messages, chat.currentUserId],
+        [chat.messages, chat.currentUserEmail],
     );
 
     return {

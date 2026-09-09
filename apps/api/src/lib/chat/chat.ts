@@ -81,7 +81,7 @@ export class ChatRoom {
         replyTo?: string,
         attachments?: ChatAttachment[],
     ): Promise<ChatMessage> {
-        const { id: authorId, email: authorEmail } = author;
+        const { email: authorEmail } = author;
         if (content.startsWith('/') && type === 'message') {
             const cmd = parseCommand(content);
             switch (cmd.kind) {
@@ -119,7 +119,6 @@ export class ChatRoom {
 
         await this.db.insert(schema.messages).values({
             id,
-            authorId,
             authorEmail,
             type,
             content,
@@ -131,7 +130,6 @@ export class ChatRoom {
 
         const message: ChatMessage = {
             id,
-            authorId,
             authorEmail,
             type,
             content,
@@ -256,28 +254,29 @@ export class ChatRoom {
                     if (recipientUser) await notifyActivity(recipientUser.id);
                 }
             } else if (type === 'message' || type === 'emote') {
-                const participants = new Map<string, string>();
                 const rows = await this.db
-                    .selectDistinct({ authorId: schema.messages.authorId, authorEmail: schema.messages.authorEmail })
+                    .selectDistinct({ authorEmail: schema.messages.authorEmail })
                     .from(schema.messages)
                     .where(isNull(schema.messages.deletedAt))
                     .all();
-                for (const row of rows) {
-                    participants.set(row.authorEmail.toLowerCase(), row.authorId);
-                }
-                participants.set(this.home.user.email.toLowerCase(), this.home.user.id);
-                participants.delete(authorEmail.toLowerCase());
+                const participantEmails = new Set<string>(rows.map((row) => row.authorEmail.toLowerCase()));
+                participantEmails.add(this.home.user.email.toLowerCase());
+                participantEmails.delete(authorEmail.toLowerCase());
 
-                // Pick recipients synchronously (populates activityNotifiedEmails for coveredEmails
-                // below), then fan out the sends concurrently — notifyActivity already isolates failures.
-                const recipientIds: string[] = [];
-                for (const [email, userId] of participants) {
-                    if (mentionedEmailSet.has(email)) continue;
-                    if (!memberEmails.has(email)) continue;
-                    activityNotifiedEmails.add(email);
-                    recipientIds.push(userId);
-                }
-                await Promise.all(recipientIds.map((userId) => notifyActivity(userId)));
+                // Containers hold no user ids, so each distinct participant email resolves through
+                // getUserByEmail (one lookup per email, as mentions/whispers already do); unresolvable
+                // emails are skipped. Resolved recipients feed activityNotifiedEmails for coveredEmails
+                // below. The batch is awaited, so the set is fully populated before the watcher fan-out.
+                await Promise.all(
+                    [...participantEmails].map(async (email) => {
+                        if (mentionedEmailSet.has(email)) return;
+                        if (!memberEmails.has(email)) return;
+                        const participant = await getUserByEmail(email);
+                        if (!participant) return;
+                        activityNotifiedEmails.add(email);
+                        await notifyActivity(participant.id);
+                    }),
+                );
             }
 
             // File history: 'commented' on the container (or the standalone chat itself).
@@ -331,18 +330,14 @@ export class ChatRoom {
         return rows.map((r) => this.toMessage(r)).reverse();
     }
 
-    async getMessagesForUser(
-        userId: string,
-        userEmail: string,
-        limit: number = 50,
-        beforeId?: string,
-    ): Promise<ChatMessage[]> {
+    async getMessagesForUser(userEmail: string, limit: number = 50, beforeId?: string): Promise<ChatMessage[]> {
         const allMessages = await this.getMessages(limit, beforeId);
+        const viewerEmail = userEmail.toLowerCase();
 
         return allMessages.map((msg) => {
             if (msg.type === 'whisper') {
-                const isAuthor = msg.authorId === userId;
-                const isRecipient = msg.whisperTo === userId || msg.whisperTo === userEmail;
+                const isAuthor = msg.authorEmail.toLowerCase() === viewerEmail;
+                const isRecipient = msg.whisperTo?.toLowerCase() === viewerEmail;
                 const targetName = msg.whisperTo || 'someone';
                 if (isAuthor) {
                     return { ...msg, content: `whispers to ${targetName}: ${msg.content}` };
@@ -360,16 +355,16 @@ export class ChatRoom {
             if (msg.type === 'emote' && !msg.deletedAt) {
                 return {
                     ...msg,
-                    content: formatEmoteForViewer(msg.content, msg.authorEmail, msg.authorId, userId, userEmail),
+                    content: formatEmoteForViewer(msg.content, msg.authorEmail, userEmail),
                 };
             }
             return msg;
         });
     }
 
-    async editMessage(messageId: string, content: string, userId: string): Promise<ChatMessage> {
+    async editMessage(messageId: string, content: string, userEmail: string): Promise<ChatMessage> {
         const existing = await this.db.select().from(schema.messages).where(eq(schema.messages.id, messageId)).get();
-        if (!existing || existing.authorId !== userId) {
+        if (!existing || existing.authorEmail.toLowerCase() !== userEmail.toLowerCase()) {
             throw new ApiError(404, 'Message not found or not owned');
         }
 
@@ -399,9 +394,9 @@ export class ChatRoom {
         return updated;
     }
 
-    async deleteMessage(messageId: string, userId: string): Promise<void> {
+    async deleteMessage(messageId: string, userEmail: string): Promise<void> {
         const existing = await this.db.select().from(schema.messages).where(eq(schema.messages.id, messageId)).get();
-        if (!existing || existing.authorId !== userId) {
+        if (!existing || existing.authorEmail.toLowerCase() !== userEmail.toLowerCase()) {
             throw new ApiError(404, 'Message not found or not owned');
         }
 
@@ -437,23 +432,6 @@ export class ChatRoom {
             await this.updateCommentIndex(async (index) => {
                 await index.decrementCount(this.path.name);
             }, members);
-        }
-    }
-
-    async markRead(userId: string, messageId: string): Promise<void> {
-        const now = new Date();
-        const existing = await this.db.select().from(schema.readState).where(eq(schema.readState.userId, userId)).get();
-        if (existing) {
-            await this.db
-                .update(schema.readState)
-                .set({ lastReadMessageId: messageId, lastReadAt: now })
-                .where(eq(schema.readState.userId, userId));
-        } else {
-            await this.db.insert(schema.readState).values({
-                userId,
-                lastReadMessageId: messageId,
-                lastReadAt: now,
-            });
         }
     }
 
@@ -515,7 +493,6 @@ export class ChatRoom {
     private toMessage(row: typeof schema.messages.$inferSelect): ChatMessage {
         return {
             id: row.id,
-            authorId: row.authorId,
             authorEmail: row.authorEmail,
             type: row.type,
             content: row.content,

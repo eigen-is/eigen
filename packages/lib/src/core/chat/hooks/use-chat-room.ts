@@ -70,7 +70,6 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
     const addLocalMessage = useCallback((content: string) => {
         const msg: ChatMessage = {
             id: `local-${++localIdCounter}`,
-            authorId: 'system',
             authorEmail: 'system',
             type: 'system',
             content,
@@ -256,7 +255,6 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
         roomMembers,
         readOnly,
         disabled: postMessage.isPending || uploadFile.isPending,
-        currentUserId: user?.id || '',
         currentUserEmail: user?.email || '',
         mediaFolderId,
         handleSendMessage,

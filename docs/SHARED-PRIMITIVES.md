@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1321 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1320 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -450,7 +450,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (321)
+## Types (320)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -521,7 +521,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ChatMatch` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `ChatMessage` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `ChatMessageType` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
-| `ChatReadState` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `ClientFileEventRecord` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `ClientFileEventType` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `CollabDocumentInfo` | `@workspace/lib/types` | packages/lib/src/types/collab.ts |

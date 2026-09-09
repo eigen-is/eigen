@@ -21,7 +21,6 @@ export function isAttachmentReference(a: ChatAttachment): a is AttachmentReferen
 
 export type ChatMessage = {
     id: string;
-    authorId: string;
     authorEmail: string;
     type: ChatMessageType;
     content: string;
@@ -36,12 +35,6 @@ export type ChatMessage = {
 export type RoomMember = {
     email: string;
     displayName: string;
-};
-
-export type ChatReadState = {
-    userId: string;
-    lastReadMessageId: string | null;
-    lastReadAt: Date | null;
 };
 
 export type CommentEntry = {

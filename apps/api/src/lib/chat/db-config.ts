@@ -4,7 +4,7 @@ import * as schema from './schema';
 
 export const CHAT_ROOM_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'chatroom',
-    currentVersion: 1,
+    currentVersion: 2,
     schema,
     snapshot: { policy: DEFAULT_RETENTION, writesPerSnapshot: 100 },
     migrations: [
@@ -33,6 +33,19 @@ export const CHAT_ROOM_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 CREATE INDEX IF NOT EXISTS idx_messages_createdAt ON messages(createdAt);
                 CREATE INDEX IF NOT EXISTS idx_messages_replyTo ON messages(replyTo);
                 CREATE INDEX IF NOT EXISTS idx_messages_authorId ON messages(authorId);
+            `),
+        },
+        {
+            // Containers reference users by email only — the message row's authorId (and the
+            // per-user read_state table, which no route or FE consumes) are dropped. authorEmail
+            // already carries authorship; message rows are preserved. Runs inside ManagedDatabase's
+            // BEGIN/ROLLBACK, so a failure leaves the db at v1 untouched.
+            version: 2,
+            up: (db) =>
+                db.exec(`
+                DROP INDEX IF EXISTS idx_messages_authorId;
+                ALTER TABLE messages DROP COLUMN authorId;
+                DROP TABLE IF EXISTS read_state;
             `),
         },
     ],
