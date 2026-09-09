@@ -1,11 +1,12 @@
-import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { createZstdCompress, createZstdDecompress } from 'node:zlib';
 import type { BackupManifest, BackupVerifyRecord } from '@workspace/lib/types/backup';
+import { parseBackupManifest, parseBackupSidecar } from '@workspace/lib/validation';
 import { ApiError } from '../core';
+import { getBackupTempPath } from './paths';
 
 // An artifact is a plain POSIX tar (pax for long paths) piped through zstd, so `tar --zstd -xf`
 // unpacks one on any machine. The tar is generated entry by entry into the compressor rather than
@@ -49,11 +50,11 @@ function truncateUtf8(text: string, maxBytes: number): string {
     return new TextDecoder().decode(bytes.subarray(0, end));
 }
 
-function tarHeader(name: string, size: number, mtime: number, typeflag: string): Uint8Array {
+function tarHeader(name: string, size: number, mtime: number, typeflag: string, mode: number): Uint8Array {
     const header = new Uint8Array(BLOCK);
     const put = (offset: number, text: string) => header.set(ENCODER.encode(text), offset);
     put(0, name);
-    put(100, octalField(0o644, 8));
+    put(100, octalField(mode, 8));
     put(108, octalField(0, 8));
     put(116, octalField(0, 8));
     writeSize(header, 124, size);
@@ -81,41 +82,70 @@ function padding(size: number): Uint8Array {
     return new Uint8Array((BLOCK - (size % BLOCK)) % BLOCK);
 }
 
-async function* entryChunks(name: string, absPath: string, size: number, mtime: number): AsyncGenerator<Uint8Array> {
+// A path over 100 bytes rides in a pax header; the ustar header after it carries the name a reader
+// that ignores pax falls back to.
+function* headerChunks(
+    name: string,
+    size: number,
+    mtime: number,
+    typeflag: string,
+    mode: number,
+): Generator<Uint8Array> {
     if (ENCODER.encode(name).length > NAME_FIELD) {
-        // A path over 100 bytes rides in a pax header; the ustar name below is what a reader that
-        // ignores pax would fall back to.
         const payload = ENCODER.encode(paxRecord('path', name));
-        yield tarHeader(`PaxHeader/${truncateUtf8(path.basename(name), 80)}`, payload.length, mtime, 'x');
+        yield tarHeader(`PaxHeader/${truncateUtf8(path.basename(name), 80)}`, payload.length, mtime, 'x', mode);
         yield payload;
         yield padding(payload.length);
     }
-    yield tarHeader(truncateUtf8(name, NAME_FIELD), size, mtime, '0');
+    yield tarHeader(truncateUtf8(name, NAME_FIELD), size, mtime, typeflag, mode);
+}
+
+async function* entryChunks(name: string, absPath: string, size: number, mtime: number): AsyncGenerator<Uint8Array> {
+    yield* headerChunks(name, size, mtime, '0', 0o644);
 
     const reader = Bun.file(absPath).stream().getReader();
     let copied = 0;
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        copied += value.length;
-        yield value;
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            copied += value.length;
+            yield value;
+        }
+        // The header above already declared `size`; fewer bytes leave the archive unreadable from here on.
+        if (copied !== size) throw new Error(`packFolder: ${name} changed size while packing (${copied} of ${size})`);
+    } finally {
+        // Reached on a destroyed pipeline too, where nobody else would ever close the file.
+        await reader.cancel();
     }
-    // The header above already declared `size`; fewer bytes leave the archive unreadable from here on.
-    if (copied !== size) throw new Error(`packFolder: ${name} changed size while packing (${copied} of ${size})`);
     yield padding(size);
 }
 
 async function* tarChunks(dir: string, rootName: string): AsyncGenerator<Uint8Array> {
     const relPaths: string[] = [];
-    for await (const rel of new Bun.Glob('**/*').scan({ cwd: dir, onlyFiles: true, dot: true })) {
+    for await (const rel of new Bun.Glob('**/*').scan({ cwd: dir, onlyFiles: false, dot: true })) {
         relPaths.push(rel.replaceAll('\\', '/'));
     }
     relPaths.sort();
 
     let written = 0;
+    // Directories get entries of their own: an empty one (a Maildir `new/`, a container's `versions/`
+    // before its first snapshot) is part of the home and has to survive the round trip.
+    function* directory(name: string, mtimeMs: number): Generator<Uint8Array> {
+        for (const chunk of headerChunks(name, 0, Math.floor(mtimeMs / 1000), '5', 0o755)) {
+            written += chunk.length;
+            yield chunk;
+        }
+    }
+
+    yield* directory(`${rootName}/`, fs.statSync(dir).mtimeMs);
     for (const rel of relPaths) {
         const abs = path.join(dir, rel);
         const stat = fs.statSync(abs);
+        if (stat.isDirectory()) {
+            yield* directory(`${rootName}/${rel}/`, stat.mtimeMs);
+            continue;
+        }
         for await (const chunk of entryChunks(`${rootName}/${rel}`, abs, stat.size, Math.floor(stat.mtimeMs / 1000))) {
             if (chunk.length === 0) continue;
             written += chunk.length;
@@ -130,11 +160,11 @@ async function* tarChunks(dir: string, rootName: string): AsyncGenerator<Uint8Ar
 
 // Packs `dir` into a `.tar.zst` whose single root folder is `dir`'s basename. Memory stays flat:
 // the tar is generated entry by entry into the zstd stream, and the compressed bytes go straight to
-// disk. The temp name is next to the artifact so the rename is atomic — an interrupted pack never
+// disk. It is built in the staging folder and renamed into place, so an interrupted pack never
 // leaves a short archive under a name the artifact list would offer for restore.
 export async function packFolder(dir: string, artifactPath: string): Promise<void> {
     fs.mkdirSync(path.dirname(artifactPath), { recursive: true });
-    const tempPath = `${artifactPath}.${randomUUID()}.part`;
+    const tempPath = getBackupTempPath('.tar.zst');
     try {
         const chunks = Readable.from(tarChunks(dir, path.basename(dir)));
         await pipeline(chunks, createZstdCompress(), fs.createWriteStream(tempPath));
@@ -145,38 +175,43 @@ export async function packFolder(dir: string, artifactPath: string): Promise<voi
     fs.renameSync(tempPath, artifactPath);
 }
 
-async function decompressToTar(artifactPath: string, tarPath: string): Promise<void> {
-    await pipeline(fs.createReadStream(artifactPath), createZstdDecompress(), fs.createWriteStream(tarPath));
-}
-
 // Bun.Archive reads bytes, not a lazy BunFile (a BunFile input reads as an empty archive), so the
-// tar is mapped rather than read: the pages stay file-backed instead of landing on the heap.
-function openTar(tarPath: string): Bun.Archive {
-    return new Bun.Archive(Bun.mmap(tarPath));
+// artifact is decompressed into the staging folder and the tar is mapped: the pages stay
+// file-backed instead of landing on the heap.
+async function withArchive<T>(artifactPath: string, read: (archive: Bun.Archive) => Promise<T>): Promise<T> {
+    const tarPath = getBackupTempPath('.tar');
+    try {
+        await pipeline(fs.createReadStream(artifactPath), createZstdDecompress(), fs.createWriteStream(tarPath));
+        return await read(new Bun.Archive(Bun.mmap(tarPath)));
+    } finally {
+        fs.rmSync(tarPath, { force: true });
+    }
 }
 
 export async function extractArtifact(artifactPath: string, targetDir: string, glob?: string): Promise<void> {
+    const existed = fs.existsSync(targetDir);
     fs.mkdirSync(targetDir, { recursive: true });
-    const tarPath = path.join(path.dirname(targetDir), `.${randomUUID()}.tar`);
     try {
-        await decompressToTar(artifactPath, tarPath);
-        await openTar(tarPath).extract(targetDir, glob ? { glob } : undefined);
-    } finally {
-        fs.rmSync(tarPath, { force: true });
+        await withArchive(artifactPath, async (archive) => {
+            await archive.extract(targetDir, glob ? { glob } : undefined);
+        });
+    } catch (error) {
+        // Half an unpacked archive is worse than none — nothing downstream can tell the two apart.
+        // A folder the caller already had is left alone; only the tree this call made is taken back.
+        if (!existed) fs.rmSync(targetDir, { recursive: true, force: true });
+        throw error;
     }
 }
 
 // The manifest of the archive's single home folder, without unpacking its files.
 export async function readArtifactManifest(artifactPath: string): Promise<BackupManifest> {
-    const tarPath = path.join(path.dirname(artifactPath), `.${randomUUID()}.tar`);
-    try {
-        await decompressToTar(artifactPath, tarPath);
-        const [entry] = [...(await openTar(tarPath).files('*/manifest.json')).values()];
-        if (!entry) throw new ApiError(422, `${path.basename(artifactPath)} has no manifest.json`);
-        return JSON.parse(await entry.text());
-    } finally {
-        fs.rmSync(tarPath, { force: true });
-    }
+    const text = await withArchive(artifactPath, async (archive) => {
+        const [entry] = [...(await archive.files('*/manifest.json')).values()];
+        return entry ? await entry.text() : null;
+    });
+    const manifest = text === null ? null : parseBackupManifest(text);
+    if (!manifest) throw new ApiError(400, `${path.basename(artifactPath)} is not an Eigen backup archive`);
+    return manifest;
 }
 
 export async function writeSidecar(
@@ -185,7 +220,7 @@ export async function writeSidecar(
     verify: BackupVerifyRecord,
 ): Promise<void> {
     const sidecarPath = `${artifactPath}${SIDECAR_SUFFIX}`;
-    const tempPath = `${sidecarPath}.${randomUUID()}.tmp`;
+    const tempPath = getBackupTempPath(SIDECAR_SUFFIX);
     try {
         await Bun.write(tempPath, JSON.stringify({ manifest, verify }, null, 2));
     } catch (error) {
@@ -195,18 +230,15 @@ export async function writeSidecar(
     fs.renameSync(tempPath, sidecarPath);
 }
 
-// Null when there is no readable sidecar — an artifact copied in by hand has none, and the caller
-// shows it as unverified until a verify job writes one.
+// Null when there is no sidecar at all — an artifact copied in by hand has none, and the caller
+// shows it as unverified until a verify job writes one. A file that is there but is not a sidecar
+// is an error instead: treating it as absent would hide a half-written one behind a plausible screen.
 export async function readSidecar(
     artifactPath: string,
 ): Promise<{ manifest: BackupManifest; verify: BackupVerifyRecord } | null> {
     const sidecarPath = `${artifactPath}${SIDECAR_SUFFIX}`;
     if (!fs.existsSync(sidecarPath)) return null;
-    try {
-        const parsed = await Bun.file(sidecarPath).json();
-        if (parsed?.manifest?.formatVersion !== 1 || !parsed?.verify?.status) return null;
-        return { manifest: parsed.manifest, verify: parsed.verify };
-    } catch {
-        return null;
-    }
+    const sidecar = parseBackupSidecar(await Bun.file(sidecarPath).text());
+    if (!sidecar) throw new ApiError(400, `${path.basename(sidecarPath)} is not a backup manifest sidecar`);
+    return sidecar;
 }
