@@ -148,9 +148,3 @@ export async function resolveHomeDir(ownerId: string): Promise<string> {
     if (existing?.role === 'guest') throw new ApiError(400, 'Guest homes are not backed up');
     return getUserHomePath(owner.id);
 }
-
-// The two folders a home can sit in. Derived from the one place that spells the layout out, so a
-// change there cannot leave the boot-time restore recovery walking the wrong directories.
-export function homeRootDirs(): string[] {
-    return [path.dirname(getUserHomePath('id')), path.dirname(getTeamDataPath('id'))];
-}

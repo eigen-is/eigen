@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX, wipeBackupStaging } from '../../lib/backup/paths';
+import { FAILED_RESTORE_SUFFIX, getBackupsDir, PRE_RESTORE_SUFFIX, wipeBackupStaging } from '../../lib/backup/paths';
 import { recoverInterruptedRestores } from '../../lib/backup/restore';
 import { TEST_DATA_DIR } from '../setup';
 
@@ -14,12 +14,23 @@ describe('Backup boot', () => {
     const homeRoot = join(TEST_DATA_DIR, 'home');
     const made: string[] = [];
 
-    function seedFolder(name: string, marker: string): string {
+    function seedFolder(name: string, content: string): string {
         const dir = join(homeRoot, name);
         mkdirSync(dir, { recursive: true });
-        writeFileSync(join(dir, 'marker'), marker);
+        writeFileSync(join(dir, 'marker'), content);
         made.push(dir);
         return dir;
+    }
+
+    // What restoreHome writes before it moves a home aside, in the staging folder of its job.
+    function seedRestoringMarker(jobId: string, homeName: string, preRestoreName: string): void {
+        const dir = join(getBackupsDir(), '.staging', jobId);
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(
+            join(dir, 'restoring.json'),
+            JSON.stringify({ ownerId: homeName, homeDir: join(homeRoot, homeName), preRestoreName }),
+        );
+        made.push(dir);
     }
 
     afterAll(() => {
@@ -56,38 +67,59 @@ describe('Backup boot', () => {
         }
     });
 
-    test('an interrupted restore gets its newest safety copy back as the home folder', () => {
+    test('the marker of an interrupted restore puts its home folder back', () => {
         const id = 'bootrecoverAAAAAAAAAAAAAAAAAAAAA';
-        seedFolder(`${id}${PRE_RESTORE_SUFFIX}20260101-000000`, 'older');
-        seedFolder(`${id}${PRE_RESTORE_SUFFIX}20260101-000100`, 'newer');
+        const aside = `${id}${PRE_RESTORE_SUFFIX}20260101-000100`;
+        seedFolder(`${id}${PRE_RESTORE_SUFFIX}20260101-000000`, 'an older restore');
+        seedFolder(aside, 'the home as it was');
+        seedRestoringMarker('boot-job-a', id, aside);
         made.push(join(homeRoot, id));
 
         recoverInterruptedRestores();
 
-        expect(readFileSync(join(homeRoot, id, 'marker'), 'utf8')).toBe('newer');
-        // Only the copy that was put back moves; an older one stays for the admin to delete.
+        expect(readFileSync(join(homeRoot, id, 'marker'), 'utf8')).toBe('the home as it was');
+        // Only the folder the marker names moves; an older copy stays for the admin to delete.
         expect(existsSync(join(homeRoot, `${id}${PRE_RESTORE_SUFFIX}20260101-000000`))).toBe(true);
-        expect(existsSync(join(homeRoot, `${id}${PRE_RESTORE_SUFFIX}20260101-000100`))).toBe(false);
+        expect(existsSync(join(homeRoot, aside))).toBe(false);
     });
 
-    test('a safety copy beside a home that is there is left alone', () => {
-        const id = 'bootrecoverBBBBBBBBBBBBBBBBBBBBB';
-        seedFolder(id, 'live');
-        seedFolder(`${id}${PRE_RESTORE_SUFFIX}20260101-000000`, 'aside');
-
-        recoverInterruptedRestores();
-
-        expect(readFileSync(join(homeRoot, id, 'marker'), 'utf8')).toBe('live');
-        expect(existsSync(join(homeRoot, `${id}${PRE_RESTORE_SUFFIX}20260101-000000`))).toBe(true);
-    });
-
-    test('a failed restore is left where it is', () => {
-        const id = 'bootrecoverCCCCCCCCCCCCCCCCCCCCC';
-        seedFolder(`${id}${FAILED_RESTORE_SUFFIX}20260101-000000`, 'failed');
+    // delete-user.ts removes the live home folder and nothing else; the safety copies of a user who
+    // was deleted stay behind forever. A missing home folder is therefore not evidence of anything.
+    test('a safety copy left by a deleted user is not resurrected', () => {
+        const id = 'bootrecoverDDDDDDDDDDDDDDDDDDDDD';
+        seedFolder(`${id}${PRE_RESTORE_SUFFIX}20260101-000000`, 'the deleted user');
 
         recoverInterruptedRestores();
 
         expect(existsSync(join(homeRoot, id))).toBe(false);
+        expect(existsSync(join(homeRoot, `${id}${PRE_RESTORE_SUFFIX}20260101-000000`))).toBe(true);
+    });
+
+    test('a marker whose home folder is there changes nothing', () => {
+        const id = 'bootrecoverBBBBBBBBBBBBBBBBBBBBB';
+        const aside = `${id}${PRE_RESTORE_SUFFIX}20260101-000000`;
+        seedFolder(id, 'live');
+        seedFolder(aside, 'aside');
+        seedRestoringMarker('boot-job-b', id, aside);
+
+        recoverInterruptedRestores();
+
+        expect(readFileSync(join(homeRoot, id, 'marker'), 'utf8')).toBe('live');
+        expect(existsSync(join(homeRoot, aside))).toBe(true);
+    });
+
+    test('a marker naming a folder of another home is refused', () => {
+        const id = 'bootrecoverCCCCCCCCCCCCCCCCCCCCC';
+        const other = 'bootrecoverEEEEEEEEEEEEEEEEEEEEE';
+        const aside = `${other}${PRE_RESTORE_SUFFIX}20260101-000000`;
+        seedFolder(aside, 'somebody else');
+        seedFolder(`${id}${FAILED_RESTORE_SUFFIX}20260101-000000`, 'failed');
+        seedRestoringMarker('boot-job-c', id, aside);
+
+        recoverInterruptedRestores();
+
+        expect(existsSync(join(homeRoot, id))).toBe(false);
+        expect(existsSync(join(homeRoot, aside))).toBe(true);
         expect(existsSync(join(homeRoot, `${id}${FAILED_RESTORE_SUFFIX}20260101-000000`))).toBe(true);
     });
 });

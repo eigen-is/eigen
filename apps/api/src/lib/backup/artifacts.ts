@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import type { BackupArtifact, BackupSafetyCopy } from '@workspace/lib/types/backup';
 import { ApiError } from '../core';
 import { readSidecar, sidecarPath } from './archive';
-import { backupsDirPath, getBackupsDir, parseArtifactName, parseSafetyCopyName, resolveHomeDir } from './paths';
+import { backupsDirPath, parseArtifactName, parseSafetyCopyName, resolveHomeDir } from './paths';
 
 // A safety copy holds a whole home; its size is a line in a list, not an accounting figure, so the
 // walk stops here and the number becomes a floor rather than taking a minute on a huge home.
@@ -109,7 +109,25 @@ export async function listSafetyCopies(ownerId: string): Promise<BackupSafetyCop
 export function resolveArtifact(name: string): { artifactPath: string; ownerId: string } {
     const parsed = parseArtifactName(name);
     if (!parsed) throw new ApiError(400, 'Not a backup artifact name');
-    return { artifactPath: path.join(getBackupsDir(), name), ownerId: parsed.ownerId };
+    // Reading or deleting an artifact never creates the backups folder; only a writer does.
+    return { artifactPath: path.join(backupsDirPath(), name), ownerId: parsed.ownerId };
+}
+
+// Lands an uploaded body under its final name without overwriting an artifact that appeared while
+// the body was streaming (another upload of the same name, or a job's own pack). A hard link fails
+// when the name is taken, which is the point. Not every filesystem has links — a ./backups bind
+// mount from CIFS/SMB rejects link outright — and there a check-then-rename is the best on offer.
+export function landUploadedArtifact(tempPath: string, artifactPath: string): void {
+    try {
+        fs.linkSync(tempPath, artifactPath);
+        return;
+    } catch (error) {
+        const code = error instanceof Error && 'code' in error ? error.code : null;
+        if (code === 'EEXIST') throw new ApiError(409, 'That artifact is already in the backups folder');
+        if (code !== 'EPERM' && code !== 'ENOSYS' && code !== 'EXDEV') throw error;
+    }
+    if (fs.existsSync(artifactPath)) throw new ApiError(409, 'That artifact is already in the backups folder');
+    fs.renameSync(tempPath, artifactPath);
 }
 
 export function deleteArtifact(artifactPath: string): void {

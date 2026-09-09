@@ -8,6 +8,7 @@ import { readArtifactManifest, writeSidecar } from '../lib/backup/archive';
 import {
     deleteArtifact,
     deleteSafetyCopy,
+    landUploadedArtifact,
     listArtifacts,
     listSafetyCopies,
     resolveArtifact,
@@ -137,14 +138,7 @@ export const backupRouter = new Elysia({ name: 'backup' })
                 const { size } = await writeTempWithHash(tempPath, request.body);
                 // Content-Length is the client's word for it; the bytes are what count.
                 if (size !== declared) throw new ApiError(400, 'Upload does not match its Content-Length');
-                // link, not rename: rename would silently overwrite an artifact that appeared while
-                // this body was streaming (another upload of the same name, or a job's own pack).
-                fs.linkSync(tempPath, artifactPath);
-            } catch (error) {
-                if (error instanceof Error && 'code' in error && error.code === 'EEXIST') {
-                    throw new ApiError(409, 'That artifact is already in the backups folder');
-                }
-                throw error;
+                landUploadedArtifact(tempPath, artifactPath);
             } finally {
                 fs.rmSync(tempPath, { force: true });
             }

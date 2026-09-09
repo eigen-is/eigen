@@ -15,11 +15,11 @@ import { setShutdownDrainDeadline } from './lib/sync';
 // not drained in time stays in pending_uploads and replays on the next boot.
 const SHUTDOWN_DRAIN_BUDGET_MS = 20_000;
 
-// A backup, verify or restore interrupted by a restart left a half-written staging folder behind and
-// nothing ever resumes it. Cleared before the first request can start a job of its own — and a
-// restore that died between moving the home aside and installing the archive is put back first.
-wipeBackupStaging();
+// A restore that died between moving the home aside and installing the archive left a note in its
+// staging folder; read it before the wipe takes the staging folders with it. Then clear them: a
+// backup, verify or restore interrupted by a restart leaves a half-written folder nothing resumes.
 recoverInterruptedRestores();
+wipeBackupStaging();
 
 const server = app.listen({
     port: 8000,

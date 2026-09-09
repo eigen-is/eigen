@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, setSystemTime, spyOn, test } from 'bun:test';
+import * as fs from 'node:fs';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BackupArtifact, BackupJob, BackupSafetyCopy } from '@workspace/lib/types/backup';
@@ -316,6 +317,9 @@ describe('Backup routes', () => {
         expect(names).toContain('seeded.png');
         expect(names).not.toContain('after-backup.png');
 
+        // The note the restore left before it moved the home aside is gone with the job.
+        expect(existsSync(join(getBackupsDir(), '.staging', job.id, 'restoring.json'))).toBe(false);
+
         const { safetyCopies } = await listArtifacts(target.id);
         const copy = safetyCopies.find((entry) => entry.kind === 'pre-restore');
         expect(copy).toBeDefined();
@@ -391,6 +395,25 @@ describe('Backup routes', () => {
         expect((await upload).status).toBe(409);
         expect(readFileSync(join(getBackupsDir(), name), 'utf8')).toBe('someone else was here');
         rmSync(join(getBackupsDir(), name));
+    });
+
+    // Not every filesystem has hard links: a ./backups bind mount from CIFS/SMB rejects link with
+    // EPERM, and an upload there must still land.
+    test('an upload lands on a filesystem without hard links', async () => {
+        const name = buildArtifactName(target.id, new Date('2020-05-06T03:04:05Z'));
+        const bytes = Uint8Array.from(readFileSync(await packTargetHome(name)));
+        const spy = spyOn(fs, 'linkSync').mockImplementation(() => {
+            throw Object.assign(new Error('link not supported'), { code: 'EPERM' });
+        });
+        try {
+            expect((await uploadRequest(name, bytes)).status).toBe(200);
+            expect(Buffer.compare(readFileSync(join(getBackupsDir(), name)), Buffer.from(bytes))).toBe(0);
+            // The name is taken now, and without links the fallback is what has to notice.
+            expect((await uploadRequest(name, bytes)).status).toBe(409);
+        } finally {
+            spy.mockRestore();
+        }
+        expect((await adminRequest(`/admin/backup/artifacts/${name}`, { method: 'DELETE' })).status).toBe(200);
     });
 
     test('lists an artifact with a missing or unreadable sidecar as unverified', async () => {
