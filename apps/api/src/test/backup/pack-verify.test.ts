@@ -62,6 +62,14 @@ async function sha256Of(filePath: string): Promise<string> {
     return hasher.digest('hex');
 }
 
+// Stage 3 samples the ten largest data.db files plus ten more; padding a doctored one past every
+// other data.db in the folder is what makes a test of it independent of what else the home holds.
+function padPastEveryDataDb(db: Database, manifest: BackupManifest): void {
+    const largest = Math.max(...manifest.entries.filter((e) => e.path.endsWith('/data.db')).map((e) => e.bytes));
+    db.run('CREATE TABLE filler (bytes BLOB)');
+    db.run(`INSERT INTO filler VALUES (zeroblob(${largest + 4096}))`);
+}
+
 // Re-states one manifest entry for the bytes now on disk, so a deliberate corruption is judged by
 // the stage under test instead of by stage 1's hashes.
 async function restateManifestEntry(folder: string, relPath: string): Promise<void> {
@@ -295,15 +303,11 @@ describe('Backup pack and verify', () => {
         const dir = await extractFresh('extract-empty-');
         const folder = join(dir, folderName);
         const target = join(folder, docDataDb);
-        // Padded past every other data.db in the folder, so the stage-3 sample (ten largest plus ten
-        // at random) is certain to reach it.
-        const largest = Math.max(...manifest.entries.filter((e) => e.path.endsWith('/data.db')).map((e) => e.bytes));
         const empty = new Database(target, { create: true, readwrite: true });
         empty.run('PRAGMA journal_mode = DELETE');
         empty.run('DROP TABLE IF EXISTS doc_updates');
         empty.run('DROP TABLE IF EXISTS doc_snapshots');
-        empty.run('CREATE TABLE filler (bytes BLOB)');
-        empty.run(`INSERT INTO filler VALUES (zeroblob(${largest + 4096}))`);
+        padPastEveryDataDb(empty, manifest);
         empty.run('VACUUM');
         empty.close();
 
@@ -326,6 +330,7 @@ describe('Backup pack and verify', () => {
         hollow.run('DELETE FROM doc_updates');
         hollow.run('DELETE FROM doc_snapshots');
         hollow.query('INSERT INTO doc_updates (updateData) VALUES (?)').run(Y.encodeStateAsUpdate(new Y.Doc()));
+        padPastEveryDataDb(hollow, manifest);
         hollow.close();
         await restateManifestEntry(folder, sheetDataDb);
 
