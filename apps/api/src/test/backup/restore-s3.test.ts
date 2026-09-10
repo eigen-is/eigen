@@ -35,6 +35,17 @@ function pendingUploadsOf(metadataPath: string): PendingRow[] {
     }
 }
 
+// The key a restored row landed on. A restore onto a remote mount rekeys every row it carries
+// (lib/backup/restore.ts), so the keys this file checks only exist once the restore has run.
+function keyOf(metadataPath: string, pathId: string): string {
+    const db = new Database(metadataPath, { readonly: true });
+    try {
+        return db.query<{ file: string }, [string]>('SELECT file FROM paths WHERE id = ?').get(pathId)!.file;
+    } finally {
+        db.close();
+    }
+}
+
 function fileKeysOf(metadataPath: string): string[] {
     const db = new Database(metadataPath, { readonly: true });
     try {
@@ -66,6 +77,7 @@ describe('Backup restore of an s3 mount', () => {
     let dataDbKey: string;
     let trashedKey: string;
     let versionKey: string;
+    let dataDbId: string;
 
     beforeAll(async () => {
         await getTestContext();
@@ -127,12 +139,8 @@ describe('Backup restore of an s3 mount', () => {
         await settleContainer(mount, doc.id);
         await mount.drainPendingUploads({ flushNow: true });
 
-        trashedKey = await mount.getStorageKey(binned.id);
-        versionKey = await mount.getStorageKey(savedVersion.id);
-        pngKey = await mount.getStorageKey(png.id);
-        textKey = await mount.getStorageKey(text.id);
-        dataDbKey = await mount.getStorageKey((await mount.getChildByName(doc.id, 'data.db'))!.id);
-        expect(await bytesInBucket(mount, pngKey)).not.toBeNull();
+        dataDbId = (await mount.getChildByName(doc.id, 'data.db'))!.id;
+        expect(await bytesInBucket(mount, await mount.getStorageKey(png.id))).not.toBeNull();
 
         const staging = mkdtempSync(join(TEST_DATA_DIR, 'restore-s3-backup-'));
         const manifest = await snapshotHome(home, staging);
@@ -148,6 +156,12 @@ describe('Backup restore of an s3 mount', () => {
         rmSync(join(BACKING, MOUNT_ID), { recursive: true, force: true });
 
         await restoreHome(artifact, userId, `restore-s3-${Date.now()}`);
+
+        trashedKey = keyOf(metadataPath, binned.id);
+        versionKey = keyOf(metadataPath, savedVersion.id);
+        pngKey = keyOf(metadataPath, png.id);
+        textKey = keyOf(metadataPath, text.id);
+        dataDbKey = keyOf(metadataPath, dataDbId);
     });
 
     afterAll(() => {

@@ -125,6 +125,20 @@ function safetyCopies(userId: string, suffix: string): string[] {
     return readdirSync(join(TEST_DATA_DIR, 'home')).filter((name) => name.startsWith(`${userId}${suffix}`));
 }
 
+// Where a flat-key mount stores one row's object after the restore: `paths.file`, which a restore
+// rewrites to a key of its own for every row it puts back (lib/backup/restore.ts).
+function storageKeyIn(ownerId: string, mountId: string, pathId: string): string {
+    const db = new Database(join(TEST_DATA_DIR, 'home', ownerId, 'mounts', mountId, 'metadata.db'), {
+        readwrite: true,
+        create: false,
+    });
+    try {
+        return db.query<{ file: string }, [string]>('SELECT file FROM paths WHERE id = ?').get(pathId)!.file;
+    } finally {
+        db.close();
+    }
+}
+
 // Read-write on purpose: a closed WAL database has no -shm beside it, and a readonly open cannot
 // create one (SQLITE_CANTOPEN) — which is exactly the shape of a home folder moved aside.
 function mailSubjectsIn(homeFolder: string): string[] {
@@ -295,9 +309,14 @@ describe('Backup restoreHome', () => {
         expect(trash.map((item) => item.name)).toEqual(['trashed.png']);
         // The archive holds a trashed file under `.trash/{id}.{ext}`; this mount stores it under its
         // flat key like any other file, so the bytes are checked where the mount will look for them
-        // (the download route refuses a trashed path, restore or no restore).
+        // (the download route refuses a trashed path, restore or no restore). That key is a fresh
+        // one: a restore never writes over an object the `.pre-restore-` copy still points at.
+        // The restore stamps its fresh keys with the same second it names the safety copy after.
+        const stamp = safetyCopies(target.id, PRE_RESTORE_SUFFIX)[0].slice(`${target.id}${PRE_RESTORE_SUFFIX}`.length);
+        const trashedKey = storageKeyIn(target.id, mountId, trashedFileId);
+        expect(trashedKey).toBe(`${trashedFileId}-r${stamp}.png`);
         const trashedBytes = await Bun.file(
-            join(TEST_DATA_DIR, 'home', target.id, 'mounts', mountId, 'data', `${trashedFileId}.png`),
+            join(TEST_DATA_DIR, 'home', target.id, 'mounts', mountId, 'data', trashedKey),
         ).arrayBuffer();
         expect(new Uint8Array(trashedBytes)).toEqual(TEST_PNG_BYTES);
         const versions = await assertJson<{ name: string }[]>(
