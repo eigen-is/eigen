@@ -108,6 +108,7 @@ machine, using Caddy as the only router so the application never hashes an owner
 | Yjs documents      | In-memory per server           | Editors connect to document owner's server   |
 | SSE connections    | Per-server                     | Each user connects to their home's server    |
 | Team membership    | Auth DB queries                | Shared auth DB handles this                  |
+| Backup / restore   | In-memory per server — the restoring mark in `apps/api/src/lib/home/get-home.ts` (which makes `getHome` refuse a home whose folder is being replaced) and the job map in `apps/api/src/lib/backup/jobs.ts` | Already home-local by design: a job runs on the server that owns the home, so the mark and the map stay in-process. The admin route's `getHome(ownerId)` is the one lookup that becomes a relay call |
 
 ### Home Locality Enforcement
 
