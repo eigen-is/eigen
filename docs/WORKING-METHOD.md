@@ -1,86 +1,28 @@
 # Working Method (multi-step changes)
 
-How feature work runs in this repo. This file is for the **orchestrating session and reviewers** —
-an implementer subagent working on one file doesn't need it, and briefs shouldn't ship it.
-For project context, architecture, and the critical rules, see [AGENTS.md](../AGENTS.md);
-for code style, see [CODE-STANDARDS.md](CODE-STANDARDS.md).
+How feature work runs in this repo. This file is for the **orchestrating session and reviewers**. An implementer subagent working on one file doesn't need it, and briefs shouldn't ship it. For project context, architecture, and the critical rules, see [AGENTS.md](../AGENTS.md); for code style, see [CODE-STANDARDS.md](CODE-STANDARDS.md).
 
-The standard way to run feature work, proven over the sheets xlsx-fidelity program (cycles 0–8)
-and the 2026-07 sheet-package cleanup program.
-Scale it to the job: a one-line fix needs none of this, a feature needs most of it, a program
-of changes needs all of it.
+The standard way to run feature work, proven over the sheets xlsx-fidelity program (cycles 0–8), the 2026-07 sheet-package cleanup program, and the 2026-09 backup program (seven units, four review shapes, one adversarial hunt). Scale it to the job: a one-line fix needs none of this, a feature needs most of it, a program of changes needs all of it.
 
-1. **Evidence first, spec sign-off before code** — start multi-step work with an audit pass on
-   real data (a gap matrix with measured counts, not assumptions), then a written spec with
-   explicit decision points, and get sign-off BEFORE implementing. Local-only artifacts (specs,
-   audits, verification screenshots) live in gitignored `docs/superpowers/`.
-2. **Own branch per unit of work** — merge `--no-ff` to main only when verified; never push
-   without an explicit go. If the main checkout is busy (another session), work from a git
-   worktree.
-3. **TDD, red first** — a failing test before the implementation, always. Tests pin the
-   CONTRACT (full round-trips, output-level assertions), never library internals; they are the
-   committed regression net.
-4. **Delegate to subagents with complete briefs — keep the controller context small.** The
-   orchestrating session plans, briefs, reviews results, and merges; implementation, review,
-   and browser verification each run in their OWN subagent so no single context drowns in file
-   dumps. Every brief includes: required reading ([AGENTS.md](../AGENTS.md) +
-   [CODE-STANDARDS.md](CODE-STANDARDS.md) + 2–3 sibling files in the target dir), exact file
-   pointers and encodings, scoped test commands, and the hard rules — stay strictly in scope,
-   diagnose failures by reading source (never blind-retry), never `git push`.
-5. **Independent review before merge** — a reviewer that did NOT write the code, in two
-   stages: spec compliance first, then quality (bugs, edge cases, conventions), held to the
-   [Review Standard](#review-standard) below.
-6. **Standards audit before merge** — a cold reviewer briefed with nothing but [AGENTS.md](../AGENTS.md),
-   [CODE-STANDARDS.md](CODE-STANDARDS.md) and the Review Standard below grades every touched non-test file
-   better / neutral / worse, with a finding per slip: comments (why only, one line, neighbour density,
-   pre-existing slop in a touched file), philosophy (no single-use helpers, no test-only options on
-   production signatures, no casts, `type` over `interface`, one source of truth), and broken windows
-   left behind. It asks a different question than step 5 — not "is this right" but "does every touched
-   file now meet the written bar" — and finds different things; a "worse" or "neutral with findings"
-   blocks the merge until fixed. The mechanical half of that bar is gated for free by
-   `bun scripts/check-standards.ts` in `bun run check`.
-7. **Real-world verification is mandatory** — drive the running dev app headless against REAL
-   documents with a throwaway test user, and read the screenshots: verdicts come from pixels
-   plus behavioral probes (scroll, click, reload-persistence), not from data-shape assertions
-   alone. Data pipelines verify as closed round-trips with feature counts; pure refactors are
-   pixel-gated (byte-identical screenshots before/after); files consumed by external software
-   (xlsx, ics, eml, …) get spot-opened in the real consumer. Full recipe — test-user
-   conventions, auth cookie injection, upload/convert API, HMR workarounds — in
-   [VERIFICATION.md](VERIFICATION.md).
-8. **Simplify pass after** — review the whole diff from four angles (reuse, simplification,
-   efficiency, altitude), apply what's worth it, and re-gate with the same tests/pixels.
-   Per-step reviews catch local issues; this pass catches cross-cutting drift.
-9. **Docs in the same cycle** — update the domain doc and any status/backlog before calling the
-   work done; record accepted drifts and out-of-scope decisions where the next session will
-   look for them.
-10. **Design changes go in small rounds** — one or two visual changes at a time, screenshots
-   first, a human verdict before merge.
+1. **Evidence first, spec sign-off before code.** Start multi-step work with an audit pass on real data (a gap matrix with measured counts, not assumptions), then a written spec with explicit decision points, and get sign-off BEFORE implementing. Local-only artifacts (specs, audits, verification screenshots, the ledger) live in gitignored `docs/superpowers/` and `.superpowers/`. A ruling that changes the spec mid-program dispatches its code task in the same breath: a spec line with no task behind it is drift, and only the final whole-branch review will notice.
+2. **Own branch per unit of work.** Merge `--no-ff` to an integration branch when the unit is verified, and to main only after an explicit go; never push without one. Units with disjoint files run in parallel git worktrees; the full `bun run check` runs once per merge, alone, because two suites on one machine produce timeout flakes that look like regressions.
+3. **TDD, red first.** A failing test before the implementation, always. Tests pin the CONTRACT (full round-trips, output-level assertions), never library internals; they are the committed regression net. A test that went green on the first run proves nothing until a deliberate mutation of the implementation makes it fail.
+4. **Delegate to subagents with complete briefs, and keep the controller context small.** The orchestrating session plans, briefs, reviews results, rules, and merges; implementation, review, and browser verification each run in their OWN subagent so no single context drowns in file dumps. Every brief includes: required reading ([AGENTS.md](../AGENTS.md) + [CODE-STANDARDS.md](CODE-STANDARDS.md) + 2–3 sibling files in the target dir), exact file pointers and encodings, scoped test commands, and the hard rules: stay strictly in scope, diagnose failures by reading source (never blind-retry), never `git push`, never `git stash` (stashes are shared across worktrees). Keep a ledger of every ruling the orchestrator makes on the owner's behalf, with what it costs if wrong; the closing message lists them all. A subagent's claim about code it did not write enters the ledger only after someone verified it in the code.
+5. **Independent review before merge.** A cold reviewer that did NOT write the code, held to the [Review Standard](#review-standard) below. Two questions, spec compliance and quality (bugs, edge cases, absences, conventions); one reviewer for a small unit, two for a unit whose contract is long enough that one reviewer would skim it. Every fix round ends with a scoped re-review of the fix diff only: fixes introduce regressions of their own, and in 2026-09 the scoped pass caught three that would otherwise have merged.
+6. **Standards audit before the branch merges.** A cold reviewer briefed with nothing but [AGENTS.md](../AGENTS.md), [CODE-STANDARDS.md](CODE-STANDARDS.md) and the Review Standard grades every touched non-test file better / neutral / worse, with a finding per slip: comments (why only, one line, neighbour density, pre-existing slop in a touched file), philosophy (no single-use helpers, no test-only options on production signatures, no casts, `type` over `interface`, one source of truth), and broken windows left behind. It asks a different question than step 5: not "is this right" but "does every touched file now meet the written bar". A "worse" or "neutral with findings" blocks the merge until fixed. Run it once over the whole branch, not once per unit: per-unit audits mostly re-litigate helper extraction while the real drift (a fact spelled in two files by two units) only shows across units. The mechanical half of the bar is gated for free by `bun scripts/check-standards.ts` in `bun run check`.
+7. **Real-world verification is mandatory.** Drive the running dev app headless against REAL documents with a throwaway test user, and read the screenshots: verdicts come from pixels plus behavioral probes (scroll, click, reload-persistence), not from data-shape assertions alone. Cover every storage backend the feature touches from the first pass (a local MinIO for S3, see `scripts/s3-local/`), because the API suite's fakes never preflight a CORS request, never idle a queue, and never surface a real client's error shape. Data pipelines verify as closed round-trips with feature counts; pure refactors are pixel-gated (byte-identical screenshots before/after); files consumed by external software (xlsx, ics, eml, tar, …) get spot-opened in the real consumer. The verification agent reports facts; the orchestrator rules on them. Full recipe (test-user conventions, auth cookie injection, upload/convert API, HMR workarounds) in [VERIFICATION.md](VERIFICATION.md).
+8. **Whole-branch review, then one fix wave.** After the last unit, two cold reviewers read the whole diff split by area (backend seams and locks; frontend, tests, docs, deploy) with the ledger's deferred minors to triage. Their findings go into ONE fix dispatch and ONE scoped re-review; residuals surface to the owner. Per-unit reviews catch local issues; this pass catches cross-cutting drift, a spec ruling nobody implemented, and a ledger entry that was never true.
+9. **Cold adversarial hunt before the merge ask.** Dispatch the most capable model available with no context beyond the repo, the branch, the ops doc and one sentence: "something in this mechanism is broken; find it". No narrative, no findings history, no rulings. A reviewer told that a bug exists searches instead of grading. In 2026-09 this found a cross-home path traversal and a crash-recovery hole after some thirty ordinary review passes had cleared the same code. Its findings get one fix round and one scoped re-review.
+10. **Simplify pass after.** Review the whole diff from four angles (reuse, simplification, efficiency, altitude), apply what's worth it, and re-gate with the same tests/pixels.
+11. **Docs in the same cycle.** Update the domain doc and any status/backlog before calling the work done; record accepted drifts and out-of-scope decisions where the next session will look for them. A docs unit gets its own cold review that checks every claim against the code: an ops doc that states one false thing an operator would act on is worse than no doc.
+12. **Design changes go in small rounds.** One or two visual changes at a time, screenshots first, a human verdict before merge.
 
 ## Review Standard
 
-Applies to every reviewer — subagent, external LLM, or a developer driving one. The goal of review
-is code that is clean, easy to read and understand, simple, and stable — and consistent: in
-patterns, naming, comment density, how solutions are implemented, and how the UX behaves, the
-change must be indistinguishable from the code around it.
+Applies to every reviewer: subagent, external LLM, or a developer driving one. The goal of review is code that is clean, easy to read and understand, simple, and stable, and consistent: in patterns, naming, comment density, how solutions are implemented, and how the UX behaves, the change must be indistinguishable from the code around it.
 
-- **Brief reviewers cold and unopinionated.** A reviewer reads [AGENTS.md](../AGENTS.md) and
-  [CODE-STANDARDS.md](CODE-STANDARDS.md) itself and judges against those written standards,
-  not personal taste. Give it the task and the files — never the author's narrative of what was
-  already "addressed" or "accepted": inherited framing is how half-fixed problems survive review.
-- **Review the blast radius, not the diff.** Trace the changed behavior through code the diff did
-  not touch — other apps' entry points, SSE handlers, callers and callees of every changed
-  function. Most escaped bugs live in files the diff never opened.
-- **Hunt absences, not only mistakes.** A diff review can only judge code that exists. For every
-  new seam ask: every cache → who invalidates it (including SSE)? every route → what validates
-  and bounds its input, and before which side effects? every fan-out or loop → what bounds it?
-  every check-then-create → what closes the race? every "fixed" class of bug → are ALL its
-  instances fixed, or only the one that was reviewed?
-- **Every touched file comes out better.** Fix broken windows. Remove dead code and duplication.
-  Replace hand-rolled logic with the shared components and helpers
-  ([SHARED-PRIMITIVES.md](SHARED-PRIMITIVES.md)). No over-engineering. Types come from
-  `packages/lib/src/types/[domain].ts` — never redefined, never declared at the wrong layer.
-- **Signal over volume, both ways.** Report only genuinely real findings — "clean" is a valid
-  verdict — but before merge run one recall-biased pass with the absence checklist above: a cold
-  reviewer that over-reports and gets pruned beats a polite one that misses. (2026-07: an outside
-  reviewer found ten real issues on a twice-reviewed branch; nearly all were absences, half-fixed
-  classes, or bugs outside the diff's blast radius.)
+- **Brief reviewers cold and unopinionated.** A reviewer reads [AGENTS.md](../AGENTS.md) and [CODE-STANDARDS.md](CODE-STANDARDS.md) itself and judges against those written standards, not personal taste. Give it the task and the files, never the author's narrative of what was already "addressed" or "accepted": inherited framing is how half-fixed problems survive review. Never tell a reviewer what not to flag; adjudicate its findings afterwards.
+- **Review the blast radius, not the diff.** Trace the changed behavior through code the diff did not touch: other apps' entry points, SSE handlers, callers and callees of every changed function, the deploy files. Most escaped bugs live in files the diff never opened.
+- **Hunt absences, not only mistakes.** A diff review can only judge code that exists. For every new seam ask: every cache, who invalidates it (including SSE)? every route, what validates and bounds its input, and before which side effects? every fan-out or loop, what bounds it? every check-then-act, what closes the race? every path derived from user data, what contains it? every "fixed" class of bug, are ALL its instances fixed, or only the one that was reviewed? every promise in the docs, which line of code keeps it?
+- **Every touched file comes out better.** Fix broken windows. Remove dead code and duplication. Replace hand-rolled logic with the shared components and helpers ([SHARED-PRIMITIVES.md](SHARED-PRIMITIVES.md)). No over-engineering. Types come from `packages/lib/src/types/[domain].ts`, never redefined, never declared at the wrong layer.
+- **Signal over volume, both ways.** Report only genuinely real findings ("clean" is a valid verdict), but before merge run one recall-biased pass with the absence checklist above: a cold reviewer that over-reports and gets pruned beats a polite one that misses. (2026-07: an outside reviewer found ten real issues on a twice-reviewed branch; nearly all were absences, half-fixed classes, or bugs outside the diff's blast radius. 2026-09: a cold hunt found the two worst bugs of a program after every per-unit review had passed.)
