@@ -20,6 +20,28 @@ function isEntry(value: unknown): boolean {
     );
 }
 
+// A mount id rides in the manifest and comes back as a path segment under the home folder
+// (`mounts/{id}`) when a restore materializes it, so an archive from outside is held to the class a
+// real one uses (`default`, or eight hex characters): no separator, no `.` or `..`, no control
+// character, never empty. Without this a manifest could name `../../{someone else}/mounts/{id}` and
+// send the restore into another user's live home.
+function isMountSummary(value: unknown): boolean {
+    return (
+        typeof value === 'object' &&
+        value !== null &&
+        'id' in value &&
+        typeof value.id === 'string' &&
+        BACKUP_MOUNT_ID.test(value.id) &&
+        'storageType' in value &&
+        typeof value.storageType === 'string' &&
+        isStorageType(value.storageType) &&
+        'files' in value &&
+        typeof value.files === 'number' &&
+        'bytes' in value &&
+        typeof value.bytes === 'number'
+    );
+}
+
 function isManifest(value: unknown): value is BackupManifest {
     return (
         typeof value === 'object' &&
@@ -45,6 +67,7 @@ function isManifest(value: unknown): value is BackupManifest {
         value.counts !== null &&
         'mounts' in value &&
         Array.isArray(value.mounts) &&
+        value.mounts.every(isMountSummary) &&
         'entries' in value &&
         Array.isArray(value.entries) &&
         value.entries.every(isEntry)
@@ -168,6 +191,9 @@ export function parseHomeMountSettings(text: string): Record<string, BackupMount
     if (!('mounts' in value) || typeof value.mounts !== 'object' || value.mounts === null) return {};
     const mounts: Record<string, BackupMountSettings> = {};
     for (const [id, entry] of Object.entries(value.mounts)) {
+        // The caller joins the id onto a folder path, so an id that is not one this server writes
+        // is left out along with everything else it claims (see isMountSummary).
+        if (!BACKUP_MOUNT_ID.test(id)) continue;
         if (typeof entry !== 'object' || entry === null) continue;
         if (!('storageType' in entry) || typeof entry.storageType !== 'string' || !isStorageType(entry.storageType)) {
             continue;
@@ -187,6 +213,10 @@ export const BACKUP_ARTIFACT_EXTENSION = '.tar.zst';
 // route resolves, so `/`, `..` and control characters are out of both by construction.
 export const BACKUP_OWNER_ID_CHARS = '[A-Za-z0-9_-]+';
 export const BACKUP_OWNER_ID = new RegExp(`^${BACKUP_OWNER_ID_CHARS}$`);
+
+// A mount id becomes a path segment under a home folder on both sides of a backup, for the same
+// reason and with the same class.
+export const BACKUP_MOUNT_ID = BACKUP_OWNER_ID;
 
 // The timestamp shape in the backups folder as named groups: artifact names and the two safety
 // copies a restore leaves beside a home folder all read the same.

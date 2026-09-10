@@ -7,7 +7,7 @@ import { parseBackupArtifactName, parseHomeMountSettings } from '@workspace/lib/
 import { ApiError, PATHS } from '../core';
 import { createMountStorage } from '../mount/helpers';
 import { readSidecar, sidecarPath } from './archive';
-import { backupsDirPath, parseSafetyCopyName, resolveHomeDir } from './paths';
+import { backupsDirPath, parseSafetyCopyName, resolveHomeDir, resolveMountDir } from './paths';
 import { flatStorageKey } from './snapshot-mount';
 
 // A safety copy holds a whole home; its size is a line in a list, not an accounting figure, so the
@@ -212,9 +212,11 @@ async function deleteRemoteObjects(folder: string, homeDir: string): Promise<voi
     let failures = 0;
     for (const [id, mount] of Object.entries(mounts)) {
         if (mount.storageType !== 's3') continue;
-        const mountDir = path.join(folder, PATHS.DRIVE.ROOT, id);
-        const copyDb = path.join(mountDir, PATHS.DRIVE.METADATA_DB);
-        if (!fs.existsSync(copyDb)) continue;
+        // settings.json came from an archive, so its keys are untrusted: a mount id that resolves
+        // outside this folder would have this reading — and deleting the objects of — another home.
+        const mountDir = resolveMountDir(folder, id);
+        const copyDb = mountDir && path.join(mountDir, PATHS.DRIVE.METADATA_DB);
+        if (!copyDb || !fs.existsSync(copyDb)) continue;
         // Never the server's current default: this folder's own credentials are the only ones that
         // name the bucket its objects are in.
         if (!mount.s3Config) {
@@ -223,11 +225,15 @@ async function deleteRemoteObjects(folder: string, homeDir: string): Promise<voi
         }
         // Nothing to hold the copy's keys against: the mount is gone from the live home, and an
         // object it may still hold is not this delete's to judge.
-        if (!fs.existsSync(path.join(homeDir, PATHS.DRIVE.ROOT, id, PATHS.DRIVE.METADATA_DB))) continue;
+        const liveMountDir = resolveMountDir(homeDir, id);
+        if (!liveMountDir || !fs.existsSync(path.join(liveMountDir, PATHS.DRIVE.METADATA_DB))) continue;
         const referenced = new Set<string>();
         for (const dir of referencing) {
-            const metadataPath = path.join(dir, PATHS.DRIVE.ROOT, id, PATHS.DRIVE.METADATA_DB);
-            if (fs.existsSync(metadataPath)) for (const key of storageKeysIn(metadataPath)) referenced.add(key);
+            const referencingMount = resolveMountDir(dir, id);
+            const metadataPath = referencingMount && path.join(referencingMount, PATHS.DRIVE.METADATA_DB);
+            if (metadataPath && fs.existsSync(metadataPath)) {
+                for (const key of storageKeysIn(metadataPath)) referenced.add(key);
+            }
         }
 
         const storage = createMountStorage(

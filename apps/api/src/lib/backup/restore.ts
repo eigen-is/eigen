@@ -40,6 +40,7 @@ import {
     getBackupsDir,
     parseSafetyCopyName,
     resolveHomeDir,
+    resolveMountDir,
     wipeBackupStagingDir,
 } from './paths';
 import { HOME_DATABASES, type SnapshotProgress } from './snapshot-home';
@@ -140,7 +141,11 @@ function materializeMount(
     summary: BackupManifest['mounts'][number],
     stamp: string,
 ): VersionedDatabase[] {
-    const mountDir = path.join(homeDir, PATHS.DRIVE.ROOT, summary.id);
+    // The id comes out of the archive's manifest. The parser holds it to the class a real mount id
+    // uses, and this is the second lock on the same door: whatever it says, the folder it resolves
+    // to has to be inside the home being restored.
+    const mountDir = resolveMountDir(homeDir, summary.id);
+    if (!mountDir) throw new ApiError(400, `The archive names a mount (${summary.id}) that is not in this home`);
     const dataDir = path.join(mountDir, PATHS.DRIVE.DATA_DIR);
     const metadataPath = path.join(mountDir, PATHS.DRIVE.METADATA_DB);
     if (!fs.existsSync(metadataPath)) {
@@ -347,10 +352,9 @@ function checkRestoredDatabases(homeDir: string, mountIds: string[], containerDa
         config,
     }));
     for (const mountId of mountIds) {
-        targets.push({
-            filePath: path.join(homeDir, PATHS.DRIVE.ROOT, mountId, PATHS.DRIVE.METADATA_DB),
-            config: MOUNT_DB_CONFIG,
-        });
+        const mountDir = resolveMountDir(homeDir, mountId);
+        if (!mountDir) throw new ApiError(400, `${mountId} is not a mount of this home`);
+        targets.push({ filePath: path.join(mountDir, PATHS.DRIVE.METADATA_DB), config: MOUNT_DB_CONFIG });
     }
     // An s3 mount's container databases are staged copies on their way to the bucket, not files at a
     // knowable path; verify read every one of them in the folder this restore unpacked minutes ago.
@@ -388,8 +392,10 @@ function checkRestoredDatabases(homeDir: string, mountIds: string[], containerDa
 function containerDatabasesIn(homeDir: string, mountIds: string[]): VersionedDatabase[] {
     const found: VersionedDatabase[] = [];
     for (const mountId of mountIds) {
-        const dataDir = path.join(homeDir, PATHS.DRIVE.ROOT, mountId, PATHS.DRIVE.DATA_DIR);
-        const metadataPath = path.join(homeDir, PATHS.DRIVE.ROOT, mountId, PATHS.DRIVE.METADATA_DB);
+        const mountDir = resolveMountDir(homeDir, mountId);
+        if (!mountDir) throw new ApiError(400, `${mountId} is not a mount of this home`);
+        const dataDir = path.join(mountDir, PATHS.DRIVE.DATA_DIR);
+        const metadataPath = path.join(mountDir, PATHS.DRIVE.METADATA_DB);
         if (!fs.existsSync(metadataPath)) continue;
         const db = new Database(metadataPath, { readwrite: true, create: false });
         try {
