@@ -96,9 +96,11 @@ bun run --sequential --filter './apps/*' build
 ### 5. Start Eigen
 
 ```bash
-mkdir -p data && chown -R 1000:1000 data
+mkdir -p data backups && chown -R 1000:1000 data backups
 docker compose --env-file .env.production up -d
 ```
+
+Both folders are bind mounts and the API runs as uid 1000, so create them first: a mount source Docker has to create comes out owned by root, and the API can then write neither its data nor its backups.
 
 Five containers start:
 
@@ -226,6 +228,10 @@ Restore an archive with `restore.sh`. It stops `eigen-api`, moves the current `d
 ```bash
 ./scripts/restore.sh ./backups/eigen-<timestamp>.tar.gz
 ```
+
+**Per-home backups** are the other half, and they need no downtime: an admin backs up, verifies, downloads and restores one user or one team from the Backup section of the admin Users and Teams detail panes. Those archives land in the same `./backups/` folder (`EIGEN_BACKUPS_DIR=/app/backups` inside the container, bind-mounted from the host), so keep an eye on its size. An archive holds every file, every mail and the mount credentials, so treat one like `.env.production`. Full operator guide: [docs/BACKUP.md](../docs/BACKUP.md).
+
+`backup.sh` stays the whole-server backup for now: the per-home archives do not cover `users3.db`, `eigen.db`, `waitlist.db`, the server config or `.env.production`.
 
 ### Demo instance
 

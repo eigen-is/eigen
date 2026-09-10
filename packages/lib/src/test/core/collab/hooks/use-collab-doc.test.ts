@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, jest, mock, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import type * as Y from 'yjs';
-import { COLLAB_STORAGE_UNAVAILABLE_CLOSE } from '../../../../constants/collab';
+import { COLLAB_HOME_REPLACED_CLOSE, COLLAB_STORAGE_UNAVAILABLE_CLOSE } from '../../../../constants/collab';
 import type { CollabDoc, UseCollabDocOptions } from '../../../../core/collab/hooks/use-collab-doc';
 
 // The hook news up a WebsocketProvider itself, so the test swaps the module for a fake that never
@@ -47,7 +47,10 @@ class FakeProvider {
     }
 
     // The hook drives these on a storage-unavailable close; the fake stays closed either way.
-    disconnect() {}
+    disconnected = false;
+    disconnect() {
+        this.disconnected = true;
+    }
     connect() {}
 
     open() {
@@ -277,6 +280,30 @@ describe('useCollabDoc connection state', () => {
             h.provider.open();
             h.provider.finishSync();
         });
+        expect(h.state.storageUnavailable).toBe(false);
+    });
+
+    test('a home replaced by a restore reloads the page instead of syncing back', () => {
+        active = mount(OPTIONS);
+        const h = active;
+        act(() => {
+            h.provider.open();
+            h.provider.finishSync();
+        });
+        const reload = jest.fn();
+        // happy-dom's Location.reload navigates; the hook only has to call it.
+        Object.defineProperty(window.location, 'reload', { value: reload, configurable: true });
+
+        // An edit this tab never got to send: the guard is armed, and it must not prompt in front of
+        // the reload — those edits belong to a document the server no longer has.
+        act(() => h.doc.getMap('items').set('unsent', 1));
+        expect(h.state.unsyncedEdits).toBe(false);
+        act(() => h.provider.close(COLLAB_HOME_REPLACED_CLOSE));
+
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(h.provider.disconnected).toBe(true);
+        expect(h.state.unsyncedEdits).toBe(false);
+        // Not a storage outage and not a plain drop: nothing retries, nothing syncs this tab back.
         expect(h.state.storageUnavailable).toBe(false);
     });
 

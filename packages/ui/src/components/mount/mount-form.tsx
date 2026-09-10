@@ -1,3 +1,4 @@
+import { STORAGE_TYPE_LABELS } from '@workspace/lib/constants/mount';
 import { EMPTY_S3, isS3ConfigValid } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { S3CheckResult, S3HardenResult } from '@workspace/lib/types/settings';
@@ -92,9 +93,11 @@ export function MountForm({
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="local">Local (full names)</SelectItem>
-                        <SelectItem value="local-key">Local (ID-based)</SelectItem>
-                        <SelectItem value="s3">S3 Bucket</SelectItem>
+                        {Object.entries(STORAGE_TYPE_LABELS).map(([value, label]) => (
+                            <SelectItem key={value} value={value}>
+                                {label}
+                            </SelectItem>
+                        ))}
                     </SelectContent>
                 </Select>
             </div>

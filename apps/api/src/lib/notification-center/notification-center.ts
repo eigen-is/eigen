@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Notification, NotificationPersistInput } from '@workspace/lib/types/notification';
 import { desc, eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
-import type { ManagedDatabase } from '../core';
+import { type ManagedDatabase, PATHS } from '../core';
 import type { Home } from '../home';
 import { NOTIFICATION_CENTER_DB_CONFIG } from './db-config';
 import * as schema from './schema';
@@ -34,10 +34,7 @@ export class NotificationCenter {
     }
 
     async init(): Promise<void> {
-        this.managedDb = await this.home.getLocalDatabase(
-            NOTIFICATION_CENTER_DB_CONFIG,
-            'eigen.notifications/notifications.db',
-        );
+        this.managedDb = await this.home.getLocalDatabase(NOTIFICATION_CENTER_DB_CONFIG, PATHS.NOTIFICATIONS.DB);
         this.db = this.managedDb.db;
     }
 

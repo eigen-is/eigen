@@ -4,6 +4,7 @@ import type { MountConfig, S3Config } from '@workspace/lib/types';
 import type { BunFile } from 'bun';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
 import type Drive from '../lib/drive/drive';
+import type { Home } from '../lib/home';
 import { Mount } from '../lib/mount/mount';
 import { UPLOAD_PUT_TIMEOUT_MS } from '../lib/mount/upload-queue';
 import type { StorageBackend, StorageFile } from '../lib/storage';
@@ -38,6 +39,9 @@ export class FaultStorage implements StorageBackend {
     // Objects whose GET fails: read() throws for these keys. Targets ONE object (e.g. a container's
     // comments.db) where a fail-next counter would hit whichever request happens to come first.
     readonly failReadKeys = new Set<string>();
+    // The `code` an injected read failure carries. Bun's S3Error puts the actionable part there and
+    // leaves message as "an unexpected error has occurred" — the shape a backup has to survive.
+    readErrorCode: string | undefined = undefined;
     readonly parked: ParkedWrite[] = [];
     private hungResolvers: Array<() => void> = [];
     private parkWaiters: Array<() => void> = [];
@@ -88,7 +92,10 @@ export class FaultStorage implements StorageBackend {
     }
 
     read(key: string): StorageFile {
-        if (this.failReadKeys.has(key)) throw new Error(`injected read failure (503) for ${key}`);
+        if (this.failReadKeys.has(key)) {
+            if (!this.readErrorCode) throw new Error(`injected read failure (503) for ${key}`);
+            throw Object.assign(new Error('an unexpected error has occurred'), { code: this.readErrorCode });
+        }
         return this.inner.read(key);
     }
     async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
@@ -176,6 +183,23 @@ export function createGetLocalDatabase(baseDir: string) {
 export function createFaultMount(ownerId: string, baseDir: string, id: string): { mount: Mount; fault: FaultStorage } {
     const mount = new Mount(ownerId, baseDir, createS3MountConfig(id), createGetLocalDatabase(baseDir));
     const fault = new FaultStorage(new LocalStorage(join(baseDir, `backing-${id}`)));
+    mount.storage = fault;
+    return { mount, fault };
+}
+
+// The same s3-over-FaultStorage mount, but rooted in a live HOME: its metadata.db goes through the
+// home's database cache exactly as Drive.addMount wires a real mount, and the fake bucket sits in
+// `backingRoot`, outside the home. Both matter to the backup suites — snapshotHome stages every
+// mount's metadata.db through home.getLocalDatabase, so a mount rooted elsewhere would be archived
+// beside a freshly created empty one, and a `.db` object inside the home would trip its
+// unlisted-database guard. The caller still owns init() and registerFaultMount.
+export function createHomeFaultMount(
+    home: Home,
+    id: string,
+    backingRoot: string,
+): { mount: Mount; fault: FaultStorage } {
+    const mount = new Mount(home.user.id, home.homeDir, createS3MountConfig(id), home.getLocalDatabase.bind(home));
+    const fault = new FaultStorage(new LocalStorage(join(backingRoot, id)));
     mount.storage = fault;
     return { mount, fault };
 }

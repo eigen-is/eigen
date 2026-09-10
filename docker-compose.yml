@@ -34,6 +34,10 @@ services:
     # docker-compose.host-api.yml overlay (binds 127.0.0.1:${EIGEN_API_BIND_PORT:-8000}).
     volumes:
       - ./data:/app/data
+      # Backup artifacts live outside data/ so a wipe of the data directory cannot take them with
+      # it — the same ./backups the offline scripts/backup.sh writes to. The API creates the folder
+      # only when the first backup runs; Docker creates the mount point itself.
+      - ./backups:/app/backups
     # Lets the API reach a host-side mail server via SMTP_HOST=host.docker.internal in
     # scenarios where the bundled postfix is off. Harmless when bundled postfix is on.
     extra_hosts:
@@ -45,6 +49,7 @@ services:
       # which would make `bun install` skip devDependencies. Dev overrides this back (dev compose).
       NODE_ENV: production
       EIGEN_DATA_ROOT: /app/data
+      EIGEN_BACKUPS_DIR: /app/backups
       # Demo-instance mode (hourly wipe + reseed via scripts/demo-reset.sh). Unset on real
       # instances → 0, so the demo entry route + auth guards stay inert.
       EIGEN_DEMO: ${EIGEN_DEMO:-0}

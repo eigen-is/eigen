@@ -17,10 +17,10 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import type { AsyncSingleton } from '../../utils/singleton';
 import { getServerSettings } from '../config/server-settings';
-import { ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType } from '../core';
+import { ApiError, type DatabaseConfig, type ManagedDatabase, PATHS, type SchemaType } from '../core';
 import { FileHistory } from '../drive/history';
 import { deleteThumbnail } from '../shared/thumbnails';
-import { LocalStorage, S3Storage, type StorageBackend, type StorageFile, wrapWithStorageFault } from '../storage';
+import type { StorageBackend, StorageFile } from '../storage';
 import type { RetentionPolicy } from '../versioning/retention';
 import * as snapshot from '../versioning/snapshot';
 import { type ContentExtractor, ContentReindexQueue } from './content-reindex-queue';
@@ -30,7 +30,9 @@ import * as documentDb from './document-db';
 import {
     ancestorIds,
     buildStorageKey,
+    buildUploadDestinationKey,
     CONTROL_CHARS,
+    createMountStorage,
     docContainerDescendantIds,
     isReservedName,
     rethrowDuplicateActiveName,
@@ -53,7 +55,8 @@ export class Mount {
 
     private baseDir: string;
     storage: StorageBackend; // internal — used by mount/*.ts + versioning/snapshot.ts
-    // internal — used by mount/*.ts + versioning/snapshot.ts + drive/history.ts (constructor-injected)
+    // internal — used by mount/*.ts + versioning/snapshot.ts + lib/backup + drive/history.ts
+    // (the last one constructor-injected)
     db!: BunSQLiteDatabase<typeof schema>;
     private getLocalDatabase: LocalDatabaseGetter;
     private ownerId: string;
@@ -67,7 +70,8 @@ export class Mount {
 
     // Write-behind upload queue (Phase 1b) — only for isRemote (s3) mounts; undefined otherwise.
     uploadQueue?: UploadQueue; // internal — used by mount/*.ts + versioning/snapshot.ts
-    // Set in the constructor's s3 branch, where s3Config is known present; undefined for local mounts.
+    // Set for an s3 mount only — see buildUploadDestinationKey, which is also the gate Mount.init
+    // stands the upload queue up behind.
     private readonly uploadDestinationKey?: string;
 
     // Per-mount content reindexer — built in init() only when an extractor is injected (the
@@ -91,27 +95,12 @@ export class Mount {
         this.ownerId = ownerId;
         this.id = config.id;
         this.config = config;
-        this.baseDir = path.join(baseDir, 'mounts', config.id);
+        this.baseDir = path.join(baseDir, PATHS.DRIVE.ROOT, config.id);
         this.getLocalDatabase = getLocalDatabase;
         this.extractContent = extractContent;
 
-        let backend: StorageBackend;
-        if (config.storageType === 'local-key' || config.storageType === 'local') {
-            // LocalStorage is a strict superset of the flat-key backend; mount.ts gates all
-            // mkdir/rename/deleteDir calls behind isPathBased, so the extra methods are inert for local-key.
-            backend = new LocalStorage(this.baseDir);
-        } else if (config.storageType === 's3') {
-            if (!config.s3Config)
-                throw new Error(
-                    `Mount '${config.id}' uses S3 storage but no S3 configuration found. Configure S3 in admin settings first.`,
-                );
-            backend = new S3Storage(config.s3Config);
-            this.uploadDestinationKey = `${config.s3Config.endpoint}/${config.s3Config.bucket}`;
-        } else {
-            throw new Error(`Storage type ${config.storageType} not yet supported`);
-        }
-        // Passes the backend through untouched unless EIGEN_STORAGE_FAULT is set (never in production).
-        this.storage = wrapWithStorageFault(backend);
+        this.storage = createMountStorage(config, this.baseDir);
+        this.uploadDestinationKey = buildUploadDestinationKey(config);
     }
 
     // Read live off config so a settings rename (TeamHome.updateMount) shows up without rebuilding.
@@ -128,59 +117,65 @@ export class Mount {
     }
 
     get thumbsDir(): string {
-        return path.join(this.baseDir, 'thumbs');
+        return path.join(this.baseDir, PATHS.DRIVE.THUMBS_DIR);
     }
 
     get tmpDir(): string {
-        return path.join(this.baseDir, 'tmp');
+        return path.join(this.baseDir, PATHS.DRIVE.TMP_DIR);
     }
 
     // Frozen VACUUM INTO upload payloads (Phase 1b) live here, NOT in tmpDir — the
     // cleanupStaleFiles sweep must never purge a staged copy whose PUT hasn't acked yet
     // (invariant 2). Only used by isRemote mounts.
     get stagingDir(): string {
-        return path.join(this.baseDir, 'staging');
+        return path.join(this.baseDir, PATHS.DRIVE.STAGING_DIR);
     }
 
     get previewsDir(): string {
-        return path.join(this.tmpDir, 'previews');
+        return path.join(this.tmpDir, PATHS.DRIVE.PREVIEWS_DIR);
     }
 
     get trashDir(): string {
         return path.join(this.dataDir, '.trash');
     }
 
-    async init(): Promise<void> {
-        if (!fs.existsSync(this.baseDir)) {
-            fs.mkdirSync(this.baseDir, { recursive: true });
-        }
-        if (!fs.existsSync(this.tmpDir)) {
-            fs.mkdirSync(this.tmpDir, { recursive: true });
-        }
-        if (!fs.existsSync(this.thumbsDir)) {
-            fs.mkdirSync(this.thumbsDir, { recursive: true });
-        }
-        if (!fs.existsSync(this.previewsDir)) {
-            fs.mkdirSync(this.previewsDir, { recursive: true });
-        }
-        if (this.isRemote && !fs.existsSync(this.stagingDir)) {
-            fs.mkdirSync(this.stagingDir, { recursive: true });
-        }
-        if (this.isPathBased && !fs.existsSync(this.trashDir)) {
-            fs.mkdirSync(this.trashDir, { recursive: true });
+    // `passive` opens a mount the home does not serve, for reading only: lib/backup archives a
+    // DISABLED mount through the same code path a live one takes, and must not turn it back on
+    // while doing so. It creates no folders, writes no root row, and starts none of the queues,
+    // sweeps, purges or prunes below — it takes the metadata.db handle (the Home's cached one) and
+    // builds the upload queue OBJECT, which is what answers "is there a staged copy newer than the
+    // stored object" (pendingStagedCopy, the freshest-first read every archive relies on). Only
+    // reconcile() uploads, and that stays behind the gate.
+    async init(opts?: { passive?: boolean }): Promise<void> {
+        const passive = opts?.passive === true;
+        if (!passive) {
+            if (!fs.existsSync(this.baseDir)) {
+                fs.mkdirSync(this.baseDir, { recursive: true });
+            }
+            if (!fs.existsSync(this.tmpDir)) {
+                fs.mkdirSync(this.tmpDir, { recursive: true });
+            }
+            if (!fs.existsSync(this.thumbsDir)) {
+                fs.mkdirSync(this.thumbsDir, { recursive: true });
+            }
+            if (!fs.existsSync(this.previewsDir)) {
+                fs.mkdirSync(this.previewsDir, { recursive: true });
+            }
+            if (this.isRemote && !fs.existsSync(this.stagingDir)) {
+                fs.mkdirSync(this.stagingDir, { recursive: true });
+            }
+            if (this.isPathBased && !fs.existsSync(this.trashDir)) {
+                fs.mkdirSync(this.trashDir, { recursive: true });
+            }
         }
 
-        const dbPath = path.join('mounts', this.config.id, 'metadata.db');
+        const dbPath = path.join(PATHS.DRIVE.ROOT, this.config.id, PATHS.DRIVE.METADATA_DB);
         const managedDb = await this.getLocalDatabase(MOUNT_DB_CONFIG, dbPath);
         this.db = managedDb.db;
         this.history = new FileHistory(this.db, this.ownerId, this.id);
 
-        await this.ensureRootFolder();
-
-        // Stand up the upload queue and replay persisted pending uploads BEFORE the tmp sweep
-        // (invariant 5) so a restart or home-reopen resumes them; staging lives in stagingDir, which
-        // the sweep never touches. The destination key groups uploads to the same provider onto one
-        // concurrency limiter, so a slow bucket can't block uploads to other buckets.
+        // The destination key groups uploads to the same provider onto one concurrency limiter, so
+        // a slow bucket can't block uploads to other buckets.
         if (this.uploadDestinationKey) {
             this.uploadQueue = new UploadQueue({
                 db: this.db,
@@ -189,8 +184,15 @@ export class Mount {
                 destinationKey: this.uploadDestinationKey,
                 label: this.id,
             });
-            this.uploadQueue.reconcile();
         }
+
+        if (passive) return;
+
+        await this.ensureRootFolder();
+
+        // Replay persisted pending uploads BEFORE the tmp sweep (invariant 5) so a restart or
+        // home-reopen resumes them; staging lives in stagingDir, which the sweep never touches.
+        this.uploadQueue?.reconcile();
 
         // Stand up the content reindexer and kick it to drain rows left dirty by the v6 backfill or
         // an unclean shutdown (the dirty bit is the durable queue — same replay-on-open as uploads).
@@ -223,7 +225,7 @@ export class Mount {
     }
 
     get dataDir(): string {
-        return path.join(this.baseDir, 'data');
+        return path.join(this.baseDir, PATHS.DRIVE.DATA_DIR);
     }
 
     private cleanupStaleFiles(dir: string, maxAgeMs: number, preserveLivePathIds = false): void {
@@ -591,7 +593,8 @@ export class Mount {
         return this.createFile(parentId, name, mimeType, 0, undefined);
     }
 
-    // internal — used by mount/*.ts + versioning/snapshot.ts + Drive.withPathLock (ChatRoom.init)
+    // internal — used by mount/*.ts + versioning/snapshot.ts + lib/backup + Drive.withPathLock
+    // (ChatRoom.init)
     async withPathLock<T>(pathId: string, fn: () => Promise<T>): Promise<T> {
         while (this.pathLocks.has(pathId)) {
             await this.pathLocks.get(pathId);
@@ -847,10 +850,17 @@ export class Mount {
     }
 
     async readFile(pathId: string): Promise<StorageFile | null> {
-        const storageKey = await this.getStorageKey(pathId);
-        // Freshest-first: an un-acked upload's frozen staged copy holds bytes newer than the storage
-        // object, so serve it — copy/download must never capture stale/absent storage. Only container
-        // dbs are ever staged, so a served file gets fresher-or-equal bytes, never staler.
+        return this.readKey(await this.getStorageKey(pathId));
+    }
+
+    // Read by storage key, for callers that already resolved it (lib/backup walks a whole paths
+    // table and derives every key from the tree it holds, rather than re-querying per file).
+    // Freshest-first: an un-acked upload's frozen staged copy holds bytes newer than the storage
+    // object, so serve it — copy/download must never capture stale/absent storage. A staged copy is
+    // always fresher-or-equal: a document db frozen on its way to the bucket, or a plain file a home
+    // restore staged, which the object behind it does not hold at all yet.
+    // internal — used by mount/*.ts + lib/backup
+    async readKey(storageKey: string): Promise<StorageFile | null> {
         const staged = this.pendingStagedCopy(storageKey);
         if (staged) return Bun.file(staged);
         const file = this.storage.read(storageKey);
@@ -992,7 +1002,7 @@ export class Mount {
         return this.config.storageType !== 'local-key' && this.config.storageType !== 'local';
     }
 
-    // internal — used by mount/*.ts
+    // internal — used by mount/*.ts + lib/backup
     get isPathBased(): boolean {
         return this.config.storageType === 'local';
     }

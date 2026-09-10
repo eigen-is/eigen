@@ -3,7 +3,7 @@ import nodemailer from 'nodemailer';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import type Mail from 'nodemailer/lib/mailer';
 import { isDemo, isProduction } from '../config/env';
-import { getMailDomain } from '../config/server-config';
+import { getMailDomain, getOrgName } from '../config/server-config';
 
 // Outbound email types — the inbound parsing types live in packages/lib/types/mail.ts
 type OutboundAddress = {
@@ -60,7 +60,7 @@ export function createTransport(): Mail {
 
 export function buildMailOptions(message: OutboundMail): Mail.Options {
     const options: Mail.Options = {
-        from: message.from ?? { name: '', address: `noreply@${getMailDomain()}` },
+        from: message.from ?? { name: getOrgName(), address: `noreply@${getMailDomain()}` },
         to: message.to,
         subject: message.subject,
         text: message.text,
@@ -103,7 +103,7 @@ export async function sendMail(message: OutboundMail): Promise<boolean> {
     // in demo mode (a demo box has no MTA — a real send would throw on every share/invite/iMIP).
     if ((!isProduction() && !process.env['SMTP_HOST']) || isDemo()) {
         console.log('[DEV] Skipping email:', {
-            from: message.from ?? { name: '', address: `noreply@${getMailDomain()}` },
+            from: message.from ?? { name: getOrgName(), address: `noreply@${getMailDomain()}` },
             to: message.to,
             subject: message.subject,
         });

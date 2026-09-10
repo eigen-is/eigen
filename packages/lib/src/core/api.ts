@@ -66,6 +66,7 @@ export const searchApi = api.search;
 export const settingsApi = api.settings;
 export const setupApi = api.setup;
 export const waitlistApi = api.waitlist;
+export const backupApi = api.admin.backup;
 
 // Read at module scope and fed to trimTrailingSlash, so a var missing from
 // .env.production used to throw before anything rendered — a blank page whose only
@@ -168,6 +169,13 @@ export const getDriveImportUrl = (ownerId: string, mountId: string, pathId: stri
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/import`;
 export const getDriveImportFromDriveUrl = (ownerId: string, mountId: string, pathId: string) =>
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/import-from-drive`;
+// Backup artifacts move as raw bodies, not JSON: the download is a browser navigation and the upload
+// streams the file with its name in the query string, neither of which fits an Eden call. The name
+// is not a custom header on purpose — that would make the upload a CORS-preflighted request, and a
+// split-origin deployment answers the preflight without it.
+export const getBackupArtifactUrl = (name: string) => `${API_HOST}/admin/backup/artifacts/${encodeURIComponent(name)}`;
+export const getBackupUploadUrl = (name: string) =>
+    `${API_HOST}/admin/backup/artifacts?name=${encodeURIComponent(name)}`;
 
 export const getDriveEmbedUrl = (
     ownerId: string,

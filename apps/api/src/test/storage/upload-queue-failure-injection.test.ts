@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import type { DatabaseConfig } from '../../lib/core';
@@ -228,6 +228,41 @@ describe('orphaned PUT past the client-side timeout (performUpload / trackOrphan
         await m2.mount.drainPendingUploads({ flushNow: true });
         const reopened = await m2.mount.openDatabase(docConfig, dataDbId);
         expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(2);
+    });
+
+    // A restore stages plain files too (lib/backup/restore.ts), and the repair above re-stages the
+    // bytes it retained. If that re-stage forgot what kind of copy they were, the SQLite header check
+    // would drop a perfectly good PNG or text file and the object would stay at the orphan's bytes.
+    test('an orphaned plain file keeps its kind: the repair re-uploads it instead of dropping it', async () => {
+        const { mount, fault } = createS3Mount('orphan-plain-file');
+        await mount.init();
+        shrinkPutTimeout(mount, 50);
+        const queue = mount.uploadQueue!;
+        const key = 'restored-plain-file.png';
+
+        // v1 stages and its PUT parks past the ceiling: an orphan, still live in-process.
+        fault.parkWrites = true;
+        const first = queue.newStagingPath();
+        writeFileSync(first, 'v1');
+        queue.enqueueStaged(key, first, false);
+        await waitFor(() => fault.parkedCount === 1);
+        await mount.drainPendingUploads();
+        expect(mount.pendingUploadCount).toBe(1);
+
+        // v2 supersedes it and acks while the orphan is unsettled, so its bytes are retained.
+        fault.parkWrites = false;
+        const second = queue.newStagingPath();
+        writeFileSync(second, 'v2');
+        queue.enqueueStaged(key, second, false);
+        await mount.drainPendingUploads({ flushNow: true });
+        expect(mount.pendingUploadCount).toBe(0);
+
+        // The orphan lands, rolling the object back to v1; its settlement re-stages the retained v2.
+        await fault.releaseOldestParked();
+        await waitFor(async () => {
+            const object = mount.storage.read(key);
+            return (await object.exists()) && (await object.text()) === 'v2';
+        });
     });
 
     // Finding 2: invariant 7 had a timeout-shaped hole. The in-time variant is guarded (putOk &&

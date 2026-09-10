@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1320 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1357 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -197,7 +197,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (248)
+## Hooks (257)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -206,10 +206,14 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useAdminGuests` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-admin-users.ts |
 | `useAdminUserList` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-admin-user-list.ts |
 | `useAdminUsersUsage` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-admin-user-list.ts |
+| `useBackupArtifacts` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
+| `useBackupJobs` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
 | `useCheckSetupS3` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-setup-status.ts |
 | `useCompleteSetup` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-setup-status.ts |
 | `useCreateTeam` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-teams.ts |
 | `useCreateUser` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-members.ts |
+| `useDeleteBackupArtifact` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
+| `useDeleteSafetyCopy` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
 | `useDeleteUser` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-members.ts |
 | `useDeleteWaitlistEntry` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-waitlist.ts |
 | `useHardenSetupS3` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-setup-status.ts |
@@ -220,10 +224,15 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useRemoveTeamMember` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-teams.ts |
 | `useResendWaitlistInvite` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-waitlist.ts |
 | `useResetUserPassword` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-members.ts |
+| `useRestoreBackup` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
+| `useRestoreSafetyCopy` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
 | `useSetupStatus` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-setup-status.ts |
+| `useStartBackup` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
 | `useTeams` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-teams.ts |
 | `useUpdateMemberRole` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-members.ts |
 | `useUpdateTeam` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-teams.ts |
+| `useUploadBackup` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
+| `useVerifyBackup` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
 | `useWaitlistEntries` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-waitlist.ts |
 | `useAppPasswords` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-app-passwords.ts |
 | `useAuth` | `@workspace/lib/auth` | packages/lib/src/core/auth/auth-context.tsx |
@@ -450,7 +459,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (320)
+## Types (327)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -626,6 +635,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ServerStorageType` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `SharedCalendar` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `SSEvent` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
+| `SSEventBackup` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventCalendar` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventChat` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventContact` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
@@ -648,6 +658,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BackgroundFill` | `@workspace/lib/types/background` | packages/lib/src/types/background.ts |
 | `Fill` | `@workspace/lib/types/background` | packages/lib/src/types/background.ts |
 | `FillPaint` | `@workspace/lib/types/background` | packages/lib/src/types/background.ts |
+| `BackupArtifact` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
+| `BackupEntry` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
+| `BackupJob` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
+| `BackupManifest` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
+| `BackupSafetyCopy` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
+| `BackupVerifyRecord` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `Command` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `CommandContext` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `PaletteResult` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
@@ -775,13 +791,15 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (581)
+## Utilities & constants (602)
 
 | Name | Import from | File |
 |------|-------------|------|
+| `handleAdminSSEvent` | `@workspace/lib/admin` | packages/lib/src/core/admin/sse-handlers.ts |
 | `ADMIN_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `api` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `API_HOST` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `backupApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `CALENDAR_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `calendarApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `CHAT_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
@@ -794,6 +812,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DRIVE_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `driveApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getAdminAppUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `getBackupArtifactUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `getBackupUploadUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getCalendarAppUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getChangelogUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getChatAppUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
@@ -929,9 +949,13 @@ rather than inlining `queryClient.invalidateQueries`.
 | `matchesCommentFilter` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
 | `readCards` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-cards.ts |
 | `writeCardToDoc` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
+| `BACKUP_UPLOAD_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/backup.ts |
+| `BACKUP_UPLOAD_MAX_LABEL` | `@workspace/lib/constants` | packages/lib/src/constants/backup.ts |
 | `CANVAS_PREVIEW_HEIGHT` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `CANVAS_PREVIEW_WIDTH` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `CELL_INDICATOR_SIZE` | `@workspace/lib/constants` | packages/lib/src/constants/comment-indicator.ts |
+| `COLLAB_HOME_REPLACED_CLOSE` | `@workspace/lib/constants` | packages/lib/src/constants/collab.ts |
+| `COLLAB_HOME_REPLACED_REASON` | `@workspace/lib/constants` | packages/lib/src/constants/collab.ts |
 | `COLLAB_STORAGE_UNAVAILABLE_CLOSE` | `@workspace/lib/constants` | packages/lib/src/constants/collab.ts |
 | `commentIndicatorColor` | `@workspace/lib/constants` | packages/lib/src/constants/comment-indicator.ts |
 | `DOCX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
@@ -968,6 +992,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `S3_NONCURRENT_DAYS_DEFAULT` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
 | `S3_NONCURRENT_DAYS_MAX` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
 | `STALE_TIME` | `@workspace/lib/constants` | packages/lib/src/constants/stale-time.ts |
+| `STORAGE_TYPE_LABELS` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
 | `userColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `XLSX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
 | `handleContactsSSEvent` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/sse-handlers.ts |
@@ -1090,9 +1115,21 @@ rather than inlining `queryClient.invalidateQueries`.
 | `userOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `withEigenExtension` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `toAttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
+| `BACKUP_ARTIFACT_EXTENSION` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `BACKUP_FORMAT_VERSION` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `BACKUP_HOME_PREFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `BACKUP_OWNER_ID` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `BACKUP_STAMP_PATTERN` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `EMAIL_FIND_REGEX` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
 | `MAX_EMAIL_LENGTH` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
+| `parseBackupArtifactName` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `parseBackupAuthRows` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `parseBackupManifest` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `parseBackupShares` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `parseBackupSidecar` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `parseBackupStamp` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `parseContactInput` | `@workspace/lib/validation` | packages/lib/src/validation/contact-input.ts |
+| `parseHomeMountSettings` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `validateACLEntries` | `@workspace/lib/validation` | packages/lib/src/validation/acl.ts |
 | `validateCommand` | `@workspace/lib/validation` | packages/lib/src/validation/command.ts |
 | `validateEmailAddress` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |

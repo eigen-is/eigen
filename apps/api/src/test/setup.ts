@@ -1,5 +1,6 @@
 // test-env sets EIGEN_DATA_ROOT before the app/auth imports below open their SQLite files. Keep it first.
 import './test-env';
+import { Database } from 'bun:sqlite';
 import { expect } from 'bun:test';
 import { treaty } from '@elysiajs/eden';
 import { type DrivePath, type MountInfo, type OrgTeam, teamOwnerId } from '@workspace/lib/types';
@@ -362,6 +363,14 @@ export function chatPost<T = unknown>(
 
 export function chatGet<T = unknown>(token: string, ownerId: string, mountId: string, path: string): Promise<T> {
     return authedRequest(token, `/chat/${ownerId}/${mountId}/${path}`).then((r) => r.json() as Promise<T>);
+}
+
+// A mount's metadata.db, for a test that reads storage keys straight out of the table. Read-write
+// on purpose: a WAL database whose owner is not holding it open has no -shm beside it, and a
+// read-only open of one fails outright (SQLITE_CANTOPEN) — the shape of every home folder a restore
+// leaves behind. Only ever used for SELECTs.
+export function openMountMetadata(metadataPath: string): Database {
+    return new Database(metadataPath, { readwrite: true, create: false });
 }
 
 // Smallest valid 4x4 PNG — the shared image fixture for upload/thumbnail/avatar tests.

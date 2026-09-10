@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { isProduction } from './env';
 
-function getDataRoot(): string {
+export function getDataRoot(): string {
     const envRoot = process.env['EIGEN_DATA_ROOT'];
     if (envRoot) return envRoot;
 

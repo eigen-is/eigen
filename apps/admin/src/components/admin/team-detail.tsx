@@ -1,6 +1,7 @@
 import { useNavigate } from '@tanstack/react-router';
 import { useAddTeamMember, useMembers, useRemoveTeam, useRemoveTeamMember, useUpdateTeam } from '@workspace/lib/admin';
 import { useCalendars, useUpdateCalendar } from '@workspace/lib/calendar';
+import { STORAGE_TYPE_LABELS } from '@workspace/lib/constants/mount';
 import { useCheckS3Connection, useHardenS3Bucket, useServerSettings } from '@workspace/lib/settings';
 import {
     useAddTeamMount,
@@ -16,7 +17,7 @@ import { teamOwnerId } from '@workspace/lib/types';
 import type { OrgTeam } from '@workspace/lib/types/admin';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { type MountSettings, mapStorageType } from '@workspace/lib/types/settings';
-import { AvatarEditor, DeleteDialog, TooltipButton } from '@workspace/ui';
+import { AvatarEditor, DeleteDialog, EmptyState, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
@@ -28,7 +29,17 @@ import { UserAvatar, UserItem } from '@workspace/ui/components/user';
 import { HardDrive, Pencil, Settings, Trash2, UserRoundPlus, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { AddMemberDialog } from './add-member-dialog';
+import { BackupSection } from './backup-section';
 import { MountDialog } from './mount-dialog';
+
+// What a team's members may do with the team calendar. 'read' is the absence of a share row rather
+// than one of the two permissions the API takes, so it lives only here.
+const CALENDAR_ACCESS = [
+    { value: 'free-busy', label: 'Free/Busy' },
+    { value: 'read', label: 'Read' },
+    { value: 'write', label: 'Write' },
+] as const;
+type CalendarAccess = (typeof CALENDAR_ACCESS)[number]['value'];
 
 type TeamDetailToolbarProps = {
     team: OrgTeam;
@@ -77,7 +88,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
 
     const [draftName, setDraftName] = useState(team.name);
     const [draftCalEnabled, setDraftCalEnabled] = useState(true);
-    const [draftCalPermission, setDraftCalPermission] = useState('read');
+    const [draftCalPermission, setDraftCalPermission] = useState<CalendarAccess>('read');
     const [draftMailMax, setDraftMailMax] = useState('');
     const [draftMountMax, setDraftMountMax] = useState('');
 
@@ -146,10 +157,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
                     ? existingShares.length > 0
                         ? existingShares
                         : null
-                    : [
-                          ...existingShares,
-                          { targetId: teamTarget, permission: draftCalPermission as 'free-busy' | 'write' },
-                      ];
+                    : [...existingShares, { targetId: teamTarget, permission: draftCalPermission }];
             await updateCalendar.mutateAsync({ id: defaultCal.id, shares });
         }
         setShowSettingsForm(false);
@@ -239,14 +247,23 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
                         {draftCalEnabled && (
                             <div className="flex items-center justify-between">
                                 <Label>Member access</Label>
-                                <Select value={draftCalPermission} onValueChange={setDraftCalPermission}>
+                                <Select
+                                    value={draftCalPermission}
+                                    onValueChange={(value) =>
+                                        setDraftCalPermission(
+                                            CALENDAR_ACCESS.find((option) => option.value === value)?.value ?? 'read',
+                                        )
+                                    }
+                                >
                                     <SelectTrigger className="w-32">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="free-busy">Free/Busy</SelectItem>
-                                        <SelectItem value="read">Read</SelectItem>
-                                        <SelectItem value="write">Write</SelectItem>
+                                        {CALENDAR_ACCESS.map((option) => (
+                                            <SelectItem key={option.value} value={option.value}>
+                                                {option.label}
+                                            </SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -367,9 +384,11 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
                 />
 
                 {Object.keys(mounts).length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-2 text-center">
-                        No mounts. Add one to enable team drive.
-                    </p>
+                    <EmptyState
+                        icon={<HardDrive className="h-6 w-6" />}
+                        message="No mounts yet"
+                        hint="Add one to give this team a drive."
+                    />
                 ) : (
                     <div className="space-y-2">
                         {Object.entries(mounts).map(([id, mount]: [string, MountSettings]) => (
@@ -378,17 +397,15 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
                                 <div className="flex-1 min-w-0">
                                     <div className="text-sm font-medium truncate">{mount.name || id}</div>
                                     <div className="text-xs text-muted-foreground">
-                                        {mount.storageType} · {mount.maxSizeMB ?? '∞'} MB
+                                        {STORAGE_TYPE_LABELS[mount.storageType]} · {mount.maxSizeMB ?? '∞'} MB
                                     </div>
                                 </div>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
+                                <TooltipButton
+                                    icon={Settings}
+                                    tooltipText="Mount settings"
                                     className="h-7 w-7 shrink-0"
                                     onClick={() => setEditingMount({ id, mount })}
-                                >
-                                    <Settings className="h-3.5 w-3.5" />
-                                </Button>
+                                />
                                 <Switch
                                     checked={mount.enabled}
                                     onCheckedChange={async (enabled) => {
@@ -400,6 +417,10 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
                     </div>
                 )}
             </div>
+
+            <Separator />
+
+            <BackupSection ownerId={ownerId} />
 
             <Separator />
 
@@ -420,7 +441,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
                 />
 
                 {teamMembers.length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-4 text-center">No members in this team yet.</p>
+                    <EmptyState icon={<UserRoundPlus className="h-6 w-6" />} message="No members in this team yet" />
                 ) : (
                     <div className="divide-y">
                         {[...teamMembers]
@@ -433,14 +454,12 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
                                         userId={tm.userId}
                                         className="flex-1 min-w-0"
                                     />
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
+                                    <TooltipButton
+                                        icon={X}
+                                        tooltipText="Remove from team"
                                         className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
                                         onClick={() => handleRemoveMember(tm.userId)}
-                                    >
-                                        <X className="h-3.5 w-3.5" />
-                                    </Button>
+                                    />
                                 </div>
                             ))}
                     </div>

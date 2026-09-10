@@ -20,7 +20,7 @@ COPY . .
 
 RUN bun install --frozen-lockfile --ignore-scripts
 
-RUN mkdir -p /app/data/home /app/data/server
+RUN mkdir -p /app/data/home /app/data/server /app/backups
 
 WORKDIR /app/apps/api
 

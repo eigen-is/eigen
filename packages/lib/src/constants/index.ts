@@ -1,3 +1,4 @@
+export * from './backup';
 export * from './collab';
 export * from './colors';
 export * from './comment-indicator';
@@ -5,6 +6,7 @@ export * from './contact';
 export * from './fonts';
 export * from './mail';
 export * from './mime';
+export * from './mount';
 export * from './preview';
 export * from './public';
 export * from './s3';

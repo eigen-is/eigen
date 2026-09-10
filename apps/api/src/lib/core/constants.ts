@@ -1,6 +1,9 @@
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants';
 
 export const PATHS = {
+    // The home's own settings file, at the root of every home folder — and so of every archive and
+    // safety copy of one.
+    SETTINGS: 'settings.json',
     DRIVE: {
         ROOT: 'mounts',
         DEFAULT_MOUNT: 'default',
@@ -9,6 +12,8 @@ export const PATHS = {
         DATA_DIR: 'data',
         THUMBS_DIR: 'thumbs',
         TMP_DIR: 'tmp',
+        STAGING_DIR: 'staging',
+        PREVIEWS_DIR: 'previews',
         DOCS_DIR: 'docs',
     },
     MAIL: {
@@ -27,6 +32,9 @@ export const PATHS = {
     CALENDAR: {
         ROOT: 'eigen.calendar',
         DB: 'eigen.calendar/calendar.db',
+    },
+    NOTIFICATIONS: {
+        DB: 'eigen.notifications/notifications.db',
     },
 } as const;
 

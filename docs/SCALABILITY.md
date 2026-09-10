@@ -108,6 +108,7 @@ machine, using Caddy as the only router so the application never hashes an owner
 | Yjs documents      | In-memory per server           | Editors connect to document owner's server   |
 | SSE connections    | Per-server                     | Each user connects to their home's server    |
 | Team membership    | Auth DB queries                | Shared auth DB handles this                  |
+| Backup jobs + restore mark | In-memory per server         | Home-local already; only the admin route's `getHome` becomes a relay call ([BACKUP.md](BACKUP.md)) |
 
 ### Home Locality Enforcement
 
