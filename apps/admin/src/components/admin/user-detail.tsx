@@ -9,6 +9,7 @@ import { Button } from '@workspace/ui/components/button';
 import { DangerZone } from '@workspace/ui/components/delete/danger-zone';
 import { StorageUsageBars } from '@workspace/ui/components/home';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
+import { Separator } from '@workspace/ui/components/separator';
 import { UserDetailHero } from '@workspace/ui/components/user';
 import { KeyRound, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -133,8 +134,6 @@ export function UserDetail({ user, usage, organizationId }: UserDetailProps) {
                 </div>
             </div>
 
-            <BackupSection ownerId={user.id} />
-
             {hasChanges && (
                 <div className="flex items-center justify-end gap-2">
                     <Button variant="outline" onClick={handleCancel}>
@@ -145,6 +144,11 @@ export function UserDetail({ user, usage, organizationId }: UserDetailProps) {
                     </Button>
                 </div>
             )}
+
+            <Separator />
+
+            {/* DangerZone below brings its own top rule, so this section needs only a leading one. */}
+            <BackupSection ownerId={user.id} />
 
             {user.role !== 'owner' && (
                 <DangerZone
