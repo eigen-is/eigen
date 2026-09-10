@@ -365,7 +365,6 @@ export function chatGet<T = unknown>(token: string, ownerId: string, mountId: st
     return authedRequest(token, `/chat/${ownerId}/${mountId}/${path}`).then((r) => r.json() as Promise<T>);
 }
 
-// Smallest valid 4x4 PNG — the shared image fixture for upload/thumbnail/avatar tests.
 // A mount's metadata.db, for a test that reads storage keys straight out of the table. Read-write
 // on purpose: a WAL database whose owner is not holding it open has no -shm beside it, and a
 // read-only open of one fails outright (SQLITE_CANTOPEN) — the shape of every home folder a restore
@@ -374,6 +373,7 @@ export function openMountMetadata(metadataPath: string): Database {
     return new Database(metadataPath, { readwrite: true, create: false });
 }
 
+// Smallest valid 4x4 PNG — the shared image fixture for upload/thumbnail/avatar tests.
 export const TEST_PNG_BYTES = new Uint8Array([
     137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 4, 0, 0, 0, 4, 8, 2, 0, 0, 0, 38, 147, 9, 41,
     0, 0, 0, 9, 112, 72, 89, 115, 0, 0, 3, 232, 0, 0, 3, 232, 1, 181, 123, 82, 107, 0, 0, 0, 17, 73, 68, 65, 84, 120,

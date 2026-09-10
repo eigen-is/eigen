@@ -138,6 +138,16 @@ export function createMountConfig(id: string, settings: MountSettings): MountCon
     };
 }
 
+// Which destination an s3 mount's uploads are paced against: one provider's rate-limit domain, and
+// the presence of a key is also what stands up the write-behind queue at all (Mount.init). Gated on
+// the storage TYPE, not on the credentials: `createMountConfig` passes a settings `s3Config` through
+// whatever the backend is, and a local mount carrying a stale one must not get a queue over its
+// LocalStorage. Infra strings only, never user data.
+export function buildUploadDestinationKey(config: MountConfig): string | undefined {
+    if (config.storageType !== 's3' || !config.s3Config) return undefined;
+    return `${config.s3Config.endpoint}/${config.s3Config.bucket}`;
+}
+
 // The one place a mount's storage backend is built from its config. `Mount` calls it for the live
 // mount; lib/backup calls it for a safety copy's mounts, whose stored objects it has to clean up
 // with no Home to ask. `baseDir` is the mount's own folder; the s3 backend has no use for it.

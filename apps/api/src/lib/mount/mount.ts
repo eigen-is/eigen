@@ -30,6 +30,7 @@ import * as documentDb from './document-db';
 import {
     ancestorIds,
     buildStorageKey,
+    buildUploadDestinationKey,
     CONTROL_CHARS,
     createMountStorage,
     docContainerDescendantIds,
@@ -69,8 +70,8 @@ export class Mount {
 
     // Write-behind upload queue (Phase 1b) — only for isRemote (s3) mounts; undefined otherwise.
     uploadQueue?: UploadQueue; // internal — used by mount/*.ts + versioning/snapshot.ts
-    // Built from the config's s3Config, which createMountStorage has already proven present for an
-    // s3 mount; undefined for a local one.
+    // Set for an s3 mount only — see buildUploadDestinationKey, which is also the gate Mount.init
+    // stands the upload queue up behind.
     private readonly uploadDestinationKey?: string;
 
     // Per-mount content reindexer — built in init() only when an extractor is injected (the
@@ -99,9 +100,7 @@ export class Mount {
         this.extractContent = extractContent;
 
         this.storage = createMountStorage(config, this.baseDir);
-        if (config.s3Config) {
-            this.uploadDestinationKey = `${config.s3Config.endpoint}/${config.s3Config.bucket}`;
-        }
+        this.uploadDestinationKey = buildUploadDestinationKey(config);
     }
 
     // Read live off config so a settings rename (TeamHome.updateMount) shows up without rebuilding.

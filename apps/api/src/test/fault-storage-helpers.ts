@@ -27,9 +27,6 @@ export type ParkedWrite = {
 export class FaultStorage implements StorageBackend {
     failNextWrites = 0;
     failNextExists = 0;
-    // Deletes that fail the way an outage, a 403 or a rotated key does — the backup code has to tell
-    // "could not delete" from "was not there", which both backends answer `false` to.
-    failNextDeletes = 0;
     writeDelayMs = 0;
     writeCount = 0;
     // Park every write until releaseHungWrites() — models a TCP-black-holed PUT that never
@@ -128,10 +125,6 @@ export class FaultStorage implements StorageBackend {
         });
     }
     async delete(key: string): Promise<boolean> {
-        if (this.failNextDeletes > 0) {
-            this.failNextDeletes--;
-            return false;
-        }
         return this.inner.delete(key);
     }
     async exists(key: string): Promise<boolean> {

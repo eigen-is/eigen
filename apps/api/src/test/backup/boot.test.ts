@@ -83,10 +83,9 @@ describe('Backup boot', () => {
         expect(existsSync(join(homeRoot, aside))).toBe(false);
     });
 
-    // Both restores write this marker through one code path (replaceHomeFolder), so a safety-copy
-    // restore killed mid-swap leaves exactly this shape: the marker, no home folder, and the folder
-    // it was moved to beside it. Its staging folder holds no unpacked archive — the recovery reads
-    // the marker and nothing else.
+    // A safety-copy restore killed mid-swap leaves the same shape (both restores write the marker
+    // through one code path, replaceHomeFolder) with nothing else in its staging folder: no unpacked
+    // archive, just the note.
     test('the marker an interrupted safety-copy restore leaves puts the home back', () => {
         const id = 'bootrecoverFFFFFFFFFFFFFFFFFFFFF';
         const aside = `${id}${PRE_RESTORE_SUFFIX}20260202-000000`;
