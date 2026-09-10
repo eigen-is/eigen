@@ -159,25 +159,38 @@ function normalizeArchiveDatabase(destPath: string): void {
     fs.rmSync(`${destPath}-shm`, { force: true });
 }
 
+// The codes a failure on THIS machine carries: SQLite's own from a VACUUM INTO, and the local-disk
+// errnos the copy into the archive folder raises. Both already say what went wrong and where, and
+// calling either "storage unreachable" would send the admin after the wrong machine. Listed one by
+// one rather than as `E[A-Z]+`: a bucket that refuses the connection can surface as a node errno
+// (`ECONNREFUSED`, `ETIMEDOUT`, `ENOTFOUND`), and that IS the storage being unreachable.
+const LOCAL_FAILURE_CODE = /^(SQLITE_[A-Z]+|ENOSPC|EACCES|EDQUOT|EROFS|EIO|ENOENT)$/;
+
 // A storage failure must fail the whole backup — an archive silently missing a mount's objects is
 // worse than no archive — but Bun's S3Error puts the actionable part in `code` and leaves `message`
 // as "an unexpected error has occurred", which is all the job's one-line error would have shown.
-// Name the mount and the code; an error with no code is rethrown untouched.
+// Only that shape is rewritten, and it names the object it was reading; anything else is rethrown
+// untouched.
 function rethrowStorageFailure(mount: Mount, storageKey: string, error: unknown): never {
     const code = error instanceof Error && 'code' in error ? String(error.code) : '';
-    if (!code) throw error;
+    if (!code || LOCAL_FAILURE_CODE.test(code)) throw error;
     throw new Error(`mount ${mount.id}: storage unreachable (${code}) reading ${storageKey}`);
 }
 
+// One mount's data tree in an archive: the entries written, how many of them are Eigen's own
+// databases (a user's `notes.db` upload is a file), and the ids the thumbnails are keyed by.
+export type MountSnapshot = { entries: BackupEntry[]; databases: number; pathIds: Set<string> };
+
 // Copy every file the mount's paths table knows about into `targetDir`. Walking the table rather
-// than the filesystem is what keeps `thumbs/`, `tmp/` and `staging/` out and `.trash/` + `versions/`
-// in, on every backend.
+// than the filesystem is what keeps `tmp/` and `staging/` out and `.trash/` + `versions/` in, on
+// every backend; `thumbs/` is copied separately (snapshotMountThumbs), keyed by the ids returned
+// here.
 export async function snapshotMountData(
     mount: Mount,
     targetDir: string,
     relPrefix: string,
     onProgress: SnapshotProgress,
-): Promise<BackupEntry[]> {
+): Promise<MountSnapshot> {
     const rows = await mount.db
         .select({
             id: paths.id,
@@ -193,10 +206,12 @@ export async function snapshotMountData(
 
     const fileRows = rows.filter((row) => row.type === 'file');
     const entries: BackupEntry[] = [];
+    let databases = 0;
     for (const [index, row] of fileRows.entries()) {
         const relPath = archivePath(row, byId);
         const destPath = path.join(targetDir, relPath);
         const entryPath = `${relPrefix}/${relPath}`;
+        const storageKey = storageKeyOf(row, byId, mount.isPathBased);
 
         const container = managedDbContainer(row, byId);
         if (container) {
@@ -209,24 +224,48 @@ export async function snapshotMountData(
             // entry drops out of the archive rather than costing the home its whole backup.
             const copied = await mount
                 .withPathLock(container.id, () => stageManagedDbCopy(mount, row.id, destPath, 'open-handle-first'))
-                .catch((error: unknown) => rethrowStorageFailure(mount, relPath, error));
+                .catch((error: unknown) => rethrowStorageFailure(mount, storageKey, error));
             if (copied) {
                 normalizeArchiveDatabase(destPath);
                 entries.push(await captureWrittenFile(destPath, entryPath));
+                databases++;
             }
         } else {
             // readKey is freshest-first (pending staged copy, then the stored object). Null means the
             // row has no bytes yet (a touched file whose upload never landed); the archive mirrors
-            // that absence rather than inventing an empty object.
-            const storageKey = storageKeyOf(row, byId, mount.isPathBased);
-            try {
-                const file = await mount.readKey(storageKey);
-                if (file) entries.push(await captureFile(file, destPath, entryPath));
-            } catch (error) {
-                rethrowStorageFailure(mount, storageKey, error);
-            }
+            // that absence rather than inventing an empty object. Only the read is judged as a
+            // storage failure: the copy that follows writes to the archive folder, and a disk that
+            // fills up there is not the bucket being unreachable.
+            const file = await mount
+                .readKey(storageKey)
+                .catch((error: unknown) => rethrowStorageFailure(mount, storageKey, error));
+            if (file) entries.push(await captureFile(file, destPath, entryPath));
         }
         onProgress('mount files', index + 1, fileRows.length);
+    }
+    return { entries, databases, pathIds: new Set(fileRows.map((row) => row.id)) };
+}
+
+// Thumbnails are not derived data: they are generated once, when a file is uploaded, and never
+// regenerated — the drive route answers 404 for a file whose thumbnail is gone — so a restore
+// without them loses every thumbnail the home ever had. They are keyed by path id, which a restore
+// preserves. A thumbnail whose row is gone is an orphan no mount would ever serve and stays out.
+export async function snapshotMountThumbs(
+    mount: Mount,
+    targetDir: string,
+    relPrefix: string,
+    pathIds: ReadonlySet<string>,
+): Promise<BackupEntry[]> {
+    if (!fs.existsSync(mount.thumbsDir)) return [];
+    const entries: BackupEntry[] = [];
+    for (const entry of fs.readdirSync(mount.thumbsDir, { withFileTypes: true })) {
+        if (!entry.isFile() || !pathIds.has(path.parse(entry.name).name)) continue;
+        const source = Bun.file(path.join(mount.thumbsDir, entry.name));
+        // A thumbnail regenerated (and briefly unlinked) mid-walk is out of the archive either way;
+        // losing the whole snapshot over one is not.
+        if (await source.exists()) {
+            entries.push(await captureFile(source, path.join(targetDir, entry.name), `${relPrefix}/${entry.name}`));
+        }
     }
     return entries;
 }

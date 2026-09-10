@@ -4,6 +4,7 @@ import { BACKUP_UPLOAD_MAX_BYTES, BACKUP_UPLOAD_MAX_LABEL } from '@workspace/lib
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { BackupArtifact, BackupJob, BackupSafetyCopy } from '@workspace/lib/types/backup';
 import { parseBackupArtifactName } from '@workspace/lib/validation';
+import { useEffect, useRef } from 'react';
 import { AppError, onMutationError } from '../../api-error';
 import { useIsGuest } from '../../auth/hooks/use-is-guest';
 import { backupKeys, invalidateBackup } from './keys';
@@ -39,7 +40,8 @@ export function useBackupArtifacts(ownerId: string) {
 
 export function useBackupJobs(ownerId: string) {
     const isGuest = useIsGuest();
-    return useQuery({
+    const queryClient = useQueryClient();
+    const query = useQuery({
         queryKey: backupKeys.jobs(ownerId),
         queryFn: async (): Promise<BackupJob[]> => {
             const response = await backupApi.jobs.get({ query: { ownerId } });
@@ -50,6 +52,20 @@ export function useBackupJobs(ownerId: string) {
         staleTime: STALE_TIME.THIRTY_SECONDS,
         refetchInterval: (query) => (hasRunningJob(query.state.data) ? JOB_POLL_MS : false),
     });
+
+    // The moment a job leaves `running` is the moment its artifact (or its safety copy) exists, and
+    // it is also the moment the artifact list stops polling — so the refetch has to be asked for
+    // here rather than left to an interval that clears on the same render.
+    const running = hasRunningJob(query.data);
+    const wasRunning = useRef(false);
+    useEffect(() => {
+        if (wasRunning.current && !running) {
+            queryClient.invalidateQueries({ queryKey: backupKeys.artifacts(ownerId) });
+        }
+        wasRunning.current = running;
+    }, [running, ownerId, queryClient]);
+
+    return query;
 }
 
 export function useStartBackup(ownerId: string) {
@@ -75,6 +91,9 @@ export function useUploadBackup() {
             // file the server would refuse never leaves the browser.
             const parsed = parseBackupArtifactName(file.name);
             if (!parsed) throw new Error(`'${file.name}' is not the name of an Eigen backup archive`);
+            // An empty file has no Content-Length the route accepts, so it would come back as the
+            // 413 about the maximum size — which says nothing about what is wrong with it.
+            if (file.size === 0) throw new Error(`'${file.name}' is empty`);
             // The route refuses a larger Content-Length with a 413; saying so before a long upload
             // starts is the whole point of the check.
             if (file.size > BACKUP_UPLOAD_MAX_BYTES) {

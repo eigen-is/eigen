@@ -8,7 +8,7 @@ import * as Y from 'yjs';
 import { readYjsStateFromFile } from '../collab/yjs-loader';
 import { PATHS } from '../core';
 import { hashFile } from '../drive/streaming';
-import { ARCHIVE_HOME_DIR, archiveHomePath, archiveMountPath } from './paths';
+import { ARCHIVE_HOME_DIR, archiveHomePath, archiveMountPath, resolveInside } from './paths';
 import { HOME_DATABASE_PATHS, type SnapshotProgress } from './snapshot-home';
 import { listManagedDatabases, readMountPathRows } from './snapshot-mount';
 
@@ -25,30 +25,6 @@ type ArchiveDatabase = { path: string; abs: string; isYjsDocument: boolean };
 
 function describeError(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
-}
-
-function hasControlCharacter(text: string): boolean {
-    for (let index = 0; index < text.length; index++) {
-        const code = text.charCodeAt(index);
-        if (code < 0x20 || code === 0x7f) return true;
-    }
-    return false;
-}
-
-// An archive comes from outside: its manifest and its mount trees name the paths this reads and
-// opens. Anything that would leave the folder — absolute, a `..` hop, a control character, or a
-// path that walks through a symlink — is refused before it reaches the filesystem. `root` is
-// already a real path, so the comparison holds on a macOS /var → /private/var of a temp folder too.
-function resolveInside(root: string, relPath: string): string | null {
-    if (relPath === '' || path.isAbsolute(relPath) || hasControlCharacter(relPath)) return null;
-    if (relPath.split(/[\\/]/).includes('..')) return null;
-    const abs = path.resolve(root, relPath);
-    if (!abs.startsWith(`${root}${path.sep}`)) return null;
-    // Lexically inside is not enough: one symlinked directory along the way and the bytes read are
-    // somebody else's. Stage 1 never reaches a link (its walk does not follow one), but the database
-    // paths stages 2 and 3 open come out of an archived tree with no such walk in front of them.
-    const real = fs.existsSync(abs) ? fs.realpathSync(abs) : abs;
-    return real.startsWith(`${root}${path.sep}`) ? abs : null;
 }
 
 // The folder's own files, walked with readdir's lstat-level types so a symlink is seen rather than
@@ -129,7 +105,7 @@ function countYjsBlobs(dbPath: string): number {
 // with a manifest — a staging folder straight after a backup, or a fresh extract before a restore.
 // Every database is opened read-only: a verify never changes a byte of what it is checking.
 export async function verifyFolder(dir: string, onProgress?: SnapshotProgress): Promise<BackupVerifyRecord> {
-    const checkedAt = new Date().toISOString();
+    const checkedAt = new Date();
     const manifestPath = path.join(dir, 'manifest.json');
     if (!fs.existsSync(manifestPath)) {
         return { status: 'failed', checkedAt, failures: ['manifest.json is missing'] };

@@ -7,39 +7,51 @@ import { parseBackupArtifactName, parseHomeMountSettings } from '@workspace/lib/
 import { ApiError, PATHS } from '../core';
 import { createMountStorage } from '../mount/helpers';
 import { readSidecar, sidecarPath } from './archive';
-import { backupsDirPath, parseSafetyCopyName, resolveHomeDir } from './paths';
+import { backupsDirPath, parseSafetyCopyName, resolveHomeDir, resolveMountDir } from './paths';
 import { flatStorageKey } from './snapshot-mount';
 
 // A safety copy holds a whole home; its size is a line in a list, not an accounting figure, so the
-// walk stops here and the number becomes a floor rather than taking a minute on a huge home.
+// walk stops here and the number becomes a floor rather than taking a minute on a huge home. The
+// floor is reported as one (`truncated`), because "52.79 MB" for a 284 MB copy is a lie the admin
+// would act on.
 const MAX_WALKED_FILES = 50_000;
+
+type FolderSize = { bytes: number; truncated: boolean };
 
 // A safety copy never changes after the restore that made it, so it is measured once per process.
 // The artifact list is refetched on every job poke — up to twice a second while a job runs — and
 // walking a whole home on each of those would stall the event loop for every user on the server.
-const measuredBytes = new Map<string, number>();
+const measuredBytes = new Map<string, FolderSize>();
 
-async function folderBytes(dir: string): Promise<number> {
+// `maxFiles` is a parameter so the cap can be exercised without a 50 000-file fixture.
+export async function measureFolder(dir: string, maxFiles = MAX_WALKED_FILES): Promise<FolderSize> {
     let bytes = 0;
     let walked = 0;
     const stack = [dir];
     for (let current = stack.pop(); current !== undefined; current = stack.pop()) {
         for (const entry of await fsp.readdir(current, { withFileTypes: true })) {
-            if (walked++ >= MAX_WALKED_FILES) return bytes;
+            if (walked++ >= maxFiles) return { bytes, truncated: true };
             const abs = path.join(current, entry.name);
             if (entry.isDirectory()) stack.push(abs);
             else if (entry.isFile()) bytes += (await fsp.stat(abs)).size;
         }
     }
-    return bytes;
+    return { bytes, truncated: false };
 }
 
-async function measureSafetyCopy(dir: string): Promise<number> {
+async function measureSafetyCopy(dir: string): Promise<FolderSize> {
     const known = measuredBytes.get(dir);
-    if (known !== undefined) return known;
-    const bytes = await folderBytes(dir);
-    measuredBytes.set(dir, bytes);
-    return bytes;
+    if (known) return known;
+    const size = await measureFolder(dir);
+    measuredBytes.set(dir, size);
+    return size;
+}
+
+// Every way a safety copy stops being at that path: deleted, or renamed back over the home by a
+// restore of it. A later copy can land on the same name (one stamp per second), and it would then
+// list the size of the folder that used to be there.
+export function forgetSafetyCopySize(dir: string): void {
+    measuredBytes.delete(dir);
 }
 
 // One home's artifacts, newest first, read from the sidecars alone: opening an archive to answer a
@@ -67,7 +79,7 @@ export async function listArtifacts(ownerId: string): Promise<BackupArtifact[]> 
         artifacts.push({
             name,
             bytes,
-            createdAt: parsed.at.toISOString(),
+            createdAt: parsed.at,
             manifest: manifest
                 ? {
                       kind: manifest.kind,
@@ -82,7 +94,7 @@ export async function listArtifacts(ownerId: string): Promise<BackupArtifact[]> 
             verify: sidecar?.verify ?? { status: 'unverified', failures: [] },
         });
     }
-    return artifacts.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return artifacts.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
 // The folders a restore left beside this home. Nothing deletes them automatically, so the admin
@@ -98,14 +110,10 @@ export async function listSafetyCopies(ownerId: string): Promise<BackupSafetyCop
         if (!entry.isDirectory()) continue;
         const parsed = parseSafetyCopyName(entry.name);
         if (!parsed || parsed.homeName !== homeName) continue;
-        copies.push({
-            name: entry.name,
-            kind: parsed.kind,
-            createdAt: parsed.at.toISOString(),
-            bytes: await measureSafetyCopy(path.join(parent, entry.name)),
-        });
+        const { bytes, truncated } = await measureSafetyCopy(path.join(parent, entry.name));
+        copies.push({ name: entry.name, kind: parsed.kind, createdAt: parsed.at, bytes, truncated });
     }
-    return copies.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return copies.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
 // Every route that names an artifact resolves it here first: a name that is not one this server
@@ -204,9 +212,11 @@ async function deleteRemoteObjects(folder: string, homeDir: string): Promise<voi
     let failures = 0;
     for (const [id, mount] of Object.entries(mounts)) {
         if (mount.storageType !== 's3') continue;
-        const mountDir = path.join(folder, PATHS.DRIVE.ROOT, id);
-        const copyDb = path.join(mountDir, PATHS.DRIVE.METADATA_DB);
-        if (!fs.existsSync(copyDb)) continue;
+        // settings.json came from an archive, so its keys are untrusted: a mount id that resolves
+        // outside this folder would have this reading — and deleting the objects of — another home.
+        const mountDir = resolveMountDir(folder, id);
+        const copyDb = mountDir && path.join(mountDir, PATHS.DRIVE.METADATA_DB);
+        if (!copyDb || !fs.existsSync(copyDb)) continue;
         // Never the server's current default: this folder's own credentials are the only ones that
         // name the bucket its objects are in.
         if (!mount.s3Config) {
@@ -215,11 +225,15 @@ async function deleteRemoteObjects(folder: string, homeDir: string): Promise<voi
         }
         // Nothing to hold the copy's keys against: the mount is gone from the live home, and an
         // object it may still hold is not this delete's to judge.
-        if (!fs.existsSync(path.join(homeDir, PATHS.DRIVE.ROOT, id, PATHS.DRIVE.METADATA_DB))) continue;
+        const liveMountDir = resolveMountDir(homeDir, id);
+        if (!liveMountDir || !fs.existsSync(path.join(liveMountDir, PATHS.DRIVE.METADATA_DB))) continue;
         const referenced = new Set<string>();
         for (const dir of referencing) {
-            const metadataPath = path.join(dir, PATHS.DRIVE.ROOT, id, PATHS.DRIVE.METADATA_DB);
-            if (fs.existsSync(metadataPath)) for (const key of storageKeysIn(metadataPath)) referenced.add(key);
+            const referencingMount = resolveMountDir(dir, id);
+            const metadataPath = referencingMount && path.join(referencingMount, PATHS.DRIVE.METADATA_DB);
+            if (metadataPath && fs.existsSync(metadataPath)) {
+                for (const key of storageKeysIn(metadataPath)) referenced.add(key);
+            }
         }
 
         const storage = createMountStorage(
@@ -247,5 +261,5 @@ async function deleteRemoteObjects(folder: string, homeDir: string): Promise<voi
 export async function deleteSafetyCopy(folder: string, homeDir: string): Promise<void> {
     await deleteRemoteObjects(folder, homeDir);
     fs.rmSync(folder, { recursive: true, force: true });
-    measuredBytes.delete(folder);
+    forgetSafetyCopySize(folder);
 }

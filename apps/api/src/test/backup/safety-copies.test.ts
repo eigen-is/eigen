@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { auth } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
-import { deleteSafetyCopy } from '../../lib/backup/artifacts';
+import { deleteSafetyCopy, listSafetyCopies } from '../../lib/backup/artifacts';
 import {
     buildArtifactName,
     buildHomeFolderName,
@@ -40,6 +40,8 @@ const PASSWORD = 'testpassword123';
 const BACKING = join(TEST_DATA_DIR, 'safety-s3-backing');
 // What the bucket holds for the PNG's key after the backup: an edit a restore must not overwrite.
 const EDITED_BYTES = new TextEncoder().encode('edited in the bucket after the backup ran');
+// Smaller than any real home folder, so a listing of this size can only be a fresh measurement.
+const MARKER_BYTES = 512;
 
 function fileKeysOf(metadataPath: string): string[] {
     const db = openMountMetadata(metadataPath);
@@ -204,6 +206,10 @@ describe('Backup safety copies of an s3 home', () => {
     test('restoring the safety copy serves the bytes the bucket held before the restore', async () => {
         const [copy] = safetyCopies(userId);
         expect(copy).toBeTruthy();
+        // Measured (and memoized) while the folder is still a safety copy, so the assertion at the
+        // end of this test says something about the memo and not about the walk.
+        const measured = (await listSafetyCopies(userId)).find((entry) => entry.name === copy);
+        expect(measured?.bytes).toBeGreaterThan(MARKER_BYTES);
 
         await restoreSafetyCopy(userId, copy, `safety-s3-undo-${Date.now()}`);
 
@@ -223,6 +229,15 @@ describe('Backup safety copies of an s3 home', () => {
         const [replaced] = safetyCopies(userId);
         expect(replaced).toBeTruthy();
         expect(fileKeysOf(join(TEST_DATA_DIR, 'home', replaced, 'mounts', MOUNT_ID, 'metadata.db'))).toEqual(keysAfter);
+
+        // The measurement was renamed away with the folder. A later copy can land on that name (one
+        // stamp per second), and it would otherwise be listed with the size of this one.
+        const revived = join(TEST_DATA_DIR, 'home', copy);
+        mkdirSync(revived, { recursive: true });
+        writeFileSync(join(revived, 'marker.bin'), Buffer.alloc(MARKER_BYTES));
+        const relisted = (await listSafetyCopies(userId)).find((entry) => entry.name === copy);
+        expect(relisted?.bytes).toBe(MARKER_BYTES);
+        rmSync(revived, { recursive: true, force: true });
     });
 
     test('a delete that cannot reach the bucket keeps the folder and says so', async () => {

@@ -1,6 +1,6 @@
 # Proposal: Backup, restore & migration
 
-> **Status — phase ② shipped 2026-09-10 on branch `backup-phase2` (pending merge to main). Phases ③ and ④ not started.** This is the spec for phases ② (per-user backup/restore), ③ (whole-server backup) and ④ (migration) of the backup program agreed 2026-08-20 (see the ROADMAP's "Data integrity + verified backups" row). Phase ① (the admin Users page, the UI surface) shipped 2026-08-21. What phase ② built, and where it drifted from the design below, is in § As built; the operator's page is [BACKUP.md](../BACKUP.md).
+> **Status — phase ② built 2026-09-10 on branch `backup-phase2`, pending merge to main. Phases ③ and ④ not started.** This is the spec for phases ② (per-user backup/restore), ③ (whole-server backup) and ④ (migration) of the backup program agreed 2026-08-20 (see the ROADMAP's "Data integrity + verified backups" row). Phase ① (the admin Users page, the UI surface) shipped 2026-08-21. What phase ② built, and where it drifted from the design below, is in § As built; the operator's page is [BACKUP.md](../BACKUP.md).
 
 > **TLDR**: One primitive does all the work: `snapshotHome` produces a **self-contained, storage-independent archive of one home** — every SQLite database captured with `VACUUM INTO` (never a raw copy of a live WAL file), every S3 object downloaded into the archive, plus the user's auth rows and share-registry rows. Per-user backup is that primitive with a download button. Whole-server backup is a loop over all homes plus the server databases. Migration is a restore pointed at a different server or a different storage backend. Restore is replace-with-a-safety-net: the current home is moved aside, never deleted, until the restored home passes verification.
 
@@ -72,7 +72,7 @@ eigen-home-{ownerId}-{timestamp}/
     └── eigen.notifications/   (notifications.db vacuumed)
 ```
 
-Not included, on purpose: `thumbs/`, `tmp/`, `staging/`, `versions/` snapshot folders, preview caches, avatar caches, FTS index content. All of it is either derived (regenerated on demand) or transport machinery. The trash **is** included — it counts toward quota and users expect restore to bring it back.
+Not included, on purpose: `tmp/`, `staging/`, preview caches, avatar caches, FTS index content. All of it is either derived (regenerated on demand) or transport machinery. The trash **is** included — it counts toward quota and users expect restore to bring it back. So are `versions/` snapshot folders (the only copy of an old file state) and `thumbs/` (generated once at upload and never regenerated, so not derived data either).
 
 ### manifest.json
 

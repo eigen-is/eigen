@@ -25,7 +25,7 @@ import { shareRegistry } from '../share/schema';
 import { getTeam } from '../team/team';
 import { getUserById } from '../user/user';
 import { extractArtifact } from './archive';
-import { resolveSafetyCopy } from './artifacts';
+import { forgetSafetyCopySize, resolveSafetyCopy } from './artifacts';
 import { AUTH_TABLES } from './auth-tables';
 import {
     ARCHIVE_AUTH_FILE,
@@ -40,6 +40,7 @@ import {
     getBackupsDir,
     parseSafetyCopyName,
     resolveHomeDir,
+    resolveMountDir,
     wipeBackupStagingDir,
 } from './paths';
 import { HOME_DATABASES, type SnapshotProgress } from './snapshot-home';
@@ -52,6 +53,9 @@ type VersionedDatabase = { filePath: string; config: DatabaseConfig<SchemaType> 
 // The note a restore leaves in its staging folder while the home folder is not where it belongs.
 // Written before the move-aside, removed when the mark clears, read once at the next boot.
 const RESTORING_MARKER = 'restoring.json';
+// Written beside it the moment the install is done, before the mark clears. A marker without this
+// beside it means the process died with a home folder that is somewhere between the two states.
+const RESTORE_COMPLETE_MARKER = 'restore-complete.json';
 type RestoringMarker = { ownerId: string; homeDir: string; preRestoreName: string };
 
 function restoringMarkerPath(jobId: string): string {
@@ -60,6 +64,13 @@ function restoringMarkerPath(jobId: string): string {
 
 function writeRestoringMarker(jobId: string, marker: RestoringMarker): void {
     fs.writeFileSync(restoringMarkerPath(jobId), JSON.stringify(marker));
+}
+
+function markRestoreComplete(jobId: string): void {
+    fs.writeFileSync(
+        path.join(getBackupStagingDir(jobId), RESTORE_COMPLETE_MARKER),
+        JSON.stringify({ completedAt: new Date().toISOString() }),
+    );
 }
 
 // The marker survived a crash and names two paths this then renames, so it is read as untrusted
@@ -140,7 +151,11 @@ function materializeMount(
     summary: BackupManifest['mounts'][number],
     stamp: string,
 ): VersionedDatabase[] {
-    const mountDir = path.join(homeDir, PATHS.DRIVE.ROOT, summary.id);
+    // The id comes out of the archive's manifest. The parser holds it to the class a real mount id
+    // uses, and this is the second lock on the same door: whatever it says, the folder it resolves
+    // to has to be inside the home being restored.
+    const mountDir = resolveMountDir(homeDir, summary.id);
+    if (!mountDir) throw new ApiError(400, `The archive names a mount (${summary.id}) that is not in this home`);
     const dataDir = path.join(mountDir, PATHS.DRIVE.DATA_DIR);
     const metadataPath = path.join(mountDir, PATHS.DRIVE.METADATA_DB);
     if (!fs.existsSync(metadataPath)) {
@@ -325,11 +340,17 @@ async function restoreShares(ownerId: string, folder: string): Promise<void> {
 }
 
 // The avatar is server data, not home data: put it back only where the server has none, so a picture
-// the user changed after the backup is not quietly reverted.
-async function restoreAvatar(folder: string): Promise<void> {
+// the user changed after the backup is not quietly reverted. The name comes out of the archive and
+// lands in the server-wide avatars folder, so it has to BE this user's: `{ownerId}.{ext}` and
+// nothing else, or a hostile archive would plant a picture for somebody who has none.
+async function restoreAvatar(ownerId: string, folder: string): Promise<void> {
     const avatarDir = path.join(folder, ARCHIVE_AVATAR_DIR);
     if (!fs.existsSync(avatarDir)) return;
     for (const name of fs.readdirSync(avatarDir)) {
+        if (path.parse(name).name !== ownerId) {
+            console.warn(`[backup] ${ownerId}: ${name} in the archive is not this user's avatar, not restored`);
+            continue;
+        }
         const target = path.join(getAvatarsDir(), name);
         if (fs.existsSync(target)) continue;
         await Bun.write(target, Bun.file(path.join(avatarDir, name)));
@@ -347,10 +368,9 @@ function checkRestoredDatabases(homeDir: string, mountIds: string[], containerDa
         config,
     }));
     for (const mountId of mountIds) {
-        targets.push({
-            filePath: path.join(homeDir, PATHS.DRIVE.ROOT, mountId, PATHS.DRIVE.METADATA_DB),
-            config: MOUNT_DB_CONFIG,
-        });
+        const mountDir = resolveMountDir(homeDir, mountId);
+        if (!mountDir) throw new ApiError(400, `${mountId} is not a mount of this home`);
+        targets.push({ filePath: path.join(mountDir, PATHS.DRIVE.METADATA_DB), config: MOUNT_DB_CONFIG });
     }
     // An s3 mount's container databases are staged copies on their way to the bucket, not files at a
     // knowable path; verify read every one of them in the folder this restore unpacked minutes ago.
@@ -388,8 +408,10 @@ function checkRestoredDatabases(homeDir: string, mountIds: string[], containerDa
 function containerDatabasesIn(homeDir: string, mountIds: string[]): VersionedDatabase[] {
     const found: VersionedDatabase[] = [];
     for (const mountId of mountIds) {
-        const dataDir = path.join(homeDir, PATHS.DRIVE.ROOT, mountId, PATHS.DRIVE.DATA_DIR);
-        const metadataPath = path.join(homeDir, PATHS.DRIVE.ROOT, mountId, PATHS.DRIVE.METADATA_DB);
+        const mountDir = resolveMountDir(homeDir, mountId);
+        if (!mountDir) throw new ApiError(400, `${mountId} is not a mount of this home`);
+        const dataDir = path.join(mountDir, PATHS.DRIVE.DATA_DIR);
+        const metadataPath = path.join(mountDir, PATHS.DRIVE.METADATA_DB);
         if (!fs.existsSync(metadataPath)) continue;
         const db = new Database(metadataPath, { readwrite: true, create: false });
         try {
@@ -463,6 +485,10 @@ async function replaceHomeFolder(
 
         try {
             await install(stamp);
+            // The home folder is whole from here: everything after this only lets go of it. A crash
+            // before this line leaves a half-written folder that only the next boot can judge, and
+            // the absence of this note is what tells it so.
+            if (movedAside) markRestoreComplete(jobId);
         } catch (error) {
             // Nothing is deleted, ever: the folder in place keeps a name of its own and the home as
             // it was goes back. A failure while putting it back must not hide the original one.
@@ -558,7 +584,7 @@ export async function restoreHome(
                 // The rows that live outside the home folder (users only).
                 restoreAuthRows(ownerId, manifest, folder);
                 await restoreShares(ownerId, folder);
-                await restoreAvatar(folder);
+                await restoreAvatar(ownerId, folder);
             };
         },
         // A half-written extraction is not a home: it keeps a name of its own, which the admin pane
@@ -587,6 +613,9 @@ export async function restoreSafetyCopy(
     const install: InstallHome = async () => {
         onProgress?.('home files', 0, 1);
         fs.renameSync(folder, homeDir);
+        // The copy is not at that path any more, and a later one can land on the same name (one
+        // stamp per second) — it would then list the size measured for this folder.
+        forgetSafetyCopySize(folder);
         onProgress?.('home files', 1, 1);
         // The verdict a restore from an archive ends on: SQLite's on the bytes, and this build's on
         // every schema stamp. A copy this server made passes both; one carried over from a newer
@@ -614,23 +643,38 @@ export async function restoreSafetyCopy(
     onProgress?.('done', 1, 1);
 }
 
-// Boot: a restore killed between the move-aside and the install left the home folder gone and its
-// contents under the `{id}.pre-restore-{ts}` its marker names. The process that knew about it is
-// dead, so nothing else will ever put it back — this does, loudly. It runs before the staging wipe,
-// which is what clears the markers of restores that finished. A safety copy with no marker is not
-// evidence of anything: nothing deletes them automatically, so a deleted user leaves one behind.
+// Boot: a restore killed anywhere between the move-aside and the last install step left the home
+// folder either gone or half written, with its real contents under the `{id}.pre-restore-{ts}` its
+// marker names. The process that knew about it is dead, so nothing else will ever put it back —
+// this does, loudly. The install writes a completion note beside the marker, so a restore that
+// finished is told from one that did not. It runs before the staging wipe, which is what clears the
+// markers of both. A safety copy with no marker is not evidence of anything: nothing deletes them
+// automatically, so a deleted user leaves one behind.
 export function recoverInterruptedRestores(): void {
     const stagingRoot = path.join(backupsDirPath(), '.staging');
     if (!fs.existsSync(stagingRoot)) return;
     for (const entry of fs.readdirSync(stagingRoot, { withFileTypes: true })) {
         if (!entry.isDirectory()) continue;
-        const marker = readRestoringMarker(path.join(stagingRoot, entry.name, RESTORING_MARKER));
+        const jobDir = path.join(stagingRoot, entry.name);
+        const marker = readRestoringMarker(path.join(jobDir, RESTORING_MARKER));
         if (!marker) continue;
-        // The home is there: the restore got as far as installing it, and its own rollback would
-        // have put the old one back. Nothing to do but leave both folders alone.
-        if (fs.existsSync(marker.homeDir)) continue;
+        // The install finished; whatever the job did after that is nobody's business now.
+        if (fs.existsSync(path.join(jobDir, RESTORE_COMPLETE_MARKER))) continue;
         const aside = path.join(path.dirname(marker.homeDir), marker.preRestoreName);
+        // No copy to put back: the restore's own rollback already did it, or there is nothing left
+        // to reason about. Either way this must not move the home folder that is in place.
         if (!fs.existsSync(aside)) continue;
+        // A folder that is there without the completion note is the half-written one: the extract
+        // landed and the mount materialization, the checks or the identity writes did not. It keeps
+        // a name of its own, exactly as a failure the job itself caught would have left it, and the
+        // home as it was goes back. Nothing is deleted.
+        if (fs.existsSync(marker.homeDir)) {
+            const parked = buildSafetyCopyName(marker.homeDir, 'failed-restore', freeStamp(marker.homeDir, new Date()));
+            fs.renameSync(marker.homeDir, parked);
+            console.error(
+                `[backup] a restore of ${marker.ownerId} was interrupted mid-install: the half-written folder is ${path.basename(parked)}`,
+            );
+        }
         fs.renameSync(aside, marker.homeDir);
         console.error(
             `[backup] a restore of ${marker.ownerId} was interrupted: ${marker.preRestoreName} is back in place as the home folder`,

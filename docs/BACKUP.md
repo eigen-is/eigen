@@ -12,15 +12,16 @@ One archive is one home. A user home and a team home are the same shape, minus t
 - **Every file the drive knows about**, by path, on all three storage backends. A `local` mount's tree as it is, a `local-key` mount's flat objects put back under their real names, and an `s3` mount's objects downloaded out of the bucket. An archive never depends on a bucket, credentials, or the storage type staying the same.
 - **Every container's `data.db` and `comments.db`** (eigendocs, sheets, slides, stickies, vector drawings, chats), taken freshest-first: an open document's live handle first, then a pending staged upload, then the stored object. A backup taken during an S3 outage holds the newest local bytes, not a stale remote object.
 - **File version history** (`versions/` inside a container) and **trash** (`.trash/`). Version history is the only copy of an old file state, so it is always included; trash is data the user can still restore.
+- **Thumbnails** (`thumbs/` beside a mount's files). A thumbnail is generated once, when a file is uploaded, and never regenerated, so it is not derived data: an archive without them is a restore that loses every thumbnail the home ever had. They are keyed by path id, which a restore preserves.
 - **The home's `settings.json`**, mount configs included, and for S3 mounts that means the access key and secret.
-- **Mail as Maildir files** and **contacts as the `.vcf` cards themselves**, so both survive a rebuild of their index database.
+- **Mail as Maildir files** and **contacts as the `.vcf` cards themselves**, so both survive a rebuild of their index database. Empty directories come along too: a mailbox nobody has ever been delivered to still needs its `new/` and `cur/`, because that is what the mail sync watches.
 - **Users only**: `auth.json` (the `user`, `account`, `apikey`, `two_factor`, `member` and `team_member` rows for this user, every column carried), `shares.json` (the share-registry rows this user granted), and the user's avatar.
 
 Each database copy is internally consistent. The archive as a whole is not one atomic instant: a mail arriving while the drive is being copied may or may not be in it. That is the standard guarantee for a backup of a running system, and it is why users keep working during one.
 
 ## What it does not contain
 
-- **Derived caches**: thumbnails, previews, the `tmp/` scratch dirs, the mount `staging/` folder as a folder (its pending bytes are materialized into the file tree instead, where they win over the stored object), the contacts avatar cache, and the Maildir delivery spool.
+- **Derived caches**: previews, the `tmp/` scratch dirs, the mount `staging/` folder as a folder (its pending bytes are materialized into the file tree instead, where they win over the stored object), the contacts avatar cache, and the Maildir delivery spool.
 - **Sessions.** A restore never signs anybody out, and an archive cannot be used to resurrect a session.
 - **Server-level data**: `users3.db`, `eigen.db`, `waitlist.db`, the server config and settings, the avatars folder as a whole, and `.env.production`. A user archive carries that user's own auth rows and nothing else about the server.
 - **Other homes.** A user's archive is their home only. Team data lives in the team's home and is covered by the team's own backup, so back a team up separately.
@@ -132,7 +133,12 @@ An artifact is a plain POSIX tar (pax headers for long paths, empty folders incl
 
 ## Interrupted restores
 
-A restore writes a marker in its staging folder before it moves the home folder aside. If the process dies between the move and the install, the next boot reads that marker, renames the pre-restore copy back to the home folder, and logs loudly. Staging is wiped afterwards, which is what clears the markers of restores that finished.
+A restore writes a marker in its staging folder before it moves the home folder aside, and a second note beside it the moment the install is done — after the databases are checked and the identity rows are written, before the home is served again. The next boot reads both:
+
+- **Marker, no completion note.** The process died somewhere in the install. The half-written home folder, if there is one, is renamed `{id}.failed-restore-{timestamp}` and the pre-restore copy is renamed back to the home folder. Both moves are logged loudly and nothing is deleted. This is the window an OOM kill or a power cut lands in, and it is a long one when the backups folder is on another disk: the install then copies the whole tree instead of renaming it.
+- **Marker and completion note.** The restore finished; both folders are left exactly as they are.
+
+Staging is wiped right after, which is what clears the markers of restores that finished.
 
 A marker lost to a torn write fails safe: the boot recovery does nothing, and the home's data is sitting complete in `{id}.pre-restore-{timestamp}`. Rename it back by hand (or use **Restore** on the safety copy once the home folder exists again).
 

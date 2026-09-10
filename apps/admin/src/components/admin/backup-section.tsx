@@ -309,7 +309,10 @@ function SafetyCopyRow({ copy, busy, onRestore, onDelete }: SafetyCopyRowProps) 
             <div className="flex-1 min-w-0">
                 <div className="text-sm truncate">{formatDateTime(copy.createdAt)}</div>
                 <div className="text-xs text-muted-foreground truncate">
-                    {copy.kind} · {formatFileSize(copy.bytes)}
+                    {/* Measuring a whole home stops after a cap, so the number is a floor. Saying so
+                        beats showing 52 MB for a 284 MB copy. */}
+                    {copy.kind} · {copy.truncated ? 'at least ' : ''}
+                    {formatFileSize(copy.bytes)}
                 </div>
             </div>
             <div className="flex items-center invisible group-hover:visible pointer-coarse:visible">

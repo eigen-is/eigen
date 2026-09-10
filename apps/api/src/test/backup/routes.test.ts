@@ -10,6 +10,7 @@ import { eq } from 'drizzle-orm';
 import { user as userScheme } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
+import { measureFolder } from '../../lib/backup/artifacts';
 import { withBackupJobSlot } from '../../lib/backup/jobs';
 import {
     buildArtifactName,
@@ -263,7 +264,9 @@ describe('Backup routes', () => {
         const uploaded = (await listArtifacts(target.id)).artifacts.find((entry) => entry.name === name);
         expect(uploaded?.verify.status).toBe('unverified');
         expect(uploaded?.manifest?.ownerId).toBe(target.id);
-        expect(uploaded?.createdAt).toBe(new Date('2020-01-02T03:04:05Z').toISOString());
+        // A Date in the type, an ISO string over the wire: this test reads the raw JSON, so it
+        // compares what the browser's Eden reviver would turn back into that Date.
+        expect(String(uploaded?.createdAt)).toBe(new Date('2020-01-02T03:04:05Z').toISOString());
 
         const job = await startAndFinish(`/admin/backup/artifacts/${name}/verify`);
         expect(job.state).toBe('done');
@@ -567,6 +570,8 @@ describe('Backup routes', () => {
 
         const sized = (await listArtifacts(target.id)).safetyCopies.find((entry) => entry.name === copyName);
         expect(sized?.bytes).toBe(2048);
+        // A copy small enough to walk in full: the number is the size, not a floor.
+        expect(sized?.truncated).toBe(false);
 
         // Measured once per process: a safety copy never changes after the restore that made it, and
         // the list is refetched on every job poke.
@@ -587,10 +592,24 @@ describe('Backup routes', () => {
         rmSync(copyDir, { recursive: true, force: true });
     });
 
+    // The walk gives up after a cap so a huge home is not re-walked on every poke, and what it
+    // reports is then a floor. Saying so is the difference between "52.79 MB" and "at least
+    // 52.79 MB" for a 284 MB copy — the first is a number an admin would act on.
+    test('a folder too big to walk reports its size as a floor', async () => {
+        const dir = mkdtempSync(join(TEST_DATA_DIR, 'measure-'));
+        for (const name of ['a.bin', 'b.bin', 'c.bin']) writeFileSync(join(dir, name), Buffer.alloc(1024));
+
+        expect(await measureFolder(dir)).toEqual({ bytes: 3072, truncated: false });
+        const capped = await measureFolder(dir, 2);
+        expect(capped.truncated).toBe(true);
+        expect(capped.bytes).toBeLessThan(3072);
+        rmSync(dir, { recursive: true, force: true });
+    });
+
     test('a failed verify fails the backup job, keeps the artifact and tells the admin', async () => {
         const spy = spyOn(verifyModule, 'verifyFolder').mockResolvedValue({
             status: 'failed',
-            checkedAt: new Date().toISOString(),
+            checkedAt: new Date(),
             failures: ['seeded: home/mounts/x/metadata.db is missing from the folder'],
         });
         try {

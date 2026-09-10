@@ -51,6 +51,39 @@ export function getBackupTempPath(suffix: string): string {
     return path.join(getBackupStagingDir('archive'), `${randomUUID()}${suffix}`);
 }
 
+function hasControlCharacter(text: string): boolean {
+    for (let index = 0; index < text.length; index++) {
+        const code = text.charCodeAt(index);
+        if (code < 0x20 || code === 0x7f) return true;
+    }
+    return false;
+}
+
+// An archive comes from outside: its manifest, its mount trees and the settings.json of a folder it
+// left behind all name paths this server then reads, opens and deletes. Anything that would leave
+// `root` — absolute, a `..` hop, a control character, or a path that walks through a symlink — is
+// refused before it reaches the filesystem. `root` is resolved to its real path here, so the
+// comparison holds on a macOS /var → /private/var temp folder too. One spelling for both sides:
+// verify judges an unpacked archive with it, and restore resolves every segment it is handed.
+export function resolveInside(root: string, relPath: string): string | null {
+    if (relPath === '' || path.isAbsolute(relPath) || hasControlCharacter(relPath)) return null;
+    if (relPath.split(/[\\/]/).includes('..')) return null;
+    const realRoot = fs.existsSync(root) ? fs.realpathSync(root) : root;
+    const abs = path.resolve(realRoot, relPath);
+    if (!abs.startsWith(`${realRoot}${path.sep}`)) return null;
+    // Lexically inside is not enough: one symlinked directory along the way and the bytes read are
+    // somebody else's.
+    const real = fs.existsSync(abs) ? fs.realpathSync(abs) : abs;
+    return real.startsWith(`${realRoot}${path.sep}`) ? abs : null;
+}
+
+// The mount folder inside a home, for a mount id that came from outside (a manifest, a home's
+// settings.json). Null when the id would leave the home — the caller refuses rather than touching
+// another home's databases and files.
+export function resolveMountDir(homeDir: string, mountId: string): string | null {
+    return resolveInside(homeDir, `${PATHS.DRIVE.ROOT}/${mountId}`);
+}
+
 // The layout inside a backup folder: `home/` mirrors the home directory one-for-one, and every
 // mount keeps its metadata.db beside a `data/` tree of the files its paths table knows about.
 // snapshotHome writes it and verifyFolder reads it back — one spelling for both.
