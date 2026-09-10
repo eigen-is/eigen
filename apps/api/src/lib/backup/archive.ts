@@ -8,6 +8,7 @@ import type { BackupManifest, BackupVerifyRecord } from '@workspace/lib/types/ba
 import { parseBackupManifest, parseBackupSidecar } from '@workspace/lib/validation';
 import { ApiError } from '../core';
 import { getBackupTempPath } from './paths';
+import type { SnapshotProgress } from './snapshot-home';
 
 // An artifact is a plain POSIX tar (pax for long paths) piped through zstd, so `tar --zstd -xf`
 // unpacks one on any machine. The tar is generated entry by entry into the compressor rather than
@@ -126,7 +127,7 @@ async function* entryChunks(name: string, absPath: string, size: number, mtime: 
     yield padding(size);
 }
 
-async function* tarChunks(dir: string, rootName: string): AsyncGenerator<Uint8Array> {
+async function* tarChunks(dir: string, rootName: string, onProgress?: SnapshotProgress): AsyncGenerator<Uint8Array> {
     const relPaths: string[] = [];
     for await (const rel of new Bun.Glob('**/*').scan({ cwd: dir, onlyFiles: false, dot: true })) {
         relPaths.push(rel.replaceAll('\\', '/'));
@@ -144,7 +145,10 @@ async function* tarChunks(dir: string, rootName: string): AsyncGenerator<Uint8Ar
     }
 
     yield* directory(`${rootName}/`, fs.statSync(dir).mtimeMs);
-    for (const rel of relPaths) {
+    for (const [index, rel] of relPaths.entries()) {
+        // Packing dominates a large home's wall clock, so it reports per entry: one `pack` step for
+        // the whole folder left the admin pane's bar at 0% for 38 of a 40-second job.
+        onProgress?.('pack', index + 1, relPaths.length);
         const abs = path.join(dir, rel);
         const stat = fs.statSync(abs);
         if (stat.isDirectory()) {
@@ -167,11 +171,11 @@ async function* tarChunks(dir: string, rootName: string): AsyncGenerator<Uint8Ar
 // the tar is generated entry by entry into the zstd stream, and the compressed bytes go straight to
 // disk. It is built in the staging folder and renamed into place, so an interrupted pack never
 // leaves a short archive under a name the artifact list would offer for restore.
-export async function packFolder(dir: string, artifactPath: string): Promise<void> {
+export async function packFolder(dir: string, artifactPath: string, onProgress?: SnapshotProgress): Promise<void> {
     fs.mkdirSync(path.dirname(artifactPath), { recursive: true });
     const tempPath = getBackupTempPath('.tar.zst');
     try {
-        const chunks = Readable.from(tarChunks(dir, path.basename(dir)));
+        const chunks = Readable.from(tarChunks(dir, path.basename(dir), onProgress));
         await pipeline(chunks, createZstdCompress(), fs.createWriteStream(tempPath));
     } catch (error) {
         fs.rmSync(tempPath, { force: true });

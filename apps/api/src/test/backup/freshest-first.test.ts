@@ -122,6 +122,8 @@ beforeAll(async () => {
 // Injections are per-test: a parked write left behind would strand the NEXT test's upload.
 afterEach(async () => {
     staleFault.parkWrites = false;
+    staleFault.failReadKeys.clear();
+    staleFault.readErrorCode = undefined;
     staleFault.releaseHungWrites();
     await staleFault.landAllRemaining();
     await staleMount.drainPendingUploads({ flushNow: true });
@@ -228,6 +230,32 @@ describe('Backup freshest-first on an s3 mount', () => {
         const storedCopy = join(scratch, 'object.db');
         await Bun.write(storedCopy, staleMount.storage.read(storageKey));
         expect(readMarkers(storedCopy)).toEqual(['stored']);
+    });
+
+    // A backup must never silently omit a mount's objects, so an unreadable one fails the whole job.
+    // Bun's S3Error says only "an unexpected error has occurred" and puts the actionable part in
+    // `code`, which is all the admin pane's one-line job error would otherwise have shown.
+    test('a storage failure fails the snapshot, naming the mount and the error code', async () => {
+        const rootId = (await staleMount.getRootFolder())!.id;
+        const fileId = await staleMount.createFile(
+            rootId,
+            'unreachable.png',
+            'image/png',
+            TEST_PNG_BYTES.byteLength,
+            TEST_PNG_BYTES,
+        );
+        await staleMount.drainPendingUploads({ flushNow: true });
+        staleFault.failReadKeys.add(await staleMount.getStorageKey(fileId));
+        staleFault.readErrorCode = 'ConnectionRefused';
+
+        await expect(snapshot()).rejects.toThrow(`mount ${STALE_MOUNT_ID}: storage unreachable (ConnectionRefused)`);
+
+        // An error with no code is somebody else's problem and reaches the job as it is.
+        staleFault.readErrorCode = undefined;
+        await expect(snapshot()).rejects.toThrow('injected read failure (503)');
+
+        staleFault.failReadKeys.clear();
+        await staleMount.deletePath(fileId);
     });
 
     test('a settled s3 mount is materialized into data/ by path', async () => {
