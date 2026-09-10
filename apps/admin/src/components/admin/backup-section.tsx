@@ -131,7 +131,7 @@ export function BackupSection({ ownerId }: BackupSectionProps) {
             <Alert variant="warning">
                 <AlertDescription>
                     An archive holds everything in this home — files, mail, calendars and the stored storage
-                    credentials. Treat it as a secret.
+                    credentials. It is a secret; keep it somewhere safe.
                 </AlertDescription>
             </Alert>
 
