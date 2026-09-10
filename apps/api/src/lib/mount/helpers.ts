@@ -4,6 +4,7 @@ import { EIGEN_DOCUMENT_TYPES } from '@workspace/lib/types/drive';
 import { type SQL, sql } from 'drizzle-orm';
 import { getS3Config } from '../config/server-settings';
 import { ApiError } from '../core';
+import { LocalStorage, S3Storage, type StorageBackend, wrapWithStorageFault } from '../storage';
 
 // Reserved: any case variant of `.trash` aliases the real trash dir (Mount.trashDir) on path-based mounts.
 // Also checked on move (updatePath) so a legacy pre-guard row can't be re-parented onto the alias.
@@ -135,4 +136,27 @@ export function createMountConfig(id: string, settings: MountSettings): MountCon
         maxSizeMB: settings.maxSizeMB,
         s3Config: settings.s3Config ?? (settings.storageType === 's3' ? getS3Config() : undefined),
     };
+}
+
+// The one place a mount's storage backend is built from its config. `Mount` calls it for the live
+// mount; lib/backup calls it for a safety copy's mounts, whose stored objects it has to clean up
+// with no Home to ask. `baseDir` is the mount's own folder; the s3 backend has no use for it.
+export function createMountStorage(config: MountConfig, baseDir: string): StorageBackend {
+    let backend: StorageBackend;
+    if (config.storageType === 'local-key' || config.storageType === 'local') {
+        // LocalStorage is a strict superset of the flat-key backend; mount.ts gates all
+        // mkdir/rename/deleteDir calls behind isPathBased, so the extra methods are inert for local-key.
+        backend = new LocalStorage(baseDir);
+    } else if (config.storageType === 's3') {
+        if (!config.s3Config) {
+            throw new Error(
+                `Mount '${config.id}' uses S3 storage but no S3 configuration found. Configure S3 in admin settings first.`,
+            );
+        }
+        backend = new S3Storage(config.s3Config);
+    } else {
+        throw new Error(`Storage type ${config.storageType} not yet supported`);
+    }
+    // Passes the backend through untouched unless EIGEN_STORAGE_FAULT is set (never in production).
+    return wrapWithStorageFault(backend);
 }
