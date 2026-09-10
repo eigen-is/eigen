@@ -1,8 +1,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { BACKUP_UPLOAD_MAX_BYTES } from '@workspace/lib/constants/backup';
+import { BACKUP_UPLOAD_MAX_BYTES, BACKUP_UPLOAD_MAX_LABEL } from '@workspace/lib/constants/backup';
 import type { BackupArtifact, BackupJob, BackupSafetyCopy } from '@workspace/lib/types/backup';
 import { parseOwnerId } from '@workspace/lib/types/owner';
+import { BACKUP_ARTIFACT_EXTENSION, BACKUP_OWNER_ID, parseBackupArtifactName } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { readArtifactManifest, writeSidecar } from '../lib/backup/archive';
 import {
@@ -22,8 +23,9 @@ import {
     startBackupJob,
     withBackupJobSlot,
 } from '../lib/backup/jobs';
-import { getBackupsDir, getBackupTempPath, OWNER_ID, parseArtifactName } from '../lib/backup/paths';
+import { getBackupsDir, getBackupTempPath } from '../lib/backup/paths';
 import { restoreHome, restoreSafetyCopy } from '../lib/backup/restore';
+import type { SnapshotProgress } from '../lib/backup/snapshot-home';
 import { ApiError } from '../lib/core';
 import { requireAdmin } from '../lib/core/access';
 import { contentDisposition } from '../lib/core/http';
@@ -35,9 +37,9 @@ import { betterAuth } from './auth';
 
 // Guest homes are disposable (guest-cleanup deletes them) and org homes hold no databases, so
 // neither is backed up. The ownerId ends up naming a home folder, so its shape is checked here,
-// against the one class paths.ts allows, before anything is resolved.
+// against the one class the shared artifact-name grammar allows, before anything is resolved.
 async function requireRestorableHome(ownerId: string): Promise<void> {
-    if (!OWNER_ID.test(ownerId)) throw new ApiError(400, 'Invalid ownerId');
+    if (!BACKUP_OWNER_ID.test(ownerId)) throw new ApiError(400, 'Invalid ownerId');
     const owner = parseOwnerId(ownerId);
     if (owner.type !== 'user' && owner.type !== 'team') throw new ApiError(400, 'Not a user or team home');
     if (owner.type === 'user' && (await getUserById(owner.id))?.role === 'guest') {
@@ -57,14 +59,28 @@ async function requireExistingHome(ownerId: string): Promise<void> {
     if (!(await getUserById(owner.id))) throw new ApiError(404, 'User not found');
 }
 
-// The uploaded artifact's name rides in Content-Disposition, the header a browser upload already
-// carries for the file it is sending. It has to be a name this server writes: the ownerId in it is
-// what the artifact list groups by, and it is the name the bytes land under.
-function uploadName(header: string | null): { name: string; ownerId: string } {
-    const name = /filename="([^"]*)"/.exec(header ?? '')?.[1] ?? '';
-    const parsed = parseArtifactName(name);
-    if (!parsed) throw new ApiError(400, 'Content-Disposition must name a backup artifact file');
-    return { name, ownerId: parsed.ownerId };
+// A restore ends with the home evicted. On a remote mount it also ends with every file in the
+// mount's staging folder and one `pending_uploads` row per file, and the queue that drains them is a
+// Mount member — nothing runs it until the home is next opened, so an admin who restores a home
+// nobody then visits leaves the bucket stale. Opening the home here is what starts it: Mount.init
+// stands up the UploadQueue and reconciles the persisted rows. Routes may call getHome; the job
+// bodies in lib/backup may not, which is why this lives here and not in jobs.ts.
+function startRestoreJob(
+    ownerId: string,
+    adminId: string,
+    artifact: string,
+    restore: (jobId: string, onProgress: SnapshotProgress) => Promise<void>,
+): { jobId: string } {
+    const job = startBackupJob('restore', ownerId, adminId, async (started, onProgress) => {
+        await restore(started.id, onProgress);
+        // The restore itself is done. A home that fails to open now is the next request's problem,
+        // not a failed restore.
+        await getHome(ownerId).catch((error: unknown) => {
+            console.error(`[backup] could not warm the restored home ${ownerId}:`, error);
+        });
+        return artifact;
+    });
+    return { jobId: job.id };
 }
 
 // Server-wide admin surface, the settings.ts carve-out: no `:ownerId` second segment, every handler
@@ -125,13 +141,22 @@ export const backupRouter = new Elysia({ name: 'backup' })
 
     .post(
         '/admin/backup/artifacts',
-        async ({ request, user }): Promise<{ name: string }> => {
+        async ({ query, request, user }): Promise<{ name: string }> => {
             await requireAdmin(user.id);
-            const { name, ownerId } = uploadName(request.headers.get('content-disposition'));
+            // The name is a query parameter, not a header: a custom request header makes the upload
+            // a CORS-preflighted request, and a split-origin deployment (every dev setup) answers
+            // that preflight without it. It has to be a name this server writes — the ownerId in it
+            // is what the artifact list groups by, and it is the name the bytes land under.
+            const parsed = parseBackupArtifactName(query.name);
+            if (!parsed) throw new ApiError(400, 'The name parameter must be a backup artifact name');
+            const { name } = query;
+            const { ownerId } = parsed;
             const declared = Number(request.headers.get('content-length'));
             if (!Number.isSafeInteger(declared) || declared <= 0 || declared > BACKUP_UPLOAD_MAX_BYTES) {
-                const limit = BACKUP_UPLOAD_MAX_BYTES / 1024 ** 3;
-                throw new ApiError(413, `A backup upload must declare a Content-Length of at most ${limit} GB`);
+                throw new ApiError(
+                    413,
+                    `A backup upload must declare a Content-Length of at most ${BACKUP_UPLOAD_MAX_LABEL}`,
+                );
             }
             const artifactPath = path.join(getBackupsDir(), name);
             if (fs.existsSync(artifactPath)) throw new ApiError(409, 'That artifact is already in the backups folder');
@@ -140,7 +165,7 @@ export const backupRouter = new Elysia({ name: 'backup' })
             // Staged next to the backups folder so the landing below is one filesystem operation: an
             // interrupted upload never leaves a short archive under a name the list would offer for
             // restore. writeTempWithHash is the stream-into-a-temp seam; its sha256 is incidental.
-            const tempPath = getBackupTempPath('.tar.zst');
+            const tempPath = getBackupTempPath(BACKUP_ARTIFACT_EXTENSION);
             try {
                 const { size } = await writeTempWithHash(tempPath, request.body);
                 // Content-Length is the client's word for it; the bytes are what count.
@@ -167,7 +192,7 @@ export const backupRouter = new Elysia({ name: 'backup' })
             }
             return { name };
         },
-        { auth: true, parse: 'none' },
+        { auth: true, parse: 'none', query: t.Object({ name: t.String() }) },
     )
 
     .get(
@@ -225,11 +250,9 @@ export const backupRouter = new Elysia({ name: 'backup' })
             if (ownerId !== body.ownerId) throw new ApiError(400, 'That artifact is a backup of another home');
             if (!fs.existsSync(artifactPath)) throw new ApiError(404, 'Artifact not found');
             await requireRestorableHome(body.ownerId);
-            const job = startBackupJob('restore', body.ownerId, user.id, async (started, onProgress) => {
-                await restoreHome(params.name, body.ownerId, started.id, onProgress);
-                return params.name;
-            });
-            return { jobId: job.id };
+            return startRestoreJob(body.ownerId, user.id, params.name, (jobId, onProgress) =>
+                restoreHome(params.name, body.ownerId, jobId, onProgress),
+            );
         },
         { auth: true, body: t.Object({ ownerId: t.String() }) },
     )
@@ -262,11 +285,9 @@ export const backupRouter = new Elysia({ name: 'backup' })
             const { folder, kind } = await resolveSafetyCopy(params.ownerId, params.name);
             if (kind !== 'pre-restore') throw new ApiError(400, 'Only a pre-restore copy can be restored');
             if (!fs.existsSync(folder)) throw new ApiError(404, 'Safety copy not found');
-            const job = startBackupJob('restore', params.ownerId, user.id, async (started, onProgress) => {
-                await restoreSafetyCopy(params.ownerId, params.name, started.id, onProgress);
-                return params.name;
-            });
-            return { jobId: job.id };
+            return startRestoreJob(params.ownerId, user.id, params.name, (jobId, onProgress) =>
+                restoreSafetyCopy(params.ownerId, params.name, jobId, onProgress),
+            );
         },
         { auth: true },
     );

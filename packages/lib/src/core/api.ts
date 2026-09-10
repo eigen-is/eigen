@@ -170,9 +170,12 @@ export const getDriveImportUrl = (ownerId: string, mountId: string, pathId: stri
 export const getDriveImportFromDriveUrl = (ownerId: string, mountId: string, pathId: string) =>
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/import-from-drive`;
 // Backup artifacts move as raw bodies, not JSON: the download is a browser navigation and the upload
-// streams the file with its name in Content-Disposition, neither of which fits an Eden call.
+// streams the file with its name in the query string, neither of which fits an Eden call. The name
+// is not a custom header on purpose — that would make the upload a CORS-preflighted request, and a
+// split-origin deployment answers the preflight without it.
 export const getBackupArtifactUrl = (name: string) => `${API_HOST}/admin/backup/artifacts/${encodeURIComponent(name)}`;
-export const getBackupUploadUrl = () => `${API_HOST}/admin/backup/artifacts`;
+export const getBackupUploadUrl = (name: string) =>
+    `${API_HOST}/admin/backup/artifacts?name=${encodeURIComponent(name)}`;
 
 export const getDriveEmbedUrl = (
     ownerId: string,

@@ -6,12 +6,13 @@ import { teamOwnerId } from '@workspace/lib/types';
 import type { BackupEntry, BackupManifest } from '@workspace/lib/types/backup';
 import type { CalendarItem } from '@workspace/lib/types/calendar';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { parseBackupArtifactName } from '@workspace/lib/validation';
 import * as encoding from 'lib0/encoding';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
 import { twoFactor as twoFactorScheme } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
-import { buildArtifactName, buildHomeFolderName, parseArtifactName } from '../../lib/backup/paths';
+import { buildArtifactName, buildHomeFolderName } from '../../lib/backup/paths';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import { docUpdates } from '../../lib/collab/schema';
@@ -582,7 +583,7 @@ describe('Backup artifact names', () => {
         for (const ownerId of ['a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'team_abc123']) {
             const name = buildArtifactName(ownerId, at);
             expect(name).toBe(`home-${ownerId}-20260909-140307.tar.zst`);
-            const parsed = parseArtifactName(name);
+            const parsed = parseBackupArtifactName(name);
             expect(parsed).not.toBeNull();
             expect(parsed!.ownerId).toBe(ownerId);
             expect(parsed!.at.toISOString()).toBe(at.toISOString());
@@ -598,7 +599,7 @@ describe('Backup artifact names', () => {
             'home-abc-2026099-140307.tar.zst',
             'home-abc-20261309-140307.tar.zst',
         ]) {
-            expect(parseArtifactName(bad)).toBeNull();
+            expect(parseBackupArtifactName(bad)).toBeNull();
         }
     });
 });

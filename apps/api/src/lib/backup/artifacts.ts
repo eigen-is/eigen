@@ -3,11 +3,11 @@ import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import type { BackupArtifact, BackupSafetyCopy } from '@workspace/lib/types/backup';
-import { parseHomeMountSettings } from '@workspace/lib/validation';
+import { parseBackupArtifactName, parseHomeMountSettings } from '@workspace/lib/validation';
 import { ApiError, PATHS } from '../core';
 import { createMountStorage } from '../mount/helpers';
 import { readSidecar, sidecarPath } from './archive';
-import { backupsDirPath, parseArtifactName, parseSafetyCopyName, resolveHomeDir } from './paths';
+import { backupsDirPath, parseSafetyCopyName, resolveHomeDir } from './paths';
 import { flatStorageKey } from './snapshot-mount';
 
 // A safety copy holds a whole home; its size is a line in a list, not an accounting figure, so the
@@ -51,7 +51,7 @@ export async function listArtifacts(ownerId: string): Promise<BackupArtifact[]> 
 
     const artifacts: BackupArtifact[] = [];
     for (const name of await fsp.readdir(dir)) {
-        const parsed = parseArtifactName(name);
+        const parsed = parseBackupArtifactName(name);
         if (!parsed || parsed.ownerId !== ownerId) continue;
         const artifactPath = path.join(dir, name);
         let bytes: number;
@@ -111,7 +111,7 @@ export async function listSafetyCopies(ownerId: string): Promise<BackupSafetyCop
 // Every route that names an artifact resolves it here first: a name that is not one this server
 // writes never reaches the filesystem. The owner id rides along because it is part of the name.
 export function resolveArtifact(name: string): { artifactPath: string; ownerId: string } {
-    const parsed = parseArtifactName(name);
+    const parsed = parseBackupArtifactName(name);
     if (!parsed) throw new ApiError(400, 'Not a backup artifact name');
     // Reading or deleting an artifact never creates the backups folder; only a writer does.
     return { artifactPath: path.join(backupsDirPath(), name), ownerId: parsed.ownerId };
