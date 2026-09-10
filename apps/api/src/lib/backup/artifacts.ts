@@ -182,9 +182,7 @@ async function deleteRemoteObjects(folder: string, homeDir: string): Promise<voi
         console.warn(`[backup] ${path.basename(folder)}: no live home to compare against, leaving its objects alone`);
         return;
     }
-    const settings = JSON.parse(await fsp.readFile(settingsPath, 'utf8')) as {
-        mounts?: Record<string, MountSettings>;
-    };
+    const settings: { mounts?: Record<string, MountSettings> } = JSON.parse(await fsp.readFile(settingsPath, 'utf8'));
     for (const [id, mountSettings] of Object.entries(settings.mounts ?? {})) {
         const config = createMountConfig(id, mountSettings);
         if (config.storageType !== 's3') continue;
