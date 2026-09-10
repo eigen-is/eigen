@@ -31,6 +31,7 @@ import {
     drivePost,
     driveUpload,
     getTestContext,
+    openMountMetadata,
     TEST_DATA_DIR,
     TEST_PNG_BYTES,
 } from '../setup';
@@ -123,6 +124,16 @@ async function stampSchemaVersion(manifest: BackupManifest, folder: string, relP
 
 function safetyCopies(userId: string, suffix: string): string[] {
     return readdirSync(join(TEST_DATA_DIR, 'home')).filter((name) => name.startsWith(`${userId}${suffix}`));
+}
+
+// Where a flat-key mount stores one row's object: `paths.file` (Mount.getStorageKey).
+function storageKeyIn(ownerId: string, mountId: string, pathId: string): string {
+    const db = openMountMetadata(join(TEST_DATA_DIR, 'home', ownerId, 'mounts', mountId, 'metadata.db'));
+    try {
+        return db.query<{ file: string }, [string]>('SELECT file FROM paths WHERE id = ?').get(pathId)!.file;
+    } finally {
+        db.close();
+    }
 }
 
 // Read-write on purpose: a closed WAL database has no -shm beside it, and a readonly open cannot
@@ -295,9 +306,13 @@ describe('Backup restoreHome', () => {
         expect(trash.map((item) => item.name)).toEqual(['trashed.png']);
         // The archive holds a trashed file under `.trash/{id}.{ext}`; this mount stores it under its
         // flat key like any other file, so the bytes are checked where the mount will look for them
-        // (the download route refuses a trashed path, restore or no restore).
+        // (the download route refuses a trashed path, restore or no restore). The key is the one it
+        // always had: only a remote mount's rows are rekeyed, because only its objects live outside
+        // the folder that moved aside.
+        const trashedKey = storageKeyIn(target.id, mountId, trashedFileId);
+        expect(trashedKey).toBe(`${trashedFileId}.png`);
         const trashedBytes = await Bun.file(
-            join(TEST_DATA_DIR, 'home', target.id, 'mounts', mountId, 'data', `${trashedFileId}.png`),
+            join(TEST_DATA_DIR, 'home', target.id, 'mounts', mountId, 'data', trashedKey),
         ).arrayBuffer();
         expect(new Uint8Array(trashedBytes)).toEqual(TEST_PNG_BYTES);
         const versions = await assertJson<{ name: string }[]>(

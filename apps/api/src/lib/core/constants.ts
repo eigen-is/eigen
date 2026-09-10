@@ -1,6 +1,9 @@
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants';
 
 export const PATHS = {
+    // The home's own settings file, at the root of every home folder — and so of every archive and
+    // safety copy of one.
+    SETTINGS: 'settings.json',
     DRIVE: {
         ROOT: 'mounts',
         DEFAULT_MOUNT: 'default',

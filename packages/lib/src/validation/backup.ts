@@ -1,4 +1,6 @@
 import type { BackupManifest, BackupVerifyRecord } from '../types/backup';
+import type { S3Config } from '../types/mount';
+import type { MountSettings } from '../types/settings';
 
 // The only manifest version this build writes and reads.
 export const BACKUP_FORMAT_VERSION = 1;
@@ -125,4 +127,50 @@ export function parseBackupShares(text: string): { targetIdentifier: string }[] 
         shares.push({ targetIdentifier: row.targetIdentifier });
     }
     return shares;
+}
+
+function isS3Config(value: unknown): value is S3Config {
+    return (
+        typeof value === 'object' &&
+        value !== null &&
+        'endpoint' in value &&
+        typeof value.endpoint === 'string' &&
+        'bucket' in value &&
+        typeof value.bucket === 'string' &&
+        'accessKeyId' in value &&
+        typeof value.accessKeyId === 'string' &&
+        'secretAccessKey' in value &&
+        typeof value.secretAccessKey === 'string'
+    );
+}
+
+function isStorageType(value: string): value is MountSettings['storageType'] {
+    return value === 'local' || value === 'local-key' || value === 's3';
+}
+
+// The mounts a home's `settings.json` declares, as an archive or a safety copy carries it. Only the
+// two facts that say where a mount's objects live are read: the backend, and the credentials of a
+// remote one. A mount whose entry is not those is left out — the caller then knows nothing about it
+// and touches nothing of it, which is the safe answer for a folder nobody is serving.
+export type BackupMountSettings = { storageType: MountSettings['storageType']; s3Config?: S3Config };
+
+export function parseHomeMountSettings(text: string): Record<string, BackupMountSettings> | null {
+    let value: unknown;
+    try {
+        value = JSON.parse(text);
+    } catch {
+        return null;
+    }
+    if (typeof value !== 'object' || value === null) return null;
+    if (!('mounts' in value) || typeof value.mounts !== 'object' || value.mounts === null) return {};
+    const mounts: Record<string, BackupMountSettings> = {};
+    for (const [id, entry] of Object.entries(value.mounts)) {
+        if (typeof entry !== 'object' || entry === null) continue;
+        if (!('storageType' in entry) || typeof entry.storageType !== 'string' || !isStorageType(entry.storageType)) {
+            continue;
+        }
+        const s3Config = 's3Config' in entry && isS3Config(entry.s3Config) ? entry.s3Config : undefined;
+        mounts[id] = { storageType: entry.storageType, s3Config };
+    }
+    return mounts;
 }
