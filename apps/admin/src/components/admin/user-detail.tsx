@@ -61,17 +61,15 @@ export function UserDetail({ user, usage, organizationId }: UserDetailProps) {
 
     const hasChanges = draftRole !== user.role;
 
-    // Reset draft when switching users
     useEffect(() => {
         setDraftRole(user.role);
     }, [user.id, user.role]);
 
     const handleSave = async () => {
-        await updateRole.mutateAsync({
-            memberId: user.memberId!,
-            userId: user.id,
-            role: draftRole as 'admin' | 'member' | 'owner',
-        });
+        // Both are set wherever the select that changes the draft is rendered: a user with no
+        // organisation row has no role to pick and no member row to change.
+        if (!user.memberId || !draftRole) return;
+        await updateRole.mutateAsync({ memberId: user.memberId, userId: user.id, role: draftRole });
     };
 
     const handleCancel = () => {
@@ -99,7 +97,8 @@ export function UserDetail({ user, usage, organizationId }: UserDetailProps) {
                     ) : (
                         <Select
                             value={draftRole ?? undefined}
-                            onValueChange={(v) => setDraftRole(v as 'admin' | 'member')}
+                            // The two items below are the whole of what this can hand back.
+                            onValueChange={(value) => setDraftRole(value === 'admin' ? 'admin' : 'member')}
                         >
                             <SelectTrigger className="w-40">
                                 <SelectValue />
@@ -145,9 +144,9 @@ export function UserDetail({ user, usage, organizationId }: UserDetailProps) {
                 </div>
             )}
 
+            {/* DangerZone below brings its own top rule, so this section needs only a leading one. */}
             <Separator />
 
-            {/* DangerZone below brings its own top rule, so this section needs only a leading one. */}
             <BackupSection ownerId={user.id} />
 
             {user.role !== 'owner' && (

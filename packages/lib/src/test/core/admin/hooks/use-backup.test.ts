@@ -189,29 +189,6 @@ describe('useUploadBackup', () => {
     });
 });
 
-describe('useBackupArtifacts', () => {
-    test("polls while a job of this home runs, so a restore's new safety copy appears without a poke", async () => {
-        const { useBackupArtifacts } = await import('../../../../core/admin/hooks/use-backup');
-        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-        const { unmount } = await renderHook(() => useBackupArtifacts(OWNER), queryClient);
-
-        const query = queryClient.getQueryCache().find({ queryKey: backupKeys.artifacts(OWNER) });
-        const interval = query?.observers[0]?.options.refetchInterval;
-        if (typeof interval !== 'function') throw new Error('the artifacts query must poll conditionally');
-
-        expect(interval(query!)).toBe(false);
-        queryClient.setQueryData(backupKeys.jobs(OWNER), [runningJob(OWNER)]);
-        expect(interval(query!)).toBe(2000);
-        // Another home's running job is another pane's business.
-        queryClient.setQueryData(backupKeys.jobs(OWNER), []);
-        queryClient.setQueryData(backupKeys.jobs(TEAM_OWNER), [runningJob(TEAM_OWNER)]);
-        expect(interval(query!)).toBe(false);
-
-        const { act } = await import('react');
-        await act(() => unmount());
-    });
-});
-
 describe('useBackupJobs', () => {
     test('refetches the artifact list the moment a job leaves running', async () => {
         const { act } = await import('react');
@@ -222,8 +199,8 @@ describe('useBackupJobs', () => {
         const { unmount } = await renderHook(() => useBackupJobs(OWNER), queryClient);
 
         expect(invalidated).toEqual([]);
-        // The artifact list's own poll clears on this same change, so nothing else would refetch it
-        // and the artifact the job just wrote would sit there unlisted.
+        // The one mechanism that carries a finished job to the artifact list: nothing else watches
+        // the jobs, so without this the artifact the job just wrote would sit there unlisted.
         await act(async () => {
             queryClient.setQueryData(backupKeys.jobs(OWNER), [
                 { ...runningJob(OWNER), state: 'done' as const, finishedAt: new Date() },

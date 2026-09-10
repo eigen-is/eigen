@@ -8,24 +8,23 @@ import * as Y from 'yjs';
 import { readYjsStateFromFile } from '../collab/yjs-loader';
 import { PATHS } from '../core';
 import { hashFile } from '../drive/streaming';
-import { ARCHIVE_HOME_DIR, archiveHomePath, archiveMountPath, resolveInside } from './paths';
+import { describeError } from './errors';
+import { ARCHIVE_HOME_DIR, ARCHIVE_MANIFEST_FILE, archiveHomePath, archiveMountPath, resolveInside } from './paths';
 import { HOME_DATABASE_PATHS, type SnapshotProgress } from './snapshot-home';
-import { listManagedDatabases, readMountPathRows } from './snapshot-mount';
+import { checkArchivedPathRows, listManagedDatabases, readMountPathRows } from './snapshot-mount';
 
 // Stage 3 samples rather than decodes everything: the ten heaviest documents plus ten of the rest.
 const SAMPLE_LARGEST = 10;
 const SAMPLE_REST = 10;
 // A wrecked archive can fail on every entry; the record is a sidecar and an SSE payload, not a log.
 const MAX_FAILURES = 100;
+// And how many of them a one-line message quotes: the record carries the whole list.
+export const FAILURES_IN_MESSAGE = 3;
 
 // An Eigen-owned database inside the archive: the path the manifest speaks of, and the resolved
 // one that survived the containment check. `isYjsDocument` marks the data.db of a collab container
 // — the only kind stage 3 can decode (chat's data.db is plain SQLite).
 type ArchiveDatabase = { path: string; abs: string; isYjsDocument: boolean };
-
-function describeError(error: unknown): string {
-    return error instanceof Error ? error.message : String(error);
-}
 
 // The folder's own files, walked with readdir's lstat-level types so a symlink is seen rather than
 // followed. packFolder writes files and directories only, so a link in an unpacked archive came
@@ -42,9 +41,9 @@ function listFolderFiles(root: string, relDir: string, present: Set<string>, fai
 function listArchiveDatabases(root: string, fail: (message: string) => void): ArchiveDatabase[] {
     const found: ArchiveDatabase[] = [];
     for (const relPath of HOME_DATABASE_PATHS) {
-        const archivePath = archiveHomePath(relPath);
-        const abs = resolveInside(root, archivePath);
-        if (abs && fs.existsSync(abs)) found.push({ path: archivePath, abs, isYjsDocument: false });
+        const relDatabase = archiveHomePath(relPath);
+        const abs = resolveInside(root, relDatabase);
+        if (abs && fs.existsSync(abs)) found.push({ path: relDatabase, abs, isYjsDocument: false });
     }
 
     const mountsDir = path.join(root, ARCHIVE_HOME_DIR, PATHS.DRIVE.ROOT);
@@ -62,15 +61,19 @@ function listArchiveDatabases(root: string, fail: (message: string) => void): Ar
         try {
             const db = new Database(metadata, { readonly: true });
             try {
-                for (const managed of listManagedDatabases(readMountPathRows(db))) {
-                    const archivePath = archiveMountPath(entry.name, `${PATHS.DRIVE.DATA_DIR}/${managed.path}`);
-                    const abs = resolveInside(root, archivePath);
+                const rows = readMountPathRows(db);
+                // Before a path is derived from them: every path a restore builds is a join of these
+                // rows' two name columns, and the table came in inside a file somebody uploaded.
+                for (const failure of checkArchivedPathRows(rows)) fail(`${relMetadata}: ${failure}`);
+                for (const managed of listManagedDatabases(rows)) {
+                    const relDatabase = archiveMountPath(entry.name, `${PATHS.DRIVE.DATA_DIR}/${managed.path}`);
+                    const abs = resolveInside(root, relDatabase);
                     if (!abs) {
-                        fail(`${archivePath}: leaves the backup folder`);
+                        fail(`${relDatabase}: leaves the backup folder`);
                         continue;
                     }
                     found.push({
-                        path: archivePath,
+                        path: relDatabase,
                         abs,
                         isYjsDocument: managed.isContainerData && isCollabType(managed.containerType),
                     });
@@ -106,13 +109,17 @@ function countYjsBlobs(dbPath: string): number {
 // Every database is opened read-only: a verify never changes a byte of what it is checking.
 export async function verifyFolder(dir: string, onProgress?: SnapshotProgress): Promise<BackupVerifyRecord> {
     const checkedAt = new Date();
-    const manifestPath = path.join(dir, 'manifest.json');
+    const manifestPath = path.join(dir, ARCHIVE_MANIFEST_FILE);
     if (!fs.existsSync(manifestPath)) {
-        return { status: 'failed', checkedAt, failures: ['manifest.json is missing'] };
+        return { status: 'failed', checkedAt, failures: [`${ARCHIVE_MANIFEST_FILE} is missing`] };
     }
     const manifest = parseBackupManifest(await Bun.file(manifestPath).text());
     if (!manifest) {
-        return { status: 'failed', checkedAt, failures: ['manifest.json is not a version 1 backup manifest'] };
+        return {
+            status: 'failed',
+            checkedAt,
+            failures: [`${ARCHIVE_MANIFEST_FILE} is not a version 1 backup manifest`],
+        };
     }
     // Every path below is compared against this, so the folder's own real path is the baseline.
     const root = fs.realpathSync(dir);
@@ -127,7 +134,7 @@ export async function verifyFolder(dir: string, onProgress?: SnapshotProgress): 
     // Stage 1 — transport: the manifest and the folder describe the same set of bytes.
     const present = new Set<string>();
     listFolderFiles(root, '', present, fail);
-    present.delete('manifest.json');
+    present.delete(ARCHIVE_MANIFEST_FILE);
     for (const [index, entry] of manifest.entries.entries()) {
         const abs = resolveInside(root, entry.path);
         if (!abs) {

@@ -8,19 +8,7 @@
 // Usage:  bun run apps/api/src/scripts/migrate-users.ts
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
-import * as path from 'node:path';
-
-function getDataRoot(): string {
-    return process.env['EIGEN_DATA_ROOT'] || './../../data';
-}
-
-function getServerDataPath(filename: string): string {
-    const serverData = path.join(getDataRoot(), 'server');
-    if (!fs.existsSync(serverData)) {
-        fs.mkdirSync(serverData, { recursive: true });
-    }
-    return path.join(serverData, filename);
-}
+import { getServerDataPath } from '../lib/config/paths';
 
 const oldDbPath = getServerDataPath('users_current.db');
 const newDbPath = getServerDataPath('users3.db');

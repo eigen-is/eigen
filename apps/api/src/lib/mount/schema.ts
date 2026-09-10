@@ -33,8 +33,9 @@ export const paths = sqliteTable('paths', {
 // Write-behind upload queue for S3-backed mounts (Phase 1b). One row per storage key
 // with an upload owed; deleted on ack. Local to metadata.db so the queue's own state is
 // synchronously durable, transactional with the path rows it guards, and moves with the
-// Home. `stagingPath` is the BASENAME of a frozen VACUUM INTO copy in the mount's stagingDir
-// (resolved at read time so it survives a data-dir relocation); epochs are plain ms numbers.
+// Home. `stagingPath` is the BASENAME of a frozen staged copy in the mount's stagingDir — a VACUUM
+// INTO copy of a managed database, or a plain file a home restore staged (resolved at read time so
+// it survives a data-dir relocation); epochs are plain ms numbers.
 // `isDatabase` says what the staged copy holds: true for the managed databases the queue was
 // written for (a VACUUM INTO copy, refused before the PUT if it lost its SQLite header), false for
 // the plain files a restore stages (lib/backup/restore.ts), which have no header to check.

@@ -2,31 +2,36 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupEntry, BackupManifest } from '@workspace/lib/types/backup';
 import { parseOwnerId } from '@workspace/lib/types/owner';
+import { BACKUP_FORMAT_VERSION } from '@workspace/lib/validation';
 import { eq } from 'drizzle-orm';
 import { CALENDAR_DB_CONFIG } from '../calendar/db-config';
 import { getAvatarsDir } from '../config/paths';
 import { getPublicConfig } from '../config/server-config';
 import { CONTACTS_DB_CONFIG } from '../contacts/db-config';
-import { ApiError, type DatabaseConfig, PATHS, type SchemaType } from '../core';
+import { type DatabaseConfig, PATHS, type SchemaType } from '../core';
 import { SHARED_DB_CONFIG } from '../drive/db-config';
 import type { Home } from '../home';
 import { MAIL_DB_CONFIG } from '../mail/db-config';
 import { MOUNT_DB_CONFIG } from '../mount/db-config';
+import { createMountConfig } from '../mount/helpers';
 import { NOTIFICATION_CENTER_DB_CONFIG } from '../notification-center/db-config';
 import { getEigenDb } from '../share/db';
 import { shareRegistry } from '../share/schema';
 import { readAuthRows } from './auth-tables';
 import { captureFile, captureWrittenFile } from './capture';
+import { describeError } from './errors';
 import {
     ARCHIVE_AUTH_FILE,
     ARCHIVE_AVATAR_DIR,
     ARCHIVE_HOME_DIR,
+    ARCHIVE_MANIFEST_FILE,
     ARCHIVE_SHARES_FILE,
     archiveHomePath,
     archiveMountPath,
     buildHomeFolderName,
+    requireBackableOwner,
 } from './paths';
-import { snapshotMountData, snapshotMountThumbs } from './snapshot-mount';
+import { snapshotDisabledMountData, snapshotMountData, snapshotMountThumbs } from './snapshot-mount';
 
 export type SnapshotProgress = (step: string, done: number, total: number) => void;
 
@@ -103,9 +108,7 @@ export async function snapshotHome(
 ): Promise<BackupManifest> {
     const ownerId = home.user.id;
     const owner = parseOwnerId(ownerId);
-    if (owner.type !== 'user' && owner.type !== 'team') {
-        throw new ApiError(400, `Cannot back up a ${owner.type} home`);
-    }
+    requireBackableOwner(owner);
 
     const folder = path.join(targetDir, buildHomeFolderName(ownerId));
     fs.mkdirSync(folder, { recursive: true });
@@ -137,7 +140,14 @@ export async function snapshotHome(
     }
 
     const mounts = home.drive.getMounts();
+    // Every mount the home declares, not only the ones it serves: a disabled mount is not in the
+    // drive's map and its folder is walked by nothing else here, so an archive without it is a
+    // restore that drops it. It comes back as disabled, because settings.json rides along as it is.
+    const disabled = Object.entries(home.settings.get().mounts ?? {}).filter(
+        ([id, settings]) => !settings.enabled && !mounts.some((mount) => mount.id === id),
+    );
     const mountSummaries: BackupManifest['mounts'] = [];
+    const total = mounts.length + disabled.length;
     for (const [index, mount] of mounts.entries()) {
         const relData = archiveMountPath(mount.id, PATHS.DRIVE.DATA_DIR);
         const relThumbs = archiveMountPath(mount.id, PATHS.DRIVE.THUMBS_DIR);
@@ -145,7 +155,12 @@ export async function snapshotHome(
         // Counted from here, so the summary means the files the archive holds for this mount —
         // metadata.db is a database, and counts.databases already has it.
         const data = await snapshotMountData(mount, path.join(folder, relData), relData, report);
-        const thumbs = await snapshotMountThumbs(mount, path.join(folder, relThumbs), relThumbs, data.pathIds);
+        const thumbs = await snapshotMountThumbs(
+            mount.thumbsDir,
+            path.join(folder, relThumbs),
+            relThumbs,
+            data.pathIds,
+        );
         const mountEntries = [...data.entries, ...thumbs];
         entries.push(...mountEntries);
         databases += data.databases;
@@ -155,7 +170,61 @@ export async function snapshotHome(
             files: mountEntries.length,
             bytes: mountEntries.reduce((sum, entry) => sum + entry.bytes, 0),
         });
-        report('mounts', index + 1, mounts.length);
+        report('mounts', index + 1, total);
+    }
+
+    for (const [index, [id, settings]] of disabled.entries()) {
+        const relMetadata = `${PATHS.DRIVE.ROOT}/${id}/${PATHS.DRIVE.METADATA_DB}`;
+        // A mount whose folder is gone (a disabled entry nobody ever mounted) has nothing to carry.
+        if (!fs.existsSync(path.join(home.homeDir, relMetadata))) continue;
+        const relData = archiveMountPath(id, PATHS.DRIVE.DATA_DIR);
+        const relThumbs = archiveMountPath(id, PATHS.DRIVE.THUMBS_DIR);
+        const mountDir = path.join(home.homeDir, PATHS.DRIVE.ROOT, id);
+        const config = createMountConfig(id, settings);
+        // Where the archive stands before this mount: a mount that turns out to be unreadable is
+        // taken back out again, entries and all, so the folder never holds bytes the manifest does
+        // not list (which is what verify's transport stage would fail it on).
+        const entriesBefore = entries.length;
+        const databasesBefore = databases;
+        try {
+            await stageDatabase(MOUNT_DB_CONFIG, relMetadata);
+            const data = await snapshotDisabledMountData(
+                config,
+                mountDir,
+                path.join(folder, ARCHIVE_HOME_DIR, relMetadata),
+                path.join(folder, relData),
+                relData,
+                report,
+            );
+            const thumbs = await snapshotMountThumbs(
+                path.join(mountDir, PATHS.DRIVE.THUMBS_DIR),
+                path.join(folder, relThumbs),
+                relThumbs,
+                data.pathIds,
+            );
+            const mountEntries = [...data.entries, ...thumbs];
+            entries.push(...mountEntries);
+            databases += data.databases;
+            mountSummaries.push({
+                id,
+                storageType: config.storageType,
+                files: mountEntries.length,
+                bytes: mountEntries.reduce((sum, entry) => sum + entry.bytes, 0),
+            });
+        } catch (error) {
+            // A mount an admin turned off must not be able to fail the backup of everything else —
+            // its storage is often unreachable BECAUSE it was turned off. It is recorded as skipped
+            // with the reason instead, and a restore leaves it disabled and absent. An ENABLED
+            // mount's storage failure still fails the whole backup: that archive would be missing
+            // files the home is serving.
+            entries.length = entriesBefore;
+            databases = databasesBefore;
+            fs.rmSync(path.join(folder, ARCHIVE_HOME_DIR, PATHS.DRIVE.ROOT, id), { recursive: true, force: true });
+            const skipped = describeError(error);
+            console.warn(`[backup] ${ownerId}: disabled mount ${id} was skipped — ${skipped}`);
+            mountSummaries.push({ id, storageType: config.storageType, files: 0, bytes: 0, skipped });
+        }
+        report('mounts', mounts.length + index + 1, total);
     }
 
     const tree: HomeTree = { files: [], dirs: [] };
@@ -208,7 +277,7 @@ export async function snapshotHome(
 
     const config = getPublicConfig();
     const manifest: BackupManifest = {
-        formatVersion: 1,
+        formatVersion: BACKUP_FORMAT_VERSION,
         kind: owner.type,
         ownerId,
         email: owner.type === 'user' ? home.user.email : undefined,
@@ -224,7 +293,7 @@ export async function snapshotHome(
         mounts: mountSummaries,
         entries,
     };
-    await Bun.write(path.join(folder, 'manifest.json'), JSON.stringify(manifest, null, 2));
+    await Bun.write(path.join(folder, ARCHIVE_MANIFEST_FILE), JSON.stringify(manifest, null, 2));
     report('done', 1, 1);
     return manifest;
 }

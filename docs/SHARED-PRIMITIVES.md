@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1356 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1357 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -459,7 +459,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (328)
+## Types (327)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -685,7 +685,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DocSearchSession` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
 | `AttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
 | `Snapshot` | `@workspace/lib/types/versioning` | packages/lib/src/types/versioning.ts |
-| `BackupMountSettings` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `CommandValidationResult` | `@workspace/lib/validation` | packages/lib/src/validation/command.ts |
 | `ParsedContactInput` | `@workspace/lib/validation` | packages/lib/src/validation/contact-input.ts |
 | `ArrangeItem` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
@@ -792,7 +791,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (600)
+## Utilities & constants (602)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -956,6 +955,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CANVAS_PREVIEW_WIDTH` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `CELL_INDICATOR_SIZE` | `@workspace/lib/constants` | packages/lib/src/constants/comment-indicator.ts |
 | `COLLAB_HOME_REPLACED_CLOSE` | `@workspace/lib/constants` | packages/lib/src/constants/collab.ts |
+| `COLLAB_HOME_REPLACED_REASON` | `@workspace/lib/constants` | packages/lib/src/constants/collab.ts |
 | `COLLAB_STORAGE_UNAVAILABLE_CLOSE` | `@workspace/lib/constants` | packages/lib/src/constants/collab.ts |
 | `commentIndicatorColor` | `@workspace/lib/constants` | packages/lib/src/constants/comment-indicator.ts |
 | `DOCX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
@@ -992,6 +992,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `S3_NONCURRENT_DAYS_DEFAULT` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
 | `S3_NONCURRENT_DAYS_MAX` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
 | `STALE_TIME` | `@workspace/lib/constants` | packages/lib/src/constants/stale-time.ts |
+| `STORAGE_TYPE_LABELS` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
 | `userColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `XLSX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
 | `handleContactsSSEvent` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/sse-handlers.ts |
@@ -1116,8 +1117,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `toAttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
 | `BACKUP_ARTIFACT_EXTENSION` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `BACKUP_FORMAT_VERSION` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `BACKUP_HOME_PREFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `BACKUP_OWNER_ID` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
-| `BACKUP_OWNER_ID_CHARS` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `BACKUP_STAMP_PATTERN` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `EMAIL_FIND_REGEX` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
 | `MAX_EMAIL_LENGTH` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |

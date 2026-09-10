@@ -1,20 +1,10 @@
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 import { BACKUP_UPLOAD_MAX_BYTES, BACKUP_UPLOAD_MAX_LABEL } from '@workspace/lib/constants/backup';
 import type { BackupArtifact, BackupJob, BackupSafetyCopy } from '@workspace/lib/types/backup';
 import { parseOwnerId } from '@workspace/lib/types/owner';
-import { BACKUP_ARTIFACT_EXTENSION, BACKUP_OWNER_ID, parseBackupArtifactName } from '@workspace/lib/validation';
+import { BACKUP_OWNER_ID, parseBackupArtifactName } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
-import { readArtifactManifest, writeSidecar } from '../lib/backup/archive';
-import {
-    deleteArtifact,
-    deleteSafetyCopy,
-    landUploadedArtifact,
-    listArtifacts,
-    listSafetyCopies,
-    resolveArtifact,
-    resolveSafetyCopy,
-} from '../lib/backup/artifacts';
+import { deleteArtifact, landUpload, listArtifacts, resolveArtifact } from '../lib/backup/artifacts';
 import {
     getBackupJob,
     listBackupJobs,
@@ -23,13 +13,12 @@ import {
     startBackupJob,
     withBackupJobSlot,
 } from '../lib/backup/jobs';
-import { getBackupsDir, getBackupTempPath } from '../lib/backup/paths';
 import { restoreHome, restoreSafetyCopy } from '../lib/backup/restore';
+import { deleteSafetyCopy, listSafetyCopies, resolveSafetyCopy } from '../lib/backup/safety-copy';
 import type { SnapshotProgress } from '../lib/backup/snapshot-home';
 import { ApiError } from '../lib/core';
 import { requireAdmin } from '../lib/core/access';
 import { contentDisposition } from '../lib/core/http';
-import { writeTempWithHash } from '../lib/drive/streaming';
 import { getHome } from '../lib/home';
 import { getTeam } from '../lib/team/team';
 import { getUserById } from '../lib/user';
@@ -147,10 +136,9 @@ export const backupRouter = new Elysia({ name: 'backup' })
             // a CORS-preflighted request, and a split-origin deployment (every dev setup) answers
             // that preflight without it. It has to be a name this server writes — the ownerId in it
             // is what the artifact list groups by, and it is the name the bytes land under.
-            const parsed = parseBackupArtifactName(query.name);
-            if (!parsed) throw new ApiError(400, 'The name parameter must be a backup artifact name');
-            const { name } = query;
-            const { ownerId } = parsed;
+            if (!parseBackupArtifactName(query.name)) {
+                throw new ApiError(400, 'The name parameter must be a backup artifact name');
+            }
             const declared = Number(request.headers.get('content-length'));
             if (!Number.isSafeInteger(declared) || declared <= 0 || declared > BACKUP_UPLOAD_MAX_BYTES) {
                 throw new ApiError(
@@ -158,39 +146,9 @@ export const backupRouter = new Elysia({ name: 'backup' })
                     `A backup upload must declare a Content-Length of at most ${BACKUP_UPLOAD_MAX_LABEL}`,
                 );
             }
-            const artifactPath = path.join(getBackupsDir(), name);
-            if (fs.existsSync(artifactPath)) throw new ApiError(409, 'That artifact is already in the backups folder');
             if (!request.body) throw new ApiError(400, 'Upload has no body');
-
-            // Staged next to the backups folder so the landing below is one filesystem operation: an
-            // interrupted upload never leaves a short archive under a name the list would offer for
-            // restore. writeTempWithHash is the stream-into-a-temp seam; its sha256 is incidental.
-            const tempPath = getBackupTempPath(BACKUP_ARTIFACT_EXTENSION);
-            try {
-                const { size } = await writeTempWithHash(tempPath, request.body);
-                // Content-Length is the client's word for it; the bytes are what count.
-                if (size !== declared) throw new ApiError(400, 'Upload does not match its Content-Length');
-                landUploadedArtifact(tempPath, artifactPath);
-            } finally {
-                fs.rmSync(tempPath, { force: true });
-            }
-
-            try {
-                const manifest = await readArtifactManifest(artifactPath);
-                if (manifest.ownerId !== ownerId) {
-                    throw new ApiError(400, `That archive is a backup of ${manifest.ownerId}, not of ${ownerId}`);
-                }
-                await writeSidecar(artifactPath, manifest, { status: 'unverified', failures: [] });
-            } catch (error) {
-                // An archive nothing can read is not an artifact; keeping it would put a row in the
-                // list that every later action fails on. Only the file this request landed goes —
-                // the sidecar, if there is one, belongs to whatever wrote it.
-                fs.rmSync(artifactPath, { force: true });
-                if (error instanceof ApiError) throw error;
-                // Anything that is not a readable .tar.zst fails deep inside the decompressor.
-                throw new ApiError(400, 'That upload is not a readable Eigen backup archive');
-            }
-            return { name };
+            await landUpload(request.body, query.name, declared);
+            return { name: query.name };
         },
         { auth: true, parse: 'none', query: t.Object({ name: t.String() }) },
     )

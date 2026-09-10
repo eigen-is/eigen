@@ -39,8 +39,10 @@ export type UploadQueueDeps = {
 // full-jitter backoff. Self-scheduling — a failed upload backs off and re-drives itself via
 // setTimeout, so there is no process-global sweep or registry. Timed-out PUTs are tracked as
 // in-process orphans and repaired when they settle (trackOrphan). Producers (sync/close/create,
-// snapshots) stage a copy then call enqueueStaged; delete/restore call cancel; mount init calls
-// reconcile; shutdown calls drain({flushNow,deadline}) then close.
+// snapshots) stage a copy then call enqueueStaged; a home restore writes its rows into
+// pending_uploads directly and lets mount init pick them up (lib/backup/materialize.ts);
+// delete/restore call cancel; mount init calls reconcile; shutdown calls drain({flushNow,deadline})
+// then close.
 export class UploadQueue {
     private readonly db: Db;
     private readonly storage: StorageBackend;
@@ -71,6 +73,9 @@ export class UploadQueue {
         this.label = deps.label;
     }
 
+    // A staged copy is opaque bytes under a name of its own. The `.db` tail is historical — the
+    // queue was written for managed databases — and nothing reads it: what a copy holds is the
+    // row's `isDatabase`, never its name.
     newStagingPath(): string {
         return path.join(this.stagingDir, `${randomUUID()}.db`);
     }
@@ -101,9 +106,9 @@ export class UploadQueue {
 
     // Record a ready staged copy as the pending upload for storageKey and kick the drain. `isDatabase`
     // says what the copy holds: a managed database (the SQLite header check applies before the PUT) or
-    // a plain file, which only a restore stages. Durable:
-    // the row is written synchronously before this returns. Newest staging wins (PK upsert); a
-    // superseded staged copy is deleted unless it's mid-PUT (the worker deletes that one on completion).
+    // a plain file, which only a restore stages. Durable: the row is written synchronously before this
+    // returns. Newest staging wins (PK upsert); a superseded staged copy is deleted unless it's
+    // mid-PUT (the worker deletes that one on completion).
     enqueueStaged(storageKey: string, stagingPath: string, isDatabase: boolean): void {
         // Store only the basename so a data-dir relocation (host migration / restore-from-backup)
         // still resolves the staged copy against the current stagingDir (schema.ts "moves with the
@@ -276,7 +281,6 @@ export class UploadQueue {
         // Orphans present when this PUT is issued: if they all settle while it is in flight, the
         // commit order against a landed one is unknown (see the ack branch below).
         const orphansAtStart = this.orphans.get(storageKey);
-
         this.inFlight.add(storageKey);
         let putOk = false;
         let timeout: ReturnType<typeof setTimeout> | undefined;

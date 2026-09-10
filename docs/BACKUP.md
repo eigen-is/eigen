@@ -9,6 +9,7 @@ Design rationale, and the phases beyond this one, live in [PROPOSAL_BACKUP_RESTO
 One archive is one home. A user home and a team home are the same shape, minus the parts a team has no equivalent for.
 
 - **Every database**, captured with `VACUUM INTO` through the running server's own handle, never as a file copy of a live WAL database: the drive's `shared.db`, each mount's `metadata.db`, `calendar.db` (teams have one too, when an admin has enabled it), and, for a user, `mail.db`, `contacts.db` and `notifications.db`.
+- **Every mount the home declares**, including the ones an admin has turned off: a disabled mount is not in the drive's map, so nothing else would walk it, and it would be gone after a restore. It comes back disabled, because the home's `settings.json` rides along as it stood. A disabled mount whose storage cannot be read does not fail the backup. Its bucket is often unreachable because the mount was turned off, so it is skipped instead: the manifest and the artifact row name it with the reason, and a restore leaves it disabled and absent. An enabled mount's storage failure still fails the whole backup.
 - **Every file the drive knows about**, by path, on all three storage backends. A `local` mount's tree as it is, a `local-key` mount's flat objects put back under their real names, and an `s3` mount's objects downloaded out of the bucket. An archive never depends on a bucket, credentials, or the storage type staying the same.
 - **Every container's `data.db` and `comments.db`** (eigendocs, sheets, slides, stickies, vector drawings, chats), taken freshest-first: an open document's live handle first, then a pending staged upload, then the stored object. A backup taken during an S3 outage holds the newest local bytes, not a stale remote object.
 - **File version history** (`versions/` inside a container) and **trash** (`.trash/`). Version history is the only copy of an old file state, so it is always included; trash is data the user can still restore.
@@ -73,10 +74,18 @@ The order is what makes it safe. Nothing is deleted at any point, and nothing is
 4. The home folder is renamed aside as `{id}.pre-restore-{timestamp}`. If the user was deleted there is no folder to move.
 5. The archive's home folder is installed in its place. A `local` mount's files go in as they are, a `local-key` mount's are written to their flat keys, and an `s3` mount's are staged with a pending-upload row each, so the existing upload queue drains them to the bucket with its normal retry and backoff. The user can work at once, and a flaky bucket makes the restore resumable by construction.
 6. Every restored database is checked in place: `quick_check`, plus its schema stamp against what this server supports.
-7. Only then are the identity rows written: if the `user` row is gone, every row from `auth.json` is inserted in one transaction; if the user is still there, identity is left alone and a restore is refused when the email no longer matches the archive. Missing share-registry rows are inserted, and the avatar is put back only if the server has none.
+7. Only then are the identity rows written: if the `user` row is gone, the archive's own rows are inserted in one transaction; if the user is still there, identity is left alone and a restore is refused when the email no longer matches the archive. Missing share-registry rows are inserted, and the avatar is put back only if the server has none.
 8. The mark clears. The next load runs migrations if the server is newer, heals contact-card drift, and refreshes shared-with-me. A restored home is opened right away, so a remote mount's queued uploads start draining immediately instead of waiting for the user's next request.
 
 If anything fails after step 4, the half-written folder keeps a name of its own (`{id}.failed-restore-{timestamp}`), the original folder is renamed back, and the job ends failed with the error.
+
+### What a restore will never do to identity
+
+`auth.json` is the one part of an archive that writes to `users3.db`, and an archive is a file somebody uploaded, so a restore takes only what is unmistakably this home's:
+
+- **Only this owner's rows.** Every row names its owner, and one that names anybody else is dropped and logged. An archive carrying a second `user` row is refused outright: it holds exactly one, with this home's id and the email the manifest was written with, or nothing is inserted.
+- **No privilege.** The restored user comes back as a plain user of this server's own organisation, whatever the archive says: `user.role` is set to the default a new account gets, the organisation is this server's, and the membership role is `member`. An admin who was one before their home was restored is made one again by hand, in Admin → Users.
+- **No teams that are not here.** A team membership whose team this server does not have is dropped, the same as an organisation that is gone.
 
 ## What the user experiences during a restore
 
@@ -133,9 +142,9 @@ An artifact is a plain POSIX tar (pax headers for long paths, empty folders incl
 
 ## Interrupted restores
 
-A restore writes a marker in its staging folder before it moves the home folder aside, and a second note beside it the moment the install is done — after the databases are checked and the identity rows are written, before the home is served again. The next boot reads both:
+A restore writes a marker in its staging folder before it moves the home folder aside (and when there is no folder to move, before it installs the archive), and a second note beside it the moment the install is done, after the databases are checked and the identity rows are written and before the home is served again. The next boot reads both:
 
-- **Marker, no completion note.** The process died somewhere in the install. The half-written home folder, if there is one, is renamed `{id}.failed-restore-{timestamp}` and the pre-restore copy is renamed back to the home folder. Both moves are logged loudly and nothing is deleted. This is the window an OOM kill or a power cut lands in, and it is a long one when the backups folder is on another disk: the install then copies the whole tree instead of renaming it.
+- **Marker, no completion note.** The process died somewhere in the install. The half-written home folder, if there is one, is renamed `{id}.failed-restore-{timestamp}` and the pre-restore copy is renamed back to the home folder. Both moves are logged loudly and nothing is deleted. This is the window an OOM kill or a power cut lands in, and it is a long one when the backups folder is on another disk: the install then copies the whole tree instead of renaming it. A restore of a user who was deleted has no copy to put back, and its marker names none. The half-written folder is parked all the same, so the user's next request cannot open it as their home.
 - **Marker and completion note.** The restore finished; both folders are left exactly as they are.
 
 Staging is wiped right after, which is what clears the markers of restores that finished.

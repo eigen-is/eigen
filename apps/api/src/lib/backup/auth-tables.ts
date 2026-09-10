@@ -1,11 +1,11 @@
-import { eq } from 'drizzle-orm';
+import { eq, getTableColumns } from 'drizzle-orm';
 import type { SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core';
 import { account, apikey, member, organization, team, teamMember, twoFactor, user } from '../../../auth-schema';
 import { getAuthDrizzleDb } from '../auth/auth';
 
 // A users3.db table one user's archive carries: the key it has in auth.json, the column that scopes
 // its rows to that user, and — for a membership — the row it would be an orphan without.
-export type AuthTableSpec = {
+type AuthTableSpec = {
     key: string;
     table: SQLiteTable;
     owner: SQLiteColumn;
@@ -34,6 +34,21 @@ export const AUTH_TABLES: AuthTableSpec[] = [
         parent: { table: team, id: team.id, column: 'teamId' },
     },
 ];
+
+// The key auth.json spells the owner column under: a Drizzle select keys its rows by the schema's
+// property name, not by the SQL column name, and a restore filters the archive's rows on that key.
+export function ownerKeyOf(spec: AuthTableSpec): string {
+    const found = Object.entries(getTableColumns(spec.table)).find(([, column]) => column === spec.owner);
+    if (!found) throw new Error(`${spec.key}: its owner column is not one of its own`);
+    return found[0];
+}
+
+// What a restored identity comes back as, whatever the archive says. `user.role` is better-auth's
+// own admin flag and a `member` row of the default org is what requireAdmin reads, so neither is
+// carried in from a file an admin uploaded: a restore puts a home's data back, it never hands out
+// privilege. An admin who was one before their restore is made one again by hand.
+export const RESTORED_USER_ROLE = 'user';
+export const RESTORED_MEMBER_ROLE = 'member';
 
 // The rows auth.json holds for one user, keyed the way the file spells them.
 export function readAuthRows(userId: string): Record<string, unknown[]> {

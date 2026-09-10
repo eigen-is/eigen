@@ -3,16 +3,18 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupEntry } from '@workspace/lib/types/backup';
 import { type DrivePathType, isCollabType, isDocumentType } from '@workspace/lib/types/drive';
+import type { MountConfig } from '@workspace/lib/types/mount';
 import { COMMENT_INDEX_DB_CONFIG } from '../chat/comment-db-config';
 import { CHAT_ROOM_DB_CONFIG } from '../chat/db-config';
 import { COLLAB_DB_CONFIG } from '../collab/db-config';
-import type { DatabaseConfig, SchemaType } from '../core';
-import { buildStorageKey } from '../mount/helpers';
+import { type DatabaseConfig, PATHS, type SchemaType } from '../core';
+import { buildStorageKey, createMountStorage, isUsableName } from '../mount/helpers';
 import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
 import { stageManagedDbCopy } from '../versioning/snapshot';
 import { VERSIONS_FOLDER_NAME } from '../versioning/versions-folder';
 import { captureFile, captureWrittenFile } from './capture';
+import { errnoOf } from './errors';
 import type { SnapshotProgress } from './snapshot-home';
 
 export type MountPathRow = Pick<
@@ -37,13 +39,15 @@ export type ManagedArchiveDatabase = {
 };
 
 // The two databases a container owns; a mount never manages any other (see mount/document-db.ts).
-const CONTAINER_DB_NAMES = new Set(['data.db', 'comments.db']);
+const CONTAINER_DATA_DB = 'data.db';
+const CONTAINER_COMMENTS_DB = 'comments.db';
+const CONTAINER_DB_NAMES = new Set([CONTAINER_DATA_DB, CONTAINER_COMMENTS_DB]);
 
 // Which schema a managed file carries: a comment index, or the container's own document database —
 // Yjs for every collab type, chat's own for a chat room. A versions/ snapshot is a copy of the
 // container's data.db, so it answers the same.
 function configOf(name: string, containerType: DrivePathType): DatabaseConfig<SchemaType> {
-    if (name === 'comments.db') return COMMENT_INDEX_DB_CONFIG;
+    if (name === CONTAINER_COMMENTS_DB) return COMMENT_INDEX_DB_CONFIG;
     return isCollabType(containerType) ? COLLAB_DB_CONFIG : CHAT_ROOM_DB_CONFIG;
 }
 
@@ -113,6 +117,40 @@ export function readMountPathRows(db: Database): MountPathRow[] {
     return db.query<MountPathRow, []>('SELECT id, file, name, type, parentId, trashedFrom FROM paths').all();
 }
 
+// A live paths table can hold none of this: validateName wrote every `name`, `file` is a name or a
+// `{id}.{ext}` key, and an id is a UUID. An archived one arrived inside a file an admin uploaded,
+// and every path a restore builds is a join of those three columns — a `..` or a separator in any
+// of them moved bytes out of the mount (a flat-key mount stores under `file`, a trashed row under
+// its id, an s3 row under a key built from its id), or an arbitrary server file into it (the
+// archive tree IS the name chain). So the archive is refused whole, before a restore reads a row.
+export function checkArchivedPathRows(rows: MountPathRow[]): string[] {
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const failures: string[] = [];
+    for (const row of rows) {
+        if (!isUsableName(row.id)) failures.push(`path row "${row.id}" has an unusable id`);
+        if (!isUsableName(row.name)) failures.push(`path row ${row.id} has an unusable name "${row.name}"`);
+        // Empty is how a flat-key mount spells a folder row (Mount.buildFileValue).
+        if (row.file !== '' && !isUsableName(row.file)) {
+            failures.push(`path row ${row.id} has an unusable file "${row.file}"`);
+        }
+        if (row.parentId !== null && !byId.has(row.parentId)) {
+            failures.push(`path row ${row.id} names a parent (${row.parentId}) the table does not hold`);
+            continue;
+        }
+        // Both path builders walk this chain, and `ancestors` stops on a cycle rather than reporting
+        // one: a tree that does not terminate at the root describes no archive.
+        const seen = new Set<string>([row.id]);
+        for (let current = row.parentId; current !== null; current = byId.get(current)?.parentId ?? null) {
+            if (seen.has(current)) {
+                failures.push(`path row ${row.id} sits in a parent cycle`);
+                break;
+            }
+            seen.add(current);
+        }
+    }
+    return failures;
+}
+
 // The same rule, read back from an archived metadata.db: which of a mount's archived files are
 // Eigen's own databases. Verify needs it to know what it may open — a user's own SQLite upload is
 // stored byte-identical, journal header and all, and opening it is not verify's business.
@@ -125,7 +163,7 @@ export function listManagedDatabases(rows: MountPathRow[]): ManagedArchiveDataba
         if (!container) continue;
         // managedDbContainer returns the parent for a container database and the grandparent for a
         // version snapshot, which is what tells a live data.db from an archived copy of one.
-        const isContainerData = container.id === row.parentId && row.name === 'data.db';
+        const isContainerData = container.id === row.parentId && row.name === CONTAINER_DATA_DB;
         found.push({
             path: archivePath(row, byId),
             isContainerData,
@@ -152,8 +190,8 @@ function normalizeArchiveDatabase(destPath: string): void {
         } finally {
             db.close();
         }
-    } catch (e) {
-        console.warn(`[backup] could not reset the journal mode of ${destPath}:`, e);
+    } catch (error) {
+        console.warn(`[backup] could not reset the journal mode of ${destPath}:`, error);
     }
     fs.rmSync(`${destPath}-wal`, { force: true });
     fs.rmSync(`${destPath}-shm`, { force: true });
@@ -171,10 +209,10 @@ const LOCAL_FAILURE_CODE = /^(SQLITE_[A-Z]+|ENOSPC|EACCES|EDQUOT|EROFS|EIO|ENOEN
 // as "an unexpected error has occurred", which is all the job's one-line error would have shown.
 // Only that shape is rewritten, and it names the object it was reading; anything else is rethrown
 // untouched.
-function rethrowStorageFailure(mount: Mount, storageKey: string, error: unknown): never {
-    const code = error instanceof Error && 'code' in error ? String(error.code) : '';
+function rethrowStorageFailure(mountId: string, storageKey: string, error: unknown): never {
+    const code = errnoOf(error);
     if (!code || LOCAL_FAILURE_CODE.test(code)) throw error;
-    throw new Error(`mount ${mount.id}: storage unreachable (${code}) reading ${storageKey}`);
+    throw new Error(`mount ${mountId}: storage unreachable (${code}) reading ${storageKey}`);
 }
 
 // One mount's data tree in an archive: the entries written, how many of them are Eigen's own
@@ -224,7 +262,7 @@ export async function snapshotMountData(
             // entry drops out of the archive rather than costing the home its whole backup.
             const copied = await mount
                 .withPathLock(container.id, () => stageManagedDbCopy(mount, row.id, destPath, 'open-handle-first'))
-                .catch((error: unknown) => rethrowStorageFailure(mount, storageKey, error));
+                .catch((error: unknown) => rethrowStorageFailure(mount.id, storageKey, error));
             if (copied) {
                 normalizeArchiveDatabase(destPath);
                 entries.push(await captureWrittenFile(destPath, entryPath));
@@ -238,7 +276,7 @@ export async function snapshotMountData(
             // fills up there is not the bucket being unreachable.
             const file = await mount
                 .readKey(storageKey)
-                .catch((error: unknown) => rethrowStorageFailure(mount, storageKey, error));
+                .catch((error: unknown) => rethrowStorageFailure(mount.id, storageKey, error));
             if (file) entries.push(await captureFile(file, destPath, entryPath));
         }
         onProgress('mount files', index + 1, fileRows.length);
@@ -251,16 +289,16 @@ export async function snapshotMountData(
 // without them loses every thumbnail the home ever had. They are keyed by path id, which a restore
 // preserves. A thumbnail whose row is gone is an orphan no mount would ever serve and stays out.
 export async function snapshotMountThumbs(
-    mount: Mount,
+    thumbsDir: string,
     targetDir: string,
     relPrefix: string,
     pathIds: ReadonlySet<string>,
 ): Promise<BackupEntry[]> {
-    if (!fs.existsSync(mount.thumbsDir)) return [];
+    if (!fs.existsSync(thumbsDir)) return [];
     const entries: BackupEntry[] = [];
-    for (const entry of fs.readdirSync(mount.thumbsDir, { withFileTypes: true })) {
+    for (const entry of fs.readdirSync(thumbsDir, { withFileTypes: true })) {
         if (!entry.isFile() || !pathIds.has(path.parse(entry.name).name)) continue;
-        const source = Bun.file(path.join(mount.thumbsDir, entry.name));
+        const source = Bun.file(path.join(thumbsDir, entry.name));
         // A thumbnail regenerated (and briefly unlinked) mid-walk is out of the archive either way;
         // losing the whole snapshot over one is not.
         if (await source.exists()) {
@@ -268,4 +306,70 @@ export async function snapshotMountThumbs(
         }
     }
     return entries;
+}
+
+// A mount an admin turned off is not in the drive's map, so there is no Mount to read it through —
+// and nothing can have a document open on one the home does not serve, which is what makes reading
+// its files straight from its own storage safe. Its metadata.db is staged by the caller through the
+// same managed handle every other database uses; `metadataPath` is that copy, so the tree read here
+// is the one the archive carries. Freshest-first like a live mount: a staged copy whose upload never
+// acked holds bytes the stored object does not.
+export async function snapshotDisabledMountData(
+    config: MountConfig,
+    mountDir: string,
+    metadataPath: string,
+    targetDir: string,
+    relPrefix: string,
+    onProgress: SnapshotProgress,
+): Promise<MountSnapshot> {
+    const copy = new Database(metadataPath, { readonly: true });
+    let rows: MountPathRow[];
+    let staged: Map<string, string>;
+    try {
+        rows = readMountPathRows(copy);
+        staged = new Map(
+            copy
+                .query<{ storageKey: string; stagingPath: string }, []>(
+                    'SELECT storageKey, stagingPath FROM pending_uploads',
+                )
+                .all()
+                .map((row) => [row.storageKey, row.stagingPath]),
+        );
+    } finally {
+        copy.close();
+    }
+
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const managedPaths = new Set(listManagedDatabases(rows).map((entry) => entry.path));
+    const storage = createMountStorage(config, mountDir);
+    const isPathBased = config.storageType === 'local';
+    const fileRows = rows.filter((row) => row.type === 'file');
+    const entries: BackupEntry[] = [];
+    let databases = 0;
+    for (const [index, row] of fileRows.entries()) {
+        const relPath = archivePath(row, byId);
+        const destPath = path.join(targetDir, relPath);
+        const entryPath = `${relPrefix}/${relPath}`;
+        const storageKey = storageKeyOf(row, byId, isPathBased);
+        const pending = staged.get(storageKey);
+        const stagedPath = pending && path.join(mountDir, PATHS.DRIVE.STAGING_DIR, pending);
+        const source = stagedPath && fs.existsSync(stagedPath) ? Bun.file(stagedPath) : storage.read(storageKey);
+        const there = await source
+            .exists()
+            .catch((error: unknown) => rethrowStorageFailure(config.id, storageKey, error));
+        // A row whose object is gone has no bytes to carry; the archive mirrors that absence.
+        if (!there) continue;
+        const entry = await captureFile(source, destPath, entryPath);
+        if (!managedPaths.has(relPath)) {
+            entries.push(entry);
+        } else {
+            // The journal mode is rewritten after the bytes land, so the entry is restated for what
+            // is now on disk — a manifest that described the pre-normalize bytes would fail verify.
+            normalizeArchiveDatabase(destPath);
+            entries.push(await captureWrittenFile(destPath, entryPath));
+            databases++;
+        }
+        onProgress('mount files', index + 1, fileRows.length);
+    }
+    return { entries, databases, pathIds: new Set(fileRows.map((row) => row.id)) };
 }

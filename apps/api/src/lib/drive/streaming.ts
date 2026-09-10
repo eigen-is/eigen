@@ -113,16 +113,26 @@ export async function writeTempWithHash(
 
     const stream = data instanceof ReadableStream ? data : data.stream();
     const writer = Bun.file(tempPath).writer({ highWaterMark: 256 * 1024 });
+    let failed = false;
     try {
         const size = await consumeStream(stream, (chunk) => {
             hasher.update(chunk);
             writer.write(chunk);
         });
-        await writer.end();
         return { size, hash: hasher.digest('hex') };
-    } catch (e) {
-        await writer.end();
-        throw e;
+    } catch (error) {
+        failed = true;
+        throw error;
+    } finally {
+        // The handle closes either way. On the way out from a failure that close is best-effort — it
+        // must not replace the error that brought us here — but on a clean finish the flush is part
+        // of the answer, so its failure is the caller's. A half-written temp is the caller's to delete.
+        if (!failed) await writer.end();
+        else {
+            try {
+                await writer.end();
+            } catch {}
+        }
     }
 }
 

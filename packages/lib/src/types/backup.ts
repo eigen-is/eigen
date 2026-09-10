@@ -19,10 +19,14 @@ export type BackupManifest = {
     server: { domain: string; orgId: string };
     // databases and files are disjoint, so entries.length === databases + files.
     counts: { databases: number; files: number; bytes: number };
-    mounts: { id: string; storageType: MountConfig['storageType']; files: number; bytes: number }[];
+    // `skipped` is set only for a mount the home has turned off whose storage could not be read: it
+    // carries the reason, holds no files, and a restore leaves it disabled and absent. An enabled
+    // mount's storage failure fails the whole backup instead.
+    mounts: { id: string; storageType: MountConfig['storageType']; files: number; bytes: number; skipped?: string }[];
     // Every file under the folder except manifest.json itself, relative to the folder root.
     entries: BackupEntry[];
-    // Server archives only (phase ③): one row per home folder, each keeping its own manifest.
+    // Server archives only: one row per home folder, each keeping its own manifest. Reserved by the
+    // design — phase ③ builds the enumerator that fills it, and reading it needs no format bump.
     homes?: { ownerId: string; kind: 'user' | 'team'; name: string }[];
 };
 
@@ -45,6 +49,8 @@ export type BackupJob = {
     startedBy: string;
     state: 'running' | 'done' | 'failed';
     progress: { step: string; done: number; total: number };
+    // The artifact the job ended on, once it has one: what a backup wrote, what a verify judged,
+    // what a restore came from. The admin pane names it in the line the finished job leaves.
     artifact?: string;
     error?: string;
     startedAt: Date;

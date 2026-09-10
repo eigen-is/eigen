@@ -28,11 +28,65 @@ const JOB_LABEL: Record<BackupJob['kind'], string> = {
     restore: 'Restoring home',
 };
 
+const JOB_DONE_LABEL: Record<BackupJob['kind'], string> = {
+    backup: 'Backup created',
+    verify: 'Archive verified',
+    restore: 'Home restored',
+};
+
+// The two things a row shows about itself are server words; these are the ones an admin reads.
+const VERIFY_LABEL: Record<BackupArtifact['verify']['status'], string> = {
+    verified: 'Verified',
+    failed: 'Failed',
+    unverified: 'Not verified',
+};
+
+const SAFETY_COPY_LABEL: Record<BackupSafetyCopy['kind'], string> = {
+    'pre-restore': 'The home before a restore',
+    'failed-restore': 'A restore that did not finish',
+};
+
 function VerifyBadge({ artifact }: { artifact: BackupArtifact }) {
-    if (artifact.verify.status === 'verified') return <Badge variant="secondary">verified</Badge>;
-    if (artifact.verify.status === 'failed') return <Badge variant="destructive">failed</Badge>;
-    return <Badge variant="outline">unverified</Badge>;
+    const label = VERIFY_LABEL[artifact.verify.status];
+    if (artifact.verify.status === 'verified') return <Badge variant="secondary">{label}</Badge>;
+    if (artifact.verify.status === 'failed') return <Badge variant="destructive">{label}</Badge>;
+    return <Badge variant="outline">{label}</Badge>;
 }
+
+// The four confirmations this pane asks for. One dialog is mounted for all of them — a dialog that
+// unmounts on close skips its own closing animation — and the choice keeps its name and kind until
+// the next one replaces it.
+type BackupConfirm =
+    | { kind: 'restore-artifact'; name: string }
+    | { kind: 'delete-artifact'; name: string }
+    | { kind: 'restore-copy'; name: string }
+    | { kind: 'delete-copy'; name: string };
+
+const CONFIRM_COPY: Record<BackupConfirm['kind'], { title: string; description: string; action: string }> = {
+    'restore-artifact': {
+        title: 'Restore this home',
+        description:
+            'This replaces every file, mail and database of the home with the archive. The home is unavailable while the restore runs and open editors reload, and the state it is in now is kept beside it as a safety copy. Restore the home of',
+        action: 'Restore',
+    },
+    'delete-artifact': {
+        title: 'Delete backup',
+        description: 'Permanently delete the archive',
+        action: 'Delete',
+    },
+    'restore-copy': {
+        title: 'Restore this safety copy',
+        description:
+            "The home goes back to the state this copy holds, and the state it is in now becomes a new safety copy beside it. Drive files on a remote mount are restored from the copy's own bucket objects. Restore the copy",
+        action: 'Restore',
+    },
+    'delete-copy': {
+        title: 'Delete safety copy',
+        description:
+            'A safety copy is the only record of the home as it was at that moment, and on a remote mount its own bucket objects are deleted with it. Permanently delete',
+        action: 'Delete',
+    },
+};
 
 type BackupSectionProps = {
     ownerId: string;
@@ -41,10 +95,8 @@ type BackupSectionProps = {
 // The backup pane of one home, in the admin user and team detail panes. Guests never reach it: the
 // admin user list excludes them and guest homes have their own route.
 export function BackupSection({ ownerId }: BackupSectionProps) {
-    const [restoreArtifact, setRestoreArtifact] = useState<string | null>(null);
-    const [deleteArtifactName, setDeleteArtifactName] = useState<string | null>(null);
-    const [restoreCopy, setRestoreCopy] = useState<string | null>(null);
-    const [deleteCopyName, setDeleteCopyName] = useState<string | null>(null);
+    const [confirm, setConfirm] = useState<BackupConfirm | null>(null);
+    const [confirmOpen, setConfirmOpen] = useState(false);
     const [dismissedJobId, setDismissedJobId] = useState<string | null>(null);
     const fileInput = useRef<HTMLInputElement>(null);
 
@@ -62,7 +114,20 @@ export function BackupSection({ ownerId }: BackupSectionProps) {
     const latest = jobs[0];
     const running = latest?.state === 'running' ? latest : undefined;
     const failed = latest?.state === 'failed' && latest.id !== dismissedJobId ? latest : undefined;
-    const nothingStored = data && data.artifacts.length === 0 && data.safetyCopies.length === 0;
+    const finished = latest?.state === 'done' && latest.id !== dismissedJobId ? latest : undefined;
+
+    const ask = (next: BackupConfirm) => {
+        setConfirm(next);
+        setConfirmOpen(true);
+    };
+
+    const runConfirmed = async () => {
+        if (!confirm) return;
+        if (confirm.kind === 'restore-artifact') await restoreBackup.mutateAsync(confirm.name);
+        else if (confirm.kind === 'delete-artifact') await deleteArtifact.mutateAsync(confirm.name);
+        else if (confirm.kind === 'restore-copy') await restoreSafetyCopy.mutateAsync(confirm.name);
+        else await deleteSafetyCopy.mutateAsync(confirm.name);
+    };
 
     const handleUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -135,98 +200,76 @@ export function BackupSection({ ownerId }: BackupSectionProps) {
                     />
                 </div>
             )}
+            {finished && (
+                <div className="flex items-start gap-1">
+                    <p className="text-xs text-muted-foreground flex-1 truncate">
+                        {JOB_DONE_LABEL[finished.kind]}
+                        {finished.artifact && ` · ${finished.artifact}`}
+                    </p>
+                    <TooltipButton
+                        icon={X}
+                        tooltipText="Dismiss"
+                        className="h-5 w-5 shrink-0"
+                        onClick={() => setDismissedJobId(finished.id)}
+                    />
+                </div>
+            )}
             {jobsFailed && <p className="text-xs text-destructive">Could not load the jobs running for this home.</p>}
 
             {isLoading ? (
                 <LoadingState />
-            ) : isError ? (
+            ) : isError || !data ? (
                 <ErrorState message="Could not load the backups of this home." />
-            ) : nothingStored ? (
+            ) : data.artifacts.length + data.safetyCopies.length === 0 ? (
                 <EmptyState
                     icon={<Archive className="h-6 w-6" />}
                     message="No backups yet"
                     hint="Create one, or copy an archive into the server's backups folder."
                 />
             ) : (
+                // Both lists in one branch: the empty state above stands for the whole section, and
+                // a home with no archive can still have a safety copy beside it.
                 <div className="space-y-2">
-                    {data?.artifacts.map((artifact) => (
+                    {data.artifacts.map((artifact) => (
                         <ArtifactRow
                             key={artifact.name}
                             artifact={artifact}
                             busy={!!running}
                             onVerify={() => verifyBackup.mutate(artifact.name)}
-                            onRestore={() => setRestoreArtifact(artifact.name)}
-                            onDelete={() => setDeleteArtifactName(artifact.name)}
+                            onRestore={() => ask({ kind: 'restore-artifact', name: artifact.name })}
+                            onDelete={() => ask({ kind: 'delete-artifact', name: artifact.name })}
                         />
                     ))}
+                    {data.safetyCopies.length > 0 && (
+                        <div className="space-y-2 pt-1">
+                            <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Safety copies
+                            </h4>
+                            {data.safetyCopies.map((copy) => (
+                                <SafetyCopyRow
+                                    key={copy.name}
+                                    copy={copy}
+                                    busy={!!running}
+                                    onRestore={() => ask({ kind: 'restore-copy', name: copy.name })}
+                                    onDelete={() => ask({ kind: 'delete-copy', name: copy.name })}
+                                />
+                            ))}
+                        </div>
+                    )}
                 </div>
             )}
 
-            {!!data?.safetyCopies.length && (
-                <div className="space-y-2">
-                    <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Safety copies</h4>
-                    {data.safetyCopies.map((copy) => (
-                        <SafetyCopyRow
-                            key={copy.name}
-                            copy={copy}
-                            busy={!!running}
-                            onRestore={() => setRestoreCopy(copy.name)}
-                            onDelete={() => setDeleteCopyName(copy.name)}
-                        />
-                    ))}
-                </div>
-            )}
-
-            {restoreArtifact && (
-                <DeleteDialog
-                    open
-                    onOpenChange={() => setRestoreArtifact(null)}
-                    title="Restore this home"
-                    description="This replaces every file, mail and database of the home with the archive. The home is unavailable while the restore runs and open editors reload, and the state it is in now is kept beside it as a safety copy. Restore the home of"
-                    itemName={ownerId}
-                    deleteText="Restore"
-                    onDelete={async () => {
-                        await restoreBackup.mutateAsync(restoreArtifact);
-                    }}
-                />
-            )}
-            {deleteArtifactName && (
-                <DeleteDialog
-                    open
-                    onOpenChange={() => setDeleteArtifactName(null)}
-                    title="Delete backup"
-                    description="Permanently delete the archive"
-                    itemName={deleteArtifactName}
-                    onDelete={async () => {
-                        await deleteArtifact.mutateAsync(deleteArtifactName);
-                    }}
-                />
-            )}
-            {restoreCopy && (
-                <DeleteDialog
-                    open
-                    onOpenChange={() => setRestoreCopy(null)}
-                    title="Restore this safety copy"
-                    description="The home goes back to the state this copy holds, and the state it is in now becomes a new safety copy beside it. Drive files on a remote mount are restored from the copy's own bucket objects. Restore the copy"
-                    itemName={restoreCopy}
-                    deleteText="Restore"
-                    onDelete={async () => {
-                        await restoreSafetyCopy.mutateAsync(restoreCopy);
-                    }}
-                />
-            )}
-            {deleteCopyName && (
-                <DeleteDialog
-                    open
-                    onOpenChange={() => setDeleteCopyName(null)}
-                    title="Delete safety copy"
-                    description="A safety copy is the only record of the home as it was at that moment, and on a remote mount its own bucket objects are deleted with it. Permanently delete"
-                    itemName={deleteCopyName}
-                    onDelete={async () => {
-                        await deleteSafetyCopy.mutateAsync(deleteCopyName);
-                    }}
-                />
-            )}
+            <DeleteDialog
+                open={confirmOpen}
+                onOpenChange={setConfirmOpen}
+                title={confirm ? CONFIRM_COPY[confirm.kind].title : ''}
+                description={confirm ? CONFIRM_COPY[confirm.kind].description : ''}
+                // A restore of the whole home is confirmed against the home, not against the file it
+                // is being restored from.
+                itemName={confirm?.kind === 'restore-artifact' ? ownerId : confirm?.name}
+                deleteText={confirm ? CONFIRM_COPY[confirm.kind].action : undefined}
+                onDelete={runConfirmed}
+            />
         </div>
     );
 }
@@ -240,6 +283,9 @@ type ArtifactRowProps = {
 };
 
 function ArtifactRow({ artifact, busy, onVerify, onRestore, onDelete }: ArtifactRowProps) {
+    // A mount the home had turned off whose storage could not be read: the archive holds nothing for
+    // it, and the row says so rather than letting the admin assume it is in there.
+    const skipped = artifact.manifest?.mounts.filter((mount) => mount.skipped) ?? [];
     return (
         <div className="group flex flex-col gap-1 p-3 border rounded-lg">
             <div className="flex items-center gap-3">
@@ -284,6 +330,11 @@ function ArtifactRow({ artifact, busy, onVerify, onRestore, onDelete }: Artifact
                     />
                 </div>
             </div>
+            {skipped.map((mount) => (
+                <p key={mount.id} className="text-xs text-muted-foreground pl-7 truncate">
+                    Skipped mount {mount.id}: {mount.skipped}
+                </p>
+            ))}
             {artifact.verify.status === 'failed' && (
                 <ul className="text-xs text-destructive max-h-24 overflow-y-auto pl-7 list-disc">
                     {artifact.verify.failures.map((failure) => (
@@ -311,7 +362,7 @@ function SafetyCopyRow({ copy, busy, onRestore, onDelete }: SafetyCopyRowProps) 
                 <div className="text-xs text-muted-foreground truncate">
                     {/* Measuring a whole home stops after a cap, so the number is a floor. Saying so
                         beats showing 52 MB for a 284 MB copy. */}
-                    {copy.kind} · {copy.truncated ? 'at least ' : ''}
+                    {SAFETY_COPY_LABEL[copy.kind]} · {copy.truncated ? 'at least ' : ''}
                     {formatFileSize(copy.bytes)}
                 </div>
             </div>

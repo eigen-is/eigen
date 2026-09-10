@@ -95,7 +95,7 @@ export class Mount {
         this.ownerId = ownerId;
         this.id = config.id;
         this.config = config;
-        this.baseDir = path.join(baseDir, 'mounts', config.id);
+        this.baseDir = path.join(baseDir, PATHS.DRIVE.ROOT, config.id);
         this.getLocalDatabase = getLocalDatabase;
         this.extractContent = extractContent;
 
@@ -132,7 +132,7 @@ export class Mount {
     }
 
     get previewsDir(): string {
-        return path.join(this.tmpDir, 'previews');
+        return path.join(this.tmpDir, PATHS.DRIVE.PREVIEWS_DIR);
     }
 
     get trashDir(): string {
@@ -159,7 +159,7 @@ export class Mount {
             fs.mkdirSync(this.trashDir, { recursive: true });
         }
 
-        const dbPath = path.join('mounts', this.config.id, 'metadata.db');
+        const dbPath = path.join(PATHS.DRIVE.ROOT, this.config.id, PATHS.DRIVE.METADATA_DB);
         const managedDb = await this.getLocalDatabase(MOUNT_DB_CONFIG, dbPath);
         this.db = managedDb.db;
         this.history = new FileHistory(this.db, this.ownerId, this.id);
@@ -212,7 +212,7 @@ export class Mount {
     }
 
     get dataDir(): string {
-        return path.join(this.baseDir, 'data');
+        return path.join(this.baseDir, PATHS.DRIVE.DATA_DIR);
     }
 
     private cleanupStaleFiles(dir: string, maxAgeMs: number, preserveLivePathIds = false): void {
@@ -843,8 +843,9 @@ export class Mount {
     // Read by storage key, for callers that already resolved it (lib/backup walks a whole paths
     // table and derives every key from the tree it holds, rather than re-querying per file).
     // Freshest-first: an un-acked upload's frozen staged copy holds bytes newer than the storage
-    // object, so serve it — copy/download must never capture stale/absent storage. Only container
-    // dbs are ever staged, so a served file gets fresher-or-equal bytes, never staler.
+    // object, so serve it — copy/download must never capture stale/absent storage. A staged copy is
+    // always fresher-or-equal: a document db frozen on its way to the bucket, or a plain file a home
+    // restore staged, which the object behind it does not hold at all yet.
     // internal — used by mount/*.ts + lib/backup
     async readKey(storageKey: string): Promise<StorageFile | null> {
         const staged = this.pendingStagedCopy(storageKey);

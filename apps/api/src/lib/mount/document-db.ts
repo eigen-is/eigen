@@ -166,6 +166,8 @@ async function buildDocumentDb<S extends SchemaType>(
                       if (mount.uploadQueue) {
                           const stagingPath = mount.uploadQueue.newStagingPath();
                           managed.stageCopy(stagingPath);
+                          // A VACUUM INTO copy of a managed database, so the queue holds it to the
+                          // SQLite header check before the PUT (schema.ts, `isDatabase`).
                           mount.uploadQueue.enqueueStaged(currentKey, stagingPath, true);
                       } else {
                           await mount.uploadFromTemp(currentKey, pathId);
