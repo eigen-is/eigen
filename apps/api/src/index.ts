@@ -22,7 +22,10 @@ recoverInterruptedRestores();
 wipeBackupStaging();
 
 const server = app.listen({
-    port: 8000,
+    // 8000 in every deployment — Caddy, Dovecot and the container healthcheck all name it. The
+    // override is what lets a test spawn this file as a real child process on a free port, boot
+    // sequence and signal handlers included.
+    port: Number(process.env['EIGEN_API_PORT']) || 8000,
     // The backup upload is the largest body the API accepts; per-file limits are enforced by the
     // streaming parser, and this is the backstop under the upload route's own check.
     maxRequestBodySize: BACKUP_UPLOAD_MAX_BYTES,
