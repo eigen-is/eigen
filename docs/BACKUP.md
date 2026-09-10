@@ -8,7 +8,7 @@ Design rationale, and the phases beyond this one, live in [PROPOSAL_BACKUP_RESTO
 
 One archive is one home. A user home and a team home are the same shape, minus the parts a team has no equivalent for.
 
-- **Every database**, captured with `VACUUM INTO` through the running server's own handle, never as a file copy of a live WAL database: the drive's `shared.db`, each mount's `metadata.db`, and (users only) `mail.db`, `contacts.db`, `calendar.db`, `notifications.db`.
+- **Every database**, captured with `VACUUM INTO` through the running server's own handle, never as a file copy of a live WAL database: the drive's `shared.db`, each mount's `metadata.db`, `calendar.db` (teams have one too, when an admin has enabled it), and, for a user, `mail.db`, `contacts.db` and `notifications.db`.
 - **Every file the drive knows about**, by path, on all three storage backends. A `local` mount's tree as it is, a `local-key` mount's flat objects put back under their real names, and an `s3` mount's objects downloaded out of the bucket. An archive never depends on a bucket, credentials, or the storage type staying the same.
 - **Every container's `data.db` and `comments.db`** (eigendocs, sheets, slides, stickies, vector drawings, chats), taken freshest-first: an open document's live handle first, then a pending staged upload, then the stored object. A backup taken during an S3 outage holds the newest local bytes, not a stale remote object.
 - **File version history** (`versions/` inside a container) and **trash** (`.trash/`). Version history is the only copy of an old file state, so it is always included; trash is data the user can still restore.
@@ -24,7 +24,7 @@ Each database copy is internally consistent. The archive as a whole is not one a
 - **Sessions.** A restore never signs anybody out, and an archive cannot be used to resurrect a session.
 - **Server-level data**: `users3.db`, `eigen.db`, `waitlist.db`, the server config and settings, the avatars folder as a whole, and `.env.production`. A user archive carries that user's own auth rows and nothing else about the server.
 - **Other homes.** A user's archive is their home only. Team data lives in the team's home and is covered by the team's own backup, so back a team up separately.
-- **Guest homes and org homes.** Guest homes are disposable (guest cleanup deletes them) and an org home holds no databases. Both are refused, and the backup section is hidden for a guest.
+- **Guest homes and org homes.** Guest homes are disposable (guest cleanup deletes them) and an org home holds no databases, so the routes refuse both: a guest or org ownerId gets a 400. Guests are not on the admin Users page either, they have their own page.
 
 ## Where the artifacts live, and why they are secrets
 
@@ -48,7 +48,7 @@ Admin → Users → pick a user → the **Backup** section (Teams → pick a tea
 
 One job per home at a time. A second request while one runs is refused with a 409, so a backup can never read a folder another job is writing. Job state lives in memory and finished jobs drop after an hour; the backups folder and the sidecars are the durable record, so nothing is lost when the API restarts.
 
-The user notices nothing. There is no lock, no read-only window, no downtime.
+The user keeps working: no read-only window and no downtime. The only thing that waits is per document and lasts as long as one copy: capturing a container's `data.db` takes that container's own path lock, so a sync or close of that one document queues behind the copy. Typing is not affected, and no other document is.
 
 ## Verifying
 
@@ -109,7 +109,7 @@ Above 1 GB, copy the file into the backups folder by hand (chunked upload is a l
 
 ```bash
 scp home-<ownerId>-<stamp>.tar.zst you@server:/opt/eigen/backups/
-ssh you@server chown 1000:1000 /opt/eigen/backups/home-<ownerId>-<stamp>.tar.zst
+ssh you@server sudo chown 1000:1000 /opt/eigen/backups/home-<ownerId>-<stamp>.tar.zst
 ```
 
 An artifact that arrives this way has no sidecar, so it lists as **unverified** and the row can say nothing about what is in it. Press **Verify**: the job unpacks it, runs the three stages and writes the sidecar. Restore works on an unverified artifact too, because a restore verifies its own extract before it touches anything, but verify first anyway: that way a bad archive is caught without taking the home offline for it.
@@ -126,9 +126,9 @@ jq '{kind, ownerId, name, createdAt, appVersion, counts, mounts}' /tmp/check/hom
 
 Everything is inside one `home-{ownerId}/` folder: `manifest.json`, the `home/` tree one-for-one with the home directory, and for a user `auth.json`, `shares.json` and `avatar/`. The manifest lists every file with its size and sha256, which is what stage 1 of the verify re-checks. The server-side sidecar `{artifact}.manifest.json` holds the same manifest plus the last verify result.
 
-## The archive format, and why we write the tar ourselves
+## The archive format
 
-An artifact is a POSIX tar (pax headers for long paths, directory entries included so empty folders survive) streamed through zstd. Reading uses `Bun.Archive`. Writing does not, and that is deliberate: `Bun.Archive.write` writes a lazy `Bun.file` value as an **empty** entry, and it buffers the whole archive in memory (measured on Bun 1.3.14: a 1.2 GB folder peaked at 3.9 GB RSS, against 0.1 GB for the streaming writer). So `apps/api/src/lib/backup/archive.ts` generates the tar entry by entry straight into the compressor. Please do not "simplify" it back to `Bun.Archive.write`; the archive would be silently empty and the API would run out of memory on a large home.
+An artifact is a plain POSIX tar (pax headers for long paths, empty folders included) streamed through zstd, so any machine with `tar --zstd` reads one and nothing about it is Eigen-specific. Eigen writes the tar itself rather than through `Bun.Archive`; the reason is in `apps/api/src/lib/backup/archive.ts` and matters only to someone changing that file.
 
 ## Interrupted restores
 
@@ -140,7 +140,7 @@ A marker lost to a torn write fails safe: the boot recovery does nothing, and th
 
 Every restored database is checked against the schema version this build expects, and one that came from a newer server is refused with a message naming both versions. Without that check the archive would land, pass `quick_check`, and then fail the whole home on the next load, long after the job said it was done. So restore an archive on a server at least as new as the one that wrote it, and upgrade the target server first if it is behind.
 
-An `s3` or `local-key` mount additionally needs a `metadata.db` at the schema version that shipped with per-home backup or newer, because a restore of a remote mount writes pending-upload rows that name a column older archives do not have. No older archive of this kind can exist, so this only ever fires on a hand-edited one.
+An `s3` mount additionally needs a `metadata.db` at the schema version that shipped with per-home backup or newer, because restoring a remote mount writes pending-upload rows in a column older archives do not have. Local and `local-key` mounts are not gated this way. No older archive of an `s3` mount can exist, so this only ever fires on a hand-edited one.
 
 ## The whole-server stopgap
 
