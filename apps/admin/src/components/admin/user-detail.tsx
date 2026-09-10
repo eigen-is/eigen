@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { UserDetailHero } from '@workspace/ui/components/user';
 import { KeyRound, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { BackupSection } from './backup-section';
 import { ResetPasswordDialog } from './reset-password-dialog';
 
 type UserDetailToolbarProps = {
@@ -131,6 +132,8 @@ export function UserDetail({ user, usage, organizationId }: UserDetailProps) {
                     {usage ? <StorageUsageBars data={usage} /> : <p className="text-sm text-muted-foreground">—</p>}
                 </div>
             </div>
+
+            <BackupSection ownerId={user.id} />
 
             {hasChanges && (
                 <div className="flex items-center justify-end gap-2">
