@@ -120,8 +120,10 @@ export function materializeMount(
                 fs.mkdirSync(inData(archivePath(row, byId)), { recursive: true });
             }
         }
-        const stagingDir = path.join(mountDir, PATHS.DRIVE.STAGING_DIR);
-        if (isRemote) fs.mkdirSync(stagingDir, { recursive: true });
+        // The MOUNT's staging folder, where the upload queue keeps a copy until its PUT acks —
+        // nothing to do with the job staging folder the archive was unpacked into.
+        const mountStagingDir = path.join(mountDir, PATHS.DRIVE.STAGING_DIR);
+        if (isRemote) fs.mkdirSync(mountStagingDir, { recursive: true });
         const enqueue = db.prepare(
             'INSERT INTO pending_uploads (storageKey, stagingPath, attempt, enqueuedAt, nextAttemptAt, isDatabase)' +
                 ' VALUES (?, ?, 0, ?, ?, ?)',
@@ -150,7 +152,7 @@ export function materializeMount(
             const key = storageKeyOf(row, byId, isPathBased);
             if (isRemote) {
                 const staged = randomUUID();
-                movePath(source, path.join(stagingDir, staged));
+                movePath(source, path.join(mountStagingDir, staged));
                 enqueue.run(key, staged, now, now, managedPaths.has(archived) ? 1 : 0);
                 continue;
             }
