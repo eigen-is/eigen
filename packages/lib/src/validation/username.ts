@@ -1,3 +1,7 @@
+// RFC 2142 role mailboxes: unclaimable, and mail to them fans out to every org admin. Spread into
+// RESERVED_USERNAMES below so the two can never drift.
+export const ROLE_MAILBOX_LOCAL_PARTS = new Set(['postmaster', 'abuse', 'noreply']);
+
 const RESERVED_USERNAMES = new Set([
     // System/admin
     'admin',
@@ -6,18 +10,16 @@ const RESERVED_USERNAMES = new Set([
     'superuser',
     'sysadmin',
     // Email standards
-    'postmaster',
+    ...ROLE_MAILBOX_LOCAL_PARTS,
     'webmaster',
     'hostmaster',
     'mailer-daemon',
-    'noreply',
     'no-reply',
     // Support
     'support',
     'help',
     'info',
     'contact',
-    'abuse',
     'security',
     // Protocols/infra
     'www',

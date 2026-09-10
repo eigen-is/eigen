@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1357 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1358 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -791,7 +791,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (602)
+## Utilities & constants (603)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1130,6 +1130,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `parseBackupStamp` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `parseContactInput` | `@workspace/lib/validation` | packages/lib/src/validation/contact-input.ts |
 | `parseHomeMountSettings` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `ROLE_MAILBOX_LOCAL_PARTS` | `@workspace/lib/validation` | packages/lib/src/validation/username.ts |
 | `validateACLEntries` | `@workspace/lib/validation` | packages/lib/src/validation/acl.ts |
 | `validateCommand` | `@workspace/lib/validation` | packages/lib/src/validation/command.ts |
 | `validateEmailAddress` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |

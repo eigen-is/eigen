@@ -1,4 +1,5 @@
 import type { DeepPartial } from '@workspace/lib/types/util';
+import { ROLE_MAILBOX_LOCAL_PARTS } from '@workspace/lib/validation';
 import pkg from '../../../../../package.json' with { type: 'json' };
 import { JsonStore } from '../core/json-store';
 import { LocalFilesystem } from '../core/local-filesystem';
@@ -76,6 +77,11 @@ export function getMailDomain(): string {
 // external recipient. Case-insensitive suffix match on the `@domain` boundary.
 export function isInternalAddress(address: string): boolean {
     return address.toLowerCase().endsWith(`@${getMailDomain().toLowerCase()}`);
+}
+
+// RFC 2142 role mailboxes on this server's mail domain: no user may claim them, mail to them goes to the admins.
+export function isRoleAddress(address: string): boolean {
+    return isInternalAddress(address) && ROLE_MAILBOX_LOCAL_PARTS.has(address.split('@')[0].toLowerCase());
 }
 
 // Display name for the deployment. Used in email shells and similar branding spots — falls
