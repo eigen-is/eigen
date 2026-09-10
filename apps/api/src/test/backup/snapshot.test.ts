@@ -20,6 +20,7 @@ import { getAvatarsDir } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home/get-home';
 import { createMountConfig } from '../../lib/mount';
+import { saveThumbnail } from '../../lib/shared/thumbnails';
 import {
     addMember,
     addTeamMount,
@@ -44,6 +45,14 @@ const PROBE_TEXT = 'backup-probe';
 const SHARE_TARGET = 'outsider@external.test';
 // A user's own SQLite upload, in WAL mode — the file the archive must never rewrite.
 const USER_DB_NAME = 'user-upload.db';
+// A thumbnail whose paths row is gone: nothing would ever serve it again, so it stays out.
+const ORPHAN_THUMB_ID = 'backup-orphan-thumb';
+// A folder named like one of the skipped ones but somewhere else in the home. The skips are paths.
+const LOOKALIKE_DIR = 'eigen.calendar/avatars';
+const LOOKALIKE_TEXT = 'not the contacts avatar cache';
+// A standard mailbox nothing is ever delivered to: its `new/` is empty, and MaildirStore.watch
+// needs it on disk after a restore.
+const EMPTY_MAILBOX_DIR = 'eigen.mail/Maildir/.Archive/new';
 
 async function listArchiveFiles(root: string): Promise<string[]> {
     const found: string[] = [];
@@ -77,6 +86,7 @@ describe('Backup snapshotHome', () => {
     let apiKeyId: string;
     let twoFactorId: string;
     let userDbBytes: ArrayBuffer;
+    let keptFileId: string;
 
     beforeAll(async () => {
         ctx = await getTestContext();
@@ -141,13 +151,26 @@ describe('Backup snapshotHome', () => {
             new File([TEST_PNG_BYTES], 'trashed.png', { type: 'image/png' }),
         );
         await driveDelete(alice.sessionToken, alice.id, defaultMountId, `path/${trashed.id}`);
-        await driveUpload(
+        const kept = await driveUpload<DrivePath>(
             alice.sessionToken,
             alice.id,
             LOCAL_MOUNT_ID,
             localRoot.id,
             new File([TEST_PNG_BYTES], 'kept.png', { type: 'image/png' }),
         );
+        keptFileId = kept.id;
+        // The upload route generates the thumbnail in the background; written here so the snapshot
+        // below finds one whatever the timing, exactly as saveThumbnail leaves it.
+        const localMount = findOrFail(home.drive.getMounts(), (m) => m.id === LOCAL_MOUNT_ID);
+        const thumbnail = await saveThumbnail(
+            localMount.thumbsDir,
+            kept.id,
+            Buffer.from(TEST_PNG_BYTES),
+            'image/png',
+            'kept.png',
+        );
+        expect(thumbnail?.fileName).toBe(`${kept.id}.webp`);
+        await Bun.write(join(localMount.thumbsDir, `${ORPHAN_THUMB_ID}.webp`), TEST_PNG_BYTES);
 
         // A share, so share_registry has a row from alice.
         const shared = await driveUpload(
@@ -223,6 +246,7 @@ describe('Backup snapshotHome', () => {
         );
 
         await Bun.write(join(getAvatarsDir(), `${alice.id}.webp`), TEST_PNG_BYTES);
+        await Bun.write(join(home.homeDir, LOOKALIKE_DIR, 'note.txt'), LOOKALIKE_TEXT);
 
         // One row of every auth table the archive carries, for alice and for bob, so the queries are
         // pinned to their user. An app password goes through the real endpoint; a two_factor row is
@@ -297,8 +321,13 @@ describe('Backup snapshotHome', () => {
         }
     });
 
-    test('counts add up', () => {
-        const dbEntries = manifest.entries.filter((e: BackupEntry) => e.path.endsWith('.db'));
+    test('counts add up, and count Eigen databases only', () => {
+        // A user's own upload called `user-upload.db` is a file: verify never opens it, and the
+        // manifest must not call it a database either.
+        const dbEntries = manifest.entries.filter(
+            (e: BackupEntry) => e.path.endsWith('.db') && !e.path.endsWith(`/${USER_DB_NAME}`),
+        );
+        expect(manifest.entries.some((e) => e.path.endsWith(`/${USER_DB_NAME}`))).toBe(true);
         expect(manifest.counts.databases).toBe(dbEntries.length);
         expect(manifest.counts.files).toBe(manifest.entries.length - dbEntries.length);
         expect(manifest.counts.bytes).toBe(manifest.entries.reduce((sum, e) => sum + e.bytes, 0));
@@ -348,10 +377,33 @@ describe('Backup snapshotHome', () => {
         expect(versions.length).toBe(2);
         expect(files.some((f) => f.includes('/data/.trash/'))).toBe(true);
         // The mount cache dirs and the Maildir spool, by path — a user folder may legitimately be
-        // called `tmp`.
-        expect(files.filter((f) => /^home\/mounts\/[^/]+\/(thumbs|tmp|staging)\//.test(f))).toEqual([]);
+        // called `tmp`. `thumbs/` is not a cache: nothing regenerates a thumbnail (see below).
+        expect(files.filter((f) => /^home\/mounts\/[^/]+\/(tmp|staging)\//.test(f))).toEqual([]);
         expect(files.filter((f) => f.startsWith('home/eigen.mail/Maildir') && f.includes('/tmp/'))).toEqual([]);
         expect(files.filter((f) => f.startsWith('home/eigen.contacts/avatars/'))).toEqual([]);
+    });
+
+    test('thumbnails ride along, orphans do not', () => {
+        // A thumbnail is written once at upload and never regenerated, so an archive without them
+        // loses every thumbnail the home had. Keyed by path id, which a restore preserves.
+        const thumbEntry = `home/mounts/${LOCAL_MOUNT_ID}/thumbs/${keptFileId}.webp`;
+        expect(files).toContain(thumbEntry);
+        expect(manifest.entries.map((e) => e.path)).toContain(thumbEntry);
+        // A thumbnail whose row is gone is one no mount would ever serve again.
+        expect(files.some((f) => f.includes(`/thumbs/${ORPHAN_THUMB_ID}.webp`))).toBe(false);
+    });
+
+    test('a home file the archive skips by name is kept when it is somebody else', async () => {
+        // The skips are paths, not names: `mounts`, `eigen.contacts/avatars` and a Maildir `tmp/`
+        // spool. A folder deeper in the home that happens to share one of those names is a user's.
+        expect(files).toContain(`home/${LOOKALIKE_DIR}/note.txt`);
+        expect(await Bun.file(join(folder, 'home', LOOKALIKE_DIR, 'note.txt')).text()).toBe(LOOKALIKE_TEXT);
+    });
+
+    test('an empty home directory is materialized so the tar can carry it', () => {
+        // A Maildir `new/` nobody has delivered to has no file to imply it, and a restored mailbox
+        // without one gets no fs.watch — mail then stops syncing in silence.
+        expect(existsSync(join(folder, 'home', EMPTY_MAILBOX_DIR))).toBe(true);
     });
 
     test('auth.json carries this user rows only', async () => {

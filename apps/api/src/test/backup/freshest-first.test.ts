@@ -163,7 +163,9 @@ describe('Backup freshest-first on an s3 mount', () => {
         expect(await countBackingRows(staleMount, dataDbId, backingRoot)).toBe(1);
 
         // The staged copy is materialized into data/ where it wins, never archived as a staging/
-        // file of its own — nor are the mount's thumbs/ and tmp/ caches.
+        // file of its own — nor is the mount's tmp/ cache. (thumbs/ IS archived, but this mount has
+        // none: its files were created straight on the mount, never through the upload route that
+        // writes one.)
         const mountPrefix = `home/mounts/${STALE_MOUNT_ID}/`;
         expect(
             manifest.entries
@@ -235,7 +237,7 @@ describe('Backup freshest-first on an s3 mount', () => {
     // A backup must never silently omit a mount's objects, so an unreadable one fails the whole job.
     // Bun's S3Error says only "an unexpected error has occurred" and puts the actionable part in
     // `code`, which is all the admin pane's one-line job error would otherwise have shown.
-    test('a storage failure fails the snapshot, naming the mount and the error code', async () => {
+    test('a storage failure fails the snapshot, naming the mount, the code and the object', async () => {
         const rootId = (await staleMount.getRootFolder())!.id;
         const fileId = await staleMount.createFile(
             rootId,
@@ -245,17 +247,52 @@ describe('Backup freshest-first on an s3 mount', () => {
             TEST_PNG_BYTES,
         );
         await staleMount.drainPendingUploads({ flushNow: true });
-        staleFault.failReadKeys.add(await staleMount.getStorageKey(fileId));
+        const storageKey = await staleMount.getStorageKey(fileId);
+        staleFault.failReadKeys.add(storageKey);
         staleFault.readErrorCode = 'ConnectionRefused';
 
-        await expect(snapshot()).rejects.toThrow(`mount ${STALE_MOUNT_ID}: storage unreachable (ConnectionRefused)`);
+        await expect(snapshot()).rejects.toThrow(
+            `mount ${STALE_MOUNT_ID}: storage unreachable (ConnectionRefused) reading ${storageKey}`,
+        );
 
         // An error with no code is somebody else's problem and reaches the job as it is.
         staleFault.readErrorCode = undefined;
         await expect(snapshot()).rejects.toThrow('injected read failure (503)');
 
+        // So is a failure on THIS machine: an errno from the local copy the archive is written to,
+        // or SQLite's own from a VACUUM INTO. Calling either "storage unreachable" would send the
+        // admin after the wrong box.
+        for (const code of ['ENOSPC', 'SQLITE_FULL']) {
+            staleFault.readErrorCode = code;
+            await expect(snapshot()).rejects.toThrow('an unexpected error has occurred');
+        }
+
+        staleFault.readErrorCode = undefined;
         staleFault.failReadKeys.clear();
         await staleMount.deletePath(fileId);
+    });
+
+    // The container branch used to name the archive path instead of the object it could not read,
+    // which is the one thing an admin chasing a bucket failure needs.
+    test('a container database that cannot be read names its storage key', async () => {
+        const { containerId, dataDbId } = await provisionDoc(staleMount);
+        const managed = await staleMount.createDatabase(docConfig, dataDbId);
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'stored' }).run();
+        await managed.flush();
+        await staleMount.drainPendingUploads({ flushNow: true });
+        // No live handle and nothing staged, so the copy has to go to the stored object.
+        await staleMount.closeDatabase(dataDbId, { skipFinalSnapshot: true });
+        const storageKey = await staleMount.getStorageKey(dataDbId);
+        staleFault.failReadKeys.add(storageKey);
+        staleFault.readErrorCode = 'AccessDenied';
+
+        await expect(snapshot()).rejects.toThrow(
+            `mount ${STALE_MOUNT_ID}: storage unreachable (AccessDenied) reading ${storageKey}`,
+        );
+
+        staleFault.readErrorCode = undefined;
+        staleFault.failReadKeys.clear();
+        await staleMount.deletePath(containerId);
     });
 
     test('a settled s3 mount is materialized into data/ by path', async () => {

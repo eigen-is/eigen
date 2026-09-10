@@ -9,6 +9,7 @@ import { restoreHome } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { getHome } from '../../lib/home/get-home';
 import type { Mount } from '../../lib/mount/mount';
+import { saveThumbnail } from '../../lib/shared/thumbnails';
 import {
     createHomeFaultMount,
     registerFaultMount,
@@ -85,6 +86,7 @@ describe('Backup restore of an s3 mount', () => {
     let trashedKey: string;
     let versionKey: string;
     let dataDbId: string;
+    let thumbPath: string;
 
     beforeAll(async () => {
         await getTestContext();
@@ -143,6 +145,13 @@ describe('Backup restore of an s3 mount', () => {
             }),
         );
 
+        // Thumbnails live beside the mount's data, not in the bucket, and nothing regenerates one.
+        thumbPath = join(mount.thumbsDir, `${png.id}.webp`);
+        expect(
+            (await saveThumbnail(mount.thumbsDir, png.id, Buffer.from(TEST_PNG_BYTES), 'image/png', 'bucket.png'))
+                ?.fileName,
+        ).toBe(`${png.id}.webp`);
+
         await settleContainer(mount, doc.id);
         await mount.drainPendingUploads({ flushNow: true });
 
@@ -161,6 +170,8 @@ describe('Backup restore of an s3 mount', () => {
         unregisterFaultMount(home.drive, MOUNT_ID);
         await mount.closeAllDatabases();
         rmSync(join(BACKING, MOUNT_ID), { recursive: true, force: true });
+        // Gone with the bucket, so only the archive can put it back.
+        rmSync(thumbPath, { force: true });
 
         await restoreHome(artifact, userId, `restore-s3-${Date.now()}`);
 
@@ -192,6 +203,9 @@ describe('Backup restore of an s3 mount', () => {
         expect(pending.find((row) => row.storageKey === versionKey)?.isDatabase).toBe(1);
         // The local data/ tree is not an s3 mount's storage; the bytes belong in the bucket.
         expect(existsSync(join(TEST_DATA_DIR, 'home', userId, 'mounts', MOUNT_ID, 'data'))).toBe(false);
+        // thumbs/ sits beside that tree and survives it: the drive route serves thumbnails off the
+        // local disk on every backend, and nothing regenerates one.
+        expect(existsSync(thumbPath)).toBe(true);
     });
 
     test('the upload queue drains them to the bucket, plain files included', async () => {

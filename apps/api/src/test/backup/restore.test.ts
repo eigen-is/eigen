@@ -23,6 +23,7 @@ import { createMountConfig } from '../../lib/mount';
 import { paths } from '../../lib/mount/schema';
 import { getEigenDb } from '../../lib/share/db';
 import { shareRegistry } from '../../lib/share/schema';
+import { saveThumbnail } from '../../lib/shared/thumbnails';
 import { createHomeFaultMount, registerFaultMount, unregisterFaultMount } from '../fault-storage-helpers';
 import {
     assertJson,
@@ -161,6 +162,7 @@ describe('Backup restoreHome', () => {
     let trashedFileId: string;
     let localRootId: string;
     let nestedFileId: string;
+    let keptThumbPath: string;
     let port: number;
 
     beforeAll(async () => {
@@ -193,6 +195,16 @@ describe('Backup restoreHome', () => {
         });
         expect(aclRes.status).toBe(200);
         keptFileId = kept.id;
+        // A thumbnail is written once, at upload, and never regenerated — the drive route 404s for a
+        // file whose thumbnail is gone — so a restore has to bring it back. Written here rather than
+        // waited for, because the upload route generates it in the background.
+        const keptMount = (await getHome(target.id)).drive.getMounts().find((m) => m.id === mountId);
+        expect(keptMount).toBeTruthy();
+        keptThumbPath = join(keptMount!.thumbsDir, `${kept.id}.webp`);
+        expect(
+            (await saveThumbnail(keptMount!.thumbsDir, kept.id, Buffer.from(TEST_PNG_BYTES), 'image/png', 'kept.png'))
+                ?.fileName,
+        ).toBe(`${kept.id}.webp`);
         // A trashed file and two version snapshots: both live in the paths table under their own key
         // shapes (`.trash/{id}.{ext}`, `{container}/versions/*.db`), so both have to come back.
         const trashed = await driveUpload<DrivePath>(
@@ -279,6 +291,8 @@ describe('Backup restoreHome', () => {
         );
         await deliverMail(target.email, 'After the backup');
         await authedRequest(target.sessionToken, `/mail/${target.id}/mailbox/`);
+        // ...and lose the thumbnail nothing would ever generate again.
+        rmSync(keptThumbPath, { force: true });
         expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual([
             'after-backup.png',
             CHATS_FOLDER,
@@ -340,6 +354,23 @@ describe('Backup restoreHome', () => {
         expect(
             existsSync(join(TEST_DATA_DIR, 'home', target.id, 'mounts', LOCAL_MOUNT_ID, 'data', 'Empty Folder')),
         ).toBe(true);
+
+        // An empty Maildir folder: no file implies it, so only a directory entry in the tar carries
+        // it — and MaildirStore.watch installs no fs.watch on a `new/` that is not there, which
+        // stops mail syncing in silence. Nothing recreates it either: createStandardMailboxes only
+        // runs when the whole Maildir is missing.
+        expect(existsSync(join(TEST_DATA_DIR, 'home', target.id, 'eigen.mail', 'Maildir', '.Archive', 'new'))).toBe(
+            true,
+        );
+
+        // The thumbnail is back where the mount looks for it, and the route serves it again.
+        expect(existsSync(keptThumbPath)).toBe(true);
+        const thumb = await authedRequest(
+            target.sessionToken,
+            `/drive/${target.id}/${mountId}/thumb/${keptFileId}.webp`,
+        );
+        expect(thumb.status).toBe(200);
+        expect(thumb.headers.get('content-type')).toBe('image/webp');
 
         const [preRestore] = safetyCopies(target.id, PRE_RESTORE_SUFFIX);
         expect(preRestore).toBeTruthy();

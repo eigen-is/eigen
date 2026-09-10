@@ -72,7 +72,7 @@ eigen-home-{ownerId}-{timestamp}/
     └── eigen.notifications/   (notifications.db vacuumed)
 ```
 
-Not included, on purpose: `thumbs/`, `tmp/`, `staging/`, `versions/` snapshot folders, preview caches, avatar caches, FTS index content. All of it is either derived (regenerated on demand) or transport machinery. The trash **is** included — it counts toward quota and users expect restore to bring it back.
+Not included, on purpose: `tmp/`, `staging/`, preview caches, avatar caches, FTS index content. All of it is either derived (regenerated on demand) or transport machinery. The trash **is** included — it counts toward quota and users expect restore to bring it back. So are `versions/` snapshot folders (the only copy of an old file state) and `thumbs/` (generated once at upload and never regenerated, so not derived data either).
 
 ### manifest.json
 
