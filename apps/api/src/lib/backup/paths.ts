@@ -1,8 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import type { BackupSafetyCopy } from '@workspace/lib/types/backup';
 import { type ParsedOwnerId, parseOwnerId } from '@workspace/lib/types/owner';
-import { BACKUP_ARTIFACT_EXTENSION, BACKUP_STAMP_PATTERN, parseBackupStamp } from '@workspace/lib/validation';
+import {
+    BACKUP_ARTIFACT_EXTENSION,
+    BACKUP_HOME_PREFIX,
+    BACKUP_STAMP_PATTERN,
+    parseBackupStamp,
+} from '@workspace/lib/validation';
 import { getDataRoot, getTeamDataPath, getUserHomePath } from '../config/paths';
 import { ApiError, PATHS } from '../core';
 import { getUserById } from '../user/user';
@@ -111,7 +117,7 @@ export function archiveMountPath(mountId: string, relPath: string): string {
 
 // The folder snapshotHome writes, and the single top-level folder inside an artifact.
 export function buildHomeFolderName(ownerId: string): string {
-    return `home-${ownerId}`;
+    return `${BACKUP_HOME_PREFIX}${ownerId}`;
 }
 
 function pad(value: number, width: number): string {
@@ -160,7 +166,7 @@ const SAFETY_COPY_NAME = new RegExp(`^(?<homeName>.+)(?<suffix>${SAFETY_COPY_SUF
 
 // The folder a restore leaves beside the home, spelled in one place: `parseSafetyCopyName` reads
 // back exactly what this writes.
-export function buildSafetyCopyName(homeDir: string, kind: 'pre-restore' | 'failed-restore', stamp: string): string {
+export function buildSafetyCopyName(homeDir: string, kind: BackupSafetyCopy['kind'], stamp: string): string {
     return `${homeDir}${kind === 'pre-restore' ? PRE_RESTORE_SUFFIX : FAILED_RESTORE_SUFFIX}${stamp}`;
 }
 
@@ -182,16 +188,13 @@ export function freeSafetyCopyStamp(homeDir: string, at: Date): string {
 
 export function parseSafetyCopyName(
     name: string,
-): { homeName: string; kind: 'pre-restore' | 'failed-restore'; at: Date } | null {
+): { homeName: string; kind: BackupSafetyCopy['kind']; at: Date } | null {
     const groups = SAFETY_COPY_NAME.exec(name)?.groups;
-    if (!groups) return null;
+    const homeName = groups?.['homeName'];
+    if (!groups || !homeName) return null;
     const at = parseBackupStamp(groups);
     if (!at) return null;
-    return {
-        homeName: groups['homeName'] ?? '',
-        kind: groups['suffix'] === PRE_RESTORE_SUFFIX ? 'pre-restore' : 'failed-restore',
-        at,
-    };
+    return { homeName, kind: groups['suffix'] === PRE_RESTORE_SUFFIX ? 'pre-restore' : 'failed-restore', at };
 }
 
 export type BackableOwner = ParsedOwnerId & { type: 'user' | 'team' };

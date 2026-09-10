@@ -1,13 +1,65 @@
-import type { BackupManifest, BackupVerifyRecord } from '../types/backup';
+import type { BackupEntry, BackupManifest, BackupVerifyRecord } from '../types/backup';
 import type { S3Config } from '../types/mount';
 import type { MountSettings } from '../types/settings';
+
+// The names in the backups folder, shared FE/BE: the admin pane refuses a file that is not one
+// before it uploads anything, the upload route refuses it again, and the artifact list reads the
+// ownerId back out of it. One grammar, so the two sides can never disagree about it.
+export const BACKUP_ARTIFACT_EXTENSION = '.tar.zst';
+
+// The folder one home's archive is, and the name of the artifact holding it.
+export const BACKUP_HOME_PREFIX = 'home-';
+
+// The character class an owner id may use. It ends up in an artifact name and in the home folder a
+// route resolves, so `/`, `..` and control characters are out of both by construction.
+const BACKUP_OWNER_ID_CHARS = '[A-Za-z0-9_-]+';
+export const BACKUP_OWNER_ID = new RegExp(`^${BACKUP_OWNER_ID_CHARS}$`);
+
+// A mount id becomes a path segment under a home folder on both sides of a backup, for the same
+// reason and with the same class.
+const BACKUP_MOUNT_ID = BACKUP_OWNER_ID;
+
+// The timestamp shape as named groups: artifact names and the two safety copies a restore leaves
+// beside a home folder all read the same.
+export const BACKUP_STAMP_PATTERN = String.raw`(?<year>\d{4})(?<month>\d{2})(?<day>\d{2})-(?<hours>\d{2})(?<minutes>\d{2})(?<seconds>\d{2})`;
+
+export function parseBackupStamp(groups: Record<string, string | undefined>): Date | null {
+    const at = new Date(
+        `${groups['year']}-${groups['month']}-${groups['day']}T${groups['hours']}:${groups['minutes']}:${groups['seconds']}Z`,
+    );
+    return Number.isNaN(at.getTime()) ? null : at;
+}
+
+// Owner ids are UUIDs or `team_{id}`, both of which contain dashes, so the timestamp is matched
+// from the end and the owner id is whatever is left.
+const ARTIFACT_EXTENSION_PATTERN = BACKUP_ARTIFACT_EXTENSION.replaceAll('.', String.raw`\.`);
+const ARTIFACT_NAME = new RegExp(
+    `^${BACKUP_HOME_PREFIX}(?<ownerId>${BACKUP_OWNER_ID_CHARS})-${BACKUP_STAMP_PATTERN}${ARTIFACT_EXTENSION_PATTERN}$`,
+);
+
+export function parseBackupArtifactName(name: string): { ownerId: string; at: Date } | null {
+    const groups = ARTIFACT_NAME.exec(name)?.groups;
+    if (!groups?.['ownerId']) return null;
+    const at = parseBackupStamp(groups);
+    return at ? { ownerId: groups['ownerId'], at } : null;
+}
 
 // The only manifest version this build writes and reads.
 export const BACKUP_FORMAT_VERSION = 1;
 
-const KINDS = new Set(['user', 'team', 'server']);
+// Both unions are the shared type's; the annotation is what keeps these lists from drifting from it.
+const KINDS: readonly BackupManifest['kind'][] = ['user', 'team', 'server'];
+const STORAGE_TYPES: readonly MountSettings['storageType'][] = ['local', 'local-key', 's3'];
 
-function isEntry(value: unknown): boolean {
+function isKind(value: string): value is BackupManifest['kind'] {
+    return KINDS.some((kind) => kind === value);
+}
+
+function isStorageType(value: string): value is MountSettings['storageType'] {
+    return STORAGE_TYPES.some((type) => type === value);
+}
+
+function isEntry(value: unknown): value is BackupEntry {
     return (
         typeof value === 'object' &&
         value !== null &&
@@ -20,11 +72,10 @@ function isEntry(value: unknown): boolean {
     );
 }
 
-// A mount id rides in the manifest and comes back as a path segment under the home folder
-// (`mounts/{id}`) when a restore materializes it, so an archive from outside is held to the class a
-// real one uses (`default`, or eight hex characters): no separator, no `.` or `..`, no control
-// character, never empty. Without this a manifest could name `../../{someone else}/mounts/{id}` and
-// send the restore into another user's live home.
+// A mount id rides in the manifest and comes back as a path segment under the home folder when a
+// restore materializes it, so an archive from outside is held to the class a real one uses. Without
+// this a manifest could name `../../{someone else}/mounts/{id}` and send the restore into their
+// live home.
 function isMountSummary(value: unknown): boolean {
     return (
         typeof value === 'object' &&
@@ -50,7 +101,7 @@ function isManifest(value: unknown): value is BackupManifest {
         value.formatVersion === BACKUP_FORMAT_VERSION &&
         'kind' in value &&
         typeof value.kind === 'string' &&
-        KINDS.has(value.kind) &&
+        isKind(value.kind) &&
         'ownerId' in value &&
         typeof value.ownerId === 'string' &&
         'name' in value &&
@@ -170,14 +221,10 @@ function isS3Config(value: unknown): value is S3Config {
     );
 }
 
-function isStorageType(value: string): value is MountSettings['storageType'] {
-    return value === 'local' || value === 'local-key' || value === 's3';
-}
-
-// The mounts a home's `settings.json` declares, as an archive or a safety copy carries it. Only the
-// two facts that say where a mount's objects live are read: the backend, and the credentials of a
-// remote one. A mount whose entry is not those is left out — the caller then knows nothing about it
-// and touches nothing of it, which is the safe answer for a folder nobody is serving.
+// The mounts a home's `settings.json` declares, as an archive or a safety copy carries it: only the
+// two facts that say where a mount's objects live. A mount whose entry is not those is left out —
+// the caller then knows nothing about it and touches nothing of it, which is the safe answer for a
+// folder nobody is serving.
 export type BackupMountSettings = { storageType: MountSettings['storageType']; s3Config?: S3Config };
 
 export function parseHomeMountSettings(text: string): Record<string, BackupMountSettings> | null {
@@ -202,43 +249,4 @@ export function parseHomeMountSettings(text: string): Record<string, BackupMount
         mounts[id] = { storageType: entry.storageType, s3Config };
     }
     return mounts;
-}
-
-// The name of an artifact in the backups folder, shared FE/BE: the admin pane refuses a file that
-// is not one before it uploads anything, the upload route refuses it again, and the artifact list
-// reads the ownerId back out of it. One grammar, so the two sides can never disagree about it.
-export const BACKUP_ARTIFACT_EXTENSION = '.tar.zst';
-
-// The character class an owner id may use. It ends up in an artifact name and in the home folder a
-// route resolves, so `/`, `..` and control characters are out of both by construction.
-export const BACKUP_OWNER_ID_CHARS = '[A-Za-z0-9_-]+';
-export const BACKUP_OWNER_ID = new RegExp(`^${BACKUP_OWNER_ID_CHARS}$`);
-
-// A mount id becomes a path segment under a home folder on both sides of a backup, for the same
-// reason and with the same class.
-export const BACKUP_MOUNT_ID = BACKUP_OWNER_ID;
-
-// The timestamp shape in the backups folder as named groups: artifact names and the two safety
-// copies a restore leaves beside a home folder all read the same.
-export const BACKUP_STAMP_PATTERN = String.raw`(?<year>\d{4})(?<month>\d{2})(?<day>\d{2})-(?<hours>\d{2})(?<minutes>\d{2})(?<seconds>\d{2})`;
-
-export function parseBackupStamp(groups: Record<string, string | undefined>): Date | null {
-    const at = new Date(
-        `${groups['year']}-${groups['month']}-${groups['day']}T${groups['hours']}:${groups['minutes']}:${groups['seconds']}Z`,
-    );
-    return Number.isNaN(at.getTime()) ? null : at;
-}
-
-// Owner ids are UUIDs or `team_{id}`, both of which contain dashes, so the timestamp is matched
-// from the end and the owner id is whatever is left.
-const ARTIFACT_EXTENSION_PATTERN = BACKUP_ARTIFACT_EXTENSION.replaceAll('.', String.raw`\.`);
-const ARTIFACT_NAME = new RegExp(
-    `^home-(?<ownerId>${BACKUP_OWNER_ID_CHARS})-${BACKUP_STAMP_PATTERN}${ARTIFACT_EXTENSION_PATTERN}$`,
-);
-
-export function parseBackupArtifactName(name: string): { ownerId: string; at: Date } | null {
-    const groups = ARTIFACT_NAME.exec(name)?.groups;
-    if (!groups) return null;
-    const at = parseBackupStamp(groups);
-    return at ? { ownerId: groups['ownerId'] ?? '', at } : null;
 }

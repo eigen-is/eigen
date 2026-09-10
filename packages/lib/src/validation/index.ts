@@ -1,10 +1,9 @@
 export { validateACLEntries } from './acl';
-export type { BackupMountSettings } from './backup';
 export {
     BACKUP_ARTIFACT_EXTENSION,
     BACKUP_FORMAT_VERSION,
+    BACKUP_HOME_PREFIX,
     BACKUP_OWNER_ID,
-    BACKUP_OWNER_ID_CHARS,
     BACKUP_STAMP_PATTERN,
     parseBackupArtifactName,
     parseBackupAuthRows,

@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupEntry, BackupManifest } from '@workspace/lib/types/backup';
 import { parseOwnerId } from '@workspace/lib/types/owner';
+import { BACKUP_FORMAT_VERSION } from '@workspace/lib/validation';
 import { eq } from 'drizzle-orm';
 import { CALENDAR_DB_CONFIG } from '../calendar/db-config';
 import { getAvatarsDir } from '../config/paths';
@@ -256,7 +257,7 @@ export async function snapshotHome(
 
     const config = getPublicConfig();
     const manifest: BackupManifest = {
-        formatVersion: 1,
+        formatVersion: BACKUP_FORMAT_VERSION,
         kind: owner.type,
         ownerId,
         email: owner.type === 'user' ? home.user.email : undefined,

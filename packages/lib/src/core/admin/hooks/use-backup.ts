@@ -12,9 +12,10 @@ import { backupKeys, invalidateBackup } from './keys';
 // Admin-only hooks over /admin/backup. The backups folder on the server is the durable record: the
 // SSE poke and the polling below only decide when to ask it again.
 
-// While a job of this home runs, both lists poll: the poke goes to the admin's own home, which an
-// admin restoring their OWN home stops receiving for the length of the restore. Without the poll on
-// the artifact list, the safety copy that restore just made would never appear.
+// While a job of this home runs the job list polls: the SSE poke goes to the admin's own home, which
+// an admin restoring their OWN home stops receiving for the length of the restore. One mechanism
+// carries that to the artifact list — the effect below, when the job stops running — rather than a
+// second poll reading the job cache from the other query.
 const JOB_POLL_MS = 2000;
 
 function hasRunningJob(jobs: BackupJob[] | undefined): boolean {
@@ -23,7 +24,6 @@ function hasRunningJob(jobs: BackupJob[] | undefined): boolean {
 
 export function useBackupArtifacts(ownerId: string) {
     const isGuest = useIsGuest();
-    const queryClient = useQueryClient();
     return useQuery({
         queryKey: backupKeys.artifacts(ownerId),
         queryFn: async (): Promise<{ artifacts: BackupArtifact[]; safetyCopies: BackupSafetyCopy[] }> => {
@@ -33,8 +33,6 @@ export function useBackupArtifacts(ownerId: string) {
         },
         enabled: !!ownerId && !isGuest,
         staleTime: STALE_TIME.TWO_MINUTES,
-        refetchInterval: () =>
-            hasRunningJob(queryClient.getQueryData<BackupJob[]>(backupKeys.jobs(ownerId))) ? JOB_POLL_MS : false,
     });
 }
 
