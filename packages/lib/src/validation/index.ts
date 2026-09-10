@@ -1,10 +1,12 @@
 export { validateACLEntries } from './acl';
+export type { BackupMountSettings } from './backup';
 export {
     BACKUP_FORMAT_VERSION,
     parseBackupAuthRows,
     parseBackupManifest,
     parseBackupShares,
     parseBackupSidecar,
+    parseHomeMountSettings,
 } from './backup';
 export type { CommandValidationResult } from './command';
 export { validateCommand } from './command';

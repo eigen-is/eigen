@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
+import { parseOwnerId } from '@workspace/lib/types/owner';
 import { parseBackupAuthRows, parseBackupManifest, parseBackupShares } from '@workspace/lib/validation';
 import { eq, getTableColumns } from 'drizzle-orm';
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core';
@@ -16,6 +17,8 @@ import { MOUNT_DB_CONFIG, PENDING_UPLOAD_KIND_VERSION } from '../mount/db-config
 import { buildStorageKey } from '../mount/helpers';
 import { getEigenDb } from '../share/db';
 import { shareRegistry } from '../share/schema';
+import { getTeam } from '../team/team';
+import { getUserById } from '../user/user';
 import { extractArtifact } from './archive';
 import { resolveSafetyCopy } from './artifacts';
 import { AUTH_TABLES } from './auth-tables';
@@ -26,14 +29,14 @@ import {
     ARCHIVE_SHARES_FILE,
     backupsDirPath,
     buildHomeFolderName,
+    buildSafetyCopyName,
     buildStamp,
-    FAILED_RESTORE_SUFFIX,
     getBackupStagingDir,
     getBackupsDir,
-    PRE_RESTORE_SUFFIX,
     parseArtifactName,
     parseSafetyCopyName,
     resolveHomeDir,
+    wipeBackupStagingDir,
 } from './paths';
 import { HOME_DATABASES, type SnapshotProgress } from './snapshot-home';
 import { archivePath, listManagedDatabases, readMountPathRows, storageKeyOf } from './snapshot-mount';
@@ -95,8 +98,8 @@ function freeStamp(homeDir: string, at: Date): string {
     let stamp = base;
     for (
         let n = 2;
-        fs.existsSync(`${homeDir}${PRE_RESTORE_SUFFIX}${stamp}`) ||
-        fs.existsSync(`${homeDir}${FAILED_RESTORE_SUFFIX}${stamp}`);
+        fs.existsSync(buildSafetyCopyName(homeDir, 'pre-restore', stamp)) ||
+        fs.existsSync(buildSafetyCopyName(homeDir, 'failed-restore', stamp));
         n++
     ) {
         stamp = `${base}-${n}`;
@@ -108,14 +111,17 @@ function freeStamp(homeDir: string, at: Date): string {
 // same as ManagedDatabase's own "never migrated" answer. Read-write, like every open below it: a WAL
 // database nobody is holding open has no -shm beside it, and a read-only open of one fails outright.
 function schemaVersionOf(filePath: string): number {
-    const db = new Database(filePath, { readwrite: true, create: false });
+    let db: Database | null = null;
     try {
+        // Inside the try: a file this cannot even be opened on (EACCES, EIO) reads as unstamped, and
+        // the quick_check right after it is what turns that into a named failure.
+        db = new Database(filePath, { readwrite: true, create: false });
         const row = db.query<{ version: number }, []>('SELECT version FROM __schema_version WHERE id = 1').get();
         return row?.version ?? 0;
     } catch {
         return 0;
     } finally {
-        db.close();
+        db?.close();
     }
 }
 
@@ -180,32 +186,33 @@ function materializeMount(
             if (row.type !== 'file') continue;
             const archived = archivePath(row, byId);
             const source = path.join(dataDir, archived);
+            // A remote mount's objects are the only ones a restore could write over: they are in a
+            // bucket, not in the folder that moved aside. So every one of its rows gets a key of its
+            // own, and the `.pre-restore-` copy keeps pointing at objects that still hold its bytes.
+            // Before the missing-bytes check, not after: a row the archive carries nothing for must
+            // not keep the key the copy references, or a late upload would land on an object it owns
+            // (a fresh key with nothing behind it reads as absent, which is what that row is). The
+            // row is this function's read model, so the new key goes into it and into the table.
+            if (isRemote) {
+                row.file = buildStorageKey(`${row.id}-r${stamp}`, row.name);
+                rekey.run(row.file, row.id);
+            }
             // A row whose storage object was already missing when the backup ran has no bytes here;
             // the restored home mirrors that absence rather than inventing an empty object.
             if (!fs.existsSync(source)) continue;
-            if (isPathBased) {
-                // Usually the same file (`file` is the name), but migration v7 renamed the NAME of a
-                // deduplicated row and left its `file` alone, so the two differ there — and the mount
-                // resolves reads through `file`. Nothing here can be overwritten: this mount's bytes
-                // moved aside with the folder.
-                const target = path.join(dataDir, storageKeyOf(row, byId, true));
-                if (target !== source) movePath(source, target);
-                continue;
-            }
-            // A flat-key backend addresses an object by `paths.file` alone, so every row that carries
-            // bytes gets a key of its own here: a restore never writes over what the bucket already
-            // holds, and the `.pre-restore-` copy beside the home keeps pointing at objects that
-            // still hold its bytes. `local-key` follows the same rule (its objects are files under
-            // the same flat key). The row is this function's read model, so it moves with it.
-            row.file = buildStorageKey(`${row.id}-r${stamp}`, row.name);
-            rekey.run(row.file, row.id);
+            const key = storageKeyOf(row, byId, isPathBased);
             if (isRemote) {
                 const staged = randomUUID();
                 movePath(source, path.join(stagingDir, staged));
-                enqueue.run(row.file, staged, now, now, managedPaths.has(archived) ? 1 : 0);
+                enqueue.run(key, staged, now, now, managedPaths.has(archived) ? 1 : 0);
                 continue;
             }
-            movePath(source, path.join(dataDir, row.file));
+            // Usually the same file on a path-based mount (`file` is the name), but migration v7
+            // renamed the NAME of a deduplicated row and left its `file` alone, so the two differ
+            // there — and the mount resolves reads through `file`. Nothing can be overwritten either
+            // way: a local mount's bytes moved aside with the folder.
+            const target = path.join(dataDir, key);
+            if (target !== source) movePath(source, target);
         }
         enqueue.finalize();
         rekey.finalize();
@@ -370,14 +377,109 @@ function checkRestoredDatabases(homeDir: string, mountIds: string[], containerDa
     }
 }
 
-// The mounts a home folder holds, for a restore that has no manifest to read them from.
-function mountIdsIn(homeDir: string): string[] {
-    const mountsDir = path.join(homeDir, PATHS.DRIVE.ROOT);
-    if (!fs.existsSync(mountsDir)) return [];
-    return fs
-        .readdirSync(mountsDir, { withFileTypes: true })
-        .filter((entry) => entry.isDirectory())
-        .map((entry) => entry.name);
+// The managed databases a home folder holds, for a restore with no manifest to enumerate them
+// from: every mount's paths table, keyed the way that mount's own backend keys its objects. A
+// remote mount's are in its bucket, so the path derived for one does not exist and the check skips
+// it — exactly what materializeMount returns for the same mount.
+function containerDatabasesIn(homeDir: string, mountIds: string[]): VersionedDatabase[] {
+    const found: VersionedDatabase[] = [];
+    for (const mountId of mountIds) {
+        const dataDir = path.join(homeDir, PATHS.DRIVE.ROOT, mountId, PATHS.DRIVE.DATA_DIR);
+        const metadataPath = path.join(homeDir, PATHS.DRIVE.ROOT, mountId, PATHS.DRIVE.METADATA_DB);
+        if (!fs.existsSync(metadataPath)) continue;
+        const db = new Database(metadataPath, { readwrite: true, create: false });
+        try {
+            const rows = readMountPathRows(db);
+            const byId = new Map(rows.map((row) => [row.id, row]));
+            // A folder row carries its own name as `file` on a path-based mount and nothing at all on
+            // a flat-key one (Mount.buildFileValue) — which is what tells the two layouts apart with
+            // no manifest to ask. A mount with no folders has no containers either.
+            const isPathBased = rows.some((row) => row.type !== 'file' && row.parentId !== null && row.file !== '');
+            for (const entry of listManagedDatabases(rows)) {
+                found.push({
+                    filePath: path.join(dataDir, storageKeyOf(entry.row, byId, isPathBased)),
+                    config: entry.config,
+                });
+            }
+        } finally {
+            db.close();
+        }
+    }
+    return found;
+}
+
+// A safety copy of a home whose owner is gone is a delete candidate, not a restore: the folder on
+// its own leaves a home nobody can sign in to. Restoring a deleted user goes through an artifact,
+// which carries their auth rows with it.
+async function requireOwnerExists(ownerId: string): Promise<void> {
+    const owner = parseOwnerId(ownerId);
+    const found = owner.type === 'team' ? await getTeam(owner.id) : await getUserById(owner.id);
+    if (!found) throw new ApiError(404, `${ownerId} no longer exists`);
+}
+
+// What a restore does once the home is out of everyone's hands and its folder is aside: put the new
+// one at `homeDir`. Returned by the step that prepared it, so whatever it needs is a closure over
+// the work that judged it.
+type InstallHome = (stamp: string) => Promise<void>;
+
+// The moves every restore is made of, in one place: take the home away from everyone holding it,
+// put the folder as it stands aside as a safety copy, install the replacement, and on any failure
+// put both folders back. `prepare` runs under the mark, before a byte is touched. `parkOnFailure`
+// names where the folder in place goes if the install throws. Nothing is ever deleted, and the
+// marker written here is the only thing that tells the next boot an interrupted restore happened —
+// one writer, so recoverInterruptedRestores covers every kind of restore.
+async function replaceHomeFolder(
+    ownerId: string,
+    homeDir: string,
+    jobId: string,
+    prepare: () => Promise<InstallHome>,
+    parkOnFailure: (stamp: string) => string,
+): Promise<void> {
+    // The lock: throws when another restore of this home holds it, before anything below runs.
+    markHomeRestoring(ownerId);
+    try {
+        const install = await prepare();
+
+        // Sessions are untouched: the user stays signed in, every request just meets the 503 until
+        // the mark clears.
+        closeCollabConnectionsForHome(ownerId);
+        await evictHome(ownerId);
+
+        // There is no home folder to move aside on a restore after the user was deleted.
+        const stamp = freeStamp(homeDir, new Date());
+        let movedAside: string | null = null;
+        if (fs.existsSync(homeDir)) {
+            movedAside = buildSafetyCopyName(homeDir, 'pre-restore', stamp);
+            // A process killed between here and the install leaves the user with no home folder, and
+            // only this note tells the next boot which folder to put back — the folder's presence
+            // alone means nothing (a deleted user's safety copies outlive them).
+            writeRestoringMarker(jobId, { ownerId, homeDir, preRestoreName: path.basename(movedAside) });
+            fs.renameSync(homeDir, movedAside);
+        }
+
+        try {
+            await install(stamp);
+        } catch (error) {
+            // Nothing is deleted, ever: the folder in place keeps a name of its own and the home as
+            // it was goes back. A failure while putting it back must not hide the original one.
+            try {
+                if (fs.existsSync(homeDir)) fs.renameSync(homeDir, parkOnFailure(stamp));
+                if (movedAside) fs.renameSync(movedAside, homeDir);
+            } catch (rollbackError) {
+                console.error(`[backup] could not put ${ownerId}'s home back after a failed restore:`, rollbackError);
+            }
+            throw error;
+        }
+    } finally {
+        // Whatever happened above is over, and the rollback put the home back itself. Neither call
+        // may throw over the failure that brought us here.
+        clearHomeRestoring(ownerId);
+        try {
+            wipeBackupStagingDir(jobId);
+        } catch (error) {
+            console.error(`[backup] could not clear the staging folder of job ${jobId}:`, error);
+        }
+    }
 }
 
 // Replaces one home with the copy inside an artifact. Nothing is ever deleted: the home as it stands
@@ -401,101 +503,65 @@ export async function restoreHome(
     }
     const homeDir = await resolveHomeDir(ownerId);
 
-    // 1 — lock. Throws when another restore of this home holds it, before anything below runs.
-    markHomeRestoring(ownerId);
-    try {
-        // 2 — unpack into this job's staging folder and judge the archive before anything is touched.
-        const unpackDir = path.join(getBackupStagingDir(jobId), 'restore');
-        fs.rmSync(unpackDir, { recursive: true, force: true });
-        onProgress?.('extract', 0, 1);
-        await extractArtifact(artifactPath, unpackDir);
-        onProgress?.('extract', 1, 1);
-        const folder = path.join(unpackDir, buildHomeFolderName(ownerId));
-        if (!fs.existsSync(folder)) {
-            throw new ApiError(400, `${artifactName} is a backup of another home`);
-        }
-        const manifest = parseBackupManifest(fs.readFileSync(path.join(folder, 'manifest.json'), 'utf8'));
-        if (!manifest) throw new ApiError(400, `${artifactName} carries no version 1 backup manifest`);
-        if (manifest.ownerId !== ownerId) {
-            throw new ApiError(400, `${artifactName} is a backup of another home (${manifest.ownerId})`);
-        }
-        const verified = await verifyFolder(folder, onProgress);
-        if (verified.status !== 'verified') {
-            // The whole list is in the record; three is enough for a message.
-            throw new ApiError(400, `${artifactName} did not verify: ${verified.failures.slice(0, 3).join('; ')}`);
-        }
-
-        // 3 — take the home away from everyone holding it. Sessions are untouched: the user stays
-        // signed in, every request just meets the 503 until the mark clears.
-        closeCollabConnectionsForHome(ownerId);
-        await evictHome(ownerId);
-
-        // 4 — move the current home aside. There is none on a restore after the user was deleted.
-        const stamp = freeStamp(homeDir, new Date());
-        let movedAside: string | null = null;
-        if (fs.existsSync(homeDir)) {
-            movedAside = `${homeDir}${PRE_RESTORE_SUFFIX}${stamp}`;
-            // The note that says this move happened. A process killed between here and the install
-            // leaves the user with no home folder, and only this file tells the next boot which
-            // folder to put back — the folder's presence alone means nothing (a deleted user's
-            // safety copies outlive them).
-            writeRestoringMarker(jobId, { ownerId, homeDir, preRestoreName: path.basename(movedAside) });
-            fs.renameSync(homeDir, movedAside);
-        }
-
-        try {
-            // 5 — the archive's `home/` IS the home folder, one for one.
-            onProgress?.('home files', 0, 1);
-            movePath(path.join(folder, ARCHIVE_HOME_DIR), homeDir);
-            onProgress?.('home files', 1, 1);
-            const containerDatabases: VersionedDatabase[] = [];
-            for (const [index, summary] of manifest.mounts.entries()) {
-                containerDatabases.push(...materializeMount(homeDir, summary, stamp));
-                onProgress?.('mounts', index + 1, manifest.mounts.length);
-            }
-
-            // 6 — what landed is still a database this server can open. Before the identity write,
-            // not after it (the spec has these the other way around): the rollback moves folders, and
-            // nothing takes a users3.db row back. A restore of a deleted user that failed this check
-            // after re-inserting would leave a user who can sign in with no home — and whose retry
-            // would find that user and skip the insert for good.
-            checkRestoredDatabases(
-                homeDir,
-                manifest.mounts.map((summary) => summary.id),
-                containerDatabases,
-            );
-
-            // 7 — the rows that live outside the home folder (users only).
-            restoreAuthRows(ownerId, manifest, folder);
-            await restoreShares(ownerId, folder);
-            await restoreAvatar(folder);
-        } catch (error) {
-            // Nothing is deleted, ever: the half-restored folder keeps a name of its own and the home
-            // as it was goes back. A failure while putting it back must not hide the original one.
-            try {
-                if (fs.existsSync(homeDir)) {
-                    fs.renameSync(homeDir, `${homeDir}${FAILED_RESTORE_SUFFIX}${stamp}`);
-                }
-                if (movedAside) fs.renameSync(movedAside, homeDir);
-            } catch (rollbackError) {
-                console.error(`[backup] could not put ${ownerId}'s home back after a failed restore:`, rollbackError);
-            }
-            throw error;
-        }
-
-        try {
+    await replaceHomeFolder(
+        ownerId,
+        homeDir,
+        jobId,
+        async () => {
+            // Unpack into this job's staging folder and judge the archive before anything is touched.
+            const unpackDir = path.join(getBackupStagingDir(jobId), 'restore');
             fs.rmSync(unpackDir, { recursive: true, force: true });
-        } catch (error) {
-            // The restore is done; a staging folder left behind is the boot-time wipe's problem.
-            console.error(`[backup] could not clear the staging folder of job ${jobId}:`, error);
-        }
-        onProgress?.('done', 1, 1);
-    } finally {
-        // 8 — unlock, and drop the note: whatever happened above is over, and the rollback put the
-        // home back itself. Neither call can throw over the failure that brought us here.
-        clearHomeRestoring(ownerId);
-        fs.rmSync(restoringMarkerPath(jobId), { force: true });
-    }
+            onProgress?.('extract', 0, 1);
+            await extractArtifact(artifactPath, unpackDir);
+            onProgress?.('extract', 1, 1);
+            const folder = path.join(unpackDir, buildHomeFolderName(ownerId));
+            if (!fs.existsSync(folder)) {
+                throw new ApiError(400, `${artifactName} is a backup of another home`);
+            }
+            const manifest = parseBackupManifest(fs.readFileSync(path.join(folder, 'manifest.json'), 'utf8'));
+            if (!manifest) throw new ApiError(400, `${artifactName} carries no version 1 backup manifest`);
+            if (manifest.ownerId !== ownerId) {
+                throw new ApiError(400, `${artifactName} is a backup of another home (${manifest.ownerId})`);
+            }
+            const verified = await verifyFolder(folder, onProgress);
+            if (verified.status !== 'verified') {
+                // The whole list is in the record; three is enough for a message.
+                throw new ApiError(400, `${artifactName} did not verify: ${verified.failures.slice(0, 3).join('; ')}`);
+            }
+
+            return async (stamp) => {
+                // The archive's `home/` IS the home folder, one for one.
+                onProgress?.('home files', 0, 1);
+                movePath(path.join(folder, ARCHIVE_HOME_DIR), homeDir);
+                onProgress?.('home files', 1, 1);
+                const containerDatabases: VersionedDatabase[] = [];
+                for (const [index, summary] of manifest.mounts.entries()) {
+                    containerDatabases.push(...materializeMount(homeDir, summary, stamp));
+                    onProgress?.('mounts', index + 1, manifest.mounts.length);
+                }
+
+                // What landed is still a database this server can open. Before the identity write,
+                // not after it (the spec has these the other way around): the rollback moves folders,
+                // and nothing takes a users3.db row back. A restore of a deleted user that failed
+                // this check after re-inserting would leave a user who can sign in with no home —
+                // and whose retry would find that user and skip the insert for good.
+                checkRestoredDatabases(
+                    homeDir,
+                    manifest.mounts.map((summary) => summary.id),
+                    containerDatabases,
+                );
+
+                // The rows that live outside the home folder (users only).
+                restoreAuthRows(ownerId, manifest, folder);
+                await restoreShares(ownerId, folder);
+                await restoreAvatar(folder);
+            };
+        },
+        // A half-written extraction is not a home: it keeps a name of its own, which the admin pane
+        // lists with a delete and no restore.
+        (stamp) => buildSafetyCopyName(homeDir, 'failed-restore', stamp),
+    );
+    onProgress?.('done', 1, 1);
 }
 
 // Puts a `.pre-restore-` copy back where it came from: the home as it stands becomes a safety copy
@@ -512,46 +578,36 @@ export async function restoreSafetyCopy(
     const { folder, homeDir, kind } = await resolveSafetyCopy(ownerId, name);
     if (kind !== 'pre-restore') throw new ApiError(400, `${name} is not a pre-restore copy of this home`);
     if (!fs.existsSync(folder)) throw new ApiError(404, `${name} is not beside this home`);
+    await requireOwnerExists(ownerId);
 
-    markHomeRestoring(ownerId);
-    try {
-        closeCollabConnectionsForHome(ownerId);
-        await evictHome(ownerId);
-
-        const stamp = freeStamp(homeDir, new Date());
-        let movedAside: string | null = null;
-        if (fs.existsSync(homeDir)) {
-            movedAside = `${homeDir}${PRE_RESTORE_SUFFIX}${stamp}`;
-            writeRestoringMarker(jobId, { ownerId, homeDir, preRestoreName: path.basename(movedAside) });
-            fs.renameSync(homeDir, movedAside);
-        }
-
+    const install: InstallHome = async () => {
         onProgress?.('home files', 0, 1);
-        try {
-            fs.renameSync(folder, homeDir);
-            onProgress?.('home files', 1, 1);
-            // The verdict a restore from an archive ends on: SQLite's on the bytes, and this build's
-            // on every schema stamp. A copy this server made passes both; one carried over from a
-            // newer server does not, and that has to surface here rather than on the next load.
-            checkRestoredDatabases(homeDir, mountIdsIn(homeDir), []);
-        } catch (error) {
-            // Exactly restoreHome's rollback: whatever is in place goes aside under a name of its
-            // own and the home as it was comes back. Nothing is deleted.
-            try {
-                if (fs.existsSync(homeDir)) {
-                    fs.renameSync(homeDir, `${homeDir}${FAILED_RESTORE_SUFFIX}${stamp}`);
-                }
-                if (movedAside) fs.renameSync(movedAside, homeDir);
-            } catch (rollbackError) {
-                console.error(`[backup] could not put ${ownerId}'s home back after a failed restore:`, rollbackError);
-            }
-            throw error;
-        }
-        onProgress?.('done', 1, 1);
-    } finally {
-        clearHomeRestoring(ownerId);
-        fs.rmSync(restoringMarkerPath(jobId), { force: true });
-    }
+        fs.renameSync(folder, homeDir);
+        onProgress?.('home files', 1, 1);
+        // The verdict a restore from an archive ends on: SQLite's on the bytes, and this build's on
+        // every schema stamp. A copy this server made passes both; one carried over from a newer
+        // server does not, and that has to surface here rather than on the next load.
+        const mountsDir = path.join(homeDir, PATHS.DRIVE.ROOT);
+        const mountIds = fs.existsSync(mountsDir)
+            ? fs
+                  .readdirSync(mountsDir, { withFileTypes: true })
+                  .filter((entry) => entry.isDirectory())
+                  .map((entry) => entry.name)
+            : [];
+        checkRestoredDatabases(homeDir, mountIds, containerDatabasesIn(homeDir, mountIds));
+    };
+
+    await replaceHomeFolder(
+        ownerId,
+        homeDir,
+        jobId,
+        // Nothing to unpack or judge: the folder is right there, and resolveSafetyCopy vouched for it.
+        async () => install,
+        // Back under the name it came from. A `.failed-restore-` name would make a pristine home
+        // unrestorable, and the only action left on one deletes its bytes.
+        () => folder,
+    );
+    onProgress?.('done', 1, 1);
 }
 
 // Boot: a restore killed between the move-aside and the install left the home folder gone and its

@@ -125,8 +125,7 @@ function safetyCopies(userId: string, suffix: string): string[] {
     return readdirSync(join(TEST_DATA_DIR, 'home')).filter((name) => name.startsWith(`${userId}${suffix}`));
 }
 
-// Where a flat-key mount stores one row's object after the restore: `paths.file`, which a restore
-// rewrites to a key of its own for every row it puts back (lib/backup/restore.ts).
+// Where a flat-key mount stores one row's object: `paths.file` (Mount.getStorageKey).
 function storageKeyIn(ownerId: string, mountId: string, pathId: string): string {
     const db = new Database(join(TEST_DATA_DIR, 'home', ownerId, 'mounts', mountId, 'metadata.db'), {
         readwrite: true,
@@ -309,12 +308,11 @@ describe('Backup restoreHome', () => {
         expect(trash.map((item) => item.name)).toEqual(['trashed.png']);
         // The archive holds a trashed file under `.trash/{id}.{ext}`; this mount stores it under its
         // flat key like any other file, so the bytes are checked where the mount will look for them
-        // (the download route refuses a trashed path, restore or no restore). That key is a fresh
-        // one: a restore never writes over an object the `.pre-restore-` copy still points at.
-        // The restore stamps its fresh keys with the same second it names the safety copy after.
-        const stamp = safetyCopies(target.id, PRE_RESTORE_SUFFIX)[0].slice(`${target.id}${PRE_RESTORE_SUFFIX}`.length);
+        // (the download route refuses a trashed path, restore or no restore). The key is the one it
+        // always had: only a remote mount's rows are rekeyed, because only its objects live outside
+        // the folder that moved aside.
         const trashedKey = storageKeyIn(target.id, mountId, trashedFileId);
-        expect(trashedKey).toBe(`${trashedFileId}-r${stamp}.png`);
+        expect(trashedKey).toBe(`${trashedFileId}.png`);
         const trashedBytes = await Bun.file(
             join(TEST_DATA_DIR, 'home', target.id, 'mounts', mountId, 'data', trashedKey),
         ).arrayBuffer();

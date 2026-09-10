@@ -83,7 +83,24 @@ describe('Backup boot', () => {
         expect(existsSync(join(homeRoot, aside))).toBe(false);
     });
 
-    // delete-user.ts removes the live home folder and nothing else; the safety copies of a user who
+    // Both restores write this marker through one code path (replaceHomeFolder), so a safety-copy
+    // restore killed mid-swap leaves exactly this shape: the marker, no home folder, and the folder
+    // it was moved to beside it. Its staging folder holds no unpacked archive — the recovery reads
+    // the marker and nothing else.
+    test('the marker an interrupted safety-copy restore leaves puts the home back', () => {
+        const id = 'bootrecoverFFFFFFFFFFFFFFFFFFFFF';
+        const aside = `${id}${PRE_RESTORE_SUFFIX}20260202-000000`;
+        seedFolder(aside, 'the home mid-swap');
+        seedRestoringMarker('boot-job-d', id, aside);
+        made.push(join(homeRoot, id));
+
+        recoverInterruptedRestores();
+
+        expect(readFileSync(join(homeRoot, id, 'marker'), 'utf8')).toBe('the home mid-swap');
+        expect(existsSync(join(homeRoot, aside))).toBe(false);
+    });
+
+    // delete-user.ts removes the live home folder and nothing else;    // delete-user.ts removes the live home folder and nothing else; the safety copies of a user who
     // was deleted stay behind forever. A missing home folder is therefore not evidence of anything.
     test('a safety copy left by a deleted user is not resurrected', () => {
         const id = 'bootrecoverDDDDDDDDDDDDDDDDDDDDD';

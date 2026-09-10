@@ -14,7 +14,14 @@ import {
     resolveArtifact,
     resolveSafetyCopy,
 } from '../lib/backup/artifacts';
-import { getBackupJob, listBackupJobs, runArtifactVerify, runHomeBackup, startBackupJob } from '../lib/backup/jobs';
+import {
+    getBackupJob,
+    listBackupJobs,
+    runArtifactVerify,
+    runHomeBackup,
+    startBackupJob,
+    withBackupJobSlot,
+} from '../lib/backup/jobs';
 import { getBackupsDir, getBackupTempPath, OWNER_ID, parseArtifactName } from '../lib/backup/paths';
 import { restoreHome, restoreSafetyCopy } from '../lib/backup/restore';
 import { ApiError } from '../lib/core';
@@ -234,7 +241,10 @@ export const backupRouter = new Elysia({ name: 'backup' })
             await requireRestorableHome(params.ownerId);
             const { folder, homeDir } = await resolveSafetyCopy(params.ownerId, params.name);
             if (!fs.existsSync(folder)) throw new ApiError(404, 'Safety copy not found');
-            await deleteSafetyCopy(folder, homeDir);
+            // Synchronous, but it holds the home's one job slot for its whole duration: it decides
+            // what is garbage by reading the live home's storage keys, and a restore swapping that
+            // folder underneath it would turn the answer into "delete what the home now points at".
+            await withBackupJobSlot(params.ownerId, () => deleteSafetyCopy(folder, homeDir));
             return { success: true };
         },
         { auth: true },
@@ -244,7 +254,9 @@ export const backupRouter = new Elysia({ name: 'backup' })
         '/admin/backup/safety/:ownerId/:name/restore',
         async ({ params, user }): Promise<{ jobId: string }> => {
             await requireAdmin(user.id);
-            await requireRestorableHome(params.ownerId);
+            // A copy of a home whose owner is gone cannot be restored, only deleted: putting the
+            // folder back would leave a home nobody can sign in to.
+            await requireExistingHome(params.ownerId);
             // The kind is judged before the folder is looked for: a `.failed-restore-` copy is not a
             // home this can put back, whether or not one by that name is there.
             const { folder, kind } = await resolveSafetyCopy(params.ownerId, params.name);

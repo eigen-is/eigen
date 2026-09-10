@@ -10,6 +10,7 @@ import { eq } from 'drizzle-orm';
 import { user as userScheme } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
+import { withBackupJobSlot } from '../../lib/backup/jobs';
 import {
     buildArtifactName,
     buildHomeFolderName,
@@ -401,6 +402,33 @@ describe('Backup routes', () => {
         const copies = (await listArtifacts(target.id)).safetyCopies;
         expect(copies.map((entry) => entry.name)).not.toContain(copy?.name);
         expect(copies.filter((entry) => entry.kind === 'pre-restore').length).toBe(1);
+    });
+
+    test('a safety-copy delete and a job never overlap on one home', async () => {
+        expect(
+            (await startAndFinish(`/admin/backup/artifacts/${artifactName}/restore`, { ownerId: target.id })).state,
+        ).toBe('done');
+        const copyName =
+            (await listArtifacts(target.id)).safetyCopies.find((entry) => entry.kind === 'pre-restore')?.name ?? '';
+        expect(copyName).not.toBe('');
+
+        // The delete reads the live home's storage keys to decide what is garbage, so a restore
+        // swapping that folder underneath it would make it delete what the home now points at.
+        const { jobId } = await assertJson<{ jobId: string }>(
+            await adminJson(`/admin/backup/artifacts/${artifactName}/restore`, { ownerId: target.id }),
+        );
+        const refused = await adminRequest(`/admin/backup/safety/${target.id}/${copyName}`, { method: 'DELETE' });
+        expect(refused.status).toBe(409);
+        expect((await waitForJob(jobId)).state).toBe('done');
+        expect((await listArtifacts(target.id)).safetyCopies.map((entry) => entry.name)).toContain(copyName);
+
+        // And the other way round: a delete holds the same one-per-home slot while it runs.
+        await withBackupJobSlot(target.id, async () => {
+            expect((await adminRequest(`/admin/backup/home/${target.id}`, { method: 'POST' })).status).toBe(409);
+            expect(
+                (await adminJson(`/admin/backup/artifacts/${artifactName}/restore`, { ownerId: target.id })).status,
+            ).toBe(409);
+        });
     });
 
     test('refuses a second upload of a name already in the folder and keeps the first', async () => {

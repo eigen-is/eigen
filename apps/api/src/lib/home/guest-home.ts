@@ -1,6 +1,6 @@
 import type { HomeSizeResponse } from '@workspace/lib/types/settings';
 import { getGuestHomePath } from '../config/paths';
-import { JsonStore, LocalFilesystem } from '../core';
+import { JsonStore, LocalFilesystem, PATHS } from '../core';
 import { Drive } from '../drive';
 import { NotificationCenter } from '../notification-center/notification-center';
 import type { User } from '../user';
@@ -11,7 +11,7 @@ export class GuestHome extends Home {
         super(user, cleanUp);
         this.homeDir = getGuestHomePath(user.id);
         this.fs = new LocalFilesystem(this.homeDir);
-        this.settings = new JsonStore<HomeSettings>(this.fs, 'settings.json', {});
+        this.settings = new JsonStore<HomeSettings>(this.fs, PATHS.SETTINGS, {});
         this._drive = new Drive(this);
         this._notifications = new NotificationCenter(this);
     }

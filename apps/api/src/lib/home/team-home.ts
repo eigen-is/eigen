@@ -5,7 +5,7 @@ import type { MountSettings, TeamSettings } from '@workspace/lib/types/settings'
 import { Calendar } from '../calendar/calendar';
 import { getTeamDataPath } from '../config/paths';
 import { getServerSettings, mapStorageType } from '../config/server-settings';
-import { ApiError, JsonStore, LocalFilesystem } from '../core';
+import { ApiError, JsonStore, LocalFilesystem, PATHS } from '../core';
 import { Drive } from '../drive';
 import { createMountConfig } from '../mount';
 import { checkS3Connection } from '../storage/s3-storage';
@@ -35,7 +35,7 @@ export class TeamHome extends Home {
         this.homeDir = getTeamDataPath(parsed.id);
         this.fs = new LocalFilesystem(this.homeDir);
 
-        this.settings = new JsonStore<TeamSettings>(this.fs, 'settings.json', { calendar: { enabled: false } });
+        this.settings = new JsonStore<TeamSettings>(this.fs, PATHS.SETTINGS, { calendar: { enabled: false } });
         this._drive = new Drive(this);
         this._calendar = new Calendar(this);
     }
