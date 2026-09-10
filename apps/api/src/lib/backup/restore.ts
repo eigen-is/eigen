@@ -340,11 +340,17 @@ async function restoreShares(ownerId: string, folder: string): Promise<void> {
 }
 
 // The avatar is server data, not home data: put it back only where the server has none, so a picture
-// the user changed after the backup is not quietly reverted.
-async function restoreAvatar(folder: string): Promise<void> {
+// the user changed after the backup is not quietly reverted. The name comes out of the archive and
+// lands in the server-wide avatars folder, so it has to BE this user's: `{ownerId}.{ext}` and
+// nothing else, or a hostile archive would plant a picture for somebody who has none.
+async function restoreAvatar(ownerId: string, folder: string): Promise<void> {
     const avatarDir = path.join(folder, ARCHIVE_AVATAR_DIR);
     if (!fs.existsSync(avatarDir)) return;
     for (const name of fs.readdirSync(avatarDir)) {
+        if (path.parse(name).name !== ownerId) {
+            console.warn(`[backup] ${ownerId}: ${name} in the archive is not this user's avatar, not restored`);
+            continue;
+        }
         const target = path.join(getAvatarsDir(), name);
         if (fs.existsSync(target)) continue;
         await Bun.write(target, Bun.file(path.join(avatarDir, name)));
@@ -578,7 +584,7 @@ export async function restoreHome(
                 // The rows that live outside the home folder (users only).
                 restoreAuthRows(ownerId, manifest, folder);
                 await restoreShares(ownerId, folder);
-                await restoreAvatar(folder);
+                await restoreAvatar(ownerId, folder);
             };
         },
         // A half-written extraction is not a home: it keeps a name of its own, which the admin pane

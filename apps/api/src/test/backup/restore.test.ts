@@ -12,6 +12,7 @@ import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
 import * as pathsModule from '../../lib/backup/paths';
 import {
+    ARCHIVE_AVATAR_DIR,
     buildArtifactName,
     buildHomeFolderName,
     FAILED_RESTORE_SUFFIX,
@@ -851,6 +852,39 @@ describe('Backup restore over a live user', () => {
         // The identity write is the last step, so the rollback undoes everything before it.
         expect(safetyCopies(user.id, FAILED_RESTORE_SUFFIX).length).toBe(1);
         expect(await rootNames(user.sessionToken, user.id, mountId, rootId)).toEqual(before);
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+    });
+});
+
+describe('Backup restore of the avatar', () => {
+    // The avatar is the one file a restore writes outside the home folder, into the server-wide
+    // avatars directory, and its name comes out of the archive.
+    test("plants nothing for another user, and puts this user's own picture back", async () => {
+        const user = await createUser('restore-avatar@test.eigen.is', 'Restore Avatar');
+        await authedRequest(user.sessionToken, `/drive/${user.id}/mounts`);
+        const own = join(getAvatarsDir(), `${user.id}.webp`);
+        await Bun.write(own, TEST_PNG_BYTES);
+
+        const foreign = `${'f'.repeat(32)}`;
+        const foreignBytes = new TextEncoder().encode('a picture for somebody else');
+        const artifact = await backup(user.id, new Date(), async (manifest, folder) => {
+            const planted = `${ARCHIVE_AVATAR_DIR}/${foreign}.webp`;
+            await Bun.write(join(folder, planted), foreignBytes);
+            const hasher = new Bun.CryptoHasher('sha256');
+            hasher.update(foreignBytes);
+            manifest.entries.push({
+                path: planted,
+                bytes: foreignBytes.byteLength,
+                sha256: hasher.digest('hex'),
+            });
+        });
+        rmSync(own, { force: true });
+
+        await restoreHome(artifact, user.id, `restore-avatar-${Date.now()}`);
+
+        expect(existsSync(own)).toBe(true);
+        expect(new Uint8Array(await Bun.file(own).arrayBuffer())).toEqual(TEST_PNG_BYTES);
+        expect(existsSync(join(getAvatarsDir(), `${foreign}.webp`))).toBe(false);
         rmSync(join(getBackupsDir(), artifact), { force: true });
     });
 });

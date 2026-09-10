@@ -159,11 +159,12 @@ function normalizeArchiveDatabase(destPath: string): void {
     fs.rmSync(`${destPath}-shm`, { force: true });
 }
 
-// The codes a failure on THIS machine carries: an errno from the local copy the archive is being
-// written to (`ENOSPC`, `EACCES`) and SQLite's own from a VACUUM INTO (`SQLITE_FULL`). Both already
-// say what went wrong and where, and calling either "storage unreachable" would send the admin after
-// the wrong machine.
-const LOCAL_FAILURE_CODE = /^(SQLITE_[A-Z]+|E[A-Z]+)$/;
+// The codes a failure on THIS machine carries: SQLite's own from a VACUUM INTO, and the local-disk
+// errnos the copy into the archive folder raises. Both already say what went wrong and where, and
+// calling either "storage unreachable" would send the admin after the wrong machine. Listed one by
+// one rather than as `E[A-Z]+`: a bucket that refuses the connection can surface as a node errno
+// (`ECONNREFUSED`, `ETIMEDOUT`, `ENOTFOUND`), and that IS the storage being unreachable.
+const LOCAL_FAILURE_CODE = /^(SQLITE_[A-Z]+|ENOSPC|EACCES|EDQUOT|EROFS|EIO|ENOENT)$/;
 
 // A storage failure must fail the whole backup — an archive silently missing a mount's objects is
 // worse than no archive — but Bun's S3Error puts the actionable part in `code` and leaves `message`

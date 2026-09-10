@@ -262,9 +262,18 @@ describe('Backup freshest-first on an s3 mount', () => {
         // So is a failure on THIS machine: an errno from the local copy the archive is written to,
         // or SQLite's own from a VACUUM INTO. Calling either "storage unreachable" would send the
         // admin after the wrong box.
-        for (const code of ['ENOSPC', 'SQLITE_FULL']) {
+        for (const code of ['ENOSPC', 'EACCES', 'SQLITE_FULL']) {
             staleFault.readErrorCode = code;
             await expect(snapshot()).rejects.toThrow('an unexpected error has occurred');
+        }
+
+        // A bucket that refuses the connection surfaces as a node errno, and that is the storage
+        // being unreachable: it keeps the mount and the object it could not read.
+        for (const code of ['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND']) {
+            staleFault.readErrorCode = code;
+            await expect(snapshot()).rejects.toThrow(
+                `mount ${STALE_MOUNT_ID}: storage unreachable (${code}) reading ${storageKey}`,
+            );
         }
 
         staleFault.readErrorCode = undefined;
