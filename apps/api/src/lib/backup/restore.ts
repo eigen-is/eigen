@@ -25,7 +25,7 @@ import { shareRegistry } from '../share/schema';
 import { getTeam } from '../team/team';
 import { getUserById } from '../user/user';
 import { extractArtifact } from './archive';
-import { resolveSafetyCopy } from './artifacts';
+import { forgetSafetyCopySize, resolveSafetyCopy } from './artifacts';
 import { AUTH_TABLES } from './auth-tables';
 import {
     ARCHIVE_AUTH_FILE,
@@ -587,6 +587,9 @@ export async function restoreSafetyCopy(
     const install: InstallHome = async () => {
         onProgress?.('home files', 0, 1);
         fs.renameSync(folder, homeDir);
+        // The copy is not at that path any more, and a later one can land on the same name (one
+        // stamp per second) — it would then list the size measured for this folder.
+        forgetSafetyCopySize(folder);
         onProgress?.('home files', 1, 1);
         // The verdict a restore from an archive ends on: SQLite's on the bytes, and this build's on
         // every schema stamp. A copy this server made passes both; one carried over from a newer

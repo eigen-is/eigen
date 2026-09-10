@@ -34,7 +34,7 @@ const inFlight = new Map<string, { kind: BackupJob['kind']; settled: Promise<voi
 function dropExpiredJobs(): void {
     const now = Date.now();
     for (const [id, job] of jobs) {
-        if (job.finishedAt && now - Date.parse(job.finishedAt) > BACKUP_JOB_RETENTION_MS) jobs.delete(id);
+        if (job.finishedAt && now - job.finishedAt.getTime() > BACKUP_JOB_RETENTION_MS) jobs.delete(id);
     }
 }
 
@@ -86,7 +86,7 @@ export function startBackupJob(
         startedBy: adminId,
         state: 'running',
         progress: { step: 'starting', done: 0, total: 0 },
-        startedAt: new Date().toISOString(),
+        startedAt: new Date(),
     };
     jobs.set(job.id, job);
     poke(job);
@@ -109,7 +109,7 @@ export function startBackupJob(
             job.error = error instanceof Error ? error.message : String(error);
         })
         .finally(() => {
-            job.finishedAt = new Date().toISOString();
+            job.finishedAt = new Date();
             inFlight.delete(job.id);
             poke(job);
         });
@@ -135,7 +135,7 @@ export async function drainBackupJobs(): Promise<void> {
 export function listBackupJobs(ownerId?: string): BackupJob[] {
     dropExpiredJobs();
     const all = [...jobs.values()].filter((job) => !ownerId || job.ownerId === ownerId);
-    return all.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+    return all.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
 }
 
 export function getBackupJob(id: string): BackupJob | undefined {

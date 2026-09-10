@@ -140,7 +140,7 @@ function runningJob(ownerId: string): BackupJob {
         startedBy: 'admin-1',
         state: 'running',
         progress: { step: 'extract', done: 1, total: 4 },
-        startedAt: new Date().toISOString(),
+        startedAt: new Date(),
     };
 }
 
@@ -169,6 +169,13 @@ describe('useUploadBackup', () => {
         expect(await uploadRefusal(file)).toBe(
             `Archives over ${BACKUP_UPLOAD_MAX_LABEL} must be copied into the server's backups folder (EIGEN_BACKUPS_DIR) by hand`,
         );
+    });
+
+    test('refuses an empty file with a message about what is wrong with it', async () => {
+        // Zero bytes fail the route's Content-Length check, which answers with the 413 about the
+        // 1 GB maximum — an answer that would send the admin looking in the wrong direction.
+        const name = `home-${OWNER}-20260909-120000.tar.zst`;
+        expect(await uploadRefusal(new File([], name))).toBe(`'${name}' is empty`);
     });
 
     test('refuses a file that is not named like an artifact, by the same grammar the route uses', async () => {
@@ -201,6 +208,31 @@ describe('useBackupArtifacts', () => {
         expect(interval(query!)).toBe(false);
 
         const { act } = await import('react');
+        await act(() => unmount());
+    });
+});
+
+describe('useBackupJobs', () => {
+    test('refetches the artifact list the moment a job leaves running', async () => {
+        const { act } = await import('react');
+        const { useBackupJobs } = await import('../../../../core/admin/hooks/use-backup');
+        const { queryClient, invalidated } = trackingClient();
+        // Seeded before the render and inside staleTime, so the query serves it without a fetch.
+        queryClient.setQueryData(backupKeys.jobs(OWNER), [runningJob(OWNER)]);
+        const { unmount } = await renderHook(() => useBackupJobs(OWNER), queryClient);
+
+        expect(invalidated).toEqual([]);
+        // The artifact list's own poll clears on this same change, so nothing else would refetch it
+        // and the artifact the job just wrote would sit there unlisted.
+        await act(async () => {
+            queryClient.setQueryData(backupKeys.jobs(OWNER), [
+                { ...runningJob(OWNER), state: 'done' as const, finishedAt: new Date() },
+            ]);
+            // The observer notifies on a scheduled batch, so the effect runs a tick later.
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+
+        expect(invalidated).toEqual([[...backupKeys.artifacts(OWNER)]]);
         await act(() => unmount());
     });
 });

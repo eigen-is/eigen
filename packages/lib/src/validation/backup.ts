@@ -84,7 +84,10 @@ export function parseBackupSidecar(text: string): { manifest: BackupManifest; ve
     if (!('status' in verify) || typeof verify.status !== 'string' || !isStatus(verify.status)) return null;
     if (!('failures' in verify) || !Array.isArray(verify.failures)) return null;
     if (verify.failures.some((failure) => typeof failure !== 'string')) return null;
-    const checkedAt = 'checkedAt' in verify && typeof verify.checkedAt === 'string' ? verify.checkedAt : undefined;
+    // The sidecar is a file, so its timestamp is an ISO string; every reader of the record wants the
+    // Date the rest of the API speaks (see types/backup.ts).
+    const stamp = 'checkedAt' in verify && typeof verify.checkedAt === 'string' ? new Date(verify.checkedAt) : null;
+    const checkedAt = stamp && !Number.isNaN(stamp.getTime()) ? stamp : undefined;
     return { manifest: value.manifest, verify: { status: verify.status, checkedAt, failures: verify.failures } };
 }
 

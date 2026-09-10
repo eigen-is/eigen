@@ -129,7 +129,7 @@ function countYjsBlobs(dbPath: string): number {
 // with a manifest — a staging folder straight after a backup, or a fresh extract before a restore.
 // Every database is opened read-only: a verify never changes a byte of what it is checking.
 export async function verifyFolder(dir: string, onProgress?: SnapshotProgress): Promise<BackupVerifyRecord> {
-    const checkedAt = new Date().toISOString();
+    const checkedAt = new Date();
     const manifestPath = path.join(dir, 'manifest.json');
     if (!fs.existsSync(manifestPath)) {
         return { status: 'failed', checkedAt, failures: ['manifest.json is missing'] };

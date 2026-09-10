@@ -28,7 +28,9 @@ export type BackupManifest = {
 
 export type BackupVerifyRecord = {
     status: 'unverified' | 'verified' | 'failed';
-    checkedAt?: string;
+    // A Date everywhere it is passed around: the sidecar on disk holds the ISO string (it is a file
+    // format), and parseBackupSidecar revives it on the way back in.
+    checkedAt?: Date;
     // Human-readable, one per failed check.
     failures: string[];
 };
@@ -45,8 +47,8 @@ export type BackupJob = {
     progress: { step: string; done: number; total: number };
     artifact?: string;
     error?: string;
-    startedAt: string;
-    finishedAt?: string;
+    startedAt: Date;
+    finishedAt?: Date;
 };
 
 // One artifact in the backups folder as the admin pane sees it. `manifest` is null for an artifact
@@ -54,7 +56,7 @@ export type BackupJob = {
 export type BackupArtifact = {
     name: string;
     bytes: number;
-    createdAt: string;
+    createdAt: Date;
     manifest: Pick<BackupManifest, 'kind' | 'ownerId' | 'email' | 'name' | 'appVersion' | 'counts' | 'mounts'> | null;
     verify: BackupVerifyRecord;
 };
@@ -63,6 +65,9 @@ export type BackupArtifact = {
 export type BackupSafetyCopy = {
     name: string;
     kind: 'pre-restore' | 'failed-restore';
-    createdAt: string;
+    createdAt: Date;
+    // A floor, not the size: measuring a whole home stops after a cap, and the pane says "at least"
+    // rather than showing a partial number as if it were the total.
     bytes: number;
+    truncated: boolean;
 };

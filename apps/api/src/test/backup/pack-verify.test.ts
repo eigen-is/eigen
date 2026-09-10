@@ -365,7 +365,8 @@ describe('Backup pack and verify', () => {
 
     test('the sidecar round-trips and is null when missing', async () => {
         expect(await readSidecar(artifact)).toBeNull();
-        const verify = { status: 'verified' as const, checkedAt: new Date().toISOString(), failures: [] };
+        // The record travels as a Date; the sidecar on disk is JSON, so it round-trips through ISO.
+        const verify = { status: 'verified' as const, checkedAt: new Date(), failures: [] };
         await writeSidecar(artifact, manifest, verify);
         expect(existsSync(`${artifact}.manifest.json`)).toBe(true);
         const read = await readSidecar(artifact);
