@@ -10,7 +10,7 @@ import { PATHS } from '../core';
 import { hashFile } from '../drive/streaming';
 import { ARCHIVE_HOME_DIR, archiveHomePath, archiveMountPath, resolveInside } from './paths';
 import { HOME_DATABASE_PATHS, type SnapshotProgress } from './snapshot-home';
-import { listManagedDatabases, readMountPathRows } from './snapshot-mount';
+import { checkArchivedPathRows, listManagedDatabases, readMountPathRows } from './snapshot-mount';
 
 // Stage 3 samples rather than decodes everything: the ten heaviest documents plus ten of the rest.
 const SAMPLE_LARGEST = 10;
@@ -62,7 +62,11 @@ function listArchiveDatabases(root: string, fail: (message: string) => void): Ar
         try {
             const db = new Database(metadata, { readonly: true });
             try {
-                for (const managed of listManagedDatabases(readMountPathRows(db))) {
+                const rows = readMountPathRows(db);
+                // Before a path is derived from them: every path a restore builds is a join of these
+                // rows' two name columns, and the table came in inside a file somebody uploaded.
+                for (const failure of checkArchivedPathRows(rows)) fail(`${relMetadata}: ${failure}`);
+                for (const managed of listManagedDatabases(rows)) {
                     const archivePath = archiveMountPath(entry.name, `${PATHS.DRIVE.DATA_DIR}/${managed.path}`);
                     const abs = resolveInside(root, archivePath);
                     if (!abs) {

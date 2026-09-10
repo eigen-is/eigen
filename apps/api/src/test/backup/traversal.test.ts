@@ -1,6 +1,8 @@
-import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { Database } from 'bun:sqlite';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { auth } from '../../lib/auth/auth';
@@ -9,8 +11,10 @@ import { deleteSafetyCopy } from '../../lib/backup/artifacts';
 import { buildArtifactName, buildHomeFolderName, getBackupsDir, PRE_RESTORE_SUFFIX } from '../../lib/backup/paths';
 import { restoreHome } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
+import * as verifyModule from '../../lib/backup/verify';
 import { verifyFolder } from '../../lib/backup/verify';
 import { getHome } from '../../lib/home/get-home';
+import { createMountConfig } from '../../lib/mount';
 import * as mountHelpers from '../../lib/mount/helpers';
 import { assertJson, authedRequest, driveUpload, getTestContext, TEST_DATA_DIR, TEST_PNG_BYTES } from '../setup';
 
@@ -146,5 +150,148 @@ describe('Backup refuses an archive that names another home', () => {
         expect(storagesBuilt).toBe(0);
         expect(existsSync(copyDir)).toBe(false);
         expect(await victimFileStatus()).toBe(200);
+    });
+});
+
+// The archive's own metadata.db is untrusted input in the same way. A live `paths` row can never
+// hold a separator, a `..` or a control character (mount/helpers validateName wrote it); an
+// archived one can. A doctored `file` moved a restored file OUT of the mount over anything the
+// server can write, and a doctored `name` moved an arbitrary server file INTO the restored home.
+describe('Backup refuses an archive whose paths table leaves the mount', () => {
+    const OUTSIDE_PATH = join(TEST_DATA_DIR, 'traversal-outside.txt');
+    const OUTSIDE_CONTENT = 'not the archive to move';
+    const LOCAL_MOUNT_ID = 'traversal-local';
+
+    let owner: TestUser;
+    let keyMountId: string;
+    let keyFileId: string;
+    let localFileId: string;
+
+    function escapePathFrom(mountId: string): string {
+        const dataDir = join(TEST_DATA_DIR, 'home', owner.id, 'mounts', mountId, 'data');
+        return relative(dataDir, OUTSIDE_PATH);
+    }
+
+    // The attacker's own archive with one `paths` row doctored, its manifest entry restated so
+    // verify's transport stage passes and the row itself is what has to be caught.
+    async function hostileArchive(mountId: string, column: 'file' | 'name', value: string, rowId: string) {
+        const staging = mkdtempSync(join(TEST_DATA_DIR, 'traversal-rows-'));
+        const manifest = await snapshotHome(await getHome(owner.id), staging);
+        const hostileFolder = join(staging, buildHomeFolderName(owner.id));
+        const rel = `home/mounts/${mountId}/metadata.db`;
+        const db = new Database(join(hostileFolder, rel), { readwrite: true, create: false });
+        try {
+            db.run(`UPDATE paths SET ${column} = ? WHERE id = ?`, [value, rowId]);
+        } finally {
+            db.close();
+        }
+        const entry = manifest.entries.find((candidate) => candidate.path === rel);
+        if (!entry) throw new Error(`${rel} is not in the manifest`);
+        const hasher = new Bun.CryptoHasher('sha256');
+        hasher.update(new Uint8Array(await Bun.file(join(hostileFolder, rel)).arrayBuffer()));
+        entry.bytes = Bun.file(join(hostileFolder, rel)).size;
+        entry.sha256 = hasher.digest('hex');
+        writeFileSync(join(hostileFolder, 'manifest.json'), JSON.stringify(manifest, null, 2));
+        return hostileFolder;
+    }
+
+    // One artifact per hostile folder. The stamp is a second wide, so each one gets its own.
+    let packed = 0;
+    async function packHostile(hostileFolder: string): Promise<string> {
+        const name = buildArtifactName(owner.id, new Date(Date.now() + packed++ * 1000));
+        await packFolder(hostileFolder, join(getBackupsDir(), name));
+        return name;
+    }
+
+    beforeAll(async () => {
+        owner = await createUser('backup-traversal-rows@test.eigen.is', 'Traversal Rows');
+        writeFileSync(OUTSIDE_PATH, OUTSIDE_CONTENT);
+
+        // The harness's default mount is local-key: its storage key IS `paths.file`.
+        const mounts = await assertJson<{ id: string }[]>(
+            await authedRequest(owner.sessionToken, `/drive/${owner.id}/mounts`),
+        );
+        keyMountId = mounts[0].id;
+        const keyRoot = await assertJson<DrivePath>(
+            await authedRequest(owner.sessionToken, `/drive/${owner.id}/${keyMountId}/root`),
+        );
+        keyFileId = (
+            await driveUpload<DrivePath>(
+                owner.sessionToken,
+                owner.id,
+                keyMountId,
+                keyRoot.id,
+                new File([TEST_PNG_BYTES], 'flat.png', { type: 'image/png' }),
+            )
+        ).id;
+
+        // And a path-based mount beside it, where the archive tree is built from `paths.name`.
+        const home = await getHome(owner.id);
+        const settings = await home.settings.set({
+            mounts: {
+                [LOCAL_MOUNT_ID]: { storageType: 'local', maxSizeMB: 100, enabled: true, name: 'Traversal Local' },
+            },
+        });
+        await home.drive.addMount(createMountConfig(LOCAL_MOUNT_ID, settings.mounts![LOCAL_MOUNT_ID]));
+        const localRoot = await assertJson<DrivePath>(
+            await authedRequest(owner.sessionToken, `/drive/${owner.id}/${LOCAL_MOUNT_ID}/root`),
+        );
+        localFileId = (
+            await driveUpload<DrivePath>(
+                owner.sessionToken,
+                owner.id,
+                LOCAL_MOUNT_ID,
+                localRoot.id,
+                new File([TEST_PNG_BYTES], 'tree.png', { type: 'image/png' }),
+            )
+        ).id;
+    });
+
+    afterAll(() => {
+        rmSync(OUTSIDE_PATH, { force: true });
+    });
+
+    test('verify names the row whose file leaves the mount', async () => {
+        const folder = await hostileArchive(keyMountId, 'file', escapePathFrom(keyMountId), keyFileId);
+        const record = await verifyFolder(folder);
+        expect(record.status).toBe('failed');
+        expect(record.failures.join(' ')).toContain(keyFileId);
+    });
+
+    test('verify names the row whose name leaves the mount', async () => {
+        const folder = await hostileArchive(LOCAL_MOUNT_ID, 'name', escapePathFrom(LOCAL_MOUNT_ID), localFileId);
+        const record = await verifyFolder(folder);
+        expect(record.status).toBe('failed');
+        expect(record.failures.join(' ')).toContain(localFileId);
+    });
+
+    test('a restore of one throws and the file outside the home is untouched', async () => {
+        const name = await packHostile(await hostileArchive(keyMountId, 'file', escapePathFrom(keyMountId), keyFileId));
+        await expect(restoreHome(name, owner.id, `traversal-rows-${randomUUID()}`)).rejects.toThrow();
+        expect(readFileSync(OUTSIDE_PATH, 'utf8')).toBe(OUTSIDE_CONTENT);
+        expect((await authedRequest(owner.sessionToken, `/drive/${owner.id}/mounts`)).status).toBe(200);
+    });
+
+    // Verify is the gate, and the materialization is the second lock on the same door: every source,
+    // target and directory it builds out of the archive's rows is resolved against the mount's own
+    // data folder before a byte moves.
+    test('the materialization refuses the rows even with verify silenced', async () => {
+        const name = await packHostile(
+            await hostileArchive(LOCAL_MOUNT_ID, 'name', escapePathFrom(LOCAL_MOUNT_ID), localFileId),
+        );
+        const spy = spyOn(verifyModule, 'verifyFolder').mockResolvedValue({
+            status: 'verified',
+            checkedAt: new Date(),
+            failures: [],
+        });
+        try {
+            await expect(restoreHome(name, owner.id, `traversal-rows-${randomUUID()}`)).rejects.toThrow();
+        } finally {
+            spy.mockRestore();
+        }
+        expect(existsSync(OUTSIDE_PATH)).toBe(true);
+        expect(readFileSync(OUTSIDE_PATH, 'utf8')).toBe(OUTSIDE_CONTENT);
+        // The rollback put the home back: the mount that was never touched still answers.
+        expect((await authedRequest(owner.sessionToken, `/drive/${owner.id}/mounts`)).status).toBe(200);
     });
 });

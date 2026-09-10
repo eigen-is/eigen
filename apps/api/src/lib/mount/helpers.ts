@@ -19,9 +19,16 @@ export function isReservedName(name: string): boolean {
 // biome-ignore lint/suspicious/noControlCharactersInRegex: matching control chars is the point
 export const CONTROL_CHARS = /[\x00-\x1f]/;
 
+// One path segment and nothing else. Split out of validateName so an archived paths table can be
+// held to the same rule without throwing: a live row always passes (validateName wrote it), a row
+// that came in inside an uploaded archive has never been held to anything.
+export function isUsableName(name: string): boolean {
+    if (!name || name === '.' || name === '..') return false;
+    return !(name.includes('/') || name.includes('\\') || CONTROL_CHARS.test(name));
+}
+
 export function validateName(name: string): string {
-    const hasControlChar = CONTROL_CHARS.test(name);
-    if (!name || name === '.' || name === '..' || name.includes('/') || name.includes('\\') || hasControlChar) {
+    if (!isUsableName(name)) {
         throw new ApiError(400, `Invalid file or folder name: "${name}"`);
     }
     // Store NFC so a decomposed (NFD) name still matches the NFC-normalized getChildByName/resolvePath lookups.

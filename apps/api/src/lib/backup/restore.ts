@@ -40,6 +40,7 @@ import {
     getBackupsDir,
     parseSafetyCopyName,
     resolveHomeDir,
+    resolveInside,
     resolveMountDir,
     wipeBackupStagingDir,
 } from './paths';
@@ -181,6 +182,14 @@ function materializeMount(
         const rows = readMountPathRows(db);
         const byId = new Map(rows.map((row) => [row.id, row]));
         const managed = listManagedDatabases(rows);
+        // Every path below is built out of the archive's own paths table. Verify refuses a table
+        // that could leave the mount at all (checkArchivedPathRows); this is the second lock on the
+        // same door, one resolve per path, so no route into here can move a byte out of `data/`.
+        const inData = (relPath: string): string => {
+            const abs = resolveInside(dataDir, relPath);
+            if (!abs) throw new ApiError(400, `Mount ${summary.id} names a path that leaves it: ${relPath}`);
+            return abs;
+        };
         // Every pending row names a staged copy on the source server that the archive does not carry.
         db.run('DELETE FROM pending_uploads');
 
@@ -189,7 +198,7 @@ function materializeMount(
             // the table, or a later rename of one 404s.
             for (const row of rows) {
                 if (row.type === 'file' || row.parentId === null) continue;
-                fs.mkdirSync(path.join(dataDir, archivePath(row, byId)), { recursive: true });
+                fs.mkdirSync(inData(archivePath(row, byId)), { recursive: true });
             }
         }
         const stagingDir = path.join(mountDir, PATHS.DRIVE.STAGING_DIR);
@@ -204,7 +213,7 @@ function materializeMount(
         for (const row of rows) {
             if (row.type !== 'file') continue;
             const archived = archivePath(row, byId);
-            const source = path.join(dataDir, archived);
+            const source = inData(archived);
             // A remote mount's objects are the only ones a restore could write over: they are in a
             // bucket, not in the folder that moved aside. So every one of its rows gets a key of its
             // own, and the `.pre-restore-` copy keeps pointing at objects that still hold its bytes.
@@ -230,7 +239,7 @@ function materializeMount(
             // renamed the NAME of a deduplicated row and left its `file` alone, so the two differ
             // there — and the mount resolves reads through `file`. Nothing can be overwritten either
             // way: a local mount's bytes moved aside with the folder.
-            const target = path.join(dataDir, key);
+            const target = inData(key);
             if (target !== source) movePath(source, target);
         }
         enqueue.finalize();
@@ -246,7 +255,7 @@ function materializeMount(
         // that backend has no use for. A path-based mount keeps them: they are its layout.
         if (!isPathBased) pruneEmptyDirs(dataDir);
         return managed.map((entry) => ({
-            filePath: path.join(dataDir, storageKeyOf(entry.row, byId, isPathBased)),
+            filePath: inData(storageKeyOf(entry.row, byId, isPathBased)),
             config: entry.config,
         }));
     } finally {

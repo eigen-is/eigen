@@ -7,7 +7,7 @@ import { COMMENT_INDEX_DB_CONFIG } from '../chat/comment-db-config';
 import { CHAT_ROOM_DB_CONFIG } from '../chat/db-config';
 import { COLLAB_DB_CONFIG } from '../collab/db-config';
 import type { DatabaseConfig, SchemaType } from '../core';
-import { buildStorageKey } from '../mount/helpers';
+import { buildStorageKey, isUsableName } from '../mount/helpers';
 import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
 import { stageManagedDbCopy } from '../versioning/snapshot';
@@ -111,6 +111,38 @@ function managedDbContainer(row: MountPathRow, byId: Map<string, MountPathRow>):
 // listed once here rather than in each caller's own SELECT (verify, restore).
 export function readMountPathRows(db: Database): MountPathRow[] {
     return db.query<MountPathRow, []>('SELECT id, file, name, type, parentId, trashedFrom FROM paths').all();
+}
+
+// A live paths table can hold none of this: validateName wrote every `name`, and every `file` is a
+// name or a `{id}.{ext}` key. An archived one arrived inside a file an admin uploaded, and every
+// path a restore builds is a join of those two columns — a `..` in either moved bytes out of the
+// mount (a flat-key mount stores under `file`) or an arbitrary server file into it (the archive
+// tree IS the name chain). So the archive is refused whole, before a restore reads a row of it.
+export function checkArchivedPathRows(rows: MountPathRow[]): string[] {
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const failures: string[] = [];
+    for (const row of rows) {
+        if (!isUsableName(row.name)) failures.push(`path row ${row.id} has an unusable name "${row.name}"`);
+        // Empty is how a flat-key mount spells a folder row (Mount.buildFileValue).
+        if (row.file !== '' && !isUsableName(row.file)) {
+            failures.push(`path row ${row.id} has an unusable file "${row.file}"`);
+        }
+        if (row.parentId !== null && !byId.has(row.parentId)) {
+            failures.push(`path row ${row.id} names a parent (${row.parentId}) the table does not hold`);
+            continue;
+        }
+        // Both path builders walk this chain, and `ancestors` stops on a cycle rather than reporting
+        // one: a tree that does not terminate at the root describes no archive.
+        const seen = new Set<string>([row.id]);
+        for (let current = row.parentId; current !== null; current = byId.get(current)?.parentId ?? null) {
+            if (seen.has(current)) {
+                failures.push(`path row ${row.id} sits in a parent cycle`);
+                break;
+            }
+            seen.add(current);
+        }
+    }
+    return failures;
 }
 
 // The same rule, read back from an archived metadata.db: which of a mount's archived files are
