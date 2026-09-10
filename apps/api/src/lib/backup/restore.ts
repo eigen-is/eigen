@@ -16,6 +16,7 @@ import { user as userTable } from '../../../auth-schema';
 import { getAuthDrizzleDb } from '../auth/auth';
 import { closeCollabConnectionsForHome } from '../collab/connections';
 import { getAvatarsDir } from '../config/paths';
+import { getPublicConfig } from '../config/server-config';
 import { ApiError, type DatabaseConfig, PATHS, type SchemaType } from '../core';
 import { clearHomeRestoring, evictHome, markHomeRestoring } from '../home/get-home';
 import { MOUNT_DB_CONFIG, PENDING_UPLOAD_KIND_VERSION } from '../mount/db-config';
@@ -26,7 +27,7 @@ import { getTeam } from '../team/team';
 import { getUserById } from '../user/user';
 import { extractArtifact } from './archive';
 import { forgetSafetyCopySize, resolveSafetyCopy } from './artifacts';
-import { AUTH_TABLES } from './auth-tables';
+import { AUTH_TABLES, ownerKeyOf, RESTORED_MEMBER_ROLE, RESTORED_USER_ROLE } from './auth-tables';
 import {
     ARCHIVE_AUTH_FILE,
     ARCHIVE_AVATAR_DIR,
@@ -303,11 +304,48 @@ function restoreAuthRows(ownerId: string, manifest: BackupManifest, folder: stri
 
     const archive = parseBackupAuthRows(fs.readFileSync(authPath, 'utf8'));
     if (!archive) throw new ApiError(400, `${ARCHIVE_AUTH_FILE} is not a set of users3.db rows`);
+
+    // The identity itself: exactly one user row, this owner's id, the email the manifest was written
+    // with. Anything else and not a row goes in — an archive carrying a second user row is carrying
+    // somebody it invented.
+    const identity = (archive['user'] ?? []).filter((row) => row['id'] === ownerId);
+    if (identity.length !== 1 || (manifest.email && identity[0]['email'] !== manifest.email)) {
+        throw new ApiError(
+            400,
+            `${ARCHIVE_AUTH_FILE} does not hold exactly one ${ownerId} row for ${manifest.email ?? 'this home'}`,
+        );
+    }
+    const orgId = getPublicConfig().orgId;
+    const drop = (table: string, reason: string): void => {
+        console.warn(`[backup] ${ownerId}: a ${table} row was not restored — ${reason}`);
+    };
+
     // One transaction for the whole identity: a clash on a later row would otherwise leave a user
     // that exists but cannot sign in — and the next attempt would take the branch above and return.
     db.transaction((tx) => {
         for (const spec of AUTH_TABLES) {
+            const ownerKey = ownerKeyOf(spec);
+            let membership = false;
             for (const row of archive[spec.key] ?? []) {
+                // Every row names its own owner, and only this home's own come back.
+                if (row[ownerKey] !== ownerId) {
+                    drop(spec.key, `it belongs to ${String(row[ownerKey])}`);
+                    continue;
+                }
+                if (spec.key === 'user') row['role'] = RESTORED_USER_ROLE;
+                if (spec.key === 'member') {
+                    // A user belongs to this server's one organization, whichever one the archive
+                    // named — so a second row would be a second membership of the same org.
+                    if (membership) {
+                        drop(spec.key, 'this server gives a user one organization');
+                        continue;
+                    }
+                    membership = true;
+                    row['organizationId'] = orgId;
+                    row['role'] = RESTORED_MEMBER_ROLE;
+                }
+                // `team_member` needs no rewrite of its own: it carries no role, and the parent check
+                // below is what keeps a membership of a team this server does not have out.
                 if (spec.parent) {
                     // A membership whose organization or team is gone would be an orphan, and
                     // better-auth's listMembers chokes on those (see user/delete-user.ts).
@@ -320,9 +358,7 @@ function restoreAuthRows(ownerId: string, manifest: BackupManifest, folder: stri
                             .where(eq(spec.parent.id, parentId))
                             .get();
                     if (!found) {
-                        console.warn(
-                            `[backup] ${ownerId}: ${spec.key} parent ${String(parentId)} is gone, not restored`,
-                        );
+                        drop(spec.key, `its parent ${String(parentId)} is gone`);
                         continue;
                     }
                 }
