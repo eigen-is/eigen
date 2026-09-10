@@ -159,6 +159,16 @@ function normalizeArchiveDatabase(destPath: string): void {
     fs.rmSync(`${destPath}-shm`, { force: true });
 }
 
+// A storage failure must fail the whole backup — an archive silently missing a mount's objects is
+// worse than no archive — but Bun's S3Error puts the actionable part in `code` and leaves `message`
+// as "an unexpected error has occurred", which is all the job's one-line error would have shown.
+// Name the mount and the code; an error with no code is rethrown untouched.
+function rethrowStorageFailure(mount: Mount, storageKey: string, error: unknown): never {
+    const code = error instanceof Error && 'code' in error ? String(error.code) : '';
+    if (!code) throw error;
+    throw new Error(`mount ${mount.id}: storage unreachable (${code}) reading ${storageKey}`);
+}
+
 // Copy every file the mount's paths table knows about into `targetDir`. Walking the table rather
 // than the filesystem is what keeps `thumbs/`, `tmp/` and `staging/` out and `.trash/` + `versions/`
 // in, on every backend.
@@ -197,9 +207,9 @@ export async function snapshotMountData(
             // snapshot try-locks and skips) and the backup holds no closing slot of its own.
             // False = the container was deleted, or the version pruned, since the tree read above; the
             // entry drops out of the archive rather than costing the home its whole backup.
-            const copied = await mount.withPathLock(container.id, () =>
-                stageManagedDbCopy(mount, row.id, destPath, 'open-handle-first'),
-            );
+            const copied = await mount
+                .withPathLock(container.id, () => stageManagedDbCopy(mount, row.id, destPath, 'open-handle-first'))
+                .catch((error: unknown) => rethrowStorageFailure(mount, relPath, error));
             if (copied) {
                 normalizeArchiveDatabase(destPath);
                 entries.push(await captureWrittenFile(destPath, entryPath));
@@ -208,8 +218,13 @@ export async function snapshotMountData(
             // readKey is freshest-first (pending staged copy, then the stored object). Null means the
             // row has no bytes yet (a touched file whose upload never landed); the archive mirrors
             // that absence rather than inventing an empty object.
-            const file = await mount.readKey(storageKeyOf(row, byId, mount.isPathBased));
-            if (file) entries.push(await captureFile(file, destPath, entryPath));
+            const storageKey = storageKeyOf(row, byId, mount.isPathBased);
+            try {
+                const file = await mount.readKey(storageKey);
+                if (file) entries.push(await captureFile(file, destPath, entryPath));
+            } catch (error) {
+                rethrowStorageFailure(mount, storageKey, error);
+            }
         }
         onProgress('mount files', index + 1, fileRows.length);
     }

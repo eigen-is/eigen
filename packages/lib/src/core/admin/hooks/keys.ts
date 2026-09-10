@@ -34,3 +34,18 @@ export function invalidateAdminMembers(queryClient: QueryClient, organizationId:
 export function invalidateAdminTeams(queryClient: QueryClient, organizationId: string): void {
     queryClient.invalidateQueries({ queryKey: adminKeys.teams(organizationId) });
 }
+
+// Backup routes are server-wide (the settings.ts carve-out, no `:ownerId` path segment), but every
+// artifact and job belongs to one home — the ownerId stays in the key so the admin pane never shows
+// another user's archives after switching rows.
+export const backupKeys = {
+    all: ['backup'] as const,
+    owner: (ownerId: string) => [...backupKeys.all, ownerId] as const,
+    artifacts: (ownerId: string) => [...backupKeys.owner(ownerId), 'artifacts'] as const,
+    jobs: (ownerId: string) => [...backupKeys.owner(ownerId), 'jobs'] as const,
+};
+
+export function invalidateBackup(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({ queryKey: backupKeys.artifacts(ownerId) });
+    queryClient.invalidateQueries({ queryKey: backupKeys.jobs(ownerId) });
+}

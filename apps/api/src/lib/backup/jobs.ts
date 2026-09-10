@@ -164,9 +164,7 @@ export async function runHomeBackup(home: Home, job: BackupJob, onProgress: Snap
         const verify = await verifyFolder(folder, onProgress);
         const name = freeArtifactName(manifest.ownerId, new Date(manifest.createdAt));
         const artifactPath = path.join(getBackupsDir(), name);
-        onProgress('pack', 0, 1);
-        await packFolder(folder, artifactPath);
-        onProgress('pack', 1, 1);
+        await packFolder(folder, artifactPath, onProgress);
         await writeSidecar(artifactPath, manifest, verify);
         if (verify.status !== 'verified') {
             const failures = verify.failures.slice(0, FAILURES_IN_MESSAGE).join('; ');

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { parseOwnerId } from '@workspace/lib/types/owner';
+import { BACKUP_ARTIFACT_EXTENSION, BACKUP_STAMP_PATTERN, parseBackupStamp } from '@workspace/lib/validation';
 import { getDataRoot, getTeamDataPath, getUserHomePath } from '../config/paths';
 import { ApiError, PATHS } from '../core';
 import { getUserById } from '../user/user';
@@ -85,39 +86,13 @@ export function buildStamp(at: Date): string {
 }
 
 export function buildArtifactName(ownerId: string, at: Date): string {
-    return `${buildHomeFolderName(ownerId)}-${buildStamp(at)}.tar.zst`;
+    return `${buildHomeFolderName(ownerId)}-${buildStamp(at)}${BACKUP_ARTIFACT_EXTENSION}`;
 }
 
 // The home folder a restore moved aside (the state before it) and the incomplete folder a failed
 // restore left behind. Nothing deletes either automatically; the admin pane lists and removes them.
 export const PRE_RESTORE_SUFFIX = '.pre-restore-';
 export const FAILED_RESTORE_SUFFIX = '.failed-restore-';
-
-// buildStamp's shape as named groups, so both names it appears in are read by one rule.
-const STAMP_GROUPS = String.raw`(?<year>\d{4})(?<month>\d{2})(?<day>\d{2})-(?<hours>\d{2})(?<minutes>\d{2})(?<seconds>\d{2})`;
-
-function stampToDate(groups: Record<string, string | undefined>): Date | null {
-    const at = new Date(
-        `${groups['year']}-${groups['month']}-${groups['day']}T${groups['hours']}:${groups['minutes']}:${groups['seconds']}Z`,
-    );
-    return Number.isNaN(at.getTime()) ? null : at;
-}
-
-// The character class an owner id may use. It ends up in an artifact name and in the home folder a
-// route resolves, so `/`, `..` and control characters are out of both by construction.
-const OWNER_ID_CHARS = '[A-Za-z0-9_-]+';
-export const OWNER_ID = new RegExp(`^${OWNER_ID_CHARS}$`);
-
-// Owner ids are UUIDs or `team_{id}`, both of which contain dashes, so the timestamp is matched
-// from the end and the owner id is whatever is left.
-const ARTIFACT_NAME = new RegExp(String.raw`^home-(?<ownerId>${OWNER_ID_CHARS})-${STAMP_GROUPS}\.tar\.zst$`);
-
-export function parseArtifactName(name: string): { ownerId: string; at: Date } | null {
-    const groups = ARTIFACT_NAME.exec(name)?.groups;
-    if (!groups) return null;
-    const at = stampToDate(groups);
-    return at ? { ownerId: groups['ownerId'] ?? '', at } : null;
-}
 
 // `{homeFolderName}{suffix}{stamp}`, plus the `-2` tail a restore appends when two of them land in
 // the same second. The caller compares `homeName` against the home it asked about: that equality,
@@ -126,7 +101,7 @@ const SAFETY_COPY_SUFFIXES = [PRE_RESTORE_SUFFIX, FAILED_RESTORE_SUFFIX]
     .map((suffix) => suffix.replaceAll('.', String.raw`\.`))
     .join('|');
 const SAFETY_COPY_NAME = new RegExp(
-    String.raw`^(?<homeName>.+)(?<suffix>${SAFETY_COPY_SUFFIXES})${STAMP_GROUPS}(?:-\d+)?$`,
+    String.raw`^(?<homeName>.+)(?<suffix>${SAFETY_COPY_SUFFIXES})${BACKUP_STAMP_PATTERN}(?:-\d+)?$`,
 );
 
 // The folder a restore leaves beside the home, spelled in one place: `parseSafetyCopyName` reads
@@ -140,7 +115,7 @@ export function parseSafetyCopyName(
 ): { homeName: string; kind: 'pre-restore' | 'failed-restore'; at: Date } | null {
     const groups = SAFETY_COPY_NAME.exec(name)?.groups;
     if (!groups) return null;
-    const at = stampToDate(groups);
+    const at = parseBackupStamp(groups);
     if (!at) return null;
     return {
         homeName: groups['homeName'] ?? '',

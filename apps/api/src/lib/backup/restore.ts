@@ -4,7 +4,12 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
 import { parseOwnerId } from '@workspace/lib/types/owner';
-import { parseBackupAuthRows, parseBackupManifest, parseBackupShares } from '@workspace/lib/validation';
+import {
+    parseBackupArtifactName,
+    parseBackupAuthRows,
+    parseBackupManifest,
+    parseBackupShares,
+} from '@workspace/lib/validation';
 import { eq, getTableColumns } from 'drizzle-orm';
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core';
 import { user as userTable } from '../../../auth-schema';
@@ -33,7 +38,6 @@ import {
     buildStamp,
     getBackupStagingDir,
     getBackupsDir,
-    parseArtifactName,
     parseSafetyCopyName,
     resolveHomeDir,
     wipeBackupStagingDir,
@@ -494,7 +498,7 @@ export async function restoreHome(
     jobId: string,
     onProgress?: SnapshotProgress,
 ): Promise<void> {
-    if (!parseArtifactName(artifactName)) {
+    if (!parseBackupArtifactName(artifactName)) {
         throw new ApiError(400, `${artifactName} is not a backup artifact name`);
     }
     const artifactPath = path.join(getBackupsDir(), artifactName);

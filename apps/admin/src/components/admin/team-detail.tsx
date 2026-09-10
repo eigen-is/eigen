@@ -28,6 +28,7 @@ import { UserAvatar, UserItem } from '@workspace/ui/components/user';
 import { HardDrive, Pencil, Settings, Trash2, UserRoundPlus, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { AddMemberDialog } from './add-member-dialog';
+import { BackupSection } from './backup-section';
 import { MountDialog } from './mount-dialog';
 
 type TeamDetailToolbarProps = {
@@ -400,6 +401,10 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
                     </div>
                 )}
             </div>
+
+            <Separator />
+
+            <BackupSection ownerId={ownerId} />
 
             <Separator />
 

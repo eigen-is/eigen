@@ -9,9 +9,11 @@ import { Button } from '@workspace/ui/components/button';
 import { DangerZone } from '@workspace/ui/components/delete/danger-zone';
 import { StorageUsageBars } from '@workspace/ui/components/home';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
+import { Separator } from '@workspace/ui/components/separator';
 import { UserDetailHero } from '@workspace/ui/components/user';
 import { KeyRound, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { BackupSection } from './backup-section';
 import { ResetPasswordDialog } from './reset-password-dialog';
 
 type UserDetailToolbarProps = {
@@ -142,6 +144,11 @@ export function UserDetail({ user, usage, organizationId }: UserDetailProps) {
                     </Button>
                 </div>
             )}
+
+            <Separator />
+
+            {/* DangerZone below brings its own top rule, so this section needs only a leading one. */}
+            <BackupSection ownerId={user.id} />
 
             {user.role !== 'owner' && (
                 <DangerZone

@@ -174,3 +174,38 @@ export function parseHomeMountSettings(text: string): Record<string, BackupMount
     }
     return mounts;
 }
+
+// The name of an artifact in the backups folder, shared FE/BE: the admin pane refuses a file that
+// is not one before it uploads anything, the upload route refuses it again, and the artifact list
+// reads the ownerId back out of it. One grammar, so the two sides can never disagree about it.
+export const BACKUP_ARTIFACT_EXTENSION = '.tar.zst';
+
+// The character class an owner id may use. It ends up in an artifact name and in the home folder a
+// route resolves, so `/`, `..` and control characters are out of both by construction.
+export const BACKUP_OWNER_ID_CHARS = '[A-Za-z0-9_-]+';
+export const BACKUP_OWNER_ID = new RegExp(`^${BACKUP_OWNER_ID_CHARS}$`);
+
+// The timestamp shape in the backups folder as named groups: artifact names and the two safety
+// copies a restore leaves beside a home folder all read the same.
+export const BACKUP_STAMP_PATTERN = String.raw`(?<year>\d{4})(?<month>\d{2})(?<day>\d{2})-(?<hours>\d{2})(?<minutes>\d{2})(?<seconds>\d{2})`;
+
+export function parseBackupStamp(groups: Record<string, string | undefined>): Date | null {
+    const at = new Date(
+        `${groups['year']}-${groups['month']}-${groups['day']}T${groups['hours']}:${groups['minutes']}:${groups['seconds']}Z`,
+    );
+    return Number.isNaN(at.getTime()) ? null : at;
+}
+
+// Owner ids are UUIDs or `team_{id}`, both of which contain dashes, so the timestamp is matched
+// from the end and the owner id is whatever is left.
+const ARTIFACT_EXTENSION_PATTERN = BACKUP_ARTIFACT_EXTENSION.replaceAll('.', String.raw`\.`);
+const ARTIFACT_NAME = new RegExp(
+    `^home-(?<ownerId>${BACKUP_OWNER_ID_CHARS})-${BACKUP_STAMP_PATTERN}${ARTIFACT_EXTENSION_PATTERN}$`,
+);
+
+export function parseBackupArtifactName(name: string): { ownerId: string; at: Date } | null {
+    const groups = ARTIFACT_NAME.exec(name)?.groups;
+    if (!groups) return null;
+    const at = parseBackupStamp(groups);
+    return at ? { ownerId: groups['ownerId'] ?? '', at } : null;
+}

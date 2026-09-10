@@ -20,7 +20,7 @@ import {
 } from '../../lib/backup/paths';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import * as verifyModule from '../../lib/backup/verify';
-import { getHome } from '../../lib/home/get-home';
+import { atHome, getHome } from '../../lib/home/get-home';
 import {
     assertJson,
     authedRequest,
@@ -106,12 +106,17 @@ async function packTargetHome(name: string): Promise<string> {
     return artifactPath;
 }
 
+// The name rides in the query string, not in a header: a custom request header would make the
+// upload a preflighted request, which a split-origin deployment refuses.
+function uploadPath(name: string): string {
+    return `/admin/backup/artifacts?name=${encodeURIComponent(name)}`;
+}
+
 function uploadRequest(name: string, bytes: Uint8Array<ArrayBuffer>, contentLength?: number): Promise<Response> {
-    return adminRequest('/admin/backup/artifacts', {
+    return adminRequest(uploadPath(name), {
         method: 'POST',
         headers: {
             'Content-Type': 'application/zstd',
-            'Content-Disposition': `attachment; filename="${name}"`,
             'Content-Length': String(contentLength ?? bytes.byteLength),
         },
         body: new Blob([bytes]),
@@ -150,10 +155,10 @@ describe('Backup routes', () => {
             ['/admin/backup/jobs/some-id', {}],
             [`/admin/backup/artifacts?ownerId=${target.id}`, {}],
             [
-                '/admin/backup/artifacts',
+                uploadPath(name),
                 {
                     method: 'POST',
-                    headers: { 'Content-Disposition': `attachment; filename="${name}"`, 'Content-Length': '3' },
+                    headers: { 'Content-Length': '3' },
                     body: new Blob([Uint8Array.from([1, 2, 3])]),
                 },
             ],
@@ -272,6 +277,25 @@ describe('Backup routes', () => {
         expect((await listArtifacts(target.id)).artifacts.some((entry) => entry.name === name)).toBe(false);
     });
 
+    test('refuses an upload whose name is not an artifact name, and reads no body', async () => {
+        const bad = ['my-backup.tar.zst', `home-${target.id}-20200101-000000.tar.gz`, '', '../evil.tar.zst'];
+        for (const name of bad) {
+            const res = await adminRequest(uploadPath(name), {
+                method: 'POST',
+                headers: { 'Content-Length': '3' },
+                body: new Blob([Uint8Array.from([1, 2, 3])]),
+            });
+            expect(res.status).toBe(400);
+        }
+        // The name is judged before the Content-Length is: an absurd length on a bad name is still 400.
+        const res = await adminRequest(uploadPath('nonsense'), {
+            method: 'POST',
+            headers: { 'Content-Length': String(2 * 1024 * 1024 * 1024) },
+            body: new Blob([Uint8Array.from([1, 2, 3])]),
+        });
+        expect(res.status).toBe(400);
+    });
+
     test('refuses an upload over the size limit', async () => {
         const name = buildArtifactName(target.id, new Date('2020-02-02T03:04:05Z'));
         const res = await uploadRequest(name, Uint8Array.from([1, 2, 3]), 2 * 1024 * 1024 * 1024);
@@ -323,6 +347,12 @@ describe('Backup routes', () => {
         const job = await startAndFinish(`/admin/backup/artifacts/${artifactName}/restore`, { ownerId: target.id });
         expect(job.state).toBe('done');
         expect(job.kind).toBe('restore');
+
+        // The restore evicted the home; the route opens it again as its last act, so a remote
+        // mount's re-upload queue starts draining now instead of waiting for whoever visits next
+        // (Mount.init stands the queue up and reconciles the pending_uploads rows the restore
+        // wrote). Asserted before any other request in this test touches the home.
+        expect(atHome(target.id)).toBe(true);
 
         const names = await rootNames();
         expect(names).toContain('seeded.png');
@@ -396,6 +426,8 @@ describe('Backup routes', () => {
         expect(job.state).toBe('done');
         expect(job.kind).toBe('restore');
         expect(job.artifact).toBe(copy?.name);
+        // Same as the artifact restore: the route warms the home it just replaced.
+        expect(atHome(target.id)).toBe(true);
         expect(await rootNames()).toContain('undo-me.png');
 
         // The copy took the home's place, and the home as the artifact restore left it took its own.
@@ -468,12 +500,9 @@ describe('Backup routes', () => {
             },
         });
 
-        const upload = adminRequest('/admin/backup/artifacts', {
+        const upload = adminRequest(uploadPath(name), {
             method: 'POST',
-            headers: {
-                'Content-Disposition': `attachment; filename="${name}"`,
-                'Content-Length': String(packed.byteLength),
-            },
+            headers: { 'Content-Length': String(packed.byteLength) },
             body,
         });
         await Bun.sleep(50);

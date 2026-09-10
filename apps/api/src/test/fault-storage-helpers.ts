@@ -39,6 +39,9 @@ export class FaultStorage implements StorageBackend {
     // Objects whose GET fails: read() throws for these keys. Targets ONE object (e.g. a container's
     // comments.db) where a fail-next counter would hit whichever request happens to come first.
     readonly failReadKeys = new Set<string>();
+    // The `code` an injected read failure carries. Bun's S3Error puts the actionable part there and
+    // leaves message as "an unexpected error has occurred" — the shape a backup has to survive.
+    readErrorCode: string | undefined = undefined;
     readonly parked: ParkedWrite[] = [];
     private hungResolvers: Array<() => void> = [];
     private parkWaiters: Array<() => void> = [];
@@ -89,7 +92,10 @@ export class FaultStorage implements StorageBackend {
     }
 
     read(key: string): StorageFile {
-        if (this.failReadKeys.has(key)) throw new Error(`injected read failure (503) for ${key}`);
+        if (this.failReadKeys.has(key)) {
+            if (!this.readErrorCode) throw new Error(`injected read failure (503) for ${key}`);
+            throw Object.assign(new Error('an unexpected error has occurred'), { code: this.readErrorCode });
+        }
         return this.inner.read(key);
     }
     async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
