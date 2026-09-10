@@ -888,3 +888,55 @@ describe('Backup restore of the avatar', () => {
         rmSync(join(getBackupsDir(), artifact), { force: true });
     });
 });
+
+describe('Backup restore of a disabled mount', () => {
+    // A mount an admin turned off is not in the drive's map: a snapshot that walked the live mounts
+    // alone left its folder out of the archive entirely, and the restore then dropped it for good.
+    const DISABLED_MOUNT_ID = 'restore-disabled';
+
+    beforeAll(async () => {
+        await getTestContext();
+    });
+
+    test('a disabled mount comes back with its files, still disabled', async () => {
+        const user = await createUser('restore-disabled@test.eigen.is', 'Restore Disabled');
+        const home = await getHome(user.id);
+        const on = await home.settings.set({
+            mounts: {
+                [DISABLED_MOUNT_ID]: { storageType: 'local', maxSizeMB: 100, enabled: true, name: 'Archive Mount' },
+            },
+        });
+        await home.drive.addMount(createMountConfig(DISABLED_MOUNT_ID, on.mounts![DISABLED_MOUNT_ID]));
+        const root = await assertJson<DrivePath>(
+            await authedRequest(user.sessionToken, `/drive/${user.id}/${DISABLED_MOUNT_ID}/root`),
+        );
+        await driveUpload<DrivePath>(
+            user.sessionToken,
+            user.id,
+            DISABLED_MOUNT_ID,
+            root.id,
+            new File([TEST_PNG_BYTES], 'archived.png', { type: 'image/png' }),
+        );
+
+        const off = await home.settings.set({
+            mounts: { [DISABLED_MOUNT_ID]: { ...on.mounts![DISABLED_MOUNT_ID], enabled: false } },
+        });
+        await home.drive.updateMount(createMountConfig(DISABLED_MOUNT_ID, off.mounts![DISABLED_MOUNT_ID]), false);
+
+        const artifact = await backup(user.id, new Date());
+        const mountDir = join(TEST_DATA_DIR, 'home', user.id, 'mounts', DISABLED_MOUNT_ID);
+        // Only what the archive carries can put the folder back.
+        rmSync(mountDir, { recursive: true, force: true });
+
+        await restoreHome(artifact, user.id, `restore-disabled-${Date.now()}`);
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+
+        expect(existsSync(join(mountDir, 'metadata.db'))).toBe(true);
+        expect(existsSync(join(mountDir, 'data', 'archived.png'))).toBe(true);
+        // Still off: settings.json rides along as it stood, so the restored home serves what it did.
+        const mounts = await assertJson<{ id: string }[]>(
+            await authedRequest(user.sessionToken, `/drive/${user.id}/mounts`),
+        );
+        expect(mounts.map((mount) => mount.id)).not.toContain(DISABLED_MOUNT_ID);
+    });
+});

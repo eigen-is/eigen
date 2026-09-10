@@ -3,11 +3,12 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupEntry } from '@workspace/lib/types/backup';
 import { type DrivePathType, isCollabType, isDocumentType } from '@workspace/lib/types/drive';
+import type { MountConfig } from '@workspace/lib/types/mount';
 import { COMMENT_INDEX_DB_CONFIG } from '../chat/comment-db-config';
 import { CHAT_ROOM_DB_CONFIG } from '../chat/db-config';
 import { COLLAB_DB_CONFIG } from '../collab/db-config';
-import type { DatabaseConfig, SchemaType } from '../core';
-import { buildStorageKey, isUsableName } from '../mount/helpers';
+import { type DatabaseConfig, PATHS, type SchemaType } from '../core';
+import { buildStorageKey, createMountStorage, isUsableName } from '../mount/helpers';
 import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
 import { stageManagedDbCopy } from '../versioning/snapshot';
@@ -203,10 +204,10 @@ const LOCAL_FAILURE_CODE = /^(SQLITE_[A-Z]+|ENOSPC|EACCES|EDQUOT|EROFS|EIO|ENOEN
 // as "an unexpected error has occurred", which is all the job's one-line error would have shown.
 // Only that shape is rewritten, and it names the object it was reading; anything else is rethrown
 // untouched.
-function rethrowStorageFailure(mount: Mount, storageKey: string, error: unknown): never {
+function rethrowStorageFailure(mountId: string, storageKey: string, error: unknown): never {
     const code = error instanceof Error && 'code' in error ? String(error.code) : '';
     if (!code || LOCAL_FAILURE_CODE.test(code)) throw error;
-    throw new Error(`mount ${mount.id}: storage unreachable (${code}) reading ${storageKey}`);
+    throw new Error(`mount ${mountId}: storage unreachable (${code}) reading ${storageKey}`);
 }
 
 // One mount's data tree in an archive: the entries written, how many of them are Eigen's own
@@ -256,7 +257,7 @@ export async function snapshotMountData(
             // entry drops out of the archive rather than costing the home its whole backup.
             const copied = await mount
                 .withPathLock(container.id, () => stageManagedDbCopy(mount, row.id, destPath, 'open-handle-first'))
-                .catch((error: unknown) => rethrowStorageFailure(mount, storageKey, error));
+                .catch((error: unknown) => rethrowStorageFailure(mount.id, storageKey, error));
             if (copied) {
                 normalizeArchiveDatabase(destPath);
                 entries.push(await captureWrittenFile(destPath, entryPath));
@@ -270,7 +271,7 @@ export async function snapshotMountData(
             // fills up there is not the bucket being unreachable.
             const file = await mount
                 .readKey(storageKey)
-                .catch((error: unknown) => rethrowStorageFailure(mount, storageKey, error));
+                .catch((error: unknown) => rethrowStorageFailure(mount.id, storageKey, error));
             if (file) entries.push(await captureFile(file, destPath, entryPath));
         }
         onProgress('mount files', index + 1, fileRows.length);
@@ -283,16 +284,16 @@ export async function snapshotMountData(
 // without them loses every thumbnail the home ever had. They are keyed by path id, which a restore
 // preserves. A thumbnail whose row is gone is an orphan no mount would ever serve and stays out.
 export async function snapshotMountThumbs(
-    mount: Mount,
+    thumbsDir: string,
     targetDir: string,
     relPrefix: string,
     pathIds: ReadonlySet<string>,
 ): Promise<BackupEntry[]> {
-    if (!fs.existsSync(mount.thumbsDir)) return [];
+    if (!fs.existsSync(thumbsDir)) return [];
     const entries: BackupEntry[] = [];
-    for (const entry of fs.readdirSync(mount.thumbsDir, { withFileTypes: true })) {
+    for (const entry of fs.readdirSync(thumbsDir, { withFileTypes: true })) {
         if (!entry.isFile() || !pathIds.has(path.parse(entry.name).name)) continue;
-        const source = Bun.file(path.join(mount.thumbsDir, entry.name));
+        const source = Bun.file(path.join(thumbsDir, entry.name));
         // A thumbnail regenerated (and briefly unlinked) mid-walk is out of the archive either way;
         // losing the whole snapshot over one is not.
         if (await source.exists()) {
@@ -300,4 +301,70 @@ export async function snapshotMountThumbs(
         }
     }
     return entries;
+}
+
+// A mount an admin turned off is not in the drive's map, so there is no Mount to read it through —
+// and nothing can have a document open on one the home does not serve, which is what makes reading
+// its files straight from its own storage safe. Its metadata.db is staged by the caller through the
+// same managed handle every other database uses; `metadataPath` is that copy, so the tree read here
+// is the one the archive carries. Freshest-first like a live mount: a staged copy whose upload never
+// acked holds bytes the stored object does not.
+export async function snapshotDisabledMountData(
+    config: MountConfig,
+    mountDir: string,
+    metadataPath: string,
+    targetDir: string,
+    relPrefix: string,
+    onProgress: SnapshotProgress,
+): Promise<MountSnapshot> {
+    const copy = new Database(metadataPath, { readonly: true });
+    let rows: MountPathRow[];
+    let staged: Map<string, string>;
+    try {
+        rows = readMountPathRows(copy);
+        staged = new Map(
+            copy
+                .query<{ storageKey: string; stagingPath: string }, []>(
+                    'SELECT storageKey, stagingPath FROM pending_uploads',
+                )
+                .all()
+                .map((row) => [row.storageKey, row.stagingPath]),
+        );
+    } finally {
+        copy.close();
+    }
+
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const managedPaths = new Set(listManagedDatabases(rows).map((entry) => entry.path));
+    const storage = createMountStorage(config, mountDir);
+    const isPathBased = config.storageType === 'local';
+    const fileRows = rows.filter((row) => row.type === 'file');
+    const entries: BackupEntry[] = [];
+    let databases = 0;
+    for (const [index, row] of fileRows.entries()) {
+        const relPath = archivePath(row, byId);
+        const destPath = path.join(targetDir, relPath);
+        const entryPath = `${relPrefix}/${relPath}`;
+        const storageKey = storageKeyOf(row, byId, isPathBased);
+        const pending = staged.get(storageKey);
+        const stagedPath = pending && path.join(mountDir, PATHS.DRIVE.STAGING_DIR, pending);
+        const source = stagedPath && fs.existsSync(stagedPath) ? Bun.file(stagedPath) : storage.read(storageKey);
+        const there = await source
+            .exists()
+            .catch((error: unknown) => rethrowStorageFailure(config.id, storageKey, error));
+        // A row whose object is gone has no bytes to carry; the archive mirrors that absence.
+        if (!there) continue;
+        const entry = await captureFile(source, destPath, entryPath);
+        if (!managedPaths.has(relPath)) {
+            entries.push(entry);
+        } else {
+            // The journal mode is rewritten after the bytes land, so the entry is restated for what
+            // is now on disk — a manifest that described the pre-normalize bytes would fail verify.
+            normalizeArchiveDatabase(destPath);
+            entries.push(await captureWrittenFile(destPath, entryPath));
+            databases++;
+        }
+        onProgress('mount files', index + 1, fileRows.length);
+    }
+    return { entries, databases, pathIds: new Set(fileRows.map((row) => row.id)) };
 }

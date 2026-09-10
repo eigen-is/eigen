@@ -12,6 +12,7 @@ import { SHARED_DB_CONFIG } from '../drive/db-config';
 import type { Home } from '../home';
 import { MAIL_DB_CONFIG } from '../mail/db-config';
 import { MOUNT_DB_CONFIG } from '../mount/db-config';
+import { createMountConfig } from '../mount/helpers';
 import { NOTIFICATION_CENTER_DB_CONFIG } from '../notification-center/db-config';
 import { getEigenDb } from '../share/db';
 import { shareRegistry } from '../share/schema';
@@ -26,7 +27,7 @@ import {
     archiveMountPath,
     buildHomeFolderName,
 } from './paths';
-import { snapshotMountData, snapshotMountThumbs } from './snapshot-mount';
+import { snapshotDisabledMountData, snapshotMountData, snapshotMountThumbs } from './snapshot-mount';
 
 export type SnapshotProgress = (step: string, done: number, total: number) => void;
 
@@ -137,7 +138,14 @@ export async function snapshotHome(
     }
 
     const mounts = home.drive.getMounts();
+    // Every mount the home declares, not only the ones it serves: a disabled mount is not in the
+    // drive's map and its folder is walked by nothing else here, so an archive without it is a
+    // restore that drops it. It comes back as disabled, because settings.json rides along as it is.
+    const disabled = Object.entries(home.settings.get().mounts ?? {}).filter(
+        ([id, settings]) => !settings.enabled && !mounts.some((mount) => mount.id === id),
+    );
     const mountSummaries: BackupManifest['mounts'] = [];
+    const total = mounts.length + disabled.length;
     for (const [index, mount] of mounts.entries()) {
         const relData = archiveMountPath(mount.id, PATHS.DRIVE.DATA_DIR);
         const relThumbs = archiveMountPath(mount.id, PATHS.DRIVE.THUMBS_DIR);
@@ -145,7 +153,12 @@ export async function snapshotHome(
         // Counted from here, so the summary means the files the archive holds for this mount —
         // metadata.db is a database, and counts.databases already has it.
         const data = await snapshotMountData(mount, path.join(folder, relData), relData, report);
-        const thumbs = await snapshotMountThumbs(mount, path.join(folder, relThumbs), relThumbs, data.pathIds);
+        const thumbs = await snapshotMountThumbs(
+            mount.thumbsDir,
+            path.join(folder, relThumbs),
+            relThumbs,
+            data.pathIds,
+        );
         const mountEntries = [...data.entries, ...thumbs];
         entries.push(...mountEntries);
         databases += data.databases;
@@ -155,7 +168,42 @@ export async function snapshotHome(
             files: mountEntries.length,
             bytes: mountEntries.reduce((sum, entry) => sum + entry.bytes, 0),
         });
-        report('mounts', index + 1, mounts.length);
+        report('mounts', index + 1, total);
+    }
+
+    for (const [index, [id, settings]] of disabled.entries()) {
+        const relMetadata = `${PATHS.DRIVE.ROOT}/${id}/${PATHS.DRIVE.METADATA_DB}`;
+        // A mount whose folder is gone (a disabled entry nobody ever mounted) has nothing to carry.
+        if (!fs.existsSync(path.join(home.homeDir, relMetadata))) continue;
+        const relData = archiveMountPath(id, PATHS.DRIVE.DATA_DIR);
+        const relThumbs = archiveMountPath(id, PATHS.DRIVE.THUMBS_DIR);
+        await stageDatabase(MOUNT_DB_CONFIG, relMetadata);
+        const mountDir = path.join(home.homeDir, PATHS.DRIVE.ROOT, id);
+        const config = createMountConfig(id, settings);
+        const data = await snapshotDisabledMountData(
+            config,
+            mountDir,
+            path.join(folder, ARCHIVE_HOME_DIR, relMetadata),
+            path.join(folder, relData),
+            relData,
+            report,
+        );
+        const thumbs = await snapshotMountThumbs(
+            path.join(mountDir, PATHS.DRIVE.THUMBS_DIR),
+            path.join(folder, relThumbs),
+            relThumbs,
+            data.pathIds,
+        );
+        const mountEntries = [...data.entries, ...thumbs];
+        entries.push(...mountEntries);
+        databases += data.databases;
+        mountSummaries.push({
+            id,
+            storageType: config.storageType,
+            files: mountEntries.length,
+            bytes: mountEntries.reduce((sum, entry) => sum + entry.bytes, 0),
+        });
+        report('mounts', mounts.length + index + 1, total);
     }
 
     const tree: HomeTree = { files: [], dirs: [] };
