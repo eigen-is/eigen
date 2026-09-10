@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { FAILED_RESTORE_SUFFIX, getBackupsDir, PRE_RESTORE_SUFFIX, wipeBackupStaging } from '../../lib/backup/paths';
-import { recoverInterruptedRestores } from '../../lib/backup/restore';
+import { recoverInterruptedRestores } from '../../lib/backup/recovery';
 import { TEST_DATA_DIR } from '../setup';
 
 // What the server does before it serves its first request: clear the staging folder a killed job

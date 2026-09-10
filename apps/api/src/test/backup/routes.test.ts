@@ -10,7 +10,6 @@ import { eq } from 'drizzle-orm';
 import { user as userScheme } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
-import { measureFolder } from '../../lib/backup/artifacts';
 import { withBackupJobSlot } from '../../lib/backup/jobs';
 import {
     buildArtifactName,
@@ -19,6 +18,7 @@ import {
     getBackupsDir,
     PRE_RESTORE_SUFFIX,
 } from '../../lib/backup/paths';
+import { measureFolder } from '../../lib/backup/safety-copy';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import * as verifyModule from '../../lib/backup/verify';
 import { atHome, getHome } from '../../lib/home/get-home';
@@ -599,7 +599,7 @@ describe('Backup routes', () => {
         const dir = mkdtempSync(join(TEST_DATA_DIR, 'measure-'));
         for (const name of ['a.bin', 'b.bin', 'c.bin']) writeFileSync(join(dir, name), Buffer.alloc(1024));
 
-        expect(await measureFolder(dir)).toEqual({ bytes: 3072, truncated: false });
+        expect(await measureFolder(dir, 50)).toEqual({ bytes: 3072, truncated: false });
         const capped = await measureFolder(dir, 2);
         expect(capped.truncated).toBe(true);
         expect(capped.bytes).toBeLessThan(3072);

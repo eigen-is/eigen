@@ -6,15 +6,7 @@ import { parseOwnerId } from '@workspace/lib/types/owner';
 import { BACKUP_ARTIFACT_EXTENSION, BACKUP_OWNER_ID, parseBackupArtifactName } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { readArtifactManifest, writeSidecar } from '../lib/backup/archive';
-import {
-    deleteArtifact,
-    deleteSafetyCopy,
-    landUploadedArtifact,
-    listArtifacts,
-    listSafetyCopies,
-    resolveArtifact,
-    resolveSafetyCopy,
-} from '../lib/backup/artifacts';
+import { deleteArtifact, landUploadedArtifact, listArtifacts, resolveArtifact } from '../lib/backup/artifacts';
 import {
     getBackupJob,
     listBackupJobs,
@@ -25,6 +17,7 @@ import {
 } from '../lib/backup/jobs';
 import { getBackupsDir, getBackupTempPath } from '../lib/backup/paths';
 import { restoreHome, restoreSafetyCopy } from '../lib/backup/restore';
+import { deleteSafetyCopy, listSafetyCopies, resolveSafetyCopy } from '../lib/backup/safety-copy';
 import type { SnapshotProgress } from '../lib/backup/snapshot-home';
 import { ApiError } from '../lib/core';
 import { requireAdmin } from '../lib/core/access';

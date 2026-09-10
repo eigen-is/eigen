@@ -4,7 +4,6 @@ import { join } from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { auth } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
-import { deleteSafetyCopy, listSafetyCopies } from '../../lib/backup/artifacts';
 import {
     buildArtifactName,
     buildHomeFolderName,
@@ -13,6 +12,7 @@ import {
     PRE_RESTORE_SUFFIX,
 } from '../../lib/backup/paths';
 import { restoreHome, restoreSafetyCopy } from '../../lib/backup/restore';
+import { deleteSafetyCopy, listSafetyCopies } from '../../lib/backup/safety-copy';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { getHome } from '../../lib/home/get-home';
 import * as mountHelpers from '../../lib/mount/helpers';

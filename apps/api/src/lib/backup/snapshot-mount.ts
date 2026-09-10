@@ -14,6 +14,7 @@ import { paths } from '../mount/schema';
 import { stageManagedDbCopy } from '../versioning/snapshot';
 import { VERSIONS_FOLDER_NAME } from '../versioning/versions-folder';
 import { captureFile, captureWrittenFile } from './capture';
+import { errnoOf } from './errors';
 import type { SnapshotProgress } from './snapshot-home';
 
 export type MountPathRow = Pick<
@@ -38,13 +39,15 @@ export type ManagedArchiveDatabase = {
 };
 
 // The two databases a container owns; a mount never manages any other (see mount/document-db.ts).
-const CONTAINER_DB_NAMES = new Set(['data.db', 'comments.db']);
+const CONTAINER_DATA_DB = 'data.db';
+const CONTAINER_COMMENTS_DB = 'comments.db';
+const CONTAINER_DB_NAMES = new Set([CONTAINER_DATA_DB, CONTAINER_COMMENTS_DB]);
 
 // Which schema a managed file carries: a comment index, or the container's own document database —
 // Yjs for every collab type, chat's own for a chat room. A versions/ snapshot is a copy of the
 // container's data.db, so it answers the same.
 function configOf(name: string, containerType: DrivePathType): DatabaseConfig<SchemaType> {
-    if (name === 'comments.db') return COMMENT_INDEX_DB_CONFIG;
+    if (name === CONTAINER_COMMENTS_DB) return COMMENT_INDEX_DB_CONFIG;
     return isCollabType(containerType) ? COLLAB_DB_CONFIG : CHAT_ROOM_DB_CONFIG;
 }
 
@@ -158,7 +161,7 @@ export function listManagedDatabases(rows: MountPathRow[]): ManagedArchiveDataba
         if (!container) continue;
         // managedDbContainer returns the parent for a container database and the grandparent for a
         // version snapshot, which is what tells a live data.db from an archived copy of one.
-        const isContainerData = container.id === row.parentId && row.name === 'data.db';
+        const isContainerData = container.id === row.parentId && row.name === CONTAINER_DATA_DB;
         found.push({
             path: archivePath(row, byId),
             isContainerData,
@@ -185,8 +188,8 @@ function normalizeArchiveDatabase(destPath: string): void {
         } finally {
             db.close();
         }
-    } catch (e) {
-        console.warn(`[backup] could not reset the journal mode of ${destPath}:`, e);
+    } catch (error) {
+        console.warn(`[backup] could not reset the journal mode of ${destPath}:`, error);
     }
     fs.rmSync(`${destPath}-wal`, { force: true });
     fs.rmSync(`${destPath}-shm`, { force: true });
@@ -205,7 +208,7 @@ const LOCAL_FAILURE_CODE = /^(SQLITE_[A-Z]+|ENOSPC|EACCES|EDQUOT|EROFS|EIO|ENOEN
 // Only that shape is rewritten, and it names the object it was reading; anything else is rethrown
 // untouched.
 function rethrowStorageFailure(mountId: string, storageKey: string, error: unknown): never {
-    const code = error instanceof Error && 'code' in error ? String(error.code) : '';
+    const code = errnoOf(error);
     if (!code || LOCAL_FAILURE_CODE.test(code)) throw error;
     throw new Error(`mount ${mountId}: storage unreachable (${code}) reading ${storageKey}`);
 }

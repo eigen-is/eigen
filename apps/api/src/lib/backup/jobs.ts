@@ -2,24 +2,22 @@ import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupJob } from '@workspace/lib/types/backup';
-import { parseBackupManifest } from '@workspace/lib/validation';
 import { ApiError } from '../core';
 import type { Home } from '../home';
 import { sendToHome } from '../home/home-relay';
-import { extractArtifact, packFolder, writeSidecar } from './archive';
-import { buildArtifactName, buildHomeFolderName, getBackupStagingDir, getBackupsDir } from './paths';
+import { extractArtifact, packFolder, readUnpackedHome, writeSidecar } from './archive';
+import { describeError } from './errors';
+import { buildHomeFolderName, freeArtifactName, getBackupStagingDir, getBackupsDir } from './paths';
 import { type SnapshotProgress, snapshotHome } from './snapshot-home';
 import { buildBackupJobEvent } from './sse-events';
-import { verifyFolder } from './verify';
+import { FAILURES_IN_MESSAGE, verifyFolder } from './verify';
 
 // A finished job stays this long so an admin who was away still sees the outcome. The artifact and
 // its sidecar are the durable record, so dropping the job loses nothing.
-export const BACKUP_JOB_RETENTION_MS = 60 * 60 * 1000;
+const BACKUP_JOB_RETENTION_MS = 60 * 60 * 1000;
 // Progress is a stream, the poke is not: a home with thousands of files would otherwise put one SSE
 // frame per file on the admin's channel. State changes always emit.
 const PROGRESS_POKE_MS = 500;
-// Enough of a verify's failure list for a message; the sidecar carries all of them.
-const FAILURES_IN_MESSAGE = 3;
 // How long shutdown waits for a backup or a verify. A restore is waited out however long it takes:
 // killed between the move-aside and the install, it leaves the user with no home folder at all.
 const SHUTDOWN_JOB_BUDGET_MS = 30_000;
@@ -45,7 +43,7 @@ function poke(job: BackupJob): void {
 // One piece of work per home at a time — a second backup while one is running would read a folder
 // the first is still walking, a second restore would move aside a folder the first is writing, and a
 // safety-copy delete overlapping a restore would judge the wrong home's keys as garbage.
-function assertHomeSlotFree(ownerId: string): void {
+function requireHomeSlotFree(ownerId: string): void {
     dropExpiredJobs();
     if (heldSlots.has(ownerId)) throw new ApiError(409, 'A safety-copy delete of this home is running');
     for (const running of jobs.values()) {
@@ -60,7 +58,7 @@ function assertHomeSlotFree(ownerId: string): void {
 // that answer into "delete what the home now points at". It never sets the restoring mark — a delete
 // is not a user-facing outage — and it is awaited by its route, so the slot lives exactly as long.
 export async function withBackupJobSlot(ownerId: string, run: () => Promise<void>): Promise<void> {
-    assertHomeSlotFree(ownerId);
+    requireHomeSlotFree(ownerId);
     heldSlots.add(ownerId);
     try {
         await run();
@@ -77,7 +75,7 @@ export function startBackupJob(
     adminId: string,
     run: (job: BackupJob, onProgress: SnapshotProgress) => Promise<string>,
 ): BackupJob {
-    assertHomeSlotFree(ownerId);
+    requireHomeSlotFree(ownerId);
 
     const job: BackupJob = {
         id: randomUUID(),
@@ -106,7 +104,7 @@ export function startBackupJob(
         })
         .catch((error: unknown) => {
             job.state = 'failed';
-            job.error = error instanceof Error ? error.message : String(error);
+            job.error = describeError(error);
         })
         .finally(() => {
             job.finishedAt = new Date();
@@ -141,16 +139,6 @@ export function listBackupJobs(ownerId?: string): BackupJob[] {
 export function getBackupJob(id: string): BackupJob | undefined {
     dropExpiredJobs();
     return jobs.get(id);
-}
-
-// Two backups of one home inside the same second would otherwise land on one name, and the second
-// would overwrite the first.
-function freeArtifactName(ownerId: string, at: Date): string {
-    let candidate = at;
-    while (fs.existsSync(path.join(getBackupsDir(), buildArtifactName(ownerId, candidate)))) {
-        candidate = new Date(candidate.getTime() + 1000);
-    }
-    return buildArtifactName(ownerId, candidate);
 }
 
 // The backup job: snapshot into staging, judge the folder before it is packed, pack it, write the
@@ -204,14 +192,8 @@ export async function runArtifactVerify(
         onProgress('extract', 1, 1);
 
         // The job's owner is the one in the artifact's name, which the route parsed.
-        const folder = path.join(unpackDir, buildHomeFolderName(job.ownerId));
-        if (!fs.existsSync(folder)) throw new Error(`${artifactName} is a backup of another home`);
+        const { folder, manifest } = readUnpackedHome(unpackDir, job.ownerId, artifactName);
         const record = await verifyFolder(folder, onProgress);
-        const manifestPath = path.join(folder, 'manifest.json');
-        const manifest = fs.existsSync(manifestPath)
-            ? parseBackupManifest(fs.readFileSync(manifestPath, 'utf8'))
-            : null;
-        if (!manifest) throw new Error(`${artifactName} carries no version 1 backup manifest`);
         await writeSidecar(artifactPath, manifest, record);
         if (record.status !== 'verified') {
             throw new Error(

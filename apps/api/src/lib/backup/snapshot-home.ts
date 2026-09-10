@@ -7,7 +7,7 @@ import { CALENDAR_DB_CONFIG } from '../calendar/db-config';
 import { getAvatarsDir } from '../config/paths';
 import { getPublicConfig } from '../config/server-config';
 import { CONTACTS_DB_CONFIG } from '../contacts/db-config';
-import { ApiError, type DatabaseConfig, PATHS, type SchemaType } from '../core';
+import { type DatabaseConfig, PATHS, type SchemaType } from '../core';
 import { SHARED_DB_CONFIG } from '../drive/db-config';
 import type { Home } from '../home';
 import { MAIL_DB_CONFIG } from '../mail/db-config';
@@ -22,10 +22,12 @@ import {
     ARCHIVE_AUTH_FILE,
     ARCHIVE_AVATAR_DIR,
     ARCHIVE_HOME_DIR,
+    ARCHIVE_MANIFEST_FILE,
     ARCHIVE_SHARES_FILE,
     archiveHomePath,
     archiveMountPath,
     buildHomeFolderName,
+    requireBackableOwner,
 } from './paths';
 import { snapshotDisabledMountData, snapshotMountData, snapshotMountThumbs } from './snapshot-mount';
 
@@ -104,9 +106,7 @@ export async function snapshotHome(
 ): Promise<BackupManifest> {
     const ownerId = home.user.id;
     const owner = parseOwnerId(ownerId);
-    if (owner.type !== 'user' && owner.type !== 'team') {
-        throw new ApiError(400, `Cannot back up a ${owner.type} home`);
-    }
+    requireBackableOwner(owner);
 
     const folder = path.join(targetDir, buildHomeFolderName(ownerId));
     fs.mkdirSync(folder, { recursive: true });
@@ -272,7 +272,7 @@ export async function snapshotHome(
         mounts: mountSummaries,
         entries,
     };
-    await Bun.write(path.join(folder, 'manifest.json'), JSON.stringify(manifest, null, 2));
+    await Bun.write(path.join(folder, ARCHIVE_MANIFEST_FILE), JSON.stringify(manifest, null, 2));
     report('done', 1, 1);
     return manifest;
 }

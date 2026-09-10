@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { parseOwnerId } from '@workspace/lib/types/owner';
+import { type ParsedOwnerId, parseOwnerId } from '@workspace/lib/types/owner';
 import { BACKUP_ARTIFACT_EXTENSION, BACKUP_STAMP_PATTERN, parseBackupStamp } from '@workspace/lib/validation';
 import { getDataRoot, getTeamDataPath, getUserHomePath } from '../config/paths';
 import { ApiError, PATHS } from '../core';
@@ -23,7 +23,9 @@ export function getBackupsDir(): string {
     return dir;
 }
 
-function getStagingRoot(): string {
+// Every job's scratch space lives under one folder, wiped at boot: `.staging` is spelled here and
+// nowhere else.
+export function getStagingRoot(): string {
     return path.join(backupsDirPath(), '.staging');
 }
 
@@ -95,6 +97,10 @@ export const ARCHIVE_AUTH_FILE = 'auth.json';
 export const ARCHIVE_SHARES_FILE = 'shares.json';
 export const ARCHIVE_AVATAR_DIR = 'avatar';
 
+// The one file every reader of an archive starts from: snapshotHome writes it, verify judges the
+// folder against it, restore reads the home out of it and the artifact list reads its sidecar copy.
+export const ARCHIVE_MANIFEST_FILE = 'manifest.json';
+
 export function archiveHomePath(relPath: string): string {
     return `${ARCHIVE_HOME_DIR}/${relPath}`;
 }
@@ -122,25 +128,56 @@ export function buildArtifactName(ownerId: string, at: Date): string {
     return `${buildHomeFolderName(ownerId)}-${buildStamp(at)}${BACKUP_ARTIFACT_EXTENSION}`;
 }
 
+// The one collision rule these names have: a stamp is a second wide, and two of a home's artifacts
+// or safety copies can land inside one. The later one is stamped a second on, so every name in
+// both grammars keeps exactly one shape.
+function freeAt(at: Date, taken: (candidate: Date) => boolean): Date {
+    let candidate = at;
+    while (taken(candidate)) candidate = new Date(candidate.getTime() + 1000);
+    return candidate;
+}
+
+// The name a new artifact takes. Without the rule above, two backups of one home inside a second
+// would land on one name and the second would overwrite the first.
+export function freeArtifactName(ownerId: string, at: Date): string {
+    const free = freeAt(at, (candidate) =>
+        fs.existsSync(path.join(backupsDirPath(), buildArtifactName(ownerId, candidate))),
+    );
+    return buildArtifactName(ownerId, free);
+}
+
 // The home folder a restore moved aside (the state before it) and the incomplete folder a failed
 // restore left behind. Nothing deletes either automatically; the admin pane lists and removes them.
 export const PRE_RESTORE_SUFFIX = '.pre-restore-';
 export const FAILED_RESTORE_SUFFIX = '.failed-restore-';
 
-// `{homeFolderName}{suffix}{stamp}`, plus the `-2` tail a restore appends when two of them land in
-// the same second. The caller compares `homeName` against the home it asked about: that equality,
-// not the character class, is what keeps a delete inside the right directory.
+// `{homeFolderName}{suffix}{stamp}`. The caller compares `homeName` against the home it asked
+// about: that equality, not the character class, is what keeps a delete inside the right directory.
 const SAFETY_COPY_SUFFIXES = [PRE_RESTORE_SUFFIX, FAILED_RESTORE_SUFFIX]
     .map((suffix) => suffix.replaceAll('.', String.raw`\.`))
     .join('|');
-const SAFETY_COPY_NAME = new RegExp(
-    String.raw`^(?<homeName>.+)(?<suffix>${SAFETY_COPY_SUFFIXES})${BACKUP_STAMP_PATTERN}(?:-\d+)?$`,
-);
+const SAFETY_COPY_NAME = new RegExp(`^(?<homeName>.+)(?<suffix>${SAFETY_COPY_SUFFIXES})${BACKUP_STAMP_PATTERN}$`);
 
 // The folder a restore leaves beside the home, spelled in one place: `parseSafetyCopyName` reads
 // back exactly what this writes.
 export function buildSafetyCopyName(homeDir: string, kind: 'pre-restore' | 'failed-restore', stamp: string): string {
     return `${homeDir}${kind === 'pre-restore' ? PRE_RESTORE_SUFFIX : FAILED_RESTORE_SUFFIX}${stamp}`;
+}
+
+// The stamp the two safety copies of one restore share, under the same collision rule: a second
+// restore of a home inside one second must not rename onto the first's copy (ENOTEMPTY, with the
+// home already moved aside) AND must not hand a flat-key mount the fresh storage keys the first
+// restore just wrote (see materializeMount).
+export function freeSafetyCopyStamp(homeDir: string, at: Date): string {
+    return buildStamp(
+        freeAt(at, (candidate) => {
+            const stamp = buildStamp(candidate);
+            return (
+                fs.existsSync(buildSafetyCopyName(homeDir, 'pre-restore', stamp)) ||
+                fs.existsSync(buildSafetyCopyName(homeDir, 'failed-restore', stamp))
+            );
+        }),
+    );
 }
 
 export function parseSafetyCopyName(
@@ -157,12 +194,22 @@ export function parseSafetyCopyName(
     };
 }
 
-// Where this owner's home folder lives. Org homes hold no databases and guest homes are disposable
-// (guest-cleanup deletes them), so neither is backed up and neither can be restored.
+export type BackableOwner = ParsedOwnerId & { type: 'user' | 'team' };
+
+// The two kinds of home an archive is of. An org home holds no databases and a guest home is
+// disposable (guest-cleanup deletes them), so neither is backed up and neither can be restored —
+// one spelling of that refusal, for the folder resolver and for the snapshot itself.
+export function requireBackableOwner(owner: ParsedOwnerId): asserts owner is BackableOwner {
+    if (owner.type !== 'user' && owner.type !== 'team') {
+        throw new ApiError(400, `Cannot back up a ${owner.type} home`);
+    }
+}
+
+// Where this owner's home folder lives. A guest is refused here as well: their home is disposable.
 export async function resolveHomeDir(ownerId: string): Promise<string> {
     const owner = parseOwnerId(ownerId);
     if (owner.type === 'team') return getTeamDataPath(owner.id);
-    if (owner.type !== 'user') throw new ApiError(400, `Cannot back up a ${owner.type} home`);
+    requireBackableOwner(owner);
     const existing = await getUserById(owner.id);
     if (existing?.role === 'guest') throw new ApiError(400, 'Guest homes are not backed up');
     return getUserHomePath(owner.id);

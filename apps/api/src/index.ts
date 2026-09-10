@@ -2,7 +2,7 @@ import { BACKUP_UPLOAD_MAX_BYTES } from '@workspace/lib/constants/backup';
 import { app } from './app';
 import { drainBackupJobs } from './lib/backup/jobs';
 import { wipeBackupStaging } from './lib/backup/paths';
-import { recoverInterruptedRestores } from './lib/backup/restore';
+import { recoverInterruptedRestores } from './lib/backup/recovery';
 import { documentTransformRunner } from './lib/document/transform/runner';
 import { drainACLFanOuts } from './lib/drive/acl-propagation';
 import { shutdownAllHomes } from './lib/home';

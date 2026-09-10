@@ -5,7 +5,7 @@ import { getAuthDrizzleDb } from '../auth/auth';
 
 // A users3.db table one user's archive carries: the key it has in auth.json, the column that scopes
 // its rows to that user, and — for a membership — the row it would be an orphan without.
-export type AuthTableSpec = {
+type AuthTableSpec = {
     key: string;
     table: SQLiteTable;
     owner: SQLiteColumn;

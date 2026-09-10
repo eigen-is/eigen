@@ -7,7 +7,7 @@ import { createZstdCompress, createZstdDecompress } from 'node:zlib';
 import type { BackupManifest, BackupVerifyRecord } from '@workspace/lib/types/backup';
 import { parseBackupManifest, parseBackupSidecar } from '@workspace/lib/validation';
 import { ApiError } from '../core';
-import { getBackupTempPath } from './paths';
+import { ARCHIVE_MANIFEST_FILE, buildHomeFolderName, getBackupTempPath } from './paths';
 import type { SnapshotProgress } from './snapshot-home';
 
 // An artifact is a plain POSIX tar (pax for long paths) piped through zstd, so `tar --zstd -xf`
@@ -197,6 +197,8 @@ async function withArchive<T>(artifactPath: string, read: (archive: Bun.Archive)
     }
 }
 
+// `glob` is unused today and reserved by the design for phase ③, where one home is extracted out of
+// a whole-server archive with a `homes/home-{ownerId}/**` filter.
 export async function extractArtifact(artifactPath: string, targetDir: string, glob?: string): Promise<void> {
     const existed = fs.existsSync(targetDir);
     fs.mkdirSync(targetDir, { recursive: true });
@@ -215,12 +217,30 @@ export async function extractArtifact(artifactPath: string, targetDir: string, g
 // The manifest of the archive's single home folder, without unpacking its files.
 export async function readArtifactManifest(artifactPath: string): Promise<BackupManifest> {
     const text = await withArchive(artifactPath, async (archive) => {
-        const [entry] = [...(await archive.files('*/manifest.json')).values()];
+        const [entry] = [...(await archive.files(`*/${ARCHIVE_MANIFEST_FILE}`)).values()];
         return entry ? await entry.text() : null;
     });
     const manifest = text === null ? null : parseBackupManifest(text);
     if (!manifest) throw new ApiError(400, `${path.basename(artifactPath)} is not an Eigen backup archive`);
     return manifest;
+}
+
+// The home folder inside an unpacked archive, with the manifest that describes it. Both callers
+// judge an extract they just made, and both say the same thing about an archive that turns out to
+// be another home's or to carry no manifest this build reads.
+export function readUnpackedHome(
+    unpackDir: string,
+    ownerId: string,
+    artifactName: string,
+): { folder: string; manifest: BackupManifest } {
+    const folder = path.join(unpackDir, buildHomeFolderName(ownerId));
+    if (!fs.existsSync(folder)) throw new ApiError(400, `${artifactName} is a backup of another home`);
+    const manifest = parseBackupManifest(fs.readFileSync(path.join(folder, ARCHIVE_MANIFEST_FILE), 'utf8'));
+    if (!manifest) throw new ApiError(400, `${artifactName} carries no version 1 backup manifest`);
+    if (manifest.ownerId !== ownerId) {
+        throw new ApiError(400, `${artifactName} is a backup of another home (${manifest.ownerId})`);
+    }
+    return { folder, manifest };
 }
 
 export async function writeSidecar(
