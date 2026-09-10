@@ -50,9 +50,9 @@ const SKIPPED_HOME_DIRS = new Set<string>([PATHS.DRIVE.ROOT, `${PATHS.CONTACTS.R
 // beside its `cur/` and `new/`, holding half-written deliveries only.
 const MAILDIR_ROOT = `${PATHS.MAIL.ROOT}/${PATHS.MAIL.MAILDIR}`;
 
-function isSkippedHomeDir(rel: string, name: string): boolean {
+function isSkippedHomeDir(rel: string): boolean {
     if (SKIPPED_HOME_DIRS.has(rel)) return true;
-    return name === PATHS.MAIL.TMP && rel.startsWith(`${MAILDIR_ROOT}/`);
+    return path.basename(rel) === PATHS.MAIL.TMP && rel.startsWith(`${MAILDIR_ROOT}/`);
 }
 
 // Home-relative paths of the databases above; verify reads them back to know which archived .db
@@ -74,7 +74,7 @@ function listHomeTree(dir: string, relDir: string, out: HomeTree): void {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
         if (entry.isDirectory()) {
-            if (isSkippedHomeDir(rel, entry.name)) continue;
+            if (isSkippedHomeDir(rel)) continue;
             out.dirs.push(rel);
             listHomeTree(path.join(dir, entry.name), rel, out);
             continue;
