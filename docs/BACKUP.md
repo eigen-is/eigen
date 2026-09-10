@@ -133,7 +133,12 @@ An artifact is a plain POSIX tar (pax headers for long paths, empty folders incl
 
 ## Interrupted restores
 
-A restore writes a marker in its staging folder before it moves the home folder aside. If the process dies between the move and the install, the next boot reads that marker, renames the pre-restore copy back to the home folder, and logs loudly. Staging is wiped afterwards, which is what clears the markers of restores that finished.
+A restore writes a marker in its staging folder before it moves the home folder aside, and a second note beside it the moment the install is done — after the databases are checked and the identity rows are written, before the home is served again. The next boot reads both:
+
+- **Marker, no completion note.** The process died somewhere in the install. The half-written home folder, if there is one, is renamed `{id}.failed-restore-{timestamp}` and the pre-restore copy is renamed back to the home folder. Both moves are logged loudly and nothing is deleted. This is the window an OOM kill or a power cut lands in, and it is a long one when the backups folder is on another disk: the install then copies the whole tree instead of renaming it.
+- **Marker and completion note.** The restore finished; both folders are left exactly as they are.
+
+Staging is wiped right after, which is what clears the markers of restores that finished.
 
 A marker lost to a torn write fails safe: the boot recovery does nothing, and the home's data is sitting complete in `{id}.pre-restore-{timestamp}`. Rename it back by hand (or use **Restore** on the safety copy once the home folder exists again).
 

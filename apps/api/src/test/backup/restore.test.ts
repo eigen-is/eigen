@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { COLLAB_HOME_REPLACED_CLOSE } from '@workspace/lib/constants/collab';
@@ -9,6 +9,7 @@ import { eq } from 'drizzle-orm';
 import { apikey as apikeyScheme, user as userScheme } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
+import * as pathsModule from '../../lib/backup/paths';
 import {
     buildArtifactName,
     buildHomeFolderName,
@@ -468,6 +469,24 @@ describe('Backup restoreHome', () => {
         );
         expect(safetyCopies(ctx.bob.user.id, PRE_RESTORE_SUFFIX)).toEqual([]);
         expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual(before);
+    });
+
+    // The note the next boot reads to tell a restore that finished from one that died halfway. It
+    // lives in the job's staging folder, which every restore wipes on its way out, so the wipe is
+    // held off here to look at what was written.
+    test('a finished restore leaves its completion note beside the marker', async () => {
+        const jobId = `restore-sentinel-${Date.now()}`;
+        const spy = spyOn(pathsModule, 'wipeBackupStagingDir').mockImplementation(() => {});
+        try {
+            await restoreHome(artifact, target.id, jobId);
+        } finally {
+            spy.mockRestore();
+        }
+
+        const staging = join(getBackupsDir(), '.staging', jobId);
+        expect(existsSync(join(staging, 'restoring.json'))).toBe(true);
+        expect(existsSync(join(staging, 'restore-complete.json'))).toBe(true);
+        rmSync(staging, { recursive: true, force: true });
     });
 
     test('a failure after the move-aside leaves .failed-restore and puts the original back', async () => {
