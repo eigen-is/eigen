@@ -3,12 +3,11 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupEntry } from '@workspace/lib/types/backup';
 import { type DrivePathType, isCollabType, isDocumentType } from '@workspace/lib/types/drive';
-import type { MountConfig } from '@workspace/lib/types/mount';
 import { COMMENT_INDEX_DB_CONFIG } from '../chat/comment-db-config';
 import { CHAT_ROOM_DB_CONFIG } from '../chat/db-config';
 import { COLLAB_DB_CONFIG } from '../collab/db-config';
-import { type DatabaseConfig, PATHS, type SchemaType } from '../core';
-import { buildStorageKey, createMountStorage, isUsableName } from '../mount/helpers';
+import type { DatabaseConfig, SchemaType } from '../core';
+import { buildStorageKey, isUsableName } from '../mount/helpers';
 import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
 import { stageManagedDbCopy } from '../versioning/snapshot';
@@ -306,70 +305,4 @@ export async function snapshotMountThumbs(
         }
     }
     return entries;
-}
-
-// A mount an admin turned off is not in the drive's map, so there is no Mount to read it through —
-// and nothing can have a document open on one the home does not serve, which is what makes reading
-// its files straight from its own storage safe. Its metadata.db is staged by the caller through the
-// same managed handle every other database uses; `metadataPath` is that copy, so the tree read here
-// is the one the archive carries. Freshest-first like a live mount: a staged copy whose upload never
-// acked holds bytes the stored object does not.
-export async function snapshotDisabledMountData(
-    config: MountConfig,
-    mountDir: string,
-    metadataPath: string,
-    targetDir: string,
-    relPrefix: string,
-    onProgress: SnapshotProgress,
-): Promise<MountSnapshot> {
-    const copy = new Database(metadataPath, { readonly: true });
-    let rows: MountPathRow[];
-    let staged: Map<string, string>;
-    try {
-        rows = readMountPathRows(copy);
-        staged = new Map(
-            copy
-                .query<{ storageKey: string; stagingPath: string }, []>(
-                    'SELECT storageKey, stagingPath FROM pending_uploads',
-                )
-                .all()
-                .map((row) => [row.storageKey, row.stagingPath]),
-        );
-    } finally {
-        copy.close();
-    }
-
-    const byId = new Map(rows.map((row) => [row.id, row]));
-    const managedPaths = new Set(listManagedDatabases(rows).map((entry) => entry.path));
-    const storage = createMountStorage(config, mountDir);
-    const isPathBased = config.storageType === 'local';
-    const fileRows = rows.filter((row) => row.type === 'file');
-    const entries: BackupEntry[] = [];
-    let databases = 0;
-    for (const [index, row] of fileRows.entries()) {
-        const relPath = archivePath(row, byId);
-        const destPath = path.join(targetDir, relPath);
-        const entryPath = `${relPrefix}/${relPath}`;
-        const storageKey = storageKeyOf(row, byId, isPathBased);
-        const pending = staged.get(storageKey);
-        const stagedPath = pending && path.join(mountDir, PATHS.DRIVE.STAGING_DIR, pending);
-        const source = stagedPath && fs.existsSync(stagedPath) ? Bun.file(stagedPath) : storage.read(storageKey);
-        const there = await source
-            .exists()
-            .catch((error: unknown) => rethrowStorageFailure(config.id, storageKey, error));
-        // A row whose object is gone has no bytes to carry; the archive mirrors that absence.
-        if (!there) continue;
-        const entry = await captureFile(source, destPath, entryPath);
-        if (!managedPaths.has(relPath)) {
-            entries.push(entry);
-        } else {
-            // The journal mode is rewritten after the bytes land, so the entry is restated for what
-            // is now on disk — a manifest that described the pre-normalize bytes would fail verify.
-            normalizeArchiveDatabase(destPath);
-            entries.push(await captureWrittenFile(destPath, entryPath));
-            databases++;
-        }
-        onProgress('mount files', index + 1, fileRows.length);
-    }
-    return { entries, databases, pathIds: new Set(fileRows.map((row) => row.id)) };
 }
