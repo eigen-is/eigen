@@ -40,6 +40,32 @@ describe('Reserved mail addresses', () => {
         expect(await res.text()).toMatch(/reserved/i);
     });
 
+    test('a non-role internal address (admin@) is not refused by this rule', async () => {
+        // The auth DB is shared across files, so admin@ may already exist — that's still not a "reserved" refusal.
+        try {
+            const created = await auth.api.createUser({
+                body: {
+                    email: 'admin@test.eigen.is',
+                    password: 'testpassword123',
+                    name: 'Real Admin',
+                    role: 'user',
+                },
+            });
+            expect(created.user.email).toBe('admin@test.eigen.is');
+        } catch (error) {
+            expect(error instanceof Error ? error.message : String(error)).not.toMatch(/reserved/i);
+        }
+    });
+
+    test('POST /guest-auth/request-otp refuses an address on the mail domain', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, '/guest-auth/request-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: 'postmaster@test.eigen.is' }),
+        });
+        expect(res.status).toBe(400);
+    });
+
     test('an external reserved address is not blocked by this rule', async () => {
         const email = `postmaster+${randomUUID()}@example.com`;
         const created = await auth.api.signUpEmail({

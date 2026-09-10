@@ -19,4 +19,4 @@ export type { ParsedContactInput } from './contact-input';
 export { parseContactInput } from './contact-input';
 export { EMAIL_FIND_REGEX, MAX_EMAIL_LENGTH, validateEmailAddress, validateEmailTarget } from './email';
 export { validatePasswordStrength } from './password';
-export { isReservedUsername, ROLE_MAILBOX_LOCAL_PARTS, validateUsername } from './username';
+export { ROLE_MAILBOX_LOCAL_PARTS, validateUsername } from './username';

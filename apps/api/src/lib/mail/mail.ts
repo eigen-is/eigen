@@ -22,12 +22,12 @@ export async function mailboxDeliver(to: string, file: ArrayBuffer) {
         const home = await getHome(user.id);
         return home.mail.mailboxDeliver(buffer);
     }
-    // RFC 2142 role addresses (postmaster/abuse/noreply) have no mailbox of their own; deliver the
-    // unchanged bytes to every server admin so DMARC reports and system-mail bounces aren't lost.
+    // RFC 2142 role addresses have no mailbox of their own; fan the unchanged bytes out to every admin.
     if (isInternalAddress(to) && ROLE_MAILBOX_LOCAL_PARTS.has((to.split('@')[0] ?? '').toLowerCase())) {
         const admins = await getOrgAdmins();
         if (admins.length > 0) {
             let result = '';
+            // A throw partway through makes Postfix redeliver, duplicating for earlier admins — fine at this scale.
             for (const admin of admins) {
                 result = await (await getHome(admin.id)).mail.mailboxDeliver(buffer);
             }

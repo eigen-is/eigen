@@ -79,8 +79,7 @@ export async function getOrgRole(userId: string): Promise<string | null> {
 }
 
 export async function getOrgAdmins(): Promise<User[]> {
-    // Scope to the default org — same reason as getOrgRole. Owners and admins are the server
-    // admins; role addresses (postmaster/abuse/noreply) fan out to all of them.
+    // Scope to the default org — same reason as getOrgRole; owners and admins are the server admins.
     const orgId = getServerConfig()?.orgId;
     if (!orgId) return [];
     const db = getAuthDrizzleDb();

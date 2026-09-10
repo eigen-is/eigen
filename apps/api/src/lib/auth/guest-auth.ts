@@ -3,7 +3,7 @@ import { generateId } from '@better-auth/core/utils/id';
 import { hashPassword } from 'better-auth/crypto';
 import { and, eq, like, lt } from 'drizzle-orm';
 import { account, user as userTable, verification } from '../../../auth-schema';
-import { getDomain, getOrgName } from '../config/server-config';
+import { getDomain, getOrgName, isInternalAddress } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core/errors';
 import { composeOtpEmail } from '../core/mail-composers';
@@ -68,9 +68,13 @@ export async function requestOtp(email: string, ip: string): Promise<void> {
     const existingUser = await getUserByEmail(email);
     if (existingUser) {
         if (existingUser.role !== 'guest') throw new ApiError(400, 'Use password login');
-    } else if (!getServerSettings().guests.openSignup) {
-        const entries = await getEntriesForTarget(email);
-        if (entries.length === 0) throw new ApiError(400, 'No shared resources found for this email');
+    } else {
+        // A direct insert bypasses the auth hook, so refuse a guest on our own mail domain here.
+        if (isInternalAddress(email)) throw new ApiError(400, 'Not a guest address');
+        if (!getServerSettings().guests.openSignup) {
+            const entries = await getEntriesForTarget(email);
+            if (entries.length === 0) throw new ApiError(400, 'No shared resources found for this email');
+        }
     }
 
     const db = getAuthDrizzleDb();

@@ -26,7 +26,7 @@ async function inboxSubjects(user: { id: string; sessionToken: string }): Promis
 
 describe('Mail role-address delivery', () => {
     for (const local of ['postmaster', 'abuse', 'noreply']) {
-        test(`${local}@ delivers to the org admin, not to a plain member`, async () => {
+        test(`${local}@ delivers to the org admin, not to a non-admin user`, async () => {
             const subject = `Role ${local} ${randomUUID()}`;
             const res = await deliver(`${local}@test.eigen.is`, subject);
             expect(res.status).toBe(200);

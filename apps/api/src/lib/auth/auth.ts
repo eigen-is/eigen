@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { apiKey } from '@better-auth/api-key';
-import { isReservedUsername } from '@workspace/lib/validation';
+import { ROLE_MAILBOX_LOCAL_PARTS } from '@workspace/lib/validation';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { APIError } from 'better-auth/api';
@@ -94,10 +94,9 @@ export function ensureAuthSchemaColumns(db: Database): void {
     db.close();
 }
 
-// RFC 2142 role addresses and the rest of the reserved list stay unclaimable on this server's mail
-// domain; external guest addresses (e.g. postmaster@example.com) are unaffected.
-function rejectReservedAddress(email: string | undefined): void {
-    if (email && isInternalAddress(email) && isReservedUsername(email.split('@')[0] ?? '')) {
+// RFC 2142 role addresses stay unclaimable on this server's mail domain; external guests are unaffected.
+function rejectRoleAddress(email: string | undefined): void {
+    if (email && isInternalAddress(email) && ROLE_MAILBOX_LOCAL_PARTS.has((email.split('@')[0] ?? '').toLowerCase())) {
         throw new APIError('BAD_REQUEST', { message: 'This address is reserved' });
     }
 }
@@ -135,7 +134,7 @@ export const auth = betterAuth({
         user: {
             create: {
                 before: async (user) => {
-                    rejectReservedAddress(user.email);
+                    rejectRoleAddress(user.email);
                 },
                 after: async (hookUser) => {
                     // better-auth's hook type omits admin/twoFactor plugin fields,
@@ -159,10 +158,9 @@ export const auth = betterAuth({
                 },
             },
             update: {
-                // Email may be absent from an update payload (name/image-only change); only check
-                // when the address is actually changing.
+                // Email may be absent (name/image-only change); rejectRoleAddress no-ops when so.
                 before: async (user) => {
-                    rejectReservedAddress(user.email);
+                    rejectRoleAddress(user.email);
                 },
             },
             delete: {
