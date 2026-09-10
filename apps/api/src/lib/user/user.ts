@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { member, teamMember, user } from '../../../auth-schema';
 import { type auth, getAuthDrizzleDb } from '../auth/auth';
 import { getServerConfig } from '../config/server-config';
@@ -76,6 +76,21 @@ export async function getOrgRole(userId: string): Promise<string | null> {
         .where(and(eq(member.userId, userId), eq(member.organizationId, orgId)))
         .get();
     return row?.role ?? null;
+}
+
+export async function getOrgAdmins(): Promise<User[]> {
+    // Scope to the default org — same reason as getOrgRole. Owners and admins are the server
+    // admins; role addresses (postmaster/abuse/noreply) fan out to all of them.
+    const orgId = getServerConfig()?.orgId;
+    if (!orgId) return [];
+    const db = getAuthDrizzleDb();
+    const rows = await db
+        .select()
+        .from(member)
+        .innerJoin(user, eq(user.id, member.userId))
+        .where(and(eq(member.organizationId, orgId), inArray(member.role, ['admin', 'owner'])))
+        .all();
+    return rows.map((row) => row.user);
 }
 
 export async function getOrgOwner(): Promise<User | null> {

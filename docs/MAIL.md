@@ -215,6 +215,8 @@ the user by address, appends the raw bytes to INBOX, then synchronously scans fo
 user's first mail init a welcome message is written straight into their INBOX (`welcome.ts`, gated by the
 `onboarding.welcomeMail` server setting), bypassing SMTP.
 
+**Role addresses.** When no user owns the recipient, `mailboxDeliver` checks whether the address is on this server's mail domain and its local part is a reserved role mailbox — `postmaster`, `abuse`, or `noreply` (`ROLE_MAILBOX_LOCAL_PARTS`, `packages/lib/src/validation/username.ts`). If so, the raw bytes are delivered unchanged to the INBOX of every org admin (owners and admins, `getOrgAdmins`), so DMARC aggregate reports to `postmaster@` and delivery-status notifications for system mail sent as `noreply@` reach a human instead of bouncing (RFC 2142). No mailbox is created for these addresses. Users can't claim a reserved local part on the mail domain: the better-auth `user.create.before` / `user.update.before` hooks reject an internal address whose local part is reserved (external guest addresses like `postmaster@example.com` are unaffected).
+
 `POST /internal/mail/queue-alert` is the other localhost-only mail route. The queue lives on a private volume, so the API cannot count it; `docker/postfix/queue-monitor.sh` counts it inside the Postfix container and posts the number once it crosses `QUEUE_ALERT_THRESHOLD`. The route resolves `getOrgOwner()` and relays an `admin-alert` notification through `sendToHome` (never a cross-home `getHome()`), coalesced on the `mail-queue-backlog` tag. A notification and not an email, because an email about a jammed queue would sit in that queue.
 
 ## Protocol access (IMAP/CalDAV/WebDAV)

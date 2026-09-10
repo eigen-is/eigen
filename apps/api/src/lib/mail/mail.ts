@@ -1,11 +1,13 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DraftAttachmentUpload, Email } from '@workspace/lib/types/mail';
+import { ROLE_MAILBOX_LOCAL_PARTS } from '@workspace/lib/validation';
 import { getMailUploadMaxSize, getUploadMaxSize } from '../config/enforcement';
+import { isInternalAddress } from '../config/server-config';
 import { ApiError } from '../core/errors';
 import { getSharedDrive } from '../drive';
 import { getHome } from '../home';
 import type { User } from '../user';
-import { getUserByEmail } from '../user/';
+import { getOrgAdmins, getUserByEmail } from '../user/';
 
 export async function getMailClient(user: User) {
     const home = await getHome(user.id);
@@ -13,13 +15,26 @@ export async function getMailClient(user: User) {
 }
 
 export async function mailboxDeliver(to: string, file: ArrayBuffer) {
-    const user = await getUserByEmail(to);
-    if (!user) {
-        throw new ApiError(404, `Recipient '${to}' not found`);
-    }
-    const home = await getHome(user.id);
     // Write raw bytes verbatim — decoding to a string mangles non-UTF-8 mail (Latin-1/Shift-JIS/binary).
-    return home.mail.mailboxDeliver(Buffer.from(file));
+    const buffer = Buffer.from(file);
+    const user = await getUserByEmail(to);
+    if (user) {
+        const home = await getHome(user.id);
+        return home.mail.mailboxDeliver(buffer);
+    }
+    // RFC 2142 role addresses (postmaster/abuse/noreply) have no mailbox of their own; deliver the
+    // unchanged bytes to every server admin so DMARC reports and system-mail bounces aren't lost.
+    if (isInternalAddress(to) && ROLE_MAILBOX_LOCAL_PARTS.has((to.split('@')[0] ?? '').toLowerCase())) {
+        const admins = await getOrgAdmins();
+        if (admins.length > 0) {
+            let result = '';
+            for (const admin of admins) {
+                result = await (await getHome(admin.id)).mail.mailboxDeliver(buffer);
+            }
+            return result;
+        }
+    }
+    throw new ApiError(404, `Recipient '${to}' not found`);
 }
 
 export async function messageGet(user: User, messageId: string): Promise<Email> {

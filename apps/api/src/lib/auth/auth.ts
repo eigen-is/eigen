@@ -1,7 +1,9 @@
 import { Database } from 'bun:sqlite';
 import { apiKey } from '@better-auth/api-key';
+import { isReservedUsername } from '@workspace/lib/validation';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+import { APIError } from 'better-auth/api';
 import { admin, organization, twoFactor } from 'better-auth/plugins';
 import { eq, notInArray, or } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
@@ -20,7 +22,7 @@ import {
 } from '../../../auth-schema';
 import { isTest } from '../config/env';
 import { getServerDataPath } from '../config/paths';
-import { getDomain, getOrgName, getServerConfig } from '../config/server-config';
+import { getDomain, getOrgName, getServerConfig, isInternalAddress } from '../config/server-config';
 import { ApiError } from '../core';
 import { composeOtpEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
@@ -92,6 +94,14 @@ export function ensureAuthSchemaColumns(db: Database): void {
     db.close();
 }
 
+// RFC 2142 role addresses and the rest of the reserved list stay unclaimable on this server's mail
+// domain; external guest addresses (e.g. postmaster@example.com) are unaffected.
+function rejectReservedAddress(email: string | undefined): void {
+    if (email && isInternalAddress(email) && isReservedUsername(email.split('@')[0] ?? '')) {
+        throw new APIError('BAD_REQUEST', { message: 'This address is reserved' });
+    }
+}
+
 export const auth = betterAuth({
     database: drizzleAdapter(drizzle(getServerDataPath('users3.db')), {
         provider: 'sqlite',
@@ -124,6 +134,9 @@ export const auth = betterAuth({
         },
         user: {
             create: {
+                before: async (user) => {
+                    rejectReservedAddress(user.email);
+                },
                 after: async (hookUser) => {
                     // better-auth's hook type omits admin/twoFactor plugin fields,
                     // but the runtime row has them. Cast to our User type at the
@@ -143,6 +156,13 @@ export const auth = betterAuth({
                     } catch (error) {
                         console.error(`Failed to reconcile shares for new user ${user.id}:`, error);
                     }
+                },
+            },
+            update: {
+                // Email may be absent from an update payload (name/image-only change); only check
+                // when the address is actually changing.
+                before: async (user) => {
+                    rejectReservedAddress(user.email);
                 },
             },
             delete: {
