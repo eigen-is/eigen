@@ -84,7 +84,7 @@ export async function getOrgAdmins(): Promise<User[]> {
     if (!orgId) return [];
     const db = getAuthDrizzleDb();
     const rows = await db
-        .select()
+        .select({ user })
         .from(member)
         .innerJoin(user, eq(user.id, member.userId))
         .where(and(eq(member.organizationId, orgId), inArray(member.role, ['admin', 'owner'])))

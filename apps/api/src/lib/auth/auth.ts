@@ -1,6 +1,5 @@
 import { Database } from 'bun:sqlite';
 import { apiKey } from '@better-auth/api-key';
-import { ROLE_MAILBOX_LOCAL_PARTS } from '@workspace/lib/validation';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { APIError } from 'better-auth/api';
@@ -22,7 +21,7 @@ import {
 } from '../../../auth-schema';
 import { isTest } from '../config/env';
 import { getServerDataPath } from '../config/paths';
-import { getDomain, getOrgName, getServerConfig, isInternalAddress } from '../config/server-config';
+import { getDomain, getOrgName, getServerConfig, isRoleAddress } from '../config/server-config';
 import { ApiError } from '../core';
 import { composeOtpEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
@@ -96,7 +95,7 @@ export function ensureAuthSchemaColumns(db: Database): void {
 
 // RFC 2142 role addresses stay unclaimable on this server's mail domain; external guests are unaffected.
 function rejectRoleAddress(email: string | undefined): void {
-    if (email && isInternalAddress(email) && ROLE_MAILBOX_LOCAL_PARTS.has((email.split('@')[0] ?? '').toLowerCase())) {
+    if (email && isRoleAddress(email)) {
         throw new APIError('BAD_REQUEST', { message: 'This address is reserved' });
     }
 }
