@@ -12,8 +12,8 @@ import { type DatabaseConfig, PATHS, type SchemaType } from '../core';
 import { SHARED_DB_CONFIG } from '../drive/db-config';
 import type { Home } from '../home';
 import { MAIL_DB_CONFIG } from '../mail/db-config';
+import { createMountConfig, Mount } from '../mount';
 import { MOUNT_DB_CONFIG } from '../mount/db-config';
-import { createMountConfig } from '../mount/helpers';
 import { NOTIFICATION_CENTER_DB_CONFIG } from '../notification-center/db-config';
 import { getEigenDb } from '../share/db';
 import { shareRegistry } from '../share/schema';
@@ -31,7 +31,7 @@ import {
     buildHomeFolderName,
     requireBackableOwner,
 } from './paths';
-import { snapshotDisabledMountData, snapshotMountData, snapshotMountThumbs } from './snapshot-mount';
+import { snapshotMountData, snapshotMountThumbs } from './snapshot-mount';
 
 export type SnapshotProgress = (step: string, done: number, total: number) => void;
 
@@ -179,25 +179,25 @@ export async function snapshotHome(
         if (!fs.existsSync(path.join(home.homeDir, relMetadata))) continue;
         const relData = archiveMountPath(id, PATHS.DRIVE.DATA_DIR);
         const relThumbs = archiveMountPath(id, PATHS.DRIVE.THUMBS_DIR);
-        const mountDir = path.join(home.homeDir, PATHS.DRIVE.ROOT, id);
         const config = createMountConfig(id, settings);
         // Where the archive stands before this mount: a mount that turns out to be unreadable is
         // taken back out again, entries and all, so the folder never holds bytes the manifest does
         // not list (which is what verify's transport stage would fail it on).
         const entriesBefore = entries.length;
         const databasesBefore = databases;
+        let mount: Mount | undefined;
         try {
             await stageDatabase(MOUNT_DB_CONFIG, relMetadata);
-            const data = await snapshotDisabledMountData(
-                config,
-                mountDir,
-                path.join(folder, ARCHIVE_HOME_DIR, relMetadata),
-                path.join(folder, relData),
-                relData,
-                report,
-            );
+            // Archived through the same Mount an enabled one goes through — one spelling of the
+            // capture rules (freshest-first, managed databases, manifest entries) for both. Opened
+            // passively because the drive does not serve this one: nothing is created, purged or
+            // uploaded (Mount.init). Its metadata.db is the Home's own cached handle, the one the
+            // copy above was staged from, so this opens nothing a second time.
+            mount = new Mount(ownerId, home.homeDir, config, home.getLocalDatabase.bind(home));
+            await mount.init({ passive: true });
+            const data = await snapshotMountData(mount, path.join(folder, relData), relData, report);
             const thumbs = await snapshotMountThumbs(
-                path.join(mountDir, PATHS.DRIVE.THUMBS_DIR),
+                mount.thumbsDir,
                 path.join(folder, relThumbs),
                 relThumbs,
                 data.pathIds,
@@ -223,6 +223,13 @@ export async function snapshotHome(
             const skipped = describeError(error);
             console.warn(`[backup] ${ownerId}: disabled mount ${id} was skipped — ${skipped}`);
             mountSummaries.push({ id, storageType: config.storageType, files: 0, bytes: 0, skipped });
+        } finally {
+            // The Drive's own teardown for a mount it drops (Drive.removeMount): this one opened no
+            // document database and never reconciled its queue, so it cancels the queue's timer and
+            // returns. It cannot flush at shutdown either — gracefulShutdown drains backup jobs
+            // (index.ts:60) before it arms the drain deadline (index.ts:63). metadata.db stays open:
+            // it belongs to the Home's cache, which closes it when the home evicts.
+            await mount?.closeAllDatabases();
         }
         report('mounts', mounts.length + index + 1, total);
     }

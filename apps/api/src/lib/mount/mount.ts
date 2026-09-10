@@ -139,24 +139,34 @@ export class Mount {
         return path.join(this.dataDir, '.trash');
     }
 
-    async init(): Promise<void> {
-        if (!fs.existsSync(this.baseDir)) {
-            fs.mkdirSync(this.baseDir, { recursive: true });
-        }
-        if (!fs.existsSync(this.tmpDir)) {
-            fs.mkdirSync(this.tmpDir, { recursive: true });
-        }
-        if (!fs.existsSync(this.thumbsDir)) {
-            fs.mkdirSync(this.thumbsDir, { recursive: true });
-        }
-        if (!fs.existsSync(this.previewsDir)) {
-            fs.mkdirSync(this.previewsDir, { recursive: true });
-        }
-        if (this.isRemote && !fs.existsSync(this.stagingDir)) {
-            fs.mkdirSync(this.stagingDir, { recursive: true });
-        }
-        if (this.isPathBased && !fs.existsSync(this.trashDir)) {
-            fs.mkdirSync(this.trashDir, { recursive: true });
+    // `passive` opens a mount the home does not serve, for reading only: lib/backup archives a
+    // DISABLED mount through the same code path a live one takes, and must not turn it back on
+    // while doing so. It creates no folders, writes no root row, and starts none of the queues,
+    // sweeps, purges or prunes below — it takes the metadata.db handle (the Home's cached one) and
+    // builds the upload queue OBJECT, which is what answers "is there a staged copy newer than the
+    // stored object" (pendingStagedCopy, the freshest-first read every archive relies on). Only
+    // reconcile() uploads, and that stays behind the gate.
+    async init(opts?: { passive?: boolean }): Promise<void> {
+        const passive = opts?.passive === true;
+        if (!passive) {
+            if (!fs.existsSync(this.baseDir)) {
+                fs.mkdirSync(this.baseDir, { recursive: true });
+            }
+            if (!fs.existsSync(this.tmpDir)) {
+                fs.mkdirSync(this.tmpDir, { recursive: true });
+            }
+            if (!fs.existsSync(this.thumbsDir)) {
+                fs.mkdirSync(this.thumbsDir, { recursive: true });
+            }
+            if (!fs.existsSync(this.previewsDir)) {
+                fs.mkdirSync(this.previewsDir, { recursive: true });
+            }
+            if (this.isRemote && !fs.existsSync(this.stagingDir)) {
+                fs.mkdirSync(this.stagingDir, { recursive: true });
+            }
+            if (this.isPathBased && !fs.existsSync(this.trashDir)) {
+                fs.mkdirSync(this.trashDir, { recursive: true });
+            }
         }
 
         const dbPath = path.join(PATHS.DRIVE.ROOT, this.config.id, PATHS.DRIVE.METADATA_DB);
@@ -164,12 +174,8 @@ export class Mount {
         this.db = managedDb.db;
         this.history = new FileHistory(this.db, this.ownerId, this.id);
 
-        await this.ensureRootFolder();
-
-        // Stand up the upload queue and replay persisted pending uploads BEFORE the tmp sweep
-        // (invariant 5) so a restart or home-reopen resumes them; staging lives in stagingDir, which
-        // the sweep never touches. The destination key groups uploads to the same provider onto one
-        // concurrency limiter, so a slow bucket can't block uploads to other buckets.
+        // The destination key groups uploads to the same provider onto one concurrency limiter, so
+        // a slow bucket can't block uploads to other buckets.
         if (this.uploadDestinationKey) {
             this.uploadQueue = new UploadQueue({
                 db: this.db,
@@ -178,8 +184,15 @@ export class Mount {
                 destinationKey: this.uploadDestinationKey,
                 label: this.id,
             });
-            this.uploadQueue.reconcile();
         }
+
+        if (passive) return;
+
+        await this.ensureRootFolder();
+
+        // Replay persisted pending uploads BEFORE the tmp sweep (invariant 5) so a restart or
+        // home-reopen resumes them; staging lives in stagingDir, which the sweep never touches.
+        this.uploadQueue?.reconcile();
 
         // Stand up the content reindexer and kick it to drain rows left dirty by the v6 backfill or
         // an unclean shutdown (the dirty bit is the durable queue — same replay-on-open as uploads).

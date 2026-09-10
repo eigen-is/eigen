@@ -894,6 +894,7 @@ describe('Backup restore of a disabled mount', () => {
     // alone left its folder out of the archive entirely, and the restore then dropped it for good.
     const DISABLED_MOUNT_ID = 'restore-disabled';
     const SKIPPED_MOUNT_ID = 'restore-skipped';
+    const PASSIVE_MOUNT_ID = 'restore-passive';
 
     beforeAll(async () => {
         await getTestContext();
@@ -1000,5 +1001,41 @@ describe('Backup restore of a disabled mount', () => {
             await authedRequest(user.sessionToken, `/drive/${user.id}/mounts`),
         );
         expect(mounts.map((mount) => mount.id)).not.toContain(SKIPPED_MOUNT_ID);
+    });
+
+    // A disabled mount is archived through the same Mount an enabled one is, opened passively —
+    // and a backup is not what turns a mount an admin switched off back on. `tmp/` is the tell: a
+    // normal open creates it, along with the sweeps and purges that follow (Mount.init).
+    test('archiving a disabled mount writes nothing into its folder', async () => {
+        const user = await createUser('restore-passive@test.eigen.is', 'Restore Passive');
+        const home = await getHome(user.id);
+        const on = await home.settings.set({
+            mounts: {
+                [PASSIVE_MOUNT_ID]: { storageType: 'local', maxSizeMB: 100, enabled: true, name: 'Passive Mount' },
+            },
+        });
+        await home.drive.addMount(createMountConfig(PASSIVE_MOUNT_ID, on.mounts![PASSIVE_MOUNT_ID]));
+        const root = await assertJson<DrivePath>(
+            await authedRequest(user.sessionToken, `/drive/${user.id}/${PASSIVE_MOUNT_ID}/root`),
+        );
+        await driveUpload<DrivePath>(
+            user.sessionToken,
+            user.id,
+            PASSIVE_MOUNT_ID,
+            root.id,
+            new File([TEST_PNG_BYTES], 'passive.png', { type: 'image/png' }),
+        );
+        const off = await home.settings.set({
+            mounts: { [PASSIVE_MOUNT_ID]: { ...on.mounts![PASSIVE_MOUNT_ID], enabled: false } },
+        });
+        await home.drive.updateMount(createMountConfig(PASSIVE_MOUNT_ID, off.mounts![PASSIVE_MOUNT_ID]), false);
+
+        const mountDir = join(TEST_DATA_DIR, 'home', user.id, 'mounts', PASSIVE_MOUNT_ID);
+        rmSync(join(mountDir, 'tmp'), { recursive: true, force: true });
+
+        const artifact = await backup(user.id, new Date());
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+
+        expect(existsSync(join(mountDir, 'tmp'))).toBe(false);
     });
 });
