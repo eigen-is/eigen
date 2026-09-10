@@ -893,6 +893,7 @@ describe('Backup restore of a disabled mount', () => {
     // A mount an admin turned off is not in the drive's map: a snapshot that walked the live mounts
     // alone left its folder out of the archive entirely, and the restore then dropped it for good.
     const DISABLED_MOUNT_ID = 'restore-disabled';
+    const SKIPPED_MOUNT_ID = 'restore-skipped';
 
     beforeAll(async () => {
         await getTestContext();
@@ -938,5 +939,66 @@ describe('Backup restore of a disabled mount', () => {
             await authedRequest(user.sessionToken, `/drive/${user.id}/mounts`),
         );
         expect(mounts.map((mount) => mount.id)).not.toContain(DISABLED_MOUNT_ID);
+    });
+
+    // The other half of the ruling: an ENABLED mount whose storage is unreachable still fails the
+    // backup loudly, but a disabled one must not — its bucket is often unreachable BECAUSE an admin
+    // turned it off, and that would leave the home with no backup at all.
+    test('a disabled mount whose storage is unreachable is skipped, not a failure', async () => {
+        const user = await createUser('restore-skipped@test.eigen.is', 'Restore Skipped');
+        const home = await getHome(user.id);
+        const on = await home.settings.set({
+            mounts: { [SKIPPED_MOUNT_ID]: { storageType: 'local', maxSizeMB: 100, enabled: true, name: 'Offline' } },
+        });
+        await home.drive.addMount(createMountConfig(SKIPPED_MOUNT_ID, on.mounts![SKIPPED_MOUNT_ID]));
+        const root = await assertJson<DrivePath>(
+            await authedRequest(user.sessionToken, `/drive/${user.id}/${SKIPPED_MOUNT_ID}/root`),
+        );
+        await driveUpload<DrivePath>(
+            user.sessionToken,
+            user.id,
+            SKIPPED_MOUNT_ID,
+            root.id,
+            new File([TEST_PNG_BYTES], 'unreachable.png', { type: 'image/png' }),
+        );
+
+        // Turned off and pointed at a bucket nothing answers: what a mount an admin disabled after
+        // its storage died looks like on the next backup.
+        const off = await home.settings.set({
+            mounts: {
+                [SKIPPED_MOUNT_ID]: {
+                    ...on.mounts![SKIPPED_MOUNT_ID],
+                    storageType: 's3',
+                    enabled: false,
+                    s3Config: {
+                        endpoint: 'http://127.0.0.1:1',
+                        bucket: 'nowhere',
+                        prefix: '',
+                        accessKeyId: 'x',
+                        secretAccessKey: 'y',
+                    },
+                },
+            },
+        });
+        await home.drive.updateMount(createMountConfig(SKIPPED_MOUNT_ID, off.mounts![SKIPPED_MOUNT_ID]), false);
+
+        let manifest: BackupManifest | undefined;
+        const artifact = await backup(user.id, new Date(), (written) => {
+            manifest = written;
+        });
+        const summary = manifest?.mounts.find((mount) => mount.id === SKIPPED_MOUNT_ID);
+        expect(summary?.skipped).toContain('storage unreachable');
+        expect(summary?.files).toBe(0);
+
+        // The archive holds nothing for it, so the restore's own verify passes and the mount is
+        // simply not in the home it installs.
+        await restoreHome(artifact, user.id, `restore-skipped-${Date.now()}`);
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+
+        expect(existsSync(join(TEST_DATA_DIR, 'home', user.id, 'mounts', SKIPPED_MOUNT_ID))).toBe(false);
+        const mounts = await assertJson<{ id: string }[]>(
+            await authedRequest(user.sessionToken, `/drive/${user.id}/mounts`),
+        );
+        expect(mounts.map((mount) => mount.id)).not.toContain(SKIPPED_MOUNT_ID);
     });
 });

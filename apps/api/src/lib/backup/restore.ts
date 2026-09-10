@@ -157,10 +157,13 @@ export async function restoreHome(
                 onProgress?.('home files', 0, 1);
                 movePath(path.join(folder, ARCHIVE_HOME_DIR), homeDir);
                 onProgress?.('home files', 1, 1);
+                // A mount the backup skipped carries nothing: it stays disabled in the restored
+                // settings.json and its folder is simply not there (snapshot-home.ts).
+                const carried = manifest.mounts.filter((summary) => !summary.skipped);
                 const containerDatabases: VersionedDatabase[] = [];
-                for (const [index, summary] of manifest.mounts.entries()) {
+                for (const [index, summary] of carried.entries()) {
                     containerDatabases.push(...materializeMount(homeDir, summary, stamp));
-                    onProgress?.('mounts', index + 1, manifest.mounts.length);
+                    onProgress?.('mounts', index + 1, carried.length);
                 }
 
                 // What landed is still a database this server can open. Before the identity write,
@@ -170,7 +173,7 @@ export async function restoreHome(
                 // and whose retry would find that user and skip the insert for good.
                 checkRestoredDatabases(
                     homeDir,
-                    manifest.mounts.map((summary) => summary.id),
+                    carried.map((summary) => summary.id),
                     containerDatabases,
                 );
 

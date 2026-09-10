@@ -89,7 +89,8 @@ function isMountSummary(value: unknown): boolean {
         'files' in value &&
         typeof value.files === 'number' &&
         'bytes' in value &&
-        typeof value.bytes === 'number'
+        typeof value.bytes === 'number' &&
+        (!('skipped' in value) || typeof value.skipped === 'string')
     );
 }
 

@@ -19,7 +19,10 @@ export type BackupManifest = {
     server: { domain: string; orgId: string };
     // databases and files are disjoint, so entries.length === databases + files.
     counts: { databases: number; files: number; bytes: number };
-    mounts: { id: string; storageType: MountConfig['storageType']; files: number; bytes: number }[];
+    // `skipped` is set only for a mount the home has turned off whose storage could not be read: it
+    // carries the reason, holds no files, and a restore leaves it disabled and absent. An enabled
+    // mount's storage failure fails the whole backup instead.
+    mounts: { id: string; storageType: MountConfig['storageType']; files: number; bytes: number; skipped?: string }[];
     // Every file under the folder except manifest.json itself, relative to the folder root.
     entries: BackupEntry[];
     // Server archives only: one row per home folder, each keeping its own manifest. Reserved by the
