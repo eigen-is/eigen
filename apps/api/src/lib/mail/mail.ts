@@ -13,7 +13,7 @@ export async function getMailClient(user: User) {
     return home.mail;
 }
 
-export async function mailboxDeliver(to: string, file: ArrayBuffer): Promise<void> {
+export async function mailboxDeliver(to: string, file: ArrayBuffer): Promise<string> {
     // Write raw bytes verbatim — decoding to a string mangles non-UTF-8 mail (Latin-1/Shift-JIS/binary).
     const buffer = Buffer.from(file);
     const user = await getUserByEmail(to);
@@ -21,9 +21,11 @@ export async function mailboxDeliver(to: string, file: ArrayBuffer): Promise<voi
     const recipients = user ? [user] : isRoleAddress(to) ? await getOrgAdmins() : [];
     if (recipients.length === 0) throw new ApiError(404, `Recipient '${to}' not found`);
     // A throw partway through makes Postfix redeliver, duplicating for earlier admins — fine at this scale.
+    let uniqueId = '';
     for (const recipient of recipients) {
-        await (await getHome(recipient.id)).mail.mailboxDeliver(buffer);
+        uniqueId = await (await getHome(recipient.id)).mail.mailboxDeliver(buffer);
     }
+    return uniqueId;
 }
 
 export async function messageGet(user: User, messageId: string): Promise<Email> {
