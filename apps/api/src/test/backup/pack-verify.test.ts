@@ -7,6 +7,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import * as encoding from 'lib0/encoding';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
+import { auth } from '../../lib/auth/auth';
 import { extractArtifact, packFolder, readArtifactManifest, readSidecar, writeSidecar } from '../../lib/backup/archive';
 import { buildArtifactName, buildHomeFolderName } from '../../lib/backup/paths';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
@@ -416,5 +417,64 @@ describe('Backup pack and verify', () => {
         const files = await listFiles(dir);
         expect(files.length).toBeGreaterThan(0);
         expect(files.every((f) => f.startsWith(`${folderName}/home/mounts/${mountId}/`))).toBe(true);
+    });
+});
+
+describe('Backup verify stage 3 samples deterministically', () => {
+    // Stage 3 decodes the ten largest collab documents plus ten more, so two verifies of one folder
+    // have to judge the same twenty — otherwise the verdict on an archive changes between the backup
+    // that wrote it and the restore that reads it, and an admin cannot act on either.
+    const DOCUMENTS = 25;
+    const SAMPLED = 20;
+    let folder: string;
+
+    beforeAll(async () => {
+        const ctx = await getTestContext();
+        const email = `verify-sample-${Date.now()}@test.eigen.is`;
+        const password = 'testpassword123';
+        const signUp = await auth.api.signUpEmail({ body: { email, password, name: 'Verify Sample' } });
+        const signIn = await auth.api.signInEmail({ returnHeaders: true, body: { email, password } });
+        const token = (signIn.headers.get('set-cookie') || '').match(/better-auth\.session_token=([^;]+)/)![1];
+        const userId = signUp.user.id;
+        expect(ctx.app).toBeDefined();
+
+        const sampleMountId = (
+            await assertJson<{ id: string }[]>(await authedRequest(token, `/drive/${userId}/mounts`))
+        )[0].id;
+        const root = await assertJson<DrivePath>(await authedRequest(token, `/drive/${userId}/${sampleMountId}/root`));
+        for (let i = 0; i < DOCUMENTS; i++) {
+            await drivePost(token, userId, sampleMountId, `folder/${root.id}/create/doc`, {
+                fileName: `Sample ${i}`,
+            });
+        }
+
+        const target = mkdtempSync(join(TEST_DATA_DIR, 'sample-'));
+        await snapshotHome(await getHome(userId), target);
+        folder = join(target, buildHomeFolderName(userId));
+
+        // Every document gets a blob that cannot decode, so the failures name exactly the documents
+        // the sample picked — a random tail would name a different twenty on the second run.
+        for (const rel of await listFiles(folder)) {
+            if (!rel.endsWith('/data.db') || !rel.includes('.eigendoc/')) continue;
+            const db = new Database(join(folder, rel));
+            try {
+                db.run("INSERT INTO doc_updates (updateData) VALUES (X'DEADBEEF')");
+            } finally {
+                db.close();
+            }
+            await restateManifestEntry(folder, rel);
+        }
+    });
+
+    test('two verifies of one folder judge the same documents', async () => {
+        const first = await verifyFolder(folder);
+        const second = await verifyFolder(folder);
+
+        expect(first.status).toBe('failed');
+        const decodeFailures = (record: typeof first) =>
+            record.failures.filter((failure) => failure.includes('Yjs state could not be read')).sort();
+        // A sample, not the whole set: fewer failures than documents, and the same ones twice.
+        expect(decodeFailures(first).length).toBe(SAMPLED);
+        expect(decodeFailures(second)).toEqual(decodeFailures(first));
     });
 });

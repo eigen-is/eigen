@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { COLLAB_HOME_REPLACED_CLOSE } from '@workspace/lib/constants/collab';
+import { teamOwnerId } from '@workspace/lib/types';
 import type { BackupManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { eq } from 'drizzle-orm';
@@ -19,6 +20,8 @@ import {
 } from '../../lib/backup/paths';
 import { restoreHome } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
+import { getAvatarsDir } from '../../lib/config/paths';
+import { getServerConfig } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home/get-home';
 import { createMountConfig } from '../../lib/mount';
 import { paths } from '../../lib/mount/schema';
@@ -27,11 +30,15 @@ import { shareRegistry } from '../../lib/share/schema';
 import { saveThumbnail } from '../../lib/shared/thumbnails';
 import { createHomeFaultMount, registerFaultMount, unregisterFaultMount } from '../fault-storage-helpers';
 import {
+    addMember,
+    addTeamMount,
     assertJson,
     authedRequest,
+    createTeam,
     driveGetList,
     drivePost,
     driveUpload,
+    firstMountId,
     getTestContext,
     openMountMetadata,
     TEST_DATA_DIR,
@@ -623,6 +630,7 @@ describe('Backup restore after the user is deleted', () => {
     let mountId: string;
     let rootId: string;
     let artifact: string;
+    let avatarPath: string;
 
     beforeAll(async () => {
         ctx = await getTestContext();
@@ -653,6 +661,11 @@ describe('Backup restore after the user is deleted', () => {
             ).status,
         ).toBe(200);
 
+        // The avatar lives in data/server/avatars, outside the home folder, so it is the archive's
+        // job to carry it — nothing else would bring it back with a deleted user.
+        avatarPath = join(getAvatarsDir(), `${deleted.id}.webp`);
+        await Bun.write(avatarPath, TEST_PNG_BYTES);
+
         artifact = await backup(deleted.id, new Date());
     });
 
@@ -682,6 +695,21 @@ describe('Backup restore after the user is deleted', () => {
         const token = (signIn.headers.get('set-cookie') || '').match(/better-auth\.session_token=([^;]+)/);
         expect(token).toBeTruthy();
         expect(await rootNames(token![1], deleted.id, mountId, rootId)).toEqual([CHATS_FOLDER, 'gone-with-me.png']);
+
+        // Deleting the user took the avatar with it; the archive puts it back.
+        expect(existsSync(avatarPath)).toBe(true);
+        expect(new Uint8Array(await Bun.file(avatarPath).arrayBuffer())).toEqual(TEST_PNG_BYTES);
+    });
+
+    test('leaves an avatar the server already has alone', async () => {
+        // A picture the user changed after the backup is theirs, and a restore of their files is not
+        // a reason to revert it.
+        const newer = new TextEncoder().encode('a picture chosen after the backup');
+        await Bun.write(avatarPath, newer);
+
+        await restoreHome(artifact, deleted.id, `restore-avatar-${Date.now()}`);
+
+        expect(new Uint8Array(await Bun.file(avatarPath).arrayBuffer())).toEqual(newer);
     });
 });
 
@@ -721,6 +749,108 @@ describe('Backup restore when an auth row cannot be re-inserted', () => {
 
         expect(authDb.select().from(userScheme).where(eq(userScheme.id, user.id)).all()).toEqual([]);
         authDb.delete(apikeyScheme).where(eq(apikeyScheme.id, apiKeyId)).run();
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+    });
+});
+
+describe('Backup restore of a team home', () => {
+    // The primitive is owner-kind-agnostic, and a team home is the other half of what it covers:
+    // no auth rows, no mail, no contacts — one calendar and the mounts an admin gave it.
+    let ctx: TestCtx;
+    let ownerId: string;
+    let mountId: string;
+    let rootId: string;
+    let fileId: string;
+    let artifact: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        const orgId = getServerConfig()!.orgId;
+        await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ organizationId: orgId }),
+        });
+        const teamId = await createTeam(ctx, orgId, `Restore Team ${Date.now()}`);
+        await addMember(ctx, teamId, ctx.alice.user.id);
+        await addTeamMount(ctx, teamId, 'Team Restore Files');
+        ownerId = teamOwnerId(teamId);
+        const token = ctx.alice.user.sessionToken;
+        mountId = await firstMountId(token, ownerId);
+        rootId = (await assertJson<DrivePath>(await authedRequest(token, `/drive/${ownerId}/${mountId}/root`))).id;
+        fileId = (
+            await driveUpload<DrivePath>(
+                token,
+                ownerId,
+                mountId,
+                rootId,
+                new File([TEST_PNG_BYTES], 'team-file.png', { type: 'image/png' }),
+            )
+        ).id;
+        artifact = await backup(ownerId, new Date());
+    });
+
+    test('round-trips the team home, files and all', async () => {
+        const token = ctx.alice.user.sessionToken;
+        await driveUpload(
+            token,
+            ownerId,
+            mountId,
+            rootId,
+            new File([TEST_PNG_BYTES], 'after-the-team-backup.png', { type: 'image/png' }),
+        );
+        expect(await rootNames(token, ownerId, mountId, rootId)).toContain('after-the-team-backup.png');
+
+        await restoreHome(artifact, ownerId, `restore-team-${Date.now()}`);
+
+        const names = await rootNames(token, ownerId, mountId, rootId);
+        expect(names).toContain('team-file.png');
+        expect(names).not.toContain('after-the-team-backup.png');
+        const download = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${fileId}/download`);
+        expect(download.status).toBe(200);
+        expect(new Uint8Array(await download.arrayBuffer())).toEqual(TEST_PNG_BYTES);
+
+        // The state before it is beside the team home, under the team folder's own name.
+        const teamRoot = join(TEST_DATA_DIR, 'team');
+        const copies = readdirSync(teamRoot).filter((name) => name.startsWith(`${ownerId.slice('team_'.length)}.`));
+        expect(copies.length).toBe(1);
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+    });
+});
+
+describe('Backup restore over a live user', () => {
+    // A restore puts a home's data back; it never rewrites who somebody is. An id whose email no
+    // longer matches the archive is a different person, and their home is not this archive's to
+    // replace.
+    test('refuses when the email no longer matches the archive, and puts the home back', async () => {
+        const user = await createUser('restore-email@test.eigen.is', 'Restore Email');
+        const mountId = await firstMountId(user.sessionToken, user.id);
+        const rootId = (
+            await assertJson<DrivePath>(await authedRequest(user.sessionToken, `/drive/${user.id}/${mountId}/root`))
+        ).id;
+        await driveUpload(
+            user.sessionToken,
+            user.id,
+            mountId,
+            rootId,
+            new File([TEST_PNG_BYTES], 'still-mine.png', { type: 'image/png' }),
+        );
+        const artifact = await backup(user.id, new Date());
+        const before = await rootNames(user.sessionToken, user.id, mountId, rootId);
+
+        getAuthDrizzleDb()
+            .update(userScheme)
+            .set({ email: 'someone-else@test.eigen.is' })
+            .where(eq(userScheme.id, user.id))
+            .run();
+
+        await expect(restoreHome(artifact, user.id, `restore-email-${Date.now()}`)).rejects.toThrow(
+            /is now someone-else@test.eigen.is; the archive holds restore-email@test.eigen.is/,
+        );
+
+        // The identity write is the last step, so the rollback undoes everything before it.
+        expect(safetyCopies(user.id, FAILED_RESTORE_SUFFIX).length).toBe(1);
+        expect(await rootNames(user.sessionToken, user.id, mountId, rootId)).toEqual(before);
         rmSync(join(getBackupsDir(), artifact), { force: true });
     });
 });
