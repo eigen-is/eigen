@@ -58,7 +58,10 @@ const RESTORING_MARKER = 'restoring.json';
 // Written beside it the moment the install is done, before the mark clears. A marker without this
 // beside it means the process died with a home folder that is somewhere between the two states.
 const RESTORE_COMPLETE_MARKER = 'restore-complete.json';
-type RestoringMarker = { ownerId: string; homeDir: string; preRestoreName: string };
+// `preRestoreName` is null when there was no home folder to move aside (a restore of a deleted
+// user). The marker is still written: the folder the install is halfway through is not a home
+// either, and nothing but this says so.
+type RestoringMarker = { ownerId: string; homeDir: string; preRestoreName: string | null };
 
 function restoringMarkerPath(jobId: string): string {
     return path.join(getBackupStagingDir(jobId), RESTORING_MARKER);
@@ -88,9 +91,12 @@ function readRestoringMarker(markerPath: string): RestoringMarker | null {
     if (typeof value !== 'object' || value === null) return null;
     if (!('ownerId' in value) || !('homeDir' in value) || !('preRestoreName' in value)) return null;
     const { ownerId, homeDir, preRestoreName } = value;
-    if (typeof ownerId !== 'string' || typeof homeDir !== 'string' || typeof preRestoreName !== 'string') return null;
-    const parsed = parseSafetyCopyName(preRestoreName);
-    if (parsed?.kind !== 'pre-restore' || parsed.homeName !== path.basename(homeDir)) return null;
+    if (typeof ownerId !== 'string' || typeof homeDir !== 'string') return null;
+    if (preRestoreName !== null && typeof preRestoreName !== 'string') return null;
+    if (preRestoreName !== null) {
+        const parsed = parseSafetyCopyName(preRestoreName);
+        if (parsed?.kind !== 'pre-restore' || parsed.homeName !== path.basename(homeDir)) return null;
+    }
     return { ownerId, homeDir, preRestoreName };
 }
 
@@ -518,22 +524,20 @@ async function replaceHomeFolder(
 
         // There is no home folder to move aside on a restore after the user was deleted.
         const stamp = freeStamp(homeDir, new Date());
-        let movedAside: string | null = null;
-        if (fs.existsSync(homeDir)) {
-            movedAside = buildSafetyCopyName(homeDir, 'pre-restore', stamp);
-            // A process killed between here and the install leaves the user with no home folder, and
-            // only this note tells the next boot which folder to put back — the folder's presence
-            // alone means nothing (a deleted user's safety copies outlive them).
-            writeRestoringMarker(jobId, { ownerId, homeDir, preRestoreName: path.basename(movedAside) });
-            fs.renameSync(homeDir, movedAside);
-        }
+        const movedAside = fs.existsSync(homeDir) ? buildSafetyCopyName(homeDir, 'pre-restore', stamp) : null;
+        // Always, and before the move: a process killed between here and the install leaves a home
+        // folder that is either gone or half written, and only this note tells the next boot which
+        // it is — the folders' presence alone means nothing (a deleted user's safety copies outlive
+        // them, and an install writes the home folder early).
+        writeRestoringMarker(jobId, { ownerId, homeDir, preRestoreName: movedAside && path.basename(movedAside) });
+        if (movedAside) fs.renameSync(homeDir, movedAside);
 
         try {
             await install(stamp);
             // The home folder is whole from here: everything after this only lets go of it. A crash
             // before this line leaves a half-written folder that only the next boot can judge, and
             // the absence of this note is what tells it so.
-            if (movedAside) markRestoreComplete(jobId);
+            markRestoreComplete(jobId);
         } catch (error) {
             // Nothing is deleted, ever: the folder in place keeps a name of its own and the home as
             // it was goes back. A failure while putting it back must not hide the original one.
@@ -705,20 +709,26 @@ export function recoverInterruptedRestores(): void {
         if (!marker) continue;
         // The install finished; whatever the job did after that is nobody's business now.
         if (fs.existsSync(path.join(jobDir, RESTORE_COMPLETE_MARKER))) continue;
-        const aside = path.join(path.dirname(marker.homeDir), marker.preRestoreName);
-        // No copy to put back: the restore's own rollback already did it, or there is nothing left
-        // to reason about. Either way this must not move the home folder that is in place.
-        if (!fs.existsSync(aside)) continue;
+        const aside = marker.preRestoreName && path.join(path.dirname(marker.homeDir), marker.preRestoreName);
+        // A copy the restore's own rollback already put back is not there any more, and this must
+        // not move the home folder that is in place over it.
+        if (aside && !fs.existsSync(aside)) continue;
         // A folder that is there without the completion note is the half-written one: the extract
         // landed and the mount materialization, the checks or the identity writes did not. It keeps
-        // a name of its own, exactly as a failure the job itself caught would have left it, and the
-        // home as it was goes back. Nothing is deleted.
+        // a name of its own, exactly as a failure the job itself caught would have left it. Nothing
+        // is deleted — this holds whether or not there is a copy to put back afterwards.
         if (fs.existsSync(marker.homeDir)) {
             const parked = buildSafetyCopyName(marker.homeDir, 'failed-restore', freeStamp(marker.homeDir, new Date()));
             fs.renameSync(marker.homeDir, parked);
             console.error(
                 `[backup] a restore of ${marker.ownerId} was interrupted mid-install: the half-written folder is ${path.basename(parked)}`,
             );
+        }
+        if (!aside) {
+            // A restore of a deleted user: there was no home to move aside, so the only thing to do
+            // is refuse to leave the half-written folder standing as one.
+            console.error(`[backup] a restore of ${marker.ownerId} was interrupted: they have no home folder again`);
+            continue;
         }
         fs.renameSync(aside, marker.homeDir);
         console.error(

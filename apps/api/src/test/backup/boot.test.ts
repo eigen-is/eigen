@@ -23,8 +23,14 @@ describe('Backup boot', () => {
     }
 
     // What restoreHome writes before it moves a home aside, in the staging folder of its job — and,
-    // when the install got all the way through, the note it writes beside it.
-    function seedRestoringMarker(jobId: string, homeName: string, preRestoreName: string, complete = false): void {
+    // when the install got all the way through, the note it writes beside it. `preRestoreName` is
+    // null for a restore of a deleted user: there was no home folder to move aside.
+    function seedRestoringMarker(
+        jobId: string,
+        homeName: string,
+        preRestoreName: string | null,
+        complete = false,
+    ): void {
         const dir = join(getBackupsDir(), '.staging', jobId);
         mkdirSync(dir, { recursive: true });
         writeFileSync(
@@ -133,6 +139,22 @@ describe('Backup boot', () => {
         const parked = readdirSync(homeRoot).filter((name) => name.startsWith(`${id}${FAILED_RESTORE_SUFFIX}`));
         expect(parked.length).toBe(1);
         expect(readFileSync(join(homeRoot, parked[0], 'marker'), 'utf8')).toBe('half-written');
+        made.push(join(homeRoot, parked[0]));
+    });
+
+    // A restore of a deleted user has no folder to move aside, so there is nothing to put back —
+    // but the folder the install was writing is still not a home, and only the marker says so.
+    test('a marker with no pre-restore copy parks the half-written home', () => {
+        const id = 'bootrecoverHHHHHHHHHHHHHHHHHHHHH';
+        seedFolder(id, 'half-written, no copy');
+        seedRestoringMarker('boot-job-f', id, null);
+
+        recoverInterruptedRestores();
+
+        expect(existsSync(join(homeRoot, id))).toBe(false);
+        const parked = readdirSync(homeRoot).filter((name) => name.startsWith(`${id}${FAILED_RESTORE_SUFFIX}`));
+        expect(parked.length).toBe(1);
+        expect(readFileSync(join(homeRoot, parked[0], 'marker'), 'utf8')).toBe('half-written, no copy');
         made.push(join(homeRoot, parked[0]));
     });
 

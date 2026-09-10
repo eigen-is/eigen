@@ -329,6 +329,8 @@ describe('Boot recovery in a real boot', () => {
     const homeRoot = join(dataRoot, 'home');
     const interrupted = 'proclifecycleAAAAAAAAAAAAAAAAAAAA';
     const finished = 'proclifecycleBBBBBBBBBBBBBBBBBBBB';
+    // A restore of a deleted user: nothing was moved aside, so the marker names no copy.
+    const deleted = 'proclifecycleCCCCCCCCCCCCCCCCCCCC';
     const interruptedAside = `${interrupted}${PRE_RESTORE_SUFFIX}20260101-000000`;
     const finishedAside = `${finished}${PRE_RESTORE_SUFFIX}20260202-000000`;
     let api: ApiProcess;
@@ -340,7 +342,7 @@ describe('Boot recovery in a real boot', () => {
 
     // What replaceHomeFolder writes before it moves a home aside, and the note it adds once the
     // install is through.
-    function seedMarker(jobId: string, homeName: string, preRestoreName: string, complete: boolean): void {
+    function seedMarker(jobId: string, homeName: string, preRestoreName: string | null, complete: boolean): void {
         const dir = join(backupsDir, '.staging', jobId);
         mkdirSync(dir, { recursive: true });
         writeFileSync(
@@ -358,6 +360,8 @@ describe('Boot recovery in a real boot', () => {
         seedFolder(finished, 'the restored home');
         seedFolder(finishedAside, 'the home as it was');
         seedMarker('job-finished', finished, finishedAside, true);
+        seedFolder(deleted, 'half-written, no copy');
+        seedMarker('job-deleted', deleted, null, false);
         api = await startApi(dataRoot, backupsDir, 'boot-recovery');
     }, LISTEN_TIMEOUT_MS);
 
@@ -376,6 +380,14 @@ describe('Boot recovery in a real boot', () => {
         expect(parked.length).toBe(1);
         expect(readFileSync(join(homeRoot, parked[0], 'marker'), 'utf8')).toBe('half-written');
         expect(api.log()).toContain(`a restore of ${interrupted} was interrupted`);
+    });
+
+    test('a restore of a deleted user that died mid-install leaves no half-written home', () => {
+        expect(existsSync(join(homeRoot, deleted))).toBe(false);
+        const parked = readdirSync(homeRoot).filter((name) => name.startsWith(`${deleted}${FAILED_RESTORE_SUFFIX}`));
+        expect(parked.length).toBe(1);
+        expect(readFileSync(join(homeRoot, parked[0], 'marker'), 'utf8')).toBe('half-written, no copy');
+        expect(api.log()).toContain(`a restore of ${deleted} was interrupted`);
     });
 
     test('a restore that finished is left alone', () => {
