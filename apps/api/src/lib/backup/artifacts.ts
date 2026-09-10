@@ -1,10 +1,18 @@
+import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import type { BackupArtifact, BackupSafetyCopy } from '@workspace/lib/types/backup';
-import { ApiError } from '../core';
+import type { MountSettings } from '@workspace/lib/types/settings';
+import { ApiError, PATHS } from '../core';
+import { createMountConfig, createMountStorage } from '../mount/helpers';
 import { readSidecar, sidecarPath } from './archive';
 import { backupsDirPath, parseArtifactName, parseSafetyCopyName, resolveHomeDir } from './paths';
+import { readMountPathRows, storageKeyOf } from './snapshot-mount';
+
+// The home's own settings file, which the archive and every safety copy carry as-is: the mount
+// configuration a copy's stored objects have to be reached through.
+const HOME_SETTINGS_FILE = 'settings.json';
 
 // A safety copy holds a whole home; its size is a line in a list, not an accounting figure, so the
 // walk stops here and the number becomes a floor rather than taking a minute on a huge home.
@@ -135,18 +143,74 @@ export function deleteArtifact(artifactPath: string): void {
     fs.rmSync(sidecarPath(artifactPath), { force: true });
 }
 
-// The one folder delete in the whole feature. The name has to parse as a safety copy AND name this
-// owner's home folder; both hold before any path is built, let alone removed.
-export async function resolveSafetyCopyPath(ownerId: string, name: string): Promise<string> {
+// Every route that names a safety copy resolves it here first. The name has to parse as one AND
+// name this owner's home folder; both hold before any path is built, let alone removed or renamed.
+export async function resolveSafetyCopy(
+    ownerId: string,
+    name: string,
+): Promise<{ folder: string; homeDir: string; kind: BackupSafetyCopy['kind'] }> {
     const homeDir = await resolveHomeDir(ownerId);
     const parsed = parseSafetyCopyName(name);
     if (!parsed || parsed.homeName !== path.basename(homeDir)) {
         throw new ApiError(400, 'Not a safety copy of this home');
     }
-    return path.join(path.dirname(homeDir), name);
+    return { folder: path.join(path.dirname(homeDir), name), homeDir, kind: parsed.kind };
 }
 
-export function deleteSafetyCopy(folder: string): void {
+// The storage keys one mount's metadata.db points at. Read-write on purpose: a WAL database whose
+// owner is not holding it open has no -shm beside it, and a read-only open of one fails outright —
+// which is exactly the shape of a home folder moved aside.
+function storageKeysIn(metadataPath: string): Set<string> {
+    const db = new Database(metadataPath, { readwrite: true, create: false });
+    try {
+        const rows = readMountPathRows(db);
+        const byId = new Map(rows.map((row) => [row.id, row]));
+        return new Set(rows.filter((row) => row.type === 'file').map((row) => storageKeyOf(row, byId, false)));
+    } finally {
+        db.close();
+    }
+}
+
+// A remote mount keeps its bytes in a bucket, not in the home folder, so removing a safety copy has
+// to take the objects only that copy points at with it. A restore gives every restored row a fresh
+// key (lib/backup/restore.ts), so a live home and its safety copies never share one — and anything
+// the live metadata.db still names is left alone whatever this folder says about it.
+async function deleteRemoteObjects(folder: string, homeDir: string): Promise<void> {
+    const settingsPath = path.join(folder, HOME_SETTINGS_FILE);
+    if (!fs.existsSync(settingsPath)) return;
+    if (!fs.existsSync(homeDir)) {
+        console.warn(`[backup] ${path.basename(folder)}: no live home to compare against, leaving its objects alone`);
+        return;
+    }
+    const settings = JSON.parse(await fsp.readFile(settingsPath, 'utf8')) as {
+        mounts?: Record<string, MountSettings>;
+    };
+    for (const [id, mountSettings] of Object.entries(settings.mounts ?? {})) {
+        const config = createMountConfig(id, mountSettings);
+        if (config.storageType !== 's3') continue;
+        const mountDir = path.join(folder, PATHS.DRIVE.ROOT, id);
+        const copyDb = path.join(mountDir, PATHS.DRIVE.METADATA_DB);
+        const liveDb = path.join(homeDir, PATHS.DRIVE.ROOT, id, PATHS.DRIVE.METADATA_DB);
+        // Nothing to hold the copy's keys against: the mount is gone from the live home, and an
+        // object it may still hold is not this delete's to judge.
+        if (!fs.existsSync(copyDb) || !fs.existsSync(liveDb)) continue;
+        const live = storageKeysIn(liveDb);
+        const storage = createMountStorage(config, mountDir);
+        for (const key of storageKeysIn(copyDb)) {
+            if (live.has(key)) continue;
+            // One object that will not go must not strand the rest, nor the folder: the admin asked
+            // for it, and a stray object is recoverable garbage.
+            await storage.delete(key).catch((error: unknown) => {
+                console.error(`[backup] could not delete ${id}/${key}:`, error);
+            });
+        }
+    }
+}
+
+export async function deleteSafetyCopy(folder: string, homeDir: string): Promise<void> {
+    await deleteRemoteObjects(folder, homeDir).catch((error: unknown) => {
+        console.error(`[backup] could not clean up the stored objects of ${path.basename(folder)}:`, error);
+    });
     fs.rmSync(folder, { recursive: true, force: true });
     measuredBytes.delete(folder);
 }

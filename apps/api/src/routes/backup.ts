@@ -12,11 +12,11 @@ import {
     listArtifacts,
     listSafetyCopies,
     resolveArtifact,
-    resolveSafetyCopyPath,
+    resolveSafetyCopy,
 } from '../lib/backup/artifacts';
 import { getBackupJob, listBackupJobs, runArtifactVerify, runHomeBackup, startBackupJob } from '../lib/backup/jobs';
 import { getBackupsDir, getBackupTempPath, OWNER_ID, parseArtifactName } from '../lib/backup/paths';
-import { restoreHome } from '../lib/backup/restore';
+import { restoreHome, restoreSafetyCopy } from '../lib/backup/restore';
 import { ApiError } from '../lib/core';
 import { requireAdmin } from '../lib/core/access';
 import { contentDisposition } from '../lib/core/http';
@@ -232,10 +232,29 @@ export const backupRouter = new Elysia({ name: 'backup' })
         async ({ params, user }): Promise<{ success: boolean }> => {
             await requireAdmin(user.id);
             await requireRestorableHome(params.ownerId);
-            const folder = await resolveSafetyCopyPath(params.ownerId, params.name);
+            const { folder, homeDir } = await resolveSafetyCopy(params.ownerId, params.name);
             if (!fs.existsSync(folder)) throw new ApiError(404, 'Safety copy not found');
-            deleteSafetyCopy(folder);
+            await deleteSafetyCopy(folder, homeDir);
             return { success: true };
+        },
+        { auth: true },
+    )
+
+    .post(
+        '/admin/backup/safety/:ownerId/:name/restore',
+        async ({ params, user }): Promise<{ jobId: string }> => {
+            await requireAdmin(user.id);
+            await requireRestorableHome(params.ownerId);
+            // The kind is judged before the folder is looked for: a `.failed-restore-` copy is not a
+            // home this can put back, whether or not one by that name is there.
+            const { folder, kind } = await resolveSafetyCopy(params.ownerId, params.name);
+            if (kind !== 'pre-restore') throw new ApiError(400, 'Only a pre-restore copy can be restored');
+            if (!fs.existsSync(folder)) throw new ApiError(404, 'Safety copy not found');
+            const job = startBackupJob('restore', params.ownerId, user.id, async (started, onProgress) => {
+                await restoreSafetyCopy(params.ownerId, params.name, started.id, onProgress);
+                return params.name;
+            });
+            return { jobId: job.id };
         },
         { auth: true },
     );

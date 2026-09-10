@@ -10,7 +10,13 @@ import { eq } from 'drizzle-orm';
 import { user as userScheme } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
-import { buildArtifactName, buildHomeFolderName, getBackupsDir, PRE_RESTORE_SUFFIX } from '../../lib/backup/paths';
+import {
+    buildArtifactName,
+    buildHomeFolderName,
+    FAILED_RESTORE_SUFFIX,
+    getBackupsDir,
+    PRE_RESTORE_SUFFIX,
+} from '../../lib/backup/paths';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import * as verifyModule from '../../lib/backup/verify';
 import { getHome } from '../../lib/home/get-home';
@@ -164,6 +170,10 @@ describe('Backup routes', () => {
             [
                 `/admin/backup/safety/${target.id}/${target.id}${PRE_RESTORE_SUFFIX}20260101-000000`,
                 { method: 'DELETE' },
+            ],
+            [
+                `/admin/backup/safety/${target.id}/${target.id}${PRE_RESTORE_SUFFIX}20260101-000000/restore`,
+                { method: 'POST' },
             ],
         ];
         for (const [path, options] of calls) {
@@ -341,6 +351,56 @@ describe('Backup routes', () => {
         const del = await adminRequest(`/admin/backup/safety/${target.id}/${copy?.name}`, { method: 'DELETE' });
         expect(del.status).toBe(200);
         expect((await listArtifacts(target.id)).safetyCopies.some((entry) => entry.name === copy?.name)).toBe(false);
+    });
+
+    test('restores a pre-restore safety copy, and refuses one while another job runs', async () => {
+        await driveUpload(
+            target.sessionToken,
+            target.id,
+            mountId,
+            rootId,
+            new File([TEST_PNG_BYTES], 'undo-me.png', { type: 'image/png' }),
+        );
+        expect(
+            (await startAndFinish(`/admin/backup/artifacts/${artifactName}/restore`, { ownerId: target.id })).state,
+        ).toBe('done');
+        expect(await rootNames()).not.toContain('undo-me.png');
+        const copy = (await listArtifacts(target.id)).safetyCopies.find((entry) => entry.kind === 'pre-restore');
+        expect(copy).toBeDefined();
+
+        // A `.failed-restore-` folder is the half-written home of a restore that did not finish, not
+        // a home to put back — judged before the folder is even looked for.
+        const failedName = `${target.id}${FAILED_RESTORE_SUFFIX}20260101-000000`;
+        expect(
+            (await adminRequest(`/admin/backup/safety/${target.id}/${failedName}/restore`, { method: 'POST' })).status,
+        ).toBe(400);
+        const absent = `${target.id}${PRE_RESTORE_SUFFIX}20260101-000000`;
+        expect(
+            (await adminRequest(`/admin/backup/safety/${target.id}/${absent}/restore`, { method: 'POST' })).status,
+        ).toBe(404);
+
+        // One job per home: a backup of this home is running, so the restore never starts.
+        const { jobId } = await assertJson<{ jobId: string }>(
+            await adminRequest(`/admin/backup/home/${target.id}`, { method: 'POST' }),
+        );
+        const busy = await adminRequest(`/admin/backup/safety/${target.id}/${copy?.name}/restore`, { method: 'POST' });
+        expect(busy.status).toBe(409);
+        const running = await waitForJob(jobId);
+        expect(running.state).toBe('done');
+        expect((await adminRequest(`/admin/backup/artifacts/${running.artifact}`, { method: 'DELETE' })).status).toBe(
+            200,
+        );
+
+        const job = await startAndFinish(`/admin/backup/safety/${target.id}/${copy?.name}/restore`);
+        expect(job.state).toBe('done');
+        expect(job.kind).toBe('restore');
+        expect(job.artifact).toBe(copy?.name);
+        expect(await rootNames()).toContain('undo-me.png');
+
+        // The copy took the home's place, and the home as the artifact restore left it took its own.
+        const copies = (await listArtifacts(target.id)).safetyCopies;
+        expect(copies.map((entry) => entry.name)).not.toContain(copy?.name);
+        expect(copies.filter((entry) => entry.kind === 'pre-restore').length).toBe(1);
     });
 
     test('refuses a second upload of a name already in the folder and keeps the first', async () => {
