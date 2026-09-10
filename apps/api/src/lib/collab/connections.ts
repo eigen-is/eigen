@@ -1,4 +1,4 @@
-import { COLLAB_HOME_REPLACED_CLOSE } from '@workspace/lib/constants/collab';
+import { COLLAB_HOME_REPLACED_CLOSE, COLLAB_HOME_REPLACED_REASON } from '@workspace/lib/constants/collab';
 import type { ServerWebSocket } from 'bun';
 
 // Every open collab socket, grouped by the home that owns the document it edits. A CollabDocument
@@ -30,5 +30,5 @@ export function closeCollabConnectionsForHome(ownerId: string): void {
     const sockets = connectionsByOwner.get(ownerId);
     if (!sockets) return;
     connectionsByOwner.delete(ownerId);
-    for (const ws of sockets) ws.close(COLLAB_HOME_REPLACED_CLOSE, 'home-replaced');
+    for (const ws of sockets) ws.close(COLLAB_HOME_REPLACED_CLOSE, COLLAB_HOME_REPLACED_REASON);
 }

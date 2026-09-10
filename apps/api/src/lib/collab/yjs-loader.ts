@@ -106,9 +106,9 @@ export function loadYjsState(
     return materializeYjsState(readYjsStatePayload(managedDb), doc, label);
 }
 
-// Reads a snapshot data.db file (a versions/<timestamp>.db copy) and returns
-// its Yjs state as a single update. Opens the SQLite file directly so we don't
-// trigger ManagedDatabase's open-time migrations on an immutable archive copy.
+// Reads a data.db file nobody is serving — a versions/<timestamp>.db snapshot, or a container's
+// data.db inside a backup archive — and returns its Yjs state as a single update. Opens the SQLite
+// file directly so we don't trigger ManagedDatabase's open-time migrations on an immutable copy.
 // Unlike a live load, a corrupt blob here fails loud: silently skipping would
 // let a restore "succeed" into a half-empty doc (PROPOSAL_DATA_INTEGRITY seam F).
 //

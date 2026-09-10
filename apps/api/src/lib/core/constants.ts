@@ -13,6 +13,7 @@ export const PATHS = {
         THUMBS_DIR: 'thumbs',
         TMP_DIR: 'tmp',
         STAGING_DIR: 'staging',
+        PREVIEWS_DIR: 'previews',
         DOCS_DIR: 'docs',
     },
     MAIL: {
@@ -33,7 +34,6 @@ export const PATHS = {
         DB: 'eigen.calendar/calendar.db',
     },
     NOTIFICATIONS: {
-        ROOT: 'eigen.notifications',
         DB: 'eigen.notifications/notifications.db',
     },
 } as const;

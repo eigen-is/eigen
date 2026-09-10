@@ -15,8 +15,10 @@ import { setShutdownDrainDeadline } from './lib/sync';
 // not drained in time stays in pending_uploads and replays on the next boot.
 const SHUTDOWN_DRAIN_BUDGET_MS = 20_000;
 
-// A restore that died between moving the home aside and installing the archive left a note in its
-// staging folder; read it before the wipe takes the staging folders with it. Then clear them: a
+// Both before the server listens: a request that resolved a home while the recovery was still
+// deciding about it would open a half-written folder as if it were the home. A restore that died
+// between moving the home aside and installing the archive left a note in its staging folder, so
+// that is read first, before the wipe takes the staging folders with it. Then they are cleared: a
 // backup, verify or restore interrupted by a restart leaves a half-written folder nothing resumes.
 recoverInterruptedRestores();
 wipeBackupStaging();

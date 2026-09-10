@@ -2,13 +2,15 @@ import { isSearchableTextFile } from '@workspace/lib/constants';
 import type { DatabaseConfig } from '../core/managed-database';
 import * as schema from './schema';
 
-// The version that gave `pending_uploads` its `isDatabase` column. A restore writes those rows
+// The schema every mount's metadata.db is migrated to.
+const CURRENT_VERSION = 8;
+// And the version that gave `pending_uploads` its `isDatabase` column. A restore writes those rows
 // itself, so it refuses an archived metadata.db older than this rather than take the DEFAULT.
 export const PENDING_UPLOAD_KIND_VERSION = 8;
 
 export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'mount-metadata',
-    currentVersion: PENDING_UPLOAD_KIND_VERSION,
+    currentVersion: CURRENT_VERSION,
     schema,
     migrations: [
         {

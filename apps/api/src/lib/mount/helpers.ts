@@ -149,7 +149,9 @@ export function createMountConfig(id: string, settings: MountSettings): MountCon
 // the presence of a key is also what stands up the write-behind queue at all (Mount.init). Gated on
 // the storage TYPE, not on the credentials: `createMountConfig` passes a settings `s3Config` through
 // whatever the backend is, and a local mount carrying a stale one must not get a queue over its
-// LocalStorage. Infra strings only, never user data.
+// LocalStorage. An s3 mount with no credentials never reaches this — createMountStorage refuses to
+// build one a line earlier — so the second half of the condition narrows the type, it is not a
+// second answer to the same question. Infra strings only, never user data.
 export function buildUploadDestinationKey(config: MountConfig): string | undefined {
     if (config.storageType !== 's3' || !config.s3Config) return undefined;
     return `${config.s3Config.endpoint}/${config.s3Config.bucket}`;
@@ -160,11 +162,9 @@ export function buildUploadDestinationKey(config: MountConfig): string | undefin
 // with no Home to ask. `baseDir` is the mount's own folder; the s3 backend has no use for it.
 export function createMountStorage(config: MountConfig, baseDir: string): StorageBackend {
     let backend: StorageBackend;
-    if (config.storageType === 'local-key' || config.storageType === 'local') {
-        // LocalStorage is a strict superset of the flat-key backend; mount.ts gates all
-        // mkdir/rename/deleteDir calls behind isPathBased, so the extra methods are inert for local-key.
-        backend = new LocalStorage(baseDir);
-    } else if (config.storageType === 's3') {
+    if (config.storageType === 's3') {
+        // The one refusal of an s3 mount with no bucket to be: every caller builds its storage
+        // before anything else, so nothing downstream has to ask again.
         if (!config.s3Config) {
             throw new Error(
                 `Mount '${config.id}' uses S3 storage but no S3 configuration found. Configure S3 in admin settings first.`,
@@ -172,7 +172,9 @@ export function createMountStorage(config: MountConfig, baseDir: string): Storag
         }
         backend = new S3Storage(config.s3Config);
     } else {
-        throw new Error(`Storage type ${config.storageType} not yet supported`);
+        // LocalStorage is a strict superset of the flat-key backend; mount.ts gates all
+        // mkdir/rename/deleteDir calls behind isPathBased, so the extra methods are inert for local-key.
+        backend = new LocalStorage(baseDir);
     }
     // Passes the backend through untouched unless EIGEN_STORAGE_FAULT is set (never in production).
     return wrapWithStorageFault(backend);

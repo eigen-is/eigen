@@ -1,4 +1,8 @@
-import { COLLAB_HOME_REPLACED_CLOSE, COLLAB_STORAGE_UNAVAILABLE_CLOSE } from '@workspace/lib/constants/collab';
+import {
+    COLLAB_HOME_REPLACED_CLOSE,
+    COLLAB_HOME_REPLACED_REASON,
+    COLLAB_STORAGE_UNAVAILABLE_CLOSE,
+} from '@workspace/lib/constants/collab';
 import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
 import { type EffectiveMember, stripEigenExtension } from '@workspace/lib/types/drive';
 import type { ServerWebSocket } from 'bun';
@@ -233,7 +237,7 @@ export const collabRouter = new Elysia({
                 // retry. So they never share a close code, and the first is a class of its own rather
                 // than a message this route would have to match on.
                 if (err instanceof HomeRestoringError) {
-                    ws.close(COLLAB_HOME_REPLACED_CLOSE, 'home-replaced');
+                    ws.close(COLLAB_HOME_REPLACED_CLOSE, COLLAB_HOME_REPLACED_REASON);
                 } else if (err instanceof ApiError && err.status === 503) {
                     ws.close(COLLAB_STORAGE_UNAVAILABLE_CLOSE, 'storage-unavailable');
                 } else {

@@ -118,11 +118,11 @@ export async function writeTempWithHash(
             hasher.update(chunk);
             writer.write(chunk);
         });
-        await writer.end();
         return { size, hash: hasher.digest('hex') };
-    } catch (e) {
+    } finally {
+        // The handle closes whether the stream ran out or threw; a half-written temp is the
+        // caller's to delete.
         await writer.end();
-        throw e;
     }
 }
 
