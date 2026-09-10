@@ -31,6 +31,7 @@ import {
     drivePost,
     driveUpload,
     getTestContext,
+    openMountMetadata,
     TEST_DATA_DIR,
     TEST_PNG_BYTES,
 } from '../setup';
@@ -127,10 +128,7 @@ function safetyCopies(userId: string, suffix: string): string[] {
 
 // Where a flat-key mount stores one row's object: `paths.file` (Mount.getStorageKey).
 function storageKeyIn(ownerId: string, mountId: string, pathId: string): string {
-    const db = new Database(join(TEST_DATA_DIR, 'home', ownerId, 'mounts', mountId, 'metadata.db'), {
-        readwrite: true,
-        create: false,
-    });
+    const db = openMountMetadata(join(TEST_DATA_DIR, 'home', ownerId, 'mounts', mountId, 'metadata.db'));
     try {
         return db.query<{ file: string }, [string]>('SELECT file FROM paths WHERE id = ?').get(pathId)!.file;
     } finally {

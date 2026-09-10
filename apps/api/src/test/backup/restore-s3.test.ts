@@ -1,4 +1,3 @@
-import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -16,7 +15,15 @@ import {
     settleContainer,
     unregisterFaultMount,
 } from '../fault-storage-helpers';
-import { assertJson, authedRequest, driveUpload, getTestContext, TEST_DATA_DIR, TEST_PNG_BYTES } from '../setup';
+import {
+    assertJson,
+    authedRequest,
+    driveUpload,
+    getTestContext,
+    openMountMetadata,
+    TEST_DATA_DIR,
+    TEST_PNG_BYTES,
+} from '../setup';
 
 const MOUNT_ID = 'restore-s3';
 const PASSWORD = 'testpassword123';
@@ -27,7 +34,7 @@ const TEXT_BYTES = new TextEncoder().encode('a restored plain file, not a databa
 type PendingRow = { storageKey: string; stagingPath: string; isDatabase: number };
 
 function pendingUploadsOf(metadataPath: string): PendingRow[] {
-    const db = new Database(metadataPath, { readonly: true });
+    const db = openMountMetadata(metadataPath);
     try {
         return db.query<PendingRow, []>('SELECT storageKey, stagingPath, isDatabase FROM pending_uploads').all();
     } finally {
@@ -38,7 +45,7 @@ function pendingUploadsOf(metadataPath: string): PendingRow[] {
 // The key a restored row landed on. A restore onto a remote mount rekeys every row it carries
 // (lib/backup/restore.ts), so the keys this file checks only exist once the restore has run.
 function keyOf(metadataPath: string, pathId: string): string {
-    const db = new Database(metadataPath, { readonly: true });
+    const db = openMountMetadata(metadataPath);
     try {
         return db.query<{ file: string }, [string]>('SELECT file FROM paths WHERE id = ?').get(pathId)!.file;
     } finally {
@@ -47,7 +54,7 @@ function keyOf(metadataPath: string, pathId: string): string {
 }
 
 function fileKeysOf(metadataPath: string): string[] {
-    const db = new Database(metadataPath, { readonly: true });
+    const db = openMountMetadata(metadataPath);
     try {
         // An s3 mount stores flat keys, so the key of a file row is its own `file` value.
         return db
