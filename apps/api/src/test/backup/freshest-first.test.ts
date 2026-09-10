@@ -19,7 +19,7 @@ import {
     settleContainer,
     unregisterFaultMount,
 } from '../fault-storage-helpers';
-import { findOrFail, getTestContext, TEST_DATA_DIR, TEST_PNG_BYTES } from '../setup';
+import { createTestUser, findOrFail, getTestContext, TEST_DATA_DIR, TEST_PNG_BYTES } from '../setup';
 
 // The remote half of snapshotHome: an `s3` mount is materialized into the archive's data/ tree by
 // path, and wherever local bytes are newer than the stored object — a container database or a plain
@@ -81,8 +81,12 @@ async function snapshot(): Promise<{ manifest: BackupManifest; folder: string }>
 }
 
 beforeAll(async () => {
-    const ctx = await getTestContext();
-    home = await getHome(ctx.alice.user.id);
+    await getTestContext();
+    // A home of its own: every snapshot below walks the whole home, and alice's has by now
+    // collected what every earlier test file left in it — seconds per walk on CI, times the eight
+    // snapshots the storage-failure test takes.
+    const user = await createTestUser('backup-freshest@test.eigen.is', 'testpassword123', 'Backup Freshest');
+    home = await getHome(user.id);
     backingRoot = mkdtempSync(join(TEST_DATA_DIR, 'backup-s3-backing-'));
 
     ({ mount: staleMount, fault: staleFault } = createHomeFaultMount(home, STALE_MOUNT_ID, backingRoot));

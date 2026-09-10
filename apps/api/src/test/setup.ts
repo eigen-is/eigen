@@ -99,7 +99,7 @@ function createAuthenticatedClient(sessionToken: string) {
     });
 }
 
-async function createTestUser(email: string, password: string, name: string): Promise<TestUser> {
+export async function createTestUser(email: string, password: string, name: string): Promise<TestUser> {
     let userId: string;
     let userName: string;
 
