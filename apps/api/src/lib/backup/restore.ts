@@ -186,17 +186,17 @@ function materializeMount(
             if (isPathBased) {
                 // Usually the same file (`file` is the name), but migration v7 renamed the NAME of a
                 // deduplicated row and left its `file` alone, so the two differ there — and the mount
-                // resolves reads through `file`. The bytes moved aside with the folder, so the tree
-                // this writes into is empty and nothing can be overwritten.
+                // resolves reads through `file`. Nothing here can be overwritten: this mount's bytes
+                // moved aside with the folder.
                 const target = path.join(dataDir, storageKeyOf(row, byId, true));
                 if (target !== source) movePath(source, target);
                 continue;
             }
             // A flat-key backend addresses an object by `paths.file` alone, so every row that carries
-            // bytes gets a key of its own here: nothing a bucket already holds is written over, and
-            // the `.pre-restore-` copy beside the home keeps pointing at objects that still hold its
-            // bytes. `local-key` follows the same rule; its objects are files under the same key.
-            // The row is the read model the rest of this function keys off, so it moves with it.
+            // bytes gets a key of its own here: a restore never writes over what the bucket already
+            // holds, and the `.pre-restore-` copy beside the home keeps pointing at objects that
+            // still hold its bytes. `local-key` follows the same rule (its objects are files under
+            // the same flat key). The row is this function's read model, so it moves with it.
             row.file = buildStorageKey(`${row.id}-r${stamp}`, row.name);
             rekey.run(row.file, row.id);
             if (isRemote) {
