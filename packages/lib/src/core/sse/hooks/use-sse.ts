@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
+import { handleAdminSSEvent } from '@workspace/lib/admin';
 import { useAuth } from '@workspace/lib/auth';
 import { handleCalendarSSEvent } from '@workspace/lib/calendar';
 import { handleChatSSEvent } from '@workspace/lib/chat';
@@ -26,6 +27,7 @@ export function useSSE() {
             handleChatSSEvent(event, queryClient);
             handleCalendarSSEvent(event, queryClient, userId);
             handleNotificationSSEvent(event, queryClient, userId);
+            handleAdminSSEvent(event, queryClient);
         },
         [queryClient],
     );

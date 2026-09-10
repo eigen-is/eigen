@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1334 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1346 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -197,7 +197,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (248)
+## Hooks (256)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -206,10 +206,14 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useAdminGuests` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-admin-users.ts |
 | `useAdminUserList` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-admin-user-list.ts |
 | `useAdminUsersUsage` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-admin-user-list.ts |
+| `useBackupArtifacts` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
+| `useBackupJobs` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
 | `useCheckSetupS3` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-setup-status.ts |
 | `useCompleteSetup` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-setup-status.ts |
 | `useCreateTeam` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-teams.ts |
 | `useCreateUser` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-members.ts |
+| `useDeleteBackupArtifact` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
+| `useDeleteSafetyCopy` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
 | `useDeleteUser` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-members.ts |
 | `useDeleteWaitlistEntry` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-waitlist.ts |
 | `useHardenSetupS3` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-setup-status.ts |
@@ -220,10 +224,14 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useRemoveTeamMember` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-teams.ts |
 | `useResendWaitlistInvite` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-waitlist.ts |
 | `useResetUserPassword` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-members.ts |
+| `useRestoreBackup` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
 | `useSetupStatus` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-setup-status.ts |
+| `useStartBackup` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
 | `useTeams` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-teams.ts |
 | `useUpdateMemberRole` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-members.ts |
 | `useUpdateTeam` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-teams.ts |
+| `useUploadBackup` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
+| `useVerifyBackup` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
 | `useWaitlistEntries` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-waitlist.ts |
 | `useAppPasswords` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-app-passwords.ts |
 | `useAuth` | `@workspace/lib/auth` | packages/lib/src/core/auth/auth-context.tsx |
@@ -782,13 +790,15 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (588)
+## Utilities & constants (592)
 
 | Name | Import from | File |
 |------|-------------|------|
+| `handleAdminSSEvent` | `@workspace/lib/admin` | packages/lib/src/core/admin/sse-handlers.ts |
 | `ADMIN_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `api` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `API_HOST` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `backupApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `CALENDAR_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `calendarApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `CHAT_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
@@ -801,6 +811,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DRIVE_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `driveApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getAdminAppUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `getBackupArtifactUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `getBackupUploadUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getCalendarAppUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getChangelogUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getChatAppUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
