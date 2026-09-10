@@ -468,6 +468,30 @@ describe('Mount (local path-based storage)', () => {
     });
 });
 
+describe('Upload queue gating', () => {
+    // createMountConfig passes a settings s3Config through whatever the storage type is, and
+    // TeamHome.updateMount accepts one on a local mount. A write-behind queue over a LocalStorage
+    // backend would reroute every container write through staging, so the type is what decides.
+    test('a local mount carrying an s3Config gets no upload queue', async () => {
+        const config = {
+            ...createTestMountConfig('test-local-stale-s3', 'local'),
+            s3Config: {
+                endpoint: 'http://127.0.0.1:1',
+                bucket: 'stale',
+                accessKeyId: 'x',
+                secretAccessKey: 'y',
+                region: 'us-east-1',
+                prefix: '',
+            },
+        };
+        const mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
+        await mount.init();
+        expect(mount.isRemote).toBe(false);
+        expect(mount.uploadQueue).toBeUndefined();
+        expect(existsSync(join(TEST_DIR, 'mounts', config.id, 'staging'))).toBe(false);
+    });
+});
+
 describe('Name validation', () => {
     let mount: Mount;
     let rootId: string;

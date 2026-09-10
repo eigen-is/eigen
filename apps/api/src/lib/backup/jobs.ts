@@ -25,6 +25,8 @@ const FAILURES_IN_MESSAGE = 3;
 const SHUTDOWN_JOB_BUDGET_MS = 30_000;
 
 const jobs = new Map<string, BackupJob>();
+// Owners whose one-per-home slot is held by work that is not a job (withBackupJobSlot).
+const heldSlots = new Set<string>();
 // The same jobs while they run, with the promise to wait on. Kept apart from the map above, which
 // is serialized to the admin pane.
 const inFlight = new Map<string, { kind: BackupJob['kind']; settled: Promise<void> }>();
@@ -40,22 +42,42 @@ function poke(job: BackupJob): void {
     sendToHome(job.startedBy, { type: 'broadcast', event: buildBackupJobEvent(job.id, job.ownerId) }).catch(() => {});
 }
 
+// One piece of work per home at a time — a second backup while one is running would read a folder
+// the first is still walking, a second restore would move aside a folder the first is writing, and a
+// safety-copy delete overlapping a restore would judge the wrong home's keys as garbage.
+function assertHomeSlotFree(ownerId: string): void {
+    dropExpiredJobs();
+    if (heldSlots.has(ownerId)) throw new ApiError(409, 'A safety-copy delete of this home is running');
+    for (const running of jobs.values()) {
+        if (running.ownerId === ownerId && running.state === 'running') {
+            throw new ApiError(409, `A ${running.kind} of this home is already running`);
+        }
+    }
+}
+
+// Work that takes the same slot without being a job: the safety-copy delete reads the live home's
+// storage keys to decide what is garbage, and a restore swapping the folder underneath it would turn
+// that answer into "delete what the home now points at". It never sets the restoring mark — a delete
+// is not a user-facing outage — and it is awaited by its route, so the slot lives exactly as long.
+export async function withBackupJobSlot(ownerId: string, run: () => Promise<void>): Promise<void> {
+    assertHomeSlotFree(ownerId);
+    heldSlots.add(ownerId);
+    try {
+        await run();
+    } finally {
+        heldSlots.delete(ownerId);
+    }
+}
+
 // Runs `run` in the background and hands the caller the job to report back. Every run resolves to
-// the artifact it worked on, so a finished job names one whatever its kind. One job per home at a
-// time — a second backup while one is running would read a folder the first is still walking, and a
-// second restore would move aside a folder the first is writing.
+// the artifact it worked on, so a finished job names one whatever its kind.
 export function startBackupJob(
     kind: BackupJob['kind'],
     ownerId: string,
     adminId: string,
     run: (job: BackupJob, onProgress: SnapshotProgress) => Promise<string>,
 ): BackupJob {
-    dropExpiredJobs();
-    for (const running of jobs.values()) {
-        if (running.ownerId === ownerId && running.state === 'running') {
-            throw new ApiError(409, `A ${running.kind} of this home is already running`);
-        }
-    }
+    assertHomeSlotFree(ownerId);
 
     const job: BackupJob = {
         id: randomUUID(),

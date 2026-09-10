@@ -32,6 +32,11 @@ export function getBackupStagingDir(jobId: string): string {
     return dir;
 }
 
+// Everything one job staged: the unpacked archive, and the restoring marker if it got that far.
+export function wipeBackupStagingDir(jobId: string): void {
+    fs.rmSync(path.join(getStagingRoot(), jobId), { recursive: true, force: true });
+}
+
 // Called on server start: a job interrupted by a restart leaves a half-written folder behind,
 // and nothing ever resumes it. Creates nothing — at boot the backups folder may not exist yet.
 export function wipeBackupStaging(): void {
@@ -123,6 +128,12 @@ const SAFETY_COPY_SUFFIXES = [PRE_RESTORE_SUFFIX, FAILED_RESTORE_SUFFIX]
 const SAFETY_COPY_NAME = new RegExp(
     String.raw`^(?<homeName>.+)(?<suffix>${SAFETY_COPY_SUFFIXES})${STAMP_GROUPS}(?:-\d+)?$`,
 );
+
+// The folder a restore leaves beside the home, spelled in one place: `parseSafetyCopyName` reads
+// back exactly what this writes.
+export function buildSafetyCopyName(homeDir: string, kind: 'pre-restore' | 'failed-restore', stamp: string): string {
+    return `${homeDir}${kind === 'pre-restore' ? PRE_RESTORE_SUFFIX : FAILED_RESTORE_SUFFIX}${stamp}`;
+}
 
 export function parseSafetyCopyName(
     name: string,

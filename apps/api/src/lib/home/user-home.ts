@@ -3,7 +3,7 @@ import { Calendar } from '../calendar/calendar';
 import { getUserHomePath } from '../config/paths';
 import { getServerSettings, mapStorageType } from '../config/server-settings';
 import { Contacts } from '../contacts/contacts';
-import { JsonStore, LocalFilesystem } from '../core';
+import { JsonStore, LocalFilesystem, PATHS } from '../core';
 import { Drive } from '../drive';
 import { Mail } from '../mail/mail-domain';
 import { MaildirStore } from '../mail/maildir-store';
@@ -19,7 +19,7 @@ export class UserHome extends Home {
         this.homeDir = getUserHomePath(user.id);
         this.fs = new LocalFilesystem(this.homeDir);
 
-        this.settings = new JsonStore<UserSettings>(this.fs, 'settings.json', {});
+        this.settings = new JsonStore<UserSettings>(this.fs, PATHS.SETTINGS, {});
         this._contacts = new Contacts(this);
         this._mail = new Mail(this, new MaildirStore(this));
         this._drive = new Drive(this);

@@ -74,11 +74,18 @@ export function archivePath(row: MountPathRow, byId: Map<string, MountPathRow>):
     return segments.join('/');
 }
 
+// What a flat-key backend (`local-key`, `s3`) stores a row's object under: `file`, falling back to
+// the id for a row written before that column carried a value — Mount.getStorageKey's own rule.
+// A path-based mount needs the whole ancestor chain instead (storageKeyOf).
+export function flatStorageKey(row: Pick<MountPathRow, 'id' | 'file'>): string {
+    return row.file || row.id;
+}
+
 // Mirrors Mount.resolveStoragePath / getStorageKey, resolved from the tree we already hold rather
 // than one recursive-CTE query per file. Exported for restore, which puts every file back at the
 // key the restored mount will look for it under — one spelling of the rule for both directions.
 export function storageKeyOf(row: MountPathRow, byId: Map<string, MountPathRow>, isPathBased: boolean): string {
-    if (!isPathBased) return row.file || row.id;
+    if (!isPathBased) return flatStorageKey(row);
     const segments = row.file ? [row.file] : [];
     for (const parent of ancestors(row, byId)) {
         if (parent.parentId === null) break;
