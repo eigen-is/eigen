@@ -117,15 +117,17 @@ export function readMountPathRows(db: Database): MountPathRow[] {
     return db.query<MountPathRow, []>('SELECT id, file, name, type, parentId, trashedFrom FROM paths').all();
 }
 
-// A live paths table can hold none of this: validateName wrote every `name`, and every `file` is a
-// name or a `{id}.{ext}` key. An archived one arrived inside a file an admin uploaded, and every
-// path a restore builds is a join of those two columns — a `..` in either moved bytes out of the
-// mount (a flat-key mount stores under `file`) or an arbitrary server file into it (the archive
-// tree IS the name chain). So the archive is refused whole, before a restore reads a row of it.
+// A live paths table can hold none of this: validateName wrote every `name`, `file` is a name or a
+// `{id}.{ext}` key, and an id is a UUID. An archived one arrived inside a file an admin uploaded,
+// and every path a restore builds is a join of those three columns — a `..` or a separator in any
+// of them moved bytes out of the mount (a flat-key mount stores under `file`, a trashed row under
+// its id, an s3 row under a key built from its id), or an arbitrary server file into it (the
+// archive tree IS the name chain). So the archive is refused whole, before a restore reads a row.
 export function checkArchivedPathRows(rows: MountPathRow[]): string[] {
     const byId = new Map(rows.map((row) => [row.id, row]));
     const failures: string[] = [];
     for (const row of rows) {
+        if (!isUsableName(row.id)) failures.push(`path row "${row.id}" has an unusable id`);
         if (!isUsableName(row.name)) failures.push(`path row ${row.id} has an unusable name "${row.name}"`);
         // Empty is how a flat-key mount spells a folder row (Mount.buildFileValue).
         if (row.file !== '' && !isUsableName(row.file)) {

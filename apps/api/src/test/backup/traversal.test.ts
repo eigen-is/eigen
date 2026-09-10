@@ -174,7 +174,7 @@ describe('Backup refuses an archive whose paths table leaves the mount', () => {
 
     // The attacker's own archive with one `paths` row doctored, its manifest entry restated so
     // verify's transport stage passes and the row itself is what has to be caught.
-    async function hostileArchive(mountId: string, column: 'file' | 'name', value: string, rowId: string) {
+    async function hostileArchive(mountId: string, column: 'file' | 'name' | 'id', value: string, rowId: string) {
         const staging = mkdtempSync(join(TEST_DATA_DIR, 'traversal-rows-'));
         const manifest = await snapshotHome(await getHome(owner.id), staging);
         const hostileFolder = join(staging, buildHomeFolderName(owner.id));
@@ -263,6 +263,15 @@ describe('Backup refuses an archive whose paths table leaves the mount', () => {
         const record = await verifyFolder(folder);
         expect(record.status).toBe('failed');
         expect(record.failures.join(' ')).toContain(localFileId);
+    });
+
+    // An id is a path segment too: a trashed row is archived under `.trash/{id}.{ext}` and a restored
+    // s3 row takes an object key built from it.
+    test('verify names the row whose id leaves the mount', async () => {
+        const folder = await hostileArchive(keyMountId, 'id', escapePathFrom(keyMountId), keyFileId);
+        const record = await verifyFolder(folder);
+        expect(record.status).toBe('failed');
+        expect(record.failures.join(' ')).toContain('unusable id');
     });
 
     test('a restore of one throws and the file outside the home is untouched', async () => {

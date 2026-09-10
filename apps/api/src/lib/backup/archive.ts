@@ -235,7 +235,8 @@ export function readUnpackedHome(
 ): { folder: string; manifest: BackupManifest } {
     const folder = path.join(unpackDir, buildHomeFolderName(ownerId));
     if (!fs.existsSync(folder)) throw new ApiError(400, `${artifactName} is a backup of another home`);
-    const manifest = parseBackupManifest(fs.readFileSync(path.join(folder, ARCHIVE_MANIFEST_FILE), 'utf8'));
+    const manifestPath = path.join(folder, ARCHIVE_MANIFEST_FILE);
+    const manifest = fs.existsSync(manifestPath) ? parseBackupManifest(fs.readFileSync(manifestPath, 'utf8')) : null;
     if (!manifest) throw new ApiError(400, `${artifactName} carries no version 1 backup manifest`);
     if (manifest.ownerId !== ownerId) {
         throw new ApiError(400, `${artifactName} is a backup of another home (${manifest.ownerId})`);

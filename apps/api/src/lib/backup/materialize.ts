@@ -60,6 +60,16 @@ function schemaVersionOf(filePath: string): number {
     }
 }
 
+// Every path a restore derives from an archive's own paths table is resolved against that mount's
+// data folder first. Verify refuses a table that could leave the mount at all
+// (checkArchivedPathRows); this is the second lock on the same door, one resolve per path, so no
+// route in here can read or move a byte outside `data/`.
+function inMountData(dataDir: string, mountId: string, relPath: string): string {
+    const abs = resolveInside(dataDir, relPath);
+    if (!abs) throw new ApiError(400, `Mount ${mountId} names a path that leaves it: ${relPath}`);
+    return abs;
+}
+
 // Put one mount's files where the restored mount will look for them. The archive holds every file
 // under `data/` by path (what a `local` mount stores natively), so every backend re-derives its own
 // keys from the restored tree: a path-based mount its name chain, a `local-key` mount a flat key,
@@ -101,14 +111,7 @@ export function materializeMount(
         const rows = readMountPathRows(db);
         const byId = new Map(rows.map((row) => [row.id, row]));
         const managed = listManagedDatabases(rows);
-        // Every path below is built out of the archive's own paths table. Verify refuses a table
-        // that could leave the mount at all (checkArchivedPathRows); this is the second lock on the
-        // same door, one resolve per path, so no route into here can move a byte out of `data/`.
-        const inData = (relPath: string): string => {
-            const abs = resolveInside(dataDir, relPath);
-            if (!abs) throw new ApiError(400, `Mount ${summary.id} names a path that leaves it: ${relPath}`);
-            return abs;
-        };
+        const inData = (relPath: string): string => inMountData(dataDir, summary.id, relPath);
         // Every pending row names a staged copy on the source server that the archive does not carry.
         db.run('DELETE FROM pending_uploads');
 
@@ -392,7 +395,7 @@ export function containerDatabasesIn(homeDir: string, mountIds: string[]): Versi
             const isPathBased = rows.some((row) => row.type !== 'file' && row.parentId !== null && row.file !== '');
             for (const entry of listManagedDatabases(rows)) {
                 found.push({
-                    filePath: path.join(dataDir, storageKeyOf(entry.row, byId, isPathBased)),
+                    filePath: inMountData(dataDir, mountId, storageKeyOf(entry.row, byId, isPathBased)),
                     config: entry.config,
                 });
             }
