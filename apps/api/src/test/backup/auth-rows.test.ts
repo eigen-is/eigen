@@ -16,7 +16,7 @@ import { restoreHome } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home/get-home';
-import { authedRequest, getTestContext, TEST_DATA_DIR } from '../setup';
+import { authedRequest, createTestUser, getTestContext, TEST_DATA_DIR, type TestUser } from '../setup';
 
 // `auth.json` is the one part of an archive that writes to users3.db, and an archive is a file an
 // admin uploaded. Every row used to go in as it stood: a planted `member` row with the public org id
@@ -25,16 +25,6 @@ import { authedRequest, getTestContext, TEST_DATA_DIR } from '../setup';
 
 const PASSWORD = 'testpassword123';
 const PLANTED_ID = 'plantedattackerrowAAAAAAAAAAAAAA';
-
-type TestUser = { id: string; email: string; sessionToken: string };
-
-async function createUser(email: string, name: string): Promise<TestUser> {
-    const signUp = await auth.api.signUpEmail({ body: { email, password: PASSWORD, name } });
-    const signIn = await auth.api.signInEmail({ returnHeaders: true, body: { email, password: PASSWORD } });
-    const match = (signIn.headers.get('set-cookie') || '').match(/better-auth\.session_token=([^;]+)/);
-    if (!match) throw new Error(`no session cookie for ${email}`);
-    return { id: signUp.user.id, email, sessionToken: match[1] };
-}
 
 // One artifact of the home as it stands, with `auth.json` doctored the way an uploaded archive can
 // be. Its manifest entry is restated so the transport stage passes and the rows themselves are what
@@ -83,7 +73,7 @@ describe('Backup restore of the identity an archive carries', () => {
         const ctx = await getTestContext();
         admin = ctx.alice.user.sessionToken;
         orgId = getServerConfig()!.orgId;
-        owner = await createUser('backup-authrows@test.eigen.is', 'Backup Auth Rows');
+        owner = await createTestUser('backup-authrows@test.eigen.is', PASSWORD, 'Backup Auth Rows');
         await authedRequest(owner.sessionToken, `/drive/${owner.id}/mounts`);
         apiKeyId = (await auth.api.createApiKey({
             body: { name: 'auth-rows-app-password' },
@@ -146,7 +136,7 @@ describe('Backup restore of the identity an archive carries', () => {
     });
 
     test('an archive whose user row is not this owner is refused and inserts nothing', async () => {
-        const stranger = await createUser('backup-authrows-stranger@test.eigen.is', 'Auth Rows Stranger');
+        const stranger = await createTestUser('backup-authrows-stranger@test.eigen.is', PASSWORD, 'Auth Rows Stranger');
         await authedRequest(stranger.sessionToken, `/drive/${stranger.id}/mounts`);
         const artifact = await backupWithAuthRows(stranger.id, new Date(), (rows) => {
             rows['user'] = [{ ...rows['user'][0], id: PLANTED_ID, email: 'planted-only@test.eigen.is' }];

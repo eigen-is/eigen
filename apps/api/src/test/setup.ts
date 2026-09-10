@@ -61,7 +61,7 @@ export function collectSSE(userId: string): { events: SSEvent[]; stop: () => voi
     };
 }
 
-type TestUser = {
+export type TestUser = {
     id: string;
     email: string;
     name: string;

@@ -7,7 +7,6 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import * as encoding from 'lib0/encoding';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
-import { auth } from '../../lib/auth/auth';
 import { extractArtifact, packFolder, readArtifactManifest, readSidecar, writeSidecar } from '../../lib/backup/archive';
 import { buildArtifactName, buildHomeFolderName } from '../../lib/backup/paths';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
@@ -16,6 +15,7 @@ import { getHome } from '../../lib/home/get-home';
 import {
     assertJson,
     authedRequest,
+    createTestUser,
     drivePost,
     driveUpload,
     getTestContext,
@@ -430,12 +430,11 @@ describe('Backup verify stage 3 samples deterministically', () => {
 
     beforeAll(async () => {
         const ctx = await getTestContext();
-        const email = `verify-sample-${Date.now()}@test.eigen.is`;
-        const password = 'testpassword123';
-        const signUp = await auth.api.signUpEmail({ body: { email, password, name: 'Verify Sample' } });
-        const signIn = await auth.api.signInEmail({ returnHeaders: true, body: { email, password } });
-        const token = (signIn.headers.get('set-cookie') || '').match(/better-auth\.session_token=([^;]+)/)![1];
-        const userId = signUp.user.id;
+        const { id: userId, sessionToken: token } = await createTestUser(
+            `verify-sample-${Date.now()}@test.eigen.is`,
+            'testpassword123',
+            'Verify Sample',
+        );
         expect(ctx.app).toBeDefined();
 
         const sampleMountId = (

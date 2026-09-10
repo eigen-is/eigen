@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { auth } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
 import { buildArtifactName, buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
 import { restoreHome } from '../../lib/backup/restore';
@@ -19,6 +18,7 @@ import {
 import {
     assertJson,
     authedRequest,
+    createTestUser,
     driveUpload,
     getTestContext,
     openMountMetadata,
@@ -27,7 +27,6 @@ import {
 } from '../setup';
 
 const MOUNT_ID = 'restore-s3';
-const PASSWORD = 'testpassword123';
 // The fake bucket, outside the home so a restore of the home folder never touches it.
 const BACKING = join(TEST_DATA_DIR, 'restore-s3-backing');
 const TEXT_BYTES = new TextEncoder().encode('a restored plain file, not a database');
@@ -90,13 +89,11 @@ describe('Backup restore of an s3 mount', () => {
 
     beforeAll(async () => {
         await getTestContext();
-        const email = 'restore-s3@test.eigen.is';
-        const signUp = await auth.api.signUpEmail({ body: { email, password: PASSWORD, name: 'Restore S3' } });
-        const signIn = await auth.api.signInEmail({ returnHeaders: true, body: { email, password: PASSWORD } });
-        const match = (signIn.headers.get('set-cookie') || '').match(/better-auth\.session_token=([^;]+)/);
-        if (!match) throw new Error('no session cookie');
-        userId = signUp.user.id;
-        token = match[1];
+        ({ id: userId, sessionToken: token } = await createTestUser(
+            'restore-s3@test.eigen.is',
+            'testpassword123',
+            'Restore S3',
+        ));
 
         mkdirSync(BACKING, { recursive: true });
         const home = await getHome(userId);

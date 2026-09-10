@@ -27,6 +27,7 @@ import {
     assertJson,
     authedRequest,
     createTeam,
+    createTestUser,
     driveDelete,
     driveGetList,
     drivePost,
@@ -35,6 +36,7 @@ import {
     getTestContext,
     TEST_DATA_DIR,
     TEST_PNG_BYTES,
+    type TestUser,
 } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -468,17 +470,20 @@ describe('Backup snapshotHome', () => {
 });
 
 describe('Backup snapshotHome under contention', () => {
-    let ctx: TestCtx;
+    let owner: TestUser;
     let home: Awaited<ReturnType<typeof getHome>>;
     let mountId: string;
 
     const UPDATE_COUNT = 10;
 
     beforeAll(async () => {
-        ctx = await getTestContext();
-        home = await getHome(ctx.alice.user.id);
+        await getTestContext();
+        // A home of its own: each test here takes a full snapshot, and alice's home holds what every
+        // earlier test file left in it — seconds per walk by the time CI reaches this file.
+        owner = await createTestUser('backup-contention@test.eigen.is', 'testpassword123', 'Backup Contention');
+        home = await getHome(owner.id);
         const mounts = await assertJson<{ id: string }[]>(
-            await authedRequest(ctx.alice.user.sessionToken, `/drive/${ctx.alice.user.id}/mounts`),
+            await authedRequest(owner.sessionToken, `/drive/${owner.id}/mounts`),
         );
         mountId = mounts[0].id;
     });
@@ -486,7 +491,7 @@ describe('Backup snapshotHome under contention', () => {
     // The regression: falling back to a raw read of an open container's main file drops every commit
     // still sitting in the WAL, and the journal-mode reset then makes that loss permanent.
     test('waits out a held container lock and keeps WAL-resident commits', async () => {
-        const alice = ctx.alice.user;
+        const alice = owner;
         const root = await assertJson<DrivePath>(
             await authedRequest(alice.sessionToken, `/drive/${alice.id}/${mountId}/root`),
         );
@@ -553,7 +558,7 @@ describe('Backup snapshotHome under contention', () => {
     });
 
     test('skips a container database whose stored bytes are gone and finishes the snapshot', async () => {
-        const alice = ctx.alice.user;
+        const alice = owner;
         const root = await assertJson<DrivePath>(
             await authedRequest(alice.sessionToken, `/drive/${alice.id}/${mountId}/root`),
         );
@@ -587,7 +592,7 @@ describe('Backup snapshotHome under contention', () => {
             const manifest = await snapshotHome(home, target, (step) => {
                 if (step === 'home files') rmSync(raceDir, { recursive: true, force: true });
             });
-            const folder = join(target, buildHomeFolderName(ctx.alice.user.id));
+            const folder = join(target, buildHomeFolderName(owner.id));
             expect(manifest.entries.filter((e) => e.path.startsWith('home/backup-vanish/')).length).toBeLessThan(20);
             for (const entry of manifest.entries) expect(existsSync(join(folder, entry.path))).toBe(true);
         } finally {

@@ -36,6 +36,7 @@ import {
     assertJson,
     authedRequest,
     createTeam,
+    createTestUser,
     driveGetList,
     drivePost,
     driveUpload,
@@ -44,10 +45,10 @@ import {
     openMountMetadata,
     TEST_DATA_DIR,
     TEST_PNG_BYTES,
+    type TestUser,
 } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
-type TestUser = { id: string; email: string; sessionToken: string };
 
 const PASSWORD = 'testpassword123';
 // A share to an address with no account is what writes a share_registry row (acl-propagation.ts).
@@ -58,14 +59,6 @@ const CHATS_FOLDER = 'chats';
 // folders exist only in the paths table. The harness's default mount is local-key (setup uses
 // 'local-id'), so both key shapes are restored here.
 const LOCAL_MOUNT_ID = 'restore-local';
-
-async function createUser(email: string, name: string): Promise<TestUser> {
-    const signUp = await auth.api.signUpEmail({ body: { email, password: PASSWORD, name } });
-    const signIn = await auth.api.signInEmail({ returnHeaders: true, body: { email, password: PASSWORD } });
-    const match = (signIn.headers.get('set-cookie') || '').match(/better-auth\.session_token=([^;]+)/);
-    if (!match) throw new Error(`no session cookie for ${email}`);
-    return { id: signUp.user.id, email, sessionToken: match[1] };
-}
 
 // One artifact of the home as it stands now, in the backups folder restoreHome reads from.
 // `patch` doctors the unpacked folder before it is packed, which is how a restore is made to fail
@@ -176,7 +169,7 @@ describe('Backup restoreHome', () => {
 
     beforeAll(async () => {
         ctx = await getTestContext();
-        target = await createUser('restoreme@test.eigen.is', 'Restore Me');
+        target = await createTestUser('restoreme@test.eigen.is', PASSWORD, 'Restore Me');
 
         const mounts = await assertJson<{ id: string }[]>(
             await authedRequest(target.sessionToken, `/drive/${target.id}/mounts`),
@@ -525,7 +518,7 @@ describe('Backup restore refuses an archive this server cannot open', () => {
 
     beforeAll(async () => {
         await getTestContext();
-        user = await createUser('restore-schema@test.eigen.is', 'Restore Schema');
+        user = await createTestUser('restore-schema@test.eigen.is', PASSWORD, 'Restore Schema');
         const mounts = await assertJson<{ id: string }[]>(
             await authedRequest(user.sessionToken, `/drive/${user.id}/mounts`),
         );
@@ -603,7 +596,7 @@ describe('Backup restore refuses an archive this server cannot open', () => {
 
     test('a deleted user is not re-created by an archive that fails the check', async () => {
         const ctx = await getTestContext();
-        const doomed = await createUser('restore-schema-deleted@test.eigen.is', 'Restore Schema Deleted');
+        const doomed = await createTestUser('restore-schema-deleted@test.eigen.is', PASSWORD, 'Restore Schema Deleted');
         expect((await authedRequest(doomed.sessionToken, `/drive/${doomed.id}/mounts`)).status).toBe(200);
         const artifact = await backup(doomed.id, new Date(), (manifest, folder) =>
             stampSchemaVersion(manifest, folder, 'home/eigen.mail/mail.db', 999),
@@ -635,7 +628,7 @@ describe('Backup restore after the user is deleted', () => {
 
     beforeAll(async () => {
         ctx = await getTestContext();
-        deleted = await createUser('restore-deleted@test.eigen.is', 'Restore Deleted');
+        deleted = await createTestUser('restore-deleted@test.eigen.is', PASSWORD, 'Restore Deleted');
         const mounts = await assertJson<{ id: string }[]>(
             await authedRequest(deleted.sessionToken, `/drive/${deleted.id}/mounts`),
         );
@@ -717,7 +710,7 @@ describe('Backup restore after the user is deleted', () => {
 describe('Backup restore when an auth row cannot be re-inserted', () => {
     test('the whole identity rolls back, so a retry is not locked out by a half-inserted user', async () => {
         const ctx = await getTestContext();
-        const user = await createUser('restore-authclash@test.eigen.is', 'Restore Auth Clash');
+        const user = await createTestUser('restore-authclash@test.eigen.is', PASSWORD, 'Restore Auth Clash');
         await authedRequest(user.sessionToken, `/drive/${user.id}/mounts`);
         const apiKeyId = (await auth.api.createApiKey({
             body: { name: 'restore-app-password' },
@@ -824,7 +817,7 @@ describe('Backup restore over a live user', () => {
     // longer matches the archive is a different person, and their home is not this archive's to
     // replace.
     test('refuses when the email no longer matches the archive, and puts the home back', async () => {
-        const user = await createUser('restore-email@test.eigen.is', 'Restore Email');
+        const user = await createTestUser('restore-email@test.eigen.is', PASSWORD, 'Restore Email');
         const mountId = await firstMountId(user.sessionToken, user.id);
         const rootId = (
             await assertJson<DrivePath>(await authedRequest(user.sessionToken, `/drive/${user.id}/${mountId}/root`))
@@ -860,7 +853,7 @@ describe('Backup restore of the avatar', () => {
     // The avatar is the one file a restore writes outside the home folder, into the server-wide
     // avatars directory, and its name comes out of the archive.
     test("plants nothing for another user, and puts this user's own picture back", async () => {
-        const user = await createUser('restore-avatar@test.eigen.is', 'Restore Avatar');
+        const user = await createTestUser('restore-avatar@test.eigen.is', PASSWORD, 'Restore Avatar');
         await authedRequest(user.sessionToken, `/drive/${user.id}/mounts`);
         const own = join(getAvatarsDir(), `${user.id}.webp`);
         await Bun.write(own, TEST_PNG_BYTES);
@@ -901,7 +894,7 @@ describe('Backup restore of a disabled mount', () => {
     });
 
     test('a disabled mount comes back with its files, still disabled', async () => {
-        const user = await createUser('restore-disabled@test.eigen.is', 'Restore Disabled');
+        const user = await createTestUser('restore-disabled@test.eigen.is', PASSWORD, 'Restore Disabled');
         const home = await getHome(user.id);
         const on = await home.settings.set({
             mounts: {
@@ -946,7 +939,7 @@ describe('Backup restore of a disabled mount', () => {
     // backup loudly, but a disabled one must not — its bucket is often unreachable BECAUSE an admin
     // turned it off, and that would leave the home with no backup at all.
     test('a disabled mount whose storage is unreachable is skipped, not a failure', async () => {
-        const user = await createUser('restore-skipped@test.eigen.is', 'Restore Skipped');
+        const user = await createTestUser('restore-skipped@test.eigen.is', PASSWORD, 'Restore Skipped');
         const home = await getHome(user.id);
         const on = await home.settings.set({
             mounts: { [SKIPPED_MOUNT_ID]: { storageType: 'local', maxSizeMB: 100, enabled: true, name: 'Offline' } },
@@ -1007,7 +1000,7 @@ describe('Backup restore of a disabled mount', () => {
     // and a backup is not what turns a mount an admin switched off back on. `tmp/` is the tell: a
     // normal open creates it, along with the sweeps and purges that follow (Mount.init).
     test('archiving a disabled mount writes nothing into its folder', async () => {
-        const user = await createUser('restore-passive@test.eigen.is', 'Restore Passive');
+        const user = await createTestUser('restore-passive@test.eigen.is', PASSWORD, 'Restore Passive');
         const home = await getHome(user.id);
         const on = await home.settings.set({
             mounts: {
