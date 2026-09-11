@@ -5,14 +5,14 @@ type: how-to
 tags: [admin, members, users, roles, password]
 related: [admin/teams, admin/guests]
 order: 20
-updated: 2026-06-08
+updated: 2026-09-11
 ---
 
-Members are the people with full accounts on your Eigen server. You manage them from the [**Members**](/admin/members) page in Admin. You need an admin or owner role to do any of this.
+Members are the people with full accounts on your Eigen server. You manage them from the [**Users**](/admin/users) page in Admin. You need an admin or owner role to do any of this.
 
 ## Add a member
 
-1. Open [**Members**](/admin/members) in Admin.
+1. Open [**Users**](/admin/users) in Admin.
 2. Click the **+** button in the toolbar.
 3. Fill in the **Name**, **Username**, and **Password** fields. The username becomes the person's email address on your mail domain.
 4. Set the **Role**: **Member** for a regular account, or **Admin** to give the person admin access.
@@ -22,7 +22,7 @@ The account is ready immediately. Share the email address and the temporary pass
 
 ## Change a member's role
 
-1. On the [**Members**](/admin/members) page, click the person's name to open their detail panel.
+1. On the [**Users**](/admin/users) page, click the person's name to open their detail panel.
 2. Under **Role**, open the dropdown and choose **Admin** or **Member**.
 3. Click **Save**.
 

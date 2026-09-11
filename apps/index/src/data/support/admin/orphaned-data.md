@@ -5,22 +5,22 @@ type: how-to
 tags: [admin, users, orphans, cleanup]
 related: [admin/manage-members]
 order: 100
-updated: 2026-06-08
+updated: 2026-09-11
 ---
 
-Over time, your server may accumulate accounts that are not part of your organisation and are not guests. These are called orphaned accounts. They appear on the [**Orphans**](/admin/orphans) page in Admin, where you can review them and delete any you no longer need.
+Over time, your server may accumulate accounts that are not part of your organisation and are not guests. These are called orphaned accounts. They appear in the [**Users**](/admin/users) list in Admin, marked with a **no organisation** badge in place of a role, where you can review them and delete any you no longer need.
 
 You need an admin or owner role to do this.
 
 ## Find orphaned accounts
 
-1. Open the [**Orphans**](/admin/orphans) page in Admin.
+1. Open the [**Users**](/admin/users) page in Admin.
 
-A list of accounts appears on the left. If the list is empty, there are no orphaned accounts on your server.
+Orphaned accounts sit in the list alongside your members, but with a **no organisation** badge where a member would show a role. You can search by name or email address using the bar at the top.
 
 ## Review an account
 
-Click any name in the list to open the detail panel on the right. You can see the person's name, email address, and when the account was created.
+Click the account to open its detail panel on the right. You can see the person's name, email address, storage use, and when the account was created.
 
 ## Delete an account
 
@@ -31,7 +31,7 @@ Deleting an account permanently removes it and all its data. This cannot be undo
 </div>
 
 1. Click the account you want to remove.
-2. Click the trash icon in the toolbar.
-3. Read the confirmation and click **Delete**.
+2. Scroll to the **Danger zone** section at the bottom of the detail panel.
+3. Click **Delete user**, read the confirmation, and confirm.
 
-The account is deleted immediately. You can search the list by name or email address if you have many accounts to work through.
+The account is deleted immediately.

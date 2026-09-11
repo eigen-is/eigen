@@ -6,7 +6,7 @@ category: Basics
 tags: [admin, setup, getting-started, configuration]
 related: [admin/manage-members, admin/server-settings]
 order: 10
-updated: 2026-06-08
+updated: 2026-09-11
 ---
 
 When you open Eigen for the first time, the setup wizard runs automatically. It collects a few
@@ -63,10 +63,10 @@ If Eigen has already been configured, the wizard shows an **Already Configured**
 Once you are signed in with your admin account, Eigen opens the admin panel at [/admin](/admin).
 The sidebar gives you access to the main areas:
 
-- **Members**: view and manage all user accounts, add new users, and change roles.
+- **Users**: view and manage all user accounts, add new users, and change roles.
 - **Teams**: create groups of members to share content with whole teams at once.
 - **Guests**: see external guest accounts that have been granted access to specific files.
-- **Orphans**: review user records that are no longer linked to an active account.
+- A user's or team's detail pane includes a **Backup** section. See [Back up a user or team](/support/admin/back-up-home).
 
 As the server owner, you also see:
 

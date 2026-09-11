@@ -6,7 +6,7 @@ category: Sharing
 tags: [sheets, sharing, permissions, comments, collaboration]
 related: [sheets/get-started, drive/share-a-file, getting-started/how-sharing-works]
 order: 120
-updated: 2026-06-08
+updated: 2026-09-11
 ---
 
 A spreadsheet is private to you until you share it. You can give specific people access, share with a
@@ -98,10 +98,11 @@ The panel slides open on the right and lists every comment. Click a comment to o
 
 ## Filter comments
 
-At the top of the panel, two controls let you narrow the list:
+Click the filter button (the funnel icon) at the top of the panel to narrow the list:
 
-- **All / For you**: **For you** shows only comments where you have been mentioned in the thread.
-- **Open / Resolved / All**: filters by status. The default is **Open**.
+- **Assigned to**: show comments assigned to **Anyone**, to **Me**, to **Unassigned**, or to one particular person.
+- **Color**: show only comments with the colours you tick.
+- **Status**: show **Open**, **Resolved**, or **All** comments. The default is **Open**.
 
 ## Resolve or reopen a comment
 

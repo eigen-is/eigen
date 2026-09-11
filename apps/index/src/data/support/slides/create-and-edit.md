@@ -6,7 +6,7 @@ category: Basics
 tags: [slides, presentation, editing, text, images]
 related: [slides/get-started, slides/add-slides, slides/insert-content]
 order: 20
-updated: 2026-06-08
+updated: 2026-09-11
 ---
 
 Create a presentation in Slides, place text and images onto a 16:9 canvas, and adjust everything from the properties panel on the right.
@@ -18,7 +18,7 @@ Create a presentation in Slides, place text and images onto a 16:9 canvas, and a
 3. Type a name for your presentation in the **Slide name** field.
 4. Click **Create**. The presentation opens in a new tab.
 
-You can also create a presentation while you already have one open. Click **File** in the toolbar and choose **New slide**.
+You can also create a presentation while you already have one open. Click **File** in the toolbar and choose **New slides**.
 
 ## The editor layout
 
@@ -30,11 +30,11 @@ The editor has three areas:
 
 ## Add a text box
 
-1. Click **Add text** in the toolbar. A text box appears in the centre of the canvas.
-2. Double-click the text box to start typing. A floating toolbar appears with **Bold**, **Italic**, list, and other formatting buttons.
+1. Click the **Text** tool in the toolbar, then click the canvas where you want the text. A text box appears and you can start typing.
+2. While you type, a floating toolbar appears with **Bold**, **Italic**, **Bullet list**, **Numbered list**, **Quote**, and **Link**.
 3. Click outside the text box to leave edit mode.
 
-With a text box selected (but not in edit mode), the properties panel shows the full range of text options: font family, size, weight, style, decoration, horizontal and vertical alignment, letter spacing, line height, text colour, and highlight colour.
+With a text box selected (but not in edit mode), the properties panel shows the full range of text options: **Font**, **Size**, **Color**, **Bold**, **Italic**, **Underline**, **Strikethrough**, **Align**, **Vertical**, **Letter** spacing, **Line** height, and **Padding**.
 
 ## Add an image
 
@@ -54,18 +54,20 @@ Click an object to select it. Handles appear at the edges and corners.
 
 To enter exact values, edit the **X**, **Y**, **W**, **H**, and rotation fields in the properties panel.
 
-To select more than one object, hold **Cmd** (Mac) or **Ctrl** (Windows) and click each one. With multiple objects selected the properties panel adds an **Arrange** section with alignment and distribution tools.
+To select more than one object, hold **Shift** and click each one. With two or more objects selected the properties panel adds an **Align** section with alignment, distribution, and match-size tools.
 
 ## Change the layer order
 
 Right-click any object to open its context menu. From there you can:
 
-- **Move up** or **Move down** to shift the object one step in the stack.
+- **Bring forward** or **Send backward** to shift the object one step in the stack.
 - **Bring to front** or **Send to back** to move it to the very top or bottom.
+
+The properties panel also has an **Arrange** section with the same buttons, shown whenever you have a selection.
 
 ## Change the slide background
 
-With no object selected, the properties panel shows the background for the active slide. You can set a solid colour, a gradient, or an image. Use the **Apply to** dropdown to apply the background to just this slide, to this slide and all following ones, or to all slides at once, then click **Apply**.
+With no object selected, the properties panel shows the background for the active slide. You can set a solid colour, a gradient, or an image. Use the **Apply to** dropdown to choose **This slide**, **This and following**, or **All slides**, then click **Apply**.
 
 ## Undo and redo
 

@@ -37,6 +37,7 @@ export const SECTIONS: SectionConfig[] = [
     { id: 'docs', title: 'Docs', description: 'Editing and collaboration.', ...app('Docs') },
     { id: 'sheets', title: 'Sheets', description: 'Spreadsheets and formulas.', ...app('Sheets') },
     { id: 'slides', title: 'Slides', description: 'Building and presenting decks.', ...app('Slides') },
+    { id: 'vector', title: 'Vector', description: 'Drawings and diagrams.', ...app('Vector') },
     { id: 'calendar', title: 'Calendar', description: 'Events, invites, sharing.', ...app('Calendar') },
     { id: 'contacts', title: 'Contacts', description: 'Managing people and groups.', ...app('Contacts') },
     { id: 'chat', title: 'Chat', description: 'Messages and spaces.', ...app('Chat') },

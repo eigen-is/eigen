@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, teams, members]
 related: [admin/manage-members, admin/team-membership]
 order: 30
-updated: 2026-06-08
+updated: 2026-09-11
 ---
 
 Teams let you group members together so you can share files, folders, and calendars with everyone in the group at once. You manage teams from the [Admin app](/admin/teams).
@@ -27,7 +27,7 @@ The new team appears in the sidebar. Click it to open its detail panel.
 4. Click a person to add them. You can add one person at a time.
 5. Close the dialog when you are done.
 
-You can also add members by going to the **Members** page, selecting one or more people from the list, and dragging them onto a team name in the sidebar. This is faster when you want to add several people at once.
+You can also add members by going to the **Users** page, selecting one or more people from the list, and dragging them onto a team name in the sidebar. This is faster when you want to add several people at once.
 
 ## Remove a member from a team
 

@@ -1,30 +1,37 @@
 ---
 title: "Present your slides"
-description: "Start a full-screen presentation from the Slides editor and navigate between slides with the mouse."
+description: "Start a full-screen presentation from the Slides editor and move between slides with the mouse or the keyboard."
 type: how-to
 tags: [slides, presentation, full-screen]
 related: [slides/get-started, slides/add-slides]
 order: 60
-updated: 2026-06-08
+updated: 2026-09-11
 ---
 
-You can present your slides directly from the Slides editor, in full screen, without any extra software.
+You can present your slides straight from the Slides editor, in full screen, without any extra software.
 
 ## Start presenting
 
-Open the presentation you want to show, then click the **Present** button in the toolbar (the play icon). Your browser enters full-screen mode and the active slide fills the screen on a black background. The cursor hides itself so it does not distract your audience.
+Open the presentation you want to show, then click the **Present** button in the toolbar (the play icon). Your browser goes full screen and the active slide fills the screen on a black background. When you stop moving the mouse, the cursor hides so it does not distract your audience.
 
-Presentation mode starts from whichever slide was active in the editor. To start from a specific slide, click its thumbnail in the left panel before you click **Present**.
+The presentation starts from whichever slide is active in the editor. To start from a specific slide, click its thumbnail in the left panel first.
 
-## Navigate between slides
+## Move between slides
 
-- **Left-click** anywhere to advance to the next slide.
-- **Right-click** anywhere to go back to the previous slide.
+With the mouse, anywhere on the slide:
 
-There are no on-screen controls. The entire screen is a click target.
+- **Left-click** to go to the next slide.
+- **Right-click** to go back to the previous slide.
 
-## End the presentation
+With the keyboard:
 
-Click through the last slide to exit. Presentation mode closes and the editor returns to normal.
+- **Right arrow**, **Down arrow**, **Page Down**, or **Space** for the next slide.
+- **Left arrow**, **Up arrow**, or **Page Up** for the previous slide.
 
-You can also press **Escape** at any time to stop the presentation and return to the editor.
+A presentation clicker sends those same keys, so it works too. On a phone, tap the screen to move to the next slide.
+
+## Leave the presentation
+
+An **Exit present** button sits in the top-right corner. It appears when you enter and whenever you move the mouse, then fades away so it stays out of the slide. Click it to return to the editor.
+
+You can also press **Escape** at any time. And when you move past the last slide, the presentation ends on its own and the editor returns to normal.

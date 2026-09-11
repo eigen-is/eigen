@@ -122,16 +122,22 @@ function AppSwitcher({ isGuest }: { isGuest: boolean }) {
                     })}
                 </div>
 
-                {isAdmin && !isGuest && (
-                    <div className="border-t pt-3 mt-3">
+                <div className="border-t pt-3 mt-3">
+                    {isAdmin && !isGuest && (
                         <DropdownMenuItem asChild>
                             <a href={getAdminAppUrl()}>
                                 <Shield className="size-4.5" />
                                 Admin
                             </a>
                         </DropdownMenuItem>
-                    </div>
-                )}
+                    )}
+                    <DropdownMenuItem asChild>
+                        <a href={getSupportUrl()}>
+                            <LifeBuoy className="size-4.5" />
+                            Support
+                        </a>
+                    </DropdownMenuItem>
+                </div>
             </DropdownMenuContent>
         </DropdownMenu>
     );

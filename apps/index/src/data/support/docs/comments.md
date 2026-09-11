@@ -6,7 +6,7 @@ category: Collaboration
 tags: [docs, comments, collaboration, review]
 related: [docs/share-a-document, docs/create-and-edit]
 order: 80
-updated: 2026-06-08
+updated: 2026-09-11
 ---
 
 Comments let you leave a note on any piece of text in a document. Each comment has its own thread, so
@@ -38,17 +38,18 @@ the text and open the thread.
 
 ## Filter and find comments
 
-At the top of the sidebar, two controls let you narrow the list:
+Click the filter button (the funnel icon) at the top of the sidebar to narrow the list:
 
-- **All / For you**: **For you** shows only comments where you have been @mentioned in the thread.
-- **Open / Resolved / All**: filters by status. The default is **Open**.
+- **Assigned to**: show comments assigned to **Anyone**, to **Me**, to **Unassigned**, or to one particular person.
+- **Color**: show only comments with the colours you tick.
+- **Status**: show **Open**, **Resolved**, or **All** comments. The default is **Open**.
 
 ## Reply to a comment
 
 Click a comment in the sidebar (or click its highlighted text in the document) to open the thread. Type
 your reply in the **Reply...** box at the bottom and press Enter to send.
 
-To @mention someone, type `@` followed by their name. They will appear in the **For you** tab.
+To @mention someone, type `@` followed by their name.
 
 ## Resolve a comment
 

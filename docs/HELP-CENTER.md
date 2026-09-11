@@ -10,7 +10,7 @@
 Everything is in `apps/index` plus two small shared bits. There is no backend: no `apps/api` code, nothing to
 deploy or operate beyond the static files.
 
-- `apps/index/src/data/{support,blog}/**` — the content (13 support sections, ~120 articles).
+- `apps/index/src/data/{support,blog}/**` — the content (14 support sections, ~135 articles).
 - `apps/index/scripts/` — the build steps, with `scripts/lib/` for frontmatter, markdown and related articles.
 - `apps/index/src/components/support/` + `src/routes/support.*` — the pages.
 - `packages/lib/src/core/` — `api.ts` (`getSupportUrl`), `search/pagefind.ts`, and the palette's
@@ -96,7 +96,9 @@ same-origin behind Caddy, so `/pagefind` is reachable from any app.
 
 `getSupportUrl()` in `packages/lib/src/core/api.ts` resolves the index app's `/support`. It is wired into both
 topbar dropdowns (signed-in and guest) as a "Support" item with a `LifeBuoy` icon, as a plain `<a href>` cross-app
-link. The index app's signed-in redirect to `/space/` lives in a `useEffect` inside `routes/index.tsx`, so it is
+link. The same link sits as a "Support" row in the app switcher's footer next to "Admin" (for every user, guests
+included), and as a muted "Help and support" card at the end of the Space landing grid (`apps/space/src/routes/_auth.index.tsx`),
+deliberately outside the `apps` registry so it never shows up as an app tile. The index app's signed-in redirect to `/space/` lives in a `useEffect` inside `routes/index.tsx`, so it is
 route-scoped and `/support/*` and `/blog/*` are reachable while signed in without any exemption logic.
 
 ## Known drifts and open items

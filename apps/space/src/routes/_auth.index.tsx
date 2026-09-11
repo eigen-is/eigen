@@ -1,7 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router';
+import { getSupportUrl } from '@workspace/lib/api';
 import { apps } from '@workspace/lib/apps';
 import { Column, ColumnLayout, EigenCyclingLogo } from '@workspace/ui';
 import { Card, CardContent } from '@workspace/ui/components/card';
+import { LifeBuoy } from 'lucide-react';
 
 export const Route = createFileRoute('/_auth/')({
     component: HomeComponent,
@@ -56,6 +58,25 @@ function HomeComponent() {
                                         </Card>
                                     );
                                 })}
+                                <Card className="overflow-hidden hover:shadow-md transition-shadow">
+                                    <CardContent className="p-0">
+                                        <a href={getSupportUrl()} className="block p-3 md:p-4">
+                                            <div className="flex items-center gap-2 md:gap-3">
+                                                <div className="p-2 rounded-md text-muted-foreground">
+                                                    <LifeBuoy className="w-5 h-5 md:w-6 md:h-6" />
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-medium text-sm md:text-base text-muted-foreground">
+                                                        Help and support
+                                                    </h3>
+                                                    <p className="text-xs text-muted-foreground hidden md:block">
+                                                        Find answers and guides
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </a>
+                                    </CardContent>
+                                </Card>
                             </div>
                         </div>
                     </div>

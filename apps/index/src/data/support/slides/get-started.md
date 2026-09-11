@@ -4,10 +4,10 @@ description: "Create presentations in the browser, add text and images to a 16:9
 type: overview
 category: Basics
 tags: [slides, getting-started, presentation, canvas]
-related: [slides/create-and-edit, slides/present, slides/share-and-comment]
+related: [slides/create-and-edit, slides/draw-shapes-and-arrows, slides/present, slides/share-and-comment]
 crossSections: [getting-started]
 order: 10
-updated: 2026-06-08
+updated: 2026-09-11
 ---
 
 Slides is where you build presentations in Eigen. Each presentation is a collection of 16:9 slides you can fill with text and images, reorder in a panel on the left, and then present in full screen from the browser.
@@ -28,29 +28,29 @@ When you open a presentation, the editor has three areas:
 
 ## Add content to a slide
 
-The toolbar across the top has three buttons for adding content to the active slide:
+The toolbar across the top holds, from left to right, an **Add slide** button, a cluster of drawing tools, an **Add image** button, and **Present**:
 
 - **Add slide** adds a new blank slide at the end of the presentation.
-- **Add text** places a text box on the canvas. Double-click it to start typing.
+- The tool cluster in the middle has **Select** for picking objects up, **Text** for a text box, and the shape and line tools **Rectangle**, **Diamond**, **Ellipse**, **Arrow**, **Line**, and **Draw**. Pick **Text**, then click the canvas to place a box and start typing.
 - **Add image** opens a picker where you can upload an image from your computer or pick one from Drive.
 
-You can also drag an image file from your computer and drop it directly onto the canvas.
+You can also drag an image file from your computer and drop it directly onto the canvas. To learn more about the shapes and arrows, see [Draw shapes and arrows](/support/slides/draw-shapes-and-arrows).
 
 ## Edit text
 
-Double-click a text box to enter edit mode. A floating toolbar appears above the text with bold, italic, list, and other inline options. Click outside the text box to leave edit mode.
+Double-click a text box to enter edit mode. A floating toolbar appears with **Bold**, **Italic**, **Bullet list**, **Numbered list**, **Quote**, and **Link**. Click outside the text box to leave edit mode.
 
-Select a text box without double-clicking, and the properties panel on the right shows the full range of text options: font, size, bold, italic, underline, strikethrough, colour, highlight, horizontal and vertical alignment, letter spacing, and line height.
+Select a text box without double-clicking, and the properties panel on the right shows the full range of text options: **Font**, **Size**, **Color**, **Bold**, **Italic**, **Underline**, **Strikethrough**, **Align**, **Vertical**, **Letter** spacing, **Line** height, and **Padding**.
 
 ## Move, resize, and rotate objects
 
 Click an object to select it. Handles appear at the edges and corners. Drag the object to move it, drag a corner or edge handle to resize it, and drag the rotation handle at the top to rotate it. You can also type exact values into the **X**, **Y**, **W**, **H**, and rotation fields in the properties panel.
 
-Hold **Cmd** (Mac) or **Ctrl** (Windows) and click additional objects to select more than one. With multiple objects selected, the properties panel adds an **Arrange** section where you can align objects to each other or distribute them evenly.
+Hold **Shift** and click additional objects to select more than one. With two or more objects selected, the properties panel adds an **Align** section where you can align objects to each other, distribute them evenly, and match their size.
 
 Use the arrow keys to nudge a selected object by one pixel at a time. Press **Delete** or **Backspace** to remove a selected object.
 
-Right-click any object for a context menu with **Copy**, **Move up**, **Move down**, **Bring to front**, **Send to back**, and **Delete**.
+Right-click any object for a context menu with **Bring to front**, **Bring forward**, **Send backward**, **Send to back**, **Copy**, **Cut**, **Paste**, **Duplicate**, **Delete**, and **Add comment**.
 
 ## Change the slide background
 
