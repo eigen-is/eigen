@@ -82,7 +82,7 @@ export function UserDetail({ user, usage, organizationId }: UserDetailProps) {
     };
 
     return (
-        <div className="app-gutter space-y-6">
+        <div className="app-gutter space-y-6 h-full overflow-y-auto">
             <UserDetailHero name={user.name} email={user.email} userId={user.id} subtitle={user.email} />
 
             <div className="space-y-4">

@@ -14,7 +14,7 @@ import { formatDateTime } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
 import type { BackupArtifact, BackupJob, BackupSafetyCopy } from '@workspace/lib/types/backup';
 import { BACKUP_ARTIFACT_EXTENSION } from '@workspace/lib/validation';
-import { DeleteDialog, EmptyState, ErrorState, LoadingState, TooltipButton } from '@workspace/ui';
+import { DeleteDialog, ErrorState, LoadingState, TooltipButton } from '@workspace/ui';
 import { Alert, AlertDescription } from '@workspace/ui/components/alert';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
@@ -168,13 +168,15 @@ export function BackupSection({ ownerId }: BackupSectionProps) {
                 </div>
             </div>
 
-            <Alert variant="warning">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription>
-                    An archive holds everything in this home — files, mail, calendars and the stored storage
-                    credentials. It is a secret; keep it somewhere safe.
-                </AlertDescription>
-            </Alert>
+            {data && data.artifacts.length + data.safetyCopies.length > 0 && (
+                <Alert variant="warning">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>
+                        An archive holds everything in this home — files, mail, calendars and the stored storage
+                        credentials. It is a secret; keep it somewhere safe.
+                    </AlertDescription>
+                </Alert>
+            )}
 
             {running && (
                 <div className="space-y-1">
@@ -221,11 +223,7 @@ export function BackupSection({ ownerId }: BackupSectionProps) {
             ) : isError || !data ? (
                 <ErrorState message="Could not load the backups of this home." />
             ) : data.artifacts.length + data.safetyCopies.length === 0 ? (
-                <EmptyState
-                    icon={<Archive className="h-6 w-6" />}
-                    message="No backups yet"
-                    hint="Create one, or copy an archive into the server's backups folder."
-                />
+                <p className="text-sm text-muted-foreground">No backups yet.</p>
             ) : (
                 // Both lists in one branch: the empty state above stands for the whole section, and
                 // a home with no archive can still have a safety copy beside it.
