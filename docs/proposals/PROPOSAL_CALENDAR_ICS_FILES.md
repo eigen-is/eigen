@@ -34,7 +34,7 @@
 
 ## Alternatives considered
 
-- **Write the raw bytes into the vestigial `icsBlob` column and treat that as the truth.** Cheapest route to round-trip fidelity: no file layout, no reconcile, no async ripple. SQLite tools could inspect and export the stored ICS without Eigen, but it would not be independently accessible as standard files, which is this proposal's additional goal. It would also make an eventual move to files a second storage change.
+- **Write the raw bytes into the vestigial `icsBlob` column and treat that as the truth.** Cheapest route to round-trip fidelity: no file layout, no reconcile, no async ripple. SQLite tools could inspect and export the stored ICS without Eigen, but it would not be independently accessible as standard files, which is this proposal's additional goal. It would also make an eventual move to files a second storage change. Rejected as the end state, not as a first step: see [Two-step option](#two-step-option-icsblob-first-files-later-2026-09-11).
 - **Files, but keep `Calendar` synchronous with `node:fs` sync writes.** Avoids touching every caller. Rejected: it blocks the event loop on fsync (a few ms on a busy disk, on every event write, inside the request path), it diverges from `LocalFilesystem.writeAtomic` and from contacts, and the async ripple is mechanical (the routes already `await resolveCalendar`).
 - **Keep columns as truth and make the serializer lossless by storing an "unknown properties" JSON sidecar per event.** This is the same amount of parse/merge work with none of the file benefits, and every new property Eigen learns to model is a schema change. Rejected.
 - **Clone `contacts/card-store.ts` into `calendar/` and adapt.** Fastest to build, and exactly the third-copy smell AGENTS.md names. Rejected in favour of a shared core (Design § 1), with contacts as the regression net for the extraction.
@@ -216,6 +216,18 @@ Code references in this table are relative to `apps/api/src/lib/` unless explici
 4. **If this storage move is approved, settle it before implementing the feed store.** That avoids writing the persistence path twice, but does not make feed refresh a trivial N-file transaction or require all import work to wait indefinitely.
 5. **If fidelity is the immediate priority, raw ICS in SQLite is a legitimate smaller alternative.** It still needs correct component editing and protocol semantics, but avoids dual-store recovery. Choose files for independent file access and recovery value, not because fidelity requires them. The relative effort is not yet measured.
 
+## Two-step option: `icsBlob` first, files later (2026-09-11)
+
+Step 1 makes the raw ICS bytes the truth inside `calendar.db`. One VCALENDAR per UID (master plus overrides plus VTIMEZONEs) lives in `icsBlob` on the master row, and the columns become the index over it. The `X-EIGEN-*` stamps, the ical.js round-trip serialiser, in-place component editing, CalDAV GET serving the bytes verbatim with a hash ETag and PUT storing them, and the iMIP snapshot transport are all built exactly as in the file design. What step 1 does not need: phase 0 (the shared file+index core), the file store, the stat reconcile and rebuild pass, `syncGen` rotation, and the async flip of `Calendar` (SQLite writes stay synchronous). Of the audit blockers, the four about file recovery drop (move/delete recovery ordering, power-loss durability, a non-reused generation after DB loss, the shared-core recovery policy); per-exclusion state, override-only resource identity and the `data.notes`/`data.color` mapping remain.
+
+Backward compatibility is nearly free on step 1. The column already exists and is NULL on every row, so a row without a blob is serialised from its columns on first read (or once at open) and written back. One function, no version bump that drops data, no client resync. This means the "No backward compatibility" ruling below need not be exercised for calendar.
+
+Step 2, if ever wanted, writes each blob out as `eigen.calendar/<calendarId>/<uri>` and turns the index into the file-backed design of this proposal. The migration is a loop over rows, because the blob already is the serialised file. Everything step 1 built carries over; step 2 adds only the file layout, the reconcile/rebuild pass and the async flip.
+
+Rough relative effort, unmeasured, from a sizing done 2026-09-11 against the contacts build as calibration: the file design is about 8 to 11 agent-sessions, and step 1 alone about half that. Treat these as estimates.
+
+What step 1 gives up until step 2: standard `.ics` files an operator can read, back up or move without Eigen, and the symmetry with mail and contacts.
+
 ## Decisions (2026-09-03)
 
 Reinder's rulings:
@@ -224,7 +236,7 @@ Reinder's rulings:
 
 Design decisions of this proposal (revised on review the same day):
 
-- **Files, not `icsBlob`.** The vestigial column is removed rather than revived.
+- **Files, not `icsBlob`.** The vestigial column is removed rather than revived. (2026-09-11) The two-step route (blob first, files later) is also valid; whichever step ships first, step 1 keeps existing data. See [Two-step option](#two-step-option-icsblob-first-files-later-2026-09-11).
 - **One file per UID**, master plus overrides plus VTIMEZONEs, under `eigen.calendar/<calendarId>/<uri>`.
 - **Eigen-owned per-event state rides in the file** as `X-EIGEN-*` and is re-stamped on PUT; calendar-level state stays in the index.
 - **Ids stay random UUIDs**, stored as `X-EIGEN-ID` and read back on rebuild. A derived id was considered and rejected (see Alternatives).

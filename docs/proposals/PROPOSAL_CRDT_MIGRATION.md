@@ -2,7 +2,7 @@
 
 > **Status — Proposal, written 2026-07-05, re-verified against code 2026-07-06 (post storage-audit
 > landings), not started.** Flagship P0 item from
-> [ROADMAP.md](../ROADMAP.md) § Data-trust foundation. Eigen is live and its Yjs document formats
+> [ROADMAP-POST-1.md](../ROADMAP-POST-1.md) § Format-change work. Eigen is live and its Yjs document formats
 > (the root names and value shapes each app reads) are frozen. The day one of the four editors
 > needs to restructure its data — stickies grows swimlanes, sheets replaces its op log, docs
 > changes an attribute encoding — there is currently **no way to ship it**. This proposal designs

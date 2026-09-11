@@ -150,6 +150,6 @@ format (SHEETS.md § Snapshot format v2).
 Accepted drifts still standing:
 
 - Queued jobs retain their payloads rather than preparation closures — bounded in practice; the closure
-  refactor is parked on the [ROADMAP](ROADMAP.md) with its trigger.
+  refactor is parked on the [post-1.0 roadmap](ROADMAP-POST-1.md) with its trigger.
 - Preview conditional-format aggregate rules compute over the render window, not the full declared range
   (PREVIEWS.md § Compact Previews); the editor canvas is the fidelity reference.
