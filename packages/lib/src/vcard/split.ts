@@ -4,18 +4,19 @@
 import { VCardError } from './ast';
 
 export function splitVCards(text: string): string[] {
-    const body = text.startsWith('\uFEFF') ? text.slice(1) : text;
-    const n = body.length;
+    const n = text.length;
     const cards: string[] = [];
     let start = -1;
     let i = 0;
     while (i < n) {
-        const lineStart = i;
-        let j = i;
-        while (j < n && body[j] !== '\n' && body[j] !== '\r') j++;
-        const content = body.slice(i, j);
+        // A BOM belongs to a file, not to a card, and concatenated exports (`cat a.vcf b.vcf`) leave one in
+        // front of any card — so skip it wherever it sits, and keep it out of the card's own bytes.
+        const lineStart = text[i] === '﻿' ? i + 1 : i;
+        let j = lineStart;
+        while (j < n && text[j] !== '\n' && text[j] !== '\r') j++;
+        const content = text.slice(lineStart, j);
         if (j >= n) i = j;
-        else if (body[j] === '\r' && body[j + 1] === '\n') i = j + 2;
+        else if (text[j] === '\r' && text[j + 1] === '\n') i = j + 2;
         else i = j + 1;
 
         // Markers match whole physical lines only, so neither a value mentioning BEGIN:VCARD nor a folded
@@ -30,7 +31,7 @@ export function splitVCards(text: string): string[] {
         } else if (start === -1) {
             if (trimmed !== '') throw new VCardError('content outside the vCard envelope');
         } else if (marker === 'END:VCARD') {
-            cards.push(body.slice(start, i));
+            cards.push(text.slice(start, i));
             start = -1;
         }
     }

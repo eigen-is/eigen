@@ -19,6 +19,11 @@ describe('splitVCards', () => {
         const text = '\uFEFF' + [card('A', '\n'), '', card('B', '\n'), '', '', card('C', '\n')].join('\n') + '\n';
         expect(splitVCards(text).map((c) => c.split('\n')[2])).toEqual(['FN:A', 'FN:B', 'FN:C']);
     });
+    test('a BOM between cards belongs to neither and is not content outside the envelope', () => {
+        // `cat a.vcf b.vcf`: every exported file carries its own BOM, so one lands mid-file.
+        const text = '\uFEFF' + card('A') + '\r\n\uFEFF' + card('B') + '\r\n';
+        expect(splitVCards(text)).toEqual([card('A') + '\r\n', card('B') + '\r\n']);
+    });
     test('case-insensitive envelope markers', () => {
         expect(splitVCards('begin:vcard\r\nVERSION:3.0\r\nFN:x\r\nend:vcard\r\n')).toHaveLength(1);
     });

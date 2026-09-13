@@ -126,6 +126,11 @@ describe('useImportContacts', () => {
     test('a file that yielded nothing at all is an error, not a success with zeroes', async () => {
         expect(await importFile({ imported: 0, skipped: 0, failed: 0 })).toBe('error: No contacts found in this file');
     });
+
+    test('a file whose every card was unreadable says so, not that it held no contacts', async () => {
+        expect(await importFile({ imported: 0, skipped: 0, failed: 2 })).toBe('error: 2 contacts could not be read');
+        expect(await importFile({ imported: 0, skipped: 0, failed: 1 })).toBe('error: 1 contact could not be read');
+    });
 });
 
 // A minimal card, repeated: the preview only has to split and parse them, not make sense of them.

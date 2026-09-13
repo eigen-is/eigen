@@ -32,7 +32,13 @@ export function useResolvedUser({ userId, email, name, imageUrl }: UseResolvedUs
         email ||
         '';
     const resolvedEmail = (parsed.type === 'team' ? 'Team' : '') || publicUser?.email || email || '';
-    const avatarSrc = url ? `${API_HOST}/${url}` : getPublicAvatarUrl(userId || email || '');
+    // Only a relative cache path is the API's to serve. An absolute URL, or the inline `data:` photo a
+    // vCard preview builds from a card's PHOTO, is already the image and must not be prefixed.
+    const avatarSrc = !url
+        ? getPublicAvatarUrl(userId || email || '')
+        : /^(https?|data):/i.test(url)
+          ? url
+          : `${API_HOST}/${url}`;
 
     return {
         displayName,

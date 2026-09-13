@@ -3,6 +3,7 @@ import { contactsApi, getContactsExportUrl, getContactsImportUrl, getDriveDownlo
 import { useAuth } from '@workspace/lib/auth';
 import { IMPORT_MAX_BYTES, IMPORT_MAX_CARDS } from '@workspace/lib/constants/contact';
 import type { ContactTransferSource, ImportContactsResult, ParsedCard } from '@workspace/lib/types/contact';
+import { VCARD_MIMES } from '@workspace/lib/types/drive';
 import { parseVCard, splitVCards, transcodeTo30 } from '@workspace/lib/vcard';
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
@@ -11,11 +12,13 @@ import { downloadBlob, filenameFromDisposition } from '../../download';
 import { contactKeys, invalidateContactCreated } from './keys';
 
 // One phrasing for both import paths: a file from the disk and a file from Drive report the same three
-// counts. Nothing imported and nothing skipped means the file held no contact this book could take.
+// counts. Nothing imported and nothing skipped means the file held no contact this book could take —
+// unreadable cards say so, because the file did hold contacts and none of them landed.
 function reportImport(result: ImportContactsResult): void {
     const { imported, skipped, failed } = result;
     if (!imported && !skipped) {
-        toast.error('No contacts found in this file');
+        if (failed) toast.error(`${failed} contact${failed === 1 ? '' : 's'} could not be read`);
+        else toast.error('No contacts found in this file');
         return;
     }
     const parts = [`Imported ${imported} contact${imported === 1 ? '' : 's'}`];
@@ -71,7 +74,7 @@ export function useImportContacts() {
         mutationFn: async (file: File): Promise<ImportContactsResult> => {
             const response = await fetch(getContactsImportUrl(ownerId), {
                 method: 'POST',
-                headers: { 'content-type': 'text/vcard' },
+                headers: { 'content-type': VCARD_MIMES[0] },
                 body: file,
                 credentials: 'include',
             });
@@ -132,5 +135,7 @@ export function useVCardFile(ownerId: string, mountId: string, pathId: string, u
         },
         enabled: !!ownerId && !!mountId && !!pathId && size <= IMPORT_MAX_BYTES,
         staleTime: Infinity,
+        // A file the parser refuses fails the same way every time — a retry only re-downloads it.
+        retry: false,
     });
 }
