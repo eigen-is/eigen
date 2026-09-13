@@ -18,6 +18,7 @@ import { ensureAuthSchemaColumns, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getUserHomePath } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { atHome } from '../../lib/home/get-home';
+import { pullHomeSize } from '../../lib/home/home-relay';
 import * as s3Storage from '../../lib/storage/s3-storage';
 import { assertJson, authedRequest, getTestContext } from '../setup';
 
@@ -1023,5 +1024,39 @@ describe('GET /settings/users/usage', () => {
         expect(mine?.total.max).toBeGreaterThan(0);
         expect(mine?.drive.default).toBeDefined();
         expect(mine?.mailAndContacts).toBeDefined();
+    });
+
+    test('sizes a home without booting it', async () => {
+        const ctx = await getTestContext();
+        const db = getAuthDrizzleDb();
+        const now = new Date();
+        await db.insert(user).values({
+            id: 'unsized-home-id',
+            name: 'No Home',
+            email: 'no-home-usage@test.eigen.is',
+            emailVerified: true,
+            createdAt: now,
+            updatedAt: now,
+        });
+        const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/users/usage');
+        const usage = await assertJson<Record<string, HomeSizeResponse>>(res);
+        expect(usage['unsized-home-id']?.total.used).toBe(0);
+        expect(usage['unsized-home-id']?.total.max).toBeGreaterThan(0);
+        expect(atHome('unsized-home-id')).toBe(false);
+        expect(fs.existsSync(getUserHomePath('unsized-home-id'))).toBe(false);
+        await db.delete(user).where(eq(user.id, 'unsized-home-id'));
+    });
+
+    // The admin view sizes from the home's own files, the user's own storage page from their booted
+    // home: same paths table, same emails index, same cards and avatars, same quota resolution.
+    test('reads the same totals the home itself reports', async () => {
+        const ctx = await getTestContext();
+        const sizeRes = await authedRequest(ctx.alice.user.sessionToken, `/home/${ctx.alice.user.id}/size`);
+        const live = await assertJson<HomeSizeResponse>(sizeRes);
+        const sized = await pullHomeSize(ctx.alice.user.id);
+        expect(sized).toEqual(live);
+        // Both halves have to be reading something, or an always-zero reader would pass the above.
+        expect(sized.drive.default.used).toBeGreaterThan(0);
+        expect(sized.mailAndContacts.used).toBeGreaterThan(0);
     });
 });

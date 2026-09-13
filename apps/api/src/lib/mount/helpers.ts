@@ -1,3 +1,4 @@
+import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import type { MountConfig, MountSettings } from '@workspace/lib/types';
 import { EIGEN_DOCUMENT_TYPES } from '@workspace/lib/types/drive';
@@ -112,6 +113,23 @@ export function isSqliteFile(filePath: string): boolean {
         return false;
     } finally {
         if (fd !== null) fs.closeSync(fd);
+    }
+}
+
+// What Mount.getTotalSize answers, for a mount nobody has opened — the admin usage view sizes every
+// home at once, and booting a Home apiece is seconds each. Read-write on purpose: a WAL database
+// whose owner is not holding it open has no -shm beside it, and a read-only open of one fails
+// outright. Only ever used for this SELECT.
+export function readMountTotalSize(metadataPath: string): number {
+    if (!fs.existsSync(metadataPath)) return 0;
+    const db = new Database(metadataPath, { readwrite: true, create: false });
+    try {
+        const row = db
+            .query<{ total: number }, []>("SELECT COALESCE(SUM(size), 0) AS total FROM paths WHERE type = 'file'")
+            .get();
+        return row?.total ?? 0;
+    } finally {
+        db.close();
     }
 }
 
