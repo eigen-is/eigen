@@ -1,6 +1,6 @@
 import { MAIL_PREVIEW_CHARS } from '@workspace/lib/constants/mail';
 import type { EmailSummary, RecipientSummary } from '@workspace/lib/types/mail';
-import { and, count, desc, eq, inArray, lt, or, type SQL, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, lt, notInArray, or, type SQL, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { PATHS, sanitizeFtsQuery } from '../core';
 import type { ManagedDatabase } from '../core/managed-database';
@@ -199,7 +199,6 @@ export default class MailDB {
 
     searchMail(opts: MailSearchOptions): EmailSummary[] {
         const match = sanitizeFtsQuery(opts.q);
-        if (!match) return [];
 
         // Filter-first: when a structured filter is present, narrow to candidate ids via
         // mail.db's own indexed columns, then ask the FTS index to rank within that
@@ -224,6 +223,23 @@ export default class MailDB {
                 .all();
             candidateIds = rows.map((r) => r.id);
             if (candidateIds.length === 0) return [];
+        }
+
+        // Filter-only search (from:/to: with no text term): rank the candidates by recency,
+        // since there is no FTS query to score against.
+        if (!match) {
+            if (!candidateIds) return [];
+            const mailboxCond =
+                opts.mailboxes && opts.mailboxes.length > 0
+                    ? inArray(schema.emails.mailbox, opts.mailboxes)
+                    : notInArray(schema.emails.mailbox, SEARCH_EXCLUDED_MAILBOXES);
+            return this.db
+                .select()
+                .from(schema.emails)
+                .where(and(inArray(schema.emails.id, candidateIds), mailboxCond))
+                .orderBy(desc(schema.emails.date), desc(schema.emails.id))
+                .limit(opts.limit)
+                .all();
         }
 
         let mailboxFilter = sql``;
