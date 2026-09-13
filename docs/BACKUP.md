@@ -170,3 +170,15 @@ Use per-home backup for what the script cannot do: an archive of one user before
 - **Disk**: a restore transiently needs roughly twice the home's uncompressed size in the backups folder, for the decompressed tar and the extracted tree side by side, on top of the artifact itself. Safety copies then keep a second full copy of the home on the data disk (and, for S3 mounts, a second generation of objects in the bucket) until you delete them.
 - **One job per home at a time**, and a safety-copy delete holds the same slot.
 - **No scheduling, no retention, no off-server upload, no encryption at rest, and no incremental archives.** Those are phase ③ and later. Anything you want off the machine you copy off yourself, encrypted.
+
+## Implementation seams
+
+What an operator never needs, and someone changing this code always does.
+
+- **One primitive**, `snapshotHome` (`apps/api/src/lib/backup/snapshot-home.ts`), writes a complete storage-independent copy of one home into a folder. `apps/api/src/lib/backup/archive.ts` packs that folder, `apps/api/src/lib/backup/verify.ts` judges it in the three stages above, `apps/api/src/lib/backup/restore.ts` installs one, and `apps/api/src/lib/backup/recovery.ts` runs the boot recovery.
+- **Never pack through `Bun.Archive.write`.** It writes a lazy `Bun.file` entry as an EMPTY one and buffers the whole archive in memory, so `archive.ts` streams a pax tar itself. This is not a complication to be simplified away. Reading stays on `Bun.Archive`.
+- **The restore marker is `restoring.json`** in the job's staging folder, with the completion note beside it.
+- **`markHomeRestoring`** (`apps/api/src/lib/home/get-home.ts`) is what makes `getHome` refuse a home while its folder is replaced, which is why the refusal reaches every request-resolved surface at once. Its collab side is `closeCollabConnectionsForHome` — see [COLLAB.md](COLLAB.md).
+- **The SSE poke is `backup:job-updated`.** Job state itself lives in the in-memory map in `apps/api/src/lib/backup/jobs.ts`, so the event is only a nudge to re-poll; the backups folder and the sidecars are the record.
+- **Routes are a server-wide admin surface** (`apps/api/src/routes/backup.ts`), so `/admin/backup/*` takes the same carve-out as `settings.ts`: no `:ownerId` as the second path segment, `requireAdmin` in every handler instead. The three routes that name a home (`/admin/backup/home/:ownerId` and the two `/admin/backup/safety/:ownerId/:name` routes) carry it further down the path.
+- **`lib/backup/*` never imports `getHome`.** The route resolves the home and hands it to the job, so the backup layer stays a function of a home it is given.
