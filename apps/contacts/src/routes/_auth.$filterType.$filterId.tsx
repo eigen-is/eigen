@@ -9,7 +9,7 @@ import {
 } from '@workspace/lib/contacts';
 import { useMyTeams } from '@workspace/lib/home';
 import type { Contact } from '@workspace/lib/types/contact';
-import { isVCardFile } from '@workspace/lib/types/drive';
+import { isVCardFile, VCARD_ACCEPT } from '@workspace/lib/types/drive';
 import { Column, ColumnLayout, DeleteDialog, EmptyState, LoadingState } from '@workspace/ui';
 import { FileImportPicker } from '@workspace/ui/components/drive';
 import { LabelFilterHeader } from '@workspace/ui/components/labels';
@@ -25,9 +25,9 @@ type ContactsSearchParams = {
 
 export const Route = createFileRoute('/_auth/$filterType/$filterId')({
     component: ContactsRoute,
-    validateSearch: (search: Record<string, unknown>) => {
+    validateSearch: (search: Record<string, unknown>): ContactsSearchParams => {
         const contactId = typeof search.contactId === 'string' ? search.contactId : undefined;
-        return { contactId } as ContactsSearchParams;
+        return { contactId };
     },
 });
 
@@ -228,7 +228,7 @@ function ContactsRoute() {
                 open={importOpen}
                 onOpenChange={setImportOpen}
                 title="Import contacts"
-                accept=".vcf,text/vcard,text/x-vcard"
+                accept={VCARD_ACCEPT}
                 canPick={(item) => isVCardFile(item.mimeType, item.name)}
                 onDeviceFile={(file) => importMutation.mutate(file)}
                 onDrivePick={(item) =>

@@ -1,5 +1,6 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { getDriveDownloadUrl, getDriveItemUrl } from '@workspace/lib/api';
+import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { useImportContactsFromDrive } from '@workspace/lib/contacts';
 import { useCopyFiles, useTextPreview } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -68,7 +69,12 @@ export function FilePreview({
     const copyFiles = useCopyFiles(path.ownerId, path.mountId);
     const importContacts = useImportContactsFromDrive();
     const downloadTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
-    useEffect(() => () => downloadTimers.current.forEach(clearTimeout), []);
+    useEffect(
+        () => () => {
+            for (const timer of downloadTimers.current) clearTimeout(timer);
+        },
+        [],
+    );
 
     // Trap focus in the overlay, but hand it to the save-to-drive picker (a Radix dialog
     // portaled to body) while that is open.
@@ -91,7 +97,7 @@ export function FilePreview({
     };
 
     const downloadAll = () => {
-        downloadTimers.current.forEach(clearTimeout);
+        for (const timer of downloadTimers.current) clearTimeout(timer);
         downloadTimers.current = [];
         for (let i = 0; i < downloadableSiblings.length; i++) {
             const s = downloadableSiblings[i];
@@ -130,7 +136,8 @@ export function FilePreview({
                     <span className="truncate text-sm font-medium">{fileName}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                    {previewMode === 'vcard' && (
+                    {/* Over the ceiling the import itself 413s, and the body says so — offer nothing to click. */}
+                    {previewMode === 'vcard' && path.size <= IMPORT_MAX_BYTES && (
                         <NavButton
                             onClick={() =>
                                 importContacts.mutate({

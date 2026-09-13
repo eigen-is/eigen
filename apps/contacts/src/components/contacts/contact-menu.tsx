@@ -34,15 +34,16 @@ export type ContactMenuActions = {
 };
 
 // The single menu-item definition the contact list's context menu and the detail page's kebab both
-// render — same actions, same order on both surfaces (Send email, Start chat, Print, Edit, Delete,
-// Assign label). Send email and Start chat act on the whole selection, silently dropping your own
-// card (a mail/chat with yourself is pointless); print and edit are single-select-only; delete and
-// labels act on the whole batch. Owns the start-chat handoff and the wizard both surfaces open, so
-// mount `chatWizard` at a stable spot outside the menu content.
+// render — same actions, same order on both surfaces (Send email, Start chat, Print, Export, Edit,
+// Delete, Assign label). Send email and Start chat act on the whole selection, silently dropping your
+// own card (a mail/chat with yourself is pointless); print and edit are single-select-only; export is
+// gated on showExport (stored cards only) and delete and labels act on the whole batch. Owns the
+// start-chat handoff and the wizard both surfaces open, so mount `chatWizard` at a stable spot outside
+// the menu content.
 export function useContactMenu() {
     const openWriteEmailTo = useOpenWriteEmailTo();
     const startChatWith = useStartChatWith();
-    const { exportContacts } = useExportContacts();
+    const { exportContacts, isExporting } = useExportContacts();
     const { user } = useAuth();
     const [chatWith, setChatWith] = useState<{ email: string; name: string }[] | null>(null);
 
@@ -125,6 +126,7 @@ export function useContactMenu() {
                 )}
                 {canExport && (
                     <DropdownMenuItem
+                        disabled={isExporting}
                         onClick={() => {
                             void exportContacts(contacts.map((c) => c.id));
                             close();

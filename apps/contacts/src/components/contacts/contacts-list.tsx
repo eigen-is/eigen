@@ -29,7 +29,7 @@ export function ContactsListToolbar({
     onSortChange,
     onImportClick,
 }: ContactsListToolbarProps) {
-    const { exportContacts } = useExportContacts();
+    const { exportContacts, isExporting } = useExportContacts();
 
     return (
         <Toolbar>
@@ -60,7 +60,7 @@ export function ContactsListToolbar({
                         <DropdownMenuItem onClick={onImportClick}>
                             <Upload className="h-4 w-4 mr-2" /> Import contacts…
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => void exportContacts()}>
+                        <DropdownMenuItem disabled={isExporting} onClick={() => void exportContacts()}>
                             <Download className="h-4 w-4 mr-2" /> Export all contacts
                         </DropdownMenuItem>
                     </DropdownMenuContent>

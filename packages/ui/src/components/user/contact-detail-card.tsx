@@ -13,8 +13,6 @@ export type ContactDetailCardProps = {
 };
 
 function formatAddress(address: Address) {
-    if (!address) return '';
-
     const parts = [address.street, address.city, address.state, address.zipCode, address.country].filter(Boolean);
 
     return parts.join(', ');
@@ -26,7 +24,7 @@ export function ContactDetailCard({ contact, labels, className }: ContactDetailC
             <UserDetailHero
                 layout="profile"
                 name={`${contact.firstName} ${contact.lastName}`}
-                email={contact.email?.[0]}
+                email={contact.email[0]}
                 imageUrl={contact.avatar}
                 subtitle={contact.jobTitle && contact.company ? `${contact.jobTitle} at ${contact.company}` : undefined}
                 badges={
@@ -48,13 +46,13 @@ export function ContactDetailCard({ contact, labels, className }: ContactDetailC
                 <div className="space-y-4">
                     <h3 className="text-lg font-medium border-b pb-2">Contact Information</h3>
 
-                    {contact.email && contact.email.length > 0 && (
+                    {contact.email.length > 0 && (
                         <div className="space-y-2">
                             <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                                 <Mail className="h-4 w-4" />
                                 Email
                             </h4>
-                            {contact.email.map((email: string, index: number) => (
+                            {contact.email.map((email, index) => (
                                 <div key={index} className="pl-6">
                                     <a className="text-primary hover:underline" href={getMailComposeUrl(email)}>
                                         {email}
@@ -64,13 +62,13 @@ export function ContactDetailCard({ contact, labels, className }: ContactDetailC
                         </div>
                     )}
 
-                    {contact.phone && contact.phone.length > 0 && contact.phone[0].length > 0 && (
+                    {contact.phone.length > 0 && contact.phone[0].length > 0 && (
                         <div className="space-y-2">
                             <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                                 <Phone className="h-4 w-4" />
                                 Phone
                             </h4>
-                            {contact.phone.map((phone: string, index: number) => (
+                            {contact.phone.map((phone, index) => (
                                 <div key={index} className="pl-6">
                                     <a href={`tel:${phone}`} className="text-primary hover:underline">
                                         {phone}
@@ -93,13 +91,13 @@ export function ContactDetailCard({ contact, labels, className }: ContactDetailC
                         </div>
                     )}
 
-                    {Boolean(contact.birthday) && (
+                    {contact.birthday && (
                         <div className="space-y-2">
                             <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                                 <Calendar className="h-4 w-4" />
                                 Birthday
                             </h4>
-                            <div className="pl-6">{formatDateOnly(contact.birthday!)}</div>
+                            <div className="pl-6">{formatDateOnly(contact.birthday)}</div>
                         </div>
                     )}
                 </div>
@@ -108,7 +106,7 @@ export function ContactDetailCard({ contact, labels, className }: ContactDetailC
                     <div className="space-y-4">
                         <h3 className="text-lg font-medium border-b pb-2">Addresses</h3>
 
-                        {contact.address.map((address: Address, index: number) => (
+                        {contact.address.map((address, index) => (
                             <div key={index} className="space-y-2">
                                 <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                                     <MapPin className="h-4 w-4" />
