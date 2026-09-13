@@ -16,7 +16,7 @@ components and viewport gates, [COMMENTS.md](COMMENTS.md) for panel hosting, `on
 > ContextMenu primitive is deleted (all menus now on the singleton), drive row actions and
 > Move/Copy are touch-reachable, long-press opens the context menus on all five audited surfaces
 > via the shared `useLongPress` hook, hover-only affordances rest visible on coarse pointers
-> (policy: match the hover value; pattern documented in AGENTS.md), docs gained Insert → Comment,
+> (policy: match the hover value; pattern documented in LAYOUT.md § Hover-Only Icons), docs gained Insert → Comment,
 > drive trash confirms on coarse pointers only, and the mail cheat-sheet has a toolbar entry
 > point. Phase 5 (structural — findings 5 and 11) merged through `ede86e72`; what
 > it shipped is listed below. Browser-verified per phase at 390/360/768/1280 (Chromium). This doc
