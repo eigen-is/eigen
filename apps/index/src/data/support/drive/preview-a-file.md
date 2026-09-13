@@ -9,7 +9,7 @@ order: 60
 updated: 2026-09-13
 ---
 
-Drive can show you the contents of a file without opening a separate app or tab. Images, PDFs, videos, audio, and text files all have a built-in preview.
+Drive can show you the contents of a file without opening a separate app or tab. Images, PDFs, videos, audio, text files, and contact files all have a built-in preview.
 
 ## Open a file in the preview
 
@@ -18,6 +18,7 @@ Open a file by clicking it to select it, then clicking it again (or pressing **E
 - **Images, PDFs, videos, audio, and most other files** open in the full-screen preview overlay.
 - **Documents, spreadsheets, presentations, boards, and drawings** open straight away in their own app.
 - **Text and code files** (such as `.md`, `.txt`, `.json`) open in a text editor in the browser.
+- **Contact files** (`.vcf`) show each contact in the file as a card, which you can [import to Contacts](/support/contacts/import-contacts) from the preview.
 
 ## Use Quick preview from the menu
 
