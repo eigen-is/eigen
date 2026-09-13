@@ -109,7 +109,7 @@ function VCardHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; c
 }
 
 // The card's own name and email, not the address book's: this previews a file. UserAvatar is the
-// The same avatar the quick look resolves for this cardnerated initials.
+// The same avatar the quick look resolves for this card
 function VCardRow({ contact }: { contact: Contact }) {
     const email = contact.email[0];
     const title = `${contact.firstName} ${contact.lastName}`.trim() || email;
