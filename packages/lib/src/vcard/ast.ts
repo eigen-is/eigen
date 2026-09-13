@@ -1,18 +1,11 @@
 // Hand-rolled vCard content-line AST (RFC 2426 / RFC 6350 §3). Parses a vCard into logical lines and
 // serializes them back, keeping the exact source bytes of any line we don't rewrite so an untouched
 // card round-trips byte-for-byte through a CardDAV GET. The fold and TEXT-escape algorithms are the
-// shared MIME-directory primitives in @workspace/lib/content-line.
-import { foldLine, isIllegalC0, neuterParamValue } from '@workspace/lib/content-line';
+// shared MIME-directory primitives in ../core/content-line.
+import { foldLine, isIllegalC0, neuterParamValue } from '../core/content-line';
+import type { VCardLine } from '../types/contact';
 
 export class VCardError extends Error {}
-
-export type VCardLine = {
-    group: string | null; // 'item1' for 'item1.EMAIL;…', else null
-    name: string; // property name, UPPERCASED ('EMAIL')
-    params: [string, string][]; // parameter name (UPPERCASED) / raw value, original order, quotes stripped
-    value: string; // raw property value, unfolded, NOT unescaped
-    raw: string | null; // exact source slice incl. original folding/CRLFs; null for built lines
-};
 
 // First index of `ch` in `s` that sits outside a double-quoted section, or -1.
 function indexOfOutsideQuotes(s: string, ch: string): number {
@@ -181,4 +174,13 @@ export function splitDataUri(value: string): { mediaType: string | null; base64:
     const header = value.slice('data:'.length, comma);
     if (!header.endsWith(';base64')) return null;
     return { mediaType: header.slice(0, -';base64'.length) || null, base64: value.slice(comma + 1) };
+}
+
+// vCard 3.0 PHOTO TYPE is the bare, uppercased image subtype ('image/jpeg' -> 'JPEG').
+export function photoParams(mediaType: string): [string, string][] {
+    const subtype = mediaType.split('/')[1] ?? mediaType;
+    return [
+        ['ENCODING', 'b'],
+        ['TYPE', subtype.toUpperCase()],
+    ];
 }

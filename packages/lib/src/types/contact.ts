@@ -48,3 +48,37 @@ export type ContactSuggestion = {
     // Only set for kind: 'team' — the team the member was matched from.
     teamId?: string;
 };
+
+// One parsed vCard content line (RFC 2426 / RFC 6350 §3) as @workspace/lib/vcard produces it.
+export type VCardLine = {
+    group: string | null; // 'item1' for 'item1.EMAIL;…', else null
+    name: string; // property name, UPPERCASED ('EMAIL')
+    params: [string, string][]; // parameter name (UPPERCASED) / raw value, original order, quotes stripped
+    value: string; // raw property value, unfolded, NOT unescaped
+    raw: string | null; // exact source slice incl. original folding/CRLFs; null for built lines
+};
+
+export type ParsedCardPhoto =
+    | { kind: 'inline'; bytes: Uint8Array; mediaType: string | null }
+    | { kind: 'uri'; uri: string };
+
+// The projection parseVCard maps a card down to: the properties Eigen owns, plus the untouched AST in
+// `lines` so a write can merge edits back without disturbing properties we don't understand.
+export type ParsedCard = {
+    lines: VCardLine[];
+    version: string | null;
+    uid: string | null;
+    firstName: string;
+    lastName: string;
+    email: string[];
+    phone: string[];
+    company: string;
+    jobTitle: string;
+    address: Address[];
+    birthday: string; // normalized YYYY-MM-DD, or '' if absent/unparseable
+    notes: string;
+    categories: string[]; // unescaped names, comma-split
+    eigenId: string | null; // X-EIGEN-ID value, verbatim
+    isGroup: boolean; // KIND:group or X-ADDRESSBOOKSERVER-KIND:group
+    photo: ParsedCardPhoto | null;
+};

@@ -1,10 +1,11 @@
+import type { VCardLine } from '@workspace/lib/types/contact';
+import { parseVCardLines } from '@workspace/lib/vcard';
 import { uriKeyOf } from '../contacts/card-store';
 import type { Contacts } from '../contacts/contacts';
 import type { CardRow } from '../contacts/dav-store';
 import { projectAddressData } from './address-data';
 import { bookHref, cardHref } from './discovery';
 import { matchCard, UnsupportedCollationError, UnsupportedFilterError } from './query-filter';
-import { parseVCardLines, type VCardLine } from './vcard-ast';
 import {
     addressDataProp,
     cardEtagProp,

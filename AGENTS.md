@@ -41,7 +41,7 @@ Two things that aren't written down anywhere else: the API serves every app from
 - **The backend imports lib through React-free subpaths, never `core/` domain barrels** — every
   `@workspace/lib/<domain>` barrel re-exports React hooks, so importing one from `apps/api` pulls React in at
   module-eval. BE-safe by design: `types/*`, `constants`(`/*`), `validation`, `sheets`(`/*`),
-  `vector`(`/*`), `background`, `docs/eigendoc`, and the React-free leaf modules (`content-line`, `date`, `format`, `html`). For a React-free
+  `vcard`(`/*`), `vector`(`/*`), `background`, `docs/eigendoc`, and the React-free leaf modules (`content-line`, `date`, `format`, `html`). For a React-free
   module that lives *inside* a domain dir, lib's exports map carves out an explicit subpath —
   `calendar/calendar-utils`, `chat/emotes`, `chat/built-in-emotes`, `chat/format-preview`, `collab/yjs-utils`,
   `mail/addresses` — import those, not the barrel. Need a new one? Add the exports entry next to these and keep

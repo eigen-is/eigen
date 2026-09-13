@@ -6,9 +6,8 @@
 // Everything else — IMPP, URL, X-SOCIALPROFILE, unknown props, VERSION/UID/PRODID/REV — rides through
 // untouched. `createVCard` emits the minimal clean 3.0 card a brand-new contact starts from.
 import { escapeContentText, stripLineBreaks } from '@workspace/lib/content-line';
-import type { Address } from '@workspace/lib/types/contact';
-import { makeLine, serializeVCardLines, unescapeText, type VCardLine } from './vcard-ast';
-import type { ParsedCard } from './vcard-parse';
+import type { Address, ParsedCard, VCardLine } from '@workspace/lib/types/contact';
+import { makeLine, photoParams, serializeVCardLines, unescapeText } from '@workspace/lib/vcard';
 
 export type CardEdits = Partial<{
     firstName: string;
@@ -47,15 +46,6 @@ function buildAddressValue(a: Address): string {
 
 function photoBase64(bytes: Uint8Array): string {
     return Buffer.from(bytes).toString('base64');
-}
-
-// vCard 3.0 PHOTO TYPE is the bare, uppercased image subtype ('image/jpeg' -> 'JPEG').
-export function photoParams(mediaType: string): [string, string][] {
-    const subtype = mediaType.split('/')[1] ?? mediaType;
-    return [
-        ['ENCODING', 'b'],
-        ['TYPE', subtype.toUpperCase()],
-    ];
 }
 
 function insertBeforeEnd(lines: VCardLine[], added: VCardLine[]): VCardLine[] {
