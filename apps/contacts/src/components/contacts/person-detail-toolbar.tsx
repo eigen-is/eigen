@@ -67,6 +67,9 @@ export function PersonDetailToolbar({
                         <DropdownMenuContent align="end">
                             {contactMenu.renderItems([contact], () => {}, {
                                 showPrint: true,
+                                // Stored cards only: a team member's card is synthetic, so there is
+                                // nothing on the server to export by id.
+                                showExport: !!editSearch,
                                 labels,
                                 onEdit,
                                 onDelete: onDeleteClick,

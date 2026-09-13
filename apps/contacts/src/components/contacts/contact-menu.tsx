@@ -1,5 +1,6 @@
 import { type AuthUser, useAuth } from '@workspace/lib/auth';
 import { useStartChatWith } from '@workspace/lib/chat';
+import { useExportContacts } from '@workspace/lib/contacts';
 import { useOpenWriteEmailTo } from '@workspace/lib/mail';
 import type { Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
@@ -7,7 +8,7 @@ import { ChatCreateWizard } from '@workspace/ui/components/chat';
 import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
 import { LabelAssignSubMenu } from '@workspace/ui/components/labels';
 import { printDocument } from '@workspace/ui/lib/printElement';
-import { Mail, MessageSquare, Pencil, Printer, Trash2 } from 'lucide-react';
+import { Download, Mail, MessageSquare, Pencil, Printer, Trash2 } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 
 // One "is this card me?" test for every contact surface: a card is you if it carries your
@@ -27,17 +28,22 @@ export type ContactMenuActions = {
     // Print clones the on-screen [data-document] detail pane, so it only belongs where a single
     // contact's detail is showing — the detail kebab, never the multi-context list.
     showPrint?: boolean;
+    // Export asks the server for these cards by id, so it only belongs where the cards are stored
+    // ones — never the synthetic team-member card, whose id is a stand-in.
+    showExport?: boolean;
 };
 
 // The single menu-item definition the contact list's context menu and the detail page's kebab both
-// render — same actions, same order on both surfaces (Send email, Start chat, Print, Edit, Delete,
-// Assign label). Send email and Start chat act on the whole selection, silently dropping your own
-// card (a mail/chat with yourself is pointless); print and edit are single-select-only; delete and
-// labels act on the whole batch. Owns the start-chat handoff and the wizard both surfaces open, so
-// mount `chatWizard` at a stable spot outside the menu content.
+// render — same actions, same order on both surfaces (Send email, Start chat, Print, Export, Edit,
+// Delete, Assign label). Send email and Start chat act on the whole selection, silently dropping your
+// own card (a mail/chat with yourself is pointless); print and edit are single-select-only; export is
+// gated on showExport (stored cards only) and delete and labels act on the whole batch. Owns the
+// start-chat handoff and the wizard both surfaces open, so mount `chatWizard` at a stable spot outside
+// the menu content.
 export function useContactMenu() {
     const openWriteEmailTo = useOpenWriteEmailTo();
     const startChatWith = useStartChatWith();
+    const { exportContacts, isExporting } = useExportContacts();
     const { user } = useAuth();
     const [chatWith, setChatWith] = useState<{ email: string; name: string }[] | null>(null);
 
@@ -49,7 +55,7 @@ export function useContactMenu() {
     };
 
     const renderItems = (contacts: Contact[], close: () => void, actions: ContactMenuActions): ReactNode => {
-        const { labels = [], onEdit, onDelete, onToggleLabel, showPrint } = actions;
+        const { labels = [], onEdit, onDelete, onToggleLabel, showPrint, showExport } = actions;
         const single = contacts.length === 1 ? contacts[0] : undefined;
         const hasSelf = contacts.some((c) => isSelfContact(c, user));
 
@@ -64,7 +70,8 @@ export function useContactMenu() {
         }));
         const canReach = eligible.length > 0;
 
-        const topGroup = canReach || (!!single && !!showPrint);
+        const canExport = !!showExport && contacts.length > 0;
+        const topGroup = canReach || (!!single && !!showPrint) || canExport;
         const editGroup = (!!single && !!onEdit) || (!!onDelete && contacts.length > 0 && !hasSelf);
 
         const labelIds = labels.map((l) => l.id);
@@ -115,6 +122,18 @@ export function useContactMenu() {
                         }}
                     >
                         <Printer className="h-4 w-4 mr-2" /> Print
+                    </DropdownMenuItem>
+                )}
+                {canExport && (
+                    <DropdownMenuItem
+                        disabled={isExporting}
+                        onClick={() => {
+                            void exportContacts(contacts.map((c) => c.id));
+                            close();
+                        }}
+                    >
+                        <Download className="h-4 w-4 mr-2" />
+                        {contacts.length === 1 ? 'Export vCard' : `Export ${contacts.length} vCards`}
                     </DropdownMenuItem>
                 )}
 

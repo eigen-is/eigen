@@ -1,8 +1,17 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useContacts, useDeleteContact, useLabels, useUpdateContact } from '@workspace/lib/contacts';
+import {
+    useContacts,
+    useDeleteContact,
+    useImportContacts,
+    useImportContactsFromDrive,
+    useLabels,
+    useUpdateContact,
+} from '@workspace/lib/contacts';
 import { useMyTeams } from '@workspace/lib/home';
 import type { Contact } from '@workspace/lib/types/contact';
+import { isVCardFile, VCARD_ACCEPT } from '@workspace/lib/types/drive';
 import { Column, ColumnLayout, DeleteDialog, EmptyState, LoadingState } from '@workspace/ui';
+import { FileImportPicker } from '@workspace/ui/components/drive';
 import { LabelFilterHeader } from '@workspace/ui/components/labels';
 import { useEffect, useState } from 'react';
 import { ContactDetail, ContactDetailToolbar } from '../components/contacts/contact-detail';
@@ -16,9 +25,9 @@ type ContactsSearchParams = {
 
 export const Route = createFileRoute('/_auth/$filterType/$filterId')({
     component: ContactsRoute,
-    validateSearch: (search: Record<string, unknown>) => {
+    validateSearch: (search: Record<string, unknown>): ContactsSearchParams => {
         const contactId = typeof search.contactId === 'string' ? search.contactId : undefined;
-        return { contactId } as ContactsSearchParams;
+        return { contactId };
     },
 });
 
@@ -35,7 +44,10 @@ function ContactsRoute() {
     const { data: myTeams = [] } = useMyTeams();
     const deleteMutation = useDeleteContact();
     const updateContactMutation = useUpdateContact();
+    const importMutation = useImportContacts();
+    const importFromDriveMutation = useImportContactsFromDrive();
 
+    const [importOpen, setImportOpen] = useState(false);
     const [deleteTargets, setDeleteTargets] = useState<Contact[]>([]);
     const deleteDialogOpen = deleteTargets.length > 0;
 
@@ -102,8 +114,10 @@ function ContactsRoute() {
         <ContactsListToolbar
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
-            // Team members carry a single display name — no first/last sort to offer.
+            // Team members carry a single display name — no first/last sort to offer, and the
+            // member list holds no cards to import into or export.
             onSortChange={filterType === 'team' ? undefined : setSortBy}
+            onImportClick={filterType === 'team' ? undefined : () => setImportOpen(true)}
         />
     );
 
@@ -208,6 +222,22 @@ function ContactsRoute() {
                         : undefined
                 }
                 onDelete={handleConfirmDelete}
+            />
+
+            <FileImportPicker
+                open={importOpen}
+                onOpenChange={setImportOpen}
+                title="Import contacts"
+                accept={VCARD_ACCEPT}
+                canPick={(item) => isVCardFile(item.mimeType, item.name)}
+                onDeviceFile={(file) => importMutation.mutate(file)}
+                onDrivePick={(item) =>
+                    importFromDriveMutation.mutate({
+                        sourceOwnerId: item.ownerId,
+                        sourceMountId: item.mountId,
+                        sourcePathId: item.id,
+                    })
+                }
             />
         </>
     );

@@ -1,6 +1,13 @@
 import { getDriveItemUrl, getDriveShareUrl, openMailComposeWith } from '@workspace/lib/api';
 import { copyToClipboard } from '@workspace/lib/clipboard';
-import { type DrivePath, type ExportFormat, exportFormatsFor, isFolderType, isOpenable } from '@workspace/lib/types';
+import {
+    type DrivePath,
+    type ExportFormat,
+    exportFormatsFor,
+    isFolderType,
+    isOpenable,
+    isVCardFile,
+} from '@workspace/lib/types';
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
@@ -12,6 +19,7 @@ import {
     ArrowRight,
     Bell,
     BellRing,
+    BookUser,
     Copy,
     CopyPlus,
     Download,
@@ -41,6 +49,7 @@ type DriveItemMenuItemsProps = {
     onQuickLook?: (item: DrivePath) => void;
     onDownload?: (item: DrivePath) => void;
     onConvert?: (item: DrivePath, target: 'eigensheets' | 'eigendoc') => void;
+    onImportContacts?: (item: DrivePath) => void;
     onExport?: (item: DrivePath, format: ExportFormat) => void;
     onRename?: (item: DrivePath) => void;
     onMoveTo?: (items: DrivePath[]) => void;
@@ -62,6 +71,7 @@ export function DriveItemMenuItems({
     onQuickLook,
     onDownload,
     onConvert,
+    onImportContacts,
     onExport,
     onRename,
     onMoveTo,
@@ -83,6 +93,7 @@ export function DriveItemMenuItems({
     // draw the same rows and the export route gates on the same list.
     const exportFormats = exportFormatsFor(item.type);
     const accessible = !!item.acl?.length || item.visibility !== 'private';
+    const canImportContacts = item.type === 'file' && isVCardFile(item.mimeType, item.name) && !!onImportContacts;
 
     const { direct, label, isPending, toggle } = useWatchToggle(item.ownerId, item.mountId, item.id);
 
@@ -115,6 +126,7 @@ export function DriveItemMenuItems({
             {(canDownloadFile ||
                 canConvertXlsx ||
                 canConvertDocx ||
+                canImportContacts ||
                 exportFormats.length > 0 ||
                 !!onRename ||
                 !!onMoveTo ||
@@ -136,6 +148,12 @@ export function DriveItemMenuItems({
                 <DropdownMenuItem onClick={run(() => onConvert(item, 'eigendoc'))} className="flex items-center">
                     <FileText className="h-4 w-4 mr-2" />
                     Convert to Document
+                </DropdownMenuItem>
+            )}
+            {canImportContacts && onImportContacts && (
+                <DropdownMenuItem onClick={run(() => onImportContacts(item))} className="flex items-center">
+                    <BookUser className="h-4 w-4 mr-2" />
+                    Import to Contacts
                 </DropdownMenuItem>
             )}
             {exportFormats.length > 0 && onExport && (

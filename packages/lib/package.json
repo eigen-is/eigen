@@ -30,7 +30,9 @@
     "./api": "./src/core/api.ts",
     "./api-error": "./src/core/api-error.ts",
     "./apps": "./src/core/apps.ts",
+    "./content-line": "./src/core/content-line.ts",
     "./date": "./src/core/date.ts",
+    "./download": "./src/core/download.ts",
     "./eigendoc-icons": "./src/core/eigendoc-icons.ts",
     "./file-presentation": "./src/core/file-presentation.ts",
     "./format": "./src/core/format.ts",
@@ -74,6 +76,8 @@
     "./doc-search": "./src/doc-search/index.ts",
     "./sheets": "./src/sheets/index.ts",
     "./sheets/*": "./src/sheets/*.ts",
+    "./vcard": "./src/vcard/index.ts",
+    "./vcard/*": "./src/vcard/*.ts",
     "./vector": "./src/vector/index.ts",
     "./vector/*": "./src/vector/*.ts",
     "./background": "./src/background/index.ts"

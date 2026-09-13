@@ -1,7 +1,7 @@
 import { getDriveDownloadUrl, getDriveEmbedUrl, getDrivePreviewUrl, getDriveThumbnailUrl } from '@workspace/lib/api';
 import { getTextPreviewMode, isExiftoolExtension } from '@workspace/lib/constants';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { isFolderType } from '@workspace/lib/types/drive';
+import { isFolderType, isVCardFile } from '@workspace/lib/types/drive';
 import type React from 'react';
 import { useCallback, useMemo, useState } from 'react';
 import { FilePreview } from '../drive/file-preview';
@@ -26,7 +26,7 @@ type PreviewState = {
     downloadMode: DownloadMode;
 };
 
-export type PreviewMode = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'fallback';
+export type PreviewMode = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'vcard' | 'fallback';
 
 function getPreviewMode(path: DrivePath): PreviewMode {
     const mime = path.mimeType || '';
@@ -35,6 +35,8 @@ function getPreviewMode(path: DrivePath): PreviewMode {
     if (mime.startsWith('video/')) return 'video';
     if (mime.startsWith('audio/')) return 'audio';
     if (mime === 'application/pdf') return 'pdf';
+    // A .vcf reads as contact cards, never as its raw text — which is why getTextPreviewMode declines it.
+    if (isVCardFile(mime, path.name)) return 'vcard';
     if (getTextPreviewMode(mime, path.name) !== null) return 'text';
     return 'fallback';
 }

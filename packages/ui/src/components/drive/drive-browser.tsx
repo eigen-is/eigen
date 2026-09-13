@@ -30,6 +30,8 @@ type DriveBrowserProps = {
     ownerId: string;
     mode: 'file' | 'folder';
     mimeFilter?: string[];
+    // Used instead of mimeFilter when set (see isVCardFile for why a .vcf needs it).
+    canPick?: (item: DrivePath) => boolean;
     selectedId?: string | null;
     onSelect?: (path: DrivePath) => void;
     onConfirm?: (path: DrivePath) => void;
@@ -55,6 +57,7 @@ export function DriveBrowser({
     ownerId,
     mode,
     mimeFilter,
+    canPick,
     selectedId,
     onSelect,
     onConfirm,
@@ -145,6 +148,11 @@ export function DriveBrowser({
 
     const currentPath = breadcrumbPaths[breadcrumbPaths.length - 1] ?? null;
 
+    const isPickable = useCallback(
+        (item: DrivePath) => (canPick ? canPick(item) : !mimeFilter || matchesMimeFilter(item.mimeType, mimeFilter)),
+        [canPick, mimeFilter],
+    );
+
     const handleMountSelect = useCallback((newOwnerId: string, mountId: string) => {
         setActiveOwnerId(newOwnerId);
         setActiveMountId(mountId);
@@ -167,7 +175,7 @@ export function DriveBrowser({
                     onSelect?.(item);
                 }
             } else if (mode === 'file') {
-                if (!mimeFilter || matchesMimeFilter(item.mimeType, mimeFilter)) {
+                if (isPickable(item)) {
                     // Single-select mode (onConfirm + selectedId both set): clicking the
                     // already-selected row confirms it, saving an extra trip to the Select button.
                     if (onConfirm && selectedId === item.id) {
@@ -178,7 +186,7 @@ export function DriveBrowser({
                 }
             }
         },
-        [navigateToFolder, mode, mimeFilter, onSelect, onConfirm, selectedId],
+        [navigateToFolder, mode, isPickable, onSelect, onConfirm, selectedId],
     );
 
     const handleItemOpen = useCallback(
@@ -186,12 +194,12 @@ export function DriveBrowser({
             if (isFolderType(item.type)) {
                 navigateToFolder(item);
             } else if (mode === 'file' && onConfirm) {
-                if (!mimeFilter || matchesMimeFilter(item.mimeType, mimeFilter)) {
+                if (isPickable(item)) {
                     onConfirm(item);
                 }
             }
         },
-        [navigateToFolder, mode, mimeFilter, onConfirm],
+        [navigateToFolder, mode, isPickable, onConfirm],
     );
 
     const handleBreadcrumbClick = (path: DrivePath) => {
@@ -219,11 +227,9 @@ export function DriveBrowser({
     const isItemDisabled = useCallback(
         (item: DrivePath) => {
             if (mode === 'folder') return !isFolderType(item.type);
-            if (mode === 'file' && mimeFilter)
-                return !isFolderType(item.type) && !matchesMimeFilter(item.mimeType, mimeFilter);
-            return false;
+            return !isFolderType(item.type) && !isPickable(item);
         },
-        [mode, mimeFilter],
+        [mode, isPickable],
     );
 
     const contentArea = (

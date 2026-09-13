@@ -169,11 +169,14 @@ FilePreview (fixed, z-[100])
     pdf:      <iframe src={embedUrl}>
     text:     TextPreviewContent (useTextPreview → eigen-prose div; the eigenvector
               body is a self-contained page, centred rather than prose-styled)
+    vcard:    VCardPreviewContent (useVCardFile → one ContactDetailCard per card)
     fallback: file icon + "No preview available" + Download button
   Footer   — Open, Download/Save to Drive, Download all/Save all to Drive
 ```
 
 **Keyboard:** Escape = close, ArrowLeft/ArrowRight = prev/next sibling.
+
+**vCard quick look.** A `.vcf` reads as contact cards, never as its raw text, so `getPreviewMode` (`packages/ui/src/components/preview-provider/preview-provider.tsx`) tests `isVCardFile` before it reaches the text mode, and `getTextPreviewMode` returns `null` for the same files — which also keeps a `.vcf` out of the drive detail hero's text body. The inline editor reads a separate list, `isInlineEditable`, and `.vcf` is not on it. The mode has no server route and no preview cache: `useVCardFile` (`packages/lib/src/core/contacts/hooks/use-transfer.ts`) downloads the file and parses it in the browser with `splitVCards` + `transcodeTo30` + `parseVCard`, keyed on the path's `updatedAt` so a new version is a new entry and the parsed one never goes stale. The query is disabled over `IMPORT_MAX_BYTES` (the overlay shows a "File too large to preview" empty state instead), parses no more cards than an import would accept (`IMPORT_MAX_CARDS`), counts the cards the parser refuses rather than failing the whole file, and reports the file's total so the overlay can say how many it isn't showing. `VCardPreviewContent` (`packages/ui/src/components/drive/vcard-preview-content.tsx`) renders the first 200 of them as `ContactDetailCard`s, with each card's `CATEGORIES` as label badges, then one counted line for the rest and one for the unreadable ones. Inline `PHOTO` bytes become `data:` URIs through `parsedCardToContact`; a `PHOTO;VALUE=uri` and a non-image media type are dropped rather than fetched, so an untrusted file can't make the browser call a URL it chose. The overlay header carries an extra button in this mode — title **Import to Contacts** — which posts the previewed path to `/contacts/:ownerId/import-from-drive` ([CONTACTS.md](CONTACTS.md)).
 
 **Download modes:** `openPreview(path, siblings?, options?)` accepts a `downloadMode` option (`'direct'` | `'save-to-drive'`).
 Direct mode (default) shows a browser download link. Save-to-drive mode (used by chat attachments) shows a
@@ -210,6 +213,8 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 | `apps/api/src/routes/drive.ts`                                            | `/preview` + `/text-preview` routes              |
 | `packages/ui/src/styles/eigen-prose.css`                                  | Shared prose + code highlight styles             |
 | `packages/ui/src/components/drive/file-preview.tsx`                | Preview overlay component                        |
+| `packages/ui/src/components/drive/vcard-preview-content.tsx`       | Client-side `.vcf` quick look: parsed cards as `ContactDetailCard`s |
+| `packages/lib/src/core/contacts/hooks/use-transfer.ts`             | `useVCardFile()` — downloads and parses a `.vcf` for the overlay |
 | `packages/ui/src/components/preview-provider/preview-provider.tsx` | Context: open/close/navigate previews            |
 | `packages/lib/src/core/drive/hooks/reads.ts`                              | `useTextPreview()` hook                          |
 | `packages/lib/src/core/drive/media-resolver.tsx`                          | Uses `getDrivePreviewUrl` for editor images      |

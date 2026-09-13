@@ -15,5 +15,6 @@ export * from './eigendoc-list-view';
 export * from './eigendoc-new-button';
 export * from './eigendoc-root';
 export * from './eigendoc-shared-view';
+export * from './file-import-picker';
 export * from './file-presentation';
 export * from './use-document-export';

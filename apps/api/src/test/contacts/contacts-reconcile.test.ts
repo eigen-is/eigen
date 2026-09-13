@@ -4,8 +4,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, uti
 import { join } from 'node:path';
 import type { Contact } from '@workspace/lib/types/contact';
 import { SSEventType } from '@workspace/lib/types/sse';
+import { parseVCard } from '@workspace/lib/vcard';
 import { eq } from 'drizzle-orm';
-import { parseVCard } from '../../lib/carddav/vcard-parse';
 import { mergeVCard } from '../../lib/carddav/vcard-serialize';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { labelColorFor, normalizeLabelName, uriKeyOf } from '../../lib/contacts/card-store';

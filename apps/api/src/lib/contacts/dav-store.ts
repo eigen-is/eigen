@@ -1,10 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import type { ParsedCard } from '@workspace/lib/types/contact';
 import { SSEventType } from '@workspace/lib/types/sse';
+import { parseVCard, transcodeTo30 } from '@workspace/lib/vcard';
 import { eq, gt } from 'drizzle-orm';
-import type { ParsedCard } from '../carddav/vcard-parse';
-import { parseVCard } from '../carddav/vcard-parse';
 import { mergeVCard } from '../carddav/vcard-serialize';
-import { transcodeTo30 } from '../carddav/vcard-transcode';
 import { ApiError, matchesIfMatch, matchesIfNoneMatch } from '../core';
 import { pushUserProfile } from '../home/home-relay';
 import { deriveCardPhotoCache, downloadAvatar } from './avatars';

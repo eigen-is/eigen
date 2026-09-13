@@ -14,6 +14,7 @@ import {
     stripEigenMediaRefs,
 } from '../../vector/media-refs';
 import { getDriveDownloadUrl } from '../api';
+import { bytesToBase64 } from '../format';
 
 const EIGEN_CLIPBOARD_MIME = 'application/eigen-clipboard';
 const HTML_MARKER = 'data-eigen-clipboard';
@@ -166,17 +167,11 @@ export function svgToImageFile(svg: string, name = 'drawing.svg'): File {
     return new File([svg], name, { type: 'image/svg+xml' });
 }
 
-// Base64 `data:` URI for a Blob's bytes. Cross-environment (browser + the bun test runtime): neither
-// FileReader nor Node's Buffer is available in both, so we go through Blob.arrayBuffer + btoa over a
-// chunked binary string. Private — callers reach it via inlineClipboardSvgMedia / svgToImageDataUri.
+// Base64 `data:` URI for a Blob's bytes. Private — callers reach it via inlineClipboardSvgMedia /
+// svgToImageDataUri.
 async function blobToDataUri(blob: Blob): Promise<string> {
     const bytes = new Uint8Array(await blob.arrayBuffer());
-    let binary = '';
-    const CHUNK = 0x8000; // stay well under the spread arg-count limit
-    for (let i = 0; i < bytes.length; i += CHUNK) {
-        binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
-    }
-    return `data:${blob.type || 'application/octet-stream'};base64,${btoa(binary)}`;
+    return `data:${blob.type || 'application/octet-stream'};base64,${bytesToBase64(bytes)}`;
 }
 
 // A whole SVG string as a base64 `data:image/svg+xml` URI — the `src` for the foreign-visible `<img>`

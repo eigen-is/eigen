@@ -10,6 +10,8 @@ export const contactKeys = {
     details: (ownerId: string) => [...contactKeys.owner(ownerId), 'detail'] as const,
     detail: (ownerId: string, id: string) => [...contactKeys.details(ownerId), id] as const,
     me: (ownerId: string) => [...contactKeys.owner(ownerId), 'me'] as const,
+    vcardFile: (ownerId: string, mountId: string, pathId: string, updatedAt: number) =>
+        [...contactKeys.owner(ownerId), 'vcard-file', mountId, pathId, updatedAt] as const,
 };
 
 // Query keys for labels
@@ -23,27 +25,25 @@ export const labelKeys = {
 };
 
 // Invalidation functions (ownerId-scoped, used from mutation onSuccess)
-export function invalidateContactCreated(queryClient: QueryClient, ownerId: string): void {
+
+// The owner-wide half of every contact change: the list every surface reads, the self/profile card (it
+// reads through contactKeys.me, not the detail/list keys, and any card can claim the self-link), and the
+// home size contacts count against. Its own export so the SSE handler can collapse it across a burst while
+// each card's detail entry still updates at once.
+export function invalidateContactList(queryClient: QueryClient, ownerId: string): void {
     queryClient.invalidateQueries({ queryKey: contactKeys.lists(ownerId) });
-    // A DAV-created card can claim the self-link (an external client PUTs your own contact), so a mounted
-    // useMeContact must refetch — mirror invalidateContactUpdated, which invalidates `me` for the same reason.
     queryClient.invalidateQueries({ queryKey: contactKeys.me(ownerId) });
     invalidateHomeSize(queryClient, ownerId);
 }
 
 export function invalidateContactUpdated(queryClient: QueryClient, ownerId: string, contactId: string): void {
     queryClient.invalidateQueries({ queryKey: contactKeys.detail(ownerId, contactId) });
-    queryClient.invalidateQueries({ queryKey: contactKeys.lists(ownerId) });
-    // The self/profile card reads through contactKeys.me, not the detail/list keys — invalidate it too so a
-    // 412 recovery (or any edit to your own card) refetches the profile editor's frozen etag snapshot.
-    queryClient.invalidateQueries({ queryKey: contactKeys.me(ownerId) });
-    invalidateHomeSize(queryClient, ownerId);
+    invalidateContactList(queryClient, ownerId);
 }
 
 export function invalidateContactDeleted(queryClient: QueryClient, ownerId: string, contactId: string): void {
     queryClient.removeQueries({ queryKey: contactKeys.detail(ownerId, contactId) });
-    queryClient.invalidateQueries({ queryKey: contactKeys.lists(ownerId) });
-    invalidateHomeSize(queryClient, ownerId);
+    invalidateContactList(queryClient, ownerId);
 }
 
 export function invalidateLabelCreated(queryClient: QueryClient, ownerId: string): void {

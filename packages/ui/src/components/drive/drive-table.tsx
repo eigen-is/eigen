@@ -40,6 +40,7 @@ export type DriveViewProps = {
     onCopyTo?: (items: DrivePath[]) => void;
     onDuplicate?: (items: DrivePath[]) => void;
     onConvert?: (item: DrivePath, targetType: 'eigensheets' | 'eigendoc') => void;
+    onImportContacts?: (item: DrivePath) => void;
     onExport?: (item: DrivePath, format: string) => void;
     onQuickLook?: (item: DrivePath) => void;
     onEmailCollaborators?: (item: DrivePath) => void;
@@ -116,6 +117,7 @@ export function DriveTable({
     onCopyTo,
     onDuplicate,
     onConvert,
+    onImportContacts,
     onExport,
     onQuickLook,
     onEmailCollaborators,
@@ -300,6 +302,7 @@ export function DriveTable({
                     onQuickLook={onQuickLook}
                     onDownload={onDownload}
                     onConvert={onConvert}
+                    onImportContacts={onImportContacts}
                     onExport={onExport}
                     onRename={onRename}
                     onMoveTo={onMoveTo}

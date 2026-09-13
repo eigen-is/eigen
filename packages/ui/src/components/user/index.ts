@@ -1,4 +1,5 @@
 export * from './collapsible-user-list';
+export * from './contact-detail-card';
 export * from './owner-info-popover';
 export * from './person-list';
 export * from './user-avatar';

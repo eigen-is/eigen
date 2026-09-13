@@ -1,8 +1,8 @@
 import { useAuth } from '@workspace/lib/auth';
-import { useContacts } from '@workspace/lib/contacts';
+import { useContacts, useExportContacts } from '@workspace/lib/contacts';
 import type { Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
-import { EmptyState, ErrorState, LoadingState, SearchBar, Toolbar } from '@workspace/ui';
+import { EmptyState, ErrorState, KebabTrigger, LoadingState, SearchBar, Toolbar } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import {
     DropdownMenu,
@@ -11,7 +11,7 @@ import {
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { PersonList, UserItem } from '@workspace/ui/components/user';
-import { ArrowUpDown } from 'lucide-react';
+import { ArrowUpDown, Download, Upload } from 'lucide-react';
 import { useMemo } from 'react';
 import { isSelfContact, useContactMenu } from './contact-menu';
 
@@ -20,9 +20,18 @@ type ContactsListToolbarProps = {
     onSearchChange: (query: string) => void;
     // Absent → no sort toggle (team members carry a single display name, nothing to sort by).
     onSortChange?: (sort: 'firstName' | 'lastName') => void;
+    // Absent → no import/export kebab (team members aren't cards this book owns).
+    onImportClick?: () => void;
 };
 
-export function ContactsListToolbar({ searchQuery, onSearchChange, onSortChange }: ContactsListToolbarProps) {
+export function ContactsListToolbar({
+    searchQuery,
+    onSearchChange,
+    onSortChange,
+    onImportClick,
+}: ContactsListToolbarProps) {
+    const { exportContacts, isExporting } = useExportContacts();
+
     return (
         <Toolbar>
             <SearchBar
@@ -42,6 +51,19 @@ export function ContactsListToolbar({ searchQuery, onSearchChange, onSortChange 
                     <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => onSortChange('firstName')}>First name</DropdownMenuItem>
                         <DropdownMenuItem onClick={() => onSortChange('lastName')}>Last name</DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            )}
+            {onImportClick && (
+                <DropdownMenu>
+                    <KebabTrigger />
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={onImportClick}>
+                            <Upload className="h-4 w-4 mr-2" /> Import contacts…
+                        </DropdownMenuItem>
+                        <DropdownMenuItem disabled={isExporting} onClick={() => void exportContacts()}>
+                            <Download className="h-4 w-4 mr-2" /> Export all contacts
+                        </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
             )}
@@ -124,7 +146,13 @@ export function ContactsList({
                 }
                 renderMenuItems={(contextItems, close) =>
                     // Print is detail-only (it clones the on-screen detail pane), so showPrint stays off here.
-                    contactMenu.renderItems(contextItems, close, { labels, onEdit, onDelete, onToggleLabel })
+                    contactMenu.renderItems(contextItems, close, {
+                        labels,
+                        onEdit,
+                        onDelete,
+                        onToggleLabel,
+                        showExport: true,
+                    })
                 }
             />
             {contactMenu.chatWizard}

@@ -42,6 +42,7 @@ type DriveDetailProps = {
     onDuplicate?: (items: DrivePath[]) => void;
     onQuickLook?: (path: DrivePath) => void;
     onConvert?: (path: DrivePath, target: 'eigensheets' | 'eigendoc') => void;
+    onImportContacts?: (path: DrivePath) => void;
     onExport?: (path: DrivePath, format: string) => void;
     onEmailCollaborators?: (path: DrivePath) => void;
     allowDelete?: boolean;
@@ -60,6 +61,7 @@ export function DriveDetail({
     onDuplicate,
     onQuickLook,
     onConvert,
+    onImportContacts,
     onExport,
     onEmailCollaborators,
     allowDelete,
@@ -124,6 +126,7 @@ export function DriveDetail({
                                     onQuickLook={onQuickLook}
                                     onDownload={onDownload}
                                     onConvert={onConvert}
+                                    onImportContacts={onImportContacts}
                                     onExport={onExport}
                                     onRename={onRename}
                                     onMoveTo={onMoveTo}

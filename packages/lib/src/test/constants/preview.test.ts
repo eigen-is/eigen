@@ -15,10 +15,20 @@ describe('isSearchableTextFile', () => {
     test('binary is not searchable', () => {
         expect(isSearchableTextFile('image/png', 'photo.png')).toBe(false);
     });
+    test('a vCard is not searchable — it has no text preview to index', () => {
+        expect(isSearchableTextFile('text/vcard', 'team.vcf')).toBe(false);
+        expect(isSearchableTextFile('text/x-vcard', 'team.vcf')).toBe(false);
+        expect(isSearchableTextFile('application/octet-stream', 'team.vcf')).toBe(false);
+    });
 });
 
 describe('getTextPreviewMode', () => {
     test('a vector drawing is a text preview — its body is the compositor page', () => {
         expect(getTextPreviewMode('application/eigenvector', 'plan.eigenvector')).toBe('eigenvector');
+    });
+    test('a vCard has no text preview — the drive hero would render its base64 photo wall', () => {
+        expect(getTextPreviewMode('text/vcard', 'team.vcf')).toBeNull();
+        expect(getTextPreviewMode('text/x-vcard', 'team.vcf')).toBeNull();
+        expect(getTextPreviewMode('application/octet-stream', 'team.vcf')).toBeNull();
     });
 });
