@@ -4,7 +4,7 @@
 
 // A C0 control byte illegal in XML character data — below 0x20 except TAB, CR, LF. One such byte echoed into
 // a REPORT's address-data/calendar-data invalidates the XML client-side and wedges DAV sync. The serialize
-// seams below STRIP these; the vCard ingest parse REJECTS them (vcard-ast.ts). A code-point check, not a
+// seams below STRIP these; the vCard ingest parse REJECTS them (../vcard/ast.ts). A code-point check, not a
 // regex: biome rejects \x00-\x1F, and \p{Cc} would also hit the C1 controls, which are valid XML.
 export function isIllegalC0(code: number): boolean {
     return code < 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d;

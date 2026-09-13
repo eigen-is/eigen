@@ -278,10 +278,13 @@ CardDAV address card next to CalDAV/IMAP/WebDAV, carrying the address-book URL.
 
 - **`apps/api/src/lib/contacts/`** — the domain, split Mount-style: `contacts.ts` (the `Contacts` facade — the write lock, the dirty/journal machinery, REST contact CRUD and the self card; every sibling call goes through it) with sibling modules of plain functions over the facade: `dav-store.ts` (the CardDAV store seam — the index reads plus `putCard`/`deleteCard` and the seam types), `reconcile.ts` (the stat-only reconcile, the from-scratch rebuild, and the self-link ranking), `labels.ts` (label definitions + the CATEGORIES fan-out and rename journal), `avatars.ts` (avatar staging + the derived photo cache). Beside them: `card-store.ts` (the file/key helpers — `sanitizeCardUri`, `writeCardFile`, `avatarCacheName`, `uriKeyOf`), `schema.ts`, `db-config.ts`, `sse-events.ts`.
 - **`apps/api/src/lib/carddav/`** — the protocol layer: `carddav-router.ts`, `discovery.ts`, `resource.ts`,
-  `report.ts`, `query-filter.ts`, `address-data.ts`, the vCard modules (`vcard-ast.ts`, `vcard-parse.ts`,
-  `vcard-serialize.ts`, `vcard-transcode.ts`), and `xml-builder.ts`/`xml-parser.ts`. The shared XML envelope
+  `report.ts`, `query-filter.ts`, `address-data.ts`, `vcard-serialize.ts` (the merge/create seam Eigen-owned
+  edits go through), and `xml-builder.ts`/`xml-parser.ts`. The shared XML envelope
   and principal props live in `dav/xml.ts`, the OPTIONS header and realm in `app.ts`; the fold/escape/C0-strip
   primitives both the vCard and iCalendar serializers ride on live in `packages/lib/src/core/content-line.ts`, imported as `@workspace/lib/content-line`.
+- **`packages/lib/src/vcard/`** — the format itself, shared by the backend and the frontend: `ast.ts` (content-line
+  parse/serialize), `parse.ts` (the `ParsedCard` projection), `transcode.ts` (vCard 4.0 -> 3.0), imported as
+  `@workspace/lib/vcard`; the `VCardLine`/`ParsedCard`/`ParsedCardPhoto` types live in `packages/lib/src/types/contact.ts`.
 - **`apps/api/src/routes/contacts.ts`** — thin REST bindings (unchanged by the refit beyond conditional-write
   etags).
 - **`packages/lib/src/core/contacts/`** — FE hooks + SSE handlers; shared types in

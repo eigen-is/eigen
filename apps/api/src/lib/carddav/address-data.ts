@@ -2,7 +2,8 @@
 // properties via <CARD:address-data><CARD:prop name="…"/>…</CARD:address-data>. This projects a stored vCard
 // down to that subset, re-serializing through the content-line AST so every kept line keeps its exact source
 // bytes (folding included) — the byte-identity contract still holds for the properties that survive.
-import { parseVCardLines, serializeVCardLines, type VCardLine } from './vcard-ast';
+import type { VCardLine } from '@workspace/lib/types/contact';
+import { parseVCardLines, serializeVCardLines } from '@workspace/lib/vcard';
 
 // Kept in every projection regardless of the requested subset: RFC 6352 § 10.4.2 requires VERSION+UID in any
 // returned card, BEGIN/END frame the envelope, and FN/N make the result a usable vCard.

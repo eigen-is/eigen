@@ -1,31 +1,8 @@
 // Maps a parsed vCard AST down to the projection the contact index stores and the CardDAV sync
 // layer diffs against. Only the properties Eigen owns are extracted; the untouched AST rides along in
 // `lines` so a write can merge edits back without disturbing properties we don't understand.
-import type { Address } from '@workspace/lib/types/contact';
-import { getVersion, parseVCardLines, splitDataUri, unescapeText, type VCardLine } from './vcard-ast';
-
-export type ParsedCardPhoto =
-    | { kind: 'inline'; bytes: Uint8Array; mediaType: string | null }
-    | { kind: 'uri'; uri: string };
-
-export type ParsedCard = {
-    lines: VCardLine[];
-    version: string | null;
-    uid: string | null;
-    firstName: string;
-    lastName: string;
-    email: string[];
-    phone: string[];
-    company: string;
-    jobTitle: string;
-    address: Address[];
-    birthday: string; // normalized YYYY-MM-DD, or '' if absent/unparseable
-    notes: string;
-    categories: string[]; // unescaped names, comma-split
-    eigenId: string | null; // X-EIGEN-ID value, verbatim
-    isGroup: boolean; // KIND:group or X-ADDRESSBOOKSERVER-KIND:group
-    photo: ParsedCardPhoto | null;
-};
+import type { Address, ParsedCard, ParsedCardPhoto, VCardLine } from '../types/contact';
+import { getVersion, parseVCardLines, splitDataUri, unescapeText } from './ast';
 
 // Split a structured (';') or list (',') TEXT value on an unescaped delimiter, keeping the escape
 // sequences intact so each component can be unescaped afterward. A backslash escapes the next character.
@@ -58,14 +35,31 @@ function photoMediaType(type: string | null): string | null {
     return type.includes('/') ? type.toLowerCase() : `image/${type.toLowerCase()}`;
 }
 
+const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
+
+// atob, not a Node decode: this module runs in the browser as well as on the server. atob refuses a 4n+1
+// length outright, so a dangling character is dropped first — a truncated PHOTO still yields the bytes it
+// did carry. Anything atob still refuses decodes to null, keeping a malformed PHOTO a "no photo".
+function base64ToBytes(b64: string): Uint8Array | null {
+    let binary: string;
+    try {
+        binary = atob(b64.length % 4 === 1 ? b64.slice(0, -1) : b64);
+    } catch {
+        return null;
+    }
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+}
+
 // Decode base64, tolerating any whitespace 3.0 folding left in the value. Returns null for a value that
 // isn't valid base64 so a malformed PHOTO degrades to "no photo" rather than throwing.
 function decodeBase64(value: string): Uint8Array | null {
     // Well-formed unfolded payloads skip the whitespace-strip, which allocates a full copy of a photo value.
-    if (/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return Buffer.from(value, 'base64');
+    if (BASE64.test(value)) return base64ToBytes(value);
     const cleaned = value.replace(/\s/g, '');
-    if (!cleaned || !/^[A-Za-z0-9+/]+={0,2}$/.test(cleaned)) return null;
-    return Buffer.from(cleaned, 'base64');
+    if (!cleaned || !BASE64.test(cleaned)) return null;
+    return base64ToBytes(cleaned);
 }
 
 // data:[<mediatype>];base64,<payload> — the 4.0 inline PHOTO form.

@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1363 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1377 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -183,7 +183,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SSEProvider` | `@workspace/ui/components/sse-provider` | packages/ui/src/components/sse-provider/sse-provider.tsx |
 | `UploadProvider` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-provider.tsx |
 
-## Contexts, schemas & classes (9)
+## Contexts, schemas & classes (10)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -193,6 +193,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FigureNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
 | `CreateUnconfirmedError` | `@workspace/lib/drive` | packages/lib/src/core/drive/reconcile-create.ts |
 | `PartialDeleteError` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
+| `VCardError` | `@workspace/lib/vcard` | packages/lib/src/vcard/ast.ts |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 | `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
@@ -459,7 +460,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (327)
+## Types (330)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -615,6 +616,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `OrgMember` | `@workspace/lib/types` | packages/lib/src/types/admin.ts |
 | `OrgTeam` | `@workspace/lib/types` | packages/lib/src/types/admin.ts |
 | `OwnerType` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
+| `ParsedCard` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
+| `ParsedCardPhoto` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `ParsedMail` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `ParsedOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `PathWatchStatus` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
@@ -652,6 +655,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UpdateEventInput` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `UpdateSharedCalendarInput` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `UserSettings` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
+| `VCardLine` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `WaitlistEntry` | `@workspace/lib/types` | packages/lib/src/types/waitlist.ts |
 | `WebdavDeadProp` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `YjsRootKind` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -791,7 +795,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (608)
+## Utilities & constants (618)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1142,6 +1146,16 @@ rather than inlining `queryClient.invalidateQueries`.
 | `validateEmailTarget` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
 | `validatePasswordStrength` | `@workspace/lib/validation` | packages/lib/src/validation/password.ts |
 | `validateUsername` | `@workspace/lib/validation` | packages/lib/src/validation/username.ts |
+| `getVersion` | `@workspace/lib/vcard` | packages/lib/src/vcard/ast.ts |
+| `makeLine` | `@workspace/lib/vcard` | packages/lib/src/vcard/ast.ts |
+| `normalizeBirthday` | `@workspace/lib/vcard` | packages/lib/src/vcard/parse.ts |
+| `parseVCard` | `@workspace/lib/vcard` | packages/lib/src/vcard/parse.ts |
+| `parseVCardLines` | `@workspace/lib/vcard` | packages/lib/src/vcard/ast.ts |
+| `photoParams` | `@workspace/lib/vcard` | packages/lib/src/vcard/ast.ts |
+| `serializeVCardLines` | `@workspace/lib/vcard` | packages/lib/src/vcard/ast.ts |
+| `splitDataUri` | `@workspace/lib/vcard` | packages/lib/src/vcard/ast.ts |
+| `transcodeTo30` | `@workspace/lib/vcard` | packages/lib/src/vcard/transcode.ts |
+| `unescapeText` | `@workspace/lib/vcard` | packages/lib/src/vcard/ast.ts |
 | `anchorToScene` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `applyResize` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `arrangeBoundingBox` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |

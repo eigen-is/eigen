@@ -1,12 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import type { Address, Contact, CreateContactInput } from '@workspace/lib/types/contact';
+import type { Address, Contact, CreateContactInput, ParsedCard, ParsedCardPhoto } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { SSEventType } from '@workspace/lib/types/sse';
+import { normalizeBirthday, parseVCard } from '@workspace/lib/vcard';
 import { eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { Semaphore } from '../../utils/semaphore';
-import type { ParsedCard, ParsedCardPhoto } from '../carddav/vcard-parse';
-import { normalizeBirthday, parseVCard } from '../carddav/vcard-parse';
 import { type CardEdits, createVCard, mergeVCard } from '../carddav/vcard-serialize';
 import { enforceContactsIngest } from '../config/enforcement';
 import { getServerSettings } from '../config/server-settings';

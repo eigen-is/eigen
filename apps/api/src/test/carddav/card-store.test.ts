@@ -6,8 +6,8 @@ import { join } from 'node:path';
 import { EIGEN_ACCENT_COLORS } from '@workspace/lib/constants/colors';
 import type { CreateContactInput } from '@workspace/lib/types/contact';
 import { SSEventType } from '@workspace/lib/types/sse';
+import { parseVCard } from '@workspace/lib/vcard';
 import { eq } from 'drizzle-orm';
-import { parseVCard } from '../../lib/carddav/vcard-parse';
 import { createVCard, mergeVCard } from '../../lib/carddav/vcard-serialize';
 import {
     CARD_MAX_BYTES,
