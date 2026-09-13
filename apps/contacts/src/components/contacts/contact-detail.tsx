@@ -37,13 +37,14 @@ type ContactDetailProps = {
 };
 
 export function ContactDetail({ contact }: ContactDetailProps) {
-    const { data: labels = [] } = useLabels();
+    const { data: labels = [], error: labelsError } = useLabels();
 
     const contactLabels = contact.labels ? labels.filter((label) => contact.labels?.includes(label.id)) : [];
 
     return (
         <div className="h-full flex flex-col overflow-hidden" data-document="contact-detail">
             <div className="flex-1 overflow-auto app-gutter">
+                {labelsError && <p className="text-sm text-destructive">Error loading labels</p>}
                 <ContactDetailCard contact={contact} labels={contactLabels} />
             </div>
         </div>

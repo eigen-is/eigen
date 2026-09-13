@@ -31,9 +31,9 @@ export function ContactDetailCard({ contact, labels, className }: ContactDetailC
                 subtitle={contact.jobTitle && contact.company ? `${contact.jobTitle} at ${contact.company}` : undefined}
                 badges={
                     labels.length > 0
-                        ? labels.map((label) => (
+                        ? labels.map((label, index) => (
                               <Badge
-                                  key={label.name}
+                                  key={index}
                                   style={{ backgroundColor: label.color }}
                                   className="px-2 py-1 text-primary-foreground"
                               >
