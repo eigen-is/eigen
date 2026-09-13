@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
 import { parseBackupAuthRows, parseBackupShares } from '@workspace/lib/validation';
 import { eq, getTableColumns } from 'drizzle-orm';
+import { drizzle } from 'drizzle-orm/bun-sqlite';
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core';
 import { user as userTable } from '../../../auth-schema';
 import { getAuthDrizzleDb } from '../auth/auth';
@@ -13,11 +14,12 @@ import { getPublicConfig } from '../config/server-config';
 import { ApiError, type DatabaseConfig, PATHS, type SchemaType } from '../core';
 import { MOUNT_DB_CONFIG, PENDING_UPLOAD_KIND_VERSION } from '../mount/db-config';
 import { buildStorageKey } from '../mount/helpers';
+import { paths, pendingUploads } from '../mount/schema';
 import { getEigenDb } from '../share/db';
 import { shareRegistry } from '../share/schema';
 import { AUTH_TABLES, ownerKeyOf, RESTORED_MEMBER_ROLE, RESTORED_USER_ROLE } from './auth-tables';
 import { errnoOf } from './errors';
-import { ARCHIVE_AUTH_FILE, ARCHIVE_AVATAR_DIR, ARCHIVE_SHARES_FILE, resolveInside, resolveMountDir } from './paths';
+import { ARCHIVE_AUTH_FILE, ARCHIVE_AVATAR_DIR, ARCHIVE_SHARES_FILE, requireMountDir, resolveInside } from './paths';
 import { HOME_DATABASES } from './snapshot-home';
 import { archivePath, listManagedDatabases, readMountPathRows, storageKeyOf } from './snapshot-mount';
 
@@ -42,14 +44,14 @@ export function movePath(from: string, to: string): void {
     }
 }
 
-// What a database says about itself. Absent (a file with no __schema_version table) reads as 0, the
-// same as ManagedDatabase's own "never migrated" answer. Read-write, like every open below it: a WAL
-// database nobody is holding open has no -shm beside it, and a read-only open of one fails outright.
+// What a database says about itself. Absent — no __schema_version table, or a file that cannot be
+// opened at all (EACCES, EIO), which is why the open is inside the try — reads as 0, the same as
+// ManagedDatabase's own "never migrated" answer, and the quick_check right after it is what turns
+// that into a named failure. Read-write, like every open below it: a WAL database nobody is holding
+// open has no -shm beside it, and a read-only open of one fails outright.
 function schemaVersionOf(filePath: string): number {
     let db: Database | null = null;
     try {
-        // Inside the try: a file this cannot even be opened on (EACCES, EIO) reads as unstamped, and
-        // the quick_check right after it is what turns that into a named failure.
         db = new Database(filePath, { readwrite: true, create: false });
         const row = db.query<{ version: number }, []>('SELECT version FROM __schema_version WHERE id = 1').get();
         return row?.version ?? 0;
@@ -82,10 +84,8 @@ export function materializeMount(
     stamp: string,
 ): VersionedDatabase[] {
     // The id comes out of the archive's manifest. The parser holds it to the class a real mount id
-    // uses, and this is the second lock on the same door: whatever it says, the folder it resolves
-    // to has to be inside the home being restored.
-    const mountDir = resolveMountDir(homeDir, summary.id);
-    if (!mountDir) throw new ApiError(400, `The archive names a mount (${summary.id}) that is not in this home`);
+    // uses, and this is the second lock on the same door.
+    const mountDir = requireMountDir(homeDir, summary.id);
     const dataDir = path.join(mountDir, PATHS.DRIVE.DATA_DIR);
     const metadataPath = path.join(mountDir, PATHS.DRIVE.METADATA_DB);
     if (!fs.existsSync(metadataPath)) {
@@ -108,12 +108,13 @@ export function materializeMount(
 
     const db = new Database(metadataPath);
     try {
+        const orm = drizzle(db);
         const rows = readMountPathRows(db);
         const byId = new Map(rows.map((row) => [row.id, row]));
         const managed = listManagedDatabases(rows);
         const inData = (relPath: string): string => inMountData(dataDir, summary.id, relPath);
         // Every pending row names a staged copy on the source server that the archive does not carry.
-        db.run('DELETE FROM pending_uploads');
+        orm.delete(pendingUploads).run();
 
         if (isPathBased) {
             // A folder carries no bytes, so an empty one has no archive entry — recreate them from
@@ -127,13 +128,8 @@ export function materializeMount(
         // nothing to do with the job staging folder the archive was unpacked into.
         const mountStagingDir = path.join(mountDir, PATHS.DRIVE.STAGING_DIR);
         if (isRemote) fs.mkdirSync(mountStagingDir, { recursive: true });
-        const enqueue = db.prepare(
-            'INSERT INTO pending_uploads (storageKey, stagingPath, attempt, enqueuedAt, nextAttemptAt, isDatabase)' +
-                ' VALUES (?, ?, 0, ?, ?, ?)',
-        );
-        const rekey = db.prepare('UPDATE paths SET file = ? WHERE id = ?');
-        const managedPaths = new Set(managed.map((entry) => entry.path));
         const now = Date.now();
+        const managedPaths = new Set(managed.map((entry) => entry.path));
         for (const row of rows) {
             if (row.type !== 'file') continue;
             const archived = archivePath(row, byId);
@@ -147,7 +143,7 @@ export function materializeMount(
             // row is this function's read model, so the new key goes into it and into the table.
             if (isRemote) {
                 row.file = buildStorageKey(`${row.id}-r${stamp}`, row.name);
-                rekey.run(row.file, row.id);
+                orm.update(paths).set({ file: row.file }).where(eq(paths.id, row.id)).run();
             }
             // A row whose storage object was already missing when the backup ran has no bytes here;
             // the restored home mirrors that absence rather than inventing an empty object.
@@ -156,7 +152,16 @@ export function materializeMount(
             if (isRemote) {
                 const staged = randomUUID();
                 movePath(source, path.join(mountStagingDir, staged));
-                enqueue.run(key, staged, now, now, managedPaths.has(archived) ? 1 : 0);
+                orm.insert(pendingUploads)
+                    .values({
+                        storageKey: key,
+                        stagingPath: staged,
+                        attempt: 0,
+                        enqueuedAt: now,
+                        nextAttemptAt: now,
+                        isDatabase: managedPaths.has(archived),
+                    })
+                    .run();
                 continue;
             }
             // Usually the same file on a path-based mount (`file` is the name), but migration v7
@@ -166,8 +171,6 @@ export function materializeMount(
             const target = inData(key);
             if (target !== source) movePath(source, target);
         }
-        enqueue.finalize();
-        rekey.finalize();
         if (isRemote) {
             // An s3 mount's bytes belong in the bucket, and the queue holds every one of them in
             // staging until the PUT acks; the archive still has them all if that never happens.
@@ -340,8 +343,7 @@ export function checkRestoredDatabases(
         config,
     }));
     for (const mountId of mountIds) {
-        const mountDir = resolveMountDir(homeDir, mountId);
-        if (!mountDir) throw new ApiError(400, `${mountId} is not a mount of this home`);
+        const mountDir = requireMountDir(homeDir, mountId);
         targets.push({ filePath: path.join(mountDir, PATHS.DRIVE.METADATA_DB), config: MOUNT_DB_CONFIG });
     }
     // An s3 mount's container databases are staged copies on their way to the bucket, not files at a
@@ -380,8 +382,7 @@ export function checkRestoredDatabases(
 export function containerDatabasesIn(homeDir: string, mountIds: string[]): VersionedDatabase[] {
     const found: VersionedDatabase[] = [];
     for (const mountId of mountIds) {
-        const mountDir = resolveMountDir(homeDir, mountId);
-        if (!mountDir) throw new ApiError(400, `${mountId} is not a mount of this home`);
+        const mountDir = requireMountDir(homeDir, mountId);
         const dataDir = path.join(mountDir, PATHS.DRIVE.DATA_DIR);
         const metadataPath = path.join(mountDir, PATHS.DRIVE.METADATA_DB);
         if (!fs.existsSync(metadataPath)) continue;

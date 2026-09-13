@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupJob } from '@workspace/lib/types/backup';
 import { ApiError } from '../core';
@@ -7,7 +6,13 @@ import type { Home } from '../home';
 import { sendToHome } from '../home/home-relay';
 import { extractArtifact, packFolder, readUnpackedHome, writeSidecar } from './archive';
 import { describeError } from './errors';
-import { buildHomeFolderName, freeArtifactName, getBackupStagingDir, getBackupsDir } from './paths';
+import {
+    buildHomeFolderName,
+    freeArtifactName,
+    getBackupStagingDir,
+    getBackupsDir,
+    wipeBackupStagingDir,
+} from './paths';
 import { type SnapshotProgress, snapshotHome } from './snapshot-home';
 import { buildBackupJobEvent } from './sse-events';
 import { FAILURES_IN_MESSAGE, verifyFolder } from './verify';
@@ -172,7 +177,7 @@ export async function runHomeBackup(home: Home, job: BackupJob, onProgress: Snap
         }
         return name;
     } finally {
-        fs.rmSync(staging, { recursive: true, force: true });
+        wipeBackupStagingDir(job.id);
     }
 }
 
@@ -202,6 +207,6 @@ export async function runArtifactVerify(
         }
         return artifactName;
     } finally {
-        fs.rmSync(staging, { recursive: true, force: true });
+        wipeBackupStagingDir(job.id);
     }
 }

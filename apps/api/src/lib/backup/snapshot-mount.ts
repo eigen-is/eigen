@@ -16,10 +16,19 @@ import { captureFile, captureWrittenFile } from './capture';
 import { errnoOf } from './errors';
 import type { SnapshotProgress } from './snapshot-home';
 
-export type MountPathRow = Pick<
-    typeof paths.$inferSelect,
-    'id' | 'file' | 'name' | 'type' | 'parentId' | 'trashedFrom'
->;
+// The columns every reader of a mount's paths table wants, spelled once: snapshotMountData selects
+// them from the live mount, readMountPathRows derives the SELECT list of an archived copy from their
+// names, and the row type both hand back is this object's keys.
+const MOUNT_PATH_COLUMNS = {
+    id: paths.id,
+    file: paths.file,
+    name: paths.name,
+    type: paths.type,
+    parentId: paths.parentId,
+    trashedFrom: paths.trashedFrom,
+};
+
+export type MountPathRow = Pick<typeof paths.$inferSelect, keyof typeof MOUNT_PATH_COLUMNS>;
 
 // The databases a mount owns inside an archive: a container's data.db/comments.db and the versions/
 // snapshots of one, each with the container type behind it.
@@ -110,10 +119,12 @@ function managedDbContainer(row: MountPathRow, byId: Map<string, MountPathRow>):
     return CONTAINER_DB_NAMES.has(row.name) && isDocumentType(parent.type) ? parent : null;
 }
 
-// The rows of an archived metadata.db, in the shape every reader of one wants. The columns are
-// listed once here rather than in each caller's own SELECT (verify, restore).
+// The rows of an archived metadata.db, in the shape every reader of one wants (verify, restore).
 export function readMountPathRows(db: Database): MountPathRow[] {
-    return db.query<MountPathRow, []>('SELECT id, file, name, type, parentId, trashedFrom FROM paths').all();
+    const columns = Object.values(MOUNT_PATH_COLUMNS)
+        .map((column) => column.name)
+        .join(', ');
+    return db.query<MountPathRow, []>(`SELECT ${columns} FROM paths`).all();
 }
 
 // A live paths table can hold none of this: validateName wrote every `name`, `file` is a name or a
@@ -160,8 +171,7 @@ export function listManagedDatabases(rows: MountPathRow[]): ManagedArchiveDataba
         if (row.type !== 'file') continue;
         const container = managedDbContainer(row, byId);
         if (!container) continue;
-        // managedDbContainer returns the parent for a container database and the grandparent for a
-        // version snapshot, which is what tells a live data.db from an archived copy of one.
+        // The container is the parent of a live data.db and the grandparent of a version snapshot.
         const isContainerData = container.id === row.parentId && row.name === CONTAINER_DATA_DB;
         found.push({
             path: archivePath(row, byId),
@@ -228,17 +238,7 @@ export async function snapshotMountData(
     relPrefix: string,
     onProgress: SnapshotProgress,
 ): Promise<MountSnapshot> {
-    const rows = await mount.db
-        .select({
-            id: paths.id,
-            file: paths.file,
-            name: paths.name,
-            type: paths.type,
-            parentId: paths.parentId,
-            trashedFrom: paths.trashedFrom,
-        })
-        .from(paths)
-        .all();
+    const rows = await mount.db.select(MOUNT_PATH_COLUMNS).from(paths).all();
     const byId = new Map(rows.map((row) => [row.id, row]));
 
     const fileRows = rows.filter((row) => row.type === 'file');

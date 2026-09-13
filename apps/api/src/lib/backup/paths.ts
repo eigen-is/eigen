@@ -92,6 +92,14 @@ export function resolveMountDir(homeDir: string, mountId: string): string | null
     return resolveInside(homeDir, `${PATHS.DRIVE.ROOT}/${mountId}`);
 }
 
+// The same folder for the callers that refuse an id they cannot place, spelled once. The null form
+// above is for the ones that tolerate a missing mount (safety-copy.ts walks what a copy still has).
+export function requireMountDir(homeDir: string, mountId: string): string {
+    const mountDir = resolveMountDir(homeDir, mountId);
+    if (!mountDir) throw new ApiError(400, `${mountId} is not a mount of this home`);
+    return mountDir;
+}
+
 // The layout inside a backup folder: `home/` mirrors the home directory one-for-one, and every
 // mount keeps its metadata.db beside a `data/` tree of the files its paths table knows about.
 // snapshotHome writes it and verifyFolder reads it back — one spelling for both.
@@ -204,16 +212,24 @@ export type BackableOwner = ParsedOwnerId & { type: 'user' | 'team' };
 // one spelling of that refusal, for the folder resolver and for the snapshot itself.
 export function requireBackableOwner(owner: ParsedOwnerId): asserts owner is BackableOwner {
     if (owner.type !== 'user' && owner.type !== 'team') {
-        throw new ApiError(400, `Cannot back up a ${owner.type} home`);
+        throw new ApiError(400, `Not a user or team home (${owner.type})`);
     }
 }
 
-// Where this owner's home folder lives. A guest is refused here as well: their home is disposable.
-export async function resolveHomeDir(ownerId: string): Promise<string> {
+// The owner an ownerId names, once it is one a backup can be of. The guest refusal needs the user
+// row, which is why this is the async half of requireBackableOwner; the routes and the folder
+// resolver both go through it, so the refusal is spelled once.
+export async function requireBackableHome(ownerId: string): Promise<BackableOwner> {
     const owner = parseOwnerId(ownerId);
-    if (owner.type === 'team') return getTeamDataPath(owner.id);
     requireBackableOwner(owner);
-    const existing = await getUserById(owner.id);
-    if (existing?.role === 'guest') throw new ApiError(400, 'Guest homes are not backed up');
-    return getUserHomePath(owner.id);
+    if (owner.type === 'user' && (await getUserById(owner.id))?.role === 'guest') {
+        throw new ApiError(400, 'Guest homes are not backed up');
+    }
+    return owner;
+}
+
+// Where this owner's home folder lives.
+export async function resolveHomeDir(ownerId: string): Promise<string> {
+    const owner = await requireBackableHome(ownerId);
+    return owner.type === 'team' ? getTeamDataPath(owner.id) : getUserHomePath(owner.id);
 }

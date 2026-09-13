@@ -1,7 +1,6 @@
 import * as fs from 'node:fs';
 import { BACKUP_UPLOAD_MAX_BYTES, BACKUP_UPLOAD_MAX_LABEL } from '@workspace/lib/constants/backup';
 import type { BackupArtifact, BackupJob, BackupSafetyCopy } from '@workspace/lib/types/backup';
-import { parseOwnerId } from '@workspace/lib/types/owner';
 import { BACKUP_OWNER_ID, parseBackupArtifactName } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { deleteArtifact, landUpload, listArtifacts, resolveArtifact } from '../lib/backup/artifacts';
@@ -13,6 +12,7 @@ import {
     startBackupJob,
     withBackupJobSlot,
 } from '../lib/backup/jobs';
+import { type BackableOwner, requireBackableHome } from '../lib/backup/paths';
 import { restoreHome, restoreSafetyCopy } from '../lib/backup/restore';
 import { deleteSafetyCopy, listSafetyCopies, resolveSafetyCopy } from '../lib/backup/safety-copy';
 import type { SnapshotProgress } from '../lib/backup/snapshot-home';
@@ -24,23 +24,18 @@ import { getTeam } from '../lib/team/team';
 import { getUserById } from '../lib/user';
 import { betterAuth } from './auth';
 
-// Guest homes are disposable (guest-cleanup deletes them) and org homes hold no databases, so
-// neither is backed up. The ownerId ends up naming a home folder, so its shape is checked here,
-// against the one class the shared artifact-name grammar allows, before anything is resolved.
-async function requireRestorableHome(ownerId: string): Promise<void> {
+// The ownerId ends up naming a home folder, so its shape is checked here, against the one class the
+// shared artifact-name grammar allows, before anything is resolved; which kinds of home a backup can
+// be of is requireBackableHome's answer.
+async function requireRestorableHome(ownerId: string): Promise<BackableOwner> {
     if (!BACKUP_OWNER_ID.test(ownerId)) throw new ApiError(400, 'Invalid ownerId');
-    const owner = parseOwnerId(ownerId);
-    if (owner.type !== 'user' && owner.type !== 'team') throw new ApiError(400, 'Not a user or team home');
-    if (owner.type === 'user' && (await getUserById(owner.id))?.role === 'guest') {
-        throw new ApiError(400, 'Guest homes are not backed up');
-    }
+    return requireBackableHome(ownerId);
 }
 
 // A backup also needs the home to be there. A restore does not: restoring a user who was deleted is
 // what the auth rows inside the archive are for.
 async function requireExistingHome(ownerId: string): Promise<void> {
-    await requireRestorableHome(ownerId);
-    const owner = parseOwnerId(ownerId);
+    const owner = await requireRestorableHome(ownerId);
     if (owner.type === 'team') {
         if (!(await getTeam(owner.id))) throw new ApiError(404, 'Team not found');
         return;
@@ -132,10 +127,9 @@ export const backupRouter = new Elysia({ name: 'backup' })
         '/admin/backup/artifacts',
         async ({ query, request, user }): Promise<{ name: string }> => {
             await requireAdmin(user.id);
-            // The name is a query parameter, not a header: a custom request header makes the upload
-            // a CORS-preflighted request, and a split-origin deployment (every dev setup) answers
-            // that preflight without it. It has to be a name this server writes — the ownerId in it
-            // is what the artifact list groups by, and it is the name the bytes land under.
+            // Name in the query, not a header: see getBackupUploadUrl. It has to be a name this
+            // server writes — the ownerId in it is what the artifact list groups by, and it is the
+            // name the bytes land under.
             if (!parseBackupArtifactName(query.name)) {
                 throw new ApiError(400, 'The name parameter must be a backup artifact name');
             }

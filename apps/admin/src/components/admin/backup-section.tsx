@@ -19,6 +19,7 @@ import { Alert, AlertDescription } from '@workspace/ui/components/alert';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { Progress } from '@workspace/ui/components/progress';
+import { cn } from '@workspace/ui/lib/utils';
 import { AlertTriangle, Archive, Download, RotateCcw, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 
@@ -113,8 +114,8 @@ export function BackupSection({ ownerId }: BackupSectionProps) {
     // Newest first, and the server allows one job per home — so the newest job is the whole story.
     const latest = jobs[0];
     const running = latest?.state === 'running' ? latest : undefined;
-    const failed = latest?.state === 'failed' && latest.id !== dismissedJobId ? latest : undefined;
-    const finished = latest?.state === 'done' && latest.id !== dismissedJobId ? latest : undefined;
+    const result = latest && latest.state !== 'running' && latest.id !== dismissedJobId ? latest : undefined;
+    const rowCount = data ? data.artifacts.length + data.safetyCopies.length : 0;
 
     const ask = (next: BackupConfirm) => {
         setConfirm(next);
@@ -168,7 +169,7 @@ export function BackupSection({ ownerId }: BackupSectionProps) {
                 </div>
             </div>
 
-            {data && data.artifacts.length + data.safetyCopies.length > 0 && (
+            {rowCount > 0 && (
                 <Alert variant="warning">
                     <AlertTriangle className="h-4 w-4" />
                     <AlertDescription>
@@ -189,30 +190,30 @@ export function BackupSection({ ownerId }: BackupSectionProps) {
                     )}
                 </div>
             )}
-            {failed && (
+            {result && (
                 <div className="flex items-start gap-1">
-                    <p className="text-xs text-destructive flex-1">
-                        {JOB_LABEL[failed.kind]} failed: {failed.error}
+                    <p
+                        className={cn(
+                            'text-xs flex-1',
+                            result.state === 'failed' ? 'text-destructive' : 'text-muted-foreground truncate',
+                        )}
+                    >
+                        {result.state === 'failed' ? (
+                            <>
+                                {JOB_LABEL[result.kind]} failed: {result.error}
+                            </>
+                        ) : (
+                            <>
+                                {JOB_DONE_LABEL[result.kind]}
+                                {result.artifact && ` · ${result.artifact}`}
+                            </>
+                        )}
                     </p>
                     <TooltipButton
                         icon={X}
                         tooltipText="Dismiss"
                         className="h-5 w-5 shrink-0"
-                        onClick={() => setDismissedJobId(failed.id)}
-                    />
-                </div>
-            )}
-            {finished && (
-                <div className="flex items-start gap-1">
-                    <p className="text-xs text-muted-foreground flex-1 truncate">
-                        {JOB_DONE_LABEL[finished.kind]}
-                        {finished.artifact && ` · ${finished.artifact}`}
-                    </p>
-                    <TooltipButton
-                        icon={X}
-                        tooltipText="Dismiss"
-                        className="h-5 w-5 shrink-0"
-                        onClick={() => setDismissedJobId(finished.id)}
+                        onClick={() => setDismissedJobId(result.id)}
                     />
                 </div>
             )}
@@ -222,7 +223,7 @@ export function BackupSection({ ownerId }: BackupSectionProps) {
                 <LoadingState />
             ) : isError || !data ? (
                 <ErrorState message="Could not load the backups of this home." />
-            ) : data.artifacts.length + data.safetyCopies.length === 0 ? (
+            ) : rowCount === 0 ? (
                 <p className="text-sm text-muted-foreground">No backups yet.</p>
             ) : (
                 // Both lists in one branch: the empty state above stands for the whole section, and
