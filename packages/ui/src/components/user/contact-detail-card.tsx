@@ -13,12 +13,12 @@ export type ContactDetailCardProps = {
 };
 
 function formatAddress(address: Address) {
-    const parts = [address.street, address.city, address.state, address.zipCode, address.country].filter(Boolean);
-
-    return parts.join(', ');
+    return [address.street, address.city, address.state, address.zipCode, address.country].filter(Boolean).join(', ');
 }
 
 export function ContactDetailCard({ contact, labels, className }: ContactDetailCardProps) {
+    const addresses = contact.address ?? [];
+
     return (
         <div className={cn('flex flex-col md:flex-row gap-8', className)}>
             <UserDetailHero
@@ -102,15 +102,15 @@ export function ContactDetailCard({ contact, labels, className }: ContactDetailC
                     )}
                 </div>
 
-                {contact.address && contact.address.length > 0 && Object.keys(contact.address[0]).length > 0 && (
+                {addresses.length > 0 && Object.keys(addresses[0]).length > 0 && (
                     <div className="space-y-4">
                         <h3 className="text-lg font-medium border-b pb-2">Addresses</h3>
 
-                        {contact.address.map((address, index) => (
+                        {addresses.map((address, index) => (
                             <div key={index} className="space-y-2">
                                 <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                                     <MapPin className="h-4 w-4" />
-                                    Address {contact.address && contact.address.length > 1 ? index + 1 : ''}
+                                    Address {addresses.length > 1 ? index + 1 : ''}
                                 </h4>
                                 <div className="pl-6">{formatAddress(address)}</div>
                             </div>
