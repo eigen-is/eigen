@@ -20,7 +20,7 @@ Only the server owner can reach these settings.
 4. Click **Test Connection**.
 5. When the test reports that the connection worked, the **Bucket safety** panel appears below the form.
 
-The same **S3 Configuration** form, with the same panel, appears whenever you point a team's storage at an S3 bucket in Admin.
+The same **S3 Configuration** form, with the same panel, appears when you give a team its own storage. Open the team from **Teams** in the sidebar, then click **Add** in the **Mounts** section to reach **Add Mount**, or **Mount settings** on a mount that is already there to reach **Edit Mount**.
 
 ## What the panel tells you
 

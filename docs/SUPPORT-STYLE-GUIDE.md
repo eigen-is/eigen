@@ -33,9 +33,11 @@ The reader is a normal Eigen user. Assume they can use a computer; do **not** as
 
 - **Describe what the user sees and does**, never how it's built. They click buttons and read labels. They don't
   know or care about the implementation.
-- **Banned vocabulary** (implementation words that must never appear in a user article): `Yjs`, `mount`,
+- **Banned vocabulary** (implementation words that must never appear in a user article): `Yjs`,
   `ACL`, `ApiError`, `Eden`, `Elysia`, `SQLite`, `WebSocket`, `SSE`, `Drizzle`, `Home`, `container`, `data.db`.
   WebDAV, IMAP, and CalDAV **are** allowed, because they're real things users configure in other apps.
+  So is "mount": it is the word the Admin interface uses for a storage location, so an admin article names the
+  control. In an app article, say "drive".
 - You research in the code to get the **facts** right, then write them in **plain language**.
 
 ## 3. Voice

@@ -51,7 +51,7 @@ Contacts, Chat, Stickies, plus Space for account settings and Admin).
    - If only parts are unverifiable, leave those parts out. Incomplete is fine. Incorrect is not.
    - Never guess, never write "probably", never describe a control you haven't seen in the code.
 3. **Write for a non-technical user.** Describe what they see and click, never how it's built. No implementation
-   words (the style guide lists the banned ones: `Yjs`, `mount`, `ACL`, `ApiError`, `SQLite`, and so on).
+   words (the style guide lists the banned ones: `Yjs`, `ACL`, `ApiError`, `SQLite`, and so on).
 4. **Follow the style guide:** second person, present tense, British English, short sentences, bold exact UI
    labels, **no em dashes (—)**, no filler ("simply", "just", "easily"). One article, one job, matching `type`.
 5. **Write the file** at the exact path above, with valid frontmatter (the build validates it).
