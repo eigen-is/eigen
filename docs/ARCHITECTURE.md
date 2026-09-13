@@ -108,7 +108,7 @@ These patterns have caused bugs across multiple domains. The gated ones (MIME st
 
 - **Query keys must include `ownerId`** for any owner-scoped data. Without it, switching between personal and team contexts serves stale cached data from the wrong owner
 - **Add a `SharedDrive` wrapper for every route-callable `Drive` method**, with the appropriate permission check (`withReadPermission`, `withWritePermission`, or owner check) — see [§ Drive Architecture](#drive-architecture)
-- **MIME type strings must match the Eigen File Types table exactly** — use the constants, don't type them by hand (gated)
+- **MIME type strings** — the rule is one line in [AGENTS.md § Pitfalls](../AGENTS.md#pitfalls) (gated), and the table it matches is [AGENTS.md § Eigen File Types](../AGENTS.md#eigen-file-types)
 - **`validateSearch` in shared routes must extract all URL params the route uses** — missing params (like `uid`) silently break detail panes for shared items
 - **Never mutate TanStack Query cache directly** — use `queryClient.setQueryData()` or `invalidateQueries()`, not direct object mutation on cached data
 - **No `"use client"` directives** — this is a Vite project, not Next.js. The directive is a no-op

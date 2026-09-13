@@ -22,8 +22,8 @@ Layout, stack, and scripts are derivable — read `package.json` (scripts + work
 - **One source of truth per fact** — a set, map, schema, or constant that answers a question lives in exactly one module. Import it; never re-list its members inline; derive subsets from the canonical one ([why](docs/ARCHITECTURE.md#one-source-of-truth-per-fact))
 - **A primitive isn't "shared" until its barrel exports it** — values through `@workspace/ui` / `@workspace/lib/<domain>`, types through `@workspace/lib/types/<domain>`; a deep import past a barrel means it should have been exported ([why](docs/ARCHITECTURE.md#a-primitive-is-shared-only-when-its-barrel-exports-it))
 - **Fix broken windows** — fix pre-existing issues if the fix is straightforward
-- **Keep docs up to date** — gotchas land in `docs/<DOMAIN>.md`; this file only if cross-domain. A user-visible change corrects the help center (`apps/index/src/data/support/`) in the same cycle, minimally, via the [support-article skill](.claude/skills/support-article/SKILL.md) and [SUPPORT-STYLE-GUIDE.md](docs/SUPPORT-STYLE-GUIDE.md)
-- **No hard line-wrapping in Markdown prose** — keep each paragraph on one line; never insert manual line breaks to satisfy a maximum line length. Editors soft-wrap, and rendered HTML is unaffected either way
+- **Keep docs up to date** — gotchas land in `docs/<DOMAIN>.md`; this file only if cross-domain; a new backend or frontend concept gets its row in the [ARCHITECTURE.md](docs/ARCHITECTURE.md) tables. A user-visible change corrects the help center (`apps/index/src/data/support/`) in the same cycle, minimally, via the [support-article skill](.claude/skills/support-article/SKILL.md) and [SUPPORT-STYLE-GUIDE.md](docs/SUPPORT-STYLE-GUIDE.md)
+- **No hard line-wrapping in Markdown prose** — when writing `.md` content (docs, blog posts, proposals), keep each paragraph on one line; never insert manual line breaks to satisfy a maximum line length. Editors soft-wrap, and rendered HTML is unaffected either way
 
 ## Working Method (multi-step changes)
 

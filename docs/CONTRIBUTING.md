@@ -168,7 +168,7 @@ It's a monorepo: one API server in `apps/api/`, frontend apps in `apps/*/`, and 
 
 Start here:
 
-- **[AGENTS.md](../AGENTS.md)** has the full project context, architecture, and critical rules. Written for
+- **[AGENTS.md](../AGENTS.md)** has the full project context and the critical rules. Written for
   humans and AI assistants alike.
 - **[CODE-STANDARDS.md](CODE-STANDARDS.md)** covers code patterns and Eden Treaty usage; **[ARCHITECTURE.md](ARCHITECTURE.md)** has the backend and frontend location tables, the Drive layers and the pitfalls.
 - **[STORAGE.md](STORAGE.md)** explains the per-user SQLite + file storage design.
