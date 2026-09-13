@@ -1,63 +1,77 @@
-// A whole-book import broadcasts one contacts:contact-created per card, so the handler's job during a
-// burst is to refetch the list once, not once per card.
+// A whole-book import or a CardDAV bulk sync broadcasts one contacts:contact-* per card, so the handler's
+// job during a burst is to refetch the list once while still touching every card's own detail entry.
 import { describe, expect, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { contactKeys } from '../../../core/contacts/hooks/keys';
 import { handleContactsSSEvent } from '../../../core/contacts/sse-handlers';
 
-// Record every queryKey passed to invalidateQueries. Recipe: the drive sse-handlers test.
-function trackingClient(): { queryClient: QueryClient; invalidated: readonly unknown[][] } {
+// Record every queryKey passed to invalidateQueries and removeQueries — a deleted card's detail entry is
+// removed, not invalidated. Recipe: the drive sse-handlers test.
+function trackingClient(): { queryClient: QueryClient; touched: readonly unknown[][] } {
     const queryClient = new QueryClient();
-    const invalidated: unknown[][] = [];
-    const original = queryClient.invalidateQueries.bind(queryClient);
+    const touched: unknown[][] = [];
+    const invalidate = queryClient.invalidateQueries.bind(queryClient);
+    const remove = queryClient.removeQueries.bind(queryClient);
     queryClient.invalidateQueries = (filters?: { queryKey?: readonly unknown[] }) => {
-        if (filters?.queryKey) invalidated.push([...filters.queryKey]);
-        return original(filters as never);
+        if (filters?.queryKey) touched.push([...filters.queryKey]);
+        return invalidate(filters as never);
     };
-    return { queryClient, invalidated };
+    queryClient.removeQueries = (filters?: { queryKey?: readonly unknown[] }) => {
+        if (filters?.queryKey) touched.push([...filters.queryKey]);
+        return remove(filters as never);
+    };
+    return { queryClient, touched };
 }
 
-function listInvalidations(invalidated: readonly unknown[][], ownerId: string): number {
-    const lists = JSON.stringify(contactKeys.lists(ownerId));
-    return invalidated.filter((key) => JSON.stringify(key) === lists).length;
+function countKey(touched: readonly unknown[][], expected: readonly unknown[]): number {
+    const wanted = JSON.stringify(expected);
+    return touched.filter((key) => JSON.stringify(key) === wanted).length;
 }
 
-// The handler's debounce is a trailing timer; a burst lands after one window, not before it.
+// The debounce is a trailing timer; the list half lands after one window, not before it.
 async function settle(): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 400));
 }
 
-describe('handleContactsSSEvent — created burst', () => {
-    test('an import of 50 cards refetches the list once, not once per card', async () => {
+describe('handleContactsSSEvent — burst', () => {
+    test('50 mixed card events refetch the list once and still touch all 50 detail entries', async () => {
         const owner = 'owner-burst';
-        const { queryClient, invalidated } = trackingClient();
+        const { queryClient, touched } = trackingClient();
 
         for (let i = 0; i < 50; i++) {
-            expect(
-                handleContactsSSEvent(
-                    { type: SSEventType.CONTACT_CREATED, contactId: `card-${i}` },
-                    queryClient,
-                    owner,
-                ),
-            ).toBe(true);
+            const contactId = `card-${i}`;
+            const type =
+                i % 3 === 0
+                    ? SSEventType.CONTACT_CREATED
+                    : i % 3 === 1
+                      ? SSEventType.CONTACT_UPDATED
+                      : SSEventType.CONTACT_DELETED;
+            expect(handleContactsSSEvent({ type, contactId }, queryClient, owner)).toBe(true);
         }
-        expect(listInvalidations(invalidated, owner)).toBe(0);
+
+        // Every card the burst names is handled at once; only the owner-wide half waits for the window.
+        const details = (): number =>
+            Array.from({ length: 50 }, (_, i) => countKey(touched, contactKeys.detail(owner, `card-${i}`))).reduce(
+                (sum, n) => sum + n,
+                0,
+            );
+        expect(details()).toBe(33);
+        expect(countKey(touched, contactKeys.lists(owner))).toBe(0);
 
         await settle();
-        expect(listInvalidations(invalidated, owner)).toBe(1);
+        expect(details()).toBe(33);
+        expect(countKey(touched, contactKeys.lists(owner))).toBe(1);
+        expect(countKey(touched, contactKeys.me(owner))).toBe(1);
     });
 
-    test('two cards updated in one burst each keep their own invalidation', async () => {
-        const owner = 'owner-updates';
-        const { queryClient, invalidated } = trackingClient();
+    test('a single event still refetches the list, one window later', async () => {
+        const owner = 'owner-single';
+        const { queryClient, touched } = trackingClient();
 
-        handleContactsSSEvent({ type: SSEventType.CONTACT_UPDATED, contactId: 'a' }, queryClient, owner);
-        handleContactsSSEvent({ type: SSEventType.CONTACT_UPDATED, contactId: 'b' }, queryClient, owner);
+        handleContactsSSEvent({ type: SSEventType.CONTACT_CREATED, contactId: 'a' }, queryClient, owner);
         await settle();
 
-        const keys = invalidated.map((key) => JSON.stringify(key));
-        expect(keys).toContain(JSON.stringify(contactKeys.detail(owner, 'a')));
-        expect(keys).toContain(JSON.stringify(contactKeys.detail(owner, 'b')));
+        expect(countKey(touched, contactKeys.lists(owner))).toBe(1);
     });
 });

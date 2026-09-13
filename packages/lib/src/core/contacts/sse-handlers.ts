@@ -3,29 +3,29 @@ import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { debounce } from 'es-toolkit';
 import {
-    invalidateContactCreated,
-    invalidateContactDeleted,
-    invalidateContactUpdated,
+    contactKeys,
+    invalidateContactList,
     invalidateLabelCreated,
     invalidateLabelDeleted,
     invalidateLabelUpdated,
 } from './hooks/keys';
 
-// A whole-book import or a CardDAV sync emits one event per card, and every card's invalidation restarts
-// the mounted list refetch — 500 cards used to mean 500 refetches per open tab, enough to trip the
-// per-IP rate limiter. Each event kind is collapsed per key into one trailing refetch instead; the
-// importing tab's own onSuccess invalidation is untouched, so a single write still lands immediately.
+// A whole-book import or a CardDAV bulk sync emits one event per card, and every card's owner-wide
+// invalidation restarts the mounted list refetch — 500 cards used to mean 500 refetches per open tab,
+// enough to trip the per-IP rate limiter. The list, `me` and home-size half is collapsed per owner into
+// one trailing refetch instead; each card's own detail entry is still handled at once, so a burst never
+// drops the card an open detail pane is showing. The importing tab's own onSuccess invalidation is
+// untouched, so a single write still lands immediately.
 const INVALIDATE_DEBOUNCE_MS = 250;
-const debouncedInvalidations = new Map<string, (queryClient: QueryClient) => void>();
+const debouncedListInvalidations = new Map<string, (queryClient: QueryClient) => void>();
 
-// The key carries the owner and the record the event is about, so a burst never drops another card's
-// invalidation — only repeats of the same one collapse. The QueryClient travels as the argument
-// (es-toolkit's debounce calls with the latest ones) rather than in the closure, which is stored.
-function invalidateSoon(key: string, queryClient: QueryClient, invalidate: (queryClient: QueryClient) => void): void {
-    let run = debouncedInvalidations.get(key);
+// The QueryClient travels as the argument (es-toolkit's debounce calls with the latest ones) rather than
+// in the closure, which is stored for the owner's lifetime.
+function invalidateListSoon(queryClient: QueryClient, ownerId: string): void {
+    let run = debouncedListInvalidations.get(ownerId);
     if (!run) {
-        run = debounce(invalidate, INVALIDATE_DEBOUNCE_MS);
-        debouncedInvalidations.set(key, run);
+        run = debounce((client: QueryClient) => invalidateContactList(client, ownerId), INVALIDATE_DEBOUNCE_MS);
+        debouncedListInvalidations.set(ownerId, run);
     }
     run(queryClient);
 }
@@ -35,21 +35,17 @@ export function handleContactsSSEvent(event: SSEvent, queryClient: QueryClient, 
 
     switch (event.type) {
         case SSEventType.CONTACT_CREATED:
-            invalidateSoon(`${event.type}:${userId}`, queryClient, (client) =>
-                invalidateContactCreated(client, userId),
-            );
+            invalidateListSoon(queryClient, userId);
             return true;
 
         case SSEventType.CONTACT_UPDATED:
-            invalidateSoon(`${event.type}:${userId}:${event.contactId}`, queryClient, (client) =>
-                invalidateContactUpdated(client, userId, event.contactId),
-            );
+            queryClient.invalidateQueries({ queryKey: contactKeys.detail(userId, event.contactId) });
+            invalidateListSoon(queryClient, userId);
             return true;
 
         case SSEventType.CONTACT_DELETED:
-            invalidateSoon(`${event.type}:${userId}:${event.contactId}`, queryClient, (client) =>
-                invalidateContactDeleted(client, userId, event.contactId),
-            );
+            queryClient.removeQueries({ queryKey: contactKeys.detail(userId, event.contactId) });
+            invalidateListSoon(queryClient, userId);
             return true;
 
         case SSEventType.LABEL_CREATED:

@@ -9,7 +9,7 @@ import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
 import { downloadBlob, filenameFromDisposition } from '../../download';
-import { contactKeys, invalidateContactCreated } from './keys';
+import { contactKeys, invalidateContactList } from './keys';
 
 // One phrasing for both import paths: a file from the disk and a file from Drive report the same three
 // counts. Nothing imported and nothing skipped means the file held no contact this book could take —
@@ -82,7 +82,7 @@ export function useImportContacts() {
             return await response.json();
         },
         onSuccess: (result) => {
-            invalidateContactCreated(queryClient, ownerId);
+            invalidateContactList(queryClient, ownerId);
             reportImport(result);
         },
         onError: onMutationError,
@@ -101,7 +101,7 @@ export function useImportContactsFromDrive() {
             return response.data;
         },
         onSuccess: (result) => {
-            invalidateContactCreated(queryClient, ownerId);
+            invalidateContactList(queryClient, ownerId);
             reportImport(result);
         },
         onError: onMutationError,

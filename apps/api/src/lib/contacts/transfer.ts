@@ -88,8 +88,7 @@ export async function importCards(contacts: Contacts, text: string): Promise<Imp
             continue;
         }
         if (parsed.uid) {
-            // Queried per card rather than pre-collected: the loop's own writes land in the index, so a
-            // file that repeats a UID skips its second copy through the same check as a re-import.
+            // Queried per card, so the loop's own writes count: a repeated UID skips like a re-import.
             const stored = contacts.db
                 .select({ id: schema.contacts.id })
                 .from(schema.contacts)

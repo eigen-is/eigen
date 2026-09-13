@@ -11,7 +11,7 @@ export function splitVCards(text: string): string[] {
     while (i < n) {
         // A BOM belongs to a file, not to a card, and concatenated exports (`cat a.vcf b.vcf`) leave one in
         // front of any card — so skip it wherever it sits, and keep it out of the card's own bytes.
-        const lineStart = text[i] === '﻿' ? i + 1 : i;
+        const lineStart = text[i] === '\uFEFF' ? i + 1 : i;
         let j = lineStart;
         while (j < n && text[j] !== '\n' && text[j] !== '\r') j++;
         const content = text.slice(lineStart, j);

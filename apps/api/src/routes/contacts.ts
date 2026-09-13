@@ -10,7 +10,7 @@ import { CARD_MAX_BYTES } from '../lib/contacts/card-store';
 import { getContacts } from '../lib/contacts/contacts';
 import { requireNonGuest, requireSelf } from '../lib/core/access';
 import { ApiError } from '../lib/core/errors';
-import { contentDisposition, readBoundedBody, setCacheHeaders } from '../lib/core/http';
+import { contentDisposition, readBoundedBodyBytes, setCacheHeaders } from '../lib/core/http';
 import { getSharedDrive } from '../lib/drive';
 import { betterAuth } from './auth';
 
@@ -56,6 +56,16 @@ const LabelSchema = t.Object({
     name: t.String(TEXT),
     color: t.String(TEXT),
 });
+
+// vCard files are UTF-8 (RFC 6350 §3.1). A Windows-1252 export decoded leniently would import with U+FFFD
+// in every accented name, stored in the card bytes and re-served to every DAV client, so it is refused.
+function decodeVCardFile(bytes: Uint8Array): string {
+    try {
+        return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    } catch {
+        throw new ApiError(400, 'File is not UTF-8 encoded');
+    }
+}
 
 // All contacts routes require ownerId === user.id (contacts are personal-only, no shared access)
 export const contactsRouter = new Elysia({ name: 'contacts' })
@@ -226,16 +236,9 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             // A whole book replays card by card through the CardDAV write seam, answering nothing until the
             // last one lands — longer than any server-wide idleTimeout, so exempt this request.
             server?.timeout(request, 0);
-            // A card whose name came out of a Windows-1252 export would be stored mangled and re-served to
-            // every DAV client, so the file is refused instead of decoded with replacement characters.
-            let text: string | null;
-            try {
-                text = await readBoundedBody(request, IMPORT_MAX_BYTES, true);
-            } catch {
-                throw new ApiError(400, 'File is not UTF-8 encoded');
-            }
-            if (text === null) throw new ApiError(413, 'Upload too large');
-            return await (await getContacts(user)).importCards(text);
+            const bytes = await readBoundedBodyBytes(request, IMPORT_MAX_BYTES);
+            if (bytes === null) throw new ApiError(413, 'Upload too large');
+            return await (await getContacts(user)).importCards(decodeVCardFile(bytes));
         },
         { auth: true, parse: 'none' },
     )
@@ -254,13 +257,8 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             if (source.size > IMPORT_MAX_BYTES) throw new ApiError(413, 'Upload too large');
             const file = await sourceDrive.downloadFile(body.sourceMountId, body.sourcePathId);
             if (!file) throw new ApiError(404, 'Source file not found');
-            let text: string;
-            try {
-                text = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer());
-            } catch {
-                throw new ApiError(400, 'File is not UTF-8 encoded');
-            }
-            return await (await getContacts(user)).importCards(text);
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            return await (await getContacts(user)).importCards(decodeVCardFile(bytes));
         },
         {
             body: t.Object({

@@ -5,7 +5,7 @@ import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { CreateContactInput, UpdateContactInput } from '@workspace/lib/types/contact';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
-import { contactKeys, invalidateContactCreated, invalidateContactDeleted, invalidateContactUpdated } from './keys';
+import { contactKeys, invalidateContactDeleted, invalidateContactList, invalidateContactUpdated } from './keys';
 
 // A write echoes the etag its form loaded; a 412 means the card changed elsewhere first. Reload list + detail so
 // the form shows current state, tell the user, and swallow it. All handling stays in the hook (NOTIFICATIONS.md).
@@ -51,7 +51,7 @@ export function useAddContact() {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateContactCreated(queryClient, ownerId),
+        onSuccess: () => invalidateContactList(queryClient, ownerId),
         onError: onMutationError,
     });
 }
