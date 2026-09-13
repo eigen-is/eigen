@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1379 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1382 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -797,7 +797,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (618)
+## Utilities & constants (621)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1115,6 +1115,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isInlineEditable` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isOpenable` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isS3ConfigValid` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
+| `isVCardFile` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `mapStorageType` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `mountStorageIdentity` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `orgOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
@@ -1124,6 +1125,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `teamOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `toFileEventType` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `userOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
+| `VCARD_MIMES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `withEigenExtension` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `toAttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
 | `BACKUP_ARTIFACT_EXTENSION` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
@@ -1156,6 +1158,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `photoParams` | `@workspace/lib/vcard` | packages/lib/src/vcard/ast.ts |
 | `serializeVCardLines` | `@workspace/lib/vcard` | packages/lib/src/vcard/ast.ts |
 | `splitDataUri` | `@workspace/lib/vcard` | packages/lib/src/vcard/ast.ts |
+| `splitVCards` | `@workspace/lib/vcard` | packages/lib/src/vcard/split.ts |
 | `transcodeTo30` | `@workspace/lib/vcard` | packages/lib/src/vcard/transcode.ts |
 | `unescapeText` | `@workspace/lib/vcard` | packages/lib/src/vcard/ast.ts |
 | `anchorToScene` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
