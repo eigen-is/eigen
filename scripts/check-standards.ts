@@ -61,6 +61,40 @@ const RAW_COLOR = new RegExp(
 );
 const APP_LAYER = /\b(?:useQuery|useMutation|useInfiniteQuery)\(|\btoast\.(?:error|success)\(/g;
 
+// Every Eigen document MIME, read from the one file that declares them so a seventh type never needs a
+// second list here. `application/eigen-*` — the drag and clipboard wire formats — is a different family,
+// not a document MIME, hence the `(?!-)`.
+const MIME_SOURCE = 'packages/lib/src/types/drive.ts';
+const EIGEN_MIME = /application\/eigen(?!-)[a-z]*/g;
+const CANONICAL_MIMES = new Set(
+    [...(await Bun.file(MIME_SOURCE).text()).matchAll(/DRIVE_MIME_\w+ = '(application\/eigen[a-z]*)'/g)].map(
+        (match) => match[1],
+    ),
+);
+if (CANONICAL_MIMES.size === 0) {
+    console.error(`ERROR: no DRIVE_MIME_* constants found in ${MIME_SOURCE} — the mime gate has nothing to check`);
+    process.exit(1);
+}
+
+const ROUTE_FILE = /^apps\/api\/src\/routes\/[^/]+\.ts$/;
+// The home-independent surfaces that deliberately carry no `:ownerId` (AGENTS.md § Common Pitfalls):
+// first-run setup, server-wide admin config, the unauthenticated public surface, and the admin backup
+// routes — server-wide too, gated by `requireAdmin` in every handler rather than by home ownership.
+const OWNER_ID_EXEMPT = new Set(['setup.ts', 'settings.ts', 'waitlist.ts', 'public.ts', 'backup.ts']);
+// One chunk per route: from its `.method('/…` to the next one.
+const ROUTE_START = /\.(?:get|post|put|patch|delete|ws|head|options|all)\(\s*['"]\//;
+// `/ws` is a transport prefix rather than a path segment — the collab socket's `:ownerId` sits behind it.
+const TRANSPORT_PREFIX = /^\/ws(?=\/)/;
+
+// AGENTS.md § Hover-Only Icons: an affordance hidden until hover must rest visible on touch, which has
+// no hover. Only a hidden element is at risk — a decorative `group-hover:scale-105` reveals nothing —
+// so the trigger is a hiding utility plus a revealing `group-hover:` in the same class string.
+// `pointer-fine:group-hover:` declares the hover desktop-only on purpose and is not a gap.
+const STRING_LITERAL = /'[^'\n]*'|"[^"\n]*"|`[^`]*`/g;
+const HIDDEN_BASE = /(?<![\w-])(?:invisible|hidden|opacity-0)(?![\w-])/;
+const HOVER_REVEAL =
+    /(?<!pointer-fine:)\bgroup-hover:(visible|flex|grid|block|inline-flex|inline-block|opacity-\d+)(?![\w-])/g;
+
 type SourceFile = {
     path: string;
     // Raw file text — use it for anything that lives in a comment, a string, or a class name.
@@ -154,6 +188,46 @@ const METRICS: Metric[] = [
         // Data fetching and error toasts belong in packages/lib hooks, never in an app component.
         count: ({ path, code }) =>
             /^apps\/(?!api\/)[^/]+\/src\//.test(path) && !path.includes('/hooks/') ? countMatches(code, APP_LAYER) : 0,
+    },
+    {
+        id: 'wrong-eigen-mime',
+        label: 'Non-canonical `application/eigen…` MIMEs',
+        hardZero: true,
+        // `eigenslide` for `eigenslides` and `eigensheet` for `eigensheets` are the typos this catches.
+        count: ({ text }) => (text.match(EIGEN_MIME) ?? []).filter((mime) => !CANONICAL_MIMES.has(mime)).length,
+    },
+    {
+        id: 'route-owner-id',
+        label: 'Authenticated routes without `:ownerId` second',
+        hardZero: true,
+        // `ownerId` names the Home that owns the resource, which is the future sharding key.
+        count: ({ path, text }) => {
+            if (!ROUTE_FILE.test(path) || OWNER_ID_EXEMPT.has(path.slice(path.lastIndexOf('/') + 1))) return 0;
+            let hits = 0;
+            for (const chunk of text.split(new RegExp(`(?=${ROUTE_START.source})`)).slice(1)) {
+                const route = /['"](\/[^'"]*)['"]/.exec(chunk)?.[1];
+                // `auth: true` is this route's own option object; an unauthenticated route (LMTP
+                // delivery, guest OTP) answers to no Home and is skipped. Comments don't count.
+                if (route === undefined || !/auth:\s*true/.test(stripNoise(chunk))) continue;
+                if (route.replace(TRANSPORT_PREFIX, '').split('/')[2] !== ':ownerId') hits++;
+            }
+            return hits;
+        },
+    },
+    {
+        id: 'hover-without-touch',
+        label: 'Hover-revealed affordances without touch',
+        hardZero: true,
+        count: ({ text }) => {
+            let hits = 0;
+            for (const literal of text.match(STRING_LITERAL) ?? []) {
+                if (!HIDDEN_BASE.test(literal)) continue;
+                for (const [, utility] of literal.matchAll(HOVER_REVEAL)) {
+                    if (!text.includes(`pointer-coarse:${utility}`)) hits++;
+                }
+            }
+            return hits;
+        },
     },
 ];
 
