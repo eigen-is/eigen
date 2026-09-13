@@ -38,6 +38,12 @@ See [Add a contact](/support/contacts/add-a-contact) for a step-by-step walkthro
 
 If you belong to a team in Eigen, each team appears in the sidebar below **My Contacts**. Click a team name to see its members. You can view a team member's details the same way as a personal contact, but team members are managed by whoever administers the team, not through the Contacts form.
 
+## Bring contacts in, take a copy out
+
+Click the **⋮** button at the top of the contact list to import or export. **Import contacts…** reads a vCard file (`.vcf`) from your computer or from Drive, and **Export all contacts** downloads your whole address book as one file. You can also export a single contact, or a selection, from the menu on the list.
+
+See [Import contacts from a vCard file](/support/contacts/import-contacts) and [Export contacts as a vCard file](/support/contacts/export-contacts).
+
 ## Use your contacts on a phone or in another app
 
 Your contacts can sync to Apple Contacts, an Android phone, or another address book app over CardDAV. See [Set up Eigen Contacts in a contacts app](/support/connect/contacts-client).

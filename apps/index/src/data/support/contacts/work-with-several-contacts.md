@@ -61,6 +61,10 @@ deleted. Cmd-click it to drop it from the selection, and the option comes back.
 Labels have to exist before you can assign them, and you can also drag a selection onto a label in the sidebar.
 See [Organise contacts with labels](/support/contacts/labels-and-groups).
 
+## Export your selection
+
+Right-click one of the selected rows and click **Export 3 vCards**. The number matches your selection. Your browser downloads one `contacts.vcf` file holding all of them. See [Export contacts as a vCard file](/support/contacts/export-contacts).
+
 ## Email or chat with your selection
 
 The same menu can start one message or one chat for the whole group. See

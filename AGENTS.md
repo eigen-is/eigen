@@ -45,7 +45,7 @@ Two things that aren't written down anywhere else: the API serves every app from
   module that lives *inside* a domain dir, lib's exports map carves out an explicit subpath —
   `calendar/calendar-utils`, `chat/emotes`, `chat/built-in-emotes`, `chat/format-preview`, `collab/yjs-utils`,
   `mail/addresses` — import those, not the barrel. Need a new one? Add the exports entry next to these and keep
-  the module React-free; lib has no wildcard exports into `core/`, so an uncarved deep import simply won't resolve
+  the module React-free; lib has no wildcard exports into `core/`, so an uncarved deep import simply won't resolve. `download` is the counter-example: a leaf subpath too, but it needs `document` and `URL.createObjectURL`, so it is FE-only and never BE-safe
 - **Don't break the type chain** — types flow from Elysia route handlers → Eden Treaty → hooks → components
   automatically. No `as any`, no `as Type` casts. Fix types at the source (add return type annotations to backend
   handlers using shared types from `packages/lib/src/types/`). See CODE-STANDARDS.md § Typing
@@ -94,7 +94,7 @@ or reviewing one; an implementer working on a single file doesn't need it.
 | **Auth**              | `apps/api/src/lib/auth/auth.ts`              | better-auth with org/team/2FA/API key plugins. `users3.db` has no migration system: a new auth column goes in `auth-schema.ts`, the `setup.ts` DDL and `ensureAuthSchemaColumns` (boot-time ALTER for existing installs) together — better-auth refuses to start on a Drizzle schema that misses a plugin field |
 | **Protocol auth**     | `apps/api/src/lib/auth/protocol-auth.ts`     | `verifyProtocolAuth()` — shared IMAP/CalDAV/CardDAV/WebDAV auth (app password → primary password fallback)         |
 | **WebDAV**            | `apps/api/src/lib/webdav/`                   | RFC 4918 Class 1+2 server at `/webdav/:ownerId/:mountId/*`; mirrors the CalDAV layer. See [WEBDAV.md](docs/WEBDAV.md) |
-| **CardDAV**           | `apps/api/src/lib/carddav/`                  | RFC 6352 at `/dav/addressbooks/:ownerId/…`; the vCards are the source of truth, `contacts.db` an index that also OWNS sync/label metadata. See [CONTACTS.md](docs/CONTACTS.md) |
+| **CardDAV**           | `apps/api/src/lib/carddav/`                  | RFC 6352 at `/dav/addressbooks/:ownerId/…`; the vCards are the source of truth, `contacts.db` an index that also OWNS sync/label metadata. The vCard parser/serializer/transcoder is shared FE+BE in `packages/lib/src/vcard/` (`@workspace/lib/vcard`), and `apps/api/src/lib/contacts/transfer.ts` replays a whole `.vcf` file through the same PUT seam. See [CONTACTS.md](docs/CONTACTS.md) |
 | **Server config**     | `apps/api/src/lib/config/server-config.ts`   | Identity + secrets written once at setup (`domain`, `orgName`, `orgId`, `secret`, `setupCompleted`)        |
 | **Server settings**   | `apps/api/src/lib/config/server-settings.ts` | Runtime-adjustable quotas, storage defaults, onboarding, guests. See [SERVER-SETTINGS.md](docs/SERVER-SETTINGS.md) |
 | **Quota resolution**  | `apps/api/src/lib/config/quota.ts`           | `resolveUserQuotas()` — server default + team overrides (most permissive wins)                             |

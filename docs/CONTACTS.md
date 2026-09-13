@@ -235,6 +235,32 @@ an O(N) recursive maildir walk, so it is **memoized per user for 15 s** (`mailSi
 contacts half stays live. REST avatar upload shares the one cache (accepted drift — only recently-delivered
 mail can read stale, bounded by the same window).
 
+## vCard import / export
+
+The whole-file counterpart to the per-card DAV surface: one route exports stored cards as a `.vcf` file, two import one. `apps/api/src/lib/contacts/transfer.ts` holds both halves as plain functions over the `Contacts` facade, like the other siblings.
+
+```
+POST /contacts/:ownerId/export             { ids? }                                          → text/vcard attachment
+POST /contacts/:ownerId/import             the .vcf file as the raw body                     → { imported, skipped, failed }
+POST /contacts/:ownerId/import-from-drive  { sourceOwnerId, sourceMountId, sourcePathId }    → the same counts
+```
+
+All three are `requireNonGuest` + `requireSelf`, like every other contacts route.
+
+**Caps.** `IMPORT_MAX_BYTES` (20 MiB) and `IMPORT_MAX_CARDS` (1000) live in `packages/lib/src/constants/contact.ts`, shared FE/BE so the Drive quick look bounds itself by the same two numbers ([PREVIEWS.md](PREVIEWS.md)). `/import` reads the body itself (`parse: 'none'`) and refuses it twice — on `Content-Length` before anything is buffered, and on the buffered byte length after, because the header can be missing or lying. `/import-from-drive` resolves its source through `getSharedDrive`, so the ACL decides what a user may read; a name and mime `isVCardFile` doesn't recognise is a 400, a stored size over the ceiling a 413. `importCards` refuses a file holding more than `IMPORT_MAX_CARDS` cards right after the split, and the export body schema caps `ids` at the same number, so one selection can't outgrow one file. The per-card `CARD_MAX_BYTES` (5 MiB) still applies: every imported card goes through `putCard`, which checks it on the raw body and again on the stored bytes. Both import routes exempt themselves from the server idle timeout (`server?.timeout(request, 0)`), because a whole book replays card by card and answers nothing until the last one lands.
+
+**Export** drains dirty cards, then reads each card's file bytes and joins them, normalizing every terminator to exactly one CRLF so the concatenation is one well-formed directory whatever the writers left behind. The bytes are otherwise the ones on disk, `PHOTO` and unknown properties included. Without `ids` it exports the whole book in `getContacts` order, which excludes group cards — symmetric with import skipping them; an unknown id is a 404. A one-card export is named after the card's own `FN` and a multi-card one `contacts.vcf`, with `contentDisposition` sanitising whatever comes back before it reaches the header.
+
+**Import replays the file through the CardDAV PUT seam.** `splitVCards` cuts the directory into one text per card, and each card is then transcoded to 3.0, parsed, and written by `putCard` under a fresh `<uuid>.vcf` resource name with `If-None-Match: *` — a UID is not a safe filename (Apple's `…:ABPerson`, `urn:uuid:`, and anything else `sanitizeCardUri` refuses), and the precondition keeps the write a create. A card that carries no `UID` gets one minted and spliced in after `VERSION`, with every other line re-emitted from its own source bytes. An imported card is therefore metered, quota-gated, self-link-resolved and stored byte-faithfully by the same code an initial device sync takes.
+
+**Duplicates skip, never merge** (no field is ever combined into an existing card). A card is passed over when its `UID` is already in the book, when its first email address equals an address any contact already carries, or when that address appeared earlier in the same file: the running `Set` grows with every card that lands, so a file repeating an address imports it once. The UID check queries the index per card rather than pre-collecting, so the loop's own writes count — a file that repeats a UID skips its second copy through the same check a re-import takes. Group cards are skipped as well.
+
+**The counters say what happened.** `ImportContactsResult` is `{ imported, skipped, failed }`. `skipped` is the duplicate and group cases above, plus a `uid-conflict` from `putCard`. `failed` is a card that is its own problem — one that won't transcode or parse, or that `putCard` refuses as `invalid`, `too-large` or on a precondition — and the file continues past it. Only the shared storage budget stops the run: a `quota` refusal throws `507` naming how many cards went in before it, and those cards stay committed, because every later card would be refused the same way.
+
+**`splitVCards` is the only multi-card entry point.** `parseVCardLines` refuses any payload holding a second `BEGIN:VCARD`, so the DAV single-card invariant holds regardless: a two-card `PUT` is a 400.
+
+Two accepted limitations. The email-dedupe set is built once before the loop and outside the write lock, so two concurrent imports — or an import racing a DAV PUT — can each admit a card for the same address. And an imported card carrying the account owner's own email can claim the self-link exactly as any DAV PUT can (`resolveSelfLinkOnPut`), because the importer hands `putCard` the same create a device would.
+
 ## Client setup
 
 Same credential story as CalDAV/IMAP: HTTP Basic auth, app password (primary-password fallback fails under
@@ -276,13 +302,11 @@ CardDAV address card next to CalDAV/IMAP/WebDAV, carrying the address-book URL.
 
 ## Where the code lives
 
-- **`apps/api/src/lib/contacts/`** — the domain, split Mount-style: `contacts.ts` (the `Contacts` facade — the write lock, the dirty/journal machinery, REST contact CRUD and the self card; every sibling call goes through it) with sibling modules of plain functions over the facade: `dav-store.ts` (the CardDAV store seam — the index reads plus `putCard`/`deleteCard` and the seam types), `reconcile.ts` (the stat-only reconcile, the from-scratch rebuild, and the self-link ranking), `labels.ts` (label definitions + the CATEGORIES fan-out and rename journal), `avatars.ts` (avatar staging + the derived photo cache). Beside them: `card-store.ts` (the file/key helpers — `sanitizeCardUri`, `writeCardFile`, `avatarCacheName`, `uriKeyOf`), `schema.ts`, `db-config.ts`, `sse-events.ts`.
+- **`apps/api/src/lib/contacts/`** — the domain, split Mount-style: `contacts.ts` (the `Contacts` facade — the write lock, the dirty/journal machinery, REST contact CRUD and the self card; every sibling call goes through it) with sibling modules of plain functions over the facade: `dav-store.ts` (the CardDAV store seam — the index reads plus `putCard`/`deleteCard` and the seam types), `reconcile.ts` (the stat-only reconcile, the from-scratch rebuild, and the self-link ranking), `labels.ts` (label definitions + the CATEGORIES fan-out and rename journal), `avatars.ts` (avatar staging + the derived photo cache). Beside them: `card-store.ts` (the file/key helpers — `sanitizeCardUri`, `writeCardFile`, `avatarCacheName`, `uriKeyOf`), `transfer.ts` (whole-file vCard export and import, above), `schema.ts`, `db-config.ts`, `sse-events.ts`.
 - **`apps/api/src/lib/carddav/`** — the protocol layer: `carddav-router.ts`, `discovery.ts`, `resource.ts`, `report.ts`, `query-filter.ts`, `address-data.ts`, `vcard-serialize.ts` (the merge/create seam Eigen-owned edits go through), and `xml-builder.ts`/`xml-parser.ts`. The shared XML envelope and principal props live in `dav/xml.ts`, the OPTIONS header and realm in `app.ts`; the fold/escape/C0-strip primitives both the vCard and iCalendar serializers ride on live in `packages/lib/src/core/content-line.ts`, imported as `@workspace/lib/content-line`.
-- **`packages/lib/src/vcard/`** — the format itself, shared by the backend and the frontend: `ast.ts` (content-line parse/serialize), `parse.ts` (the `ParsedCard` projection), `transcode.ts` (vCard 4.0 -> 3.0), imported as `@workspace/lib/vcard`; the `VCardLine`/`ParsedCard`/`ParsedCardPhoto` types live in `packages/lib/src/types/contact.ts`.
-- **`apps/api/src/routes/contacts.ts`** — thin REST bindings (unchanged by the refit beyond conditional-write
-  etags).
-- **`packages/lib/src/core/contacts/`** — FE hooks + SSE handlers; shared types in
-  `packages/lib/src/types/contact.ts`.
+- **`packages/lib/src/vcard/`** — the format itself, shared by the backend and the frontend: `ast.ts` (content-line parse/serialize, single-card envelope), `split.ts` (a multi-card file into one text per card), `parse.ts` (the `ParsedCard` projection), `to-contact.ts` (a parsed card as the `Contact` shape the app renders, for preview only), `transcode.ts` (vCard 4.0 -> 3.0), imported as `@workspace/lib/vcard`; the `VCardLine`/`ParsedCard`/`ParsedCardPhoto` types live in `packages/lib/src/types/contact.ts`.
+- **`apps/api/src/routes/contacts.ts`** — thin REST bindings: contact and label CRUD with the conditional-write `etag`, avatar staging, and the three transfer routes above.
+- **`packages/lib/src/core/contacts/`** — FE hooks + SSE handlers, including `hooks/use-transfer.ts` (`useExportContacts`, `useImportContacts`, `useImportContactsFromDrive`, and the `useVCardFile` reader the Drive quick look parses a `.vcf` with — [PREVIEWS.md](PREVIEWS.md)); shared types in `packages/lib/src/types/contact.ts`.
 
 Storage layout: [STORAGE.md](STORAGE.md). Database inventory: [DATABASE.md](DATABASE.md). Full design history
 and the folded review passes: [PROPOSAL_CARDDAV.md](proposals/PROPOSAL_CARDDAV.md).
