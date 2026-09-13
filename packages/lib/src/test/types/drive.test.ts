@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { EIGEN_DOC_TYPE_INFO, type YjsRootKind } from '../../types/drive';
+import { EIGEN_DOC_TYPE_INFO, isVCardFile, type YjsRootKind } from '../../types/drive';
 
 // Scans each collab app's source for Y.Doc root-type access and asserts the
 // referenced names are declared in EIGEN_DOC_TYPE_INFO[type].yjsRoots. Catches
@@ -119,5 +119,18 @@ describe('EIGEN_DOC_TYPE_INFO declares roots the scan above cannot see', () => {
         const canvasRoots = { elements: 'map', frames: 'map', meta: 'map' } as const;
         expect(EIGEN_DOC_TYPE_INFO.slides.yjsRoots).toEqual(canvasRoots);
         expect(EIGEN_DOC_TYPE_INFO.vector.yjsRoots).toEqual(canvasRoots);
+    });
+});
+
+describe('isVCardFile', () => {
+    test('by extension regardless of mime', () => {
+        expect(isVCardFile('application/octet-stream', 'team.VCF')).toBe(true);
+    });
+    test('by mime regardless of name', () => {
+        expect(isVCardFile('text/x-vcard', 'export')).toBe(true);
+        expect(isVCardFile('text/vcard', 'export')).toBe(true);
+    });
+    test('neither', () => {
+        expect(isVCardFile('text/plain', 'notes.txt')).toBe(false);
     });
 });
