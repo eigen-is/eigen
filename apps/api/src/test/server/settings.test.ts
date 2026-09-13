@@ -1,5 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import * as fs from 'node:fs';
 import { type S3Config, teamOwnerId } from '@workspace/lib/types';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -14,7 +15,9 @@ import type {
 import { eq, inArray } from 'drizzle-orm';
 import { user } from '../../../auth-schema';
 import { ensureAuthSchemaColumns, getAuthDrizzleDb } from '../../lib/auth/auth';
+import { getUserHomePath } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
+import { atHome } from '../../lib/home/get-home';
 import * as s3Storage from '../../lib/storage/s3-storage';
 import { assertJson, authedRequest, getTestContext } from '../setup';
 
@@ -979,6 +982,28 @@ describe('GET /settings/users', () => {
         expect(Array.isArray(aliceRow?.teams)).toBe(true);
         // cleanup so other tests' user counts stay stable
         await db.delete(user).where(inArray(user.id, ['orphan-test-id', 'guest-test-id']));
+    });
+
+    // The list carries no usage, and must not size anything to answer: usage is its own query, so
+    // the page renders its rows before a single home has been looked at.
+    test('lists a user without touching their home', async () => {
+        const ctx = await getTestContext();
+        const db = getAuthDrizzleDb();
+        const now = new Date();
+        await db.insert(user).values({
+            id: 'unlisted-home-id',
+            name: 'No Home',
+            email: 'no-home@test.eigen.is',
+            emailVerified: true,
+            createdAt: now,
+            updatedAt: now,
+        });
+        const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/users');
+        const rows: AdminUserRow[] = await assertJson(res);
+        expect(rows.find((r) => r.id === 'unlisted-home-id')).toBeDefined();
+        expect(atHome('unlisted-home-id')).toBe(false);
+        expect(fs.existsSync(getUserHomePath('unlisted-home-id'))).toBe(false);
+        await db.delete(user).where(eq(user.id, 'unlisted-home-id'));
     });
 });
 
