@@ -4,6 +4,7 @@ import {
     DRIVE_MIME_SHEETS,
     DRIVE_MIME_SLIDES,
     DRIVE_MIME_VECTOR,
+    isVCardFile,
 } from '../types/drive';
 
 const CODE_MIMES = [
@@ -61,6 +62,8 @@ export function getTextPreviewMode(mimeType: string, fileName: string): TextPrev
     if (mimeType === DRIVE_MIME_SLIDES) return 'eigenslides';
     if (mimeType === DRIVE_MIME_SHEETS) return 'eigensheets';
     if (mimeType === DRIVE_MIME_VECTOR) return 'eigenvector';
+    // A vCard is text, but its raw body is mostly base64 photo: it previews as contact cards instead.
+    if (isVCardFile(mimeType, fileName)) return null;
     const ext = getExtension(fileName);
     if (mimeType === 'text/markdown' || ext === '.md' || ext === '.markdown') return 'markdown';
     if (mimeType === 'text/plain' || ext === '.txt') return 'plaintext';

@@ -1,5 +1,6 @@
 import { getDriveDownloadUrl, openDocument } from '@workspace/lib/api';
 import { usePaletteSelectionActions } from '@workspace/lib/command-palette';
+import { useImportContactsFromDrive } from '@workspace/lib/contacts';
 import {
     useConvertDocument,
     useCopyPath,
@@ -51,6 +52,7 @@ export function useDriveLayoutDialogs({
     const duplicatePath = useDuplicatePath();
     const deletePathsMutation = useDeletePaths();
     const convertMutation = useConvertDocument(ownerId, mountId);
+    const importContactsMutation = useImportContactsFromDrive();
     const isCoarsePointer = useIsCoarsePointer();
     const isEffectiveOwnerOf = useIsEffectiveOwnerOf();
     const { exportPath, isExporting } = useDocumentExport();
@@ -167,6 +169,17 @@ export function useDriveLayoutDialogs({
         [convertMutation],
     );
 
+    const handleImportContacts = useCallback(
+        (path: DrivePath) => {
+            importContactsMutation.mutate({
+                sourceOwnerId: path.ownerId,
+                sourceMountId: path.mountId,
+                sourcePathId: path.id,
+            });
+        },
+        [importContactsMutation],
+    );
+
     const onDelete = capabilities.canDelete ? handleDeletePaths : undefined;
     const onRename = capabilities.canRename ? dialogs.rename.openDialog : undefined;
     const onShareClick = capabilities.canShare ? dialogs.share.openDialog : undefined;
@@ -218,6 +231,7 @@ export function useDriveLayoutDialogs({
         onDownload: handleDownloadPath,
         onExport: exportPath,
         onConvert: handleConvertPath,
+        onImportContacts: handleImportContacts,
         // Wiring consumed by <DriveLayoutDialogs> below.
         ownerId,
         mountId,

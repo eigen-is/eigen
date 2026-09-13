@@ -29,6 +29,7 @@ export function DriveGrid({
     onCopyTo,
     onDuplicate,
     onConvert,
+    onImportContacts,
     onExport,
     onQuickLook,
     onEmailCollaborators,
@@ -132,6 +133,7 @@ export function DriveGrid({
                 onQuickLook={onQuickLook}
                 onDownload={onDownload}
                 onConvert={onConvert}
+                onImportContacts={onImportContacts}
                 onExport={onExport}
                 onRename={onRename}
                 onMoveTo={onMoveTo}
