@@ -86,3 +86,6 @@ export type ParsedCard = {
 // What one vCard import file did: a card is imported, skipped as a duplicate (UID or first email) or as a
 // group, or failed on its own content. The three always sum to the number of cards in the file.
 export type ImportContactsResult = { imported: number; skipped: number; failed: number };
+
+// The drive file an import-from-drive run reads its cards from: the picked file's owner, mount and path.
+export type ContactTransferSource = { sourceOwnerId: string; sourceMountId: string; sourcePathId: string };
