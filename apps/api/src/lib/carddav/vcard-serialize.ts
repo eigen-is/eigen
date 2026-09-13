@@ -5,8 +5,8 @@
 // group and params, and taking the whole property name so no repeated line of it survives the edit.
 // Everything else — IMPP, URL, X-SOCIALPROFILE, unknown props, VERSION/UID/PRODID/REV — rides through
 // untouched. `createVCard` emits the minimal clean 3.0 card a brand-new contact starts from.
+import { escapeContentText, stripLineBreaks } from '@workspace/lib/content-line';
 import type { Address } from '@workspace/lib/types/contact';
-import { escapeContentText, stripLineBreaks } from '../core/content-line';
 import { makeLine, serializeVCardLines, unescapeText, type VCardLine } from './vcard-ast';
 import type { ParsedCard } from './vcard-parse';
 

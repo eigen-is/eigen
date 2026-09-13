@@ -281,7 +281,7 @@ CardDAV address card next to CalDAV/IMAP/WebDAV, carrying the address-book URL.
   `report.ts`, `query-filter.ts`, `address-data.ts`, the vCard modules (`vcard-ast.ts`, `vcard-parse.ts`,
   `vcard-serialize.ts`, `vcard-transcode.ts`), and `xml-builder.ts`/`xml-parser.ts`. The shared XML envelope
   and principal props live in `dav/xml.ts`, the OPTIONS header and realm in `app.ts`; the fold/escape/C0-strip
-  primitives both the vCard and iCalendar serializers ride on live in `apps/api/src/lib/core/content-line.ts`.
+  primitives both the vCard and iCalendar serializers ride on live in `packages/lib/src/core/content-line.ts`, imported as `@workspace/lib/content-line`.
 - **`apps/api/src/routes/contacts.ts`** — thin REST bindings (unchanged by the refit beyond conditional-write
   etags).
 - **`packages/lib/src/core/contacts/`** — FE hooks + SSE handlers; shared types in

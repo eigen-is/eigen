@@ -30,6 +30,7 @@
     "./api": "./src/core/api.ts",
     "./api-error": "./src/core/api-error.ts",
     "./apps": "./src/core/apps.ts",
+    "./content-line": "./src/core/content-line.ts",
     "./date": "./src/core/date.ts",
     "./eigendoc-icons": "./src/core/eigendoc-icons.ts",
     "./file-presentation": "./src/core/file-presentation.ts",
