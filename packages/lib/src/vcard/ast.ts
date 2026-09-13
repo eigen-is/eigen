@@ -107,9 +107,11 @@ export function parseVCardLines(text: string): VCardLine[] {
 
     const lines = unfold(text).map(({ raw, logical }) => parseLine(raw, logical));
 
-    // The marker value is trimmed: splitVCards frames cards on a trimmed physical line, so a padded
-    // BEGIN:VCARD reaches here as its own card and must parse rather than count as unreadable.
-    const frames = (name: string) => lines.filter((l) => l.name === name && l.value.trim().toUpperCase() === 'VCARD');
+    // trimEnd, exactly what splitVCards frames a card on: a marker with trailing whitespace reaches here as
+    // its own card and must parse, while a 'BEGIN: VCARD' the splitter would never open on is refused here
+    // too — otherwise a card a PUT accepted could not be re-imported from its own export.
+    const frames = (name: string) =>
+        lines.filter((l) => l.name === name && l.value.trimEnd().toUpperCase() === 'VCARD');
     const begins = frames('BEGIN');
     const ends = frames('END');
     if (begins.length === 0) throw new VCardError('missing BEGIN:VCARD');
