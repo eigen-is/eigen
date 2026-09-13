@@ -123,6 +123,38 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
         expect(found).toBe(true);
     });
 
+    test('a lone from: filter with an empty query finds mail from that sender', async () => {
+        const eml = [
+            'From: "Anna Filteronly" <anna.filteronly@example.com>',
+            'To: alice@test.eigen.is',
+            'Subject: Squibbly filter-only sender test',
+            '',
+            'body text',
+        ].join('\r\n');
+        const res = await app.handle(
+            new Request('http://localhost/mail/deliver/alice@test.eigen.is', {
+                method: 'POST',
+                headers: { 'Content-Type': 'message/rfc822' },
+                body: new TextEncoder().encode(eml).buffer,
+            }),
+        );
+        expect(res.status).toBe(200);
+
+        const { getHome } = await import('../../lib/home');
+        const home = await getHome(ctx.alice.user.id);
+        for (let i = 0; i < 40; i++) {
+            await home.mail.mailboxGet('');
+            if (home.mail.search({ q: 'squibbly', limit: 20 }).length > 0) break;
+            await Bun.sleep(25);
+        }
+
+        const hits = home.mail.search({ q: '', from: 'anna.filteronly@example.com', limit: 20 });
+        expect(hits.some((h) => h.subject === 'Squibbly filter-only sender test')).toBe(true);
+
+        // A non-matching sender still returns nothing.
+        expect(home.mail.search({ q: '', from: 'nobody.filteronly@example.com', limit: 20 })).toEqual([]);
+    });
+
     test('deleting an email removes it from search', async () => {
         await deliverMail(ctx.alice.user.id, 'alice@test.eigen.is', 'Glompy deletion candidate', 'body');
         const { getHome } = await import('../../lib/home');

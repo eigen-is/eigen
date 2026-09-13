@@ -47,6 +47,9 @@ Deleting a message sends it to the **Trash**.
 1. Open the message, or right-click it in the list.
 2. Click the **Delete** button in the toolbar, or choose **Delete** from the menu.
 
+Pressing **Delete** or **Backspace** does the same thing, on the message you have open or on the one selected in
+the list.
+
 A deleted message is not gone for good. It sits in **Trash**, where you can still read it or move it back to
 another mailbox if you deleted it by mistake.
 

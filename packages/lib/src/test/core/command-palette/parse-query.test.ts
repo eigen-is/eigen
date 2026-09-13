@@ -43,6 +43,10 @@ describe('parseQuery', () => {
         });
     });
 
+    test('a lone from: operator sets the filter and leaves q empty', () => {
+        expect(parseQuery('from:anna')).toEqual({ from: 'anna', q: '' });
+    });
+
     test('to: operator extracts the recipient filter', () => {
         expect(parseQuery('to:bob@example.com q3')).toEqual({
             to: 'bob@example.com',

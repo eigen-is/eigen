@@ -55,8 +55,6 @@ export function ContactsSidebar({ condensed = false, onAssignLabel }: ContactsSi
                     <SidebarSection condensed={condensed} loading />
                 ) : error ? (
                     <SidebarSection condensed={condensed} error="An error occurred while loading labels." />
-                ) : labels.length === 0 ? (
-                    <SidebarSection condensed={condensed} empty="No labels found. Add one with the + button." />
                 ) : (
                     <LabelManager
                         labels={labels}

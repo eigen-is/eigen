@@ -218,21 +218,25 @@ function buildSaveOptions(fields: DraftFields, forceFullSave: boolean): SaveOpti
 // remount). `localNext` is the user's intent — serverActual minus attachments removed during
 // the save, plus tempId attachments added during the save. Drift between the two naturally
 // re-triggers the auto-save to sync the server.
-function mergeServerAttachments(
+export function mergeServerAttachments(
     local: AttachmentMeta[],
     sent: AttachmentMeta[],
     parsed: Attachment[],
 ): { serverActual: AttachmentMeta[]; localNext: AttachmentMeta[] } {
-    const visible = parsed.filter((a) => !a.contentType.startsWith('text/calendar'));
-    const serverActual = visible.map((a, i) => {
-        const filename = a.filename || `Attachment ${i + 1}`;
+    // index is the raw position in the message's attachment list, calendar parts included.
+    const indexed = parsed
+        .map((a, index) => ({ a, index }))
+        .filter(({ a }) => !a.contentType.startsWith('text/calendar'));
+    const visible = indexed.map(({ a }) => a);
+    const serverActual = indexed.map(({ a, index }) => {
+        const filename = a.filename || `Attachment ${index + 1}`;
         const prevMatch = local.find((p) => p.filename === filename && p.size === a.size);
         return {
-            key: prevMatch?.key ?? `server-${i}-${filename}-${a.size}`,
+            key: prevMatch?.key ?? `server-${index}-${filename}-${a.size}`,
             filename,
             size: a.size,
             contentType: a.contentType,
-            index: i,
+            index,
             localUrl: prevMatch?.localUrl,
         };
     });

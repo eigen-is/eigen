@@ -8,11 +8,11 @@ const CONCURRENCY = 4;
 let cache: { at: number; ids: string; data: Record<string, HomeSizeResponse> } | null = null;
 let inFlight: { ids: string; promise: Promise<Record<string, HomeSizeResponse>> } | null = null;
 
-// Sizing a user means instantiating their Home (self-evicting after idle), so results are computed
-// a few at a time and cached; a single broken home is skipped, not a 500 for the page. The cache is
-// keyed by the exact id set it was computed for — a call for a different set bypasses the TTL and
-// recomputes, so a shrunk/grown user list never serves the wrong rows. Concurrent calls for the same
-// set still share one in-flight computation.
+// Sizing a user reads their home's folder and databases, never booting the Home — cheap, but still
+// disk work, so it stays capped and cached; a single broken home is skipped, not a 500 for the
+// page. The cache is keyed by the exact id set it was computed for — a call for a different set
+// bypasses the TTL and recomputes, so a shrunk/grown user list never serves the wrong rows.
+// Concurrent calls for the same set still share one in-flight computation.
 export async function getAllUsersUsage(userIds: string[]): Promise<Record<string, HomeSizeResponse>> {
     const ids = [...userIds].sort().join(',');
     if (cache && cache.ids === ids && Date.now() - cache.at < CACHE_TTL_MS) return cache.data;

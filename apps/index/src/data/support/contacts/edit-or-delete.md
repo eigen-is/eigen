@@ -44,7 +44,8 @@ In the **Labels** row you can pick a label from the dropdown. To remove a label,
 2. Click the trash icon (**Delete**) in the toolbar.
 3. A confirmation dialog appears. Click **Delete** to confirm, or **Cancel** to go back.
 
-You can also right-click a contact in the list and choose **Delete** from the menu that appears.
+You can also right-click a contact in the list and choose **Delete** from the menu that appears, or select
+it in the list and press **Delete** or **Backspace**.
 
 <div class="eigen-callout">
 
