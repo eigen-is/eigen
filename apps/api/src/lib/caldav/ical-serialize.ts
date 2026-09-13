@@ -1,7 +1,7 @@
+import { escapeContentText, foldLine, neuterParamValue, stripLineBreaks } from '@workspace/lib/content-line';
 import type { Attendee, CalendarEvent } from '@workspace/lib/types/calendar';
 import { computeOccurrenceTimes, storedRecurrenceKey, utcToLocal } from '../calendar/recurrence';
 import { normalizeTimezone } from '../calendar/timezone';
-import { escapeContentText, foldLine, neuterParamValue, stripLineBreaks } from '../core/content-line';
 import { buildVTimezone } from './vtimezone';
 
 const pad = (n: number) => n.toString().padStart(2, '0');

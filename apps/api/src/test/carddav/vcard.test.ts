@@ -1,6 +1,7 @@
 // vCard content-line AST (RFC 2426 / RFC 6350 §3) — parsing, serialization, and byte-preserving
 // round-trip. All Phase-1 CardDAV vCard tasks extend this file.
 import { describe, expect, test } from 'bun:test';
+import { escapeContentText } from '@workspace/lib/content-line';
 import { projectAddressData } from '../../lib/carddav/address-data';
 import {
     matchCard,
@@ -20,7 +21,6 @@ import {
 import { parseVCard } from '../../lib/carddav/vcard-parse';
 import { createVCard, mergeVCard } from '../../lib/carddav/vcard-serialize';
 import { transcodeTo30 } from '../../lib/carddav/vcard-transcode';
-import { escapeContentText } from '../../lib/core/content-line';
 
 // Wrap a single content line in a minimal valid vCard so it can go through the public parser.
 const parseCard = (line: string) => parseVCardLines(`BEGIN:VCARD\r\nVERSION:3.0\r\n${line}\r\nEND:VCARD\r\n`);
