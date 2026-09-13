@@ -32,6 +32,7 @@
     "./apps": "./src/core/apps.ts",
     "./content-line": "./src/core/content-line.ts",
     "./date": "./src/core/date.ts",
+    "./download": "./src/core/download.ts",
     "./eigendoc-icons": "./src/core/eigendoc-icons.ts",
     "./file-presentation": "./src/core/file-presentation.ts",
     "./format": "./src/core/format.ts",
