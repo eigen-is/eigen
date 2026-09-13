@@ -92,6 +92,7 @@ export function DriveLayout({
         mountId,
         pathId,
         onConvert: actions.onConvert,
+        onImportContacts: actions.onImportContacts,
         onDownload: actions.onDownload,
         onExport: actions.onExport,
         // Every view links rows to the one canonical item URL.
@@ -141,6 +142,7 @@ export function DriveLayout({
         onDuplicate: actions.onDuplicate,
         onQuickLook: onQuickLook ? wrappedQuickLook : undefined,
         onConvert: actions.onConvert,
+        onImportContacts: actions.onImportContacts,
         onExport: actions.onExport,
         onEmailCollaborators: actions.onEmailCollaborators,
         highlightHistory,

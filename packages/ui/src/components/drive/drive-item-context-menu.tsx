@@ -13,6 +13,7 @@ type DriveItemContextMenuProps = {
     onQuickLook?: (item: DrivePath) => void;
     onDownload?: (item: DrivePath) => void;
     onConvert?: (item: DrivePath, targetType: 'eigensheets' | 'eigendoc') => void;
+    onImportContacts?: (item: DrivePath) => void;
     onExport?: (item: DrivePath, format: string) => void;
     onRename?: (item: DrivePath) => void;
     onMoveTo?: (items: DrivePath[]) => void;
@@ -33,6 +34,7 @@ export function DriveItemContextMenu({
     onQuickLook,
     onDownload,
     onConvert,
+    onImportContacts,
     onExport,
     onRename,
     onMoveTo,
@@ -73,6 +75,7 @@ export function DriveItemContextMenu({
                     onQuickLook={onQuickLook}
                     onDownload={onDownload}
                     onConvert={onConvert}
+                    onImportContacts={onImportContacts}
                     onExport={onExport}
                     onRename={onRename}
                     onMoveTo={onMoveTo}
