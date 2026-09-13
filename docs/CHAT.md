@@ -288,7 +288,7 @@ Messages use `useInfiniteQuery` with cursor-based pagination:
 
 - **Emotes**: Italic with marker. Built-ins show first/second/third person text based on viewer
 - **Whispers**: Primary-tinted background (`bg-primary/5`) with "whisper" label. Non-participants see `[a few hushed words]`
-- **Deleted**: Content cleared, shown as "This message was deleted."
+- **Deleted**: Row hidden from the list entirely (`deletedAt` soft-delete, no tombstone rendered)
 - **Email rendering**: Emails in content replaced with inline name + hover card (via `usePublicUser`)
 - **URL rendering**: URLs auto-linked as clickable links
 - **Loading**: `EigenLoader` shown while fetching older messages, `LoadingState` for initial load

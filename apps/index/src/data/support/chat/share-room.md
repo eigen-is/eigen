@@ -5,11 +5,11 @@ type: how-to
 tags: [chat, rooms, sharing, permissions, access]
 related: [chat/create-room, chat/personal-and-team-chats]
 order: 90
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
-By default, a room you create is private. Only you can see it until you invite someone. You can share a room
-with specific people, with a whole team, or with anyone on your Eigen server who has the link.
+You can share a room with specific people, with a whole team, or with anyone on your Eigen server who has the
+link.
 
 ## Open the Share dialog
 

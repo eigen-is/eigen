@@ -6,7 +6,7 @@ category: Basics
 tags: [search, command-palette, navigation, getting-started]
 related: [getting-started/your-first-steps, account/light-and-dark-theme, drive/get-started]
 order: 3
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 Eigen has one box that searches your files and email, jumps to any app, and runs quick actions. It's called the command palette, and you reach it from anywhere with a single keystroke. This page shows you how to open it and what it can do.
@@ -26,7 +26,7 @@ When the palette opens, type into the **Search and jump anywhere…** box. Resul
 
 Start typing part of a file or folder name. Matches show up under a **Files** heading, each with the icon for its type.
 
-Press **Enter** on a file to open it. Documents, spreadsheets, and presentations open in their editor; other files, such as images and PDFs, open in a preview. Search looks at file and folder names, so a word from inside a document won't find it.
+Press **Enter** on a file to open it. Documents, spreadsheets, and presentations open in their editor; other files, such as images and PDFs, open in a preview. Search looks at file and folder names, and at the text inside your documents, spreadsheets, presentations, drawings, boards, and chats.
 
 ## Find an email
 
@@ -41,7 +41,7 @@ Messages in your Trash and Junk are left out of the results.
 
 ## Narrow to one kind of result
 
-If you only want one kind of result, you can limit the search. Press **Tab** to cycle through the groups: **Files**, then **Mail**, then **Actions**, then **Contacts**. The current group shows as a small label above the box. Press **Backspace** with the box empty to clear it and search everything again.
+If you only want one kind of result, you can limit the search. Press **Tab** to cycle through the groups: **Files**, then **Mail**, then **Actions**, then **Contacts**, then **Help**. The current group shows as a small label above the box. Press **Backspace** with the box empty to clear it and search everything again.
 
 You can also type a prefix to jump straight to a group:
 

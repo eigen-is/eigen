@@ -1,15 +1,16 @@
 ---
 title: "Download files"
-description: "Save a file from Drive to your computer, or export a document, spreadsheet, or presentation in a standard format."
+description: "Save a file from Drive to your computer, or export a document, spreadsheet, presentation, or drawing in a standard format."
 type: how-to
 tags: [drive, download, export]
 related: [drive/get-started, drive/preview-a-file, drive/upload-files]
 order: 50
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
-You can download any uploaded file from Drive to your computer. Documents, spreadsheets, and
-presentations created in Eigen can be exported as standard formats such as Word, Excel, or PDF.
+You can download any uploaded file from Drive to your computer. Documents, spreadsheets,
+presentations, and drawings created in Eigen can be exported as standard formats such as Word, Excel,
+or PDF.
 
 ## Download a file
 
@@ -27,10 +28,10 @@ then click the **Download** button (the download icon next to the **Share** butt
 Open the file preview by right-clicking a file and choosing **Quick preview**, or by clicking a file
 in the detail panel. A **Download** button appears in the footer of the preview.
 
-## Export a document, spreadsheet, or presentation
+## Export a document, spreadsheet, presentation, or drawing
 
-Documents, spreadsheets, and presentations are stored in Eigen's own format. To save them as a
-standard file you can open in other apps, use the export option.
+Documents, spreadsheets, presentations, and drawings are stored in Eigen's own format. To save them as
+a standard file you can open in other apps, use the export option.
 
 1. Right-click the file, or click the **⋮** button.
 2. Point to **Download**.
@@ -41,6 +42,7 @@ Available formats:
 - **Document:** Microsoft Word (.docx), PDF (.pdf), Web Page (.html)
 - **Spreadsheet:** Microsoft Excel (.xlsx), PDF (.pdf), Web Page (.html)
 - **Presentation:** PDF (.pdf), Web Page (.html)
+- **Drawing:** SVG image (.svg), PDF (.pdf)
 
 <div class="eigen-callout">
 

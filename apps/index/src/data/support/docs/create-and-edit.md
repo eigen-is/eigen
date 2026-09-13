@@ -6,7 +6,7 @@ category: Basics
 tags: [docs, editing, create, writing]
 related: [docs/format-text, docs/get-started]
 order: 20
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 Docs is the document editor in Eigen. You can create a new document in seconds, write and format your content
@@ -47,7 +47,7 @@ Open the **File** menu and click **Rename**. Type the new name and press Enter.
 
 ## Undo and redo
 
-Use the undo and redo buttons at the left of the toolbar, or the keyboard shortcuts:
+Open the **Edit** menu in the toolbar and choose **Undo** or **Redo**, or use the keyboard shortcuts:
 
 - **Undo**: Cmd+Z (Mac) or Ctrl+Z (Windows)
 - **Redo**: Cmd+Y (Mac) or Ctrl+Y (Windows)

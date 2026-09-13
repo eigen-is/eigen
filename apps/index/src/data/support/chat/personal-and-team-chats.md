@@ -5,7 +5,7 @@ type: overview
 tags: [chat, rooms, teams, sharing, personal]
 related: [chat/get-started, chat/create-room, chat/share-room]
 order: 20
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 Chat has two kinds of rooms: personal rooms that you own and share yourself, and team rooms that belong to a
@@ -15,7 +15,7 @@ both. The difference is in who has access and who controls it.
 ## Personal chat rooms
 
 A personal room lives in your Drive. You create it, you name it, and you decide who can read or write in it.
-By default, only you can see a room you've created.
+The people you pick when you create it get access straight away.
 
 To give other people access, open the room and click the **Share** button in the toolbar at the top. The
 sharing dialog lets you add people by email address and set them as **Viewer** or **Editor**. The toolbar also
@@ -43,8 +43,8 @@ Chat clears the dot automatically when you open the room.
 
 ## Create a new room
 
-Click **New chat** at the top of the sidebar to create a room. In the dialog that opens, give the room a name
-and choose where to save it. You can save it to your own Drive (a personal room) or to a team's Drive (a team
-room), depending on which location you pick.
+Click **New chat** at the top of the sidebar to create a room. In the dialog that opens, add the people you want
+to chat with, then confirm the name and the location. To make a team room instead, click **Team chat** in the
+bottom-left of the dialog and pick the team.
 
 See [Create a chat room](/support/chat/create-room) for step-by-step instructions.

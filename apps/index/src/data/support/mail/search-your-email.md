@@ -1,12 +1,12 @@
 ---
 title: "Search your email"
-description: "Find an email by sender, subject, or the start of its text, either within a folder or across all your mail."
+description: "Find an email by sender, subject, or the text of the message, either within a folder or across all your mail."
 type: how-to
 category: Basics
 tags: [mail, search, find, email]
 related: [mail/get-started]
 order: 30
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 When you need a particular message, you don't have to scroll for it. Mail gives you two ways to search: a box at
@@ -20,9 +20,9 @@ Every folder has a search box at the top of the email list.
 2. Click the **Search emails...** box at the top of the list.
 3. Type what you're looking for. The list narrows as you type.
 
-The search looks at three things in each message: the **sender**, the **subject**, and the start of the message
-text (the grey preview line you see under the subject). A message matches if your text appears in any of them, so
-typing a name finds mail from that person, and typing a word from the subject finds it by subject.
+The search looks at the **sender**, the **recipients**, the **subject**, and the text of the message. A message
+matches if your text appears in any of them, so typing a name finds mail from that person, and typing a word from
+the subject finds it by subject.
 
 Matching ignores capital letters, and the results stay sorted with the newest at the top. To clear the search and
 see the whole folder again, delete the text from the box.
@@ -44,7 +44,7 @@ The search at the top of the window looks through all your mail, whichever folde
 2. Type a name, a word from the subject, or a word from the message.
 3. Matching emails appear under the **Mail** heading. Click one, or use the arrow keys and press **Enter**, to open it.
 
-This search covers the sender, the recipients, the subject, and the start of the message text. It looks through
+This search covers the sender, the recipients, the subject, and the text of the message. It looks through
 all your folders except **Trash** and **Spam**.
 
 The same box also finds files and other things in Eigen. To see only email, type `mail:` before your words, or
@@ -66,6 +66,4 @@ A few things to check when a search comes up empty:
 
 - **It might be in the Trash or Spam folder.** The top-of-window search skips both. Open the **Trash** or **Spam**
   folder from the sidebar and use the folder search box there instead.
-- **Search matches the start of the message, not the whole body.** If your word only appears deep in a long
-  email, try searching by the sender or a word from the subject instead.
 - **Drafts you haven't finished** live in the **Drafts** folder. Open it from the sidebar to find them.

@@ -5,7 +5,7 @@ type: how-to
 tags: [chat, notifications, unread, mentions]
 related: [chat/get-started, chat/mentions]
 order: 100
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 Chat tells you about new messages in two ways: unread dots on room names in the sidebar, and notifications in
@@ -35,11 +35,11 @@ From the panel you can:
 
 ## What triggers a notification
 
-**@mention:** When someone types your email address in a message, you receive a notification titled "You were
-mentioned in …".
+**@mention:** When someone types your email address in a message, you receive a notification titled "Alice
+mentioned you in …".
 
 **New message in a room:** If you have previously sent a message in a room, or if you own it, you receive a
-"New message in …" notification when someone else posts there.
+"New message from Alice in …" notification when someone else posts there.
 
 **Whisper:** If someone sends you a private whisper, you receive a notification the same way you would for a
 regular message.

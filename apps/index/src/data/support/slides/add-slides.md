@@ -5,7 +5,7 @@ type: how-to
 tags: [slides, presentation, reorder]
 related: [slides/create-and-edit]
 order: 30
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 Each slide in your presentation appears as a numbered thumbnail in the panel on the left. You can add blank slides, duplicate one to reuse its layout, and drag them into any order.
@@ -14,7 +14,7 @@ You need editor access to make changes. If you can only view the presentation, t
 
 ## Add a slide
 
-Click the **Add slide** button in the toolbar (the **+** icon). A blank white slide appears at the end of the list and becomes the active slide.
+Click the **Add slide** button in the toolbar (the **+** icon). A blank white slide appears straight after the current slide and becomes the active slide.
 
 ## Duplicate a slide
 
@@ -26,6 +26,6 @@ Right-click the thumbnail in the left panel and choose **Delete**. You cannot de
 
 ## Reorder slides
 
-Drag a thumbnail in the left panel to a new position. A highlight shows where the slide will land when you release. Drop it where you want it.
+Drag a thumbnail in the left panel to a new position. The other thumbnails move aside to show where it will land. Drop it where you want it.
 
 The status bar at the bottom of the canvas shows your current position, for example "Slide 3 of 8", and updates as you move between slides.

@@ -5,7 +5,7 @@ type: how-to
 tags: [contacts, add, create, new]
 related: [contacts/get-started, contacts/edit-or-delete, contacts/contact-details]
 order: 20
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 Open Contacts and click **Create contact** in the sidebar. A blank form opens where you can fill in as much or as little as you know.
@@ -24,7 +24,7 @@ The form is divided into three sections.
 
 - **Email Addresses**: one empty field is shown by default. Click **Add** to include more addresses. You can remove any extra address with the bin icon.
 - **Phone Numbers**: works the same way as email. Click **Add** to include more numbers.
-- **Addresses**: fill in **Street**, **City**, **State**, **Postal code**, and **Country**. Click **Add** to add a second address. Each address block has a bin icon to remove it.
+- **Addresses**: fill in **Street**, **City**, **State**, **Postal code**, and **Country**. Click **Add** to add a second address. Each extra address block has a bin icon to remove it.
 
 **Additional Information**
 
@@ -37,6 +37,6 @@ Click the camera icon at the bottom right of the avatar circle. Choose **Upload 
 
 ## Save the contact
 
-Click **Save** at the bottom of the form. Contacts takes you back to **My Contacts**, where the new entry appears in the list. Click it to see the full details.
+Click **Save** at the bottom of the form. Contacts takes you back to **My Contacts**, where the new entry appears in the list.
 
 To discard the form without saving, click **Cancel**.

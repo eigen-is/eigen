@@ -7,7 +7,7 @@ tags: [drive, getting-started, files, folders]
 related: [drive/share-a-file, connect/mount-drive-on-your-computer]
 crossSections: [getting-started]
 order: 10
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 Drive is where your files live in Eigen. You can upload files from your computer, create documents and
@@ -20,7 +20,7 @@ Click the **New** button at the top of the sidebar. From there you can:
 
 - **Upload** files from your computer.
 - Create a **folder** to organise things.
-- Start a new document, spreadsheet, presentation, board, or chat. These open straight away in the browser.
+- Start a new document, spreadsheet, presentation, drawing, board, or chat. These open straight away in the browser.
 
 You can also drag files from your desktop and drop them into Drive.
 

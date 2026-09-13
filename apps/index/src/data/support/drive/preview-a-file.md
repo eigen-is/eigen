@@ -6,7 +6,7 @@ category: Files
 tags: [drive, preview, files]
 related: [drive/get-started, drive/download-files]
 order: 60
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 Drive can show you the contents of a file without opening a separate app or tab. Images, PDFs, videos, audio, and text files all have a built-in preview.
@@ -16,7 +16,7 @@ Drive can show you the contents of a file without opening a separate app or tab.
 Open a file by clicking it to select it, then clicking it again (or pressing **Enter**). What happens depends on the file type:
 
 - **Images, PDFs, videos, audio, and most other files** open in the full-screen preview overlay.
-- **Documents, spreadsheets, presentations, and boards** open straight away in their own app.
+- **Documents, spreadsheets, presentations, boards, and drawings** open straight away in their own app.
 - **Text and code files** (such as `.md`, `.txt`, `.json`) open in a text editor in the browser.
 
 ## Use Quick preview from the menu
@@ -28,7 +28,7 @@ Quick preview lets you glance at any file without leaving the list.
 
 The preview opens as an overlay on top of the list. Press **Esc** or click the dark area around the file to close it.
 
-You can also select a file with the keyboard (use the arrow keys to move through the list) and press **Space** to open Quick preview.
+You can also select a file with the keyboard (use the arrow keys to move through the list) and press **Space** to open Quick preview. Press **Space** again to close it.
 
 <div class="eigen-callout">
 

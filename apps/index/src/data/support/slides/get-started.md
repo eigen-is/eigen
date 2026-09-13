@@ -7,7 +7,7 @@ tags: [slides, getting-started, presentation, canvas]
 related: [slides/create-and-edit, slides/draw-shapes-and-arrows, slides/present, slides/share-and-comment]
 crossSections: [getting-started]
 order: 10
-updated: 2026-09-11
+updated: 2026-09-13
 ---
 
 Slides is where you build presentations in Eigen. Each presentation is a collection of 16:9 slides you can fill with text and images, reorder in a panel on the left, and then present in full screen from the browser.
@@ -30,7 +30,7 @@ When you open a presentation, the editor has three areas:
 
 The toolbar across the top holds, from left to right, an **Add slide** button, a cluster of drawing tools, an **Add image** button, and **Present**:
 
-- **Add slide** adds a new blank slide at the end of the presentation.
+- **Add slide** adds a new blank slide straight after the current one.
 - The tool cluster in the middle has **Select** for picking objects up, **Text** for a text box, and the shape and line tools **Rectangle**, **Diamond**, **Ellipse**, **Arrow**, **Line**, and **Draw**. Pick **Text**, then click the canvas to place a box and start typing.
 - **Add image** opens a picker where you can upload an image from your computer or pick one from Drive.
 

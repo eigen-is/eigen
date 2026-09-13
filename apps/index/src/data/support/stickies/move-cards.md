@@ -5,7 +5,7 @@ type: how-to
 tags: [stickies, kanban, drag, cards, columns]
 related: [stickies/add-and-edit-cards, stickies/column-settings]
 order: 40
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 You can rearrange cards on a board by dragging them. Drag within a column to change their order, or drag to a
@@ -45,4 +45,4 @@ If you drag something to the wrong place, press **Cmd+Z** (Mac) or **Ctrl+Z** (W
 ## On mobile
 
 Columns fill the screen width on a phone. Swipe left or right to move between them. Drag-to-move still works
-by touch: press and hold your finger on a card or column title bar, then drag.
+by touch: drag a card, or a column title bar, with your finger.

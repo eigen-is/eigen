@@ -5,7 +5,7 @@ type: how-to
 tags: [stickies, cards, kanban, editing]
 related: [stickies/get-started, stickies/move-cards, stickies/delete-cards]
 order: 30
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 Cards are the individual items on a Stickies board. Each card has a title, an optional description, and a colour. This article covers how to add a new card and how to change a card's content after you've created it.
@@ -25,10 +25,10 @@ You need write access to the board to add cards. If you can only view the board,
 
 1. Click the card to open it.
 2. In the card dialog, click the pencil icon (**Edit**) in the strip below the description.
-3. The **Edit card** dialog opens with the card's current title, description, and colour filled in.
+3. The card's title, description, and colour open for editing inside the card.
 4. Change whatever you like, then click **Save**. Click **Cancel** to discard your changes.
 
-You can also open the **Edit card** dialog from the context menu: right-click the card and choose **View sticky**, then click the pencil icon in the dialog that opens.
+You can also start editing from the context menu: right-click the card and choose **Edit sticky**.
 
 ## Add a checklist
 
@@ -44,7 +44,7 @@ Once a card has a checklist, a small progress bar and a count, such as **1/3**, 
 
 ## Change a card's colour without opening the edit dialog
 
-Right-click a card to open the context menu, then point to **Sticky color**. A colour swatch appears. Click any colour to apply it straight away.
+Right-click a card to open the context menu, then point to **Sticky color**. A list of colours appears. Click any colour to apply it straight away.
 
 ## Undo a change
 

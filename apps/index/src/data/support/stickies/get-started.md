@@ -7,7 +7,7 @@ tags: [stickies, kanban, cards, columns, getting-started]
 related: [stickies/create-board, stickies/add-and-edit-cards, stickies/move-cards, stickies/card-comments]
 crossSections: [getting-started]
 order: 10
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 Stickies is a kanban board. You organise work into columns, and each column holds cards. A card has a title,
@@ -27,8 +27,7 @@ To open a card and read its full content, click it.
 Columns run left to right across the board. Each one has a header with its title and two small buttons: a plus
 icon to add a card, and a pencil icon to open **Column Settings** where you can rename the column or delete it.
 
-To add a new column, click the **Add column** button in the toolbar (the plus icon). On a narrow screen, open the
-**Edit** menu in the toolbar and choose **Add column**.
+To add a new column, open the **Insert** menu in the toolbar and choose **Column**.
 
 You can reorder columns by dragging their header left or right.
 
@@ -39,10 +38,10 @@ header). The **Add Sticky** dialog opens, where you fill in a title, an optional
 Click **Add Sticky** to save it.
 
 To edit a card you have already added, open it by clicking on it, then click the pencil icon in the card detail
-view to open **Edit card**.
+view.
 
-Cards have a colour to help you group related work at a glance. You can change a card's colour in the
-**Edit card** dialog, or right-click a card and choose a colour from the context menu.
+Cards have a colour to help you group related work at a glance. You can change a card's colour while you
+edit it, or right-click a card and choose a colour from the context menu.
 
 ## Moving cards
 
@@ -60,12 +59,12 @@ See [Discuss a card with comments](/support/stickies/card-comments) for more det
 ## Filtering by colour
 
 The toolbar shows a row of colour swatches. Click one to show only the cards with that colour. Click it again,
-or click **Reset**, to clear the filter.
+or click **Clear**, to clear the filter.
 
 ## Undo and redo
 
-**Mod+Z** undoes the last change. **Mod+Y** or **Mod+Shift+Z** redoes it. The toolbar also has undo and redo
-buttons.
+**Mod+Z** undoes the last change. **Mod+Y** or **Mod+Shift+Z** redoes it. The **Edit** menu in the toolbar also
+has **Undo** and **Redo**.
 
 ## Sharing
 

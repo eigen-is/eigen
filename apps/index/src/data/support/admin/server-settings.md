@@ -5,7 +5,7 @@ type: reference
 tags: [admin, settings, quotas, storage, notifications]
 related: [admin/get-started, admin/storage-quotas]
 order: 80
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 The **Settings** page in Admin lets the server owner control storage limits, how new users' files are stored, and which events trigger email notifications. Only the server owner sees this page in the sidebar.
@@ -50,7 +50,7 @@ When you select **S3 Bucket**, an **S3 Configuration** form appears. Fill in all
 
 <div class="eigen-callout">
 
-If the connection test reports that bucket versioning is off or suspended, consider enabling it in your S3 provider. Without versioning, an overwritten file cannot be recovered.
+If the connection test reports that bucket versioning is off or suspended, click **Enable safe defaults** under **Bucket safety**. Without versioning, an overwritten file cannot be recovered.
 
 </div>
 

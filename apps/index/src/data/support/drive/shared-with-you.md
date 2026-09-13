@@ -6,7 +6,7 @@ category: Sharing
 tags: [drive, sharing, permissions, collaboration]
 related: [drive/share-a-file, drive/get-started]
 order: 90
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 Drive keeps two views that bring shared files together in one place: **Shared with me** shows
@@ -44,8 +44,8 @@ change their access level.
 
 <div class="eigen-callout">
 
-In **Shared with me**, you can open and preview files, but you cannot rename or delete them. Those
-actions belong to the file's owner.
+In **Shared with me**, you can open and preview files, but you cannot rename them. Renaming belongs to
+the file's owner.
 
 </div>
 

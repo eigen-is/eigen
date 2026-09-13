@@ -5,7 +5,7 @@ type: how-to
 tags: [stickies, kanban, columns, board, getting-started]
 related: [stickies/get-started, stickies/add-and-edit-cards]
 order: 20
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 A Stickies board is a kanban board made of columns. You can create as many boards as you like and shape
@@ -33,12 +33,9 @@ in the first column. You can rename the columns, delete them, or add new ones at
 You need write access to the board to add or change columns.
 
 1. Open the board.
-2. Click the **+** (plus) button in the toolbar. The **Add Column** dialog opens.
+2. Open the **Insert** menu in the toolbar and choose **Column**. The **Add Column** dialog opens.
 3. Type a name in the **Title** field.
 4. Click **Add Column**. The new column appears at the right end of the board.
-
-On a narrow screen the **+** button is not shown in the toolbar. Open the **Edit** menu in the toolbar
-instead and choose **Add column**.
 
 ## Rename a column
 
@@ -65,4 +62,4 @@ them to another column first. See [Move and reorder cards](/support/stickies/mov
 ## Undo a change
 
 Press **Ctrl+Z** (Windows) or **Cmd+Z** (macOS) to undo the last change. Press **Ctrl+Y** or
-**Cmd+Shift+Z** to redo. The toolbar also has undo and redo buttons.
+**Cmd+Shift+Z** to redo. The **Edit** menu in the toolbar also has **Undo** and **Redo**.

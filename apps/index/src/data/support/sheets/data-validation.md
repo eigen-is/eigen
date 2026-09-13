@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, data-validation, dropdown, rules]
 related: [sheets/enter-and-edit-data, sheets/conditional-formatting]
 order: 50
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 Data validation lets you control what goes into a cell. You can add a dropdown list so people pick from a fixed set of options, or write a rule that rejects a value if it falls outside a range, does not match a pattern, or fails another condition.
@@ -24,7 +24,7 @@ The dialog shows the current selection in the **Cell range** field. You can type
 3. Tick **Allow multiple selection** if you want people to be able to pick more than one option from the list.
 4. Click **OK**.
 
-When someone clicks a cell with a dropdown, a small arrow button appears at the right edge. Clicking it opens the list of options.
+A cell with a dropdown shows a small arrow at its right edge. Click it to open the list of options.
 
 ## Add a checkbox
 

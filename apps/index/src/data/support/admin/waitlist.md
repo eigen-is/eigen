@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, waitlist, onboarding, invitations]
 related: [admin/get-started, admin/manage-members]
 order: 110
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 When the waitlist is enabled, your Eigen landing page shows a sign-up form where people can submit
@@ -18,8 +18,8 @@ to invite them or reject their application.
 2. Under **Waitlist**, turn on **Enable waitlist**.
 3. Click **Save**.
 
-Once enabled, a **Waitlist** entry appears in the sidebar. The landing page now shows a "Join
-Waitlist" form instead of a direct sign-up option.
+Once enabled, a **Waitlist** entry appears in the sidebar. The landing page now shows a
+**Join Waitlist** button next to **Login**.
 
 <div class="eigen-callout">
 

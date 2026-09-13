@@ -5,7 +5,7 @@ type: how-to
 tags: [chat, rooms, rename]
 related: [chat/create-room, chat/get-started]
 order: 80
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 You can rename a chat room at any time from inside the room.
@@ -21,4 +21,4 @@ The new name appears straight away in the toolbar and in the sidebar.
 
 ## Who can rename a room
 
-You need edit access to the room to rename it. If you only have viewer access, the rename will not be saved and an error will appear.
+You need edit access to the room to rename it. If you only have viewer access, the pencil icon does not appear.

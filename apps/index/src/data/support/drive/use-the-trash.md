@@ -5,7 +5,7 @@ type: how-to
 tags: [drive, trash, delete, restore]
 related: [drive/get-started]
 order: 110
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 Deleting a file in Drive doesn't remove it straight away. It goes to the Trash, where it stays until you empty
@@ -24,7 +24,7 @@ to the Trash as well.
 
 1. Open **Trash** from the sidebar on the left.
 2. Find the item you want to restore.
-3. Hover over it and click the restore icon that appears on the right, or right-click and choose **Restore**.
+3. Right-click it (or click the **⋮** button at the end of its row) and choose **Restore**.
 
 Drive puts the item back where it was. If the original folder was also deleted, the item goes back to the top
 level of your Drive instead.
@@ -35,8 +35,7 @@ If you are sure you no longer need something in the Trash, you can remove it for
 automatically.
 
 1. Open **Trash** from the sidebar.
-2. Hover over the item and click the **Delete permanently** icon on the right, or right-click and choose
-   **Delete permanently**.
+2. Right-click the item (or click the **⋮** button at the end of its row) and choose **Delete permanently**.
 3. Confirm in the dialog that appears.
 
 This cannot be undone.

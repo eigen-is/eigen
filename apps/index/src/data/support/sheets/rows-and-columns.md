@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, rows, columns, resize]
 related: [sheets/create-and-edit, sheets/enter-and-edit-data]
 order: 80
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 You can add and remove rows and columns at any point, and adjust their size to fit your data. All of these actions are available from the menu bar or by right-clicking directly on the grid.
@@ -20,8 +20,8 @@ You can add and remove rows and columns at any point, and adjust their size to f
 
 **From the right-click menu:**
 
-1. Right-click any cell.
-2. The context menu shows an **Insert** entry with a count input and a direction. Type the number of rows you want, then click the row direction: **Above** or **Below**.
+1. Right-click the row number of the row next to where you want the new row.
+2. Choose **Insert 1 row above** or **Insert 1 row below**.
 
 To add rows to the end of the sheet, use the **Add** button at the very bottom of the grid. Type a count in the box next to it, then click **Add**.
 
@@ -35,8 +35,8 @@ To add rows to the end of the sheet, use the **Add** button at the very bottom o
 
 **From the right-click menu:**
 
-1. Right-click any cell.
-2. The context menu shows an **Insert** entry with a count input and a direction. Type the number of columns you want, then click the column direction: **Left** or **Right**.
+1. Right-click the column letter of the column next to where you want the new column.
+2. Choose **Insert 1 column to the left** or **Insert 1 column to the right**.
 
 ## Delete rows
 
@@ -48,7 +48,7 @@ To add rows to the end of the sheet, use the **Add** button at the very bottom o
 **From the right-click menu:**
 
 1. Click the row number on the left to select the whole row. You can hold Shift and click another row number to extend the selection.
-2. Right-click the selected area and choose **Delete selected Row**.
+2. Right-click the selected area and choose **Delete row**.
 
 You cannot delete the last remaining row in a sheet.
 
@@ -62,7 +62,7 @@ You cannot delete the last remaining row in a sheet.
 **From the right-click menu:**
 
 1. Click the column letter at the top to select the whole column. You can hold Shift and click another letter to extend the selection.
-2. Right-click the selected area and choose **Delete selected Column**.
+2. Right-click the selected area and choose **Delete column**.
 
 You cannot delete the last remaining column in a sheet.
 
@@ -76,16 +76,16 @@ To set a column to fit its contents, double-click the right edge of the column l
 
 1. Click a row number or column letter to select it.
 2. Right-click the selection.
-3. In the context menu, find the **RowHeight** or **ColumnWidth** entry. Type a number in the box next to it, then click the entry to apply. Row height accepts values from 1 to 545 px; column width accepts values from 1 to 2038 px.
+3. Choose **Resize the row** or **Resize the column**. Type a number in the dialog that opens, then click **OK**. Row height accepts values from 1 to 545 px; column width accepts values from 1 to 2038 px.
 
 ## Hide and show rows or columns
 
 To hide rows or columns you do not want to see at the moment:
 
 1. Click a row number or column letter to select the whole row or column.
-2. Right-click and choose **Hide selected Row** or **Hide selected Column**.
+2. Right-click and choose **Hide row** or **Hide column**.
 
-To bring them back, click a row number or column letter near the hidden rows or columns to select it, then right-click and choose **Show hidden Row** or **Show hidden Column**.
+To bring them back, click a row number or column letter near the hidden rows or columns to select it, then right-click and choose **Show hidden rows** or **Show hidden columns**.
 
 <div class="eigen-callout">
 

@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, spreadsheet, create, edit, cells, data]
 related: [sheets/get-started, sheets/enter-and-edit-data]
 order: 20
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 You can create a spreadsheet directly in Drive or from inside Sheets, then enter data and edit it using the
@@ -91,7 +91,7 @@ the centre of the menu bar.
 ## Find and replace
 
 Press **Ctrl+F** (Mac: **⌘F**) to open the find panel, or **Edit → Find and replace**. A search box appears
-where you can search across all cells. Use the **Replace** tab to replace matching values.
+where you can search across all cells. Click **Show replace** to open the replace row.
 
 ## Sheet tabs
 

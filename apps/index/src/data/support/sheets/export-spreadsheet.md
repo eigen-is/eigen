@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, export, download, excel, xlsx, pdf]
 related: [sheets/import-excel, sheets/get-started]
 order: 160
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 You can download a copy of any spreadsheet to your computer without removing it from Eigen. Three formats are
@@ -38,13 +38,6 @@ When you download as **Microsoft Excel (.xlsx)**, the following are preserved:
 - Text alignment, text wrapping, and text rotation
 - The sheet tab names and their order
 - Hidden gridlines (if you hid them)
-
-<div class="eigen-callout">
-
-Conditional formatting rules and data validation rules are not included in the Excel export. If you need
-those, keep the spreadsheet in Sheets where they apply.
-
-</div>
 
 ## What to use each format for
 

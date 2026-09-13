@@ -5,7 +5,7 @@ type: how-to
 tags: [contacts, edit, delete]
 related: [contacts/add-a-contact]
 order: 30
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 You can update any of a contact's details at any time, and delete contacts you no longer need.
@@ -40,7 +40,7 @@ In the **Labels** row you can pick a label from the dropdown. To remove a label,
 2. Click the trash icon (**Delete**) in the toolbar.
 3. A confirmation dialog appears. Click **Delete** to confirm, or **Cancel** to go back.
 
-You can also right-click any contact in the list and choose **Delete** from the menu that appears.
+You can also right-click a contact in the list and choose **Delete** from the menu that appears.
 
 <div class="eigen-callout">
 

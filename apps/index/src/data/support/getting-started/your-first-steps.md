@@ -6,7 +6,7 @@ category: Basics
 tags: [getting-started, sign-in, profile, space]
 related: [getting-started/about-eigen, drive/get-started]
 order: 2
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 Eigen brings your mail, files, calendar, and more together in one place, each as its own app. This page shows you
@@ -50,6 +50,7 @@ button (its label is **Switch app**). Click it to open the full list and jump to
 - **Drive** for your files and folders.
 - **Calendar** for your schedule.
 - **Docs**, **Sheets**, and **Slides** for documents, spreadsheets, and presentations.
+- **Vector** for drawings and diagrams.
 - **Stickies** for notes and boards, and **Chat** for messages.
 - **Contacts** for the people you know.
 

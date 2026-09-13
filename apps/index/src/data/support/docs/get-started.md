@@ -7,7 +7,7 @@ tags: [docs, getting-started, editor, collaboration, writing]
 related: [docs/export, docs/comments, docs/share-a-document]
 crossSections: [getting-started]
 order: 10
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 Docs is where you write in Eigen. You can create a document, format it, insert images and tables, and
@@ -37,7 +37,7 @@ The toolbar has three areas:
   numbered, or checklist) here.
 - **Share** and **Comments** buttons, on the right.
 
-On a narrow screen the formatting controls move into **Edit**, **Format**, and **Insert** dropdown
+On a narrow screen the formatting controls move into **Format** and **Insert** dropdown
 menus to save space.
 
 ## Your changes save automatically
@@ -51,8 +51,8 @@ Docs supports real-time editing. Share the document with other people (see
 [Share a document and set access](/support/docs/share-a-document)), and anyone with **Editor** access
 can work on it at the same time as you. Their cursor appears in the document labelled with their name.
 
-If you have **Viewer** access to a document, the toolbar shows a **Read-only** indicator and the text
-is not editable.
+If you have **Viewer** access to a document, the toolbar shows an eye icon in place of the **Share**
+button and the text is not editable.
 
 ## Comments
 
@@ -69,7 +69,7 @@ To download a copy of the document, open the **File** menu and go to **Download*
 - **Web Page (.html)**
 
 To bring content from a Word file into the current document, open the **File** menu and choose
-**Import docx file…**. See [Export to Word, PDF, HTML, or text](/support/docs/export) and
+**Import docx file…**. See [Export to Word, PDF, or HTML](/support/docs/export) and
 [Import a Word document](/support/docs/import-word) for more.
 
 ## Keep things tidy

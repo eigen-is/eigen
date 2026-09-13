@@ -7,7 +7,7 @@ tags: [chat, getting-started, messages, rooms, teams]
 related: [chat/personal-and-team-chats, chat/send-messages]
 crossSections: [getting-started]
 order: 10
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 Chat lets you send messages to other people in Eigen, organise conversations into named rooms, and share files
@@ -26,8 +26,8 @@ The sidebar is split into two areas:
 
 ## Create a room
 
-Click **New chat** at the top of the sidebar. Give the room a name and choose where to save it. The new room
-opens straight away.
+Click **New chat** at the top of the sidebar. Add the people you want to chat with, then confirm the name and
+the location. The new room opens straight away.
 
 If you have no rooms yet, Chat shows a **Create your first chat** button in the centre of the screen.
 

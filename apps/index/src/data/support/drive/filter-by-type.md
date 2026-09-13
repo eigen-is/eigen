@@ -5,7 +5,7 @@ type: how-to
 tags: [drive, files, images, filter, type]
 related: [drive/get-started]
 order: 80
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 Drive shows you your files inside folders, but sometimes you want to see all your images, or all your chats,
@@ -23,6 +23,7 @@ type across all your drives in one list.
    - **All chats**: shows every chat in your Drive.
    - **All slides**: opens Slides and lists your presentations there.
    - **All sheets**: opens Sheets and lists your spreadsheets there.
+   - **All vectors**: opens Vector and lists your drawings there.
 
 ## Work with files in a filtered view
 

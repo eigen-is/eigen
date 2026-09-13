@@ -7,7 +7,7 @@ tags: [calendar, caldav, sync, integrations, app-passwords, thunderbird, apple-c
 related: [connect/app-passwords, connect/overview]
 crossSections: [calendar]
 order: 40
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 Eigen Calendar syncs over CalDAV, so you can keep your events in step with Apple Calendar, Thunderbird, or any
@@ -40,7 +40,7 @@ your main password will not work for CalDAV.
 
 1. Open the **Calendar** app and go to **File → Add Account**.
 2. Choose **Other CalDAV Account** and click **Continue**.
-3. Set **Account Type** to **Automatic** (or **Manual** if Automatic fails).
+3. Set **Account Type** to **Manual**.
 4. Enter your Eigen **email address** as the username.
 5. Paste the **Server URL** you copied from the Integrations page.
 6. Paste your app password into the **Password** field.

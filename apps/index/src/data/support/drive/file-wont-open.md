@@ -5,7 +5,7 @@ type: troubleshooting
 tags: [drive, preview, permissions, access, troubleshooting]
 related: [drive/request-access, drive/preview-a-file, drive/use-the-trash]
 order: 210
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 If clicking a file does nothing, shows an error, or gives you a "No preview available" message, one of a few
@@ -26,8 +26,8 @@ For more detail, see [Request access to a file](/support/drive/request-access).
 If you expect to see a file but it is not in the folder, check the Trash. Eigen moves deleted files to the
 Trash rather than removing them straight away. Open the **Trash** from the sidebar to see deleted files.
 
-If you find the file there, right-click it and choose **Restore**, or hover over it and click the restore
-button. The file goes back to the folder it was in before.
+If you find the file there, right-click it and choose **Restore**. The file goes back to the folder it was in
+before.
 
 If it is not in the Trash either, it may have been permanently deleted.
 
@@ -46,8 +46,8 @@ To work with the file:
 
 Different file types open in different ways:
 
-- **Documents, spreadsheets, presentations, boards, and chats** open in their own app (Docs, Sheets,
-  Slides, Stickies, Chat). If the app seems to hang on loading, try refreshing the page.
+- **Documents, spreadsheets, presentations, boards, drawings, and chats** open in their own app (Docs, Sheets,
+  Slides, Stickies, Vector, Chat). If the app seems to hang on loading, try refreshing the page.
 - **Images, PDFs, videos, and audio** open in the preview overlay in Drive.
 - **Text and code files** (such as `.md`, `.txt`, `.json`) open in a text editor in the browser.
 

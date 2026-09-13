@@ -5,7 +5,7 @@ type: faq
 tags: [calendar, invitations, external, imip, rsvp]
 related: [calendar/invite-people, calendar/respond-to-invitation, calendar/create-event]
 order: 70
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 Eigen can exchange calendar invitations with people who use other calendar apps, such as Google Calendar,
@@ -40,8 +40,8 @@ When an invitation email arrives in your Eigen mailbox, Mail shows a calendar ca
 instead of a bare attachment. The card displays the event title, date and time, location, and the
 organiser's name. Click **View in Calendar** to open Calendar on that event.
 
-Eigen adds the event to your default calendar automatically. You do not need to do anything else for it
-to appear.
+Eigen adds the event to your default calendar automatically, as long as your server can verify the sender
+of the email. If it cannot, the card still appears in Mail but nothing is added to your calendar.
 
 ## How do I respond to an externally-organised event?
 

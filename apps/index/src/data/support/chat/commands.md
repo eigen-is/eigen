@@ -5,7 +5,7 @@ type: reference
 tags: [chat, commands, slash, emotes, whisper]
 related: [chat/get-started, chat/mentions, chat/send-messages]
 order: 120
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 Chat has a set of slash commands you type directly in the message box. Start typing `/` and a suggestion list
@@ -94,6 +94,7 @@ The table below lists every emote. Aliases shown alongside the primary name also
 | `/guffaw` | Boisterous guffaw |
 | `/happy` | Filled with happiness |
 | `/hello`, `/hi` | Hearty hello |
+| `/hide` | Slowly back into the hedge |
 | `/highfive` | High five |
 | `/hug` | Hug |
 | `/idea` | You have an idea! |

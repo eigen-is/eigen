@@ -1,19 +1,19 @@
 ---
 title: "See and restore previous versions of a file"
-description: "View the version history of a document, spreadsheet, presentation, or board, and restore an earlier version if you need to."
+description: "View the version history of a document, spreadsheet, presentation, board, or drawing, and restore an earlier version if you need to."
 type: how-to
 category: Files
-tags: [drive, versions, history, restore, docs, sheets, slides, stickies]
+tags: [drive, versions, history, restore, docs, sheets, slides, stickies, vector]
 related: [drive/get-started, drive/use-the-trash]
 order: 120
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
-Eigen keeps a history of saved states for every document, spreadsheet, presentation, and board you own or can
-edit. You can browse that history and restore an earlier version at any time.
+Eigen keeps a history of saved states for every document, spreadsheet, presentation, board, and drawing you own
+or can edit. You can browse that history and restore an earlier version at any time.
 
 Version history is available in the **File** menu inside the editor. It is not shown for plain uploaded files,
-only for Docs, Sheets, Slides, and Stickies.
+only for Docs, Sheets, Slides, Stickies, and Vector.
 
 ## Save a version manually
 

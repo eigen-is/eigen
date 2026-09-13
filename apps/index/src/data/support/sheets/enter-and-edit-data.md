@@ -6,7 +6,7 @@ category: Basics
 tags: [sheets, cells, data, editing, keyboard, formula-bar]
 related: [sheets/get-started, sheets/create-and-edit, sheets/formulas]
 order: 30
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 You can enter text, numbers, and formulas into any cell in Sheets, then edit or clear them at any time.
@@ -47,8 +47,8 @@ within the same cell. Press **Enter** on its own to confirm and move to the next
 
 Select one or more cells, then press **Delete** or **Backspace**. The values and formulas are removed.
 
-To clear contents from the right-click menu, right-click the selection and choose **Clear content**.
-The same option is available under **Edit → Delete → Clear content**.
+To clear contents from the right-click menu, right-click the selection and choose **Clear contents**.
+The same option is available under **Edit → Delete → Clear contents**.
 
 ## Select a range of cells
 

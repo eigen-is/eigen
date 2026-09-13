@@ -5,7 +5,7 @@ type: how-to
 tags: [calendar, rsvp, invitations, attendees]
 related: [calendar/invite-people, calendar/external-invitations, calendar/create-event]
 order: 50
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 When someone invites you to an event, it appears in your calendar straight away. You can accept,
@@ -56,7 +56,8 @@ When someone who uses a different calendar app invites you, the invitation email
 Mail shows a calendar card inside the message with the event title, date, and organiser's name.
 Click **View in Calendar** on that card to open Calendar on the event.
 
-Eigen adds the event to your default calendar automatically when the email arrives. From there,
+Eigen adds the event to your default calendar automatically when the email arrives, as long as your
+server can verify the sender. From there,
 respond the same way: click the event, find the **RSVP** section, and choose **Accept**,
 **Maybe**, or **Decline**. Eigen sends a reply email to the organiser so their calendar app can
 update its attendee list.

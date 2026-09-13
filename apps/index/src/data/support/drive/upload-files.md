@@ -6,7 +6,7 @@ category: Basics
 tags: [drive, upload, files]
 related: [drive/get-started]
 order: 30
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 You can upload files to Drive in two ways: through the **New** menu, or by dragging files from your
@@ -41,7 +41,7 @@ you start the drag.
 
 Drive will not overwrite an existing file. If you upload a file whose name is already taken in the
 folder, Drive saves the new file with a number added to its name. For example, uploading `photo.jpg`
-into a folder that already has a `photo.jpg` results in a file named `photo#1.jpg`.
+into a folder that already has a `photo.jpg` results in a file named `photo (2).jpg`.
 
 <div class="eigen-callout">
 

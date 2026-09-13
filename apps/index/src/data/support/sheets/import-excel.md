@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, import, excel, xlsx, spreadsheet]
 related: [sheets/get-started, sheets/export-spreadsheet]
 order: 110
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 You can bring an Excel workbook into Sheets in two ways: import it into an existing spreadsheet to replace its
@@ -60,8 +60,5 @@ The following are not imported:
 
 - Charts
 - Images embedded in cells
-- Conditional formatting rules
-- Data validation rules
-- Hyperlinks (the link text is kept, but the URL is dropped)
 
 If these are important, keep the original `.xlsx` file in Drive so you have a reference copy.

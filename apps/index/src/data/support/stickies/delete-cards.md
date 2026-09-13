@@ -5,7 +5,7 @@ type: how-to
 tags: [stickies, cards, delete, kanban]
 related: [stickies/add-and-edit-cards, stickies/move-cards]
 order: 60
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 You can delete any card you no longer need. Deletion is permanent, but you can undo it straight away if
@@ -24,8 +24,8 @@ The card is removed from the board immediately.
 
 ## Undo a deletion
 
-Press **Ctrl+Z** (Windows) or **Cmd+Z** (macOS) straight after deleting to bring the card back. The undo
-button in the toolbar does the same thing.
+Press **Ctrl+Z** (Windows) or **Cmd+Z** (macOS) straight after deleting to bring the card back. **Undo** in
+the toolbar's **Edit** menu does the same thing.
 
 <div class="eigen-callout">
 
