@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1386 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1395 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -199,7 +199,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (257)
+## Hooks (261)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -309,11 +309,15 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useContactSuggestions` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contact-suggestions.ts |
 | `useDeleteContact` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `useDeleteLabel` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-labels.ts |
+| `useExportContacts` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-transfer.ts |
+| `useImportContacts` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-transfer.ts |
+| `useImportContactsFromDrive` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-transfer.ts |
 | `useLabels` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-labels.ts |
 | `useMeContact` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `useUpdateContact` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `useUpdateLabel` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-labels.ts |
 | `useUploadContactAvatar` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
+| `useVCardFile` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-transfer.ts |
 | `useAggregateMimeContent` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useAllWatches` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
 | `useBreadcrumb` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
@@ -799,7 +803,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (623)
+## Utilities & constants (628)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -829,6 +833,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getCollabWebSocketUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getContactsAppUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getContactsAvatarUploadUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `getContactsExportUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `getContactsImportUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getDemoEnterUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getDocsAppUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getDriveAppUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
@@ -1026,6 +1032,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `A4_WIDTH_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/index.ts |
 | `getDocExtensions` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/extensions.ts |
 | `PAGE_MARGIN_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/index.ts |
+| `downloadBlob` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
+| `filenameFromDisposition` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
 | `checkPathAccess` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `createWithReconcile` | `@workspace/lib/drive` | packages/lib/src/core/drive/reconcile-create.ts |
 | `DEFAULT_MOUNT_ID` | `@workspace/lib/drive` | packages/lib/src/types/mount.ts |
@@ -1157,6 +1165,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getVersion` | `@workspace/lib/vcard` | packages/lib/src/vcard/ast.ts |
 | `makeLine` | `@workspace/lib/vcard` | packages/lib/src/vcard/ast.ts |
 | `normalizeBirthday` | `@workspace/lib/vcard` | packages/lib/src/vcard/parse.ts |
+| `parsedCardToContact` | `@workspace/lib/vcard` | packages/lib/src/vcard/to-contact.ts |
 | `parseVCard` | `@workspace/lib/vcard` | packages/lib/src/vcard/parse.ts |
 | `parseVCardLines` | `@workspace/lib/vcard` | packages/lib/src/vcard/ast.ts |
 | `photoParams` | `@workspace/lib/vcard` | packages/lib/src/vcard/ast.ts |

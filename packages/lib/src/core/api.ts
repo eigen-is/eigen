@@ -157,6 +157,8 @@ export const getPublicAvatarUrl = (emailOrId: string) => `${API_HOST}/p/avatar/$
 export const getDemoEnterUrl = () => `${API_HOST}/p/demo/enter`;
 export const getSSEEventsUrl = (ownerId: string) => `${API_HOST}/sse/${ownerId}/events`;
 export const getContactsAvatarUploadUrl = (ownerId: string) => `${API_HOST}/contacts/${ownerId}/avatar`;
+export const getContactsExportUrl = (ownerId: string) => `${API_HOST}/contacts/${ownerId}/export`;
+export const getContactsImportUrl = (ownerId: string) => `${API_HOST}/contacts/${ownerId}/import`;
 export const getDriveFileUploadUrl = (ownerId: string, mountId: string, pathId: string) =>
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}`;
 export const getMailDraftAttachmentUploadUrl = (ownerId: string) =>

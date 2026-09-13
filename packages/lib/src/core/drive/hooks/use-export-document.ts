@@ -1,6 +1,7 @@
 import { getDriveExportUrl } from '@workspace/lib/api';
 import { useCallback, useState } from 'react';
 import { onMutationError } from '../../api-error';
+import { downloadBlob, filenameFromDisposition } from '../../download';
 
 export function useExportDocument() {
     const [isExporting, setIsExporting] = useState(false);
@@ -15,18 +16,8 @@ export function useExportDocument() {
                 throw new Error(text || `Export failed (${response.status})`);
             }
             const blob = await response.blob();
-            const disposition = response.headers.get('Content-Disposition');
-            const match = disposition?.match(/filename\*?="?([^";]+)"?/);
-            const fileName = match ? decodeURIComponent(match[1]) : `export.${format}`;
-
-            const objectUrl = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = objectUrl;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(objectUrl);
+            const name = filenameFromDisposition(response.headers.get('Content-Disposition'), `export.${format}`);
+            downloadBlob(blob, name);
         } catch (e) {
             onMutationError(e);
         } finally {
