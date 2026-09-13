@@ -20,6 +20,8 @@ Eigenslides and eigensheets reuse the same HTML→PDF pipeline (sheets also expo
 
 Every eigendoc/eigenslides/eigensheets/eigenvector export runs its Yjs reconstruction, rendering and sanitization in the one-shot document-transform Worker ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)): the main thread prepares media, the Worker returns the finished document bytes. The DOCX conversion runs there too — the Worker loads the externalized `@turbodocx/html-to-docx` from runtime `node_modules`. WeasyPrint stays a main-thread subprocess on top of the Worker's HTML.
 
+**Contacts export is a different thing with the same name.** `POST /contacts/:ownerId/export` concatenates the stored `.vcf` files and streams them as one `text/vcard` attachment: no renderer, no Worker, no sanitization pass, because the bytes on disk are already the format. Its import twins read a `.vcf` back into the address book. See [CONTACTS.md § vCard import / export](CONTACTS.md#vcard-import--export).
+
 ## File Structure
 
 ```
