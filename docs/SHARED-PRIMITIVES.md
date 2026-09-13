@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1363 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1365 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (156)
+## Components (157)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -158,6 +158,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FindInDocumentMenuItem` | `@workspace/ui/components/search` | packages/ui/src/components/search/find-in-document-button.tsx |
 | `UploadContainer` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-container.tsx |
 | `CollapsibleUserList` | `@workspace/ui/components/user` | packages/ui/src/components/user/collapsible-user-list.tsx |
+| `ContactDetailCard` | `@workspace/ui/components/user` | packages/ui/src/components/user/contact-detail-card.tsx |
 | `OwnerInfoPopover` | `@workspace/ui/components/user` | packages/ui/src/components/user/owner-info-popover.tsx |
 | `PersonList` | `@workspace/ui/components/user` | packages/ui/src/components/user/person-list.tsx |
 | `UserAvatar` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-avatar.tsx |
@@ -459,7 +460,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (327)
+## Types (328)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -778,6 +779,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DocSearchProviderProps` | `@workspace/ui/components/search` | packages/ui/src/components/search/doc-search-provider.tsx |
 | `FlashRange` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 | `UploadItem` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-provider.tsx |
+| `ContactDetailCardProps` | `@workspace/ui/components/user` | packages/ui/src/components/user/contact-detail-card.tsx |
 | `OwnerInfoPopoverProps` | `@workspace/ui/components/user` | packages/ui/src/components/user/owner-info-popover.tsx |
 | `UserAvatarProps` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-avatar.tsx |
 | `UserDetailHeroProps` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-detail-hero.tsx |
