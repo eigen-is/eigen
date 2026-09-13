@@ -14,6 +14,7 @@ type DriveFilePickerProps = {
     onSelect: (paths: DrivePath[]) => void;
     onUploadFromDevice?: () => void;
     mimeFilter?: string[];
+    canPick?: (item: DrivePath) => boolean;
     title?: string;
     multiSelect?: boolean;
 };
@@ -24,6 +25,7 @@ export function DriveFilePicker({
     onSelect,
     onUploadFromDevice,
     mimeFilter,
+    canPick,
     title = 'Attach file',
     multiSelect = false,
 }: DriveFilePickerProps) {
@@ -95,6 +97,7 @@ export function DriveFilePicker({
                         ownerId={ownerId}
                         mode="file"
                         mimeFilter={mimeFilter}
+                        canPick={canPick}
                         selectedId={multiSelect ? undefined : selected?.id}
                         onSelect={handleSelect}
                         onConfirm={multiSelect ? undefined : handleConfirm}
