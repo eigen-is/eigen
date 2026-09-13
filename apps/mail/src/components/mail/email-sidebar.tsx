@@ -8,7 +8,7 @@ import { useMemo } from 'react';
 import { EmailComposeButton } from './email-compose-button';
 
 // Map of special mailbox flags to their icons and display names
-const standardMailboxes: Record<string, { icon: React.ComponentType<{ className?: string }>; name: string }> = {
+export const standardMailboxes: Record<string, { icon: React.ComponentType<{ className?: string }>; name: string }> = {
     '\\Inbox': { icon: Inbox, name: 'Inbox' },
     '\\Drafts': { icon: File, name: 'Drafts' },
     '\\Sent': { icon: Send, name: 'Sent' },
@@ -76,7 +76,7 @@ const defaultMailboxes = [
 ];
 
 // Helper function to get the standard mailbox flag
-function getStandardMailboxFlag(flags: string[] = []): string | null {
+export function getStandardMailboxFlag(flags: string[] = []): string | null {
     const standardFlags = Object.keys(standardMailboxes);
     return flags.find((flag) => standardFlags.includes(flag)) || null;
 }
