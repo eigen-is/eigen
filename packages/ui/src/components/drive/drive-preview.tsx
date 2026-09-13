@@ -1,12 +1,18 @@
 import { getDriveItemThumbnail } from '@workspace/lib/api';
 import { CANVAS_PREVIEW_WIDTH, getTextPreviewMode, type TextPreviewMode } from '@workspace/lib/constants';
+import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
+import { useVCardFile } from '@workspace/lib/contacts';
 import { A4_WIDTH_PX } from '@workspace/lib/docs/eigendoc';
 import { useTextPreview } from '@workspace/lib/drive';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import type { Contact } from '@workspace/lib/types/contact';
+import { type DrivePath, isVCardFile } from '@workspace/lib/types/drive';
+import { parsedCardToContact } from '@workspace/lib/vcard';
 import type { LucideIcon } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '../../lib/utils';
+import { UserAvatar } from '../user/user-avatar';
 import { getFilePresentation } from './file-presentation';
+import { droppedLine, remainingLine } from './vcard-preview-lines';
 
 type DrivePreviewProps = {
     path: DrivePath;
@@ -18,6 +24,8 @@ type DrivePreviewProps = {
 export function DrivePreview({ path, onActivate, className }: DrivePreviewProps) {
     const presentation = getFilePresentation(path.mimeType, path.type);
     const hasTextPreview = getTextPreviewMode(path.mimeType, path.name) !== null;
+    // Same guard as the quick look: a file an import would refuse is never downloaded to be parsed.
+    const hasVCardPreview = isVCardFile(path.mimeType, path.name) && path.size <= IMPORT_MAX_BYTES;
     const { showThumbnail, thumbnailUrl } = getDriveItemThumbnail(path);
 
     const interactive = !!onActivate;
@@ -51,6 +59,8 @@ export function DrivePreview({ path, onActivate, className }: DrivePreviewProps)
                     />
                     <img src={thumbnailUrl} alt={path.name} className="absolute inset-0 w-full h-full object-contain" />
                 </>
+            ) : hasVCardPreview ? (
+                <VCardHero path={path} icon={presentation.icon} color={presentation.colorVar} />
             ) : hasTextPreview ? (
                 <HtmlPreview path={path} tintColor={presentation.colorVar} />
             ) : (
@@ -64,6 +74,53 @@ function IconFallback({ icon: Icon, color }: { icon: LucideIcon; color: string }
     return (
         <div className="absolute inset-0 flex items-center justify-center">
             <Icon className="size-16" style={{ color }} strokeWidth={1.5} />
+        </div>
+    );
+}
+
+// What fits the 16:9 box at reading size, badge and counted lines included.
+const HERO_CARD_LIMIT = 3;
+
+// A .vcf has no server-rendered body: the hero shows its first contacts, parsed in the browser.
+function VCardHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; color: string }) {
+    const { data, isLoading } = useVCardFile(path.ownerId, path.mountId, path.id, path.updatedAt, path.size);
+    // Inline photos become data URIs, so this is real work per card — never per render.
+    const contacts = useMemo(
+        () => (data?.cards ?? []).slice(0, HERO_CARD_LIMIT).map(parsedCardToContact),
+        [data?.cards],
+    );
+
+    // Loading reads as the empty tinted box, the same as a text hero with no body yet.
+    if (isLoading) return null;
+    if (!data || contacts.length === 0) return <IconFallback icon={icon} color={color} />;
+
+    // The cards the file holds that this hero shows no row for — the unreadable ones get their own line.
+    const remaining = data.total - data.dropped - contacts.length;
+
+    return (
+        <div className="absolute inset-0 flex flex-col justify-center gap-2 overflow-hidden px-4 pt-8 pb-3">
+            {contacts.map(({ contact }, index) => (
+                <VCardRow key={index} contact={contact} />
+            ))}
+            {remaining > 0 && <p className="truncate text-xs text-muted-foreground">{remainingLine(remaining)}</p>}
+            {data.dropped > 0 && <p className="truncate text-xs text-muted-foreground">{droppedLine(data.dropped)}</p>}
+        </div>
+    );
+}
+
+// The card's own name and email, not the address book's: this previews a file. UserAvatar is the
+// The same avatar the quick look resolves for this cardnerated initials.
+function VCardRow({ contact }: { contact: Contact }) {
+    const email = contact.email[0];
+    const title = `${contact.firstName} ${contact.lastName}`.trim() || email;
+
+    return (
+        <div className="flex min-w-0 items-center gap-3">
+            <UserAvatar name={title} email={email} imageUrl={contact.avatar} />
+            <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-foreground">{title}</p>
+                {email && email !== title && <p className="truncate text-xs text-muted-foreground">{email}</p>}
+            </div>
         </div>
     );
 }

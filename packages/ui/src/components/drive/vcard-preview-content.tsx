@@ -8,13 +8,10 @@ import { EmptyState } from '../layout/app/empty-state';
 import { ErrorState } from '../layout/app/error-state';
 import { LoadingState } from '../layout/app/loading-state';
 import { ContactDetailCard } from '../user/contact-detail-card';
+import { droppedLine, remainingLine } from './vcard-preview-lines';
 
 // A quick look reads, it doesn't scroll a whole address book: the rest is a counted line.
 const PREVIEW_CARD_LIMIT = 200;
-
-function droppedLine(dropped: number): string {
-    return `${dropped} contact${dropped === 1 ? '' : 's'} could not be read`;
-}
 
 export function VCardPreviewContent({ path }: { path: DrivePath }) {
     const { data, isLoading } = useVCardFile(path.ownerId, path.mountId, path.id, path.updatedAt, path.size);
@@ -53,11 +50,7 @@ export function VCardPreviewContent({ path }: { path: DrivePath }) {
                             className="border-b pb-8 last:border-b-0 last:pb-0"
                         />
                     ))}
-                    {remaining > 0 && (
-                        <p className="text-sm text-muted-foreground">
-                            and {remaining} more contact{remaining === 1 ? '' : 's'}
-                        </p>
-                    )}
+                    {remaining > 0 && <p className="text-sm text-muted-foreground">{remainingLine(remaining)}</p>}
                     {data.dropped > 0 && <p className="text-sm text-muted-foreground">{droppedLine(data.dropped)}</p>}
                 </div>
             )}
