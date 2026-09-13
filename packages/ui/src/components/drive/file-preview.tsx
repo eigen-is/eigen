@@ -7,7 +7,6 @@ import { isDocumentType, isFolderType } from '@workspace/lib/types/drive';
 import { useFocusTrap } from '@workspace/ui/hooks/use-focus-trap';
 import { BookUser, ChevronLeft, ChevronRight, Download, ExternalLink, FolderDown, Loader2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import type { DownloadMode, PreviewMode } from '../preview-provider/preview-provider';
 import { DriveLocationPicker } from './drive-location-picker';
 import { getFileIcon } from './file-presentation';
@@ -132,11 +131,7 @@ export function FilePreview({
                 </div>
                 <div className="flex items-center gap-1">
                     {previewMode === 'vcard' && (
-                        <TooltipButton
-                            icon={BookUser}
-                            tooltipText="Import to Contacts"
-                            disabled={importContacts.isPending}
-                            className="text-white hover:bg-white/20 hover:text-white"
+                        <NavButton
                             onClick={() =>
                                 importContacts.mutate({
                                     sourceOwnerId: path.ownerId,
@@ -144,7 +139,11 @@ export function FilePreview({
                                     sourcePathId: path.id,
                                 })
                             }
-                        />
+                            disabled={importContacts.isPending}
+                            title="Import to Contacts"
+                        >
+                            <BookUser className="size-4" />
+                        </NavButton>
                     )}
                     <NavButton onClick={onPrev} disabled={!hasPrev} title="Previous (←)">
                         <ChevronLeft className="size-4" />

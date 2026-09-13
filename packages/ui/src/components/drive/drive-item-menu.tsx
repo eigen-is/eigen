@@ -93,7 +93,7 @@ export function DriveItemMenuItems({
     // draw the same rows and the export route gates on the same list.
     const exportFormats = exportFormatsFor(item.type);
     const accessible = !!item.acl?.length || item.visibility !== 'private';
-    const canImportContacts = isVCardFile(item.mimeType, item.name) && accessible && !!onImportContacts;
+    const canImportContacts = item.type === 'file' && isVCardFile(item.mimeType, item.name) && !!onImportContacts;
 
     const { direct, label, isPending, toggle } = useWatchToggle(item.ownerId, item.mountId, item.id);
 

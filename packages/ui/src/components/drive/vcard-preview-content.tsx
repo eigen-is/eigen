@@ -1,5 +1,6 @@
 import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { useVCardFile } from '@workspace/lib/contacts';
+import { formatFileSize } from '@workspace/lib/format';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { parsedCardToContact } from '@workspace/lib/vcard';
 import { useMemo } from 'react';
@@ -23,12 +24,16 @@ export function VCardPreviewContent({ path }: { path: DrivePath }) {
         [data?.cards],
     );
 
-    const remaining = data ? data.total - contacts.length : 0;
+    // The cards the file holds that this preview shows no card for — the unreadable ones get their own line.
+    const remaining = data ? data.total - data.dropped - contacts.length : 0;
 
     return (
         <div className="w-[80vw] h-[calc(100vh-7rem)] overflow-auto rounded bg-background">
             {path.size > IMPORT_MAX_BYTES ? (
-                <EmptyState message="File too large to preview" />
+                <EmptyState
+                    message="File too large to preview"
+                    hint={`A file over ${formatFileSize(IMPORT_MAX_BYTES)} can’t be imported either.`}
+                />
             ) : isLoading ? (
                 <LoadingState />
             ) : !data ? (
