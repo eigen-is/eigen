@@ -62,10 +62,16 @@ describe('parsedCardToContact', () => {
         expect(contact.avatar).toBe(`data:image/jpeg;base64,${PNG}`);
     });
 
-    test('a uri photo passes through untouched', () => {
+    test('a uri photo is dropped — a preview never fetches a URL an untrusted card chose', () => {
         const { contact } = parsedCardToContact(card('PHOTO;VALUE=URI:https://example.com/jane.jpg'));
 
-        expect(contact.avatar).toBe('https://example.com/jane.jpg');
+        expect(contact.avatar).toBeUndefined();
+    });
+
+    test('an inline photo that is not an image is dropped, whatever it declares', () => {
+        const { contact } = parsedCardToContact(card(`PHOTO:data:text/html;base64,${PNG}`));
+
+        expect(contact.avatar).toBeUndefined();
     });
 
     test('categories are returned beside the contact, never as its labels', () => {

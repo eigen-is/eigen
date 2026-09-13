@@ -1,19 +1,25 @@
 import type { Contact, ParsedCard, ParsedCardPhoto } from '../types/contact';
 
 // btoa over a chunked binary string, not Buffer: this runs in the browser. Mirrors blobToDataUri in
-// core/clipboard. The media-type fallback is the server's (cacheCardPhoto) — a 3.0 PHOTO may declare none.
-function photoDataUri(bytes: Uint8Array, mediaType: string | null): string {
+// core/clipboard.
+function photoDataUri(bytes: Uint8Array, mediaType: string): string {
     let binary = '';
     const CHUNK = 0x8000; // stay well under the spread arg-count limit
     for (let i = 0; i < bytes.length; i += CHUNK) {
         binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
     }
-    return `data:${mediaType ?? 'image/jpeg'};base64,${btoa(binary)}`;
+    return `data:${mediaType};base64,${btoa(binary)}`;
 }
 
+// Only an inline image becomes an avatar. A uri photo is never fetched — an import doesn't fetch one
+// either (cacheCardPhoto ignores them), and a preview that did would have the browser call a URL an
+// untrusted file chose. A non-image media type is refused for the same reason: a data: URI is only ever
+// rendered as an image here. The fallback for a 3.0 PHOTO that declares no type is the server's.
 function cardAvatar(photo: ParsedCardPhoto | null): string | undefined {
-    if (!photo) return undefined;
-    return photo.kind === 'inline' ? photoDataUri(photo.bytes, photo.mediaType) : photo.uri;
+    if (photo?.kind !== 'inline') return undefined;
+    const mediaType = photo.mediaType ?? 'image/jpeg';
+    if (!mediaType.toLowerCase().startsWith('image/')) return undefined;
+    return photoDataUri(photo.bytes, mediaType);
 }
 
 // A parsed card as the app renders a contact, for a file that is only being previewed: nothing is stored,

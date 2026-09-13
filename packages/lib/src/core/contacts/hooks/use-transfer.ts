@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { contactsApi, getContactsExportUrl, getContactsImportUrl, getDriveDownloadUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
-import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
+import { IMPORT_MAX_BYTES, IMPORT_MAX_CARDS } from '@workspace/lib/constants/contact';
 import type { ContactTransferSource, ImportContactsResult, ParsedCard } from '@workspace/lib/types/contact';
 import { parseVCard, splitVCards, transcodeTo30 } from '@workspace/lib/vcard';
 import { useCallback, useState } from 'react';
@@ -107,18 +107,20 @@ export function useImportContactsFromDrive() {
 
 // The cards in a Drive file, read for preview only — nothing is imported. The file is fetched whole, so
 // the query stays off anything over the import ceiling; `updatedAt` in the key makes a new version a new
-// entry, which is why it never goes stale.
+// entry, which is why it never goes stale. It parses no more cards than an import would accept, and
+// reports `total` so the preview can say how many the file holds.
 export function useVCardFile(ownerId: string, mountId: string, pathId: string, updatedAt: Date, size: number) {
     return useQuery({
         queryKey: contactKeys.vcardFile(ownerId, mountId, pathId, updatedAt.getTime()),
-        queryFn: async (): Promise<{ cards: ParsedCard[]; dropped: number }> => {
+        queryFn: async (): Promise<{ cards: ParsedCard[]; dropped: number; total: number }> => {
             const response = await fetch(getDriveDownloadUrl(ownerId, mountId, pathId, updatedAt), {
                 credentials: 'include',
             });
             if (!response.ok) throw new Error(await response.text());
+            const texts = splitVCards(await response.text());
             const cards: ParsedCard[] = [];
             let dropped = 0;
-            for (const text of splitVCards(await response.text())) {
+            for (const text of texts.slice(0, IMPORT_MAX_CARDS)) {
                 // One card the parser refuses never costs the preview the rest of the file.
                 try {
                     cards.push(parseVCard(transcodeTo30(text)));
@@ -126,7 +128,7 @@ export function useVCardFile(ownerId: string, mountId: string, pathId: string, u
                     dropped++;
                 }
             }
-            return { cards, dropped };
+            return { cards, dropped, total: texts.length };
         },
         enabled: !!ownerId && !!mountId && !!pathId && size <= IMPORT_MAX_BYTES,
         staleTime: Infinity,
