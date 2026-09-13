@@ -64,7 +64,7 @@ Two things that aren't written down anywhere else: the API serves every app from
   The inverse is also a smell: deep-importing past a barrel (`@workspace/lib/core/…`) usually means the
   thing you reached for should have been exported
 - **Fix broken windows** — fix pre-existing issues if the fix is straightforward
-- **Keep docs up to date** — update `docs/` and this file when changes affect architecture
+- **Keep docs up to date** — update `docs/` and this file when changes affect architecture, and the help center in `apps/index/src/data/support/` when the change is user-visible: a label, a menu path, a step, a stated limit, or a list an article presents as complete. Minimal corrections, never a rewrite, and bump an article's `updated:` only when you changed it. House rules in [SUPPORT-STYLE-GUIDE.md](docs/SUPPORT-STYLE-GUIDE.md); the orchestration version of this rule is step 11 of [WORKING-METHOD.md](docs/WORKING-METHOD.md)
 - **No hard line-wrapping in Markdown prose** — when writing `.md` content (docs, blog posts, proposals), keep each paragraph on one line; never insert manual line breaks to satisfy a maximum line length. Editors soft-wrap, and rendered HTML is unaffected either way
 
 ## Working Method (multi-step changes)
