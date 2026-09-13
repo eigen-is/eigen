@@ -52,6 +52,7 @@
     "./command-palette": "./src/core/command-palette/index.ts",
     "./comments": "./src/core/comments/index.ts",
     "./contacts": "./src/core/contacts/index.ts",
+    "./contacts/format": "./src/core/contacts/format.ts",
     "./drive": "./src/core/drive/index.ts",
     "./editor": "./src/core/editor/index.ts",
     "./home": "./src/core/home/index.ts",

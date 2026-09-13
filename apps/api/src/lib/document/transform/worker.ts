@@ -1,12 +1,13 @@
 import type * as Y from 'yjs';
 import { ApiError } from '../../core/errors';
 import {
+    type BytesTransformJob,
+    type CollabPreviewJob,
     type CollabTransformJob,
     type DocumentTransformRequest,
     type DocumentTransformResponse,
     type ExportTransformJob,
     type ImportTransformJob,
-    type PreviewTransformJob,
     type TransformResult,
     type TransformWarning,
     transferListOfResult,
@@ -21,7 +22,7 @@ import {
 // evaluates the sheet engine, and a deck export never loads lowlight.
 
 async function renderPreview(
-    request: PreviewTransformJob,
+    request: CollabPreviewJob,
     doc: Y.Doc,
 ): Promise<{ body: string; warnings: TransformWarning[] }> {
     switch (request.documentType) {
@@ -82,6 +83,20 @@ async function runImport(request: ImportTransformJob & { data: ArrayBuffer }): P
     }
 }
 
+// The bytes-sourced kinds convert what they were handed: an upload to import, or the .vcf a
+// preview renders. Closed over the kind like every other dispatch here.
+async function runBytesRequest(request: BytesTransformJob & { data: ArrayBuffer }): Promise<DocumentTransformResponse> {
+    switch (request.kind) {
+        case 'import':
+            return runImport(request);
+        case 'preview': {
+            const { renderVCardPreviewBody } = await import('../../preview/vcard-render');
+            const { body, warnings } = renderVCardPreviewBody(request.data);
+            return { ok: true, result: { body }, warnings };
+        }
+    }
+}
+
 // The three document-sourced kinds dispatch off one materialized doc, so the
 // skipped-blob warning is appended once by the caller rather than in every arm.
 async function renderCollabRequest(
@@ -106,8 +121,8 @@ async function renderCollabRequest(
 }
 
 async function handleRequest(request: DocumentTransformRequest): Promise<DocumentTransformResponse> {
-    // Imports convert uploaded bytes — no document to materialize.
-    if (request.kind === 'import') return runImport(request);
+    // Bytes-sourced jobs carry their own input — no document to materialize.
+    if ('data' in request) return runBytesRequest(request);
 
     // Preview and export both read the persisted document, so materialization is shared.
     const { materializeYjsState } = await import('../../collab/yjs-loader');

@@ -1,6 +1,6 @@
 # Document Transform Workers
 
-> **TLDR**: Every CPU-heavy document transform — eigensheets/eigendoc/eigenslides/eigenvector previews, HTML/PDF/XLSX/DOCX
+> **TLDR**: Every CPU-heavy document transform — eigensheets/eigendoc/eigenslides/eigenvector and vCard previews, HTML/PDF/XLSX/DOCX
 > exports, the xlsx/docx import and convert, and background search extraction — runs in a one-shot Bun Worker
 > behind one bounded runner (`apps/api/src/lib/document/transform/`). The main thread keeps auth/ACL, cache
 > coordination, storage I/O, media prep and the import commit; only transferred `ArrayBuffer`s and plain
@@ -29,22 +29,22 @@ Main thread                                       One-shot Bun Worker
 
 | File (`apps/api/src/lib/document/transform/`) | Role |
 |---|---|
-| `run-transform.ts`  | The one main-thread seam every transform goes through (`runTransformToText` / `runTransformToBytes` / import variants): owns capture timing, per-operation deadline, admission, warning surfacing, failure mapping |
+| `run-transform.ts`  | The one main-thread seam every transform goes through (`runTransformToText` / `runTransformToBytes` / `runFileTransformToText` / import variants): owns capture timing, per-operation deadline, admission, warning surfacing, failure mapping |
 | `runner.ts`         | Admission + Worker lifecycle only, no document logic; `TRANSFORM_LIMITS` lives here |
 | `worker.ts`         | Operation dispatch with lazy imports — a doc preview never evaluates the sheet engine or ExcelJS |
-| `protocol.ts`       | Closed discriminated request/response unions, transfer lists, result↔request pairing, result sizing |
+| `protocol.ts`       | Closed discriminated request/response unions, transfer lists, result↔request pairing, result sizing. Two source shapes: a collab job carries the captured Yjs payload, a bytes job (the vCard preview, both imports) carries a transferred `ArrayBuffer` |
 | `collab-source.ts`  | Main-thread capture of the compressed Yjs payload (`readYjsStatePayload`) |
 
 Every operation follows the same layout: a Worker-pure module per type behind a thin main-thread entry.
 
 | Operation | Main-thread entry | Worker-pure modules | Detail doc |
 |---|---|---|---|
-| Preview  | `preview/preview-document.ts` | `preview/eigen{doc,slides,sheets,vector}-render.ts` | [PREVIEWS.md](PREVIEWS.md) |
+| Preview  | `preview/preview-document.ts` (collab), `preview/preview-cache.ts` (vCard) | `preview/eigen{doc,slides,sheets,vector}-render.ts`, `preview/vcard-render.ts` | [PREVIEWS.md](PREVIEWS.md) |
 | Export   | `export/export-document.ts` (`runDocumentExport` + the format→envelope table) | `export/{doc,sheets,vector}/{render,transform}.ts`, `export/canvas/{render,transform}.ts` (both canvas types) | [EXPORT.md](EXPORT.md) |
 | Import / convert | `import/import-document.ts` | `import/{doc,sheets}/transform.ts` | [EXPORT.md](EXPORT.md), [SHEETS.md](SHEETS.md) |
 | Search extraction | `search/extract-text.ts` | `search/extract-render.ts` | [SEARCH.md](SEARCH.md) |
 
-**Boundary rules.** Workers receive transferred `ArrayBuffer`s (compressed Yjs blobs, upload bytes, media
+**Boundary rules.** Workers receive transferred `ArrayBuffer`s (compressed Yjs blobs, upload bytes, previewed file bytes, media
 buffers) and clone-safe metadata — never a `Mount`, `ManagedDatabase`, `Y.Doc`, storage handle, callback or
 class instance. A module the Worker imports must never statically reach `preview/preview-cache.ts` (it would
 drag sharp and the sheet engine into every document Worker) — the reason `document/media.ts` (light, both
@@ -69,7 +69,7 @@ search extraction) priorities. Per-kind limits live in `TRANSFORM_LIMITS` (`runn
 | import        | 120s | 30s |
 | extract-text  | 30s  | 15s |
 
-The deadline bounds runaways; the admission cost is what a job is expected to cost the queue. Because these
+`TRANSFORM_LIMITS` is keyed by kind, not document type, so the vCard preview runs under the same `preview` row as the collab ones. The deadline bounds runaways; the admission cost is what a job is expected to cost the queue. Because these
 routes are synchronous, a queued request holds its HTTP connection open — foreground admission is therefore
 bounded by predicted wait (summed admission costs, max 120s), not queue length alone. Overflow rejects with a
 human-readable `503` ("The server is busy…" — `useExportDocument` shows the raw text). Background work may

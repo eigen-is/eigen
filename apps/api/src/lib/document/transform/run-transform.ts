@@ -4,15 +4,16 @@ import { ApiError } from '../../core/errors';
 import type { Mount } from '../../mount';
 import { captureCollabSource } from './collab-source';
 import type {
+    CollabPreviewJob,
     DocImportJob,
     DocImportWorkerResult,
     DocumentTransformRequest,
     ExportTransformJob,
     ExtractTextJob,
-    PreviewTransformJob,
     SheetsImportJob,
     TransformResultFor,
     TransformWarning,
+    VCardPreviewJob,
 } from './protocol';
 import { documentTransformRunner, type RunOptions, TRANSFORM_LIMITS, type TransformPriority } from './runner';
 
@@ -98,7 +99,7 @@ function surfaceWarning(warning: TransformWarning, kind: DocumentTransformReques
 export async function runTransformToText(
     mount: Mount,
     drivePath: DrivePath,
-    job: PreviewTransformJob,
+    job: CollabPreviewJob,
     opts: TransformOptions,
 ): Promise<string> {
     const { body } = await runDocumentTransform(mount, drivePath, opts, (source) => ({ ...job, source }));
@@ -123,6 +124,30 @@ export async function runTransformToBytes(
 ): Promise<Buffer> {
     const { data } = await runDocumentTransform(mount, drivePath, opts, (source) => ({ ...job, source }));
     return Buffer.from(data);
+}
+
+// The bytes-sourced counterpart of runDocumentTransform: the input is the file itself, read from
+// the Mount after admission the same way a Yjs capture is. Null when the file is gone, so the
+// caller serves no preview rather than an empty one.
+export async function runFileTransformToText(
+    mount: Mount,
+    drivePath: DrivePath,
+    job: VCardPreviewJob,
+    opts: TransformOptions,
+): Promise<string | null> {
+    const priority = opts.priority ?? 'foreground';
+    documentTransformRunner.assertAdmissible(priority);
+
+    const captureStart = performance.now();
+    const file = await mount.readFile(drivePath.id);
+    if (!file) return null;
+    const data = await file.arrayBuffer();
+
+    const { body } = await runTransformRequest(
+        { ...job, data },
+        { ...opts, priority, captureMs: performance.now() - captureStart },
+    );
+    return body;
 }
 
 // Imports carry uploaded bytes instead of a captured document, and hand back what

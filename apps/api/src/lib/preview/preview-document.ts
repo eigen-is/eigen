@@ -1,11 +1,11 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { buildPreviewUrlMap } from '../document/media';
-import type { PreviewTransformJob } from '../document/transform/protocol';
+import type { CollabPreviewJob } from '../document/transform/protocol';
 import { runTransformToText } from '../document/transform/run-transform';
 import type { TransformPriority } from '../document/transform/runner';
 import type { Mount } from '../mount';
 
-export type PreviewDocumentType = PreviewTransformJob['documentType'];
+export type PreviewDocumentType = CollabPreviewJob['documentType'];
 
 // The one main-thread preview entry (export-document.ts's counterpart). No signal:
 // a preview may finish after disconnect because its result populates the cache.

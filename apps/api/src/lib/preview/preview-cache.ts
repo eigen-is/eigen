@@ -1,14 +1,17 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getTextPreviewMode } from '@workspace/lib/constants';
-import { type DrivePath, isCollabType } from '@workspace/lib/types/drive';
+import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
+import { type DrivePath, isCollabType, isVCardFile } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
 import { COLLAB_DOCUMENT_TYPES } from '../document/collab-types';
+import { runFileTransformToText } from '../document/transform/run-transform';
 import type { TransformPriority } from '../document/transform/runner';
 import type { Mount } from '../mount';
 import { generateImagePreview } from '../shared/thumbnails';
 import { isExiftoolCandidate } from './exiftool-preview';
 import { generateDocumentPreview } from './preview-document';
+import { renderPreviewNotice } from './preview-marker';
 import { inlineSvgMediaRefs } from './svg-media-inline';
 import { generateTextPreview, type TextPreviewResult } from './text-preview';
 
@@ -300,9 +303,23 @@ export async function getScreenPreview(
 // upload, and a plain file wearing an eigen mime must keep the preview its bytes deserve.
 export async function getTextPreview(mount: Mount, drivePath: DrivePath): Promise<ServedTextPreview | null> {
     const documentType = isCollabType(drivePath.type) ? COLLAB_DOCUMENT_TYPES.get(drivePath.mimeType || '') : undefined;
-    if (!documentType) return getFileTextPreview(mount, drivePath);
-    return getOrCacheText(mount.previewsDir, drivePath.id, textCacheName(drivePath), documentType, (priority) =>
-        generateDocumentPreview(documentType, mount, drivePath, priority),
+    if (documentType) {
+        return getOrCacheText(mount.previewsDir, drivePath.id, textCacheName(drivePath), documentType, (priority) =>
+            generateDocumentPreview(documentType, mount, drivePath, priority),
+        );
+    }
+    if (isVCardFile(drivePath.mimeType || '', drivePath.name)) return getVCardTextPreview(mount, drivePath);
+    return getFileTextPreview(mount, drivePath);
+}
+
+// A .vcf reads as contact cards, never as its raw text — which is why getTextPreviewMode declines it
+// and this branch sits beside the collab one. The file is parsed whole, so the preview carries the
+// import's ceiling: over it the body says so, without the file ever being read.
+async function getVCardTextPreview(mount: Mount, drivePath: DrivePath): Promise<ServedTextPreview | null> {
+    return getOrCacheText(mount.previewsDir, drivePath.id, textCacheName(drivePath), 'vcard', (priority) =>
+        drivePath.size > IMPORT_MAX_BYTES
+            ? Promise.resolve(renderPreviewNotice('File too large to preview'))
+            : runFileTransformToText(mount, drivePath, { kind: 'preview', documentType: 'vcard' }, { priority }),
     );
 }
 

@@ -4,8 +4,8 @@ import type { YjsStatePayload } from '../../collab/yjs-loader';
 // Only clone-safe primitives, ArrayBuffers and Maps of primitives ride here — never
 // Mount, database, Y.Doc, or other class instances, and never module/function names
 // user input could influence. Every eigensheets/eigendoc/eigenslides/eigenvector preview,
-// every HTML/PDF/XLSX/DOCX export, the xlsx and docx imports and the search content
-// extraction ride these unions.
+// every vCard preview, every HTML/PDF/XLSX/DOCX export, the xlsx and docx imports and the
+// search content extraction ride these unions.
 
 // `pdf-html` is the HTML stage of the PDF export — WeasyPrint stays a main-thread
 // subprocess, so the Worker returns the document it renders from.
@@ -25,9 +25,13 @@ export type TransformMedia = { name: string; contentType: string; data: ArrayBuf
 // (run-transform.ts) captures the Yjs source and completes it into a request.
 // Doc/slides/vector previews reference media by URL, so no bytes cross for a preview.
 // (Vector renders to an SVG served as-is; the URL map resolves its <image> hrefs.)
-export type PreviewTransformJob =
+export type CollabPreviewJob =
     | { kind: 'preview'; documentType: 'eigensheets' }
     | { kind: 'preview'; documentType: 'eigendoc' | 'eigenslides' | 'eigenvector'; mediaUrls: Map<string, string> };
+
+// A .vcf holds no collaborative document: it previews from its own bytes, which ride as a
+// transferred buffer the way an upload does.
+export type VCardPreviewJob = { kind: 'preview'; documentType: 'vcard' };
 
 // `title` is the document title the renderer embeds — the Worker has no DrivePath.
 // (Sheets and slides strip the eigen extension; eigendoc's <title> keeps the full
@@ -64,13 +68,14 @@ export type SheetsImportJob = { kind: 'import'; sourceFormat: 'xlsx'; targetType
 export type DocImportJob = { kind: 'import'; sourceFormat: 'docx'; targetType: 'eigendoc' };
 export type ImportTransformJob = SheetsImportJob | DocImportJob;
 
-// Preview, export and search extraction read the persisted collaborative document;
-// import does not.
-export type CollabTransformJob = PreviewTransformJob | ExportTransformJob | ExtractTextJob;
+// Preview, export and search extraction read the persisted collaborative document; the
+// bytes-sourced jobs (the vCard preview, both imports) carry their own input instead.
+export type CollabTransformJob = CollabPreviewJob | ExportTransformJob | ExtractTextJob;
+export type BytesTransformJob = VCardPreviewJob | ImportTransformJob;
 
 export type DocumentTransformRequest =
     | (CollabTransformJob & { source: YjsStatePayload })
-    | (ImportTransformJob & { data: ArrayBuffer });
+    | (BytesTransformJob & { data: ArrayBuffer });
 
 export type TransformWarning =
     | { code: 'recalc-failed'; message: string }
@@ -110,7 +115,7 @@ export type TransformResult =
 // resultMatchesRequest; run-transform.ts narrows to this once so no caller re-checks.
 // Keyed off the job discriminants, so a captured request (job + source) resolves the
 // same. A future arm resolves to `never` and fails to compile at its callsite.
-export type TransformResultFor<R extends CollabTransformJob | ImportTransformJob> = R extends { kind: 'preview' }
+export type TransformResultFor<R extends CollabTransformJob | BytesTransformJob> = R extends { kind: 'preview' }
     ? PreviewResult
     : R extends { kind: 'extract-text' }
       ? ExtractTextResult
@@ -133,7 +138,7 @@ export type WorkerResponseEnvelope = { jobId: number; response: DocumentTransfor
 // copy. A future request kind with a different payload fails to compile here until
 // it is handled.
 export function transferListOf(request: DocumentTransformRequest): ArrayBuffer[] {
-    if (request.kind === 'import') return [request.data];
+    if ('data' in request) return [request.data];
     const buffers: ArrayBuffer[] = [];
     if (request.source.snapshot) buffers.push(request.source.snapshot.data);
     for (const update of request.source.updates) buffers.push(update.data);

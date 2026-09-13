@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
+import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { DRIVE_MIME_SLIDES } from '@workspace/lib/types/drive';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
 import { getHome } from '../../lib/home/get-home';
@@ -44,6 +45,19 @@ describe('Preview', () => {
         const data = await res.json();
         expect(data.body).toContain('Hello world');
         expect(data.mode).toBe('plaintext');
+    });
+
+    test('vcard file returns contact cards under its own mode', async () => {
+        // A .vcf reads as contact cards, never as its raw text (mostly base64 photo), so it rides the
+        // text-preview route with a server-rendered body instead of being parsed in the browser.
+        const content =
+            'BEGIN:VCARD\r\nVERSION:3.0\r\nN:Doe;Jane;;;\r\nFN:Jane Doe\r\nEMAIL:jane@example.com\r\nEND:VCARD\r\n';
+        const { res } = await uploadAndTextPreview('team.vcf', content, 'text/vcard');
+        expect(res.status).toBe(200);
+        const data = await res.json();
+        expect(data.mode).toBe('vcard');
+        expect(data.body).toContain('Jane Doe');
+        expect(data.body).toContain('jane@example.com');
     });
 
     test('plaintext preview renders prose paragraphs, not a code block', async () => {
@@ -488,6 +502,28 @@ describe('getTextPreview (stale-while-revalidate)', () => {
 
         const served = await getTextPreview(mount, { ...path, mimeType: DRIVE_MIME_SLIDES });
         expect(served?.value.body).toContain('plain text pretending to be a deck');
+    });
+
+    test('a vcard over the import ceiling answers with a notice instead of being read', async () => {
+        // The file would be parsed whole, so the preview is bounded by the same ceiling an import is:
+        // over it the overlay shows a body that says so, rather than no preview at all.
+        const { mkdirSync } = await import('node:fs');
+        const tmpDir = mkdtempSync('/tmp/eigen-vcard-limit-test-');
+        mkdirSync(tmpDir, { recursive: true });
+
+        const config = createTestMountConfig('test-vcard-limit', 'local-key');
+        const mount = new Mount('test-owner-id', tmpDir, config, createGetLocalDatabase(tmpDir));
+        await mount.init();
+        const rootId = (await mount.getRootFolder())!.id;
+
+        const bytes = Buffer.from('BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Jane Doe\r\nEND:VCARD\r\n');
+        const fileId = await mount.createFile(rootId, 'huge.vcf', 'text/vcard', bytes.length, bytes);
+        const path = await mount.getActivePath(fileId);
+
+        const served = await getTextPreview(mount, { ...path, size: IMPORT_MAX_BYTES + 1 });
+        expect(served?.value.mode).toBe('vcard');
+        expect(served?.value.body).toContain('File too large to preview');
+        expect(served?.value.body).not.toContain('Jane Doe');
     });
 });
 

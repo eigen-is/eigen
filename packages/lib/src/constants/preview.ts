@@ -37,6 +37,8 @@ const EXIFTOOL_EXTENSIONS = new Set([
     '.heif',
 ]);
 
+// `vcard` is a served mode only: getTextPreviewMode declines a .vcf (see there), and preview-cache
+// picks the vCard renderer off isVCardFile instead.
 export type TextPreviewMode =
     | 'markdown'
     | 'plaintext'
@@ -44,7 +46,8 @@ export type TextPreviewMode =
     | 'eigendoc'
     | 'eigenslides'
     | 'eigensheets'
-    | 'eigenvector';
+    | 'eigenvector'
+    | 'vcard';
 
 // The logical box a canvas preview body is composed at: the drive hero scales a preview from its
 // intrinsic width (drive-preview.tsx), so a drawing of any size previews through one known number,
@@ -62,7 +65,8 @@ export function getTextPreviewMode(mimeType: string, fileName: string): TextPrev
     if (mimeType === DRIVE_MIME_SLIDES) return 'eigenslides';
     if (mimeType === DRIVE_MIME_SHEETS) return 'eigensheets';
     if (mimeType === DRIVE_MIME_VECTOR) return 'eigenvector';
-    // A vCard is text, but its raw body is mostly base64 photo: it previews as contact cards instead.
+    // A vCard is text, but its raw body is mostly base64 photo: it previews as contact cards instead,
+    // through the mode of the same name the server picks for it — never as raw text here.
     if (isVCardFile(mimeType, fileName)) return null;
     const ext = getExtension(fileName);
     if (mimeType === 'text/markdown' || ext === '.md' || ext === '.markdown') return 'markdown';

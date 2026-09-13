@@ -430,6 +430,89 @@
         padding: 1rem;
     }
 
+    /* vCard quick look: the server-rendered .vcf body (apps/api/src/lib/preview/vcard-render.ts)
+       emits class-named semantic markup and is styled here rather than in eigen-prose.css — it is
+       a card layout, not prose, and the doc export embeds that stylesheet whole. The overlay
+       renders it outside .eigen-prose for the same reason (file-preview.tsx), which is also what
+       keeps these rules reachable: eigen-prose.css is imported unlayered and would otherwise
+       outrank every layered rule here. */
+    .vcard-preview {
+        display: flex;
+        flex-direction: column;
+        gap: 2rem;
+    }
+    .vcard-preview .vcard-card {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        padding-bottom: 2rem;
+        border-bottom: 1px solid var(--color-border);
+    }
+    .vcard-preview .vcard-card:last-of-type {
+        padding-bottom: 0;
+        border-bottom: none;
+    }
+    .vcard-preview .vcard-card-head {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    .vcard-preview .vcard-avatar {
+        flex-shrink: 0;
+        width: 4rem;
+        height: 4rem;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+    .vcard-preview .vcard-name {
+        margin: 0;
+        font-size: 1.25rem;
+        font-weight: var(--font-weight-medium);
+    }
+    .vcard-preview .vcard-subtitle {
+        margin: 0;
+        color: var(--color-muted-foreground);
+    }
+    .vcard-preview .vcard-labels {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.375rem;
+        margin: 0.5rem 0 0;
+        padding: 0;
+        list-style: none;
+    }
+    .vcard-preview .vcard-labels li {
+        margin: 0;
+        padding: 0.125rem 0.5rem;
+        border-radius: calc(var(--radius) - 2px);
+        background-color: var(--color-muted);
+        color: var(--color-muted-foreground);
+        font-size: 0.75rem;
+    }
+    /* Label column, value column. Pinning the columns keeps a field's second value (a third
+       phone number) under the first instead of in the label column. */
+    .vcard-preview .vcard-fields {
+        display: grid;
+        grid-template-columns: 7rem 1fr;
+        gap: 0.25rem 1rem;
+        margin: 0;
+    }
+    .vcard-preview .vcard-fields dt {
+        grid-column: 1;
+        color: var(--color-muted-foreground);
+        font-size: 0.875rem;
+    }
+    .vcard-preview .vcard-fields dd {
+        grid-column: 2;
+        margin: 0;
+        white-space: pre-wrap;
+    }
+    .vcard-preview .vcard-note {
+        margin: 0;
+        color: var(--color-muted-foreground);
+        font-size: 0.875rem;
+    }
+
     .eigen-list-item {
         @apply bg-background cursor-pointer select-none;
         box-shadow: inset 2px 0 0 0 transparent;

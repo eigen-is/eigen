@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1397 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1402 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -804,7 +804,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (629)
+## Utilities & constants (634)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1012,6 +1012,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `STORAGE_TYPE_LABELS` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
 | `userColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `XLSX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
+| `formatContactAddress` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/format.ts |
+| `formatContactCompany` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/format.ts |
+| `formatContactRole` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/format.ts |
 | `handleContactsSSEvent` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/sse-handlers.ts |
 | `escapeContentText` | `@workspace/lib/content-line` | packages/lib/src/core/content-line.ts |
 | `foldLine` | `@workspace/lib/content-line` | packages/lib/src/core/content-line.ts |
@@ -1165,6 +1168,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `validateEmailTarget` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
 | `validatePasswordStrength` | `@workspace/lib/validation` | packages/lib/src/validation/password.ts |
 | `validateUsername` | `@workspace/lib/validation` | packages/lib/src/validation/username.ts |
+| `droppedLine` | `@workspace/lib/vcard` | packages/lib/src/vcard/preview-lines.ts |
 | `getVersion` | `@workspace/lib/vcard` | packages/lib/src/vcard/ast.ts |
 | `makeLine` | `@workspace/lib/vcard` | packages/lib/src/vcard/ast.ts |
 | `normalizeBirthday` | `@workspace/lib/vcard` | packages/lib/src/vcard/parse.ts |
@@ -1172,6 +1176,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `parseVCard` | `@workspace/lib/vcard` | packages/lib/src/vcard/parse.ts |
 | `parseVCardLines` | `@workspace/lib/vcard` | packages/lib/src/vcard/ast.ts |
 | `photoParams` | `@workspace/lib/vcard` | packages/lib/src/vcard/ast.ts |
+| `remainingLine` | `@workspace/lib/vcard` | packages/lib/src/vcard/preview-lines.ts |
 | `serializeVCardLines` | `@workspace/lib/vcard` | packages/lib/src/vcard/ast.ts |
 | `splitVCards` | `@workspace/lib/vcard` | packages/lib/src/vcard/split.ts |
 | `transcodeTo30` | `@workspace/lib/vcard` | packages/lib/src/vcard/transcode.ts |
