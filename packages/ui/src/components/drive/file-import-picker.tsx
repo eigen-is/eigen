@@ -6,8 +6,7 @@ type FileImportPickerProps = {
     onOpenChange: (open: boolean) => void;
     title: string;
     accept: string;
-    // Which drive rows are pickable. Replaces the browser's mime filter, so a file recognised by
-    // name (a .vcf stored as application/octet-stream) can be picked too.
+    // Which drive rows are pickable. Used instead of the browser's mime filter.
     canPick: (item: DrivePath) => boolean;
     onDeviceFile: (file: File) => void;
     onDrivePick: (item: DrivePath) => void;

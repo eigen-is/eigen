@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1396 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1397 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -804,7 +804,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (628)
+## Utilities & constants (629)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1048,6 +1048,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EIGEN_DOC_ICONS` | `@workspace/lib/eigendoc-icons` | packages/lib/src/core/eigendoc-icons.ts |
 | `getFileIconComponent` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
 | `getFilePresentation` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
+| `bytesToBase64` | `@workspace/lib/format` | packages/lib/src/core/format.ts |
 | `formatFileSize` | `@workspace/lib/format` | packages/lib/src/core/format.ts |
 | `escapeHtml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `escapeXml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
@@ -1138,6 +1139,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `teamOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `toFileEventType` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `userOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
+| `VCARD_ACCEPT` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `VCARD_MIMES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `withEigenExtension` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `toAttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
@@ -1171,7 +1173,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `parseVCardLines` | `@workspace/lib/vcard` | packages/lib/src/vcard/ast.ts |
 | `photoParams` | `@workspace/lib/vcard` | packages/lib/src/vcard/ast.ts |
 | `serializeVCardLines` | `@workspace/lib/vcard` | packages/lib/src/vcard/ast.ts |
-| `splitDataUri` | `@workspace/lib/vcard` | packages/lib/src/vcard/ast.ts |
 | `splitVCards` | `@workspace/lib/vcard` | packages/lib/src/vcard/split.ts |
 | `transcodeTo30` | `@workspace/lib/vcard` | packages/lib/src/vcard/transcode.ts |
 | `unescapeText` | `@workspace/lib/vcard` | packages/lib/src/vcard/ast.ts |

@@ -47,15 +47,16 @@ Contact groups, the kind Apple Contacts creates, are skipped. Contacts organises
 A contact in the file is skipped when it is already in your address book. Two things count as already there:
 
 - The contact carries the same identifier as one you already have. Every card Eigen stores carries one, so re-importing a file you exported from Eigen adds nothing.
-- The contact's first email address is already on one of your contacts. The match ignores capitals and spaces.
+- The contact's first email address is already on one of your contacts. The match ignores capitals.
 
-If the same address appears on two contacts inside one file, only the first of them is imported.
+If a contact's first email address is already on a contact earlier in the same file, only the earlier one is imported.
 
 Skipped contacts are counted in the message at the end. Nothing you already had is changed, overwritten, or merged with anything.
 
 ## Limits
 
 - A file can be up to 20 MB, and can hold up to 1000 contacts. A bigger file is refused as a whole, so split it before you import.
+- The file has to be saved as UTF-8, which is what every current address book writes. A file in an older encoding is refused with a message saying so; open it in a text editor and save it again as UTF-8.
 - A single contact can be up to 5 MB. That is only a problem when a card carries a very large photo. Such a card is counted as unreadable, and the rest of the file still goes in.
 - Contacts share a storage allowance with Mail. If you run out part way through, the import stops and tells you how many contacts went in. Those contacts stay.
 

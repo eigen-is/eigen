@@ -30,8 +30,7 @@ type DriveBrowserProps = {
     ownerId: string;
     mode: 'file' | 'folder';
     mimeFilter?: string[];
-    // Used INSTEAD of mimeFilter when set: a file the picker accepts by name (a .vcf stored as
-    // application/octet-stream) has no mime the filter could match.
+    // Used instead of mimeFilter when set (see isVCardFile for why a .vcf needs it).
     canPick?: (item: DrivePath) => boolean;
     selectedId?: string | null;
     onSelect?: (path: DrivePath) => void;

@@ -4,7 +4,6 @@ export {
     parseVCardLines,
     photoParams,
     serializeVCardLines,
-    splitDataUri,
     unescapeText,
     VCardError,
 } from './ast';

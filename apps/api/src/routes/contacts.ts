@@ -10,7 +10,7 @@ import { CARD_MAX_BYTES } from '../lib/contacts/card-store';
 import { getContacts } from '../lib/contacts/contacts';
 import { requireNonGuest, requireSelf } from '../lib/core/access';
 import { ApiError } from '../lib/core/errors';
-import { contentDisposition, setCacheHeaders } from '../lib/core/http';
+import { contentDisposition, readBoundedBodyBytes, setCacheHeaders } from '../lib/core/http';
 import { getSharedDrive } from '../lib/drive';
 import { betterAuth } from './auth';
 
@@ -57,13 +57,14 @@ const LabelSchema = t.Object({
     color: t.String(TEXT),
 });
 
-// A one-card export is named after the card itself — its FN, the display name every client writes — a
-// multi-card one generically. contentDisposition sanitises whatever comes back before it reaches the header.
-function exportFileName(text: string, ids?: string[]): string {
-    if (ids?.length !== 1) return 'contacts.vcf';
-    const fn = parseVCard(text).lines.find((line) => line.name === 'FN');
-    const name = fn ? unescapeText(fn.value).trim() : '';
-    return `${name || 'contact'}.vcf`;
+// vCard files are UTF-8 (RFC 6350 §3.1). A Windows-1252 export decoded leniently would import with U+FFFD
+// in every accented name, stored in the card bytes and re-served to every DAV client, so it is refused.
+function decodeVCardFile(bytes: Uint8Array): string {
+    try {
+        return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    } catch {
+        throw new ApiError(400, 'File is not UTF-8 encoded');
+    }
 }
 
 // All contacts routes require ownerId === user.id (contacts are personal-only, no shared access)
@@ -208,8 +209,17 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             const text = await (await getContacts(user)).exportCards(body.ids);
+            // A one-card export is named after the card itself — its FN, the display name every client
+            // writes — a multi-card one generically. contentDisposition sanitises whatever comes back
+            // before it reaches the header; the clamp keeps one absurd FN from filling it.
+            let fileName = 'contacts.vcf';
+            if (body.ids?.length === 1) {
+                const fn = parseVCard(text).lines.find((line) => line.name === 'FN');
+                const name = fn ? unescapeText(fn.value).trim().slice(0, 200) : '';
+                fileName = `${name || 'contact'}.vcf`;
+            }
             set.headers['Content-Type'] = 'text/vcard; charset=utf-8';
-            set.headers['Content-Disposition'] = contentDisposition('attachment', exportFileName(text, body.ids));
+            set.headers['Content-Disposition'] = contentDisposition('attachment', fileName);
             return text;
         },
         {
@@ -226,15 +236,9 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             // A whole book replays card by card through the CardDAV write seam, answering nothing until the
             // last one lands — longer than any server-wide idleTimeout, so exempt this request.
             server?.timeout(request, 0);
-            // Early Content-Length check guards against large allocations before the body is buffered.
-            // Header can be missing or lying, so the post-buffer check below is a belt-and-suspenders guard.
-            const contentLength = request.headers.get('content-length');
-            if (contentLength && Number(contentLength) > IMPORT_MAX_BYTES) {
-                throw new ApiError(413, 'Upload too large');
-            }
-            const buffer = Buffer.from(await request.arrayBuffer());
-            if (buffer.byteLength > IMPORT_MAX_BYTES) throw new ApiError(413, 'Upload too large');
-            return await (await getContacts(user)).importCards(new TextDecoder().decode(buffer));
+            const bytes = await readBoundedBodyBytes(request, IMPORT_MAX_BYTES);
+            if (bytes === null) throw new ApiError(413, 'Upload too large');
+            return await (await getContacts(user)).importCards(decodeVCardFile(bytes));
         },
         { auth: true, parse: 'none' },
     )
@@ -253,8 +257,8 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             if (source.size > IMPORT_MAX_BYTES) throw new ApiError(413, 'Upload too large');
             const file = await sourceDrive.downloadFile(body.sourceMountId, body.sourcePathId);
             if (!file) throw new ApiError(404, 'Source file not found');
-            const buffer = Buffer.from(await file.arrayBuffer());
-            return await (await getContacts(user)).importCards(new TextDecoder().decode(buffer));
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            return await (await getContacts(user)).importCards(decodeVCardFile(bytes));
         },
         {
             body: t.Object({

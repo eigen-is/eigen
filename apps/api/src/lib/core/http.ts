@@ -44,16 +44,16 @@ export function matchesIfNoneMatch(header: string, etag: string | null): boolean
     return header.split(',').some((raw) => raw.trim().replace(/^W\//, '').replace(/^"|"$/g, '') === etag);
 }
 
-// The bounded request-body reader every DAV router's XML/body seam sits on. Reads the body as UTF-8 text but
-// refuses to buffer more than `maxBytes`: the Content-Length pre-check rejects an honest client early, and the
-// read loop cancels the stream the instant the running total crosses the cap — the load-bearing check, since a
-// chunked or Bun-string body carries no length header to trust. Returns the decoded text ('' for an empty
-// body), or null when the cap is exceeded, leaving each caller to map null to its own rejection (WebDAV throws
-// 413, CalDAV/CardDAV return an explicit 413) so a hostile payload never reaches the synchronous XML parser.
-export async function readBoundedBody(request: Request, maxBytes: number): Promise<string | null> {
+// The bounded request-body reader every DAV router's XML/body seam sits on. Refuses to buffer more than
+// `maxBytes`: the Content-Length pre-check rejects an honest client early, and the read loop cancels the
+// stream the instant the running total crosses the cap — the load-bearing check, since a chunked or
+// Bun-string body carries no length header to trust. Returns the bytes (empty for an empty body), or null
+// when the cap is exceeded, leaving each caller to map null to its own rejection (WebDAV throws 413,
+// CalDAV/CardDAV return an explicit 413) so a hostile payload never reaches the synchronous XML parser.
+export async function readBoundedBodyBytes(request: Request, maxBytes: number): Promise<Uint8Array | null> {
     const len = request.headers.get('Content-Length');
     if (len !== null && Number(len) > maxBytes) return null;
-    if (!request.body) return '';
+    if (!request.body) return new Uint8Array();
     const reader = request.body.getReader();
     const chunks: Uint8Array[] = [];
     let total = 0;
@@ -67,14 +67,21 @@ export async function readBoundedBody(request: Request, maxBytes: number): Promi
         }
         chunks.push(value);
     }
-    if (chunks.length === 0) return '';
     const merged = new Uint8Array(total);
     let offset = 0;
     for (const c of chunks) {
         merged.set(c, offset);
         offset += c.byteLength;
     }
-    return new TextDecoder().decode(merged);
+    return merged;
+}
+
+// The same read decoded as UTF-8 the lenient way, which is what an XML body wants. A caller whose body is
+// a user's file decodes the bytes itself, so a file in another encoding can be refused rather than stored
+// with replacement characters.
+export async function readBoundedBody(request: Request, maxBytes: number): Promise<string | null> {
+    const bytes = await readBoundedBodyBytes(request, maxBytes);
+    return bytes === null ? null : new TextDecoder().decode(bytes);
 }
 
 // RFC 7233 single byte-range. Returns the inclusive [start, end] when satisfiable,
