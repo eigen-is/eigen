@@ -141,6 +141,16 @@ describe('vCard content-line AST', () => {
         expect(getVersion(parseVCardLines(APPLE_FIXTURE))).toBe('3.0');
     });
 
+    test('an envelope marker frames the card exactly as splitVCards does', () => {
+        // The splitter trims the end of a physical line, so a card whose BEGIN/END carries trailing
+        // whitespace arrives here as one card and must parse rather than count as unreadable.
+        const padded = 'BEGIN:VCARD \r\nVERSION:3.0\r\nFN:x\r\nUID:u\r\nEND:VCARD \r\n';
+        expect(parseVCard(padded).uid).toBe('u');
+        // Leading whitespace is not trimmed, for the same reason: the splitter opens no card on this line,
+        // so a card the parser accepted here could not be re-imported from its own export.
+        expect(() => parseVCardLines('BEGIN: VCARD\r\nVERSION:3.0\r\nUID:u\r\nEND:VCARD\r\n')).toThrow('BEGIN');
+    });
+
     test('rejects two concatenated vCards', () => {
         const two = `${APPLE_FIXTURE}${APPLE_FIXTURE}`;
         expect(() => parseVCardLines(two)).toThrow(VCardError);

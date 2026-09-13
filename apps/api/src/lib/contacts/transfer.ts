@@ -18,23 +18,24 @@ import * as schema from './schema';
 // replays a multi-card file through the CardDAV PUT seam so every card is stored byte-faithfully and metered
 // by the same gate a device sync takes. See docs/CONTACTS.md § vCard import / export.
 
-// The stored cards for `ids`, in that order — or the whole book (groups excluded, as getContacts serves it,
-// symmetric with import skipping them). Each card's terminator is normalized to exactly one CRLF so the
+// The stored cards for `ids`, in that order — or the whole book (groups excluded, as the contact list serves
+// it, symmetric with import skipping them). Each card's terminator is normalized to exactly one CRLF so the
 // concatenation is one well-formed directory whatever the writers left behind; the bytes are otherwise the
 // ones on disk, PHOTO and unknown properties included.
 export async function exportCards(contacts: Contacts, ids?: string[]): Promise<string> {
     await contacts.ensureDrained();
-    const targets = ids ?? (await contacts.getContacts()).map((contact) => contact.id);
+    const rows = contacts.db
+        .select({ id: schema.contacts.id, uri: schema.contacts.uri, isGroup: schema.contacts.isGroup })
+        .from(schema.contacts)
+        .all();
+    const uriById = new Map(rows.map((row) => [row.id, row.uri]));
+    const targets = ids ?? rows.filter((row) => !row.isGroup).map((row) => row.id);
 
     const cards: string[] = [];
     for (const id of targets) {
-        const row = contacts.db
-            .select({ uri: schema.contacts.uri })
-            .from(schema.contacts)
-            .where(eq(schema.contacts.id, id))
-            .get();
-        if (!row) throw new ApiError(404, 'Contact not found');
-        const text = new TextDecoder().decode(await contacts.readCardBytes(row.uri));
+        const uri = uriById.get(id);
+        if (!uri) throw new ApiError(404, 'Contact not found');
+        const text = new TextDecoder().decode(await contacts.readCardBytes(uri));
         cards.push(`${text.replace(/[\r\n]+$/, '')}\r\n`);
     }
     return cards.join('');

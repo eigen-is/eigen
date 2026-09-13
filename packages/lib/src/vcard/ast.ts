@@ -107,7 +107,9 @@ export function parseVCardLines(text: string): VCardLine[] {
 
     const lines = unfold(text).map(({ raw, logical }) => parseLine(raw, logical));
 
-    const frames = (name: string) => lines.filter((l) => l.name === name && l.value.toUpperCase() === 'VCARD');
+    // trimEnd only, mirroring splitVCards: a card a PUT accepts must re-import from its own export
+    const frames = (name: string) =>
+        lines.filter((l) => l.name === name && l.value.trimEnd().toUpperCase() === 'VCARD');
     const begins = frames('BEGIN');
     const ends = frames('END');
     if (begins.length === 0) throw new VCardError('missing BEGIN:VCARD');

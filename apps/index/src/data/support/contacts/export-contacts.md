@@ -25,8 +25,6 @@ Your browser downloads a file called `contacts.vcf` holding every contact in you
 
 The file is named after the contact, for example `Jane Smith.vcf`.
 
-This option is on the contact list. The **⋮** button on a contact's own page has **Print** instead, and no export.
-
 ## Export several contacts at once
 
 1. Select the contacts you want. Hold Cmd (Ctrl on Windows) and click each one, or click the first and Shift-click the last.

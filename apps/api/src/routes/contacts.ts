@@ -3,7 +3,7 @@ import type { Contact, ImportContactsResult } from '@workspace/lib/types/contact
 import { isVCardFile } from '@workspace/lib/types/drive';
 import type { Label } from '@workspace/lib/types/label';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
-import { parseVCard, unescapeText } from '@workspace/lib/vcard';
+import { parseVCardLines, unescapeText } from '@workspace/lib/vcard';
 import { Elysia, t } from 'elysia';
 import { enforceAvatarUpload } from '../lib/config/enforcement';
 import { CARD_MAX_BYTES } from '../lib/contacts/card-store';
@@ -214,7 +214,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             // before it reaches the header; the clamp keeps one absurd FN from filling it.
             let fileName = 'contacts.vcf';
             if (body.ids?.length === 1) {
-                const fn = parseVCard(text).lines.find((line) => line.name === 'FN');
+                const fn = parseVCardLines(text).find((line) => line.name === 'FN');
                 const name = fn ? unescapeText(fn.value).trim().slice(0, 200) : '';
                 fileName = `${name || 'contact'}.vcf`;
             }
