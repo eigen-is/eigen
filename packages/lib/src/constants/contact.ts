@@ -12,3 +12,8 @@ export const emptyContact: Contact = {
     address: [{}],
     labels: [],
 };
+
+// The two ceilings a vCard import is bounded by, shared FE/BE: the raw payload is refused before it is read,
+// and a file with more cards than this is refused right after the split.
+export const IMPORT_MAX_BYTES = 20 * 1024 * 1024;
+export const IMPORT_MAX_CARDS = 1000;
