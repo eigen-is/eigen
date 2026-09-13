@@ -49,16 +49,6 @@ function withMintedUid(parsed: ParsedCard): string {
     return serializeVCardLines(lines);
 }
 
-// Queried per card rather than pre-collected: the loop's own writes land in the index, so a file that
-// repeats a UID skips its second copy through the same check as a re-import.
-function uidInBook(contacts: Contacts, uid: string): boolean {
-    return !!contacts.db
-        .select({ id: schema.contacts.id })
-        .from(schema.contacts)
-        .where(eq(schema.contacts.uid, uid))
-        .get();
-}
-
 // Replay a multi-card file into the book. Duplicates skip, never merge (spec R1): a card whose UID is
 // already in the book, or whose first email already belongs to a contact, is counted and passed over — the
 // running Set means a file that repeats an address imports it once. A card that fails on its own content
@@ -97,9 +87,18 @@ export async function importCards(contacts: Contacts, text: string): Promise<Imp
             result.skipped++;
             continue;
         }
-        if (parsed.uid && uidInBook(contacts, parsed.uid)) {
-            result.skipped++;
-            continue;
+        if (parsed.uid) {
+            // Queried per card rather than pre-collected: the loop's own writes land in the index, so a
+            // file that repeats a UID skips its second copy through the same check as a re-import.
+            const stored = contacts.db
+                .select({ id: schema.contacts.id })
+                .from(schema.contacts)
+                .where(eq(schema.contacts.uid, parsed.uid))
+                .get();
+            if (stored) {
+                result.skipped++;
+                continue;
+            }
         }
         const firstEmail = parsed.email[0]?.trim().toLowerCase();
         if (firstEmail && emails.has(firstEmail)) {

@@ -50,7 +50,9 @@ export function matchesIfNoneMatch(header: string, etag: string | null): boolean
 // chunked or Bun-string body carries no length header to trust. Returns the decoded text ('' for an empty
 // body), or null when the cap is exceeded, leaving each caller to map null to its own rejection (WebDAV throws
 // 413, CalDAV/CardDAV return an explicit 413) so a hostile payload never reaches the synchronous XML parser.
-export async function readBoundedBody(request: Request, maxBytes: number): Promise<string | null> {
+// `fatalUtf8` makes the decode throw instead of substituting U+FFFD: a caller whose body is a user's file
+// (the vCard import) must refuse a Windows-1252 export rather than store every name mangled.
+export async function readBoundedBody(request: Request, maxBytes: number, fatalUtf8 = false): Promise<string | null> {
     const len = request.headers.get('Content-Length');
     if (len !== null && Number(len) > maxBytes) return null;
     if (!request.body) return '';
@@ -74,7 +76,7 @@ export async function readBoundedBody(request: Request, maxBytes: number): Promi
         merged.set(c, offset);
         offset += c.byteLength;
     }
-    return new TextDecoder().decode(merged);
+    return new TextDecoder('utf-8', { fatal: fatalUtf8 }).decode(merged);
 }
 
 // RFC 7233 single byte-range. Returns the inclusive [start, end] when satisfiable,

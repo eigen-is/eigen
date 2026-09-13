@@ -133,6 +133,27 @@ describe('Contacts transfer routes', () => {
         expect(res.status).toBe(413);
     });
 
+    test('a raw import that is not UTF-8 is refused, not stored with mangled names', async () => {
+        // 0xE9 is "é" in Windows-1252 and an invalid UTF-8 byte — the exact shape of an older client's export.
+        const head = new TextEncoder().encode('BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Ren');
+        const tail = new TextEncoder().encode('e\r\nEND:VCARD\r\n');
+        const bytes = new Uint8Array([...head, 0xe9, ...tail]);
+
+        const res = await importRequest(alice, new Blob([bytes]));
+        expect(res.status).toBe(400);
+        expect(await res.text()).toContain('UTF-8');
+    });
+
+    test('a long FN cannot fill the export filename header', async () => {
+        const id = await createContact('L'.repeat(300), 'Long', 'long@vcard-routes.example');
+
+        const res = await exportRequest(alice, alice.id, { ids: [id] });
+        const disposition = res.headers.get('content-disposition') ?? '';
+        expect(res.status).toBe(200);
+        expect(disposition).toContain('.vcf');
+        expect(disposition.length).toBeLessThan(300);
+    });
+
     test('import-from-drive on own drive imports', async () => {
         const text =
             card('Ken Thompson', 'ken@vcard-routes.example') + card('Dennis Ritchie', 'dennis@vcard-routes.example');
@@ -156,6 +177,17 @@ describe('Contacts transfer routes', () => {
 
         const res = await importFromDrive(alice, uploaded);
         expect(res.status).toBe(400);
+    });
+
+    test('import-from-drive on a file that is not UTF-8 is refused the same way', async () => {
+        const head = new TextEncoder().encode('BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Ren');
+        const tail = new TextEncoder().encode('e\r\nEND:VCARD\r\n');
+        const file = new File([new Uint8Array([...head, 0xe9, ...tail])], 'latin1.vcf', { type: 'text/vcard' });
+        const uploaded = await driveUpload(alice.sessionToken, alice.id, mountId, rootId, file);
+
+        const res = await importFromDrive(alice, uploaded);
+        expect(res.status).toBe(400);
+        expect(await res.text()).toContain('UTF-8');
     });
 
     test("import-from-drive on bob's unshared file is 403", async () => {
