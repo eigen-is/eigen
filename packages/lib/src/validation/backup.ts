@@ -1,6 +1,5 @@
 import type { BackupEntry, BackupManifest, BackupVerifyRecord } from '../types/backup';
-import type { S3Config } from '../types/mount';
-import type { MountSettings } from '../types/settings';
+import type { MountConfig, S3Config } from '../types/mount';
 
 // One grammar for the names in the backups folder, so the pane, the upload route and the artifact
 // list can never disagree about what an artifact is called.
@@ -43,13 +42,13 @@ export const BACKUP_FORMAT_VERSION = 1;
 
 // The annotations are what keep these lists from drifting from the shared unions.
 const KINDS: readonly BackupManifest['kind'][] = ['user', 'team', 'server'];
-const STORAGE_TYPES: readonly MountSettings['storageType'][] = ['local', 'local-key', 's3'];
+const STORAGE_TYPES: readonly MountConfig['storageType'][] = ['local', 'local-key', 's3'];
 
 function isKind(value: string): value is BackupManifest['kind'] {
     return KINDS.some((kind) => kind === value);
 }
 
-function isStorageType(value: string): value is MountSettings['storageType'] {
+function isStorageType(value: string): value is MountConfig['storageType'] {
     return STORAGE_TYPES.some((type) => type === value);
 }
 
@@ -68,7 +67,7 @@ function isEntry(value: unknown): value is BackupEntry {
 
 // Without the id check a manifest could name `../../{someone else}/mounts/{id}`, which a restore
 // would materialize into their live home.
-function isMountSummary(value: unknown): boolean {
+function isMountSummary(value: unknown): value is BackupManifest['mounts'][number] {
     return (
         typeof value === 'object' &&
         value !== null &&
@@ -83,6 +82,43 @@ function isMountSummary(value: unknown): boolean {
         'bytes' in value &&
         typeof value.bytes === 'number' &&
         (!('skipped' in value) || typeof value.skipped === 'string')
+    );
+}
+
+function isServer(value: unknown): value is BackupManifest['server'] {
+    return (
+        typeof value === 'object' &&
+        value !== null &&
+        'domain' in value &&
+        typeof value.domain === 'string' &&
+        'orgId' in value &&
+        typeof value.orgId === 'string'
+    );
+}
+
+function isCounts(value: unknown): value is BackupManifest['counts'] {
+    return (
+        typeof value === 'object' &&
+        value !== null &&
+        'databases' in value &&
+        typeof value.databases === 'number' &&
+        'files' in value &&
+        typeof value.files === 'number' &&
+        'bytes' in value &&
+        typeof value.bytes === 'number'
+    );
+}
+
+function isHomeSummary(value: unknown): value is NonNullable<BackupManifest['homes']>[number] {
+    return (
+        typeof value === 'object' &&
+        value !== null &&
+        'ownerId' in value &&
+        typeof value.ownerId === 'string' &&
+        'kind' in value &&
+        (value.kind === 'user' || value.kind === 'team') &&
+        'name' in value &&
+        typeof value.name === 'string'
     );
 }
 
@@ -104,17 +140,19 @@ function isManifest(value: unknown): value is BackupManifest {
         'appVersion' in value &&
         typeof value.appVersion === 'string' &&
         'server' in value &&
-        typeof value.server === 'object' &&
-        value.server !== null &&
+        isServer(value.server) &&
         'counts' in value &&
-        typeof value.counts === 'object' &&
-        value.counts !== null &&
+        isCounts(value.counts) &&
         'mounts' in value &&
         Array.isArray(value.mounts) &&
         value.mounts.every(isMountSummary) &&
         'entries' in value &&
         Array.isArray(value.entries) &&
-        value.entries.every(isEntry)
+        value.entries.every(isEntry) &&
+        (!('email' in value) || value.email === undefined || typeof value.email === 'string') &&
+        (!('homes' in value) ||
+            value.homes === undefined ||
+            (Array.isArray(value.homes) && value.homes.every(isHomeSummary)))
     );
 }
 
@@ -211,7 +249,7 @@ function isS3Config(value: unknown): value is S3Config {
 
 // The two facts an archive's or safety copy's `settings.json` says about where a mount's objects
 // live. A mount whose entry is not those is left out, so the caller touches nothing of it.
-export type BackupMountSettings = { storageType: MountSettings['storageType']; s3Config?: S3Config };
+export type BackupMountSettings = { storageType: MountConfig['storageType']; s3Config?: S3Config };
 
 export function parseHomeMountSettings(text: string): Record<string, BackupMountSettings> | null {
     let value: unknown;

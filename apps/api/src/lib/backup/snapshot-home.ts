@@ -147,13 +147,13 @@ export async function snapshotHome(
         ([id, settings]) => !settings.enabled && !mounts.some((mount) => mount.id === id),
     );
     const mountSummaries: BackupManifest['mounts'] = [];
-    const total = mounts.length + disabled.length;
-    for (const [index, mount] of mounts.entries()) {
+
+    // One mount's own bytes, enabled or disabled: its data tree, its thumbnails and the summary row.
+    // metadata.db is staged by the caller and counted as a database, so the summary means the files
+    // the archive holds for this mount.
+    const archiveMount = async (mount: Mount): Promise<void> => {
         const relData = archiveMountPath(mount.id, PATHS.DRIVE.DATA_DIR);
         const relThumbs = archiveMountPath(mount.id, PATHS.DRIVE.THUMBS_DIR);
-        await stageDatabase(MOUNT_DB_CONFIG, `${PATHS.DRIVE.ROOT}/${mount.id}/${PATHS.DRIVE.METADATA_DB}`);
-        // Counted from here, so the summary means the files the archive holds for this mount —
-        // metadata.db is a database, and counts.databases already has it.
         const data = await snapshotMountData(mount, path.join(folder, relData), relData, report);
         const thumbs = await snapshotMountThumbs(
             mount.thumbsDir,
@@ -170,6 +170,12 @@ export async function snapshotHome(
             files: mountEntries.length,
             bytes: mountEntries.reduce((sum, entry) => sum + entry.bytes, 0),
         });
+    };
+
+    const total = mounts.length + disabled.length;
+    for (const [index, mount] of mounts.entries()) {
+        await stageDatabase(MOUNT_DB_CONFIG, `${PATHS.DRIVE.ROOT}/${mount.id}/${PATHS.DRIVE.METADATA_DB}`);
+        await archiveMount(mount);
         report('mounts', index + 1, total);
     }
 
@@ -177,8 +183,6 @@ export async function snapshotHome(
         const relMetadata = `${PATHS.DRIVE.ROOT}/${id}/${PATHS.DRIVE.METADATA_DB}`;
         // A mount whose folder is gone (a disabled entry nobody ever mounted) has nothing to carry.
         if (!fs.existsSync(path.join(home.homeDir, relMetadata))) continue;
-        const relData = archiveMountPath(id, PATHS.DRIVE.DATA_DIR);
-        const relThumbs = archiveMountPath(id, PATHS.DRIVE.THUMBS_DIR);
         const config = createMountConfig(id, settings);
         // Where the archive stands before this mount: a mount that turns out to be unreadable is
         // taken back out again, entries and all, so the folder never holds bytes the manifest does
@@ -195,22 +199,7 @@ export async function snapshotHome(
             // copy above was staged from, so this opens nothing a second time.
             mount = new Mount(ownerId, home.homeDir, config, home.getLocalDatabase.bind(home));
             await mount.init({ passive: true });
-            const data = await snapshotMountData(mount, path.join(folder, relData), relData, report);
-            const thumbs = await snapshotMountThumbs(
-                mount.thumbsDir,
-                path.join(folder, relThumbs),
-                relThumbs,
-                data.pathIds,
-            );
-            const mountEntries = [...data.entries, ...thumbs];
-            entries.push(...mountEntries);
-            databases += data.databases;
-            mountSummaries.push({
-                id,
-                storageType: config.storageType,
-                files: mountEntries.length,
-                bytes: mountEntries.reduce((sum, entry) => sum + entry.bytes, 0),
-            });
+            await archiveMount(mount);
         } catch (error) {
             // A mount an admin turned off must not be able to fail the backup of everything else —
             // its storage is often unreachable BECAUSE it was turned off. It is recorded as skipped
@@ -226,9 +215,9 @@ export async function snapshotHome(
         } finally {
             // The Drive's own teardown for a mount it drops (Drive.removeMount): this one opened no
             // document database and never reconciled its queue, so it cancels the queue's timer and
-            // returns. It cannot flush at shutdown either — gracefulShutdown drains backup jobs
-            // (index.ts:60) before it arms the drain deadline (index.ts:63). metadata.db stays open:
-            // it belongs to the Home's cache, which closes it when the home evicts.
+            // returns. It cannot flush at shutdown either — gracefulShutdown runs drainBackupJobs
+            // before setShutdownDrainDeadline. metadata.db stays open: it belongs to the Home's
+            // cache, which closes it when the home evicts.
             await mount?.closeAllDatabases();
         }
         report('mounts', mounts.length + index + 1, total);

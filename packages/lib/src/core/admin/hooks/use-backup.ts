@@ -89,19 +89,16 @@ export function useUploadBackup() {
             // file the server would refuse never leaves the browser.
             const parsed = parseBackupArtifactName(file.name);
             if (!parsed) throw new Error(`'${file.name}' is not the name of an Eigen backup archive`);
-            // An empty file has no Content-Length the route accepts, so it would come back as the
-            // 413 about the maximum size — which says nothing about what is wrong with it.
+            // Both sizes are the route's 413, said before a long upload starts — and on an empty file
+            // that 413 talks about the maximum size, which says nothing about what is wrong with it.
             if (file.size === 0) throw new Error(`'${file.name}' is empty`);
-            // The route refuses a larger Content-Length with a 413; saying so before a long upload
-            // starts is the whole point of the check.
             if (file.size > BACKUP_UPLOAD_MAX_BYTES) {
                 throw new Error(
                     `Archives over ${BACKUP_UPLOAD_MAX_LABEL} must be copied into the server's backups folder (EIGEN_BACKUPS_DIR) by hand`,
                 );
             }
-            // Raw body, not JSON, and the name in the query string: a custom request header would
-            // make this a preflighted request, and a split-origin deployment answers that preflight
-            // without it. fetch fills in the Content-Length the route checks the bytes against.
+            // Raw body, not JSON, and the name in the query: see getBackupUploadUrl. fetch fills in
+            // the Content-Length the route checks the bytes against.
             const response = await fetch(getBackupUploadUrl(file.name), {
                 method: 'POST',
                 body: file,
@@ -113,9 +110,7 @@ export function useUploadBackup() {
                     error: { status: response.status, value: await response.text() },
                 });
             }
-            // The route lands the bytes under the name it was given, so there is nothing to read
-            // back. An archive of another home belongs in that home's list, not in the pane that
-            // happened to upload it.
+            // The route lands the bytes under the name it was given, so there is nothing to read back.
             return { name: file.name, ownerId: parsed.ownerId };
         },
         onSuccess: (data) => invalidateBackup(queryClient, data.ownerId),

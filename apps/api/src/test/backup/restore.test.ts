@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { COLLAB_HOME_REPLACED_CLOSE } from '@workspace/lib/constants/collab';
+import { COLLAB_HOME_REPLACED_CLOSE, COLLAB_HOME_REPLACED_REASON } from '@workspace/lib/constants/collab';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { BackupManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -394,7 +394,7 @@ describe('Backup restoreHome', () => {
 
         await restoreHome(artifact, target.id, `restore-ws-${Date.now()}`);
 
-        expect(await closed).toEqual({ code: COLLAB_HOME_REPLACED_CLOSE, reason: 'home-replaced' });
+        expect(await closed).toEqual({ code: COLLAB_HOME_REPLACED_CLOSE, reason: COLLAB_HOME_REPLACED_REASON });
     });
 
     test('a socket that connects while the mark is set is closed 1012, never 1013', async () => {
@@ -409,7 +409,7 @@ describe('Backup restoreHome', () => {
                 ws.onerror = (event) => reject(event);
             });
             // 1013 would make this tab keep its document and retry — straight back over the restore.
-            expect(closed).toEqual({ code: COLLAB_HOME_REPLACED_CLOSE, reason: 'home-replaced' });
+            expect(closed).toEqual({ code: COLLAB_HOME_REPLACED_CLOSE, reason: COLLAB_HOME_REPLACED_REASON });
         } finally {
             clearHomeRestoring(target.id);
         }
