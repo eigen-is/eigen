@@ -1,7 +1,7 @@
 import { useHotkey, useHotkeySequence } from '@tanstack/react-hotkeys';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { UseListSelectionReturn } from '@workspace/ui/hooks/use-list-selection';
-import { useEffect, useRef, useState } from 'react';
+import { type RefObject, useEffect, useRef, useState } from 'react';
 
 // `g`-jump chords go through useHotkeySequence (plain letters, no single-key conflict). The `*`-select
 // chords do NOT — a '*' press emits a Shift keydown first, which the sequence matcher trips over, so
@@ -30,6 +30,9 @@ type UseMailShortcutsOptions = {
     setCursorIndex: (index: number) => void;
     setCursorById: (id: string | undefined) => void;
     selection: UseListSelectionReturn<EmailSummary>;
+    // Wraps the mail columns. Delete/Backspace register on it instead of the document, so a
+    // portalled dialog (drive location picker, a confirm) can never trash the message behind it.
+    surfaceRef: RefObject<HTMLElement | null>;
     isComposing: boolean;
     helpOpen: boolean;
     shortcutsEnabled: boolean;
@@ -61,14 +64,16 @@ type UseMailShortcutsOptions = {
 
 // The Gmail keyboard layer for mail. Pure registration, called from MailRoute so every key acts on
 // the same rows/cursor/selection the list renders. Inert unless opted in, and while composing or the
-// help overlay is open. The lib auto-suppresses keys (and Shift combos) in inputs. Target priority is
-// open conversation > checkbox selection > cursor; landing rules per the Phase 3 brief.
+// help overlay is open — except Delete/Backspace, which delete whether or not the set is on. The lib
+// auto-suppresses keys (and Shift combos) in inputs. Target priority is open conversation >
+// checkbox selection > cursor; landing rules per the Phase 3 brief.
 export function useMailShortcuts({
     orderedEmails,
     cursorIndex,
     setCursorIndex,
     setCursorById,
     selection,
+    surfaceRef,
     isComposing,
     helpOpen,
     shortcutsEnabled,
@@ -254,6 +259,12 @@ export function useMailShortcuts({
     useHotkey({ key: '#', shift: true }, () => runDestructive('delete'), { enabled });
     // ! — report spam. RawHotkey: '!' is Shift+1.
     useHotkey({ key: '!', shift: true }, () => runDestructive('spam'), { enabled });
+    // Delete/Backspace — the macOS delete keys. Outside the opt-in Gmail set, so they work for
+    // everyone; the lib keeps them off in inputs and contenteditables, and surfaceRef keeps them
+    // off everything outside the mail columns (every dialog portals to the body).
+    const deleteKeysEnabled = !isComposing && !helpOpen;
+    useHotkey('Delete', () => runDestructive('delete'), { enabled: deleteKeysEnabled, target: surfaceRef });
+    useHotkey('Backspace', () => runDestructive('delete'), { enabled: deleteKeysEnabled, target: surfaceRef });
 
     // ] archive-and-newer / [ archive-and-older — ALWAYS advance a fixed direction, ignore autoAdvance.
     const archiveAndAdvance = (direction: 'newer' | 'older') => {

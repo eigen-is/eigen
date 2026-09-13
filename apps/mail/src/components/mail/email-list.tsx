@@ -159,7 +159,8 @@ export function EmailList({
     // with the shortcuts layer) and the virtualizer scrolls. The hook also owns list focus — the
     // mount grab plus the body-focus reclaim that keeps the shortcuts alive after a click on
     // non-focusable chrome — gated off while composing so a reply keeps its keystrokes.
-    // No onDelete: Delete stays swallowed, batch delete lives on the menu.
+    // No onDelete: the Delete/Backspace bindings live in useMailShortcuts, which also covers an
+    // open conversation; the list just swallows the keypress.
     const { handleKeyDown } = useKeyboardListNavigation({
         items: orderedEmails,
         getId: (e) => e.id,

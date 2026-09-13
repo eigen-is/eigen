@@ -94,6 +94,9 @@ names.
 Archive, delete, report spam, star, and the two mark keys act on the message you have open. With nothing open they
 act on the messages you have selected, and failing that on the row under the cursor.
 
+The **Delete** and **Backspace** keys also send a message to the Trash, and they pick their target the same way.
+Those two are not part of the set above: they work whether or not the shortcuts are turned on.
+
 ## Conversation
 
 | Key | What it does |
