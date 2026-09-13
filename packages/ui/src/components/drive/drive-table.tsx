@@ -176,6 +176,8 @@ export function DriveTable({
         onQuickLook,
         onMove,
         onSelectionChange,
+        onDelete,
+        allowDelete,
     });
 
     // One long-press instance for the whole list — rows spread bind(item); disabled rows skip it.

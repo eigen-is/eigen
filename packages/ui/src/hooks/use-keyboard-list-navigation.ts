@@ -197,7 +197,9 @@ export function useKeyboardListNavigation<T>({
                 }
                 break;
 
+            // Backspace deletes too, the way Finder, Apple Mail and Contacts do on macOS.
             case 'Delete':
+            case 'Backspace':
                 e.preventDefault();
                 if (onDelete && selectedIndex >= 0 && selectedIndex < items.length) {
                     onDelete(items[selectedIndex]);

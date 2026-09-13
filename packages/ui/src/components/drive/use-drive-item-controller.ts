@@ -20,6 +20,9 @@ export type UseDriveItemControllerOptions = {
     onQuickLook?: (item: DrivePath) => void;
     onMove?: (item: DrivePath, targetItemId: string) => void;
     onSelectionChange?: (items: DrivePath[]) => void;
+    // Same handler the context menu's trash entry calls — bound to Delete/Backspace here.
+    onDelete?: (items: DrivePath[]) => void;
+    allowDelete?: boolean;
 };
 
 export function useDriveItemController({
@@ -33,6 +36,8 @@ export function useDriveItemController({
     onQuickLook,
     onMove,
     onSelectionChange,
+    onDelete,
+    allowDelete,
 }: UseDriveItemControllerOptions) {
     const handleItemSelect = useCallback(
         (id: string) => {
@@ -72,6 +77,11 @@ export function useDriveItemController({
         onQuickLook: onQuickLook ? handleQuickLook : undefined,
         containerRef,
         shouldNotify: () => !!activeItemId,
+        // A multi-selection wins over the cursored row, exactly as the context menu resolves it.
+        onDelete:
+            allowDelete && onDelete
+                ? (item) => onDelete(selection.selectedCount > 1 ? selection.selectedItems : [item])
+                : undefined,
         selection,
         columns,
         scrollToIndex,

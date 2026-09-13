@@ -73,6 +73,8 @@ export function DriveGrid({
         onQuickLook,
         onMove,
         onSelectionChange,
+        onDelete,
+        allowDelete,
     });
 
     // One long-press instance for the whole grid — tiles spread bind(item); disabled tiles skip it.
