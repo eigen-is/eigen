@@ -181,6 +181,7 @@ shared-with-me view for free.
 MIME → icon is not a Drive concern: `getFileIconComponent` / `getFilePresentation` live in
 `packages/lib/src/core/file-presentation.ts` (DOM-free, so lib callers like the palette can use them),
 with the JSX wrapper `getFileIcon` re-exported from `drive/file-presentation.tsx`.
+Both take the file name beside the mime: a `.vcf` is often stored as `application/octet-stream`, and it carries the Contacts app's icon and colour the way an eigendoc carries its own app's.
 
 ## List Patterns
 

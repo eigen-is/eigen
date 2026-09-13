@@ -10,7 +10,7 @@ export { type FilePresentation, getFileIconComponent, getFilePresentation } from
 
 type FileIconProps = React.ComponentProps<typeof File>;
 
-export function getFileIcon(mimeType: string, type: string, props?: FileIconProps) {
-    const Icon = getFileIconComponent(mimeType, type);
+export function getFileIcon(mimeType: string, type: string, name: string, props?: FileIconProps) {
+    const Icon = getFileIconComponent(mimeType, type, name);
     return <Icon {...props} />;
 }

@@ -39,7 +39,7 @@ export function useFileSearchResults(
         // Carry the query into the opened document so its find bar lands on the matches.
         const encodedQ = parsed.q ? encodeURIComponent(parsed.q) : '';
         return data.file.map((path, i) => {
-            const presentation = getFilePresentation(path.mimeType, path.type);
+            const presentation = getFilePresentation(path.mimeType, path.type, path.name);
             // Only the four eigendoc editors consume ?q= — chat/folder/inline-edit URLs never do.
             const carryQ = encodedQ && isCollabType(path.type) ? encodedQ : '';
             return {

@@ -43,7 +43,7 @@ export function DriveTile({
         getDropProps,
         dragOverItemId,
     } = controller;
-    const presentation = getFilePresentation(item.mimeType, item.type);
+    const presentation = getFilePresentation(item.mimeType, item.type, item.name);
     const { showThumbnail, thumbnailUrl } = getDriveItemThumbnail(item);
     const [thumbFailed, setThumbFailed] = useState(false);
 
@@ -79,7 +79,7 @@ export function DriveTile({
                         className="absolute inset-0 w-full h-full object-cover"
                     />
                 ) : (
-                    getFileIcon(item.mimeType, item.type, {
+                    getFileIcon(item.mimeType, item.type, item.name, {
                         className: 'size-10',
                         style: { color: presentation.colorVar },
                     })
@@ -87,7 +87,7 @@ export function DriveTile({
             </div>
             <div className="flex items-center gap-1 px-2 py-1.5 min-w-0">
                 <span className="relative flex-shrink-0">
-                    {getFileIcon(item.mimeType, item.type, {
+                    {getFileIcon(item.mimeType, item.type, item.name, {
                         className: 'h-4 w-4',
                         style: { color: presentation.colorVar },
                     })}

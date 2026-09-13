@@ -205,7 +205,9 @@ export function FilePreview({
                     {previewMode === 'vcard' && <VCardPreviewContent path={path} />}
                     {previewMode === 'fallback' && (
                         <div className="flex flex-col items-center gap-4 text-white">
-                            {getFileIcon(path.mimeType, path.type, { className: 'size-16 text-muted-foreground' })}
+                            {getFileIcon(path.mimeType, path.type, path.name, {
+                                className: 'size-16 text-muted-foreground',
+                            })}
                             <span className="text-lg font-medium">{fileName}</span>
                             <span className="text-sm text-muted-foreground">No preview available</span>
                         </div>

@@ -12,8 +12,9 @@ import {
     Folder,
     type LucideIcon,
     Presentation,
+    UsersRound,
 } from 'lucide-react';
-import { DRIVE_TYPE_FOLDER, type DrivePathType, getEigenDocInfoByMime } from '../types';
+import { DRIVE_TYPE_FOLDER, type DrivePathType, getEigenDocInfoByMime, isVCardFile } from '../types';
 import { EIGEN_DOC_ICONS } from './eigendoc-icons';
 
 const ARCHIVE_MIMES = new Set([
@@ -59,11 +60,13 @@ const WORD_MIMES = new Set([
 const EXECUTABLE_MIMES = new Set(['application/x-msdownload', 'application/x-executable']);
 const DB_MIMES = new Set(['application/vnd.sqlite3', 'application/x-sqlite3', 'application/vnd.ms-access']);
 
-export function getFileIconComponent(mimeType: string, type: string): LucideIcon {
+export function getFileIconComponent(mimeType: string, type: string, name: string): LucideIcon {
     if (type === DRIVE_TYPE_FOLDER) return Folder;
 
     const eigenInfo = getEigenDocInfoByMime(mimeType);
     if (eigenInfo) return EIGEN_DOC_ICONS[eigenInfo.type];
+    // A .vcf belongs to Contacts the way an eigendoc belongs to its app, so it carries that app's icon.
+    if (isVCardFile(mimeType, name)) return UsersRound;
 
     if (!mimeType) return File;
     if (mimeType.startsWith('image/')) return FileImage;
@@ -93,7 +96,7 @@ export type FilePresentation = {
     label: string;
 };
 
-export function getFilePresentation(mimeType: string, type: DrivePathType): FilePresentation {
+export function getFilePresentation(mimeType: string, type: DrivePathType, name: string): FilePresentation {
     if (type === DRIVE_TYPE_FOLDER) {
         return {
             icon: Folder,
@@ -115,8 +118,18 @@ export function getFilePresentation(mimeType: string, type: DrivePathType): File
         };
     }
 
+    if (isVCardFile(mimeType, name)) {
+        return {
+            icon: UsersRound,
+            colorVar: 'var(--app-contacts-color)',
+            softColorVar: 'var(--app-contacts-color-soft)',
+            fillColorVar: 'var(--app-contacts-color-soft)',
+            label: 'Contacts',
+        };
+    }
+
     return {
-        icon: getFileIconComponent(mimeType, type),
+        icon: getFileIconComponent(mimeType, type, name),
         colorVar: 'var(--muted-foreground)',
         softColorVar: 'var(--muted)',
         fillColorVar: 'none',

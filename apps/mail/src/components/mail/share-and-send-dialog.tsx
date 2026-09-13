@@ -81,7 +81,9 @@ export function ShareAndSendDialog({
             <div className="space-y-2 text-sm">
                 {grants.map((g) => (
                     <div key={g.id} className="flex items-center gap-2">
-                        {getFileIcon(g.mimeType, g.driveType, { className: 'h-4 w-4 shrink-0 text-muted-foreground' })}
+                        {getFileIcon(g.mimeType, g.driveType, g.name, {
+                            className: 'h-4 w-4 shrink-0 text-muted-foreground',
+                        })}
                         <span className="truncate font-medium">{g.name}</span>
                         <span className="ml-auto shrink-0 text-xs text-muted-foreground">Viewer</span>
                     </div>

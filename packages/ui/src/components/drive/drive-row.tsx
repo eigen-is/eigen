@@ -67,7 +67,7 @@ export function DriveRow({
         getDropProps,
         dragOverItemId,
     } = controller;
-    const presentation = getFilePresentation(item.mimeType, item.type);
+    const presentation = getFilePresentation(item.mimeType, item.type, item.name);
     const itemDate = getItemDate(item);
 
     return (
@@ -107,7 +107,7 @@ export function DriveRow({
         >
             <div className="pr-2 py-1.5 flex items-center min-w-0">
                 <div className="relative mr-2 flex-shrink-0">
-                    {getFileIcon(item.mimeType, item.type, {
+                    {getFileIcon(item.mimeType, item.type, item.name, {
                         className: 'h-4 w-4',
                         style: { color: presentation.colorVar, fill: presentation.fillColorVar },
                     })}

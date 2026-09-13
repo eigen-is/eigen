@@ -45,7 +45,7 @@ export function ReferenceAttachmentChip({ reference, onRemove, className }: Refe
             }}
         >
             <div className="flex items-center gap-1.5 px-2.5 py-1.5">
-                {getFileIcon(reference.mimeType, reference.driveType, {
+                {getFileIcon(reference.mimeType, reference.driveType, reference.name, {
                     className: 'h-3 w-3 text-muted-foreground shrink-0',
                 })}
                 <span className="truncate max-w-[200px]">{onRemove ? displayName : `Open ${displayName}`}</span>

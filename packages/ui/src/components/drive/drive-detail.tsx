@@ -153,7 +153,7 @@ export function DriveDetail({
 const EXTRA_DETAIL_HIDDEN_KEYS = new Set(['width', 'height', 'duration', 'pageCount', 'webdavProps', 'originalName']);
 
 function DetailsSection({ path }: { path: DrivePath }) {
-    const presentation = getFilePresentation(path.mimeType, path.type);
+    const presentation = getFilePresentation(path.mimeType, path.type, path.name);
     const details = path.details;
     const extraEntries = details ? Object.entries(details).filter(([key]) => !EXTRA_DETAIL_HIDDEN_KEYS.has(key)) : [];
 

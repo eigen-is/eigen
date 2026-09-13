@@ -22,7 +22,7 @@ type DrivePreviewProps = {
 
 // Fixed 16:9 aspect keeps the panel height stable as the user clicks through files.
 export function DrivePreview({ path, onActivate, className }: DrivePreviewProps) {
-    const presentation = getFilePresentation(path.mimeType, path.type);
+    const presentation = getFilePresentation(path.mimeType, path.type, path.name);
     const hasTextPreview = getTextPreviewMode(path.mimeType, path.name) !== null;
     // Same guard as the quick look: a file an import would refuse is never downloaded to be parsed.
     const hasVCardPreview = isVCardFile(path.mimeType, path.name) && path.size <= IMPORT_MAX_BYTES;
