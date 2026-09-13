@@ -71,7 +71,7 @@ Two builders in `packages/lib/src/core/file-subject.ts`, beside `file-presentati
 
 ### The overlay
 
-`openPreview(subject, siblings?)`, `updatePreview(subject)`. `downloadMode` is deleted. `getPreviewMode(subject)` gates the exiftool image branch and the whole text branch on `subject.drive`, because `CODE_MIMES` opens with the bare `text/` prefix and `TextPreviewContent` needs a mount, a path and an `updatedAt`; without the gate a `text/plain` mail part renders an empty panel. The three `type` reads become `subject.drive?.type ?? 'file'`. Siblings match by `key`. Aspect ratio comes from `subject.drive?.details` as today.
+`openPreview(subject, siblings?)`, `updatePreview(subject)`. `downloadMode` is deleted. `getPreviewMode(subject)` gates the whole text branch on `subject.drive`, because `CODE_MIMES` opens with the bare `text/` prefix and `TextPreviewContent` needs a mount, a path and an `updatedAt`; without the gate a `text/plain` mail part renders an empty panel. The image branch changes shape: a Drive subject is `image` for any `image/*` mime or exiftool extension, as today, because its `<img>` points at the `/preview` route, which serves a sharp-resized WebP with an exiftool fallback for HEIC, RAW and PSD. A subject without `drive` has no such route and its `<img>` points at the original bytes, so it is `image` only when the mime is in a new `BROWSER_IMAGE_MIMES` set in `packages/lib/src/constants/preview.ts` (JPEG, PNG, GIF, WebP, AVIF, BMP, SVG). A HEIC mail part with an `image/heic` mime therefore gets the fallback card rather than a broken image element in Chrome and Firefox. The three `type` reads become `subject.drive?.type ?? 'file'`. Siblings match by `key`. Aspect ratio comes from `subject.drive?.details` as today.
 
 The footer renders from the registry: Open (when `subject.drive`), then every applicable file action except Quick Look, then the batch "Save all (n)", gated as today on at least two downloadable siblings with folders and eigendocs filtered out. It appears on Drive previews too, which never had it; that is a new affordance and goes to the screenshot round.
 
@@ -134,7 +134,7 @@ Two observable changes on the existing download route, both deliberate: the real
 
 ## Performance invariants
 
-- The overlay makes the same requests for a Drive subject as today. A mail subject makes one embed request.
+- The overlay makes the same requests for a Drive subject as today. A mail subject makes one embed request and shows the original bytes: no resize, no thumbnail, no transcode. A 20 MB JPEG part loads at full size.
 - Drive-to-Drive writes keep the same-storage fast path and cross-mount bridge through `/copy`, untouched.
 - A mail part into Drive goes through the existing server-side route, never through the browser.
 - The only bytes that pass through the browser are a vCard into contacts (kilobytes) and a mail part being converted (capped at 25 MiB by the message limit, one extra round-trip).
@@ -173,6 +173,6 @@ Then the vCard plan (`docs/superpowers/plans/2026-09-11-vcard-import-export.md`)
 | D6 | One `serveMailPart` for both mail byte routes; `serveFile` untouched. | One home for the inline-header fact is `scriptableInlineHeaders`; the mail helper only spreads it. |
 | D7 | `mailAttachmentName` is the one fallback name; the saved file changes from `attachment-2` to `Attachment 3`. `Attachment.filename` stays optional. | A missing filename is how outbound mail recognises inline cid parts. The chip, the header and the saved file must read alike. |
 | D8 | `downloadMode` is deleted; the footer renders from the registry and the batch "Save all (n)" keeps both of today's gates. | One footer everywhere. Its appearance on Drive previews is new and goes to the screenshot round. |
-| D9 | Every server-rendered preview mode gates on `subject.drive`. | HEIC and raw render only through the server transcode; the text renderer needs a mount, a path and a version key. |
+| D9 | Every server-rendered preview mode gates on `subject.drive`; a subject without `drive` is `image` only for a browser-decodable mime (`BROWSER_IMAGE_MIMES`). | Drive's `<img>` never shows original bytes: `/preview` serves a resized WebP, with exiftool for HEIC, RAW and PSD. A mail part's `<img>` shows the original, which the browser must decode itself. The text renderer needs a mount, a path and a version key. |
 | D10 | Mail compose chips are out of scope. | `AttachmentMeta[]` is a different shape and a compose chip is a remove affordance, not an action list. |
 | D11 | The `use-draft.ts` off-by-N (raw index at one site, calendar-filtered index at another, both fed to `keepAttachmentIndexes`) is a separate cheap-win commit, listed in `ROADMAP.md`. | Real bug, unrelated to preview or actions. |
