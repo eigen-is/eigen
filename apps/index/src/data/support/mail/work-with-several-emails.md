@@ -41,6 +41,8 @@ selected, not the one you clicked.
 - **Delete** sends the set to the Trash. The item shows the count, like **Delete 4 emails**.
 - **Move to folder** opens a list of your other mailboxes. Pick one to move the whole set there.
 
+With no message open, pressing **Delete** or **Backspace** sends the whole selection to the Trash as well.
+
 Reply, Reply All, Forward, and Download only make sense for one message, so those appear in the menu only when a single
 message is selected.
 

@@ -41,6 +41,8 @@ If you right-click a row that is not selected, that row becomes the selection an
 3. The **Delete Contact** dialog asks "Are you sure you want to delete 3 contacts?". Click **Delete** to
    confirm, or **Cancel** to keep them.
 
+Pressing **Delete** or **Backspace** with the list in focus opens the same dialog on the whole selection.
+
 Deleting is permanent, as it is for a single contact. See
 [Edit or delete a contact](/support/contacts/edit-or-delete).
 
