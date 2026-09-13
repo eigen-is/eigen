@@ -26,7 +26,7 @@ type FolderSize = { bytes: number; truncated: boolean };
 // walking a whole home on each of those would stall the event loop for every user on the server.
 const measuredBytes = new Map<string, FolderSize>();
 
-export async function measureFolder(dir: string, maxFiles: number): Promise<FolderSize> {
+export async function measureFolder(dir: string, maxFiles = MAX_WALKED_FILES): Promise<FolderSize> {
     let bytes = 0;
     let walked = 0;
     const stack = [dir];
@@ -44,7 +44,7 @@ export async function measureFolder(dir: string, maxFiles: number): Promise<Fold
 async function measureSafetyCopy(dir: string): Promise<FolderSize> {
     const known = measuredBytes.get(dir);
     if (known) return known;
-    const size = await measureFolder(dir, MAX_WALKED_FILES);
+    const size = await measureFolder(dir);
     measuredBytes.set(dir, size);
     return size;
 }

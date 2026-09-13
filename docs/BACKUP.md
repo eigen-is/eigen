@@ -155,7 +155,7 @@ A marker lost to a torn write fails safe: the boot recovery does nothing, and th
 
 Every restored database is checked against the schema version this build expects, and one that came from a newer server is refused with a message naming both versions. Without that check the archive would land, pass `quick_check`, and then fail the whole home on the next load, long after the job said it was done. So restore an archive on a server at least as new as the one that wrote it, and upgrade the target server first if it is behind.
 
-An `s3` mount additionally needs a `metadata.db` at the schema version that shipped with per-home backup or newer, because restoring a remote mount writes pending-upload rows in a column older archives do not have. Local and `local-key` mounts are not gated this way. No older archive of an `s3` mount can exist, so this only ever fires on a hand-edited one.
+An `s3` mount additionally needs a `metadata.db` that carries the `pending_uploads.isDatabase` column (metadata schema v8 or newer), because restoring a remote mount writes pending rows with it. Local and `local-key` mounts are not gated this way. No older archive of an `s3` mount can exist, so this only ever fires on a hand-edited one.
 
 ## The whole-server stopgap
 
