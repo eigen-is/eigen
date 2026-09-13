@@ -77,7 +77,7 @@ explain each one — read them before changing the render path.
   filename prefix.
 
 For prose rules, article types and frontmatter conventions see [SUPPORT-STYLE-GUIDE.md](SUPPORT-STYLE-GUIDE.md);
-for the per-article writer template see [SUPPORT-WRITER-PROMPT.md](SUPPORT-WRITER-PROMPT.md).
+for the per-article writer procedure see the [support-article skill](../.claude/skills/support-article/SKILL.md).
 
 ## Search
 
