@@ -86,6 +86,23 @@ up a level (detail → list); the `'sidebar'` sentinel goes on FIRST columns and
 as a full column — it self-gates on `sidebarMode === 'collapsible'`, so sidebar-less surfaces
 (editors, RequestAccessView) never render a dead arrow.
 
+## Page Layout Pattern
+
+Every page uses `ColumnLayout` + `Column`. The toolbar is a **separate prop**, not part of the page content. The `Column` renders the toolbar in a fixed `h-12` bar with `px-4 border-b`. This ensures consistent toolbar height across all pages.
+
+```tsx
+<ColumnLayout mobileColumn={showDetail ? 'detail' : 'list'}>
+    <Column id="list" width="flex" onBack="sidebar" toolbar={<MyToolbar />}>
+        <MyContent />
+    </Column>
+    <Column id="detail" width="400px" onBack={handleBack} toolbar={<DetailToolbar />}>
+        <DetailContent />
+    </Column>
+</ColumnLayout>
+```
+
+The first column passes `onBack="sidebar"` — the sentinel renders the mobile back arrow that steps up to the sidebar column, and self-gates away when the app has no sidebar. Without it a mobile user has no path back to navigation. Use `width="flex"` for a single full-width column. For a plain page title in the toolbar, use the shared `ToolbarTitle` component (`@workspace/ui/components/layout/toolbar`), which applies the `.eigen-toolbar-title` class (`text-sm font-normal text-foreground truncate` — thin, matching the breadcrumb) rather than hand-rolling a styled span. Richer toolbars (drive's path) compose a `BreadcrumbPage` (`font-normal`), so the two read at the same weight.
+
 ## LayoutContext
 
 `useLayout()` provides: `appName`, `setAppName`, `documentTitle`, `setDocumentTitle`, `sidebarOpen`,
@@ -260,6 +277,25 @@ const drag = useListDrag({ selection, getId: (item) => item.id, dragType: 'my-ty
 | `EmailList`              | `apps/mail/src/components/mail/email-list.tsx`                          | `email`      |
 | `ContactsList`           | `apps/contacts/src/components/contacts/contacts-list.tsx`               | `contact`    |
 
+## Hover-Only Icons
+
+To show action icons only on row hover (like the share icon in Drive), use the Tailwind `group` + `invisible group-hover:visible` pattern. Always add the matching `pointer-coarse:` variant so the affordance rests visible on touch devices, which have no hover — mirror the value the mouse user sees on hover. `pointer-fine:group-hover:` is the opt-out when hover really is desktop-only. Gated:
+
+```tsx
+<TableRow className="eigen-list-item group">
+    <TableCell>
+        <span>Item name</span>
+        <div className="invisible group-hover:visible pointer-coarse:visible ml-auto">
+            <TooltipButton icon={Edit} tooltipText="Edit" className="h-7 w-7" onClick={...} />
+        </div>
+    </TableCell>
+</TableRow>
+```
+
+Use `TooltipButton` from `packages/ui/src/components/layout/toolbar/tooltip-button.tsx` for icon buttons with tooltips. Don't rebuild Tooltip+Button manually.
+
+If hover icons would affect row height, use `absolute` positioning so they float over the row.
+
 ## Keyboard Shortcuts
 
 `@tanstack/react-hotkeys` for global shortcuts. `Mod` = Cmd (Mac) / Ctrl (Windows).
@@ -285,6 +321,28 @@ import { useHotkey, formatForDisplay } from '@tanstack/react-hotkeys';
 useHotkey('Mod+S', () => save(), { enabled: canSave });
 const label = formatForDisplay('Mod+S'); // "⌘S" on Mac, "Ctrl+S" on Windows
 ```
+
+## Z-Index / Layering
+
+One scale, project-wide. Higher values are progressively rarer — if you reach for one, justify it with a comment.
+
+| Layer                                        | z-index | Examples                                                |
+|----------------------------------------------|---------|---------------------------------------------------------|
+| Document content                             | auto    | Default; everything flows                               |
+| In-content floating UI                       | 10      | Inline autocompletes, chat/contact suggestion lists     |
+| Sheet canvas-internal overlays               | 8–30    | Selection, freeze handles, scrollbars, hint boxes — scoped under `cellArea` |
+| Portaled UI (dropdowns, popovers, dialogs)   | 50      | shadcn / Radix default — leave it alone                 |
+| Full-screen overlay                          | 100     | `FilePreview`, slides `PresentMode`                     |
+| Dialog above preview                         | 200     | `DialogContent` with `abovePreview` prop                |
+| Toaster                                      | library | Sonner manages its own stack                            |
+
+Rules:
+
+- **App-level components don't set z-index.** Use layout instead — flex sibling (slides pattern) or absolute inside a parent that establishes a stacking context (docs pattern with `position: relative overflow-hidden`). Side panels (comments, properties) belong here.
+- **`position: relative` alone does *not* establish a stacking context** — the element needs a `z-index` other than `auto` (or one of: `transform`, `opacity < 1`, `filter`, `isolation: isolate`, `will-change`). If you want to contain children's z-indices, add `isolation: isolate`.
+- **Don't override shadcn primitives' z-50.** If a portaled menu is being covered, fix the offending high z-index, don't escalate the menu.
+- **Anything > 50 needs a comment** explaining why (current exceptions are `FilePreview`, the slides `PresentMode` overlay and the `abovePreview` Dialog prop).
+- **The sheet engine's `cellArea` is its own world** — overlays under it stay ≤ 30; portaled menus rely on shadcn's z-50 to land above.
 
 ## File Locations
 

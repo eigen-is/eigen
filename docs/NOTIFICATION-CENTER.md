@@ -121,7 +121,7 @@ DELETE /notifications/:ownerId/:id                 Dismiss
 | Comment activity       | `ChatRoom.postMessage()` (embedded chat) | `comment-reply`             | `comment-reply:{ownerId}:{mountId}:{containerId}:{name}` |
 | Comment assignment     | assignee PATCH route (`routes/collab.ts`) | `assigned`                 | `assigned:{ownerId}:{mountId}:{pathId}:{chatName}` — only on a real change to a registered non-self assignee |
 | Access request         | `propagateAccessRequest()` (`lib/drive/access-request-propagation.ts`; the route delegates) | `access-request` | `access-request:{ownerId}:{mountId}:{pathId}:{email}` |
-| File event (watch)     | `FileHistory.notifyWatchers()` via relay | `file-event`                | `file-event:{ownerId}:{mountId}:{pathId}` — burst events (`created`/`uploaded`/`copied`) tag the parent folder; always sent with `coalesce: true`. See [AGENTS.md § File history + watch](../AGENTS.md) |
+| File event (watch)     | `FileHistory.notifyWatchers()` via relay | `file-event`                | `file-event:{ownerId}:{mountId}:{pathId}` — burst events (`created`/`uploaded`/`copied`) tag the parent folder; always sent with `coalesce: true`. See [FILE-HISTORY.md](FILE-HISTORY.md) |
 
 `actorEmail` is set on all sources — the sharer, organizer, mail sender, mention author, or access requester.
 

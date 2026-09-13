@@ -22,7 +22,7 @@ Note the second rule only fires once a workspace actually has tests. Do not add 
 
 ```bash
 bun run check              # lint + typecheck + home-import check + test-layout check + docs-link check + primitives:check + test
-bun run test               # tests only (all workspaces)
+bun run test               # tests only (all workspaces: api + sheet + lib + index)
 bun run test:api           # API tests only
 bun run test:sheet         # sheet package unit tests only (packages/sheet, plain `bun test`, no preload)
 bun run typecheck          # typecheck only
@@ -81,6 +81,8 @@ Test -> Eden Treaty / authedRequest() -> app.handle() -> Real business logic -> 
   `drivePost`, `chatGet`, etc.). It has no top-level `await` — under `--isolate` a suspended module would be
   observed mid-evaluation by the importing file, so its exports are all defined synchronously
 - **Preload**: `apps/api/src/test/preload.ts` registers an `afterAll` cleanup hook
+- **Integration tests** (`drive.test.ts`, `calendar.test.ts`, etc.) use test helpers from `setup.ts`: `getTestContext()` → returns `{ alice, bob, charlie }` test users with session tokens and API clients; `authedRequest(token, path, options?)` → make authenticated HTTP request; `driveGet/drivePost/drivePut/driveDelete` → typed drive API helpers; `driveGetPermission` → check read/write permissions
+- **Unit tests** (`mount.test.ts`, `storage.test.ts`, etc.) create isolated instances with temp directories
 
 ## Test Files
 

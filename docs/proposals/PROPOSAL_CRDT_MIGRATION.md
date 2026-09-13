@@ -166,7 +166,7 @@ Three candidate homes, weighed:
 
 | Option | Survives byte-copy of the container? | Survives version-restore? | Survives export/import? | Cost |
 |---|---|---|---|---|
-| **A. Row in the container's `data.db`** | Yes — containers copy as byte copies and reference children by name ([AGENTS.md](../../AGENTS.md) § Copy/move), so `data.db` travels whole | Yes — `versions/<ts>.db` is a full copy of `data.db`, so every archive self-describes its format | Yes — exports carry the container's files | One additive `COLLAB_DB_CONFIG` migration |
+| **A. Row in the container's `data.db`** | Yes — containers copy as byte copies and reference children by name ([ARCHITECTURE.md](../ARCHITECTURE.md) § Backend, the copy / move row), so `data.db` travels whole | Yes — `versions/<ts>.db` is a full copy of `data.db`, so every archive self-describes its format | Yes — exports carry the container's files | One additive `COLLAB_DB_CONFIG` migration |
 | B. A meta root inside the `Y.Doc` | Yes | Only if restore surgery special-cases it | Yes | Is itself a frozen-format change to every doc; requires hydrating the doc just to read the version; `restoreYjsDoc` would need to exclude it from surgery |
 | C. Column in the mount's `metadata.db` | **No** — cross-mount copy/export rebuilds rows; the stamp detaches from the bytes it describes | No — restore doesn't touch metadata | No | Cheap to query |
 

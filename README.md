@@ -182,7 +182,7 @@ to do and plenty of room to shape the direction.
 
 See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for how to get involved — whether that's reporting bugs, submitting PRs,
 adopting a subsystem, or sponsoring the project. The full project context (for humans and AI agents alike) lives in
-[AGENTS.md](AGENTS.md), and [CODE-STANDARDS.md](docs/CODE-STANDARDS.md) covers code style and architecture patterns.
+[AGENTS.md](AGENTS.md), [CODE-STANDARDS.md](docs/CODE-STANDARDS.md) covers code style, and [ARCHITECTURE.md](docs/ARCHITECTURE.md) covers the architecture patterns.
 
 Found a security issue? Please **do not** open a public issue — see [SECURITY.md](SECURITY.md) for how to report
 privately.

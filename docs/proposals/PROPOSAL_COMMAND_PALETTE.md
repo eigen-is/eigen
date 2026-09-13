@@ -2,7 +2,7 @@
 
 > **Status — v1 shipped on `main`.** Code in `../../packages/lib/src/core/command-palette` +
 > `../../packages/ui/src/components/layout/app/command-palette`, mounted by `AppShell.PaletteRunner`;
-> the shipped design is documented in AGENTS.md § Command palette and in the code itself.
+> the shipped design is documented in [ARCHITECTURE.md](../ARCHITECTURE.md) § Frontend (the command palette row) and in the code itself.
 > The palette does jumps, creates, contacts, smart parses (email / URL), selection-aware
 > actions, mail / file / in-document / comment / help search, prefix scopes
 > (`mail:` / `file:` / `doc:` / `>` / `@` / `?`) and the Tab scope chip. Search depth grows on
