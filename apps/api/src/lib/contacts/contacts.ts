@@ -1,5 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import type { Address, Contact, CreateContactInput, ParsedCard, ParsedCardPhoto } from '@workspace/lib/types/contact';
+import type {
+    Address,
+    Contact,
+    CreateContactInput,
+    ImportContactsResult,
+    ParsedCard,
+    ParsedCardPhoto,
+} from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { normalizeBirthday, parseVCard } from '@workspace/lib/vcard';
@@ -37,6 +44,7 @@ import * as labels from './labels';
 import * as reconcile from './reconcile';
 import * as schema from './schema';
 import { buildContactEvent, buildLabelEvent } from './sse-events';
+import * as transfer from './transfer';
 
 export async function getContacts(user: User): Promise<Contacts> {
     const home = await getHome(user.id);
@@ -956,6 +964,16 @@ export class Contacts {
 
     public async deleteCard(uri: string, pre: { ifMatch: string | null }): Promise<DeleteCardResult> {
         return davStore.deleteCard(this, uri, pre);
+    }
+
+    // ---- vCard transfer facade — implementation in contacts/transfer.ts ----
+
+    public async exportCards(ids?: string[]): Promise<string> {
+        return transfer.exportCards(this, ids);
+    }
+
+    public async importCards(text: string): Promise<ImportContactsResult> {
+        return transfer.importCards(this, text);
     }
 
     async destruct(): Promise<void> {
