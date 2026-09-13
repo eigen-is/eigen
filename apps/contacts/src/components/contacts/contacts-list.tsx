@@ -1,3 +1,4 @@
+import { useAuth } from '@workspace/lib/auth';
 import { useContacts } from '@workspace/lib/contacts';
 import type { Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
@@ -12,7 +13,7 @@ import {
 import { PersonList, UserItem } from '@workspace/ui/components/user';
 import { ArrowUpDown } from 'lucide-react';
 import { useMemo } from 'react';
-import { useContactMenu } from './contact-menu';
+import { isSelfContact, useContactMenu } from './contact-menu';
 
 type ContactsListToolbarProps = {
     searchQuery: string;
@@ -75,6 +76,7 @@ export function ContactsList({
 }: ContactsListProps) {
     const { data: contacts = [], isLoading, error } = useContacts();
     const contactMenu = useContactMenu();
+    const { user } = useAuth();
 
     const filteredContacts = useMemo(() => {
         if (filterType === 'label' && filterId !== 'all') {
@@ -112,6 +114,14 @@ export function ContactsList({
                         className="flex-1"
                     />
                 )}
+                // Delete/Backspace on the list, minus the card that is you — the menu hides Delete there too.
+                onDelete={
+                    onDelete
+                        ? (selected) => {
+                              if (!selected.some((c) => isSelfContact(c, user))) onDelete(selected);
+                          }
+                        : undefined
+                }
                 renderMenuItems={(contextItems, close) =>
                     // Print is detail-only (it clones the on-screen detail pane), so showPrint stays off here.
                     contactMenu.renderItems(contextItems, close, { labels, onEdit, onDelete, onToggleLabel })

@@ -28,6 +28,8 @@ type PersonListProps<T> = {
     // Present → rows get right-click, touch long-press, and a hover ⋮ button, all opening the
     // singleton menu on the selected batch (the pressed row is pulled into the selection first).
     renderMenuItems?: (items: T[], close: () => void) => ReactNode;
+    // Same handler the menu's delete entry calls — bound to Delete/Backspace here.
+    onDelete?: (items: T[]) => void;
 };
 
 // One person list for contacts and admin: alphabetically grouped rows (diacritics folded via
@@ -48,6 +50,7 @@ export function PersonList<T>({
     selectable,
     dragType,
     renderMenuItems,
+    onDelete,
 }: PersonListProps<T>) {
     const listRef = useRef<HTMLDivElement>(null);
 
@@ -76,6 +79,10 @@ export function PersonList<T>({
         onSelect: onRowClick,
         containerRef: listRef,
         selection: selectable ? selection : undefined,
+        // A multi-selection wins over the cursored row, exactly as the context menu resolves it.
+        onDelete: onDelete
+            ? (item) => onDelete(selection.selectedCount > 1 ? selection.selectedItems : [item])
+            : undefined,
     });
 
     const menuItems = contextMenu.item
