@@ -1,13 +1,17 @@
-import type { Contact } from '@workspace/lib/types/contact';
+import { IMPORT_MAX_BYTES, IMPORT_MAX_CARDS } from '@workspace/lib/constants/contact';
+import type { Contact, ImportContactsResult } from '@workspace/lib/types/contact';
+import { isVCardFile } from '@workspace/lib/types/drive';
 import type { Label } from '@workspace/lib/types/label';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
+import { parseVCard, unescapeText } from '@workspace/lib/vcard';
 import { Elysia, t } from 'elysia';
 import { enforceAvatarUpload } from '../lib/config/enforcement';
 import { CARD_MAX_BYTES } from '../lib/contacts/card-store';
 import { getContacts } from '../lib/contacts/contacts';
 import { requireNonGuest, requireSelf } from '../lib/core/access';
 import { ApiError } from '../lib/core/errors';
-import { setCacheHeaders } from '../lib/core/http';
+import { contentDisposition, setCacheHeaders } from '../lib/core/http';
+import { getSharedDrive } from '../lib/drive';
 import { betterAuth } from './auth';
 
 // Field bounds in front of the ceiling the write seam enforces on the assembled card: generous enough that
@@ -52,6 +56,15 @@ const LabelSchema = t.Object({
     name: t.String(TEXT),
     color: t.String(TEXT),
 });
+
+// A one-card export is named after the card itself — its FN, the display name every client writes — a
+// multi-card one generically. contentDisposition sanitises whatever comes back before it reaches the header.
+function exportFileName(text: string, ids?: string[]): string {
+    if (ids?.length !== 1) return 'contacts.vcf';
+    const fn = parseVCard(text).lines.find((line) => line.name === 'FN');
+    const name = fn ? unescapeText(fn.value).trim() : '';
+    return `${name || 'contact'}.vcf`;
+}
 
 // All contacts routes require ownerId === user.id (contacts are personal-only, no shared access)
 export const contactsRouter = new Elysia({ name: 'contacts' })
@@ -188,4 +201,67 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             return await (await getContacts(user)).getMe();
         },
         { auth: true },
+    )
+    .post(
+        '/contacts/:ownerId/export',
+        async ({ params, body, user, set }): Promise<string> => {
+            requireNonGuest(user);
+            requireSelf(params.ownerId, user.id);
+            const text = await (await getContacts(user)).exportCards(body.ids);
+            set.headers['Content-Type'] = 'text/vcard; charset=utf-8';
+            set.headers['Content-Disposition'] = contentDisposition('attachment', exportFileName(text, body.ids));
+            return text;
+        },
+        {
+            // The same card-count ceiling the import side enforces: one selection can't outgrow one file.
+            body: t.Object({ ids: t.Optional(t.Array(t.String(TEXT), { maxItems: IMPORT_MAX_CARDS })) }),
+            auth: true,
+        },
+    )
+    .post(
+        '/contacts/:ownerId/import',
+        async ({ params, request, user, server }): Promise<ImportContactsResult> => {
+            requireNonGuest(user);
+            requireSelf(params.ownerId, user.id);
+            // A whole book replays card by card through the CardDAV write seam, answering nothing until the
+            // last one lands — longer than any server-wide idleTimeout, so exempt this request.
+            server?.timeout(request, 0);
+            // Early Content-Length check guards against large allocations before the body is buffered.
+            // Header can be missing or lying, so the post-buffer check below is a belt-and-suspenders guard.
+            const contentLength = request.headers.get('content-length');
+            if (contentLength && Number(contentLength) > IMPORT_MAX_BYTES) {
+                throw new ApiError(413, 'Upload too large');
+            }
+            const buffer = Buffer.from(await request.arrayBuffer());
+            if (buffer.byteLength > IMPORT_MAX_BYTES) throw new ApiError(413, 'Upload too large');
+            return await (await getContacts(user)).importCards(new TextDecoder().decode(buffer));
+        },
+        { auth: true, parse: 'none' },
+    )
+    .post(
+        '/contacts/:ownerId/import-from-drive',
+        async ({ params, body, request, user, server }): Promise<ImportContactsResult> => {
+            requireNonGuest(user);
+            requireSelf(params.ownerId, user.id);
+            // Same idle-timeout exemption as the raw import route: silent until the last card lands.
+            server?.timeout(request, 0);
+            // The source can live in any drive the user may read — SharedDrive is what checks that.
+            const sourceDrive = await getSharedDrive(body.sourceOwnerId, user);
+            const source = await sourceDrive.getPath(body.sourceMountId, body.sourcePathId);
+            if (!source) throw new ApiError(404, 'Source file not found');
+            if (!isVCardFile(source.mimeType, source.name)) throw new ApiError(400, 'Not a vCard file');
+            if (source.size > IMPORT_MAX_BYTES) throw new ApiError(413, 'Upload too large');
+            const file = await sourceDrive.downloadFile(body.sourceMountId, body.sourcePathId);
+            if (!file) throw new ApiError(404, 'Source file not found');
+            const buffer = Buffer.from(await file.arrayBuffer());
+            return await (await getContacts(user)).importCards(new TextDecoder().decode(buffer));
+        },
+        {
+            body: t.Object({
+                sourceOwnerId: t.String(),
+                sourceMountId: t.String(),
+                sourcePathId: t.String(),
+            }),
+            auth: true,
+        },
     );
