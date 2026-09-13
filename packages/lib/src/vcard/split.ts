@@ -4,7 +4,7 @@
 import { VCardError } from './ast';
 
 export function splitVCards(text: string): string[] {
-    const body = text.startsWith('﻿') ? text.slice(1) : text;
+    const body = text.startsWith('\uFEFF') ? text.slice(1) : text;
     const n = body.length;
     const cards: string[] = [];
     let start = -1;
@@ -18,9 +18,12 @@ export function splitVCards(text: string): string[] {
         else if (body[j] === '\r' && body[j + 1] === '\n') i = j + 2;
         else i = j + 1;
 
-        // Markers match whole lines only, so a value mentioning BEGIN:VCARD never opens a card.
-        const trimmed = content.trim();
-        const marker = trimmed.toUpperCase();
+        // Markers match whole physical lines only, so neither a value mentioning BEGIN:VCARD nor a folded
+        // continuation line (RFC 2425 §5.8.1 — leading SPACE or TAB, which ast.ts joins to the line above)
+        // can open or close a card.
+        const trimmed = content.trimEnd();
+        const folded = content.startsWith(' ') || content.startsWith('\t');
+        const marker = folded ? '' : trimmed.toUpperCase();
         if (marker === 'BEGIN:VCARD') {
             if (start !== -1) throw new VCardError('nested BEGIN:VCARD');
             start = lineStart;

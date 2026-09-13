@@ -1,7 +1,7 @@
 // splitVCards is the only multi-card entry point in the codebase: parseVCardLines rejects multi-card
 // payloads, so an import file is split here first and each card parsed on its own.
 import { describe, expect, test } from 'bun:test';
-import { splitVCards, VCardError } from '@workspace/lib/vcard';
+import { splitVCards, VCardError } from '../../vcard';
 
 const card = (fn: string, eol = '\r\n') =>
     ['BEGIN:VCARD', 'VERSION:3.0', `FN:${fn}`, 'N:;' + fn + ';;;', 'END:VCARD'].join(eol);
@@ -16,7 +16,7 @@ describe('splitVCards', () => {
         expect(splitVCards(c + '\r\n')).toEqual([c + '\r\n']);
     });
     test('three LF cards with blank lines and a BOM', () => {
-        const text = '﻿' + [card('A', '\n'), '', card('B', '\n'), '', '', card('C', '\n')].join('\n') + '\n';
+        const text = '\uFEFF' + [card('A', '\n'), '', card('B', '\n'), '', '', card('C', '\n')].join('\n') + '\n';
         expect(splitVCards(text).map((c) => c.split('\n')[2])).toEqual(['FN:A', 'FN:B', 'FN:C']);
     });
     test('case-insensitive envelope markers', () => {
@@ -31,5 +31,34 @@ describe('splitVCards', () => {
     });
     test('non-blank content outside an envelope throws', () => {
         expect(() => splitVCards('junk\r\n' + card('A'))).toThrow(VCardError);
+    });
+    test('a folded continuation line is never an envelope marker', () => {
+        const begin = 'BEGIN:VCARD\r\nVERSION:3.0\r\nNOTE:aaa\r\n BEGIN:VCARD\r\nFN:x\r\nEND:VCARD\r\n';
+        expect(splitVCards(begin)).toEqual([begin]);
+        const tabbed = 'BEGIN:VCARD\r\nVERSION:3.0\r\nNOTE:aaa\r\n\tBEGIN:VCARD\r\nFN:x\r\nEND:VCARD\r\n';
+        expect(splitVCards(tabbed)).toEqual([tabbed]);
+        const end = 'BEGIN:VCARD\r\nVERSION:3.0\r\nNOTE:aaa\r\n END:VCARD\r\nFN:x\r\nEND:VCARD\r\n';
+        expect(splitVCards(end)).toEqual([end]);
+    });
+    test('a card whose only END:VCARD is folded is unterminated', () => {
+        expect(() => splitVCards('BEGIN:VCARD\r\nVERSION:3.0\r\nNOTE:aaa\r\n END:VCARD\r\n')).toThrow(
+            'missing END:VCARD',
+        );
+    });
+    test('a second BEGIN:VCARD inside an open card throws', () => {
+        expect(() => splitVCards('BEGIN:VCARD\r\nVERSION:3.0\r\nBEGIN:VCARD\r\nEND:VCARD\r\n')).toThrow(
+            'nested BEGIN:VCARD',
+        );
+    });
+    test('a final card with no terminator comes back without one', () => {
+        const c = card('Ada');
+        expect(splitVCards(c)).toEqual([c]);
+    });
+    test('mixed line endings inside one card are preserved', () => {
+        const mixed = 'BEGIN:VCARD\nVERSION:3.0\r\nFN:x\nEND:VCARD\r\n';
+        expect(splitVCards(mixed)).toEqual([mixed]);
+    });
+    test('trailing spaces after END:VCARD still close the card', () => {
+        expect(splitVCards('BEGIN:VCARD\r\nVERSION:3.0\r\nFN:x\r\nEND:VCARD  \r\n')).toHaveLength(1);
     });
 });
