@@ -6,7 +6,7 @@ category: Basics
 tags: [mail, email, select, organise]
 related: [mail/archive-delete-spam, mail/move-email-between-folders, mail/get-started]
 order: 60
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 When you have a stack of messages to tidy, you don't have to handle them one at a time. Select several in the
@@ -58,6 +58,16 @@ left. While you drag, a small badge shows how many you're carrying, and the mail
 Let go to drop them in.
 
 This is a quick way to clear the Inbox: select what you've finished with and drag it to **Archive**.
+
+## Star a message
+
+You can mark a message with a star to make it easy to pick out later. A starred message shows a small star next to
+its date in the list.
+
+The star has no button or menu item yet, so the only way to set one is from the keyboard. Turn on keyboard
+shortcuts, then press **s** on the message you have open or the row under the cursor. With the shortcuts on you can
+also select every starred message in the list at once by pressing **\*** and then **s**. See
+[Keyboard shortcuts in Mail](/support/mail/keyboard-shortcuts).
 
 ## Permanently delete from Trash
 

@@ -6,7 +6,7 @@ category: Troubleshooting
 tags: [mail, sending, attachments, errors, troubleshooting]
 related: [mail/compose-and-send, mail/attach-files]
 order: 200
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 When you click **Send** and the message doesn't go, Mail tells you why. Some checks happen before the message
@@ -41,6 +41,15 @@ example because the recipient's address doesn't exist or their mail system rejec
 Your message stays safe in **Drafts**. Open it from the **Drafts** folder in the sidebar, check the addresses for
 typos, and send again. If it keeps failing for everyone you write to, the problem is likely with mail delivery on
 the server rather than with your message, so contact whoever runs your Eigen server.
+
+## It reached some people but not others
+
+A message can reach some of its recipients and not others. When that happens it still counts as sent: it moves to
+**Sent** and leaves your **Drafts**. A message at the bottom of the window names the addresses that were turned
+down, such as **Delivery to alice@example.com failed**.
+
+Check those addresses for typos. Because the message has already left Drafts, open it in **Sent** and forward it
+to the people who missed it.
 
 ## An attachment is too large
 

@@ -5,7 +5,7 @@ type: how-to
 tags: [chat, messages, editing]
 related: [chat/get-started]
 order: 30
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 You can send a message in any chat room you have access to, and edit or delete your own messages afterwards.
@@ -25,7 +25,7 @@ URLs and email addresses you type are turned into links automatically.
 
 You can only edit messages you sent yourself.
 
-1. Hover over the message. A small action bar appears in the top-right corner of it.
+1. Hover over the message. A small action bar appears in the top-right corner of it. The bar needs a mouse, so you can also right-click the message, or press and hold it on a phone, to open a menu with the same actions: **Edit**, **Delete**, and **Save attachments** when the message has a file attached.
 2. Click the pencil icon (**Edit**).
 3. The message text becomes editable. Change the text as needed.
 4. Press **Enter** to save, or click **Save**. Press **Escape** or click **Cancel** to discard your changes.
@@ -38,7 +38,7 @@ You can also press the **up arrow** key in an empty message box to start editing
 
 You can only delete messages you sent yourself.
 
-1. Hover over the message. A small action bar appears in the top-right corner of it.
+1. Hover over the message. A small action bar appears in the top-right corner of it. You can also right-click the message, or press and hold it on a phone, and choose **Delete** from the menu.
 2. Click the bin icon (**Delete**).
 3. A confirmation dialog appears. Click **Delete** to confirm.
 

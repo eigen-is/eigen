@@ -24,7 +24,8 @@ The dialog shows the current selection in the **Cell range** field. You can type
 3. Tick **Allow multiple selection** if you want people to be able to pick more than one option from the list.
 4. Click **OK**.
 
-A cell with a dropdown shows a small arrow at its right edge. Click it to open the list of options.
+A cell with a dropdown shows a small arrow at its right edge. Click it to open the list of options, or select
+the cell and press **Alt+Down**.
 
 ## Add a checkbox
 

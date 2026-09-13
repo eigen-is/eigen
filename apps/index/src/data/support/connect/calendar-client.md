@@ -81,6 +81,9 @@ CalDAV gives access to the calendars you own. Calendars that other people have s
 calendars, do not appear in an external client. You can see those by opening [Calendar](/calendar) in the
 browser.
 
+You can create a new calendar from your client and it appears in Eigen straight away. Deleting a calendar has
+to be done in Eigen: a client that tries to delete a whole calendar is refused.
+
 <div class="eigen-callout">
 
 Events created in your calendar client appear in Eigen within a minute or two, and vice versa. Many clients

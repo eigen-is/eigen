@@ -26,7 +26,7 @@ When the palette opens, type into the **Search and jump anywhere…** box. Resul
 
 Start typing part of a file or folder name. Matches show up under a **Files** heading, each with the icon for its type.
 
-Press **Enter** on a file to open it. Documents, spreadsheets, and presentations open in their editor; other files, such as images and PDFs, open in a preview. Search looks at file and folder names, and at the text inside your documents, spreadsheets, presentations, drawings, boards, and chats.
+Press **Enter** on a file to open it. Documents, spreadsheets, and presentations open in their editor; other files, such as images and PDFs, open in a preview. Search looks at file and folder names, and at the text inside your documents, spreadsheets, presentations, drawings, boards, and chats. It covers your own files and the drives of every team you belong to, so you don't have to remember where something lives.
 
 ## Find an email
 
@@ -41,7 +41,7 @@ Messages in your Trash and Junk are left out of the results.
 
 ## Narrow to one kind of result
 
-If you only want one kind of result, you can limit the search. Press **Tab** to cycle through the groups: **Files**, then **Mail**, then **Actions**, then **Contacts**, then **Help**. The current group shows as a small label above the box. Press **Backspace** with the box empty to clear it and search everything again.
+If you only want one kind of result, you can limit the search. Press **Tab** to cycle through the groups: **Files**, then **Mail**, then **Actions**, then **Contacts**, then **Help**. With a document open, **In document** comes first. The current group shows as a small label above the box. Press **Backspace** with the box empty to clear it and search everything again.
 
 You can also type a prefix to jump straight to a group:
 
@@ -49,8 +49,14 @@ You can also type a prefix to jump straight to a group:
 - `mail:` for email.
 - `@` for contacts.
 - `>` for actions.
+- `?` for help articles.
+- `doc:` for the document you have open.
 
 So `mail: invoice` searches only your email, and `@alice` looks only for the contact Alice.
+
+**Help** searches this help center from wherever you are, so you don't have to leave the app to look something up. Matches appear under a **Help** heading and open the article.
+
+**In document** searches the document, spreadsheet, presentation, drawing, or board you have open. Matches in the text appear under **In Document** and matches in its comments under **In Comments**. Press **Enter** on one and the find bar opens with that match highlighted. Without a document open the palette tells you so.
 
 ## Jump to an app or run an action
 

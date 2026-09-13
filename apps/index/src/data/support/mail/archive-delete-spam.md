@@ -6,7 +6,7 @@ category: Basics
 tags: [mail, email, archive, delete, spam]
 related: [mail/move-email-between-folders, mail/work-with-several-emails, mail/get-started]
 order: 40
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 When you are done with a message, you can keep it out of the way without losing it, throw it away, or flag it as
@@ -65,6 +65,17 @@ Deleting from any other mailbox only moves the message to **Trash**, so you can 
 **Trash** removes it for good. There is no undo for that step.
 
 </div>
+
+## Undo, and where you land next
+
+Archiving a message, sending it to Trash, or reporting spam shows a short message at the bottom of the window with
+an **Undo** action next to it. Click **Undo** and the message goes back to the mailbox it came from. If you have
+keyboard shortcuts turned on, **z** undoes the last action as well. See
+[Keyboard shortcuts in Mail](/support/mail/keyboard-shortcuts).
+
+When you act on a message you have open, Mail takes you on to another one. You choose which: open
+[**Mail**](/space/email) in Space and set **After archiving, deleting, or reporting spam** to **Go to the mail
+below (older)** (the default), **Go to the mail above (newer)**, or **Go back to the list**.
 
 ## Act on several messages at once
 

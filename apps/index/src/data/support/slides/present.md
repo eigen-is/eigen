@@ -5,7 +5,7 @@ type: how-to
 tags: [slides, presentation, full-screen]
 related: [slides/get-started, slides/add-slides]
 order: 60
-updated: 2026-09-11
+updated: 2026-09-13
 ---
 
 You can present your slides straight from the Slides editor, in full screen, without any extra software.
@@ -35,3 +35,7 @@ A presentation clicker sends those same keys, so it works too. On a phone, tap t
 An **Exit present** button sits in the top-right corner. It appears when you enter and whenever you move the mouse, then fades away so it stays out of the slide. Click it to return to the editor.
 
 You can also press **Escape** at any time. And when you move past the last slide, the presentation ends on its own and the editor returns to normal.
+
+## On a phone
+
+On a phone a presentation is view-only, and the slide panel is not shown. Swipe left on the slide to move to the next one, and swipe right to go back.

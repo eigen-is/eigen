@@ -5,7 +5,7 @@ type: overview
 tags: [connect, imap, caldav, carddav, webdav, app-passwords, integrations]
 related: [connect/app-passwords, connect/mount-drive-on-your-computer, connect/contacts-client]
 order: 10
-updated: 2026-08-17
+updated: 2026-09-13
 ---
 
 Eigen works in the browser, but your Mail, Calendar, Contacts, and Drive are also available to any standard
@@ -55,3 +55,9 @@ All the server addresses, ports, and URLs you need are on the [**Integrations** 
 - **WebDAV (Drive sync)**: one URL per drive, for your personal drives and any team drives you belong to.
 
 The username field on that page is pre-filled with your email address so you can copy it in one click.
+
+Some clients can find the server without being told. Calendar and contacts apps that follow the standard
+discovery route reach your calendars and address book from `https://your-domain/.well-known/caldav` and
+`https://your-domain/.well-known/carddav`, and where the server's administrator has added the matching DNS
+records, a few clients find it from your email address alone. Support for this varies a lot from client to
+client, so the addresses on the Integrations page remain the reliable way in.

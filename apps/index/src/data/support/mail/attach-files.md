@@ -6,7 +6,7 @@ category: Writing
 tags: [mail, attachments, files, drive, compose]
 related: [drive/share-a-file]
 order: 100
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 You can send files with your email, either from your computer or straight from your Drive. This page shows how to add them, where they appear, and how to take one off again before you send.
@@ -23,6 +23,8 @@ The files appear as chips just above the message, where you write your text. You
 
 You can also drag files from your desktop and drop them anywhere on the message. A **Drop files to attach** overlay appears while you drag, and the files attach when you let go.
 
+Copying works too: copy a file or an image on your computer, then paste it into the message. It attaches the same way a dropped file does.
+
 ## Attach a file from Drive
 
 If the file is already in your Drive, you don't need to download it first.
@@ -31,7 +33,7 @@ If the file is already in your Drive, you don't need to download it first.
 2. In the **Attach file** dialog, browse to the file you want. Click it to select it, or hold Shift or Ctrl (Cmd on a Mac) to select several.
 3. Click **Select** to attach them. The button shows a count, such as **Select (2)**, when you pick more than one.
 
-Documents, spreadsheets, presentations, and folders attach as a link the other person can open, rather than as a copy of the file. Everything else, such as a PDF or an image, is attached as a copy.
+Documents, spreadsheets, and presentations attach as a link the other person can open, rather than as a copy of the file. Everything else, such as a PDF or an image, is attached as a copy. Folders can't be picked here: clicking one opens it so you can carry on browsing inside.
 
 <div class="eigen-callout">
 
@@ -43,7 +45,7 @@ A link to a Drive document only works for people who can already open it in Eige
 
 You can also go the other way and begin an email from the file itself.
 
-1. In Drive, right-click the file (or open its **⋮** menu) and open the **Share** submenu.
+1. In Drive, right-click the file or folder (or open its **⋮** menu) and open the **Share** submenu.
 2. Choose **Mail to…**.
 
 A new email opens with the file already attached, ready for you to add the recipients and your message.

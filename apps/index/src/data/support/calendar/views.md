@@ -5,7 +5,7 @@ type: how-to
 tags: [calendar, navigation, month, week]
 related: [calendar/get-started, calendar/create-event]
 order: 20
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 Calendar opens in month view by default. You can switch to week view for a closer look at a single week, and
@@ -35,6 +35,12 @@ Click **Today** in the toolbar to return to the current period. In month view th
 current month. In week view it brings you back to the current week.
 
 Today's date is always highlighted with a filled circle in both views, so you can spot it at a glance.
+
+The sidebar has **View Month** and **View Week** as well. Both switch to that view and jump to the current
+month or week, wherever in time you were looking.
+
+On a phone, **Today** and the view picker fold into the **⋮** button (**View options**) on the right of the
+toolbar.
 
 ## Create an event by clicking a day
 

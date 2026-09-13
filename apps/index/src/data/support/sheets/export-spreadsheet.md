@@ -38,6 +38,9 @@ When you download as **Microsoft Excel (.xlsx)**, the following are preserved:
 - Text alignment, text wrapping, and text rotation
 - The sheet tab names and their order
 - Hidden gridlines (if you hid them)
+- Conditional formatting rules, data validation rules, and hyperlinks
+- Frozen rows and columns, and the range a filter covers (the values ticked in each column's dropdown are
+  not carried over)
 
 ## What to use each format for
 

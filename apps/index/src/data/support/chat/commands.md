@@ -29,6 +29,7 @@ regular messages.
 | Command | What it does |
 |---|---|
 | `/inspect [email]` | Shows a contact card for that person, visible only to you. You can also use `/look` or `/finger`. |
+| `/whoami` | Shows your own contact card, visible only to you. |
 
 The card shows the person's name and, if they are in your Contacts, their company and phone number.
 

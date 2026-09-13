@@ -7,7 +7,7 @@ tags: [contacts, getting-started, people, address-book]
 related: [contacts/add-a-contact, contacts/edit-or-delete, contacts/search-contacts]
 crossSections: [getting-started]
 order: 10
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 Contacts is where you keep the people you work with. You can store names, email addresses, phone numbers, job titles, addresses, birthdays, and notes, and reach someone in Mail straight from their contact page. This page is a quick tour of what you can do.
@@ -19,6 +19,8 @@ Open [Contacts](/contacts) and you'll see **My Contacts** in the sidebar. Click 
 To search by name or email address, type in the search bar at the top of the list. The list updates as you type.
 
 To change how names are sorted, click the arrows icon next to the search bar and choose **First name** or **Last name**.
+
+One of the cards is you. Contacts keeps a card linked to your own Eigen account, which you can edit like any other contact but cannot delete.
 
 ## View a contact
 
@@ -35,3 +37,7 @@ See [Add a contact](/support/contacts/add-a-contact) for a step-by-step walkthro
 ## Teams
 
 If you belong to a team in Eigen, each team appears in the sidebar below **My Contacts**. Click a team name to see its members. You can view a team member's details the same way as a personal contact, but team members are managed by whoever administers the team, not through the Contacts form.
+
+## Use your contacts on a phone or in another app
+
+Your contacts can sync to Apple Contacts, an Android phone, or another address book app over CardDAV. See [Set up Eigen Contacts in a contacts app](/support/connect/contacts-client).

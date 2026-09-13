@@ -14,7 +14,7 @@ You need editor access to make changes. If you can only view the presentation, t
 
 ## Add a slide
 
-Click the **Add slide** button in the toolbar (the **+** icon). A blank white slide appears straight after the current slide and becomes the active slide.
+Click the **Add slide** button in the toolbar (the **+** icon). A blank white slide appears straight after the current slide and becomes the active slide. The toolbar menus have the same thing: **Insert → Slide**.
 
 ## Duplicate a slide
 

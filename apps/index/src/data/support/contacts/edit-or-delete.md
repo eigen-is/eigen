@@ -22,6 +22,10 @@ You can update any of a contact's details at any time, and delete contacts you n
 
 To cancel without saving, click **Cancel**.
 
+If someone else changes the same contact while you have it open, your save is refused. A message tells you the
+contact changed elsewhere and has been reloaded, and the form reopens with the newer version, so you can make
+your change again on top of theirs.
+
 ### Add or remove a photo
 
 In the edit form, click the camera button on the avatar to open a small menu. Choose **Upload from files** to pick an image from your computer. If the contact already has a photo, the menu also shows **Remove avatar**.

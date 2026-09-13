@@ -49,6 +49,9 @@ The import reads every worksheet in the workbook and preserves:
 - Text alignment (horizontal and vertical), text wrapping, and text rotation
 - The sheet tab names and their order
 - The gridlines setting (hidden or visible)
+- Conditional formatting rules, data validation rules, and hyperlinks
+- Frozen rows and columns, and the range a filter covers (the values ticked in each column's dropdown are
+  not carried over)
 
 Fonts from Excel are mapped to the four fonts Sheets supports. Common sans-serif fonts (such as Calibri,
 Arial, and Verdana) map to Inter; serif fonts (such as Times New Roman and Georgia) map to Source Serif 4;

@@ -21,6 +21,10 @@ You need write access to the board to add cards. If you can only view the board,
 5. Optionally, pick a colour from the **Color** row at the bottom of the dialog.
 6. Click **Add Sticky**. The card appears at the top of the column.
 
+You can also double-click an empty spot in a column to add a card there. The same **Add Sticky** dialog opens.
+
+To copy a card you already have, hold **Alt** (**Option** on a Mac) while you drag it, and let go where you want the copy. The original stays where it was. The copy takes the title, description, colour, and attachments with it, and starts its own comment thread.
+
 ## Edit a card
 
 1. Click the card to open it.

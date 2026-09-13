@@ -49,6 +49,15 @@ the file's owner.
 
 </div>
 
+## Remove something from Shared with me
+
+To take a file out of your list, right-click it and choose **Move to trash**. When the file was shared with you
+directly, this gives up your own access rather than trashing it. The file stays untouched in the owner's drive,
+and they can share it with you again later.
+
+A file you reached by opening a folder someone shared works differently. Trashing it there moves the owner's file
+to the Trash, the same as any other file you are allowed to change.
+
 ## Copy a link to a shared file
 
 Right-click the file and choose **Share → Copy link**. The link is copied to your clipboard. Anyone

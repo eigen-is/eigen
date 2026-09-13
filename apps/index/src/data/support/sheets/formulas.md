@@ -6,7 +6,7 @@ category: Formulas
 tags: [sheets, formulas, functions, autocomplete]
 related: [sheets/get-started, sheets/enter-and-edit-data]
 order: 40
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 Formulas let you calculate values from other cells. You type them directly in the grid or in the formula bar,
@@ -29,6 +29,9 @@ The formula bar and the cell always show the same content.
 While you are typing a formula, click any cell to insert its reference at the cursor position. Sheets
 highlights the referenced cells in colour so you can see what the formula covers. You can also click and
 drag to select a range.
+
+Put the cursor on a reference and press **F4** to cycle it through `A1`, `$A$1`, `A$1`, and `$A1`. A `$`
+locks that part of the reference, so it stays put when you copy the formula to another cell.
 
 ## Use the autocomplete
 

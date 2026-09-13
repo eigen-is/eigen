@@ -5,7 +5,7 @@ type: how-to
 tags: [contacts, photo, birthday, details, edit]
 related: [contacts/add-a-contact, contacts/edit-or-delete]
 order: 40
-updated: 2026-06-08
+updated: 2026-09-13
 ---
 
 Contacts can hold more than a name and email address. You can attach a photo, record where someone works,
@@ -74,3 +74,8 @@ contact detail view below the other information.
 
 Click **Save** at the bottom of the form when you are done. You are taken back to the contact detail view
 where the updated information is shown. To discard your changes, click **Cancel**.
+
+## Print a contact
+
+To print everything the detail view shows, open the contact, click the **⋮** button in the toolbar, and choose
+**Print**. The option is on the detail view only, not on the menu you get by right-clicking a row in the list.

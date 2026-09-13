@@ -22,6 +22,9 @@ A welcome card sits in the first column to show you how things work.
 Each card shows its title, a preview of its description, and a reply count if there are comments on it.
 To open a card and read its full content, click it.
 
+You can see who else is on the board. When someone has a card open or is dragging it, their name appears on
+that card and it gets an outline in their colour.
+
 ## Columns
 
 Columns run left to right across the board. Each one has a header with its title and two small buttons: a plus
