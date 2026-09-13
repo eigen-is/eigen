@@ -1059,4 +1059,8 @@ describe('GET /settings/users/usage', () => {
         expect(sized.drive.default.used).toBeGreaterThan(0);
         expect(sized.mailAndContacts.used).toBeGreaterThan(0);
     });
+
+    test('refuses a team owner id rather than sizing nothing', async () => {
+        await expect(pullHomeSize(teamOwnerId('team-1'))).rejects.toThrow('expects a user owner id');
+    });
 });

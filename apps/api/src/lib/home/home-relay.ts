@@ -159,6 +159,10 @@ export async function pullDrivePath(ownerUserId: string, mountId: string, pathId
 // instead of booting the Home: the admin Users page sizes every user at once, and a boot apiece is
 // seconds each.
 export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeResponse> {
+    // Sizing reads a user home's folder layout and quotas; a team or org home has neither.
+    if (ownerUserId.startsWith('team_') || ownerUserId.startsWith('org_')) {
+        throw new Error(`pullHomeSize expects a user owner id, got ${ownerUserId}`);
+    }
     const homeDir = getUserHomePath(ownerUserId);
     // A user who has never signed in has no home folder yet, and sizing must not create one.
     const homeFs = fs.existsSync(homeDir) ? new LocalFilesystem(homeDir) : null;

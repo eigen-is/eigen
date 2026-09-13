@@ -124,6 +124,7 @@ export function readMountTotalSize(metadataPath: string): number {
     if (!fs.existsSync(metadataPath)) return 0;
     const db = new Database(metadataPath, { readwrite: true, create: false });
     try {
+        db.run('PRAGMA busy_timeout = 5000;');
         const row = db
             .query<{ total: number }, []>("SELECT COALESCE(SUM(size), 0) AS total FROM paths WHERE type = 'file'")
             .get();

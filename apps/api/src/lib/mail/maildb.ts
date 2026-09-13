@@ -19,6 +19,7 @@ export function readMailTotalSize(dbPath: string): number {
     if (!fs.existsSync(dbPath)) return 0;
     const db = new Database(dbPath, { readwrite: true, create: false });
     try {
+        db.run('PRAGMA busy_timeout = 5000;');
         const row = db.query<{ total: number }, []>('SELECT COALESCE(SUM(size), 0) AS total FROM emails').get();
         return row?.total ?? 0;
     } finally {
