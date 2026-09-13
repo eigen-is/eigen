@@ -58,7 +58,7 @@ export const searchRouter = new Elysia({ name: 'search' })
         {
             auth: true,
             query: t.Object({
-                q: t.String({ minLength: 1, maxLength: 256 }),
+                q: t.String({ maxLength: 256 }),
                 sources: t.Optional(t.String()),
                 mailbox: t.Optional(t.String()),
                 from: t.Optional(t.String({ maxLength: 256 })),

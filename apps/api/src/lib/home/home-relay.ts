@@ -9,6 +9,7 @@
 // deployment, only this file changes: sendToHome() routes to the correct
 // server (or enqueues a message), and pull functions become remote API calls.
 
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type {
     Attendee,
@@ -20,7 +21,7 @@ import type {
 import type { DriveACL, DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
 import { teamOwnerId } from '@workspace/lib/types/owner';
-import type { HomeSizeResponse, TeamSettings } from '@workspace/lib/types/settings';
+import type { HomeSizeResponse, TeamSettings, UserSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import type {
     CreateEventArgs,
@@ -28,7 +29,12 @@ import type {
     ReceiveInvitationPayload,
     UpdateEventArgs,
 } from '../calendar/types';
-import { getAvatarsDir } from '../config/paths';
+import { getAvatarsDir, getUserHomePath } from '../config/paths';
+import { resolveUserQuotas } from '../config/quota';
+import { CARDS_DIR } from '../contacts/card-store';
+import { LocalFilesystem, PATHS } from '../core';
+import { readMailTotalSize } from '../mail/maildb';
+import { createDefaultMountConfig, createMountConfig, readMountTotalSize } from '../mount/helpers';
 import type { User } from '../user';
 import { getMemberships, getUserByEmail, updateUser } from '../user';
 import { atHome, getHome, getTeamHome } from './get-home';
@@ -149,11 +155,41 @@ export async function pullDrivePath(ownerUserId: string, mountId: string, pathId
     return home.drive.getPath(mountId, pathId);
 }
 
-// Sizing a foreign user's Home (admin usage view). Mirrors the self-scoped /home/:ownerId/size route.
+// Sizing a foreign user's Home (admin usage view). Answers Home.size() from the home's own files
+// instead of booting the Home: the admin Users page sizes every user at once, and a boot apiece is
+// seconds each.
 export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeResponse> {
-    const home = await getHome(ownerUserId);
+    // Sizing reads a user home's folder layout and quotas; a team or org home has neither.
+    if (ownerUserId.startsWith('team_') || ownerUserId.startsWith('org_')) {
+        throw new Error(`pullHomeSize expects a user owner id, got ${ownerUserId}`);
+    }
+    const homeDir = getUserHomePath(ownerUserId);
+    // A user who has never signed in has no home folder yet, and sizing must not create one.
+    const homeFs = fs.existsSync(homeDir) ? new LocalFilesystem(homeDir) : null;
+    const [cards, avatars] = await Promise.all([
+        homeFs?.dirSize(`${PATHS.CONTACTS.ROOT}/${CARDS_DIR}`) ?? 0,
+        homeFs?.dirSize(`${PATHS.CONTACTS.ROOT}/${PATHS.CONTACTS.AVATARS}`) ?? 0,
+    ]);
+    const mail = readMailTotalSize(path.join(homeDir, PATHS.MAIL.DB));
+    const driveUsed = readMountTotalSize(
+        path.join(homeDir, PATHS.DRIVE.ROOT, PATHS.DRIVE.DEFAULT_MOUNT, PATHS.DRIVE.METADATA_DB),
+    );
+
+    const settingsFile = Bun.file(path.join(homeDir, PATHS.SETTINGS));
+    const settings: UserSettings = (await settingsFile.exists()) ? await settingsFile.json() : {};
+    const mountSettings = settings.mounts?.[PATHS.DRIVE.DEFAULT_MOUNT];
     const { teamIds } = await getMemberships(ownerUserId);
-    return home.size(teamIds);
+    const quotas = await resolveUserQuotas(
+        mountSettings ? createMountConfig(PATHS.DRIVE.DEFAULT_MOUNT, mountSettings) : createDefaultMountConfig(),
+        teamIds,
+    );
+
+    const mailAndContactsUsed = mail + cards + avatars;
+    return {
+        mailAndContacts: { used: mailAndContactsUsed, max: quotas.mailAndContactsMax },
+        drive: { default: { used: driveUsed, max: quotas.mountMax } },
+        total: { used: mailAndContactsUsed + driveUsed, max: quotas.mailAndContactsMax + quotas.mountMax },
+    };
 }
 
 export async function pullCalendarShares(

@@ -54,9 +54,9 @@ export async function getUploadMaxSize(ownerId: string, userId: string, mountId:
 
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 
-// The mail half of the shared quota is an O(N) recursive maildir walk (MaildirStore.size → dirSize). A CardDAV
-// device sync meters every card it PUTs, so uncached that is one walk per card. Memoize the mail size per user
-// for a short window: a sync burst does at most one walk. 15s comfortably covers an initial-sync burst (cards
+// The mail half of the shared quota is a SUM over the message index (MaildirStore.size → MailDB.size). A CardDAV
+// device sync meters every card it PUTs, so uncached that is one query per card. Memoize the mail size per user
+// for a short window: a sync burst does at most one read. 15s comfortably covers an initial-sync burst (cards
 // arrive milliseconds apart) while keeping the staleness bound negligible for a soft quota — and the contacts
 // half stays live (Contacts.size answers from in-memory byte counters), so contact growth is always exact.
 // Only mail delivered inside the window can read stale, which the per-upload and whole-card ceilings still
@@ -75,7 +75,7 @@ async function cachedMailSize(userId: string, home: Home): Promise<number> {
     const now = Date.now();
     const cached = mailSizeCache.get(userId);
     if (cached && cached.expiresAt > now) return cached.value;
-    // A miss already pays a maildir walk, so sweep every closed window here too — otherwise the map keeps one
+    // A miss already pays an index query, so sweep every closed window here too — otherwise the map keeps one
     // entry per user who ever synced, forever. This bounds it to users active within the last TTL.
     for (const [key, entry] of mailSizeCache) {
         if (entry.expiresAt <= now) mailSizeCache.delete(key);

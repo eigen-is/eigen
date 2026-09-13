@@ -32,7 +32,7 @@ export function useMailSearchResults(
         from: parsed.from,
         to: parsed.to,
         limit: 6,
-        enabled: !scopeBlocks && parsed.q.length > 0,
+        enabled: !scopeBlocks && (parsed.q.length > 0 || !!parsed.from || !!parsed.to),
     });
 
     const results = useMemo<PaletteResult[]>(() => {
@@ -60,10 +60,9 @@ export function useMailSearchResults(
         });
     }, [data, parsed.q]);
 
-    // `willSearch` matches the `enabled` predicate above — same shape both ways so
-    // typing only an operator (`from:alice@x` with no q) doesn't stick `isPending`
-    // permanently true while the underlying query is disabled.
-    const willSearch = !scopeBlocks && parsed.q.length > 0;
+    // `willSearch` mirrors the `enabled` predicate above so `isPending` tracks the
+    // query's real state — a lone operator (`from:alice@x` with no q) searches too.
+    const willSearch = !scopeBlocks && (parsed.q.length > 0 || !!parsed.from || !!parsed.to);
     const isDebouncing = !scopeBlocks && input.trim().length > 0 && input !== debouncedInput;
     return { results, isPending: (willSearch && isFetching) || isDebouncing };
 }

@@ -161,6 +161,8 @@ function MailRoute() {
     const autoAdvance = spaceSettings?.email?.autoAdvance ?? 'older';
     const isComposing = mode === 'compose' || !!selectedEmail?.isDraft;
     const searchInputRef = useRef<HTMLInputElement>(null);
+    // Scope for the Delete/Backspace bindings; see useMailShortcuts.
+    const mailSurfaceRef = useRef<HTMLDivElement>(null);
     const [helpOpen, setHelpOpen] = useState(false);
 
     const handleDeleteEmail = async (mail: Email) => {
@@ -241,6 +243,7 @@ function MailRoute() {
         setCursorIndex,
         setCursorById,
         selection,
+        surfaceRef: mailSurfaceRef,
         isComposing,
         helpOpen,
         shortcutsEnabled,
@@ -327,86 +330,89 @@ function MailRoute() {
                 itemName={pendingDeleteEmails.length === 1 ? pendingDeleteEmails[0]?.subject || undefined : undefined}
                 onDelete={confirmDeleteEmails}
             />
-            <ColumnLayout mobileColumn={showDetail ? 'detail' : 'list'}>
-                <Column id="list" width={listWidth} onBack="sidebar" toolbar={listToolbar}>
-                    <div className="flex flex-col border-r h-full overflow-hidden">
-                        <EmailList
-                            // View identity: on a mailbox switch OR any change to the search text,
-                            // EmailList resets the virtualizer to the top. Folding the query in (not just
-                            // isSearching) matters because refining one search into another keeps the same
-                            // mailbox and stays "searching" — a drastic result-set size change under a
-                            // scrolled position otherwise leaves the virtual window desynced from the scroll
-                            // offset (blank list until you nudge the scroll).
-                            resetKey={`${filterId}:${searchQuery.trim()}`}
-                            orderedEmails={orderedEmails}
-                            selection={selection}
-                            cursorIndex={cursorIndex}
-                            setCursorIndex={setCursorIndex}
-                            isLoading={isListLoading}
-                            error={emailsError}
-                            // Paging only applies to the live mailbox; search returns a single capped set.
-                            hasMore={!isSearching && !!hasNextPage}
-                            isFetchingMore={isFetchingNextPage}
-                            onLoadMore={fetchNextPage}
-                            onRowClick={actions.handleRowClick}
-                            activeRowId={mailId}
-                            // The same gate the shortcuts layer uses: while the inline composer owns
-                            // typing, the list must not grab or reclaim focus.
-                            isComposing={isComposing}
-                            mailboxes={mailboxes}
-                            currentFolderId={currentFolderId}
-                            onDelete={handleDeleteEmailsByIds}
-                            onArchive={actions.handleArchiveEmailsByIds}
-                            onReportSpam={actions.handleReportSpamByIds}
-                            onMoveToFolder={actions.handleMoveEmailsToFolderByIds}
-                            onReply={actions.handleReplyEmail}
-                            onReplyAll={actions.handleReplyAllEmail}
-                            onForward={actions.handleForwardEmail}
-                        />
-                    </div>
-                </Column>
-                {/* Leaving compose is safe: EmailDraft saves the draft on unmount. */}
-                <Column id="detail" width="flex" onBack={actions.navigateToList} toolbar={detailToolbar}>
-                    {showDetail ? (
-                        isDraft ? (
-                            <EmailDraft
-                                // Identity key: within one compose session (mode='compose' +
-                                // same composeSessionKey), the composer stays mounted across
-                                // the auto-save URL update. A new Reply/Forward/Compose click
-                                // bumps composeSessionKey, forcing a remount. For draft
-                                // detail (mode absent), keying on mailId lets LightEditor pick
-                                // up fresh initial content — Tiptap's useEditor reads
-                                // `content` on mount only.
-                                key={
-                                    mode === 'compose'
-                                        ? `compose-${composeSessionKey ?? 'fresh'}`
-                                        : (selectedEmail?.id ?? 'empty')
-                                }
-                                email={isEmailDraft(selectedEmail) ? selectedEmail : null}
-                                prefillDraft={prefillDraft}
-                                to={to}
-                                initialDriveAttachments={initialDriveAttachments}
-                                signatureHtml={signatureHtml}
-                                sendDraft={actions.handleSendEmail}
-                                onAutoSave={actions.saveDraft}
-                                onDraftIdAssigned={actions.handleDraftIdAssigned}
-                                isSending={isSending}
-                                onPreparingSendChange={setPreparingSend}
-                                filePickerOpen={filePickerOpen}
-                                onFilePickerOpenChange={setFilePickerOpen}
+            {/* display:contents, so the ref hangs on a real node without changing the layout. */}
+            <div ref={mailSurfaceRef} className="contents">
+                <ColumnLayout mobileColumn={showDetail ? 'detail' : 'list'}>
+                    <Column id="list" width={listWidth} onBack="sidebar" toolbar={listToolbar}>
+                        <div className="flex flex-col border-r h-full overflow-hidden">
+                            <EmailList
+                                // View identity: on a mailbox switch OR any change to the search text,
+                                // EmailList resets the virtualizer to the top. Folding the query in (not just
+                                // isSearching) matters because refining one search into another keeps the same
+                                // mailbox and stays "searching" — a drastic result-set size change under a
+                                // scrolled position otherwise leaves the virtual window desynced from the scroll
+                                // offset (blank list until you nudge the scroll).
+                                resetKey={`${filterId}:${searchQuery.trim()}`}
+                                orderedEmails={orderedEmails}
+                                selection={selection}
+                                cursorIndex={cursorIndex}
+                                setCursorIndex={setCursorIndex}
+                                isLoading={isListLoading}
+                                error={emailsError}
+                                // Paging only applies to the live mailbox; search returns a single capped set.
+                                hasMore={!isSearching && !!hasNextPage}
+                                isFetchingMore={isFetchingNextPage}
+                                onLoadMore={fetchNextPage}
+                                onRowClick={actions.handleRowClick}
+                                activeRowId={mailId}
+                                // The same gate the shortcuts layer uses: while the inline composer owns
+                                // typing, the list must not grab or reclaim focus.
+                                isComposing={isComposing}
+                                mailboxes={mailboxes}
+                                currentFolderId={currentFolderId}
+                                onDelete={handleDeleteEmailsByIds}
+                                onArchive={actions.handleArchiveEmailsByIds}
+                                onReportSpam={actions.handleReportSpamByIds}
+                                onMoveToFolder={actions.handleMoveEmailsToFolderByIds}
+                                onReply={actions.handleReplyEmail}
+                                onReplyAll={actions.handleReplyAllEmail}
+                                onForward={actions.handleForwardEmail}
                             />
+                        </div>
+                    </Column>
+                    {/* Leaving compose is safe: EmailDraft saves the draft on unmount. */}
+                    <Column id="detail" width="flex" onBack={actions.navigateToList} toolbar={detailToolbar}>
+                        {showDetail ? (
+                            isDraft ? (
+                                <EmailDraft
+                                    // Identity key: within one compose session (mode='compose' +
+                                    // same composeSessionKey), the composer stays mounted across
+                                    // the auto-save URL update. A new Reply/Forward/Compose click
+                                    // bumps composeSessionKey, forcing a remount. For draft
+                                    // detail (mode absent), keying on mailId lets LightEditor pick
+                                    // up fresh initial content — Tiptap's useEditor reads
+                                    // `content` on mount only.
+                                    key={
+                                        mode === 'compose'
+                                            ? `compose-${composeSessionKey ?? 'fresh'}`
+                                            : (selectedEmail?.id ?? 'empty')
+                                    }
+                                    email={isEmailDraft(selectedEmail) ? selectedEmail : null}
+                                    prefillDraft={prefillDraft}
+                                    to={to}
+                                    initialDriveAttachments={initialDriveAttachments}
+                                    signatureHtml={signatureHtml}
+                                    sendDraft={actions.handleSendEmail}
+                                    onAutoSave={actions.saveDraft}
+                                    onDraftIdAssigned={actions.handleDraftIdAssigned}
+                                    isSending={isSending}
+                                    onPreparingSendChange={setPreparingSend}
+                                    filePickerOpen={filePickerOpen}
+                                    onFilePickerOpenChange={setFilePickerOpen}
+                                />
+                            ) : (
+                                <EmailDetail
+                                    email={selectedEmail}
+                                    toggleMailRead={actions.handleToggleMailRead}
+                                    highlightTerm={q}
+                                />
+                            )
                         ) : (
-                            <EmailDetail
-                                email={selectedEmail}
-                                toggleMailRead={actions.handleToggleMailRead}
-                                highlightTerm={q}
-                            />
-                        )
-                    ) : (
-                        <EmptyState message="Select an email to view details" />
-                    )}
-                </Column>
-            </ColumnLayout>
+                            <EmptyState message="Select an email to view details" />
+                        )}
+                    </Column>
+                </ColumnLayout>
+            </div>
         </>
     );
 }

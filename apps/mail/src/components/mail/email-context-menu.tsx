@@ -10,6 +10,7 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { ucfirst } from '@workspace/ui/lib/utils';
 import { AlertTriangle, Archive, Download, Forward, Printer, Reply, ReplyAll, Trash2 } from 'lucide-react';
+import { getStandardMailboxFlag, standardMailboxes } from './email-sidebar';
 
 type EmailContextMenuProps = {
     messageIds: string[];
@@ -151,17 +152,20 @@ export function EmailContextMenu({
                 <DropdownMenuSubContent className="w-48">
                     {mailboxes
                         .filter((mailbox) => mailbox.path !== currentMailboxId)
-                        .map((mailbox) => (
-                            <DropdownMenuItem
-                                key={mailbox.path}
-                                onClick={() => {
-                                    onMoveToFolder?.(messageIds, mailbox.path);
-                                    onClose();
-                                }}
-                            >
-                                {ucfirst(mailbox.name)}
-                            </DropdownMenuItem>
-                        ))}
+                        .map((mailbox) => {
+                            const flag = getStandardMailboxFlag(mailbox.flags);
+                            return (
+                                <DropdownMenuItem
+                                    key={mailbox.path}
+                                    onClick={() => {
+                                        onMoveToFolder?.(messageIds, mailbox.path);
+                                        onClose();
+                                    }}
+                                >
+                                    {flag ? standardMailboxes[flag].name : ucfirst(mailbox.name)}
+                                </DropdownMenuItem>
+                            );
+                        })}
                 </DropdownMenuSubContent>
             </DropdownMenuSub>
         </>

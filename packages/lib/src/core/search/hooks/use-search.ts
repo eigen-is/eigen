@@ -18,6 +18,11 @@ export type UseSearchQueryOptions = {
     enabled?: boolean;
 };
 
+// A lone `from:`/`to:` filter is a query on its own — the palette's mail search runs with an empty q.
+export function isSearchQueryEnabled(opts: UseSearchQueryOptions): boolean {
+    return opts.enabled !== false && !!opts.ownerId && (opts.q.length > 0 || !!opts.from || !!opts.to);
+}
+
 export function useSearchQuery(opts: UseSearchQueryOptions) {
     return useQuery({
         queryKey: searchKeys.query(opts),
@@ -37,7 +42,7 @@ export function useSearchQuery(opts: UseSearchQueryOptions) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        enabled: opts.enabled !== false && opts.q.length > 0 && !!opts.ownerId,
+        enabled: isSearchQueryEnabled(opts),
         staleTime: STALE_TIME.THIRTY_SECONDS,
     });
 }

@@ -17,6 +17,8 @@ mistake.
 1. Find the file or folder in Drive.
 2. Right-click it (or open the **⋮** menu) and choose **Move to trash**.
 
+You can also select the item in the list and press **Delete** or **Backspace**.
+
 The item disappears from your files and moves to the Trash. If you delete a folder, everything inside it moves
 to the Trash as well.
 
