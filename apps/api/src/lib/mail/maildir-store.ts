@@ -1,4 +1,11 @@
 import type { FSWatcher } from 'node:fs';
+import {
+    MAILBOX_DRAFTS,
+    MAILBOX_INBOX,
+    MAILBOX_INBOX_IMAP,
+    mailboxListFlags,
+    STANDARD_MAILBOXES,
+} from '@workspace/lib/constants/mailboxes';
 import type {
     Attachment,
     DraftAttachmentUpload,
@@ -10,7 +17,7 @@ import type {
 import type { BunFile, FileSink } from 'bun';
 import { Semaphore } from '../../utils/semaphore';
 import { invalidateMailSize } from '../config/enforcement';
-import { ApiError, LocalFilesystem, PATHS, STANDARD_MAILBOXES } from '../core';
+import { ApiError, LocalFilesystem, PATHS } from '../core';
 import type { Home } from '../home';
 import { parseEml, parseEmlBytes } from './mail-parse';
 import type { DraftMeta, MailFlag, MailSearchOptions, MailStore, MailStoreEvents } from './mail-store';
@@ -20,7 +27,6 @@ import {
     buildMaildirFilename,
     createUniqueMessageId,
     getMailIDfromFileName,
-    getStandardMailboxFlags,
     parseFlagsFromFilename,
     rebuildFlagsSuffix,
 } from './mailutils';
@@ -177,16 +183,16 @@ export class MaildirStore implements MailStore {
         // the bytes we write are exactly what parseEml would read back from the delivered file.
         const messageId = existingId ?? createUniqueMessageId();
         const bytes = Buffer.from(raw, 'utf-8');
-        const parsed = await parseEmlBytes(messageId, 'Drafts', bytes, bytes.length);
+        const parsed = await parseEmlBytes(messageId, MAILBOX_DRAFTS, bytes, bytes.length);
 
         // Hold the lock across the fs write + db.addEmail pair so a concurrent watcher sync can't
         // ingest the draft file first and fire a spurious received(isNew) event.
         return this.storeLock.run(async () => {
-            const { filename } = await this.deliverToCur('Drafts', raw, { draft: true, seen: true }, messageId);
+            const { filename } = await this.deliverToCur(MAILBOX_DRAFTS, raw, { draft: true, seen: true }, messageId);
 
             applyFlagsFromFilename(parsed, filename);
             parsed.filename = filename;
-            parsed.mailbox = 'Drafts';
+            parsed.mailbox = MAILBOX_DRAFTS;
             this.db.addEmail(parsed);
             return parsed;
         });
@@ -500,7 +506,7 @@ export class MaildirStore implements MailStore {
             }
         }
 
-        const subscriptions = `${STANDARD_MAILBOXES.filter((m) => m !== '').join('\n')}\n`;
+        const subscriptions = `${STANDARD_MAILBOXES.filter((m) => m !== MAILBOX_INBOX).join('\n')}\n`;
         await this.storage.write(this.storage.pathJoin(this.basePath, 'subscriptions'), subscriptions);
     }
 
@@ -514,7 +520,7 @@ export class MaildirStore implements MailStore {
         await this.storage.mkdir(this.storage.pathJoin(mailboxPath, PATHS.MAIL.CUR));
         await this.storage.mkdir(this.storage.pathJoin(mailboxPath, PATHS.MAIL.NEW));
         await this.storage.mkdir(this.storage.pathJoin(mailboxPath, PATHS.MAIL.TMP));
-        if (mailbox !== '') {
+        if (mailbox !== MAILBOX_INBOX) {
             await this.storage.write(this.storage.pathJoin(mailboxPath, 'maildirfolder'), '');
         }
     }
@@ -612,7 +618,7 @@ export class MaildirStore implements MailStore {
     }
 
     private mailboxDir(mailbox: string): string {
-        if (mailbox === '' || mailbox === 'INBOX') return this.basePath;
+        if (mailbox === MAILBOX_INBOX || mailbox === MAILBOX_INBOX_IMAP) return this.basePath;
         if (/[^a-zA-Z0-9._\- /]/.test(mailbox) || mailbox.includes('..')) {
             throw new ApiError(400, `Invalid mailbox name: ${mailbox}`);
         }
@@ -629,9 +635,9 @@ export class MaildirStore implements MailStore {
     private getMailboxInfo(mailboxName: string): MaildirMailbox {
         return {
             path: mailboxName,
-            name: mailboxName ? mailboxName.split('.').pop() || mailboxName : 'INBOX',
+            name: mailboxName ? mailboxName.split('.').pop() || mailboxName : MAILBOX_INBOX_IMAP,
             delimiter: '.',
-            flags: getStandardMailboxFlags(mailboxName),
+            flags: mailboxListFlags(mailboxName),
             total: this.db.getEmailsCount(mailboxName),
             unread: this.db.getEmailsCountUnread(mailboxName),
         };

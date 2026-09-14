@@ -8,6 +8,7 @@ import {
 } from '@tanstack/react-query';
 import { getMailComposeUrl, mailApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
+import { MAILBOX_TRASH } from '@workspace/lib/constants/mailboxes';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { Email, EmailSummary } from '@workspace/lib/types/mail';
 import type { SSEventMail } from '@workspace/lib/types/sse';
@@ -107,7 +108,7 @@ export function useDeleteEmail() {
 
     return useMutation({
         mutationFn: async (email: Email) => {
-            if (email.mailbox === 'Trash') {
+            if (email.mailbox === MAILBOX_TRASH) {
                 const response = await mailApi({ ownerId }).message({ id: email.id }).delete();
                 if (response.error) throw new AppError(response);
             } else {
@@ -122,15 +123,15 @@ export function useDeleteEmail() {
                 ownerId,
                 email.id,
                 'remove',
-                email.mailbox === 'Trash' ? SSEventType.MAIL_DELETED : SSEventType.MAIL_MOVED,
+                email.mailbox === MAILBOX_TRASH ? SSEventType.MAIL_DELETED : SSEventType.MAIL_MOVED,
             ),
         onSuccess: (email) => {
-            if (email.mailbox === 'Trash') {
+            if (email.mailbox === MAILBOX_TRASH) {
                 queryClient.removeQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
             } else {
                 queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
                 // Moved to Trash — the Trash list wasn't optimistically patched, so refresh it.
-                queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, 'Trash') });
+                queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, MAILBOX_TRASH) });
             }
             invalidateMailboxes(queryClient, ownerId);
         },

@@ -5,6 +5,7 @@ export * from './comment-indicator';
 export * from './contact';
 export * from './fonts';
 export * from './mail';
+export * from './mailboxes';
 export * from './mime';
 export * from './mount';
 export * from './preview';

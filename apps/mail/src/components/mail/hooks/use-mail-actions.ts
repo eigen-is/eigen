@@ -1,5 +1,6 @@
 import { useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
+import { MAILBOX_ARCHIVE, MAILBOX_JUNK, MAILBOX_TRASH } from '@workspace/lib/constants/mailboxes';
 import { formatFullDateTime } from '@workspace/lib/date';
 import { escapeHtml } from '@workspace/lib/html';
 import {
@@ -160,7 +161,7 @@ export function useMailActions() {
     };
 
     const handleDeleteEmail = async (mail: Email) => {
-        if (mail.mailbox === 'Trash') {
+        if (mail.mailbox === MAILBOX_TRASH) {
             return { needsConfirmation: true as const, emails: [mail] };
         }
         await deleteMail.mutateAsync(mail);
@@ -184,8 +185,8 @@ export function useMailActions() {
     // full count nor offer to undo items that never moved; none-succeeded → no toast, no undo, no nav.
     const handleDeleteEmailsByIds = async (emailIds: string[]) => {
         const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
-        const trashEmails = emails.filter((e) => e.mailbox === 'Trash');
-        const nonTrashEmails = emails.filter((e) => e.mailbox !== 'Trash');
+        const trashEmails = emails.filter((e) => e.mailbox === MAILBOX_TRASH);
+        const nonTrashEmails = emails.filter((e) => e.mailbox !== MAILBOX_TRASH);
 
         let moved: Email[] = [];
         if (nonTrashEmails.length > 0) {
@@ -195,7 +196,7 @@ export function useMailActions() {
                 const action: Undoable = {
                     kind: 'move',
                     items: moved.map((e) => ({ emailId: e.id, from: e.mailbox })),
-                    to: 'Trash',
+                    to: MAILBOX_TRASH,
                 };
                 lastAction.current = action;
                 undoToast(`${moved.length} moved to Trash`, action);
@@ -226,14 +227,14 @@ export function useMailActions() {
     const handleArchiveEmailsByIds = async (emailIds: string[]) => {
         const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
         const results = await Promise.allSettled(
-            emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox: 'Archive' })),
+            emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox: MAILBOX_ARCHIVE })),
         );
         const moved = emails.filter((_, i) => results[i].status === 'fulfilled');
         if (moved.length > 0) {
             const action: Undoable = {
                 kind: 'move',
                 items: moved.map((e) => ({ emailId: e.id, from: e.mailbox })),
-                to: 'Archive',
+                to: MAILBOX_ARCHIVE,
             };
             lastAction.current = action;
             undoToast(`${moved.length} archived`, action);
@@ -244,14 +245,14 @@ export function useMailActions() {
     const handleReportSpamByIds = async (emailIds: string[]) => {
         const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
         const results = await Promise.allSettled(
-            emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox: 'Junk' })),
+            emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox: MAILBOX_JUNK })),
         );
         const moved = emails.filter((_, i) => results[i].status === 'fulfilled');
         if (moved.length > 0) {
             const action: Undoable = {
                 kind: 'move',
                 items: moved.map((e) => ({ emailId: e.id, from: e.mailbox })),
-                to: 'Junk',
+                to: MAILBOX_JUNK,
             };
             lastAction.current = action;
             undoToast(`${moved.length} reported as spam`, action);
@@ -269,16 +270,16 @@ export function useMailActions() {
         moveMail.mutate({ email, mailbox });
         const action: Undoable = { kind: 'move', items: [{ emailId, from: email.mailbox }], to: mailbox };
         lastAction.current = action;
-        if (mailbox === 'Archive') undoToast('Archived', action);
-        else if (mailbox === 'Junk') undoToast('Reported as spam', action);
+        if (mailbox === MAILBOX_ARCHIVE) undoToast('Archived', action);
+        else if (mailbox === MAILBOX_JUNK) undoToast('Reported as spam', action);
     };
 
     const deleteEmailByIdOnly = async (emailId: string) => {
         const email = await getEmailById(emailId);
         if (!email) return { needsConfirmation: false as const };
-        if (email.mailbox === 'Trash') return { needsConfirmation: true as const, emails: [email] };
+        if (email.mailbox === MAILBOX_TRASH) return { needsConfirmation: true as const, emails: [email] };
         deleteMail.mutate(email);
-        const action: Undoable = { kind: 'move', items: [{ emailId, from: email.mailbox }], to: 'Trash' };
+        const action: Undoable = { kind: 'move', items: [{ emailId, from: email.mailbox }], to: MAILBOX_TRASH };
         lastAction.current = action;
         undoToast('Moved to Trash', action);
         return { needsConfirmation: false as const };

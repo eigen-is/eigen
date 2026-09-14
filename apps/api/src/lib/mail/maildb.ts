@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import { MAIL_PREVIEW_CHARS } from '@workspace/lib/constants/mail';
+import { MAILBOX_JUNK, MAILBOX_TRASH } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary, RecipientSummary } from '@workspace/lib/types/mail';
 import { and, count, desc, eq, inArray, lt, notInArray, or, type SQL, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
@@ -28,7 +29,7 @@ export function readMailTotalSize(dbPath: string): number {
 }
 
 // Mailboxes excluded from default mail search — users can still search them explicitly.
-const SEARCH_EXCLUDED_MAILBOXES = ['Trash', 'Junk'];
+const SEARCH_EXCLUDED_MAILBOXES = [MAILBOX_TRASH, MAILBOX_JUNK];
 
 export default class MailDB {
     private home: Home;

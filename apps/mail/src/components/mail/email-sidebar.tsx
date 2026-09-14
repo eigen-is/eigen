@@ -1,85 +1,42 @@
+import {
+    MAILBOX_INBOX,
+    MAILBOX_INBOX_KEY,
+    mailboxRouteSegment,
+    SIDEBAR_MAILBOXES,
+    specialMailboxFromFlags,
+} from '@workspace/lib/constants/mailboxes';
+import { CUSTOM_MAILBOX_ICON, MAILBOX_ICONS } from '@workspace/lib/mailbox-icons';
 import type { MaildirMailbox } from '@workspace/lib/types/mail';
 import { SidebarBody, SidebarItem, SidebarSection } from '@workspace/ui';
 import { StorageUsage } from '@workspace/ui/components/home';
 import { DroppableSidebarItem } from '@workspace/ui/components/layout/sidebar/droppable-sidebar-item';
-import { AlertOctagon, AlertTriangle, Archive, File, Inbox, Send, Trash2 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type React from 'react';
 import { useMemo } from 'react';
 import { EmailComposeButton } from './email-compose-button';
 
-// Map of special mailbox flags to their icons and display names
-export const standardMailboxes: Record<string, { icon: React.ComponentType<{ className?: string }>; name: string }> = {
-    '\\Inbox': { icon: Inbox, name: 'Inbox' },
-    '\\Drafts': { icon: File, name: 'Drafts' },
-    '\\Sent': { icon: Send, name: 'Sent' },
-    '\\Junk': { icon: AlertOctagon, name: 'Spam' },
-    '\\Trash': { icon: Trash2, name: 'Trash' },
-    '\\Archive': { icon: Archive, name: 'Archive' },
+type SidebarMailbox = {
+    path: string;
+    name: string;
+    icon: React.ReactNode;
+    href: string;
+    unread: number;
+    isStandard: boolean;
 };
 
-// Default mailboxes to display if API call fails
-const defaultMailboxes = [
-    {
-        path: 'INBOX',
-        name: 'Inbox',
-        icon: <Inbox className="h-4 w-4" />,
-        href: '/box/inbox',
-        unread: 0,
-        flags: ['\\HasNoChildren', '\\Inbox'],
-        isStandard: true,
-    },
-    {
-        path: 'Drafts',
-        name: 'Drafts',
-        icon: <File className="h-4 w-4" />,
-        href: '/box/drafts',
-        unread: 0,
-        flags: ['\\HasNoChildren', '\\Drafts'],
-        isStandard: true,
-    },
-    {
-        path: 'Sent',
-        name: 'Sent',
-        icon: <Send className="h-4 w-4" />,
-        href: '/box/sent',
-        unread: 0,
-        flags: ['\\HasNoChildren', '\\Sent'],
-        isStandard: true,
-    },
-    {
-        path: 'Junk',
-        name: 'Spam',
-        icon: <AlertTriangle className="h-4 w-4" />,
-        href: '/box/junk',
-        unread: 0,
-        flags: ['\\HasNoChildren', '\\Junk'],
-        isStandard: true,
-    },
-    {
-        path: 'Trash',
-        name: 'Trash',
-        icon: <Trash2 className="h-4 w-4" />,
-        href: '/box/trash',
-        unread: 0,
-        flags: ['\\HasNoChildren', '\\Trash'],
-        isStandard: true,
-    },
-    {
-        path: 'Archive',
-        name: 'Archive',
-        icon: <Archive className="h-4 w-4" />,
-        href: '/box/archive',
-        unread: 0,
-        flags: ['\\HasNoChildren', '\\Archive'],
-        isStandard: true,
-    },
-];
+const mailboxHref = (path: string) => `/box/${mailboxRouteSegment(path)}`;
 
-// Helper function to get the standard mailbox flag
-export function getStandardMailboxFlag(flags: string[] = []): string | null {
-    const standardFlags = Object.keys(standardMailboxes);
-    return flags.find((flag) => standardFlags.includes(flag)) || null;
-}
+const renderIcon = (Icon: LucideIcon) => <Icon className="h-4 w-4" />;
+
+// Shown while the mailbox list is still loading or after it failed.
+const defaultMailboxes: SidebarMailbox[] = SIDEBAR_MAILBOXES.map((box) => ({
+    path: box.path,
+    name: box.label,
+    icon: renderIcon(MAILBOX_ICONS[box.path]),
+    href: mailboxHref(box.path),
+    unread: 0,
+    isStandard: true,
+}));
 
 type AppSidebarProps = {
     condensed?: boolean;
@@ -98,46 +55,27 @@ export function EmailSidebar({
 }: AppSidebarProps) {
     // Memoize the processed mailboxes to avoid unnecessary recalculations
     const standardMailboxList = useMemo(() => {
-        const processedMailboxes = mailboxes.map((mailbox) => {
+        const processedMailboxes: SidebarMailbox[] = mailboxes.map((mailbox) => {
             const path = mailbox.path || '';
-            const name = mailbox.name || path;
-            const flags = mailbox.flags || [];
-
-            // Get the standard mailbox flag if it exists
-            const standardFlag = getStandardMailboxFlag(flags);
-
-            // Get icon component based on standard flag or use default
-            let icon: React.ReactNode;
-            if (standardFlag && standardMailboxes[standardFlag]) {
-                const IconComponent = standardMailboxes[standardFlag].icon;
-                icon = <IconComponent className="h-4 w-4" />;
-            } else {
-                icon = <File className="h-4 w-4" />;
-            }
+            const special = specialMailboxFromFlags(mailbox.flags);
 
             return {
-                ...mailbox,
-                name: standardFlag ? standardMailboxes[standardFlag].name : name,
-                href: `/box/${path.toLowerCase() || 'inbox'}`,
-                icon,
-                isStandard: !!standardFlag,
+                path,
+                name: special ? special.label : mailbox.name || path,
+                icon: renderIcon(special ? MAILBOX_ICONS[special.path] : CUSTOM_MAILBOX_ICON),
+                href: mailboxHref(path),
+                unread: mailbox.unread,
+                isStandard: !!special,
             };
         });
 
         // Use API mailboxes if available, otherwise fall back to defaults
         const displayMailboxes = isLoading || error ? defaultMailboxes : processedMailboxes;
 
-        // Separate standard mailboxes from custom mailboxes
-        const standardMailboxListFetched = displayMailboxes.filter((mailbox) => mailbox.isStandard);
-
-        // order standard mailboxes, similar to the order of defaultMailboxes
-        const standardMailboxList = defaultMailboxes.flatMap((defaultMailbox) =>
-            standardMailboxListFetched.filter(
-                (mailbox) => mailbox.name.toLowerCase() === defaultMailbox.name.toLowerCase(),
-            ),
+        // Keep only the special mailboxes, in the order the sidebar lists them
+        return SIDEBAR_MAILBOXES.flatMap((box) =>
+            displayMailboxes.filter((mailbox) => mailbox.isStandard && mailbox.name === box.label),
         );
-
-        return standardMailboxList;
     }, [mailboxes, isLoading, error]);
 
     return (
@@ -146,7 +84,7 @@ export function EmailSidebar({
 
             <SidebarSection condensed={condensed} loading={isLoading}>
                 {standardMailboxList.map((item) => {
-                    const folderId = item.path === '' || item.path?.toLowerCase() === 'inbox' ? '' : item.path || '';
+                    const folderId = item.path.toLowerCase() === MAILBOX_INBOX_KEY ? MAILBOX_INBOX : item.path;
                     if (onMoveToFolder) {
                         return (
                             <DroppableSidebarItem

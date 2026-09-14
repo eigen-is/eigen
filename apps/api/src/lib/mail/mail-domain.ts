@@ -1,4 +1,11 @@
 import { MAIL_PREVIEW_CHARS, MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
+import {
+    MAILBOX_DRAFTS,
+    MAILBOX_INBOX,
+    MAILBOX_INBOX_KEY,
+    MAILBOX_SENT,
+    STANDARD_MAILBOXES,
+} from '@workspace/lib/constants/mailboxes';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import {
     type AddressObject,
@@ -17,7 +24,7 @@ import { type SSEventMail, SSEventType } from '@workspace/lib/types/sse';
 import { processInboundImip, summarizeCalendarInvite } from '../calendar/imip';
 import { isDemo } from '../config/env';
 import { isInternalAddress } from '../config/server-config';
-import { ApiError, STANDARD_MAILBOXES } from '../core';
+import { ApiError } from '../core';
 import { renderAttachmentLinksText, renderAttachmentPills } from '../core/mail-template';
 import { type OutboundMail, sendMail } from '../core/mailer';
 import type { Home } from '../home';
@@ -36,7 +43,7 @@ import { welcomeMail } from './welcome';
 const FULL_SAVE_INTERVAL_MS = 5 * 60 * 1000;
 
 function canonicalMailbox(name: string): string {
-    if (name === '' || name.toLowerCase() === 'inbox') return '';
+    if (name === MAILBOX_INBOX || name.toLowerCase() === MAILBOX_INBOX_KEY) return MAILBOX_INBOX;
     return STANDARD_MAILBOXES.find((m) => m.toLowerCase() === name.toLowerCase()) ?? name;
 }
 
@@ -306,7 +313,7 @@ export class Mail {
         const recipients = buildRecipientSummary(email.to, email.cc);
         this.store.updateDraftContent(existingId, meta.subject, email.text || '', recipients);
 
-        this.emit(SSEventType.MAIL_DRAFT_UPDATED, { messageId: existingId, mailbox: 'Drafts' });
+        this.emit(SSEventType.MAIL_DRAFT_UPDATED, { messageId: existingId, mailbox: MAILBOX_DRAFTS });
 
         const user = this.home.user;
         const attachments = meta.attachments.map((a) => ({
@@ -451,7 +458,7 @@ export class Mail {
             lastFullSaveAt: Date.now(),
         });
 
-        this.emit(SSEventType.MAIL_DRAFT_UPDATED, { messageId: saved.id, mailbox: 'Drafts' });
+        this.emit(SSEventType.MAIL_DRAFT_UPDATED, { messageId: saved.id, mailbox: MAILBOX_DRAFTS });
 
         // Overlay the clean html so the client's compose view doesn't re-render the
         // baked card block that's in the parsed EML.
@@ -620,10 +627,10 @@ export class Mail {
         }
 
         await this.store.deleteDraftMeta(mail.id);
-        await this.messageMove(mail.id, 'Sent');
+        await this.messageMove(mail.id, MAILBOX_SENT);
         await this.store.setFlags(mail.id, { draft: false });
-        this.emit(SSEventType.MAIL_FLAGS_CHANGED, { messageId: mail.id, mailbox: 'Sent' });
-        this.emit(SSEventType.MAIL_SENT, { messageId: mail.id, mailbox: 'Sent' });
+        this.emit(SSEventType.MAIL_FLAGS_CHANGED, { messageId: mail.id, mailbox: MAILBOX_SENT });
+        this.emit(SSEventType.MAIL_SENT, { messageId: mail.id, mailbox: MAILBOX_SENT });
 
         return failedRecipients.length ? { ...mail, failedRecipients } : mail;
     }

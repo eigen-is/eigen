@@ -1,5 +1,6 @@
 import { createFileRoute, useLocation, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
+import { MAILBOX_ARCHIVE, MAILBOX_JUNK, MAILBOX_TRASH, mailboxRouteSegment } from '@workspace/lib/constants/mailboxes';
 import { usePathInfos } from '@workspace/lib/drive';
 import { useEmail, useEmails, useMailboxes } from '@workspace/lib/mail';
 import { useSearchQuery } from '@workspace/lib/search';
@@ -116,7 +117,7 @@ function MailRoute() {
     // to the mailbox's canonical `path` (inbox = ''), the same identity EmailSummary.mailbox carries and
     // that emailKeys.list normalizes. Lets the menu hide the current box as a move target and drop the
     // already-satisfied Archive/Spam actions instead of offering no-op self-moves.
-    const currentFolderId = mailboxes.find((m) => (m.path === '' ? 'inbox' : m.path.toLowerCase()) === filterId)?.path;
+    const currentFolderId = mailboxes.find((m) => mailboxRouteSegment(m.path) === filterId)?.path;
     const { data: spaceSettings } = useSpaceSettings();
     const signatureHtml = spaceSettings?.email?.signatures?.[0]?.html;
 
@@ -211,14 +212,14 @@ function MailRoute() {
                   ? orderedEmails[idx + 1]?.id
                   : orderedEmails[idx - 1]?.id;
         if (action === 'delete') {
-            if (selectedEmail?.mailbox === 'Trash') {
+            if (selectedEmail?.mailbox === MAILBOX_TRASH) {
                 setPendingDeleteEmails([selectedEmail]);
                 setDeleteDialogOpen(true);
                 return;
             }
             void actions.deleteEmailByIdOnly(id);
         } else {
-            void actions.moveEmailByIdOnly(id, action === 'archive' ? 'Archive' : 'Junk');
+            void actions.moveEmailByIdOnly(id, action === 'archive' ? MAILBOX_ARCHIVE : MAILBOX_JUNK);
         }
         if (landId) actions.handleRowClick(landId);
         else actions.navigateToList();

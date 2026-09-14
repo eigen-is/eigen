@@ -25,7 +25,17 @@ import { Database } from 'bun:sqlite';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { PATHS, STANDARD_MAILBOXES } from '../lib/core/constants';
+import {
+    MAILBOX_ARCHIVE,
+    MAILBOX_DRAFTS,
+    MAILBOX_INBOX,
+    MAILBOX_JUNK,
+    MAILBOX_SENT,
+    MAILBOX_TRASH,
+    mailboxRouteSegment,
+    STANDARD_MAILBOXES,
+} from '@workspace/lib/constants/mailboxes';
+import { PATHS } from '../lib/core/constants';
 import { buildMaildirFilename, createUniqueMessageId } from '../lib/mail/mailutils';
 
 // Data root: honor EIGEN_DATA_ROOT (as the server does), else the repo's ./data resolved from
@@ -68,10 +78,18 @@ const userFrom = `${(account.name || account.email).replace(/[<>]/g, '')} <${acc
 
 // Maildir root for the user: <data>/home/<id>/eigen.mail/Maildir  (Inbox = root; others = .<Name>).
 const maildirRoot = path.join(DATA_ROOT, 'home', account.id, PATHS.MAIL.ROOT, PATHS.MAIL.MAILDIR);
-const mailboxDir = (mailbox: string) => (mailbox === '' ? maildirRoot : path.join(maildirRoot, `.${mailbox}`));
+const mailboxDir = (mailbox: string) =>
+    mailbox === MAILBOX_INBOX ? maildirRoot : path.join(maildirRoot, `.${mailbox}`);
 
 // Relative weights for how the messages spread across mailboxes (Inbox heaviest, like a real account).
-const WEIGHTS: Record<string, number> = { '': 45, Archive: 25, Sent: 15, Junk: 6, Trash: 6, Drafts: 3 };
+const WEIGHTS: Record<string, number> = {
+    [MAILBOX_INBOX]: 45,
+    [MAILBOX_ARCHIVE]: 25,
+    [MAILBOX_SENT]: 15,
+    [MAILBOX_JUNK]: 6,
+    [MAILBOX_TRASH]: 6,
+    [MAILBOX_DRAFTS]: 3,
+};
 const NEW_FRACTION = 0.15; // share written to new/ (unseen) rather than cur/
 
 const firstNames = [
@@ -139,7 +157,7 @@ const dows = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const baseMs = 1_752_000_000_000; // fixed anchor (~mid-2025) — Date.now() is fine here but a constant keeps dates stable
 
 function rfc822(i: number, mailbox: string, extAddr: string): string {
-    const outgoing = mailbox === 'Sent' || mailbox === 'Drafts';
+    const outgoing = mailbox === MAILBOX_SENT || mailbox === MAILBOX_DRAFTS;
     const from = outgoing ? userFrom : extAddr;
     const to = outgoing ? extAddr : account.email;
     // Spread dates over the past ~year.
@@ -152,7 +170,7 @@ function rfc822(i: number, mailbox: string, extAddr: string): string {
         `Date: ${dateHdr}\r\n` +
         `Message-ID: <seed-${i}-${createUniqueMessageId()}@seed.eigen.test>\r\n` +
         `Content-Type: text/plain; charset=utf-8\r\n\r\n` +
-        `Seeded ${mailbox === '' ? 'inbox' : mailbox.toLowerCase()} message ${i} for stress testing. ` +
+        `Seeded ${mailboxRouteSegment(mailbox)} message ${i} for stress testing. ` +
         `Lorem ipsum dolor sit amet, consectetur adipiscing elit. Delete all [SEED] mail when done.\r\n`
     );
 }
@@ -186,7 +204,7 @@ for (let i = 1; i <= count; i++) {
         filename = `${uid},S=${size}`;
     } else {
         // cur/ files carry flags: mostly Seen; ~8% Flagged; Drafts get the Draft flag.
-        const flags = { seen: rand() > 0.2, flagged: rand() < 0.08, draft: mailbox === 'Drafts' };
+        const flags = { seen: rand() > 0.2, flagged: rand() < 0.08, draft: mailbox === MAILBOX_DRAFTS };
         dir = path.join(mailboxDir(mailbox), PATHS.MAIL.CUR);
         filename = buildMaildirFilename(uid, flags, size);
     }

@@ -1,4 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
+import { MAILBOX_DRAFTS, mailboxRouteSegment } from '@workspace/lib/constants/mailboxes';
 
 export const emailKeys = {
     all: ['emails'] as const,
@@ -10,7 +11,7 @@ export const emailKeys = {
     // 'inbox' the route mounts under. Without it, invalidating list(ownerId, '') on a move/undo INTO
     // the inbox would miss the open {mailbox:'inbox'} query and the row wouldn't reappear.
     list: (ownerId: string, mailbox: string) =>
-        [...emailKeys.lists(ownerId), { mailbox: mailbox === '' ? 'inbox' : mailbox.toLowerCase() }] as const,
+        [...emailKeys.lists(ownerId), { mailbox: mailboxRouteSegment(mailbox) }] as const,
     details: (ownerId: string) => [...emailKeys.owner(ownerId), 'detail'] as const,
     detail: (ownerId: string, id: string) => [...emailKeys.details(ownerId), id] as const,
     // One attachment's server-rendered preview: the part index identifies it inside the message. Under
@@ -74,6 +75,6 @@ export function invalidateMailMessageChanged(
 }
 
 export function invalidateDraftUpdated(queryClient: QueryClient, ownerId: string, messageId: string): void {
-    queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, 'Drafts') });
+    queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, MAILBOX_DRAFTS) });
     queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, messageId) });
 }

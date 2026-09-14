@@ -38,8 +38,6 @@ export const PATHS = {
     },
 } as const;
 
-export const STANDARD_MAILBOXES = ['', 'Sent', 'Drafts', 'Trash', 'Junk', 'Archive'] as const;
-
 export const DEFAULT_LABELS = [
     { name: 'Family', color: EIGEN_ACCENT_COLORS_SHUFFLED[0].value },
     { name: 'Friends', color: EIGEN_ACCENT_COLORS_SHUFFLED[1].value },

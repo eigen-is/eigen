@@ -40,6 +40,7 @@
     "./format": "./src/core/format.ts",
     "./html": "./src/core/html.ts",
     "./html-dom": "./src/core/html-dom.ts",
+    "./mailbox-icons": "./src/core/mailbox-icons.ts",
     "./use-debounced-value": "./src/core/use-debounced-value.ts",
     "./auth": "./src/core/auth/index.ts",
     "./calendar": "./src/core/calendar/index.ts",

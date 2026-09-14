@@ -1,4 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
+import { MAILBOX_INBOX, MAILBOX_INBOX_KEY } from '@workspace/lib/constants/mailboxes';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { invalidateHomeSize } from '../home';
@@ -13,7 +14,7 @@ import {
 } from './hooks/keys';
 import { consumeRecentMailMutation } from './hooks/use-emails';
 
-const normalizeMailbox = (mailbox: string) => (mailbox === '' ? 'inbox' : mailbox);
+const normalizeMailbox = (mailbox: string) => (mailbox === MAILBOX_INBOX ? MAILBOX_INBOX_KEY : mailbox);
 
 export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, userId: string): boolean {
     if (!event?.type?.startsWith('mail:')) return false;
