@@ -56,9 +56,7 @@ export const DRIVE_CAPABILITIES = {
     },
 } as const satisfies Record<string, DriveCapabilities>;
 
-// The fs browser's surface follows the viewer's own access to the folder it lists: a folder shared
-// read-only still browses — breadcrumb, quick look, download, Copy to… — it just offers nothing that
-// writes, so the row menu, detail kebab and quick-look footer stop proposing calls that 403.
+// The fs browser follows the viewer's access to the folder: a read-only share still browses, but offers no writes.
 export function browseCapabilities(canWrite: boolean): DriveCapabilities {
     return canWrite ? DRIVE_CAPABILITIES.browse : { ...DRIVE_CAPABILITIES.readOnly, showBreadcrumb: true };
 }

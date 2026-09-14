@@ -31,10 +31,7 @@ function DriveRoute() {
         error: isFolderContentLoadingError,
     } = useSharedPaths(ownerId, to as 'by-me' | 'with-me');
 
-    // Shared-with-me rows are other people's files at mixed access levels, and the feed carries no
-    // per-row permission. Rename and the actions that write beside the source are offered only on
-    // the by-me side; delete stays on both — on with-me it is "leave the share", which a read-only
-    // recipient may always do.
+    // The with-me feed carries no per-row permission, so writes are by-me only; delete on with-me is "leave the share".
     const capabilities: DriveCapabilities = {
         ...DRIVE_CAPABILITIES.listing,
         canRename: to === 'by-me',

@@ -56,9 +56,7 @@ function DriveRoute() {
     const { data: shareTargetPath = null } = usePathInfo(ownerId, mountId, sharePathId || '');
     const shareDialogOpen = !!sharePathId && !!shareTargetPath;
 
-    // Menus, detail column and quick look all act on one capability set, so the viewer's own access
-    // to this folder decides it — a read-only share browses but writes nothing. Owners and team
-    // members always write, so they skip the round trip.
+    // One capability set for menus, detail column and quick look; owners skip the permissions round trip.
     const isOwner = useIsEffectiveOwner(ownerId);
     const { data: permissions } = useCheckPermissions(ownerId, mountId, isOwner || skipDataFetch ? undefined : pathId);
     const capabilities = browseCapabilities(isOwner || permissions?.canWrite === true);
