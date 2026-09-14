@@ -5,15 +5,6 @@ import type { MailFlag } from './mail-store';
 
 let deliveryCounter = 0;
 
-const STANDARD_MAILBOX_FLAGS: Record<string, string[]> = {
-    '': ['\\HasNoChildren', '\\Inbox'],
-    Sent: ['\\HasNoChildren', '\\Sent'],
-    Drafts: ['\\HasNoChildren', '\\Drafts'],
-    Trash: ['\\HasNoChildren', '\\Trash'],
-    Junk: ['\\HasNoChildren', '\\Junk'],
-    Archive: ['\\HasNoChildren', '\\Archive'],
-};
-
 const FLAG_CHARS: readonly (readonly [MailFlag, string])[] = [
     ['seen', 'S'],
     ['replied', 'R'],
@@ -52,11 +43,6 @@ export function getMailIDfromFileName(fileName: string): string {
     const withoutFlags = colonIndex >= 0 ? fileName.substring(0, colonIndex) : fileName;
     const commaIndex = withoutFlags.indexOf(',');
     return commaIndex >= 0 ? withoutFlags.substring(0, commaIndex) : withoutFlags;
-}
-
-export function getStandardMailboxFlags(mailbox: string): string[] {
-    const flags = STANDARD_MAILBOX_FLAGS[mailbox];
-    return flags ?? ['\\HasNoChildren'];
 }
 
 export function buildMaildirFilename(

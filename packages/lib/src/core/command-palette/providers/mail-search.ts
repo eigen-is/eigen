@@ -1,4 +1,5 @@
 import { getMailAppUrl } from '@workspace/lib/api';
+import { mailboxRouteSegment } from '@workspace/lib/constants/mailboxes';
 import type { CommandContext, PaletteResult, PaletteScope } from '@workspace/lib/types/command-palette';
 import { Mail } from 'lucide-react';
 import { useMemo } from 'react';
@@ -43,7 +44,7 @@ export function useMailSearchResults(
             // its canonical shape. Inbox is stored as the empty string in mail.db; route
             // segments need 'inbox'. Other mailboxes are lowercased because useEmails
             // lowercases the URL path on the wire (and the sidebar URLs match).
-            const filterId = email.mailbox ? email.mailbox.toLowerCase() : 'inbox';
+            const filterId = mailboxRouteSegment(email.mailbox);
             return {
                 kind: 'mail' as const,
                 id: `mail.${email.id}`,

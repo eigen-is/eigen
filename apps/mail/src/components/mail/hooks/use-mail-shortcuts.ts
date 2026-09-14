@@ -1,4 +1,12 @@
 import { useHotkey, useHotkeySequence } from '@tanstack/react-hotkeys';
+import {
+    MAILBOX_ARCHIVE,
+    MAILBOX_DRAFTS,
+    MAILBOX_INBOX,
+    MAILBOX_JUNK,
+    MAILBOX_SENT,
+    mailboxRouteSegment,
+} from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { UseListSelectionReturn } from '@workspace/ui/hooks/use-list-selection';
 import { type RefObject, useEffect, useRef, useState } from 'react';
@@ -249,7 +257,7 @@ export function useMailShortcuts({
                 });
             } else {
                 setCursorById(nextId);
-                void moveEmailByIdOnly(id, action === 'archive' ? 'Archive' : 'Junk');
+                void moveEmailByIdOnly(id, action === 'archive' ? MAILBOX_ARCHIVE : MAILBOX_JUNK);
             }
         }
     };
@@ -274,7 +282,7 @@ export function useMailShortcuts({
             // idx<0 (open email not in the list) would make orderedEmails[idx+1]=[0] land on the top
             // row for 'older'/[ — guard it so the neighbour is undefined and we fall back to the list.
             const neighbourId = idx < 0 ? undefined : orderedEmails[idx + delta]?.id;
-            void moveEmailByIdOnly(openEmailId, 'Archive');
+            void moveEmailByIdOnly(openEmailId, MAILBOX_ARCHIVE);
             if (neighbourId) onRowClick(neighbourId);
             else navigateToList();
             return;
@@ -282,7 +290,7 @@ export function useMailShortcuts({
         if (cursorIndex >= 0 && cursorIndex < orderedEmails.length) {
             const id = orderedEmails[cursorIndex].id;
             setCursorById(orderedEmails[cursorIndex + delta]?.id);
-            void moveEmailByIdOnly(id, 'Archive');
+            void moveEmailByIdOnly(id, MAILBOX_ARCHIVE);
         }
     };
     // ] — archive and go to the newer neighbour.
@@ -375,15 +383,15 @@ export function useMailShortcuts({
     useHotkey('F', () => reply(onForward), { enabled });
 
     // Jump chords — `g` then i/t/d navigate to a mailbox (no single-key i/t/d, so no tail conflict).
-    useHotkeySequence(SEQ_JUMP_INBOX, () => navigateToMailbox('inbox'), {
+    useHotkeySequence(SEQ_JUMP_INBOX, () => navigateToMailbox(mailboxRouteSegment(MAILBOX_INBOX)), {
         enabled: chordsEnabled,
         timeout: CHORD_TIMEOUT_MS,
     });
-    useHotkeySequence(SEQ_JUMP_SENT, () => navigateToMailbox('sent'), {
+    useHotkeySequence(SEQ_JUMP_SENT, () => navigateToMailbox(mailboxRouteSegment(MAILBOX_SENT)), {
         enabled: chordsEnabled,
         timeout: CHORD_TIMEOUT_MS,
     });
-    useHotkeySequence(SEQ_JUMP_DRAFTS, () => navigateToMailbox('drafts'), {
+    useHotkeySequence(SEQ_JUMP_DRAFTS, () => navigateToMailbox(mailboxRouteSegment(MAILBOX_DRAFTS)), {
         enabled: chordsEnabled,
         timeout: CHORD_TIMEOUT_MS,
     });

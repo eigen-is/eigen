@@ -1,4 +1,5 @@
 import { useMatch, useNavigate } from '@tanstack/react-router';
+import { MAILBOX_INBOX_KEY } from '@workspace/lib/constants/mailboxes';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
 import { MailPlus } from 'lucide-react';
 
@@ -16,7 +17,7 @@ export function EmailComposeButton({ condensed }: EmailComposeButtonProps) {
     });
 
     const filterType = match?.params?.filterType ?? 'box';
-    const filterId = match?.params?.filterId ?? 'inbox';
+    const filterId = match?.params?.filterId ?? MAILBOX_INBOX_KEY;
 
     const navigate = useNavigate();
 

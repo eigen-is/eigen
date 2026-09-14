@@ -25,6 +25,7 @@ import type { JSONContent } from '@tiptap/core';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
+import { MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
 import { DOCX_MIME } from '@workspace/lib/constants/mime';
 import type { Attendee, EventData } from '@workspace/lib/types/calendar';
 import type { CommentCard } from '@workspace/lib/types/comments';
@@ -750,7 +751,7 @@ async function main(): Promise<void> {
                 // (the other end is the external party). Moving them keeps only genuinely inbound mail
                 // in the inbox; mark read since you sent it.
                 if (!external) {
-                    await recipientHome.mail.messageMove(deliveredId, 'Sent');
+                    await recipientHome.mail.messageMove(deliveredId, MAILBOX_SENT);
                     await recipientHome.mail.messageSetRead(deliveredId, true);
                 }
                 references.push(messageId);

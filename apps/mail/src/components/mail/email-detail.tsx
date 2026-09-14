@@ -1,4 +1,5 @@
 import { getMailComposeUrl } from '@workspace/lib/api';
+import { MAILBOX_ARCHIVE, MAILBOX_JUNK, MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
 import { formatDateTime } from '@workspace/lib/date';
 import { flattenAddresses } from '@workspace/lib/mail';
 import type { AddressObject, Attachment, Email, MaildirMailbox } from '@workspace/lib/types/mail';
@@ -40,10 +41,10 @@ export function EmailDetailToolbar({
     return (
         <Toolbar>
             <div className="flex items-center gap-1">
-                {email.mailbox !== 'Archive' && (
+                {email.mailbox !== MAILBOX_ARCHIVE && (
                     <TooltipButton icon={Archive} tooltipText="Archive" onClick={() => onArchive(email.id)} />
                 )}
-                {email.mailbox !== 'Junk' && (
+                {email.mailbox !== MAILBOX_JUNK && (
                     <TooltipButton
                         icon={AlertTriangle}
                         tooltipText="Report Spam"
@@ -181,7 +182,7 @@ function MailHeaderDetails({ email, formattedDate }: { email: Email; formattedDa
 }
 
 function MailHeader({ email, formattedDate }: { email: Email; formattedDate: string }) {
-    const isSent = email.mailbox === 'Sent';
+    const isSent = email.mailbox === MAILBOX_SENT;
     const recipients = [...collectAddresses(email.to), ...collectAddresses(email.cc), ...collectAddresses(email.bcc)];
     const primary = isSent ? recipients[0] : email.from?.value[0];
     const primaryName = primary?.name || primary?.address || 'Unknown';

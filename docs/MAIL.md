@@ -61,8 +61,7 @@ The behaviour contract is the golden corpus: every `.eml` under `apps/api/src/te
 
 ## Mailboxes and the naming gotcha
 
-`STANDARD_MAILBOXES = ['', 'Sent', 'Drafts', 'Trash', 'Junk', 'Archive']` (`lib/core/constants.ts`) — the
-empty string is INBOX. `canonicalMailbox()` (`mail-domain.ts`) normalizes any case (`inbox`/`Trash`/`trash`)
+**`packages/lib/src/constants/mailboxes.ts` is the single source of the special mailbox names** — `STANDARD_MAILBOXES = ['', 'Sent', 'Drafts', 'Trash', 'Junk', 'Archive']` (the empty string is INBOX) together with each one's IMAP special-use flag and the label the UI shows for it (`Junk` reads as "Spam"); FE and BE both import it and neither spells a mailbox by hand. It stays React-free so the API can import it, so the lucide icon per mailbox sits beside it in `packages/lib/src/core/mailbox-icons.ts` (`@workspace/lib/mailbox-icons`), the way `eigendoc-icons.ts` sits beside the doc-type registry. `canonicalMailbox()` (`mail-domain.ts`) normalizes any case (`inbox`/`Trash`/`trash`)
 to canonical form at every domain entry point. **Three representations of "the inbox" coexist** — the #1
 source of subtle mail bugs; never compare mailbox strings without knowing the layer:
 

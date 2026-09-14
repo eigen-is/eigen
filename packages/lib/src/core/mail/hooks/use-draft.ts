@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getDriveAppUrl, getMailDraftAttachmentUploadUrl, mailApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
+import { MAILBOX_DRAFTS } from '@workspace/lib/constants/mailboxes';
 import type {
     DraftAttachmentUpload,
     DraftInput,
@@ -103,7 +104,7 @@ export function useUpdateDraft() {
             // refetch. The list still gets invalidated because per-message metadata (date,
             // attachment count) may have changed.
             if (data.id) queryClient.setQueryData(emailKeys.detail(ownerId, data.id), data);
-            queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, 'Drafts') });
+            queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, MAILBOX_DRAFTS) });
             invalidateMailboxes(queryClient, ownerId);
             invalidateHomeSize(queryClient, ownerId);
         },
@@ -121,7 +122,7 @@ export function useSendDraft() {
             sendDraftEmail(draft, ownerId, grantAccessRefIds),
         onSuccess: (data) => {
             invalidateMailboxes(queryClient, ownerId);
-            queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, 'Drafts') });
+            queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, MAILBOX_DRAFTS) });
             invalidateHomeSize(queryClient, ownerId);
             if (data.failedRecipients?.length) {
                 toast.error(`Delivery to ${data.failedRecipients.join(', ')} failed`);

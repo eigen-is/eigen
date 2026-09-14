@@ -1,5 +1,6 @@
 import { getMailMessageDownloadUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
+import { MAILBOX_ARCHIVE, MAILBOX_JUNK, specialMailboxFromFlags } from '@workspace/lib/constants/mailboxes';
 import type { MaildirMailbox } from '@workspace/lib/types/mail';
 import {
     DropdownMenuItem,
@@ -10,7 +11,6 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { ucfirst } from '@workspace/ui/lib/utils';
 import { AlertTriangle, Archive, Download, Forward, Printer, Reply, ReplyAll, Trash2 } from 'lucide-react';
-import { getStandardMailboxFlag, standardMailboxes } from './email-sidebar';
 
 type EmailContextMenuProps = {
     messageIds: string[];
@@ -96,7 +96,7 @@ export function EmailContextMenu({
                 </>
             )}
 
-            {currentMailboxId !== 'Archive' && (
+            {currentMailboxId !== MAILBOX_ARCHIVE && (
                 <DropdownMenuItem
                     onClick={() => {
                         onArchive?.(messageIds);
@@ -107,7 +107,7 @@ export function EmailContextMenu({
                     {isSingleSelect ? 'Archive' : `Archive ${messageIds.length} emails`}
                 </DropdownMenuItem>
             )}
-            {currentMailboxId !== 'Junk' && (
+            {currentMailboxId !== MAILBOX_JUNK && (
                 <DropdownMenuItem
                     onClick={() => {
                         onReportSpam?.(messageIds);
@@ -153,7 +153,7 @@ export function EmailContextMenu({
                     {mailboxes
                         .filter((mailbox) => mailbox.path !== currentMailboxId)
                         .map((mailbox) => {
-                            const flag = getStandardMailboxFlag(mailbox.flags);
+                            const special = specialMailboxFromFlags(mailbox.flags);
                             return (
                                 <DropdownMenuItem
                                     key={mailbox.path}
@@ -162,7 +162,7 @@ export function EmailContextMenu({
                                         onClose();
                                     }}
                                 >
-                                    {flag ? standardMailboxes[flag].name : ucfirst(mailbox.name)}
+                                    {special ? special.label : ucfirst(mailbox.name)}
                                 </DropdownMenuItem>
                             );
                         })}
