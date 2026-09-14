@@ -77,6 +77,10 @@ Route (thin handler)  →  SharedDrive (ACL wrapper)  →  Drive (business logic
 | **Mail list + pagination** | `packages/lib/src/core/mail/hooks/use-emails.ts` | Keyset-paginated `useInfiniteQuery` with optimistic per-id cache patches. See [MAIL.md](MAIL.md) |
 | **Eigen-doc icons**| `packages/lib/src/core/eigendoc-icons.ts`             | `EIGEN_DOC_ICONS` — the single source for the icon per eigen-doc type. Kept out of `types/drive.ts` so that file stays type-only on the BE side |
 | **Drive copy/move**| `packages/lib/src/core/drive/hooks/writes.ts`      | Right-click **Move to… / Copy to… / Duplicate** via `useMovePath`/`useCopyPath`/`useDuplicatePath` + the reused `DriveLocationPicker`. See [STORAGE.md § Copy / Move](STORAGE.md#copy--move) |
+| **File subject**   | `packages/lib/src/types/file-subject.ts` + `packages/lib/src/core/file-subject.ts` | `FileSubject` — one file a surface can act on, whatever holds it (a Drive item today, a mail part next); `subjectFromPath()` is the only builder and `getPreviewMode()` picks the overlay's render mode. See [PREVIEWS.md](PREVIEWS.md) |
+| **File actions**   | `packages/lib/src/core/file-actions.ts`               | `FILE_ACTIONS` + `fileActionsFor(subject, exclude?)` — the one registry of what may be done with a subject; a predicate reads the subject, never which menu is asking |
+| **File action runner** | `packages/ui/src/components/file-actions/use-file-action-runner.tsx` | `useFileActionRunner(subject, siblings?)` performs a registry row and hands its host one `dialogs` node to mount, so a picker outlives the menu that opened it |
+| **Save to Drive**  | `packages/ui/src/components/drive/save-to-drive-picker.tsx` | `SaveToDrivePicker` — one "where does this go" dialog for every surface that puts a file into Drive: server-side copy for a Drive subject, staggered browser download otherwise |
 
 ## Package boundaries
 
