@@ -31,6 +31,11 @@ const Toaster = ({ ...props }: ToasterProps) => {
                     '--normal-border': 'var(--border)',
                 } as React.CSSProperties
             }
+            // A modal Radix dialog parks `pointer-events: none` on <body> while it is mounted, and
+            // the toaster lives under it: without its own value a toast raised from inside one (the
+            // save-to-drive picker awaits its write, and a convert stacks the progress dialog on
+            // top) draws an action that swallows every click.
+            toastOptions={{ style: { pointerEvents: 'auto' } }}
             {...props}
         />
     );
