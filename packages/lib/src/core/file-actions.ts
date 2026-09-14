@@ -1,6 +1,5 @@
 import { BookUser, Download, Eye, FileText, FolderDown, type LucideIcon, Sheet } from 'lucide-react';
 import { IMPORT_MAX_BYTES } from '../constants/contact';
-import { DOCX_MIME, XLSX_MIME } from '../constants/mime';
 import { isFolderType, isVCardFile } from '../types/drive';
 import type { FileSubject } from '../types/file-subject';
 
@@ -34,16 +33,15 @@ export const FILE_ACTIONS: readonly FileAction[] = [
         id: 'convert-to-sheet',
         label: 'Convert to Sheet',
         icon: Sheet,
-        // A mail part often arrives as application/octet-stream, which is why the name counts too.
-        applies: (subject) =>
-            !!subject.downloadUrl && (subject.mimeType === XLSX_MIME || subject.name.toLowerCase().endsWith('.xlsx')),
+        // Extension only, matching the server: import-document.ts refuses on the name, so a mail part
+        // carrying the mime but no extension would offer a row that 400s.
+        applies: (subject) => !!subject.downloadUrl && subject.name.toLowerCase().endsWith('.xlsx'),
     },
     {
         id: 'convert-to-document',
         label: 'Convert to Document',
         icon: FileText,
-        applies: (subject) =>
-            !!subject.downloadUrl && (subject.mimeType === DOCX_MIME || subject.name.toLowerCase().endsWith('.docx')),
+        applies: (subject) => !!subject.downloadUrl && subject.name.toLowerCase().endsWith('.docx'),
     },
     {
         id: 'import-contacts',

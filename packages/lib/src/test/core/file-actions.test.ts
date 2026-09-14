@@ -53,10 +53,11 @@ describe('fileActionsFor on a Drive item', () => {
             item: path({ name: 'team.vcf', type: 'file', mimeType: 'text/vcard' }),
             ids: ['quick-look', 'download', 'save-to-drive', 'import-contacts'],
         },
-        // An .xlsx that lost its extension still converts, the way a mail part named `attachment` would.
+        // The convert gate is the extension alone, matching the server: a spreadsheet that lost its
+        // name — a mail part called `attachment-2` — offers no convert, because the import refuses it.
         {
             item: path({ name: 'budget', type: 'file', mimeType: XLSX_MIME }),
-            ids: ['quick-look', 'download', 'save-to-drive', 'convert-to-sheet'],
+            ids: ['quick-look', 'download', 'save-to-drive'],
         },
         // Over the import ceiling the row is gone: the route answers a bigger vCard with a 413.
         {
