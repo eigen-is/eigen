@@ -3,7 +3,14 @@ import { useDriveViewPreferences } from '@workspace/lib/drive';
 import type { DrivePath, DriveSortDir, DriveSortKey } from '@workspace/lib/types/drive';
 import { isFolderType } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@workspace/ui/components/dialog';
 import { Upload } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { DriveBrowser } from './drive-browser';
@@ -88,6 +95,7 @@ export function DriveFilePicker({
             <DialogContent className="flex flex-col p-0 gap-0 sm:max-w-[688px] max-w-[90vw] h-[520px] max-h-[85vh]">
                 <DialogHeader className="px-6 py-4 border-b">
                     <DialogTitle>{title}</DialogTitle>
+                    <DialogDescription className="sr-only">Browse your Drive and pick a file.</DialogDescription>
                 </DialogHeader>
 
                 <div className="flex-1 overflow-hidden">

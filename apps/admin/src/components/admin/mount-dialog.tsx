@@ -1,6 +1,6 @@
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { S3CheckResult, S3HardenResult } from '@workspace/lib/types/settings';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { MountForm, type MountFormValues } from '@workspace/ui/components/mount/mount-form';
 
 type MountDialogProps = {
@@ -37,6 +37,9 @@ export function MountDialog({
             <DialogContent size="sm">
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
+                    <DialogDescription className="sr-only">
+                        Set the name, storage type and size limit for this mount.
+                    </DialogDescription>
                 </DialogHeader>
                 <MountForm
                     initialValues={initialValues}

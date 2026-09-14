@@ -15,7 +15,14 @@ import { useMyTeams } from '@workspace/lib/home';
 import type { Attendee, CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { ConfirmDialog } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@workspace/ui/components/dialog';
 import { UsersRound } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { AttendeeEditor, AttendeeList } from './attendee-editor';
@@ -223,6 +230,9 @@ export function EditEventDialog({
                 <DialogContent size="md">
                     <DialogHeader>
                         <DialogTitle>Edit Event</DialogTitle>
+                        <DialogDescription className="sr-only">
+                            Change the title, time, guests and details of this event.
+                        </DialogDescription>
                     </DialogHeader>
 
                     <EventFormFields

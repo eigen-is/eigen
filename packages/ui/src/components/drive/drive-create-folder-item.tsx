@@ -51,7 +51,7 @@ export function DriveCreateItemDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
+            <DialogContent aria-describedby={undefined}>
                 <DialogHeader>
                     <DialogTitle>{title || `New ${type.toLowerCase()}`}</DialogTitle>
                 </DialogHeader>

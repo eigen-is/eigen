@@ -10,7 +10,12 @@ export function ProgressDialog({ open, title }: { open: boolean; title: string }
 
     return (
         <Dialog open={open}>
-            <DialogContent size="sm" showCloseButton={false} abovePreview={preview?.isPreviewOpen}>
+            <DialogContent
+                size="sm"
+                showCloseButton={false}
+                abovePreview={preview?.isPreviewOpen}
+                aria-describedby={undefined}
+            >
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                 </DialogHeader>

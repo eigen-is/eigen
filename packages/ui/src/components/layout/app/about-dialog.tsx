@@ -3,7 +3,7 @@ import { formatInputDate } from '@workspace/lib/date';
 import { usePublicConfig } from '@workspace/lib/public';
 import { Github, Scale, ScrollText } from 'lucide-react';
 import { Button } from '../../button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../../dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../dialog';
 
 type AboutDialogProps = {
     open: boolean;
@@ -21,11 +21,11 @@ export function AboutDialog({ open, onOpenChange }: AboutDialogProps) {
                     <div className="text-3xl font-medium select-none" style={{ color: 'var(--app-space-color)' }}>
                         eigen
                     </div>
-                    <p className="text-sm text-muted-foreground text-center">
+                    <DialogDescription className="text-center">
                         A self-hosted alternative to Google Workspace.
                         <br />
                         Simple and secure. You control your data.
-                    </p>
+                    </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-4 text-sm">

@@ -112,7 +112,7 @@ export function AdminSidebar({
             </SidebarBody>
 
             <Dialog open={showCreate} onOpenChange={setShowCreate}>
-                <DialogContent>
+                <DialogContent aria-describedby={undefined}>
                     <DialogHeader>
                         <DialogTitle>Create Team</DialogTitle>
                     </DialogHeader>

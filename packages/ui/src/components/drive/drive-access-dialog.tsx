@@ -6,7 +6,7 @@ import {
     type DriveVisibility,
     stripEigenExtension,
 } from '@workspace/lib/types/drive';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { DriveAccessList } from '@workspace/ui/components/drive/drive-access-list';
 import { DriveAccessListEdit } from '@workspace/ui/components/drive/drive-access-list-edit';
 import { DriveEmailCollaborators } from '@workspace/ui/components/drive/drive-email-collaborators';
@@ -66,6 +66,9 @@ export function DriveAccessDialog({ open, onOpenChange, path, prefillEmail }: Dr
                                 Share '{stripEigenExtension(path.name)}'
                             </DialogTitle>
                         </div>
+                        <DialogDescription className="sr-only">
+                            Manage who can open this file and what they can do with it.
+                        </DialogDescription>
                     </DialogHeader>
 
                     {readOnly ? (

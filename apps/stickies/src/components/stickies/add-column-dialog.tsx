@@ -25,7 +25,7 @@ export function AddColumnDialog({ isOpen, onClose, onAddColumn }: AddColumnDialo
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent size="sm">
+            <DialogContent size="sm" aria-describedby={undefined}>
                 <form onSubmit={handleSubmit}>
                     <DialogHeader>
                         <DialogTitle>Add Column</DialogTitle>

@@ -9,7 +9,14 @@ import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import { useDebouncedValue } from '@workspace/lib/use-debounced-value';
 import { Button } from '@workspace/ui/components/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@workspace/ui/components/dialog';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -220,6 +227,9 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
             <DialogContent className="flex flex-col p-0 gap-0 sm:max-w-[560px] max-w-[90vw] h-[620px] max-h-[85vh]">
                 <DialogHeader className="px-6 py-4 border-b shrink-0">
                     <DialogTitle>New chat</DialogTitle>
+                    <DialogDescription className="sr-only">
+                        Choose who to chat with, then name the chat.
+                    </DialogDescription>
                 </DialogHeader>
 
                 {step === 1 ? (
