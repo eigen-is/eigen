@@ -2,7 +2,14 @@ import { escapeHtml, stripTagsServer } from '@workspace/lib/html';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
-import { buildAttachmentUrl, renderEigenEmail } from './mail-template';
+import {
+    buildAttachmentUrl,
+    EMAIL_BORDER,
+    EMAIL_LINK,
+    EMAIL_MUTED,
+    EMAIL_TEXT,
+    renderEigenEmail,
+} from './mail-template';
 import type { OutboundMail } from './mailer';
 
 function pathAsAttachmentLink(path: DrivePath): AttachmentReference {
@@ -52,12 +59,12 @@ export function composeAccessRequestEmail(
     const requesterDisplay = requester.name || requester.email;
     const subject = `${requesterDisplay} requested access to "${displayName}"`;
     const messageBlock = message
-        ? `<div style="margin-top:12px;padding:12px;border-left:3px solid #e0e0e0;color:#1a1a1a;font-size:14px;line-height:1.5">${escapeHtml(message).replace(/\n/g, '<br>')}</div>`
+        ? `<div style="margin-top:12px;padding:12px;border-left:3px solid ${EMAIL_BORDER};color:${EMAIL_TEXT};font-size:14px;line-height:1.5">${escapeHtml(message).replace(/\n/g, '<br>')}</div>`
         : '';
     const reference = pathAsAttachmentLink(path);
     const html = renderEigenEmail({
         title: subject,
-        bodyHtml: `<p style="font-size:14px;line-height:1.5">${escapeHtml(requesterDisplay)} (<a href="mailto:${escapeHtml(requester.email)}" style="color:#1a73e8">${escapeHtml(requester.email)}</a>) is requesting access. Open the document and grant them access from the share dialog.</p>${messageBlock}`,
+        bodyHtml: `<p style="font-size:14px;line-height:1.5">${escapeHtml(requesterDisplay)} (<a href="mailto:${escapeHtml(requester.email)}" style="color:${EMAIL_LINK}">${escapeHtml(requester.email)}</a>) is requesting access. Open the document and grant them access from the share dialog.</p>${messageBlock}`,
         attachmentLinks: [reference],
         footerLine: `Access request from ${requesterDisplay}`,
     });
@@ -101,21 +108,15 @@ export function composeCollaboratorsEmail(
     };
 }
 
-// System emails (OTP, invite) — sent via sendMail() with `From: noreply@…` and a {orgName}
-// footer line so every Eigen-authored email carries the same branding shell. Welcome lives
-// in the user's own maildir (apps/api/src/lib/mail/welcome.ts) so it builds RFC822 directly
-// using renderEigenEmail rather than going through a composer.
-
+// System emails carry no from-address, so buildMailOptions stamps `noreply@` on them.
 export function composeOtpEmail(
     recipient: { name: string; email: string },
     code: string,
     kind: '2fa' | 'guest',
     orgName: string,
-    // Web domain — appended as `@domain #code` trailer in the plaintext so iOS Mail's
-    // Security Code AutoFill binds the code to this site. iOS scans the text/plain part of
-    // multipart/alternative; HTML isn't used for detection. Pass 'localhost' (or undefined)
-    // to skip the trailer — binding to localhost is meaningless and pollutes the body.
-    domain?: string,
+    // The `@domain #code` trailer is what iOS Mail's Security Code AutoFill reads from the
+    // text/plain part; 'localhost' skips it, since binding a code to localhost is meaningless.
+    domain: string,
 ): OutboundMail {
     const subject = kind === '2fa' ? 'Your verification code' : 'Your guest access code';
     const intro =
@@ -127,11 +128,11 @@ export function composeOtpEmail(
         bodyHtml:
             `<p style="font-size:14px;line-height:1.5">${intro}</p>` +
             `<p style="font-family:ui-monospace,Menlo,monospace;font-size:28px;font-weight:600;letter-spacing:4px;margin:16px 0">${escapeHtml(code)}</p>` +
-            `<p style="font-size:13px;color:#5f6368">This code expires in 5 minutes.</p>`,
+            `<p style="font-size:13px;color:${EMAIL_MUTED}">This code expires in 5 minutes.</p>`,
         footerLine: orgName,
     });
     const lines = [`${intro.replace(/:$/, '')}: ${code}`, '', 'This code expires in 5 minutes.'];
-    if (domain && domain !== 'localhost') {
+    if (domain !== 'localhost') {
         lines.push('', `@${domain} #${code}`);
     }
     return {

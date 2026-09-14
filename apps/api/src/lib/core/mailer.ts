@@ -39,6 +39,10 @@ export type OutboundMail = {
     envelope?: { from: string; to: string[] };
 };
 
+function defaultFrom(): OutboundAddress {
+    return { name: getOrgName(), address: `noreply@${getMailDomain()}` };
+}
+
 export function createTransport(): Mail {
     if (process.env['SMTP_HOST']) {
         // This hop stays inside the docker network (SMTP_HOST defaults to the bundled postfix)
@@ -60,7 +64,7 @@ export function createTransport(): Mail {
 
 export function buildMailOptions(message: OutboundMail): Mail.Options {
     const options: Mail.Options = {
-        from: message.from ?? { name: getOrgName(), address: `noreply@${getMailDomain()}` },
+        from: message.from ?? defaultFrom(),
         to: message.to,
         subject: message.subject,
         text: message.text,
@@ -73,13 +77,7 @@ export function buildMailOptions(message: OutboundMail): Mail.Options {
     if (message.inReplyTo) options.inReplyTo = message.inReplyTo;
     if (message.references) options.references = message.references;
     if (message.envelope) options.envelope = message.envelope;
-    if (message.attachments?.length) {
-        options.attachments = message.attachments.map((a) => ({
-            filename: a.filename,
-            content: a.content,
-            contentType: a.contentType,
-        }));
-    }
+    if (message.attachments?.length) options.attachments = message.attachments;
     if (message.icalEvent) {
         // Build iMIP MIME: text/calendar in multipart/alternative + application/ics attachment.
         // Use raw alternative with base64 to avoid quoted-printable mangling iCal = signs.
@@ -103,7 +101,7 @@ export async function sendMail(message: OutboundMail): Promise<boolean> {
     // in demo mode (a demo box has no MTA — a real send would throw on every share/invite/iMIP).
     if ((!isProduction() && !process.env['SMTP_HOST']) || isDemo()) {
         console.log('[DEV] Skipping email:', {
-            from: message.from ?? { name: getOrgName(), address: `noreply@${getMailDomain()}` },
+            from: message.from ?? defaultFrom(),
             to: message.to,
             subject: message.subject,
         });

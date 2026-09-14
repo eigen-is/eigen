@@ -1,13 +1,18 @@
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants';
 
+const DRIVE_ROOT = 'mounts';
+const MAIL_ROOT = 'eigen.mail';
+const CONTACTS_ROOT = 'eigen.contacts';
+const CALENDAR_ROOT = 'eigen.calendar';
+
 export const PATHS = {
     // The home's own settings file, at the root of every home folder — and so of every archive and
     // safety copy of one.
     SETTINGS: 'settings.json',
     DRIVE: {
-        ROOT: 'mounts',
+        ROOT: DRIVE_ROOT,
         DEFAULT_MOUNT: 'default',
-        SHARED_DB: 'mounts/shared.db',
+        SHARED_DB: `${DRIVE_ROOT}/shared.db`,
         METADATA_DB: 'metadata.db',
         DATA_DIR: 'data',
         THUMBS_DIR: 'thumbs',
@@ -17,21 +22,21 @@ export const PATHS = {
         DOCS_DIR: 'docs',
     },
     MAIL: {
-        ROOT: 'eigen.mail',
+        ROOT: MAIL_ROOT,
         MAILDIR: 'Maildir',
-        DB: 'eigen.mail/mail.db',
+        DB: `${MAIL_ROOT}/mail.db`,
         CUR: 'cur',
         NEW: 'new',
         TMP: 'tmp',
     },
     CONTACTS: {
-        ROOT: 'eigen.contacts',
-        DB: 'eigen.contacts/contacts.db',
+        ROOT: CONTACTS_ROOT,
+        DB: `${CONTACTS_ROOT}/contacts.db`,
         AVATARS: 'avatars',
     },
     CALENDAR: {
-        ROOT: 'eigen.calendar',
-        DB: 'eigen.calendar/calendar.db',
+        ROOT: CALENDAR_ROOT,
+        DB: `${CALENDAR_ROOT}/calendar.db`,
     },
     NOTIFICATIONS: {
         DB: 'eigen.notifications/notifications.db',

@@ -40,7 +40,16 @@ describe('parseByteRange', () => {
     });
 
     test('ignores a header it cannot parse rather than rejecting the request', () => {
-        for (const header of ['bytes=0-1,4-5', 'bytes = 0-2', 'bytes=-', 'BYTES=0-1', 'items=0-1', 'bytes=a-b']) {
+        // 'bytes=5-2' parses, but last-pos before first-pos is an invalid spec → ignore, not 416 (RFC 9110 §14.1.1).
+        for (const header of [
+            'bytes=0-1,4-5',
+            'bytes = 0-2',
+            'bytes=-',
+            'BYTES=0-1',
+            'items=0-1',
+            'bytes=a-b',
+            'bytes=5-2',
+        ]) {
             expect(parseByteRange(header, 10)).toBeNull();
         }
     });
@@ -48,7 +57,6 @@ describe('parseByteRange', () => {
     test('is unsatisfiable only for a parsed range outside the resource', () => {
         expect(parseByteRange('bytes=99-120', 10)).toBe('unsatisfiable');
         expect(parseByteRange('bytes=10-', 10)).toBe('unsatisfiable');
-        expect(parseByteRange('bytes=5-2', 10)).toBe('unsatisfiable');
         expect(parseByteRange('bytes=0-0', 0)).toBe('unsatisfiable');
     });
 });

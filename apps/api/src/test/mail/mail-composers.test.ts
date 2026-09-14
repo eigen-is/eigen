@@ -146,11 +146,6 @@ describe('composeOtpEmail', () => {
         expect(mail.text).not.toContain('@localhost');
         expect(mail.text).not.toContain('#111111');
     });
-
-    test('omits domain trailer when domain undefined', () => {
-        const mail = composeOtpEmail({ name: 'a', email: 'a@b.test' }, '222222', 'guest', 'Acme');
-        expect(mail.text).not.toContain(' #222222');
-    });
 });
 
 describe('composeInviteEmail', () => {

@@ -1,29 +1,24 @@
 import type { DeepPartial } from '@workspace/lib/types/util';
 import type { LocalFilesystem } from './local-filesystem';
 
-function deepMerge<T extends Record<string, unknown>>(target: T, source: DeepPartial<T>): T {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): Record<string, unknown> {
     const result = { ...target };
-    for (const key of Object.keys(source) as (keyof T)[]) {
+    for (const key of Object.keys(source)) {
         const sourceVal = source[key];
         const targetVal = result[key];
-        if (
-            sourceVal !== null &&
-            sourceVal !== undefined &&
-            typeof sourceVal === 'object' &&
-            !Array.isArray(sourceVal) &&
-            typeof targetVal === 'object' &&
-            targetVal !== null &&
-            !Array.isArray(targetVal)
-        ) {
-            result[key] = deepMerge(
-                targetVal as Record<string, unknown>,
-                sourceVal as DeepPartial<Record<string, unknown>>,
-            ) as T[keyof T];
-        } else {
-            result[key] = sourceVal as T[keyof T];
-        }
+        result[key] =
+            isPlainObject(sourceVal) && isPlainObject(targetVal) ? deepMerge(targetVal, sourceVal) : sourceVal;
     }
     return result;
+}
+
+// deepMerge works on untyped records; only this seam asserts the merged shape is still a T.
+function merge<T extends Record<string, unknown>>(target: T, source: DeepPartial<T>): T {
+    return deepMerge(target, source) as T;
 }
 
 export class JsonStore<T extends Record<string, unknown>> {
@@ -39,9 +34,9 @@ export class JsonStore<T extends Record<string, unknown>> {
 
     async load(): Promise<void> {
         const file = this.fs.file(this.filename);
-        // Fail-closed: a missing file yields defaults, but a corrupt existing file must reject — a silent reset would let the next set() persist defaults over the real bytes.
+        // Fail-closed: a corrupt existing file must reject, or the next set() persists defaults over the real bytes.
         if (await file.exists()) {
-            this.data = deepMerge(this.defaults, (await file.json()) as DeepPartial<T>);
+            this.data = merge(this.defaults, await file.json());
         }
     }
 
@@ -51,7 +46,7 @@ export class JsonStore<T extends Record<string, unknown>> {
 
     async set(update: DeepPartial<T>): Promise<T> {
         const prev = this.data;
-        this.data = deepMerge(this.data, update);
+        this.data = merge(this.data, update);
         try {
             await this.save();
         } catch (e) {

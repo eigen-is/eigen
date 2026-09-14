@@ -6,7 +6,7 @@ import { externalOwnerId } from '@workspace/lib/types/owner';
 import { parseIcs } from '../caldav/ical-parse';
 import { serializeEventForImip } from '../caldav/ical-serialize';
 import { getMailDomain } from '../config/server-config';
-import { renderEigenEmail } from '../core/mail-template';
+import { EMAIL_MUTED, EMAIL_TEXT, renderEigenEmail } from '../core/mail-template';
 import type { OutboundICalEvent, OutboundMail } from '../core/mailer';
 import type { Home } from '../home';
 import { verifyImipSender } from '../mail/imip-auth';
@@ -27,8 +27,8 @@ function buildEventSummary(event: CalendarEvent): string {
 
 function buildSection(label: string, value: string): string {
     return `<div style="margin-bottom:16px">
-      <div style="font-weight:600;font-size:13px;color:#5f6368;margin-bottom:4px">${label}</div>
-      <div style="font-size:14px;color:#1a1a1a">${value}</div>
+      <div style="font-weight:600;font-size:13px;color:${EMAIL_MUTED};margin-bottom:4px">${label}</div>
+      <div style="font-size:14px;color:${EMAIL_TEXT}">${value}</div>
     </div>`;
 }
 

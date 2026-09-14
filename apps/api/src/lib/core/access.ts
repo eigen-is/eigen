@@ -1,3 +1,4 @@
+import type { User } from '../user';
 import { getMemberships, getOrgRole } from '../user';
 import { ApiError } from './errors';
 
@@ -53,7 +54,8 @@ export function requireLocalhost(request: Request, server: RequestServer): void 
         throw new ApiError(403, 'Access denied: localhost only');
     }
     const ip = server?.requestIP(request)?.address;
-    if (!ip) return; // No server (e.g., tests using app.handle()) — allow
+    // No address falls through open: app.handle() (tests) has no server, and requestIP() is null once the peer socket is gone.
+    if (!ip) return;
     if (!isIpTrusted(ip)) {
         throw new ApiError(403, 'Access denied: localhost only');
     }
@@ -65,7 +67,7 @@ export function requireSelf(ownerId: string, userId: string): void {
     }
 }
 
-export function requireNonGuest(user: { role?: string | null }): void {
+export function requireNonGuest(user: Pick<User, 'role'>): void {
     if (user.role === 'guest') {
         throw new ApiError(403, 'Guests cannot access this resource');
     }

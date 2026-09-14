@@ -117,6 +117,20 @@ describe('ManagedDatabase future-version guard', () => {
         await expect(db.open(0)).rejects.toThrow(/newer/);
     });
 
+    test('refuses a schema stamp that is not an integer', async () => {
+        // Only our own migrations write the stamp, so anything else is a db we do not understand.
+        // `'abc' > 1` is false: without the guard the db opened with no migration run and every
+        // query on the missing tables failed later instead of the open failing loud.
+        const dbPath = nextDbPath();
+        const raw = new BunDatabase(dbPath, { create: true });
+        raw.exec(`CREATE TABLE __schema_version (id INTEGER PRIMARY KEY CHECK (id = 1), version INTEGER NOT NULL DEFAULT 0);
+                  INSERT INTO __schema_version (id, version) VALUES (1, 'abc');`);
+        raw.close();
+
+        const db = new ManagedDatabase(makeConfig(1000), dbPath, {}, true);
+        await expect(db.open(0)).rejects.toThrow(/schema stamp/);
+    });
+
     test('opens a database sitting at exactly currentVersion', async () => {
         // The guard is `>`, not `>=`: an already-migrated db reopens cleanly at currentVersion.
         const dbPath = nextDbPath();
