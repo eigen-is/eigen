@@ -1,15 +1,13 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
-import type { Contact } from '@workspace/lib/types/contact';
 import type { EmailSummary } from '@workspace/lib/types/mail';
+import type { TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getHome } from '../../lib/home';
 import { assertJson, authedRequest, findOrFail, getTestContext, putDraft, uploadDraftAttachment } from '../setup';
-
-type VCardPreviewBody = { cards: { contact: Contact }[]; dropped: number; total: number };
 
 const isWindows = process.platform === 'win32';
 const SUBJECT = 'Attachment route fixture';
@@ -17,6 +15,10 @@ const RANGED_BODY = '0123456789';
 const ODD_NAME = 'räp"ort.txt';
 const OVERSIZE_SUBJECT = 'Oversize vCard fixture';
 const NOTES_BODY = 'First line.\r\n\r\nSecond paragraph.';
+// A sender names the parts, so one named after a preview route must still download as its own bytes.
+const SHADOW_NAMED_BODY = 'bytes, not a preview';
+// Latin-1 bytes: read as UTF-8 the 0xE9 comes back as a replacement character.
+const LATIN_BODY = 'caf\u00e9 au lait';
 const VCARD_BODY = [
     'BEGIN:VCARD',
     'VERSION:3.0',
@@ -37,9 +39,9 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
     const embedUrl = (index: number, fileName: string): string =>
         `/mail/${ctx.alice.user.id}/message/${messageId}/attachment/${index}/embed/${fileName}`;
     const textPreviewUrl = (index: number): string =>
-        `/mail/${ctx.alice.user.id}/message/${messageId}/attachment/${index}/text-preview`;
+        `/mail/${ctx.alice.user.id}/message/${messageId}/attachment/${index}/preview/text`;
     const vcardPreviewUrl = (index: number): string =>
-        `/mail/${ctx.alice.user.id}/message/${messageId}/attachment/${index}/vcard-preview`;
+        `/mail/${ctx.alice.user.id}/message/${messageId}/attachment/${index}/preview/vcard`;
 
     beforeAll(async () => {
         ctx = await getTestContext();
@@ -108,6 +110,17 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
             'Content-Disposition: attachment; filename="typeless.bin"',
             '',
             'no type here',
+            `--${boundary}`,
+            'Content-Type: text/plain; charset=utf-8',
+            'Content-Disposition: attachment; filename="text-preview"',
+            '',
+            SHADOW_NAMED_BODY,
+            `--${boundary}`,
+            'Content-Type: text/plain; charset=iso-8859-1',
+            'Content-Disposition: attachment; filename="latin.txt"',
+            'Content-Transfer-Encoding: base64',
+            '',
+            Buffer.from(LATIN_BODY, 'latin1').toString('base64'),
             `--${boundary}--`,
         ].join('\r\n');
 
@@ -152,16 +165,16 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
     });
 
     test('an out-of-range index is 404 on both routes', async () => {
-        const download = await authedRequest(ctx.alice.user.sessionToken, downloadUrl(10, 'page.html'));
+        const download = await authedRequest(ctx.alice.user.sessionToken, downloadUrl(12, 'page.html'));
         expect(download.status).toBe(404);
-        const embed = await authedRequest(ctx.alice.user.sessionToken, embedUrl(10, 'page.html'));
+        const embed = await authedRequest(ctx.alice.user.sessionToken, embedUrl(12, 'page.html'));
         expect(embed.status).toBe(404);
     });
 
     test('the download route serves the real content type, nosniff and an attachment disposition', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, downloadUrl(0, 'ignored-url-name.bin'));
         expect(res.status).toBe(200);
-        expect(res.headers.get('content-type')).toBe('text/html');
+        expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8');
         expect(res.headers.get('content-disposition')).toBe('attachment; filename="page.html"');
         expect(res.headers.get('x-content-type-options')).toBe('nosniff');
         expect(res.headers.get('cache-control')).toBe('private, no-cache');
@@ -178,7 +191,7 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
     test('the embed route serves inline with the sandbox CSP for a scriptable part', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, embedUrl(0, 'page.html'));
         expect(res.status).toBe(200);
-        expect(res.headers.get('content-type')).toBe('text/html');
+        expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8');
         expect(res.headers.get('content-disposition')).toBe('inline; filename="page.html"');
         expect(res.headers.get('content-security-policy')).toBe("sandbox; default-src 'none'");
         expect(res.headers.get('x-content-type-options')).toBe('nosniff');
@@ -332,7 +345,7 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
     });
     test('a text part previews as a plaintext body', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, textPreviewUrl(5));
-        const preview = await assertJson<{ body: string; mode: string }>(res);
+        const preview = await assertJson<TextPreviewResult>(res);
         expect(preview.mode).toBe('plaintext');
         expect(preview.body).toContain('<p>First line.</p>');
         expect(preview.body).toContain('Second paragraph.');
@@ -340,7 +353,7 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
 
     test('a markdown part previews as rendered markdown', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, textPreviewUrl(6));
-        const preview = await assertJson<{ body: string; mode: string }>(res);
+        const preview = await assertJson<TextPreviewResult>(res);
         expect(preview.mode).toBe('markdown');
         expect(preview.body).toContain('<h1>Title</h1>');
     });
@@ -349,19 +362,36 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
     // renders as the mode its name deserves, and is labelled with that mode — never inside a document frame.
     test('a part wearing an eigen mime previews as the mode its bytes deserve', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, textPreviewUrl(8));
-        const preview = await assertJson<{ body: string; mode: string }>(res);
+        const preview = await assertJson<TextPreviewResult>(res);
         expect(preview.mode).toBe('plaintext');
         expect(preview.body).toContain('Plain text wearing a document mime.');
     });
 
     test('a .vcf part previews as its cards', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, vcardPreviewUrl(7));
-        const preview = await assertJson<VCardPreviewBody>(res);
+        const preview = await assertJson<VCardPreview>(res);
         expect(preview.total).toBe(1);
         expect(preview.dropped).toBe(0);
         expect(preview.cards).toHaveLength(1);
         expect(preview.cards[0].contact.firstName).toBe('Ada');
         expect(preview.cards[0].contact.lastName).toBe('Lovelace');
+    });
+
+    // A sender names the part, so one named after a preview route still has to download as its own bytes:
+    // the preview routes sit two segments past the index, where no single-segment name reaches them.
+    test('a part named after the preview route downloads its own bytes', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, downloadUrl(10, 'text-preview'));
+        expect(res.status).toBe(200);
+        expect(await res.text()).toBe(SHADOW_NAMED_BODY);
+    });
+
+    test('a part is decoded and served in the charset it declares', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, textPreviewUrl(11));
+        const preview = await assertJson<TextPreviewResult>(res);
+        expect(preview.body).toContain(LATIN_BODY);
+
+        const download = await authedRequest(ctx.alice.user.sessionToken, downloadUrl(11, 'latin.txt'));
+        expect(download.headers.get('content-type')).toBe('text/plain; charset=iso-8859-1');
     });
 
     test('a part no text mode covers has no text preview', async () => {
@@ -373,7 +403,7 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
     });
 
     test('an out-of-range part carries no preview caching headers with its 404', async () => {
-        const res = await authedRequest(ctx.alice.user.sessionToken, textPreviewUrl(10));
+        const res = await authedRequest(ctx.alice.user.sessionToken, textPreviewUrl(12));
         expect(res.status).toBe(404);
         expect(res.headers.get('etag')).toBeNull();
         expect(res.headers.get('cache-control')).toBeNull();
@@ -442,7 +472,7 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
 
         const res = await authedRequest(
             ctx.alice.user.sessionToken,
-            `/mail/${ctx.alice.user.id}/message/${bigId}/attachment/0/vcard-preview`,
+            `/mail/${ctx.alice.user.id}/message/${bigId}/attachment/0/preview/vcard`,
         );
         expect(res.status).toBe(413);
     });

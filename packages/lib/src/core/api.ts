@@ -63,7 +63,7 @@ export const vcardPreviewRoute = (ownerId: string, mountId: string, pathId: stri
 // The mail part beside it serves the same cards with the same bare birthdays, so it reads through the
 // same no-revival treaty.
 export const mailVCardPreviewRoute = (ownerId: string, messageId: string, index: number) =>
-    plainApi.mail({ ownerId }).message({ id: messageId }).attachment({ index })['vcard-preview'];
+    plainApi.mail({ ownerId }).message({ id: messageId }).attachment({ index }).preview.vcard;
 export const mailApi = api.mail;
 export const publicApi = api.p;
 export const driveApi = api.drive;

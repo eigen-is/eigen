@@ -33,8 +33,12 @@ export function serveMailPart(
 ): Response {
     // A part with no Content-Type header parses to '', which no client can act on.
     const contentType = att.contentType || 'application/octet-stream';
+    // A text part keeps the charset it declared: served bare, a latin-1 body is read as UTF-8 and shows
+    // mojibake. The parser kept only a token, so nothing sender-written can break the header.
+    const servedType =
+        att.charset && contentType.startsWith('text/') ? `${contentType}; charset=${att.charset}` : contentType;
     const headers: Record<string, string> = {
-        'Content-Type': contentType,
+        'Content-Type': servedType,
         'Content-Disposition': contentDisposition(disposition, mailAttachmentName(att, index)),
         'X-Content-Type-Options': 'nosniff',
         'Accept-Ranges': 'bytes',

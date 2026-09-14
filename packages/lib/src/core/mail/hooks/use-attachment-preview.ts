@@ -14,7 +14,7 @@ export function useMailTextPreview(ownerId: string, messageId: string, index: nu
             const response = await mailApi({ ownerId })
                 .message({ id: messageId })
                 .attachment({ index })
-                ['text-preview'].get();
+                .preview.text.get();
             if (response.error) throw new AppError(response);
             return response.data;
         },

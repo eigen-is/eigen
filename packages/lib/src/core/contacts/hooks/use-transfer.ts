@@ -61,23 +61,46 @@ export function useExportContacts() {
     return { exportContacts, isExporting };
 }
 
+// The file travels as the raw body, not multipart: the route reads one vCard stream. Mirrors
+// useImportDocument.
+async function postImport(ownerId: string, file: Blob): Promise<ImportContactsResult> {
+    const response = await fetch(getContactsImportUrl(ownerId), {
+        method: 'POST',
+        headers: { 'content-type': VCARD_MIMES[0] },
+        body: file,
+        credentials: 'include',
+    });
+    if (!response.ok) throw new Error(await response.text());
+    return await response.json();
+}
+
 export function useImportContacts() {
     const queryClient = useQueryClient();
     const { user } = useAuth();
     const ownerId = user?.id || '';
 
     return useMutation({
-        // The file travels as the raw body, not multipart: the route reads one vCard stream. Mirrors
-        // useImportDocument.
-        mutationFn: async (file: File): Promise<ImportContactsResult> => {
-            const response = await fetch(getContactsImportUrl(ownerId), {
-                method: 'POST',
-                headers: { 'content-type': VCARD_MIMES[0] },
-                body: file,
-                credentials: 'include',
-            });
+        mutationFn: (file: File): Promise<ImportContactsResult> => postImport(ownerId, file),
+        onSuccess: (result) => {
+            invalidateContactList(queryClient, ownerId);
+            reportImport(result);
+        },
+        onError: onMutationError,
+    });
+}
+
+// A file with no Drive path behind it (a mail part, a chat attachment): a vCard is kilobytes, so the
+// browser carries the bytes from the download URL to the import route.
+export function useImportContactsFromUrl() {
+    const queryClient = useQueryClient();
+    const { user } = useAuth();
+    const ownerId = user?.id || '';
+
+    return useMutation({
+        mutationFn: async ({ url }: { url: string }): Promise<ImportContactsResult> => {
+            const response = await fetch(url, { credentials: 'include' });
             if (!response.ok) throw new Error(await response.text());
-            return await response.json();
+            return postImport(ownerId, await response.blob());
         },
         onSuccess: (result) => {
             invalidateContactList(queryClient, ownerId);

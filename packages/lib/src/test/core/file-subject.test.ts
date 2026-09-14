@@ -114,6 +114,19 @@ describe('getPreviewMode', () => {
             expect(getPreviewMode(subject('team.vcf', 'text/vcard'))).toBe('vcard');
         }
     });
+
+    // A mime is the uploader's or the sender's word; only a real container earns the document modes,
+    // which is the gate the preview routes run on the bytes they hold.
+    test('an eigen mime on loose bytes previews as what its name deserves, never as a document', () => {
+        expect(getPreviewMode(driveSubject('report.bin', 'application/eigendoc'))).toBe('fallback');
+        expect(getPreviewMode(mailSubject('report.bin', 'application/eigendoc'))).toBe('fallback');
+        expect(getPreviewMode(driveSubject('report.txt', 'application/eigendoc'))).toBe('text');
+    });
+
+    test('a Drive container previews as text, from its own document body', () => {
+        expect(getPreviewMode(driveSubject('Notes.eigendoc', 'application/eigendoc', 'doc'))).toBe('text');
+        expect(getPreviewMode(driveSubject('Team.eigenchat', 'application/eigenchat', 'chat'))).toBe('fallback');
+    });
 });
 
 describe('subjectFromMailAttachment', () => {

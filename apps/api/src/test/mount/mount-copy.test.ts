@@ -80,14 +80,35 @@ describe('Mount.copyPath', () => {
         expect(copied.details?.height).toBe(8);
     });
 
-    test('copies a file whose thumbnail file is gone', async () => {
+    test('copies a file whose thumbnail file is gone, details and all', async () => {
         const data = Buffer.from('png-bytes');
         const fileId = await mount.createFile(rootId, 'stale.png', 'image/png', data.length, data);
-        await mount.updatePath(fileId, { thumbnail: `${fileId}.webp` });
+        await mount.updatePath(fileId, { thumbnail: `${fileId}.webp`, details: { width: 4, height: 2 } });
 
         const copied = await mount.copyPath(fileId, rootId, 'stale-copy.png');
         expect(copied.thumbnail).toBeNull();
         expect(existsSync(join(mount.thumbsDir, `${copied.id}.webp`))).toBe(false);
+        expect(copied.details?.width).toBe(4);
+        expect(copied.details?.height).toBe(2);
+    });
+
+    test('copies the details of a file that never had a thumbnail', async () => {
+        const data = Buffer.from('mp3-bytes');
+        const fileId = await mount.createFile(rootId, 'song.mp3', 'audio/mpeg', data.length, data);
+        await mount.updatePath(fileId, { details: { duration: 42 } });
+
+        const copied = await mount.copyPath(fileId, rootId, 'song-copy.mp3');
+        expect(copied.details?.duration).toBe(42);
+    });
+
+    test('leaves the details that belong to the source row behind', async () => {
+        const data = Buffer.from('png-bytes');
+        const fileId = await mount.createFile(rootId, 'upload.png', 'image/png', data.length, data);
+        await mount.updatePath(fileId, { details: { originalName: 'holiday.png', width: 3 } });
+
+        const copied = await mount.copyPath(fileId, rootId, 'upload-copy.png');
+        expect(copied.details?.width).toBe(3);
+        expect(copied.details?.originalName).toBeUndefined();
     });
 
     test('copies a folder with a thumbnailed child', async () => {

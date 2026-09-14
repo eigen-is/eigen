@@ -32,6 +32,8 @@ export type Attachment = {
     content: Uint8Array;
     // Byte length of content; the detail payload blanks content, so the compose UI reads this instead.
     size: number;
+    // The charset the part declares, kept for text parts: the bytes are not UTF-8 unless they say so.
+    charset?: string;
     calendarMethod?: ImipMethod;
     // Set on text/calendar attachments in the message-detail payload; null = unparseable ICS.
     calendarInvite?: CalendarInvite | null;

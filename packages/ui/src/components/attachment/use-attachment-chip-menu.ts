@@ -44,7 +44,7 @@ export function useAttachmentChipMenu<T, H = void>(toMenuItem: ToMenuItem<T, H>)
                 // Leave links and text selected under the pointer to the browser's native copy menu. A
                 // chip is an anchor too, and it has its own rows to offer.
                 const selection = window.getSelection();
-                if (!chipKey && e.target instanceof HTMLElement && e.target.closest('a')) return;
+                if (!chipKey && e.target instanceof Element && e.target.closest('a')) return;
                 if (
                     selection &&
                     !selection.isCollapsed &&

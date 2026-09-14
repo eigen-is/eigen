@@ -3,18 +3,20 @@ import * as path from 'node:path';
 import { getBytesTextPreviewMode } from '@workspace/lib/constants';
 import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { type DrivePath, isCollabType, isVCardFile } from '@workspace/lib/types/drive';
+import type { TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { ApiError } from '../core/errors';
 import { COLLAB_DOCUMENT_TYPES } from '../document/collab-types';
 import type { VCardPreviewJob } from '../document/transform/protocol';
 import { runBytesTransformToText, runFileTransformToText } from '../document/transform/run-transform';
 import type { TransformPriority } from '../document/transform/runner';
+import { decodeCharset } from '../mail/mail-parser/decode';
 import type { Mount } from '../mount';
 import { generateImagePreview } from '../shared/thumbnails';
 import { isExiftoolCandidate } from './exiftool-preview';
 import { generateDocumentPreview } from './preview-document';
 import { inlineSvgMediaRefs } from './svg-media-inline';
-import { generateTextPreview, type TextPreviewResult } from './text-preview';
-import { parseVCardPreview, type VCardPreview } from './vcard-preview';
+import { generateTextPreview } from './text-preview';
+import { parseVCardPreview } from './vcard-preview';
 
 type ImagePreview = { type: 'image'; data: Buffer; contentType: string };
 type ScreenPreviewResult = ImagePreview | { type: 'redirect'; url: string } | null;
@@ -364,10 +366,13 @@ export async function getBytesTextPreview(
     bytes: ArrayBuffer | Uint8Array,
     fileName: string,
     contentType: string,
+    charset?: string,
 ): Promise<TextPreviewResult | null> {
     const mode = getBytesTextPreviewMode(contentType, fileName);
     if (mode === null) return null;
-    return generateTextPreview(new TextDecoder().decode(bytes), mode, fileName);
+    // A mail part carries the charset its sender declared; Drive bytes have none and read as UTF-8.
+    const buffer = Buffer.from(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes));
+    return generateTextPreview(decodeCharset(buffer, charset ?? 'utf-8'), mode, fileName);
 }
 
 const VCARD_PREVIEW_JOB: VCardPreviewJob = { kind: 'preview', documentType: 'vcard' };

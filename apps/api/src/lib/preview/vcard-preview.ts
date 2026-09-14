@@ -1,19 +1,13 @@
 import { IMPORT_MAX_CARDS, VCARD_PREVIEW_MAX_CARDS } from '@workspace/lib/constants/contact';
-import type { Contact } from '@workspace/lib/types/contact';
+import type { VCardPreview } from '@workspace/lib/types/preview';
 import { ApiError } from '../core/errors';
 import { parseVCard } from '../vcard/parse';
 import { splitVCards } from '../vcard/split';
 import { parsedCardToContact } from '../vcard/to-contact';
 import { transcodeTo30 } from '../vcard/transcode';
 
-// What a .vcf preview serves: the cards themselves, not a rendered body — the overlay and the drive hero
-// both render them with ContactDetailCard/UserAvatar (packages/ui). `cards` holds the first
-// VCARD_PREVIEW_MAX_CARDS readable ones; `dropped` counts the cards the parser refused and `total` the
-// cards the file holds, so a surface can say how many it is not showing.
-export type VCardPreview = { cards: { contact: Contact; categories: string[] }[]; dropped: number; total: number };
-
 // A cached body is JSON this process wrote from a value it built, so the read back is a typed assignment,
-// like the text preview's own cached JSON. Nothing else checks the shape: change this type and bump
+// like the text preview's own cached JSON. Nothing else checks the shape: change VCardPreview and bump
 // VCARD_FORMAT (preview-cache.ts), or a restored previewsDir serves the old shape. A file that is
 // truncated or half-written throws here and readCachedText counts it a miss.
 export const parseVCardPreview = (body: string): VCardPreview => JSON.parse(body);

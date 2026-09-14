@@ -1,5 +1,6 @@
-import { type BytesTextPreviewMode, getExtension, type TextPreviewMode } from '@workspace/lib/constants/preview';
+import { type BytesTextPreviewMode, getExtension } from '@workspace/lib/constants/preview';
 import { escapeHtml } from '@workspace/lib/html';
+import type { TextPreviewResult } from '@workspace/lib/types/preview';
 import { hastToHtml } from '../export/doc/render';
 import { sanitizeExportHtml } from '../export/sanitize';
 
@@ -61,11 +62,6 @@ const LANGUAGE_MAP: Record<string, string> = {
 function getLanguageFromFileName(fileName: string): string | undefined {
     return LANGUAGE_MAP[getExtension(fileName)];
 }
-
-export type TextPreviewResult = {
-    body: string;
-    mode: TextPreviewMode;
-};
 
 // The mode is the narrow one: this renders bytes, and the collab modes come from the Yjs loaders.
 export async function generateTextPreview(

@@ -60,9 +60,18 @@ export async function copyPath(
     const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), srcFile);
     try {
         const newId = await mount.createFileFromTemp(destParentId, name, src.mimeType, size, hash, tempId);
-        if (src.thumbnail) {
-            const thumbnail = await copyThumbnail(mount.thumbsDir, src.thumbnail, newId);
-            if (thumbnail) await mount.updatePath(newId, { thumbnail, details: src.details });
+        // The media facts the upload path derives from the bytes travel with them, thumbnail or not.
+        // The rest of details stays behind: originalName names the source's own downloads and
+        // webdavProps are its client's dead properties.
+        const details = {
+            ...(src.details?.width !== undefined && { width: src.details.width }),
+            ...(src.details?.height !== undefined && { height: src.details.height }),
+            ...(src.details?.duration !== undefined && { duration: src.details.duration }),
+        };
+        const hasDetails = Object.keys(details).length > 0;
+        const thumbnail = src.thumbnail ? await copyThumbnail(mount.thumbsDir, src.thumbnail, newId) : null;
+        if (thumbnail || hasDetails) {
+            await mount.updatePath(newId, { ...(thumbnail && { thumbnail }), ...(hasDetails && { details }) });
         }
         if (actor) {
             mount.history.record({ pathId: newId, eventType: 'copied', actor, details: copiedFrom });
