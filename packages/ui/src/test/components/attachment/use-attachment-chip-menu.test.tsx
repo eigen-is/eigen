@@ -41,7 +41,7 @@ const { useAttachmentChipMenu } = await import('../../../components/attachment/u
 
 // The menu item is the chip key itself: what the wrapper owes a host is which chip the press landed
 // on, and nothing when the press landed on no chip.
-function Host({ onItem }: { onItem: (item: string | null) => void }) {
+function Host({ onItem, onSave }: { onItem: (item: string | null) => void; onSave: () => void }) {
     const { contextMenu, bind } = useAttachmentChipMenu<null, string>((_row, chipKey) => chipKey ?? undefined);
     onItem(contextMenu.item);
     return createElement(
@@ -55,16 +55,24 @@ function Host({ onItem }: { onItem: (item: string | null) => void }) {
         }),
         createElement('a', { id: 'other-link', href: 'https://example.test/elsewhere' }, 'a link'),
         createElement('span', { id: 'body' }, 'message text'),
+        createElement('button', { id: 'save-all', type: 'button', onClick: onSave }, 'Save attachments'),
     );
 }
 
 async function mountHost() {
     const items: (string | null)[] = [];
+    const saves: number[] = [];
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
     await act(async () => {
-        root.render(createElement(Fragment, null, createElement(Host, { onItem: (item) => items.push(item) })));
+        root.render(
+            createElement(
+                Fragment,
+                null,
+                createElement(Host, { onItem: (item) => items.push(item), onSave: () => saves.push(1) }),
+            ),
+        );
     });
     const at = (selector: string) => {
         const element = container.querySelector(selector);
@@ -75,7 +83,24 @@ async function mountHost() {
         await act(async () => root.unmount());
         container.remove();
     };
-    return { items, at, cleanup, last: () => items[items.length - 1] };
+    return { items, saves, at, cleanup, last: () => items[items.length - 1] };
+}
+
+async function longPress(element: Element) {
+    await act(async () => {
+        const down = new MouseEvent('pointerdown', { bubbles: true, clientX: 40, clientY: 60 });
+        Object.defineProperty(down, 'pointerType', { value: 'touch' });
+        element.dispatchEvent(down);
+    });
+    await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+    });
+}
+
+async function click(element: Element) {
+    await act(async () => {
+        element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
 }
 
 async function rightClick(element: Element) {
@@ -123,5 +148,27 @@ test('a touch long-press on a chip opens the same menu', async () => {
         await new Promise((resolve) => setTimeout(resolve, 600));
     });
     expect(host.last()).toBe('part-0');
+    await host.cleanup();
+});
+
+test('a long press that opens no menu leaves the click that follows alone', async () => {
+    const host = await mountHost();
+    const button = host.at('#save-all');
+    await longPress(button);
+    expect(host.last()).toBe(null);
+    await click(button);
+    expect(host.saves.length).toBe(1);
+    await host.cleanup();
+});
+
+test('a long press that opened a menu still swallows the click that follows', async () => {
+    const host = await mountHost();
+    await longPress(host.at('[data-attachment-chip="part-0"] span'));
+    expect(host.last()).toBe('part-0');
+    const click2 = new MouseEvent('click', { bubbles: true, cancelable: true });
+    await act(async () => {
+        host.at('[data-attachment-chip="part-0"] span').dispatchEvent(click2);
+    });
+    expect(click2.defaultPrevented).toBe(true);
     await host.cleanup();
 });
