@@ -1,5 +1,5 @@
 import { getCalendarAppUrl } from '@workspace/lib/api';
-import { formatEventWhen, getMonthRange } from '@workspace/lib/calendar';
+import { formatEventWhen, getMonthRange, viewerTimeZone } from '@workspace/lib/calendar';
 import type { CalendarInvite } from '@workspace/lib/types/mail';
 import { Button } from '@workspace/ui/components/button';
 import { cn } from '@workspace/ui/lib/utils';
@@ -52,7 +52,13 @@ export function CalendarInviteWidget({ invite }: CalendarInviteWidgetProps) {
                     </p>
                 )}
                 <p className="text-xs text-muted-foreground">
-                    {formatEventWhen(invite.startTime, invite.endTime, invite.allDay, invite.timezone)}
+                    {formatEventWhen(
+                        invite.startTime,
+                        invite.endTime,
+                        invite.allDay,
+                        invite.timezone,
+                        viewerTimeZone(),
+                    )}
                 </p>
                 {invite.location && <p className="text-xs text-muted-foreground">{invite.location}</p>}
                 {organizer && <p className="text-xs text-muted-foreground">Organizer: {organizer}</p>}

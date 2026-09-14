@@ -152,6 +152,15 @@ occurrence-by-occurrence from dtstart to the query window on the single shared e
 - **Query windows are clamped**, not rejected, to a 5-year span — wide enough for any real view, and it stops
   a year-9999 range request.
 
+## Rendering a zone-less event
+
+`timezone` is nullable: only the create/edit dialogs always store one, so API-, CalDAV- and iMIP-created events routinely carry `null` (all-day events store `null` by design). `formatEventWhen` therefore takes the fallback zone as a required argument instead of defaulting to UTC, because the right answer differs per surface:
+
+- **Browser** (`event-detail-dialog.tsx`, `calendar-invite-widget.tsx`) passes `viewerTimeZone()` — the runtime's own zone, which is exactly what the month/week grid lays events out in (`formatTime` reads `getHours`, `getEventsForDay` reads `getDate`). Any other choice makes the detail dialog name a different clock time than the slot the grid drew.
+- **API** (`imip.ts`) has no viewer and must not borrow the server's zone, so invitation mail renders a zone-less timed event in UTC and appends `(UTC)`. An event with a stored zone renders in that zone, unlabelled; the attached `.ics` carries the TZID either way.
+
+All-day events take neither fallback: `formatEventWhen` pins them to UTC, because their bounds are midnight UTC and the date portion is the answer (the same UTC buckets `getEventsForDay` sorts them into). A stored TZID that `Intl` rejects (Outlook's `W. Europe Standard Time`, pre-normalization rows) takes the same fallback as no zone at all — it is the case `normalizeTimezone` now writes as `null` at ingestion.
+
 ## All-Day Events
 
 `startTime`/`endTime` are midnight UTC. `endTime` is exclusive (day after last day). Frontend must use UTC date portion,

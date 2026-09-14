@@ -10,6 +10,7 @@ import {
     useMoveEvent,
     useSharedCalendars,
     useUpdateEvent,
+    viewerTimeZone,
 } from '@workspace/lib/calendar';
 import { useMyTeams } from '@workspace/lib/home';
 import type { Attendee, CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
@@ -159,7 +160,7 @@ export function EditEventDialog({
         const { start, end } = buildEventTimes(allDay, startDate, endDate, startTime, endTime);
 
         const data = { ...event.data, attendees: attendees.length > 0 ? attendees : undefined };
-        const timezone = allDay ? null : (event.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
+        const timezone = allDay ? null : (event.timezone ?? viewerTimeZone());
         const updates = {
             title: title.trim(),
             startTime: start,
@@ -267,7 +268,7 @@ export function EditEventDialog({
                         setSelectedCalKey={setSelectedCalKey}
                         calendarOptions={calendarOptions}
                         recurrenceStartDate={new Date(`${startDate}T00:00:00`)}
-                        timezone={event.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone}
+                        timezone={event.timezone || viewerTimeZone()}
                         allDayId="edit-all-day"
                         detailsDisabled={isLinkedEvent}
                         attendeesSection={

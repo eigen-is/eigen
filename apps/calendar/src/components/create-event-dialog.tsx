@@ -1,5 +1,11 @@
 import { useAuth } from '@workspace/lib/auth';
-import { toLocalDateString, useCalendars, useCreateEvent, useSharedCalendars } from '@workspace/lib/calendar';
+import {
+    toLocalDateString,
+    useCalendars,
+    useCreateEvent,
+    useSharedCalendars,
+    viewerTimeZone,
+} from '@workspace/lib/calendar';
 import { useMyTeams } from '@workspace/lib/home';
 import type { Attendee } from '@workspace/lib/types/calendar';
 import { Button } from '@workspace/ui/components/button';
@@ -92,7 +98,7 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
             description: description.trim() || null,
             location: location.trim() || null,
             rrule: rruleString,
-            timezone: allDay ? null : Intl.DateTimeFormat().resolvedOptions().timeZone,
+            timezone: allDay ? null : viewerTimeZone(),
             data: attendees.length > 0 ? { attendees } : undefined,
         });
         onOpenChange(false);
@@ -134,7 +140,7 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
                     setSelectedCalKey={setSelectedCalKey}
                     calendarOptions={calendarOptions}
                     recurrenceStartDate={new Date(`${startDate}T00:00:00`)}
-                    timezone={Intl.DateTimeFormat().resolvedOptions().timeZone}
+                    timezone={viewerTimeZone()}
                     allDayId="all-day"
                     attendeesSection={
                         <div className="flex items-start gap-3">

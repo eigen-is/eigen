@@ -8,6 +8,7 @@ import {
     useDeleteEvent,
     useRsvp,
     useUpdateEvent,
+    viewerTimeZone,
 } from '@workspace/lib/calendar';
 import { useMyTeams } from '@workspace/lib/home';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
@@ -215,7 +216,13 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                         <div className="flex items-start gap-3 text-sm">
                             <Clock className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
                             <div>
-                                {formatEventWhen(event.startTime, event.endTime, event.allDay, event.timezone)}
+                                {formatEventWhen(
+                                    event.startTime,
+                                    event.endTime,
+                                    event.allDay,
+                                    event.timezone,
+                                    viewerTimeZone(),
+                                )}
                                 {event.timezone && (
                                     <div className="text-xs text-muted-foreground">
                                         {event.timezone.split('/').pop()?.replace(/_/g, ' ')} time zone

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { formatEventWhen, getEventsForDay } from '../../../core/calendar/calendar-utils';
+import { formatEventWhen, getEventsForDay, viewerTimeZone } from '../../../core/calendar/calendar-utils';
 import type { CalendarEventOccurrence } from '../../../types/calendar';
 
 function occurrence(occurrenceDate: string, startTime: Date, endTime: Date): CalendarEventOccurrence {
@@ -79,12 +79,37 @@ describe('formatEventWhen', () => {
 
     test('a valid IANA zone shifts the wall-clock time', () => {
         // Sept 2026 is CEST (UTC+2), so 09:00Z renders as 11:00.
-        expect(formatEventWhen(start, end, false, 'Europe/Amsterdam')).toContain('11:00');
+        expect(formatEventWhen(start, end, false, 'Europe/Amsterdam', 'UTC')).toContain('11:00');
     });
 
-    test('a non-IANA zone (pre-normalization stored TZID) degrades to UTC instead of throwing', () => {
-        expect(formatEventWhen(start, end, false, 'W. Europe Standard Time')).toBe(
-            formatEventWhen(start, end, false, 'UTC'),
+    test('an event with no stored zone renders in the given fallback, not UTC', () => {
+        // What the browser passes: the viewer zone the week grid positions the same event in.
+        expect(formatEventWhen(start, end, false, null, 'Europe/Amsterdam')).toContain('11:00');
+        expect(formatEventWhen(start, end, false, null, 'UTC')).toContain('9:00');
+    });
+
+    test('the viewer fallback agrees with the grid, which reads local Date getters', () => {
+        const originalTz = process.env.TZ;
+        process.env.TZ = 'Europe/Amsterdam';
+        try {
+            expect(formatEventWhen(start, end, false, null, viewerTimeZone())).toContain(
+                `${start.getHours()}:${String(start.getMinutes()).padStart(2, '0')}`,
+            );
+        } finally {
+            process.env.TZ = originalTz;
+        }
+    });
+
+    test('an all-day event keeps its UTC date whatever the fallback is', () => {
+        // Midnight-UTC bounds, exclusive end: one day, 10 Sept, for a viewer west of UTC too.
+        const dayStart = new Date('2026-09-10T00:00:00Z');
+        const dayEnd = new Date('2026-09-11T00:00:00Z');
+        expect(formatEventWhen(dayStart, dayEnd, true, null, 'America/Los_Angeles')).toBe('Thursday, 10 Sep 2026');
+    });
+
+    test('a non-IANA zone (pre-normalization stored TZID) falls back instead of throwing', () => {
+        expect(formatEventWhen(start, end, false, 'W. Europe Standard Time', 'Europe/Amsterdam')).toBe(
+            formatEventWhen(start, end, false, null, 'Europe/Amsterdam'),
         );
     });
 });

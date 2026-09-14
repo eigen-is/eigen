@@ -89,21 +89,39 @@ export function formatEventTime(event: CalendarEventOccurrence): string {
     return formatTime(event.startTime);
 }
 
+// The zone the calendar grid lays events out in: the runtime's own, because the grid reads local
+// Date getters (formatTime's getHours, getEventsForDay's getDate). Every browser surface that labels
+// those same events must resolve a zone-less one here too, or the dialog contradicts the grid.
+export function viewerTimeZone(): string {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
 // Calendar rows stored before TZID ingestion-normalization can hold a non-IANA zone that makes Intl
-// throw RangeError; this shared FE+BE code can't import the api-side normalizeTimezone, so it
-// degrades to UTC locally using the same Intl-construction oracle.
-function safeTimeZone(timezone?: string | null): string {
-    if (!timezone) return 'UTC';
+// throw RangeError; this shared FE+BE code can't import the api-side normalizeTimezone, so it reuses
+// the same Intl-construction oracle and treats a rejected zone as the no-zone case it normalizes to.
+function safeTimeZone(timezone: string | null | undefined, fallback: string): string {
+    if (!timezone) return fallback;
     try {
         new Intl.DateTimeFormat('en', { timeZone: timezone });
         return timezone;
     } catch {
-        return 'UTC';
+        return fallback;
     }
 }
 
-export function formatEventWhen(start: Date, end: Date, allDay: boolean, timezone?: string | null): string {
-    const tz = safeTimeZone(timezone);
+// fallbackTimeZone is explicit because there is no sane default on both sides: in the browser it is
+// viewerTimeZone(), on the API (iMIP mail) the server's own zone would be a lie, so that caller
+// passes 'UTC' and says so.
+export function formatEventWhen(
+    start: Date,
+    end: Date,
+    allDay: boolean,
+    timezone: string | null | undefined,
+    fallbackTimeZone: string,
+): string {
+    // An all-day event stores midnight UTC and its date portion IS the answer, so it never converts —
+    // same UTC day buckets getEventsForDay puts it in. Only timed events take the fallback.
+    const tz = allDay ? 'UTC' : safeTimeZone(timezone, fallbackTimeZone);
     const date = (d: Date) => formatDayMonth(d, { weekday: 'long', year: true, timeZone: tz });
     const dayKey = (d: Date) => d.toLocaleDateString('en', { timeZone: tz });
     const timeOpts: Intl.DateTimeFormatOptions = {
