@@ -18,6 +18,15 @@ export type NotificationType =
     | 'file-event'
     | 'admin-alert';
 
+// The thread a chat notification belongs to: a standalone chat's own path, or the container a comment
+// sits in plus that comment chat's file name. Tag spelling: core/notification/tags.ts.
+export type ChatNotificationThread = {
+    ownerId: string;
+    mountId: string;
+    pathId: string;
+    chatName?: string;
+};
+
 export type NotificationDetailsMap = {
     mail: { mailId: string; snippet?: string };
     'calendar-invite': { startTime: number };

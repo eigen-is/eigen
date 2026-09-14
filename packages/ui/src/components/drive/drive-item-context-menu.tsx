@@ -24,6 +24,8 @@ type DriveItemContextMenuProps = {
     onEmailCollaborators?: (item: DrivePath) => void;
     onDelete?: (items: DrivePath[]) => void;
     allowDelete?: boolean;
+    // The view's own write capability: a read-only feed's subjects offer no row that writes beside them.
+    canWrite?: boolean;
     // Replaces the default menu body — used by listings with their own actions (trash).
     renderItems?: (items: DrivePath[], close: () => void) => React.ReactNode;
 };
@@ -61,13 +63,20 @@ function DriveItemActionsMenu({
     onEmailCollaborators,
     onDelete,
     allowDelete,
+    canWrite = true,
 }: DriveItemContextMenuProps) {
     const { contextMenu } = controller;
     const contextItems = contextItemsOf(controller);
 
-    const subject = useMemo(() => (contextMenu.item ? subjectFromPath(contextMenu.item) : null), [contextMenu.item]);
+    const subject = useMemo(
+        () => (contextMenu.item ? subjectFromPath(contextMenu.item, { canWrite }) : null),
+        [contextMenu.item, canWrite],
+    );
     // Mapped only while the menu is open: a folder listing can run to thousands of rows.
-    const siblings = useMemo(() => (contextMenu.item ? items.map(subjectFromPath) : []), [contextMenu.item, items]);
+    const siblings = useMemo(
+        () => (contextMenu.item ? items.map((item) => subjectFromPath(item, { canWrite })) : []),
+        [contextMenu.item, items, canWrite],
+    );
     const runner = useFileActionRunner(subject, siblings);
 
     const isSingleSelect = contextItems.length === 1;

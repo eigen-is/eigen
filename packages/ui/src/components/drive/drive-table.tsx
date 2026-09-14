@@ -42,6 +42,8 @@ export type DriveViewProps = {
     onQuickLook?: (item: DrivePath) => void;
     onEmailCollaborators?: (item: DrivePath) => void;
     allowDelete?: boolean;
+    // The listing's own write capability, carried into the subjects its menus act on.
+    canWrite?: boolean;
     unreadPathIds?: Set<string>;
     // Selection lifted by the caller (DriveList) so it survives list/grid toggles.
     selection?: UseListSelectionReturn<DrivePath>;
@@ -116,6 +118,7 @@ export function DriveTable({
     onQuickLook,
     onEmailCollaborators,
     allowDelete = false,
+    canWrite = true,
     ancestorBreadcrumb,
     unreadPathIds,
     hideModified = false,
@@ -303,6 +306,7 @@ export function DriveTable({
                     onEmailCollaborators={onEmailCollaborators}
                     onDelete={onDelete}
                     allowDelete={allowDelete}
+                    canWrite={canWrite}
                     renderItems={contextMenuItems}
                 />
             )}

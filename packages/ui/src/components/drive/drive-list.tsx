@@ -216,6 +216,7 @@ type DriveListProps = CreateCallbacks & {
     pathId?: string;
     allowDelete?: boolean;
     allowUpload?: boolean;
+    canWrite?: boolean;
     onRename?: (item: DrivePath) => void;
     onMove?: (item: DrivePath, targetItemId: string) => void;
     onMoveTo?: (items: DrivePath[]) => void;
@@ -252,6 +253,7 @@ export function DriveList({
     pathId,
     allowDelete = false,
     allowUpload = false,
+    canWrite = true,
     onRename,
     onMove,
     onMoveTo,
@@ -322,6 +324,7 @@ export function DriveList({
         onExport,
         onDelete,
         allowDelete,
+        canWrite,
         onRename,
         onMove,
         onMoveTo,

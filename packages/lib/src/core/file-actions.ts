@@ -4,6 +4,12 @@ import { isFolderType, isVCardFile } from '../types/drive';
 import type { FileAction, FileActionId, FileSubject } from '../types/file-subject';
 import { subjectInfo } from './file-subject';
 
+// A convert writes the new document beside its source, so a file at a Drive location the viewer cannot
+// write to offers nothing; an attachment converts through the picker, which saves where the user points it.
+function canConvert(subject: FileSubject): boolean {
+    return !subject.drive || !!subject.attachment || !subject.readOnly;
+}
+
 // What can be done with a file, answered once for every surface; a predicate never asks which menu is drawing.
 export const FILE_ACTIONS: readonly FileAction[] = [
     {
@@ -25,13 +31,15 @@ export const FILE_ACTIONS: readonly FileAction[] = [
         label: 'Convert to Sheet',
         icon: Sheet,
         // Extension only: the convert route refuses on the name (import-document.ts).
-        applies: (info) => !!info.downloadUrl && info.name.toLowerCase().endsWith('.xlsx'),
+        applies: (info, subject) =>
+            !!info.downloadUrl && info.name.toLowerCase().endsWith('.xlsx') && canConvert(subject),
     },
     {
         id: 'convert-to-document',
         label: 'Convert to Document',
         icon: FileText,
-        applies: (info) => !!info.downloadUrl && info.name.toLowerCase().endsWith('.docx'),
+        applies: (info, subject) =>
+            !!info.downloadUrl && info.name.toLowerCase().endsWith('.docx') && canConvert(subject),
     },
     {
         id: 'import-contacts',

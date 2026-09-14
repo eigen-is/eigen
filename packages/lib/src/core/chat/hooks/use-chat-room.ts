@@ -21,7 +21,9 @@ import { useAutoMarkChatRead } from './use-chat-unread';
 
 let localIdCounter = 0;
 
-export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
+// `containerPathId` is set for a comment thread: the document it comments on, which is what its
+// notifications are tagged with (core/notification/tags.ts) — a standalone chat is tagged with itself.
+export function useChatRoom(ownerId: string, mountId: string, chatId: string, containerPathId?: string) {
     const { user } = useAuth();
 
     const messagesQuery = useMessages(ownerId, mountId, chatId);
@@ -54,7 +56,8 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
 
     const chatName = chatPath ? stripEigenExtension(chatPath.name) : 'Chat';
 
-    useAutoMarkChatRead(user?.id ?? '', chatId);
+    // The tag carries the chat's file name, not the stripped label the header shows.
+    useAutoMarkChatRead(user?.id ?? '', containerPathId ?? chatId, containerPathId ? chatPath?.name : undefined);
 
     const { data: effectiveMembers } = useEffectiveMembers(ownerId, mountId, chatId);
     const memberEmails = useMemo(() => (effectiveMembers ?? []).map((m) => m.email), [effectiveMembers]);

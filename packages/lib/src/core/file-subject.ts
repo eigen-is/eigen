@@ -16,8 +16,10 @@ import {
     getMailAttachmentUrl,
 } from './api';
 
-export function subjectFromPath(path: DrivePath): FileSubject {
-    return { drive: path };
+// `canWrite` is the holding surface's own capability: a listing the viewer may not write to marks its
+// subjects read-only, so a row that writes beside the file (convert) doesn't apply.
+export function subjectFromPath(path: DrivePath, capability?: { canWrite: boolean }): FileSubject {
+    return { drive: path, ...(capability?.canWrite === false && { readOnly: true as const }) };
 }
 
 // `index` is the raw part index the mail routes address, calendar parts included.

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { chatActivityTag, chatMentionTag } from '@workspace/lib/notification/tags';
 import type { ChatAttachment, ChatMessage } from '@workspace/lib/types/chat';
 import { type DrivePath, type EffectiveMember, stripEigenExtension } from '@workspace/lib/types/drive';
 import { type SSEvent, SSEventType } from '@workspace/lib/types/sse';
@@ -171,6 +172,13 @@ export class ChatRoom {
 
             const displayName = stripEigenExtension(this.containerPath?.name ?? this.path.name);
             const targetPath = this.containerPath ?? this.path;
+            // An embedded chat notifies about the container, naming the comment thread inside it.
+            const thread = {
+                ownerId: targetPath.ownerId,
+                mountId: targetPath.mountId,
+                pathId: targetPath.id,
+                chatName: this.containerPath ? this.path.name : undefined,
+            };
             const body = content.length > 100 ? `${content.slice(0, 100)}...` : content;
             const memberEmails = new Set(members.map((m) => m.email.toLowerCase()));
 
@@ -199,7 +207,7 @@ export class ChatRoom {
                                           actorEmail: authorEmail,
                                           title: mentionTitle,
                                           body,
-                                          tag: `mention:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}:${this.path.name}:${email}`,
+                                          tag: chatMentionTag(thread, email),
                                           details: { pathType: this.containerPath.type },
                                       }
                                     : {
@@ -207,7 +215,7 @@ export class ChatRoom {
                                           actorEmail: authorEmail,
                                           title: mentionTitle,
                                           body,
-                                          tag: `mention:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}:${email}`,
+                                          tag: chatMentionTag(thread, email),
                                       },
                             });
                         } catch {
@@ -229,7 +237,7 @@ export class ChatRoom {
                                   actorEmail: authorEmail,
                                   title: `${author.name} commented on "${displayName}"`,
                                   body,
-                                  tag: `comment-reply:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}:${this.path.name}`,
+                                  tag: chatActivityTag(thread),
                                   details: { pathType: this.containerPath.type },
                               }
                             : {
@@ -237,7 +245,7 @@ export class ChatRoom {
                                   actorEmail: authorEmail,
                                   title: `New message from ${author.name} in "${displayName}"`,
                                   body,
-                                  tag: `chat-message:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}`,
+                                  tag: chatActivityTag(thread),
                               },
                     });
                 } catch {

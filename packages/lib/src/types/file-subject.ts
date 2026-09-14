@@ -13,6 +13,9 @@ export type FileSubject = (
     // A message's or container's attachment, not a file at a Drive location: saved as a set, and
     // converted only after a save to a folder the user picks (a chat copy sits in a hidden media folder).
     attachment?: true;
+    // The viewer cannot write where this file sits (a watched feed), so no row that writes beside it
+    // applies. Set by the surface that holds the file, from its own DriveCapabilities.
+    readOnly?: true;
 };
 
 // One part of one message, by the RAW part index the mail routes address.

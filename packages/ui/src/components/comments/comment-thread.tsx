@@ -10,6 +10,8 @@ import { DrivePickerWithUpload } from '../drive/drive-picker-with-upload';
 type CommentThreadProps = {
     ownerId: string;
     mountId: string;
+    // The container this comment sits in: its notifications are tagged with that path, not the chat's.
+    pathId: string;
     chatName: string;
     className?: string;
 };
@@ -17,10 +19,11 @@ type CommentThreadProps = {
 function CommentThreadInner({
     ownerId,
     mountId,
+    pathId,
     chatId,
     className,
 }: { chatId: string } & Omit<CommentThreadProps, 'chatName'>) {
-    const chat = useChatRoom(ownerId, mountId, chatId);
+    const chat = useChatRoom(ownerId, mountId, chatId, pathId);
     const editing = useChatEditing(chat);
     const [filePickerOpen, setFilePickerOpen] = useState(false);
     const inputRef = useRef<ChatMessageInputHandle>(null);
@@ -80,7 +83,7 @@ function CommentThreadInner({
     );
 }
 
-export function CommentThread({ ownerId, mountId, chatName, className }: CommentThreadProps) {
+export function CommentThread({ ownerId, mountId, pathId, chatName, className }: CommentThreadProps) {
     const { resolveChatId } = useMediaResolver();
     const chatId = resolveChatId(chatName);
 
@@ -88,5 +91,7 @@ export function CommentThread({ ownerId, mountId, chatName, className }: Comment
         return <div className={cn('px-4 pb-4 text-sm text-muted-foreground', className)}>Comment not found.</div>;
     }
 
-    return <CommentThreadInner ownerId={ownerId} mountId={mountId} chatId={chatId} className={className} />;
+    return (
+        <CommentThreadInner ownerId={ownerId} mountId={mountId} pathId={pathId} chatId={chatId} className={className} />
+    );
 }

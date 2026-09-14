@@ -123,6 +123,8 @@ DELETE /notifications/:ownerId/:id                 Dismiss
 | Access request         | `propagateAccessRequest()` (`lib/drive/access-request-propagation.ts`; the route delegates) | `access-request` | `access-request:{ownerId}:{mountId}:{pathId}:{email}` |
 | File event (watch)     | `FileHistory.notifyWatchers()` via relay | `file-event`                | `file-event:{ownerId}:{mountId}:{pathId}` — burst events (`created`/`uploaded`/`copied`) tag the parent folder; always sent with `coalesce: true`. See [FILE-HISTORY.md](FILE-HISTORY.md) |
 
+The four chat and comment tags are built and read back through one module, `chatActivityTag` / `chatMentionTag` / `parseChatNotificationThread` / `chatThreadKey` (`packages/lib/src/core/notification/tags.ts`, imported by the API as `@workspace/lib/notification/tags`): a chat is tagged with its own path, an embedded chat with the *container* it comments on plus that comment chat's file name, so the notification links to the document and still names the thread inside it. `chatThreadKey` is what a reader compares on — `useAutoMarkChatRead` (`use-chat-unread.ts`) marks exactly the open thread's rows read, which is why a comment card passes the container's pathId with its chat name rather than the comment chat's own id, and `useUnreadChatIds` keeps using the tag's pathId, so the unread dot sits on the document.
+
 `actorEmail` is set on all sources — the sharer, organizer, mail sender, mention author, or access requester.
 
 What deliberately does NOT create a notification: your own actions (every source skips the actor), and plain

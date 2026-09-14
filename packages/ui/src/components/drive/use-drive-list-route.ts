@@ -8,6 +8,8 @@ import { usePreview } from '../preview-provider';
 type UseDriveListRouteOptions = {
     // The unsorted items backing the list — the fallback preview passes this whole set as siblings.
     items: DrivePath[];
+    // The view's own DriveCapabilities.canWrite: the preview's convert rows need somewhere to write.
+    canWrite: boolean;
     // Folder-branch target: fs stays in-route, shared/watched jump to /fs, mime clears the selection.
     onOpenFolder: (path: DrivePath) => void;
     // Desktop row-select target: where a single click on a non-openable row navigates.
@@ -27,6 +29,7 @@ type DriveListRouteHandlers = {
 // desktop select target vary, so the routes pass those two closures and keep the rest here.
 export function useDriveListRoute({
     items,
+    canWrite,
     onOpenFolder,
     onSelectItem,
 }: UseDriveListRouteOptions): DriveListRouteHandlers {
@@ -34,8 +37,10 @@ export function useDriveListRoute({
     const { isMobile } = useLayout();
     const { openPreview, updatePreview, isPreviewOpen } = usePreview();
 
+    const subjectOf = (path: DrivePath) => subjectFromPath(path, { canWrite });
+
     const onQuickLook = (path: DrivePath, sortedSiblings: DrivePath[]) => {
-        openPreview(subjectFromPath(path), sortedSiblings.map(subjectFromPath));
+        openPreview(subjectOf(path), sortedSiblings.map(subjectOf));
     };
 
     const onRowActivate = (path: DrivePath) => {
@@ -49,13 +54,13 @@ export function useDriveListRoute({
                 params: { ownerId: path.ownerId, mountId: path.mountId, pathId: path.id },
             });
         } else {
-            openPreview(subjectFromPath(path), items.map(subjectFromPath));
+            openPreview(subjectOf(path), items.map(subjectOf));
         }
     };
 
     const onRowSelect = (path: DrivePath) => {
         if (isPreviewOpen) {
-            updatePreview(subjectFromPath(path));
+            updatePreview(subjectOf(path));
         }
 
         if (isMobile && (isFolderType(path.type) || isDocumentType(path.type))) {

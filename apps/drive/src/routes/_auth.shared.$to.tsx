@@ -33,6 +33,7 @@ function DriveRoute() {
 
     const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
         items: folderContents,
+        canWrite: DRIVE_CAPABILITIES.listing.canWrite,
         onOpenFolder: (path: DrivePath) =>
             navigate({
                 to: '/fs/$ownerId/$mountId/$pathId',
