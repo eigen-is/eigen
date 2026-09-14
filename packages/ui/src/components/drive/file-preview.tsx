@@ -21,8 +21,7 @@ type FilePreviewProps = {
     hasNext: boolean;
     subject: FileSubject;
     siblings: FileSubject[];
-    // The siblings are one container's attachments: a set to act on as a whole, not just a list to
-    // page through.
+    // The siblings are one container's attachments: a set to save as a whole, not only a list to page through.
     attachment: boolean;
     onClose: () => void;
     onPrev: () => void;
@@ -44,14 +43,11 @@ export function FilePreview({
 }: FilePreviewProps) {
     const runner = useFileActionRunner(subject, siblings, { attachment });
 
-    // These register on document, and so does the picker's Escape (Radix stops nothing): without the
-    // gate one Escape would dismiss the dialog and the overlay under it in the same keystroke.
+    // Both listen on document and Radix stops nothing: ungated, one Escape would close the dialog and the overlay.
     const keysEnabled = !runner.isDialogOpen;
     useHotkey('Escape', () => onClose(), { enabled: keysEnabled });
     // Space closes it again, the way it opened it (Finder's Quick Look).
     useHotkey('Space', () => onClose(), { enabled: keysEnabled, preventDefault: true });
-    // The siblings arrive in the list's own order, so up/down step exactly like the drive list
-    // does and left/right mean the same thing.
     const goPrev = () => {
         if (hasPrev) onPrev();
     };
@@ -63,8 +59,7 @@ export function FilePreview({
     useHotkey('ArrowRight', goNext, { enabled: keysEnabled });
     useHotkey('ArrowDown', goNext, { enabled: keysEnabled });
 
-    // Trap focus in the overlay, but hand it to a picker (a Radix dialog portaled to body)
-    // while one is open.
+    // Focus stays in the overlay except while a dialog, portaled to body, holds it.
     const overlayRef = useRef<HTMLDivElement>(null);
     useFocusTrap(overlayRef, !runner.isDialogOpen);
 
@@ -81,9 +76,7 @@ export function FilePreview({
             tabIndex={-1}
             className="fixed inset-0 z-[100] bg-black/80 flex flex-col animate-in fade-in outline-none"
             style={{ pointerEvents: 'auto' }}
-            // React synthetic events bubble through the React tree across portals, so a
-            // click inside the save-to-drive picker (rendered as a JSX child below) would
-            // bubble here and dismiss the preview. Only close on direct overlay clicks.
+            // Synthetic events bubble across portals, so a click inside the picker would land here too.
             onClick={(e) => {
                 if (e.target === e.currentTarget) onClose();
             }}
@@ -121,8 +114,7 @@ export function FilePreview({
                     style={{ cursor: 'default' }}
                 >
                     {previewMode === 'image' && (
-                        // Keyed: paging to a sibling must not inherit the loaded flag or the measured
-                        // ratio of the image before it.
+                        // Keyed so a sibling never inherits the previous image's loaded flag or measured ratio.
                         <ProgressiveImage
                             key={previewUrl}
                             thumbnailUrl={subject.thumbnailUrl}
@@ -152,8 +144,7 @@ export function FilePreview({
                             className="w-[80vw] h-[calc(100vh-7rem)] rounded bg-background"
                         />
                     )}
-                    {/* Drive and mail serve the same preview shapes; the subject's identity picks the
-                        query, and each component calls exactly one hook. */}
+                    {/* One shape from Drive and mail; the identity picks the query, one hook per component. */}
                     {previewMode === 'text' && subject.drive && <TextPreviewContent path={subject.drive} />}
                     {previewMode === 'text' && subject.mail && <MailTextPreviewContent part={subject.mail} />}
                     {previewMode === 'vcard' && subject.drive && <VCardPreviewContent path={subject.drive} />}
@@ -215,8 +206,7 @@ function MailTextPreviewContent({ part }: { part: MailPartRef }) {
     return <TextPreviewBody data={data} isLoading={isLoading} />;
 }
 
-// Both routes serve one shape, so one renderer reads it — and a mail preview that drifted from the Drive
-// one would not compile.
+// Typed off the Drive hook, so a mail preview that drifted from its shape would not compile.
 type TextPreviewData = NonNullable<ReturnType<typeof useTextPreview>['data']>;
 
 function TextPreviewBody({ data, isLoading }: { data: TextPreviewData | undefined; isLoading: boolean }) {
@@ -302,8 +292,7 @@ function ProgressiveImage({
     aspectRatio?: number;
 }) {
     const [previewReady, setPreviewReady] = useState(false);
-    // A mail part carries no width/height details, so the box hugs the image once it has loaded: an
-    // unmeasured box spans the whole viewport and swallows the clicks that should close the overlay.
+    // Without known dimensions the box hugs the image once loaded, so clicks beside it still reach the backdrop.
     const [loadedRatio, setLoadedRatio] = useState<number>();
 
     const ratio = aspectRatio ?? loadedRatio;

@@ -359,9 +359,7 @@ async function generateFileTextPreview(mount: Mount, drivePath: DrivePath): Prom
     return preview?.body ?? null;
 }
 
-// A plain file's text preview from its own bytes: the mode gate, the decode and the renderer, with no
-// Mount and no cache behind them. Drive reaches it through the per-version cache above; a mail part,
-// which has no version to key a cache on, calls it directly. Null = nothing to preview.
+// The one text renderer: Drive reaches it through the per-version cache above, a mail part calls it directly.
 export async function getBytesTextPreview(
     bytes: ArrayBuffer | Uint8Array,
     fileName: string,
@@ -374,9 +372,7 @@ export async function getBytesTextPreview(
 
 const VCARD_PREVIEW_JOB: VCardPreviewJob = { kind: 'preview', documentType: 'vcard' };
 
-// What a .vcf preview refuses before it runs, wherever the file comes from: a file the mime and name don't
-// call a vCard, and one past the import ceiling — the preview parses the file whole, exactly as an import
-// would. A caller that knows the size without reading the bytes (Drive) refuses before it reads them.
+// The preview parses the whole file like an import does, so it shares the import's ceiling.
 export function assertVCardPreviewable(fileName: string, contentType: string, size: number): void {
     if (!isVCardFile(contentType, fileName)) throw new ApiError(400, 'Not a vCard file');
     if (size > IMPORT_MAX_BYTES) throw new ApiError(413, 'File too large to preview');
@@ -391,7 +387,7 @@ export async function getVCardPreview(mount: Mount, drivePath: DrivePath): Promi
     );
 }
 
-// The same cards from bytes the caller already holds — a mail part. Same Worker job, same parse, no cache.
+// The same cards from bytes the caller holds (a mail part): same Worker job, no cache.
 export async function getBytesVCardPreview(data: ArrayBuffer): Promise<VCardPreview> {
     return parseVCardPreview(await runBytesTransformToText(VCARD_PREVIEW_JOB, data, {}));
 }

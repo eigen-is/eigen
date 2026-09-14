@@ -18,8 +18,7 @@ export type FileAction = {
     applies: (subject: FileSubject) => boolean;
 };
 
-// What can be done with a file, answered once for every surface. A predicate reads the subject's own
-// type and size, never which menu is asking. Order here is the order rows are drawn in.
+// What can be done with a file, answered once for every surface; a predicate never asks which menu is drawing.
 export const FILE_ACTIONS: readonly FileAction[] = [
     {
         id: 'quick-look',
@@ -33,8 +32,7 @@ export const FILE_ACTIONS: readonly FileAction[] = [
         id: 'convert-to-sheet',
         label: 'Convert to Sheet',
         icon: Sheet,
-        // Extension only, matching the server: import-document.ts refuses on the name, so a mail part
-        // carrying the mime but no extension would offer a row that 400s.
+        // Extension only: the convert route refuses on the name (import-document.ts).
         applies: (subject) => !!subject.downloadUrl && subject.name.toLowerCase().endsWith('.xlsx'),
     },
     {
@@ -47,7 +45,7 @@ export const FILE_ACTIONS: readonly FileAction[] = [
         id: 'import-contacts',
         label: 'Import to Contacts',
         icon: BookUser,
-        // Over the ceiling the import itself 413s — offer nothing to click.
+        // Over the ceiling the import 413s, so offer nothing.
         applies: (subject) =>
             !!subject.downloadUrl && isVCardFile(subject.mimeType, subject.name) && subject.size <= IMPORT_MAX_BYTES,
     },

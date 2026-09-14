@@ -11,23 +11,19 @@ type SaveToDrivePickerProps = {
     subjects: FileSubject[];
     open: boolean;
     onClose: () => void;
-    // What the save created, for a caller with more to do with it — the runner converts what it
-    // just saved for a subject that had no Drive path to convert.
+    // What the save created: the runner converts what it just saved for a subject with no Drive path.
     onSaved?: (paths: DrivePath[]) => void;
-    // Overrides the dialog's own wording, for a caller whose save is a step in something larger.
+    // For a caller whose save is a step in something larger (a convert).
     labels?: { title: string; confirmLabel: string };
 };
 
-// One "where does this go" dialog for every surface that puts a file into Drive, with the browser
-// download as the escape hatch. A Drive subject is copied server-side, so its bytes never travel; a
-// mail part is written from the message the server still holds.
+// One "where does this go" dialog for every surface that puts a file into Drive, with the browser download
+// as the escape hatch. A Drive subject is copied server-side; a mail part is written from the stored message.
 export function SaveToDrivePicker({ subjects, open, onClose, onSaved, labels }: SaveToDrivePickerProps) {
     const preview = useOptionalPreview();
-    // Siblings always come from one surface, so a batch is all Drive items or all mail parts: the
-    // first subject picks the branch, and the rest ride it.
+    // Siblings come from one surface, so a batch is all Drive items or all mail parts: the first picks the branch.
     const source = subjects[0]?.drive;
     const mail = subjects[0]?.mail;
-    // The batch comes from one folder, so every path shares the first one's source mount.
     const copyFiles = useCopyFiles(source?.ownerId ?? '', source?.mountId);
     const saveMailAttachments = useSaveMailAttachmentsToDrive();
     const downloadTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -48,10 +44,6 @@ export function SaveToDrivePicker({ subjects, open, onClose, onSaved, labels }: 
         );
     };
 
-    // Neither identity means no branch could write it: better nothing than a dialog that saves 0 files.
-    // An empty batch is a picker nothing has opened yet; a closed one keeps its last subjects.
-    if (subjects.length > 0 && !mail && !source) return null;
-
     return (
         <DriveLocationPicker
             open={open}
@@ -71,8 +63,7 @@ export function SaveToDrivePicker({ subjects, open, onClose, onSaved, labels }: 
                     targetMountId: location.mountId,
                     targetParentId: location.folderId,
                 };
-                // Await the write so the picker closes on success and stays open (with the failure
-                // toast) on error, instead of closing immediately.
+                // Awaited so the picker closes on success and stays open, with the failure toast, on error.
                 const saved = mail
                     ? await saveMailAttachments.mutateAsync({
                           messageId: mail.messageId,

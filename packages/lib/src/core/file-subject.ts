@@ -11,7 +11,6 @@ import {
 } from './api';
 
 export function subjectFromPath(path: DrivePath): FileSubject {
-    // A path that came off a raw fetch rather than through the Eden reviver still carries a string.
     const updated = path.updatedAt instanceof Date ? path.updatedAt : new Date(path.updatedAt);
     return {
         key: `drive:${path.ownerId}:${path.mountId}:${path.id}`,
@@ -19,7 +18,7 @@ export function subjectFromPath(path: DrivePath): FileSubject {
         mimeType: path.mimeType,
         size: path.size,
         embedUrl: getDriveEmbedUrl(path.ownerId, path.mountId, path.id, path.name, updated),
-        // Only a plain file has bytes: a folder has none and an Eigen container is a directory of dbs.
+        // Only a plain file has bytes to download; a container is a directory of dbs.
         downloadUrl:
             path.type === 'file' ? getDriveDownloadUrl(path.ownerId, path.mountId, path.id, updated) : undefined,
         thumbnailUrl: path.thumbnail
@@ -29,9 +28,7 @@ export function subjectFromPath(path: DrivePath): FileSubject {
     };
 }
 
-// The index is the RAW part index the mail routes address, calendar parts included: a reader that
-// hides those still has to ask the server for the part it means. The reader's own attachments carry
-// more than this, but the parsed content is not what a subject needs.
+// `index` is the raw part index the mail routes address, calendar parts included.
 export function subjectFromMailAttachment(
     ownerId: string,
     messageId: string,
@@ -52,10 +49,8 @@ export function subjectFromMailAttachment(
 
 export type PreviewMode = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'vcard' | 'fallback';
 
-// How the preview overlay renders a file. An image preview needs a mount to resize from, so it gates on
-// `drive`; without one the <img> shows the original bytes, which only a browser-decodable mime survives.
-// The text and card previews answer for a mail part too — the same renderers on the part's own bytes
-// (PREVIEWS.md) — so they gate on carrying either identity.
+// A Drive image is resized by /preview; any other <img> shows the original bytes, so only a browser-decodable
+// mime is an image. Text and vCard previews are served for Drive files and mail parts alike (PREVIEWS.md).
 export function getPreviewMode(subject: FileSubject): PreviewMode {
     const mime = subject.mimeType;
     const isImage = subject.drive
@@ -67,7 +62,6 @@ export function getPreviewMode(subject: FileSubject): PreviewMode {
     if (mime.startsWith('video/')) return 'video';
     if (mime.startsWith('audio/')) return 'audio';
     if (mime === 'application/pdf') return 'pdf';
-    // A .vcf reads as contact cards, never as its raw text — which is why getTextPreviewMode declines it.
     if (served && isVCardFile(mime, subject.name)) return 'vcard';
     if (served && getTextPreviewMode(mime, subject.name) !== null) return 'text';
     return 'fallback';

@@ -12,7 +12,7 @@ import {
     saveAttachmentsToDrive,
     uploadDraftAttachment,
 } from '../lib/mail/mail';
-import { readMailPartForPreview, serveMailPart } from '../lib/mail/serve-mail-part';
+import { readMailPart, serveMailPart } from '../lib/mail/serve-mail-part';
 import { assertVCardPreviewable, getBytesTextPreview, getBytesVCardPreview } from '../lib/preview/preview-cache';
 import { betterAuth } from './auth';
 import { attachmentReferenceSchema } from './shared-schemas';
@@ -306,30 +306,33 @@ export const mailRouter = new Elysia({ name: 'mail' })
     )
     .get(
         '/mail/:ownerId/message/:id/attachment/:index/:fileName',
-        async ({ params, request, user }): Promise<Response> => {
+        async ({ params, request, user, set }) => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            return serveMailPart(await getMailClient(user), params.id, params.index, 'attachment', request);
+            const att = await readMailPart(await getMailClient(user), params.id, params.index, request, set);
+            if (!att) return status(304);
+            return serveMailPart(att, params.index, 'attachment', request.headers.get('range'));
         },
         { auth: true, params: AttachmentParamsSchema },
     )
     .get(
         '/mail/:ownerId/message/:id/attachment/:index/embed/:fileName',
-        async ({ params, request, user }): Promise<Response> => {
+        async ({ params, request, user, set }) => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            return serveMailPart(await getMailClient(user), params.id, params.index, 'inline', request);
+            const att = await readMailPart(await getMailClient(user), params.id, params.index, request, set);
+            if (!att) return status(304);
+            return serveMailPart(att, params.index, 'inline', request.headers.get('range'));
         },
         { auth: true, params: AttachmentParamsSchema },
     )
-    // A mail part previews through the renderers Drive's own preview routes end in, on the part's bytes
-    // instead of a file's (PREVIEWS.md). Same shapes, so the same components render both.
+    // Previews run the renderers Drive's preview routes end in, on the part's bytes; same shapes, same components.
     .get(
         '/mail/:ownerId/message/:id/attachment/:index/text-preview',
         async ({ params, request, user, set }) => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            const att = await readMailPartForPreview(await getMailClient(user), params.id, params.index, request, set);
+            const att = await readMailPart(await getMailClient(user), params.id, params.index, request, set);
             if (!att) return status(304);
 
             const preview = await getBytesTextPreview(
@@ -347,13 +350,11 @@ export const mailRouter = new Elysia({ name: 'mail' })
         async ({ params, request, user, set }) => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            const att = await readMailPartForPreview(await getMailClient(user), params.id, params.index, request, set);
+            const att = await readMailPart(await getMailClient(user), params.id, params.index, request, set);
             if (!att) return status(304);
 
-            // A part carries no size until it is parsed, so the ceiling is checked on the bytes in hand.
             assertVCardPreviewable(mailAttachmentName(att, params.index), att.contentType, att.size);
-            // A copy, not the part's own buffer: content is a Buffer view over the whole parsed message,
-            // and the Worker is handed (and detaches) the buffer, not the view.
+            // A copy: content is a view over the whole parsed message, and the Worker detaches the buffer it gets.
             return getBytesVCardPreview(new Uint8Array(att.content).buffer);
         },
         { auth: true, params: AttachmentPreviewParamsSchema },
