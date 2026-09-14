@@ -23,7 +23,7 @@ the message, and press **Escape** to close it.
 
 Along the bottom of the preview are the things you can do with the file: **Download**, **Save to Drive…**, and,
 depending on the file, **Convert to Sheet** for an `.xlsx` spreadsheet, **Convert to Document** for a `.docx`
-document, or **Import to Contacts** for a `.vcf` contact file. On a message with more than one attachment the bar
+document, or **Import to Contacts** for a `.vcf` contact file. On a message with more than one file the bar
 ends with **Save all**, followed by the number of files.
 
 ## Save one attachment
@@ -34,7 +34,8 @@ ends with **Save all**, followed by the number of files.
 4. In the **Save to Drive** dialog, browse to the folder in Drive where you want it, then click **Save here**.
 
 The same menu holds every action the preview's bottom bar offers, so you can download a file, convert it, or
-import a contact file without opening it first.
+import a contact file without opening it first. When you convert one, Eigen asks for a Drive folder first, saves
+the file there, and creates the converted copy beside it.
 
 ## Save all of them at once
 

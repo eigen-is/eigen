@@ -14,12 +14,14 @@ type SaveToDrivePickerProps = {
     // What the save created, for a caller with more to do with it — the runner converts what it
     // just saved for a subject that had no Drive path to convert.
     onSaved?: (paths: DrivePath[]) => void;
+    // Overrides the dialog's own wording, for a caller whose save is a step in something larger.
+    labels?: { title: string; confirmLabel: string };
 };
 
 // One "where does this go" dialog for every surface that puts a file into Drive, with the browser
 // download as the escape hatch. A Drive subject is copied server-side, so its bytes never travel; a
 // mail part is written from the message the server still holds.
-export function SaveToDrivePicker({ subjects, open, onClose, onSaved }: SaveToDrivePickerProps) {
+export function SaveToDrivePicker({ subjects, open, onClose, onSaved, labels }: SaveToDrivePickerProps) {
     const preview = useOptionalPreview();
     // Siblings always come from one surface, so a batch is all Drive items or all mail parts: the
     // first subject picks the branch, and the rest ride it.
@@ -46,6 +48,10 @@ export function SaveToDrivePicker({ subjects, open, onClose, onSaved }: SaveToDr
         );
     };
 
+    // Neither identity means no branch could write it: better nothing than a dialog that saves 0 files.
+    // An empty batch is the closed picker, which stays mounted for its exit animation.
+    if (subjects.length > 0 && !mail && !source) return null;
+
     return (
         <DriveLocationPicker
             open={open}
@@ -55,8 +61,8 @@ export function SaveToDrivePicker({ subjects, open, onClose, onSaved }: SaveToDr
             // The picker opens over the preview overlay when one is showing, and has to outrank it.
             abovePreview={preview?.isPreviewOpen}
             mode="folder"
-            title={subjects.length > 1 ? `Save ${subjects.length} files to Drive` : 'Save to Drive'}
-            confirmLabel="Save here"
+            title={labels?.title ?? (subjects.length > 1 ? `Save ${subjects.length} files to Drive` : 'Save to Drive')}
+            confirmLabel={labels?.confirmLabel ?? 'Save here'}
             defaultOwnerId={source?.ownerId}
             defaultMountId={source?.mountId}
             onConfirm={async (location) => {

@@ -55,4 +55,5 @@ Click the card to open it. The chips sit below the description. Click one to ope
 
 Right-click a chip, or press and hold it on a phone, to see what else you can do with that one file:
 **Quick preview**, **Download**, and **Save to Drive…**. An Excel or Word file also offers to convert it, and a
-contact file offers **Import to Contacts**.
+contact file offers **Import to Contacts**. When you convert one, Eigen asks for a Drive folder first, saves the
+file there, and creates the converted copy beside it.

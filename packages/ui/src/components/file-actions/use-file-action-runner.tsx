@@ -4,14 +4,12 @@ import { useImportContacts, useImportContactsFromDrive } from '@workspace/lib/co
 import { triggerDownload } from '@workspace/lib/download';
 import { useConvertDocument } from '@workspace/lib/drive';
 import type { FileAction } from '@workspace/lib/file-actions';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import type { ConvertTarget, DrivePath } from '@workspace/lib/types/drive';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import { type ReactNode, useRef, useState } from 'react';
 import { ProgressDialog } from '../drive/progress-dialog';
 import { SaveToDrivePicker } from '../drive/save-to-drive-picker';
 import { type PreviewOptions, usePreview } from '../preview-provider/preview-context';
-
-type ConvertTarget = 'eigensheets' | 'eigendoc';
 
 export type FileActionRunner = {
     // The menu component draws the rows from the same subject the runner acts on, so a host can
@@ -38,10 +36,11 @@ export function useFileActionRunner(
     const importContacts = useImportContacts();
     const [pickerSubjects, setPickerSubjects] = useState<FileSubject[] | null>(null);
     // Set while the picker is open for a convert: a subject with no Drive path has to land in Drive
-    // first, and only the picker knows where it landed.
-    const pendingConvert = useRef<ConvertTarget | null>(null);
+    // first, and only the picker knows where it landed. The label names the row that asked.
+    const pendingConvert = useRef<{ targetType: ConvertTarget; label: string } | null>(null);
 
     const openPicker = (subjects: FileSubject[]) => {
+        if (subjects.length === 0) return;
         pendingConvert.current = null;
         setPickerSubjects(subjects);
     };
@@ -60,12 +59,12 @@ export function useFileActionRunner(
         );
     };
 
-    const convert = (targetType: ConvertTarget) => {
+    const convert = (targetType: ConvertTarget, label: string) => {
         if (!subject) return;
         // Nothing in Drive to convert yet, or only a copy in a container's hidden media folder: save
         // it where the user picks first, then convert what the save created.
         if (!subject.drive || options?.attachment) {
-            pendingConvert.current = targetType;
+            pendingConvert.current = { targetType, label };
             setPickerSubjects([subject]);
             return;
         }
@@ -107,16 +106,18 @@ export function useFileActionRunner(
                 openPicker([subject]);
                 return;
             case 'convert-to-sheet':
-                convert('eigensheets');
+                convert('eigensheets', action.label);
                 return;
             case 'convert-to-document':
-                convert('eigendoc');
+                convert('eigendoc', action.label);
                 return;
             case 'import-contacts':
                 runImportContacts();
                 return;
         }
     };
+
+    const pending = pendingConvert.current;
 
     return {
         subject,
@@ -129,14 +130,16 @@ export function useFileActionRunner(
                 <SaveToDrivePicker
                     subjects={pickerSubjects ?? []}
                     open={pickerSubjects !== null}
+                    // A convert through the picker saves first, so the dialog says what it is asking for.
+                    labels={pending ? { title: pending.label, confirmLabel: 'Save and convert' } : undefined}
                     onClose={() => {
                         pendingConvert.current = null;
                         setPickerSubjects(null);
                     }}
                     onSaved={(paths) => {
-                        const targetType = pendingConvert.current;
+                        const convertTo = pendingConvert.current;
                         pendingConvert.current = null;
-                        if (targetType) for (const path of paths) convertPath(path, targetType);
+                        if (convertTo) for (const path of paths) convertPath(path, convertTo.targetType);
                     }}
                 />
                 <ProgressDialog
