@@ -7,7 +7,7 @@ import { Elysia, t } from 'elysia';
 import { getUploadMaxSize } from '../lib/config/enforcement';
 import { ApiError } from '../lib/core';
 import { requireNonGuest, requireSelf } from '../lib/core/access';
-import { contentDisposition, scriptableInlineHeaders, setCacheHeaders } from '../lib/core/http';
+import { contentDisposition, readBoundedBodyBytes, scriptableInlineHeaders, setCacheHeaders } from '../lib/core/http';
 import { getDrive, getSharedDrive } from '../lib/drive';
 import { propagateAccessRequest } from '../lib/drive/access-request-propagation';
 import { aggregateMimeContents, aggregateWatches } from '../lib/drive/aggregate';
@@ -249,15 +249,12 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 throw new ApiError(403, 'No write permission');
             }
             const maxSize = await getUploadMaxSize(params.ownerId, user.id, params.mountId);
-            // Early Content-Length check guards against large allocations before the body is buffered.
-            // Header can be missing or lying, so the post-buffer check below is a belt-and-suspenders guard.
-            const contentLength = request.headers.get('content-length');
-            if (contentLength && Number(contentLength) > maxSize) {
-                throw new ApiError(413, 'Upload too large');
-            }
-            const buffer = Buffer.from(await request.arrayBuffer());
-            if (buffer.byteLength > maxSize) throw new ApiError(413, 'Upload too large');
-            await importIntoDocument(drive, mount, path, buffer, user, request.signal);
+            // The shared bounded reader, as the contacts import uses it: a Content-Length over the ceiling is
+            // refused before anything is read, and a chunked or lying body has its stream cancelled the moment
+            // the running total crosses it — never buffered whole first.
+            const bytes = await readBoundedBodyBytes(request, maxSize);
+            if (bytes === null) throw new ApiError(413, 'Upload too large');
+            await importIntoDocument(drive, mount, path, Buffer.from(bytes), user, request.signal);
             return { success: true };
         },
         { auth: true, parse: 'none' },
