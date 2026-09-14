@@ -71,7 +71,7 @@ through `formatChatPreview`.
 | `calendar-unshare` | `Hanne removed your access` | calendar name | — | calendar app |
 | `calendar-invite` | `Alice invited you` | event title | start time (`details.startTime`, epoch ms) | month view `?eventId=` |
 | `calendar-invite-updated` | `Alice updated an invitation` | event title | new start time | same |
-| `calendar-invite-cancelled` | `Alice cancelled an invitation` | event title | — | same |
+| `calendar-invite-cancelled` | `Alice canceled an invitation` | event title | — | same |
 | `mail` | `New mail from Hanne Oberman` | subject, or `(no subject)` | snippet (`textShort`, 120 chars) | `box/inbox?mailId=<details.mailId>` |
 | `mention-chat` | `Daan mentioned you in "chat"` | message snippet * | — | chat room |
 | `mention-comment` | `Daan mentioned you in "Doc"` | message snippet * | — | doc `?chat=` |

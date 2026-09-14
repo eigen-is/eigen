@@ -58,7 +58,7 @@ To suggest a different time, contact the organizer directly.
 ## What if I receive a cancellation email?
 
 When the organizer cancels the event, a new email arrives in Mail. The calendar card in that email shows
-"This event has been cancelled". Eigen removes the event from your calendar automatically.
+"This event has been canceled". Eigen removes the event from your calendar automatically.
 
 ## Why did my invited guest not receive anything?
 

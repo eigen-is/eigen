@@ -151,7 +151,7 @@ client API (`authClient.organization.*`) for org/team operations and Eden Treaty
 ### Pages
 
 - **Users** (`/users`, old `/members` redirects here): one enriched table of org members **and** orphans — columns
-  name, role (orphans carry a "no organisation" badge), email, disk usage, teams, last active, joined. Create,
+  name, role (orphans carry a "no organization" badge), email, disk usage, teams, last active, joined. Create,
   search, change role, reset password, remove org members, fully delete user accounts, and drag members onto team
   sidebar items. Collapses to a 350px list + detail pane on narrow viewports (container query, no remount); the
   detail pane holds the role select, teams, last active/joined, per-user storage bars, a danger zone, and
