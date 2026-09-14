@@ -56,7 +56,7 @@ export function RecurrencePicker({ value, onChange, startDate }: RecurrencePicke
                 value: new RRule({ freq: Frequency.MONTHLY, byweekday: [byDay.nth(weekOfMonth)] }).toString(),
             },
             {
-                label: `Annually on ${monthName} ${dayOfMonth}`,
+                label: `Annually on ${dayOfMonth} ${monthName}`,
                 value: new RRule({
                     freq: Frequency.YEARLY,
                     bymonth: [startDate.getMonth() + 1],

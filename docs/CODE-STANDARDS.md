@@ -59,6 +59,8 @@ Workspace imports resolve through each package's `exports` map, with no tsconfig
 | `@workspace/lib/date` | Date formatting (`formatDate`, `formatTime`, `formatTimeAgo`) |
 | `@workspace/lib/validation` | Shared FE/BE validation schemas |
 
+**User-visible dates are day-month-year** — "5 January 2026", "5 Jan", "5 Jan 2026, 14:30", "Mon 5 Jan", never "January 5, 2026": pass `'en-GB'` to `toLocale*String` / `Intl.DateTimeFormat`, and write hand-built shapes as `d MMM yyyy`. Spelling everywhere else stays en-US.
+
 ## Key Patterns
 
 Worked examples: [CODE-EXAMPLES.md § Key Patterns](CODE-EXAMPLES.md#key-patterns).

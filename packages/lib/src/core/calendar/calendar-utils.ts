@@ -111,6 +111,8 @@ export function formatEventWhen(start: Date, end: Date, allDay: boolean, timezon
         year: 'numeric',
         timeZone: tz,
     };
+    // Dates render en-GB (day-month-year), times stay on 'en' — en-GB lowercases the meridiem and
+    // the rest of the app shows formatTime's "PM".
     const timeOpts: Intl.DateTimeFormatOptions = {
         hour: 'numeric',
         minute: '2-digit',
@@ -122,20 +124,23 @@ export function formatEventWhen(start: Date, end: Date, allDay: boolean, timezon
         // All-day endTime is exclusive (midnight after the last day), so the displayed
         // end date is one day earlier than the stored value.
         const displayEnd = new Date(end.getTime() - 86400_000);
-        const startStr = start.toLocaleDateString('en', dateOpts);
+        const startStr = start.toLocaleDateString('en-GB', dateOpts);
         if (
-            start.toLocaleDateString('en', { timeZone: tz }) === displayEnd.toLocaleDateString('en', { timeZone: tz })
+            start.toLocaleDateString('en-GB', { timeZone: tz }) ===
+            displayEnd.toLocaleDateString('en-GB', { timeZone: tz })
         ) {
             return startStr;
         }
-        return `${startStr} – ${displayEnd.toLocaleDateString('en', dateOpts)}`;
+        return `${startStr} – ${displayEnd.toLocaleDateString('en-GB', dateOpts)}`;
     }
 
-    const sameDay = start.toLocaleDateString('en', { timeZone: tz }) === end.toLocaleDateString('en', { timeZone: tz });
+    const sameDay =
+        start.toLocaleDateString('en-GB', { timeZone: tz }) === end.toLocaleDateString('en-GB', { timeZone: tz });
     if (sameDay) {
-        return `${start.toLocaleDateString('en', dateOpts)} · ${start.toLocaleTimeString('en', timeOpts)} – ${end.toLocaleTimeString('en', timeOpts)}`;
+        return `${start.toLocaleDateString('en-GB', dateOpts)} · ${start.toLocaleTimeString('en', timeOpts)} – ${end.toLocaleTimeString('en', timeOpts)}`;
     }
-    return `${start.toLocaleString('en', { ...dateOpts, ...timeOpts })} – ${end.toLocaleString('en', { ...dateOpts, ...timeOpts })}`;
+    const when = (d: Date) => `${d.toLocaleDateString('en-GB', dateOpts)}, ${d.toLocaleTimeString('en', timeOpts)}`;
+    return `${when(start)} – ${when(end)}`;
 }
 
 export function getCalendarColor(

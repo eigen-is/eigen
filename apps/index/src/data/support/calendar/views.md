@@ -27,7 +27,7 @@ Use the arrow buttons in the toolbar to step through time:
 - The **right arrow** moves forward by the same amount.
 
 The title next to the arrows updates to show where you are. In month view it reads something like
-**June 2026**. In week view it shows the date range, for example **Jun 2 – 8, 2026**.
+**June 2026**. In week view it shows the date range, for example **2 – 8 Jun 2026**.
 
 ## Jump to today
 

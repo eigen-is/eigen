@@ -37,13 +37,13 @@ function formatTitle(date: Date, viewMode: ViewMode): string {
     const endYear = endOfWeek.getFullYear();
 
     if (startOfWeek.getMonth() === endOfWeek.getMonth()) {
-        return `${startMonth} ${startOfWeek.getDate()} – ${endOfWeek.getDate()}, ${endYear}`;
+        return `${startOfWeek.getDate()} – ${endOfWeek.getDate()} ${startMonth} ${endYear}`;
     }
-    // Across a year boundary, stamp both years (e.g. "Dec 29, 2026 – Jan 4, 2027").
+    // Across a year boundary, stamp both years (e.g. "29 Dec 2026 – 4 Jan 2027").
     if (startYear !== endYear) {
-        return `${startMonth} ${startOfWeek.getDate()}, ${startYear} – ${endMonth} ${endOfWeek.getDate()}, ${endYear}`;
+        return `${startOfWeek.getDate()} ${startMonth} ${startYear} – ${endOfWeek.getDate()} ${endMonth} ${endYear}`;
     }
-    return `${startMonth} ${startOfWeek.getDate()} – ${endMonth} ${endOfWeek.getDate()}, ${endYear}`;
+    return `${startOfWeek.getDate()} ${startMonth} – ${endOfWeek.getDate()} ${endMonth} ${endYear}`;
 }
 
 export function CalendarToolbar({

@@ -9,15 +9,19 @@ export function formatTime(date: Date | string | number): string {
 }
 
 export function formatDate(date: Date | string | number): string {
-    return new Date(date).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' });
+    return new Date(date).toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-// "Jun 8, 2026" for a bare YYYY-MM-DD calendar date. Parses the parts as a *local* date —
+// "8 Jun 2026" for a bare YYYY-MM-DD calendar date. Parses the parts as a *local* date —
 // `new Date("2026-06-08")` reads the string as UTC midnight, which renders the day before for
 // viewers west of UTC and mismatches between prerender (build TZ) and hydration (viewer TZ).
 export function formatDateOnly(isoDate: string): string {
     const [year, month, day] = isoDate.split('-').map(Number);
-    return new Date(year, month - 1, day).toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' });
+    return new Date(year, month - 1, day).toLocaleDateString('en-GB', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+    });
 }
 
 export function isSameDay(a: Date, b: Date): boolean {
@@ -36,7 +40,7 @@ export function formatDateTime(date: Date | string | number): string {
         return `Today, ${formatTime(d)}`;
     }
     if (isSameYear) {
-        return `${d.toLocaleDateString('en', { month: 'short', day: 'numeric' })}, ${formatTime(d)}`;
+        return `${d.toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })}, ${formatTime(d)}`;
     }
 
     return `${formatDate(d)}, ${formatTime(d)}`;
@@ -59,7 +63,7 @@ export function formatFullDateTime(date: Date | string | number): string {
 }
 
 export function formatMonth(date: Date | string | number, style: 'long' | 'short' = 'long'): string {
-    return new Date(date).toLocaleDateString('en', { month: style });
+    return new Date(date).toLocaleDateString('en-GB', { month: style });
 }
 
 export function formatInputDate(date: Date | string | number): string {
