@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1420 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1440 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -473,7 +473,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (340)
+## Types (342)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -496,6 +496,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BytesTextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `EigenColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EigenFont` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
+| `SpecialMailbox` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
+| `StandardMailbox` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `TextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `FigureAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
 | `FigureLayout` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
@@ -818,7 +820,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (638)
+## Utilities & constants (656)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1021,6 +1023,17 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isSearchableTextFile` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `lightenColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `MAIL_PREVIEW_CHARS` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
+| `MAILBOX_ARCHIVE` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
+| `MAILBOX_DRAFTS` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
+| `MAILBOX_INBOX` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
+| `MAILBOX_INBOX_IMAP` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
+| `MAILBOX_INBOX_KEY` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
+| `MAILBOX_JUNK` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
+| `MAILBOX_NO_CHILDREN_FLAG` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
+| `MAILBOX_SENT` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
+| `MAILBOX_TRASH` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
+| `mailboxListFlags` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
+| `mailboxRouteSegment` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `MAX_PUBLIC_USERS_PER_BATCH` | `@workspace/lib/constants` | packages/lib/src/constants/public.ts |
 | `MAX_SEND_RECIPIENTS` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `MAX_SEND_REFERENCES` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
@@ -1028,7 +1041,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `S3_LIFECYCLE_RULE_ID` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
 | `S3_NONCURRENT_DAYS_DEFAULT` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
 | `S3_NONCURRENT_DAYS_MAX` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
+| `SIDEBAR_MAILBOXES` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
+| `SPECIAL_MAILBOXES` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
+| `specialMailboxFromFlags` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `STALE_TIME` | `@workspace/lib/constants` | packages/lib/src/constants/stale-time.ts |
+| `STANDARD_MAILBOXES` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `STORAGE_TYPE_LABELS` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
 | `TEXT_PREVIEW_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `userColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
@@ -1102,6 +1119,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `createDraftEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
 | `flattenAddresses` | `@workspace/lib/mail` | packages/lib/src/core/mail/addresses.ts |
 | `handleMailSSEvent` | `@workspace/lib/mail` | packages/lib/src/core/mail/sse-handlers.ts |
+| `CUSTOM_MAILBOX_ICON` | `@workspace/lib/mailbox-icons` | packages/lib/src/core/mailbox-icons.ts |
+| `MAILBOX_ICONS` | `@workspace/lib/mailbox-icons` | packages/lib/src/core/mailbox-icons.ts |
 | `CHAT_TEXT_NOTIFICATION_TYPES` | `@workspace/lib/notification` | packages/lib/src/core/notification/describe.ts |
 | `describeNotification` | `@workspace/lib/notification` | packages/lib/src/core/notification/describe.ts |
 | `handleNotificationSSEvent` | `@workspace/lib/notification` | packages/lib/src/core/notification/sse-handlers.ts |
