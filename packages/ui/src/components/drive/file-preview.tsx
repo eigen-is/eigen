@@ -6,6 +6,7 @@ import { getPreviewMode } from '@workspace/lib/file-subject';
 import { useMailTextPreview } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileSubject, MailPartRef } from '@workspace/lib/types/file-subject';
+import type { TextPreviewResult } from '@workspace/lib/types/preview';
 import { useFocusTrap } from '@workspace/ui/hooks/use-focus-trap';
 import { ChevronLeft, ChevronRight, ExternalLink, FolderDown, Loader2, X } from 'lucide-react';
 import { useRef, useState } from 'react';
@@ -198,10 +199,7 @@ function MailTextPreviewContent({ part }: { part: MailPartRef }) {
     return <TextPreviewBody data={data} isLoading={isLoading} />;
 }
 
-// Typed off the Drive hook, so a mail preview that drifted from its shape would not compile.
-type TextPreviewData = NonNullable<ReturnType<typeof useTextPreview>['data']>;
-
-function TextPreviewBody({ data, isLoading }: { data: TextPreviewData | undefined; isLoading: boolean }) {
+function TextPreviewBody({ data, isLoading }: { data: TextPreviewResult | undefined; isLoading: boolean }) {
     if (isLoading) {
         return (
             <div className="flex items-center justify-center w-[80vw] h-[calc(100vh-7rem)]">

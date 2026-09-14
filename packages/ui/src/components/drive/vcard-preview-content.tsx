@@ -5,6 +5,7 @@ import { formatFileSize } from '@workspace/lib/format';
 import { useMailVCardPreview } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { MailPartRef } from '@workspace/lib/types/file-subject';
+import type { VCardPreview } from '@workspace/lib/types/preview';
 import { EmptyState } from '../layout/app/empty-state';
 import { ErrorState } from '../layout/app/error-state';
 import { LoadingState } from '../layout/app/loading-state';
@@ -23,16 +24,13 @@ export function MailVCardPreviewContent({ part, size }: { part: MailPartRef; siz
     return <VCardCards data={data} isLoading={isLoading} oversize={oversize} />;
 }
 
-// Both routes serve one shape, so one renderer reads it — and a mail preview that drifted from the Drive
-// one would not compile.
-type VCardPreviewData = NonNullable<ReturnType<typeof useVCardPreview>['data']>;
-
+// Both routes serve one shape, so one renderer reads it.
 function VCardCards({
     data,
     isLoading,
     oversize,
 }: {
-    data: VCardPreviewData | undefined;
+    data: VCardPreview | undefined;
     isLoading: boolean;
     oversize: boolean;
 }) {

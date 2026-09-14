@@ -1,6 +1,7 @@
 import { MAX_SEND_RECIPIENTS } from '@workspace/lib/constants/mail';
 import type { DriveAccessCheckResult, DrivePath } from '@workspace/lib/types/drive';
 import type { FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
+import type { TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { getUploadMaxSize } from '../lib/config/enforcement';
@@ -323,7 +324,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     )
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/text-preview',
-        async ({ params, user, set }) => {
+        async ({ params, user, set }): Promise<TextPreviewResult> => {
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             const result = await getTextPreview(mount, path);
@@ -350,7 +351,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     // convention as the text preview beside it.
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/vcard-preview',
-        async ({ params, user, set }) => {
+        async ({ params, user, set }): Promise<VCardPreview> => {
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             assertVCardPreviewable(path.name, path.mimeType || '', path.size);

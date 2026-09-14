@@ -1,15 +1,13 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
-import type { Contact } from '@workspace/lib/types/contact';
 import type { EmailSummary } from '@workspace/lib/types/mail';
+import type { TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getHome } from '../../lib/home';
 import { assertJson, authedRequest, findOrFail, getTestContext, putDraft, uploadDraftAttachment } from '../setup';
-
-type VCardPreviewBody = { cards: { contact: Contact }[]; dropped: number; total: number };
 
 const isWindows = process.platform === 'win32';
 const SUBJECT = 'Attachment route fixture';
@@ -332,7 +330,7 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
     });
     test('a text part previews as a plaintext body', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, textPreviewUrl(5));
-        const preview = await assertJson<{ body: string; mode: string }>(res);
+        const preview = await assertJson<TextPreviewResult>(res);
         expect(preview.mode).toBe('plaintext');
         expect(preview.body).toContain('<p>First line.</p>');
         expect(preview.body).toContain('Second paragraph.');
@@ -340,7 +338,7 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
 
     test('a markdown part previews as rendered markdown', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, textPreviewUrl(6));
-        const preview = await assertJson<{ body: string; mode: string }>(res);
+        const preview = await assertJson<TextPreviewResult>(res);
         expect(preview.mode).toBe('markdown');
         expect(preview.body).toContain('<h1>Title</h1>');
     });
@@ -349,14 +347,14 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
     // renders as the mode its name deserves, and is labelled with that mode — never inside a document frame.
     test('a part wearing an eigen mime previews as the mode its bytes deserve', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, textPreviewUrl(8));
-        const preview = await assertJson<{ body: string; mode: string }>(res);
+        const preview = await assertJson<TextPreviewResult>(res);
         expect(preview.mode).toBe('plaintext');
         expect(preview.body).toContain('Plain text wearing a document mime.');
     });
 
     test('a .vcf part previews as its cards', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, vcardPreviewUrl(7));
-        const preview = await assertJson<VCardPreviewBody>(res);
+        const preview = await assertJson<VCardPreview>(res);
         expect(preview.total).toBe(1);
         expect(preview.dropped).toBe(0);
         expect(preview.cards).toHaveLength(1);

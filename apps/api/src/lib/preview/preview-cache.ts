@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { getBytesTextPreviewMode } from '@workspace/lib/constants';
 import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { type DrivePath, isCollabType, isVCardFile } from '@workspace/lib/types/drive';
+import type { TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { ApiError } from '../core/errors';
 import { COLLAB_DOCUMENT_TYPES } from '../document/collab-types';
 import type { VCardPreviewJob } from '../document/transform/protocol';
@@ -13,8 +14,8 @@ import { generateImagePreview } from '../shared/thumbnails';
 import { isExiftoolCandidate } from './exiftool-preview';
 import { generateDocumentPreview } from './preview-document';
 import { inlineSvgMediaRefs } from './svg-media-inline';
-import { generateTextPreview, type TextPreviewResult } from './text-preview';
-import { parseVCardPreview, type VCardPreview } from './vcard-preview';
+import { generateTextPreview } from './text-preview';
+import { parseVCardPreview } from './vcard-preview';
 
 type ImagePreview = { type: 'image'; data: Buffer; contentType: string };
 type ScreenPreviewResult = ImagePreview | { type: 'redirect'; url: string } | null;
