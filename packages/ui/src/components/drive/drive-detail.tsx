@@ -1,5 +1,5 @@
 import { formatDateTime } from '@workspace/lib/date';
-import { subjectFromPath } from '@workspace/lib/file-subject';
+import { subjectFromPath, subjectInfo } from '@workspace/lib/file-subject';
 import { formatFileSize } from '@workspace/lib/format';
 import { type DrivePath, isDocumentType, isOpenable, stripEigenExtension } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
@@ -84,7 +84,7 @@ export function DriveDetail({
     };
 
     const canOpen = !!onItemOpen && isOpenable(path);
-    const canDownload = !!onDownload && !!subject?.downloadUrl;
+    const canDownload = !!onDownload && !!subject && !!subjectInfo(subject).downloadUrl;
 
     return (
         <div className="flex flex-col h-full bg-background">

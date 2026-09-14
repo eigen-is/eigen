@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { subjectFromMailAttachment } from '@workspace/lib/file-subject';
 import type { FileAction, FileSubject } from '@workspace/lib/types/file-subject';
 import { installHappyDom } from '../../happy-dom';
 
@@ -9,16 +10,11 @@ const { createRoot } = await import('react-dom/client');
 const { DropdownMenu, DropdownMenuContent } = await import('../../../components/dropdown-menu');
 const { FileActionMenuItems } = await import('../../../components/file-actions/file-action-menu-items');
 
-const subject: FileSubject = {
-    key: 'mail:owner-1:message-1:0',
-    name: 'team.vcf',
-    mimeType: 'text/vcard',
+const subject = subjectFromMailAttachment('owner-1', 'message-1', 0, {
+    contentType: 'text/vcard',
+    filename: 'team.vcf',
     size: 2048,
-    embedUrl: 'https://example.test/embed',
-    downloadUrl: 'https://example.test/download',
-    mail: { ownerId: 'owner-1', messageId: 'message-1', index: 0 },
-    attachment: true,
-};
+});
 
 async function openMenu(props: { subject: FileSubject | null }) {
     const ran: FileAction[] = [];

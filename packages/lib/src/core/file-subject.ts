@@ -5,7 +5,7 @@ import {
     isExiftoolExtension,
 } from '../constants/preview';
 import { type DrivePath, isCollabType, isVCardFile } from '../types/drive';
-import type { FileSubject, PreviewMode } from '../types/file-subject';
+import type { FileSubject, MailPartRef, PreviewMode, SubjectInfo } from '../types/file-subject';
 import { type Attachment, mailAttachmentName } from '../types/mail';
 import {
     getDriveDownloadUrl,
@@ -16,6 +16,25 @@ import {
 } from './api';
 
 export function subjectFromPath(path: DrivePath): FileSubject {
+    return { drive: path };
+}
+
+// `index` is the raw part index the mail routes address, calendar parts included.
+export function subjectFromMailAttachment(
+    ownerId: string,
+    messageId: string,
+    index: number,
+    att: Pick<Attachment, 'contentType' | 'filename' | 'size'>,
+): FileSubject {
+    return { mail: { ownerId, messageId, index }, part: att, attachment: true };
+}
+
+// Everything that follows from a subject's identity, in the one place that knows the routes.
+export function subjectInfo(subject: FileSubject): SubjectInfo {
+    return subject.drive ? driveInfo(subject.drive) : mailInfo(subject.mail, subject.part);
+}
+
+function driveInfo(path: DrivePath): SubjectInfo {
     const updated = new Date(path.updatedAt);
     return {
         key: `drive:${path.ownerId}:${path.mountId}:${path.id}`,
@@ -29,48 +48,42 @@ export function subjectFromPath(path: DrivePath): FileSubject {
         thumbnailUrl: path.thumbnail
             ? getDriveThumbnailUrl(path.ownerId, path.mountId, path.thumbnail, updated)
             : undefined,
-        drive: path,
     };
 }
 
-// `index` is the raw part index the mail routes address, calendar parts included.
-export function subjectFromMailAttachment(
-    ownerId: string,
-    messageId: string,
-    index: number,
-    att: Pick<Attachment, 'contentType' | 'filename' | 'size'>,
-): FileSubject {
-    const name = mailAttachmentName(att, index);
+function mailInfo(
+    { ownerId, messageId, index }: MailPartRef,
+    part: Pick<Attachment, 'contentType' | 'filename' | 'size'>,
+): SubjectInfo {
+    const name = mailAttachmentName(part, index);
     return {
         key: `mail:${ownerId}:${messageId}:${index}`,
         name,
-        mimeType: att.contentType,
-        size: att.size,
+        mimeType: part.contentType,
+        size: part.size,
         embedUrl: getMailAttachmentEmbedUrl(ownerId, messageId, index, name),
         downloadUrl: getMailAttachmentUrl(ownerId, messageId, index, name),
-        mail: { ownerId, messageId, index },
-        attachment: true,
     };
 }
 
 // A Drive image is resized by /preview; any other <img> shows the original bytes, so only a browser-decodable
 // mime is an image. Text and vCard previews are served for Drive files and mail parts alike (PREVIEWS.md).
 export function getPreviewMode(subject: FileSubject): PreviewMode {
-    const mime = subject.mimeType;
+    const { name, mimeType: mime } = subjectInfo(subject);
     const isImage = subject.drive
-        ? mime.startsWith('image/') || isExiftoolExtension(subject.name)
+        ? mime.startsWith('image/') || isExiftoolExtension(name)
         : BROWSER_IMAGE_MIMES.has(mime);
     if (isImage) return 'image';
     if (mime.startsWith('video/')) return 'video';
     if (mime.startsWith('audio/')) return 'audio';
     if (mime === 'application/pdf') return 'pdf';
-    if (isVCardFile(mime, subject.name)) return 'vcard';
+    if (isVCardFile(mime, name)) return 'vcard';
     // The gate the preview routes run: a container renders from its Yjs body, everything else from its
     // bytes, and an eigen mime on loose bytes is only the uploader's or the sender's word.
     const textMode =
         subject.drive && isCollabType(subject.drive.type)
-            ? getTextPreviewMode(mime, subject.name)
-            : getBytesTextPreviewMode(mime, subject.name);
+            ? getTextPreviewMode(mime, name)
+            : getBytesTextPreviewMode(mime, name);
     if (textMode !== null) return 'text';
     return 'fallback';
 }
