@@ -56,7 +56,7 @@ export type PreviewMode = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'vcard'
 // gates on `drive`. Without one the <img> shows the original bytes instead of a resized WebP, which
 // only a browser-decodable mime survives.
 export function getPreviewMode(subject: FileSubject): PreviewMode {
-    const mime = subject.mimeType || '';
+    const mime = subject.mimeType;
     const isImage = subject.drive
         ? mime.startsWith('image/') || isExiftoolExtension(subject.name)
         : BROWSER_IMAGE_MIMES.has(mime);
