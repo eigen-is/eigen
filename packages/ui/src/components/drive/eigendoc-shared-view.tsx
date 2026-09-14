@@ -69,7 +69,11 @@ export function EigenDocSharedView({ config, to, pid, uid, mid, onNavigate, onNa
             onAfterAction={() => navigate({ to: '/' })}
             capabilities={{
                 ...DRIVE_CAPABILITIES.listing,
+                // Same mixed-access feed as Drive's shared view: rows on the with-me side belong to
+                // other people at access levels this listing doesn't carry, so nothing that writes
+                // is offered there.
                 canRename: to === 'by-me',
+                canWrite: to === 'by-me',
                 createTypes: new Set([config.type]),
             }}
             title={eigenDocSharedTitle(to === 'by-me' ? 'by' : 'with', config.labelPlural)}

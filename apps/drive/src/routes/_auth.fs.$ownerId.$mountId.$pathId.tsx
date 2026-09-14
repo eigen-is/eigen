@@ -2,11 +2,11 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { AppError } from '@workspace/lib/api-error';
 import { useAuth } from '@workspace/lib/auth';
 import { useUnreadChatIds } from '@workspace/lib/chat';
-import { useFolderContent, usePathInfo } from '@workspace/lib/drive';
+import { useCheckPermissions, useFolderContent, useIsEffectiveOwner, usePathInfo } from '@workspace/lib/drive';
 import type { DrivePath, DriveSearchParams } from '@workspace/lib/types/drive';
 import { EmptyState, LoadingState, RequestAccessView } from '@workspace/ui';
 import { DriveAccessDialog } from '@workspace/ui/components/drive/drive-access-dialog';
-import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
+import { browseCapabilities } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
 import { useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';
 import { useContext, useEffect } from 'react';
@@ -56,9 +56,16 @@ function DriveRoute() {
     const { data: shareTargetPath = null } = usePathInfo(ownerId, mountId, sharePathId || '');
     const shareDialogOpen = !!sharePathId && !!shareTargetPath;
 
+    // Menus, detail column and quick look all act on one capability set, so the viewer's own access
+    // to this folder decides it — a read-only share browses but writes nothing. Owners and team
+    // members always write, so they skip the round trip.
+    const isOwner = useIsEffectiveOwner(ownerId);
+    const { data: permissions } = useCheckPermissions(ownerId, mountId, isOwner || skipDataFetch ? undefined : pathId);
+    const capabilities = browseCapabilities(isOwner || permissions?.canWrite === true);
+
     const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
         items: folderContents,
-        capabilities: DRIVE_CAPABILITIES.browse,
+        capabilities,
         onOpenFolder: (path: DrivePath) =>
             navigate({
                 to: Route.fullPath,
@@ -140,7 +147,7 @@ function DriveRoute() {
                 onRowActivate={onRowActivate}
                 onBackToList={handleBackToList}
                 onAfterAction={handleAfterAction}
-                capabilities={DRIVE_CAPABILITIES.browse}
+                capabilities={capabilities}
                 onQuickLook={onQuickLook}
                 pid={pid}
                 unreadPathIds={unreadChatIds}
