@@ -9,7 +9,7 @@ order: 60
 updated: 2026-09-14
 ---
 
-Drive can show you the contents of a file without opening a separate app or tab. Images, PDFs, videos, audio, text files, and contact files all have a built-in preview.
+Drive can show you the contents of a file without opening a separate app or tab. Images, PDFs, videos, audio, text files, and contact files all have a built-in preview. Text files over 1 MB show the file card instead.
 
 ## Open a file in the preview
 
