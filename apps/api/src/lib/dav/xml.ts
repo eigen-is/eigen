@@ -5,7 +5,7 @@ export const XML_CONTENT_TYPE = 'application/xml; charset=utf-8';
 
 const NS = `xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CARD="urn:ietf:params:xml:ns:carddav" xmlns:CS="http://calendarserver.org/ns/" xmlns:ICAL="http://apple.com/ns/ical/"`;
 
-export function multistatus(responses: string[], extra?: string): string {
+function multistatus(responses: string[], extra?: string): string {
     return `<?xml version="1.0" encoding="utf-8"?>\n<D:multistatus ${NS}>${responses.join('')}${extra ?? ''}</D:multistatus>`;
 }
 
@@ -38,7 +38,6 @@ export function propstatNotFound(props: string[]): string {
     return `<D:propstat><D:prop>${props.join('')}</D:prop><D:status>HTTP/1.1 404 Not Found</D:status></D:propstat>`;
 }
 
-// Principal properties
 export function principalProps(userId: string): string[] {
     return [
         `<D:resourcetype><D:collection/><D:principal/></D:resourcetype>`,

@@ -286,4 +286,13 @@ describe('WebDAV GET security headers', () => {
         expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
         expect(res.headers.get('Content-Security-Policy')).toBeNull();
     });
+
+    test('malformed percent-encoding in the URL → 400', async () => {
+        const res = await webdavRequest(
+            ctx.alice.user.email,
+            'GET',
+            `/webdav/${ctx.alice.user.id}/${mountId}/bad%E0.txt`,
+        );
+        expect(res.status).toBe(400);
+    });
 });

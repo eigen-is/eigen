@@ -1,4 +1,5 @@
 import { XMLParser } from 'fast-xml-parser';
+import { asNode, isXmlNode, type XmlNode } from '../dav/xml-node';
 import {
     assertSupportedCollation,
     type ParamFilter,
@@ -36,9 +37,6 @@ export type CardReportRequest =
       }
     | { type: 'sync-collection'; syncToken: string | undefined; wantsData: boolean };
 
-type XmlNode = Record<string, unknown>;
-
-const asNode = (v: unknown): XmlNode => (v && typeof v === 'object' && !Array.isArray(v) ? (v as XmlNode) : {});
 // fast-xml-parser collapses a single repeated child to the value itself; the filter grammar's `*`/`?` children
 // are normalised to arrays here rather than via isArray so the config comment above stays about `href`/`prop`.
 const asArray = (v: unknown): unknown[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
@@ -50,7 +48,7 @@ const attr = (node: XmlNode, name: string): string | null => {
 // The requested <D:prop> container: whether address-data was asked for at all, and the CARD:prop name list
 // under it (the partial-retrieval subset) when present. Full retrieval — <CARD:address-data/> with no
 // children — leaves partialProps null, which is the handler's "serve the stored bytes whole" signal.
-function readProps(root: Record<string, unknown>): { wantsData: boolean; partialProps: string[] | null } {
+function readProps(root: XmlNode): { wantsData: boolean; partialProps: string[] | null } {
     const prop = asNode(root['prop']);
     const wantsData = Object.keys(prop).some((k) => k.includes('address-data'));
     let partialProps: string[] | null = null;
@@ -81,11 +79,10 @@ const PARAM_FILTER_CHILDREN = new Set(['is-not-defined', 'text-match']);
 // `<text-match>value</text-match>` (no attributes) parses to the string value directly (§ 10.5.4 defaults:
 // collation i;unicode-casemap, match-type contains). The collation is validated here so an unsupported one is
 // a book-independent 403.
-function parseTextMatch(raw: unknown): TextMatch {
-    if (typeof raw !== 'object' || raw === null) {
-        return { collation: null, matchType: 'contains', negate: false, value: raw == null ? '' : String(raw) };
+function parseTextMatch(node: unknown): TextMatch {
+    if (!isXmlNode(node)) {
+        return { collation: null, matchType: 'contains', negate: false, value: node == null ? '' : String(node) };
     }
-    const node = asNode(raw);
     assertOnlyChildren(node, new Set());
     const collation = attr(node, 'collation');
     assertSupportedCollation(collation);

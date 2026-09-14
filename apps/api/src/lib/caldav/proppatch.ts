@@ -1,5 +1,6 @@
 import { XMLParser } from 'fast-xml-parser';
 import type { Calendar } from '../calendar/calendar';
+import { isXmlNode, type XmlNode } from '../dav/xml-node';
 import { calendarHref, sanitizeCalendarId } from './discovery';
 import { multistatusResponse, propstatOk, response } from './xml-builder';
 
@@ -10,12 +11,12 @@ const parser = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true });
 // attribute (e.g. xml:lang), an object with the value under '#text'. Return the string form; null when absent.
 function textOf(value: unknown): string | null {
     if (typeof value === 'string' || typeof value === 'number') return String(value);
-    if (value && typeof value === 'object' && '#text' in value) return String((value as { '#text': unknown })['#text']);
+    if (isXmlNode(value) && '#text' in value) return String(value['#text']);
     return null;
 }
 
 // displayname + calendar-color as the client set them, read identically by MKCALENDAR and PROPPATCH.
-function extractCalendarProps(prop: Record<string, unknown>): { name?: string; color?: string } {
+function extractCalendarProps(prop: XmlNode): { name?: string; color?: string } {
     const out: { name?: string; color?: string } = {};
     // Truthiness, not null-checks: an empty <displayname/> means "not set", never an empty name.
     const name = textOf(prop['displayname']);

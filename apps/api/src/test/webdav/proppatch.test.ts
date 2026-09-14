@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { XMLValidator } from 'fast-xml-parser';
 import { getTestContext, type TestContext } from '../setup';
 import { getDefaultMountId, webdavRequest } from './setup';
 
@@ -73,5 +74,29 @@ describe('WebDAV PROPPATCH', () => {
             headers: { 'Content-Type': 'application/xml; charset=utf-8' },
         });
         expect(res.status).toBe(413);
+    });
+
+    test('PROPPATCH with a truncated body → 400, nothing persisted', async () => {
+        await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/proppatch-trunc.txt`, { body: 'a' });
+        const res = await webdavRequest(ctx.alice.user.email, 'PROPPATCH', `${baseHref}/proppatch-trunc.txt`, {
+            body: '<D:propertyupdate xmlns:D="DAV:"><D:set><D:prop><Z:x xmlns:Z="urn:eigen-test">1</Z:x>',
+        });
+        expect(res.status).toBe(400);
+        const find = await webdavRequest(ctx.alice.user.email, 'PROPFIND', `${baseHref}/proppatch-trunc.txt`, {
+            headers: { Depth: '0' },
+        });
+        expect(await find.text()).not.toContain('urn:eigen-test');
+    });
+
+    test('PROPPATCH with a name that is not an XML name → 400, later PROPFIND stays well-formed', async () => {
+        await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/proppatch-name.txt`, { body: 'a' });
+        const res = await webdavRequest(ctx.alice.user.email, 'PROPPATCH', `${baseHref}/proppatch-name.txt`, {
+            body: '<D:propertyupdate xmlns:D="DAV:"><D:set><D:prop><Z:a&amp;b xmlns:Z="urn:eigen-test">1</Z:a&amp;b></D:prop></D:set></D:propertyupdate>',
+        });
+        expect(res.status).toBe(400);
+        const find = await webdavRequest(ctx.alice.user.email, 'PROPFIND', `${baseHref}/proppatch-name.txt`, {
+            headers: { Depth: '0' },
+        });
+        expect(XMLValidator.validate(await find.text())).toBe(true);
     });
 });

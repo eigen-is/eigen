@@ -5,8 +5,7 @@ import { auth } from './auth';
 import { checkProtocolAuthLimit, clearProtocolAuthFailures, recordProtocolAuthFailure } from './protocol-rate-limit';
 
 // HTTP Basic auth shared by CalDAV, CardDAV, and WebDAV routers. Browsers/clients send
-// `Authorization: Basic base64(email:password)`; we hand the credentials to
-// `verifyProtocolAuth` which checks app passwords first, then primary password.
+// `Authorization: Basic base64(email:password)`.
 export async function authenticateBasic(request: Request): Promise<User> {
     const authHeader = request.headers.get('Authorization');
     if (!authHeader?.startsWith('Basic ')) {
@@ -36,8 +35,7 @@ export async function authenticateBasic(request: Request): Promise<User> {
 // dovecot's `TCPREMOTEIP`, which for a submission login is the SMTP client postfix reported as
 // `rip`. It stays optional because that variable is unset for internal sessions (doveadm), and then
 // only the email bucket fills. Where Docker's port publishing hides the source behind the bridge
-// gateway, a whole port shares one bucket. That only gates the primary-password path (a valid app
-// password is checked first), which is why the per-IP cap sits as high as 50.
+// gateway, a whole port shares one bucket.
 export async function verifyProtocolAuth(email: string, password: string, ip?: string): Promise<User> {
     const user = await getUserByEmail(email);
 
