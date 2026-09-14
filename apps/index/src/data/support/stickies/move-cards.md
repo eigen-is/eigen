@@ -23,7 +23,7 @@ The other cards shift to make room as you drag.
 
 ## Move a card to a different column
 
-1. Click and hold the card, then drag it sideways towards the target column.
+1. Click and hold the card, then drag it sideways toward the target column.
 2. Hover over a card in the target column to insert your card above it, or hover over the empty area at the
    bottom of the column to add it there.
 3. Release to drop it.

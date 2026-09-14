@@ -31,7 +31,7 @@ Each guest appears below the field with a **Pending** badge. Once they respond, 
 
 <div class="eigen-callout">
 
-You cannot add yourself as a guest. If you try, Calendar will tell you. You are already the organiser.
+You cannot add yourself as a guest. If you try, Calendar will tell you. You are already the organizer.
 
 </div>
 

@@ -44,8 +44,8 @@ The import reads every worksheet in the workbook and preserves:
 - Merged cells
 - Column widths and row heights
 - Cell borders
-- Text formatting: bold, italic, underline, strikethrough, font size, and text colour
-- Fill colours
+- Text formatting: bold, italic, underline, strikethrough, font size, and text color
+- Fill colors
 - Text alignment (horizontal and vertical), text wrapping, and text rotation
 - The sheet tab names and their order
 - The gridlines setting (hidden or visible)

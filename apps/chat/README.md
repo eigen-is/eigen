@@ -198,7 +198,7 @@ You     [lounge]
 ```
 
 - \* indicates your current room
-- Greyed out or shrunken text when peeking
+- Grayed out or shrunken text when peeking
 
 ---
 

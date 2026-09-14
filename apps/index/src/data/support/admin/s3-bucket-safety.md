@@ -68,7 +68,7 @@ Once both lines have a tick, the button is gone. Click **Change** at the end of 
 
 Some access keys are allowed to read and write files but not to change bucket settings. In that case, and when the bucket already has a lifecycle rule of its own, the panel shows the same settings as `aws` commands. Click **Copy commands** and run them against the bucket yourself, from a machine where the AWS command-line tool is set up for that provider.
 
-The panel fills the commands in with your endpoint, bucket, prefix, and the number of days you picked. Keep the rule's ID as it is. Eigen recognises its own rule by that ID, so a rule under a different name reads as somebody else's and is left alone.
+The panel fills the commands in with your endpoint, bucket, prefix, and the number of days you picked. Keep the rule's ID as it is. Eigen recognizes its own rule by that ID, so a rule under a different name reads as somebody else's and is left alone.
 
 <div class="eigen-callout">
 

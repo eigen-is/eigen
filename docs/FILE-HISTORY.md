@@ -26,7 +26,7 @@ to its payload; `FileEventType` is that map's keys plus the detail-less `created
 and link the descendant an event happened on. `toFileEventType` coerces any persisted string outside
 the union to `'edited'`, so rows from other builds stay renderable and the phrasing helpers total.
 
-Rows carry both `actorUserId` and `actorEmail` — denormalised so a row renders without an auth-db
+Rows carry both `actorUserId` and `actorEmail` — denormalized so a row renders without an auth-db
 join. Drive mutations take an optional `user`; **no actor means no row**, which keeps internal
 scaffolding (chat seed files, `media/` folders) out of the user-visible timeline. History is
 per-mount, not per-home or server-wide: the FK cascade cleans it up when a path is permanently
@@ -74,7 +74,7 @@ comment event, so an `'edited'` row would double-report each drag.
 **Clients** may post a small allowlist of semantic events to
 `POST /drive/:ownerId/:mountId/path/:pathId/history`. The route's typebox union *is* the allowlist:
 `sticky-added` / `sticky-moved` (`card`, `toColumn`, `cardId`) and `sticky-removed` (`card`,
-`cardId`); `isClientFileEventType` re-checks as defence in depth, and identical events from one
+`cardId`); `isClientFileEventType` re-checks as defense in depth, and identical events from one
 actor collapse within a 30 s dedupe window. `apps/stickies` posts them through `useRecordHistory`.
 Slide, sheet and doc structural verbs are deliberately absent — they surface as `'edited'`.
 

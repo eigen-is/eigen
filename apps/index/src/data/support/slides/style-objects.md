@@ -3,7 +3,7 @@ title: "Style shapes, text, and images"
 description: "A reference for every section of the properties panel in Slides, from position and size to fill, stroke, corners, and the hand-drawn sketch style."
 type: reference
 category: Editing
-tags: [slides, styling, fill, stroke, colours, text]
+tags: [slides, styling, fill, stroke, colors, text]
 related: [slides/insert-content, slides/draw-shapes-and-arrows, slides/arrange-and-align]
 order: 50
 updated: 2026-09-11
@@ -34,9 +34,9 @@ Shows for a text box. Controls the type itself; the box behind it uses the **Fil
 |---|---|
 | **Font** | The typeface |
 | **Size** | Font size in points |
-| **Color** | Text colour |
+| **Color** | Text color |
 | **Style** | **Bold**, **Italic**, **Underline**, and **Strikethrough** |
-| **Align** | Left, centre, right, or justified |
+| **Align** | Left, center, right, or justified |
 | **Vertical** | Top, middle, or bottom of the box |
 
 ### Spacing
@@ -77,7 +77,7 @@ An arrow has its own sections in place of **Fill**. If the arrow has a label, a 
 
 ## Fill
 
-The colour inside a shape or text box. Set a solid colour or a two-stop gradient, or turn the fill off.
+The color inside a shape or text box. Set a solid color or a two-stop gradient, or turn the fill off.
 
 | Control | What it does |
 |---|---|
@@ -91,7 +91,7 @@ The outline of the object.
 
 | Control | What it does |
 |---|---|
-| **Color** | Outline colour |
+| **Color** | Outline color |
 | **Width** | Line thickness |
 | **Style** | **Solid**, **Dashed**, or **Dotted** |
 

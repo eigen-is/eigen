@@ -44,7 +44,7 @@ An **Unrestricted** link still requires the other person to sign in to Eigen. It
 
 ### Let people know
 
-Open the **File** menu and choose **Email collaborators** to write a message to everyone you have shared with. Eigen adds a link to the drawing for you. Save your sharing changes first, because the option is greyed out while you have unsaved changes.
+Open the **File** menu and choose **Email collaborators** to write a message to everyone you have shared with. Eigen adds a link to the drawing for you. Save your sharing changes first, because the option is grayed out while you have unsaved changes.
 
 ### Control who can change sharing
 
@@ -56,18 +56,18 @@ Comments attach to a single object on the canvas, such as a shape, an arrow, or 
 
 1. Right-click the object.
 2. Choose **Add comment** from the menu.
-3. In the **New comment** dialog, give the comment a title and, if you like, a description and a colour. You can also assign it to someone.
+3. In the **New comment** dialog, give the comment a title and, if you like, a description and a color. You can also assign it to someone.
 4. Click **Add comment**.
 
-A small coloured triangle appears in the top-right corner of the object to show it has a comment.
+A small colored triangle appears in the top-right corner of the object to show it has a comment.
 
 ### Open and reply to a comment
 
-Click the coloured triangle on an object to open that comment's thread. You can read the messages, add a reply, and mark the comment as resolved.
+Click the colored triangle on an object to open that comment's thread. You can read the messages, add a reply, and mark the comment as resolved.
 
 ### View all comments
 
-Click the **Comments** button (speech bubble icon) in the toolbar to open the comments panel on the right. The panel lists every comment on the drawing, and the **New comment** button at the top of the panel adds one that belongs to the drawing as a whole rather than to an object. Use the filter button (funnel icon) at the top of the panel to narrow the list by who a comment is **Assigned to**, by colour, or by **Status**: **Open**, **Resolved**, or **All**.
+Click the **Comments** button (speech bubble icon) in the toolbar to open the comments panel on the right. The panel lists every comment on the drawing, and the **New comment** button at the top of the panel adds one that belongs to the drawing as a whole rather than to an object. Use the filter button (funnel icon) at the top of the panel to narrow the list by who a comment is **Assigned to**, by color, or by **Status**: **Open**, **Resolved**, or **All**.
 
 Click a comment in the panel to jump to the object it is attached to and open its thread.
 

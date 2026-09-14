@@ -24,7 +24,7 @@ Open your Eigen instance in a browser. If setup has not been completed yet, you 
 server has a `DOMAIN` environment variable set to a real hostname, the field is pre-filled and
 read-only.
 
-**Organization Name** is the display name for your organisation. It appears in the interface and
+**Organization Name** is the display name for your organization. It appears in the interface and
 in emails sent to members.
 
 **Storage Type** controls where Eigen stores user files. Three options are available:
@@ -48,7 +48,7 @@ in emails sent to members.
 
 ### Completing setup
 
-Click **Complete Setup**. Eigen creates the organisation and the admin account, then shows a
+Click **Complete Setup**. Eigen creates the organization and the admin account, then shows a
 **Setup Complete!** confirmation. Click **Go to Login** to reach the sign-in page.
 
 <div class="eigen-callout">

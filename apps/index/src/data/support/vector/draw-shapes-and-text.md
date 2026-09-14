@@ -47,7 +47,7 @@ The **Draw** and **Eraser** tools stay active on their own, whether or not **Kee
 
 To edit a text object later, double-click it. You can also double-click an empty spot on the canvas to start a new text box there, without picking the **Text** tool first.
 
-Once a text object is selected but not being edited, the properties panel on the right shows the full set of text options: font, size, colour, alignment, and spacing.
+Once a text object is selected but not being edited, the properties panel on the right shows the full set of text options: font, size, color, alignment, and spacing.
 
 ## Add an image
 
@@ -80,4 +80,4 @@ Each tool has a single-key shortcut. Press the key to pick the tool without goin
 
 The number keys pick the same tools in toolbar order, so `1` is **Select**, `2` is **Rectangle**, and so on. The **Arrow** (`A`) and **Line** (`L`) tools have their own article: [Connect objects with arrows](/support/vector/connect-with-arrows).
 
-Once your objects are placed, [Style objects](/support/vector/style-objects) covers colours, borders, and fills, and [Arrange and align objects](/support/vector/arrange-and-align) covers moving, ordering, and lining things up.
+Once your objects are placed, [Style objects](/support/vector/style-objects) covers colors, borders, and fills, and [Arrange and align objects](/support/vector/arrange-and-align) covers moving, ordering, and lining things up.

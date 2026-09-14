@@ -16,9 +16,9 @@ deleting anything.
 
 Your calendars are listed under **My Calendars** in the sidebar on the left.
 
-Each calendar has a small coloured square next to its name. That square is a toggle:
+Each calendar has a small colored square next to its name. That square is a toggle:
 
-- When it is filled with colour and shows a tick, the calendar is visible. Its events appear in the view.
+- When it is filled with color and shows a tick, the calendar is visible. Its events appear in the view.
 - When it is empty (no fill, no tick), the calendar is hidden. Its events are not shown.
 
 Click the square to switch between visible and hidden. The change takes effect straight away.
@@ -26,22 +26,22 @@ Click the square to switch between visible and hidden. The change takes effect s
 ## Show or hide a shared calendar
 
 Calendars that other people have shared with you appear under **Shared with me**. Team calendars from
-groups you belong to appear under **Team Calendars**. Both work the same way: click the coloured square
+groups you belong to appear under **Team Calendars**. Both work the same way: click the colored square
 next to a calendar's name to show or hide it.
 
-## Change a calendar's colour or name
+## Change a calendar's color or name
 
 Each calendar in **My Calendars** has an edit button that appears when you hover over it. Click the pencil
 icon on the right to open the **Edit Calendar** dialog. From there you can:
 
 - Change the calendar's name in the **Calendar Name** field.
-- Pick a new colour by clicking the colour swatch on the left.
+- Pick a new color by clicking the color swatch on the left.
 
 Click **Save** when you are done.
 
 For calendars under **Shared with me** or **Team Calendars**, click the pencil icon to open
-**Shared Calendar Settings**. You can choose a different display colour for that calendar. This only
-affects how the calendar looks for you; it does not change the colour the owner set.
+**Shared Calendar Settings**. You can choose a different display color for that calendar. This only
+affects how the calendar looks for you; it does not change the color the owner set.
 
 ## Delete a calendar you own
 

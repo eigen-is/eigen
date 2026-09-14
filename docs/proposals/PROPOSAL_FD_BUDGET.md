@@ -270,7 +270,7 @@ counting is Linux-only and the three points above cover the honest signal (D3).
   `Bun.spawn(['sh', '-c', 'ulimit -n 128 && exec bun test …'])` works portably — but it means
   booting the whole API in a child process, and the single-file test recipe (preload, serial
   execution) makes that fragile. **Recommendation: skip it**; the parser and retry unit
-  tests plus the pinned compose limit cover the behaviour without a canary test that will flake.
+  tests plus the pinned compose limit cover the behavior without a canary test that will flake.
 
 ## Open questions
 

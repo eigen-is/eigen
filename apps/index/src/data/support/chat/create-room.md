@@ -21,7 +21,7 @@ A chat room is a named space where you and other people can send messages and sh
 
 ## Create your first room
 
-If you have no rooms yet, Chat shows a **Create your first chat** button in the centre of the screen. Click it to open the same dialog described above.
+If you have no rooms yet, Chat shows a **Create your first chat** button in the center of the screen. Click it to open the same dialog described above.
 
 ## Personal rooms and team rooms
 

@@ -22,7 +22,7 @@ Right-click the thumbnail of the slide you want to copy in the left panel, then 
 
 ## Delete a slide
 
-Right-click the thumbnail in the left panel and choose **Delete**. You cannot delete the last remaining slide in a presentation. If **Delete** appears greyed out, the presentation has only one slide.
+Right-click the thumbnail in the left panel and choose **Delete**. You cannot delete the last remaining slide in a presentation. If **Delete** appears grayed out, the presentation has only one slide.
 
 ## Reorder slides
 

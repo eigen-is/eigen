@@ -3,7 +3,7 @@ title: "Work with several emails at once"
 description: "Select more than one message in Mail, then archive, delete, report, or move the whole set in one go."
 type: how-to
 category: Basics
-tags: [mail, email, select, organise]
+tags: [mail, email, select, organize]
 related: [mail/archive-delete-spam, mail/move-email-between-folders, mail/get-started]
 order: 60
 updated: 2026-09-13

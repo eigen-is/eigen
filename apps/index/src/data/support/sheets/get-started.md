@@ -32,11 +32,11 @@ rename a spreadsheet, use **File → Rename**.
 When a spreadsheet is open, the editor has three main areas:
 
 - The **menu bar** across the top: **File**, **Edit**, **View**, **Insert**, **Format**, and **Data** menus,
-  plus a row of quick-format buttons in the centre.
+  plus a row of quick-format buttons in the center.
 - A narrow bar just below the menus: on the left it shows the address of the selected cell (such as `A1`),
   and on the right it shows the cell's value or formula. Click that bar to edit a cell's content directly
   there.
-- The **grid**: the rows and columns where you enter data. Columns are labelled A, B, C and rows are
+- The **grid**: the rows and columns where you enter data. Columns are labeled A, B, C and rows are
   numbered 1, 2, 3. The cell at the intersection of column B and row 3 is called `B3`.
 
 Below the grid, a row of sheet tabs lets you switch between the sheets in the workbook. Click the plus

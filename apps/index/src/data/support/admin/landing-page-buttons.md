@@ -8,7 +8,7 @@ order: 85
 updated: 2026-09-13
 ---
 
-The landing page is what visitors see at the address of your server before they sign in. You can add your own buttons to it, each with a title you choose and a web address it opens. People use them for a status page, a handbook, or the organisation's main website.
+The landing page is what visitors see at the address of your server before they sign in. You can add your own buttons to it, each with a title you choose and a web address it opens. People use them for a status page, a handbook, or the organization's main website.
 
 Only the server owner can do this.
 

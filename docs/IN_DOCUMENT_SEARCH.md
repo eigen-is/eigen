@@ -5,7 +5,7 @@
 > `DocSearchController` over its own live state; `DocSearchProvider` owns the session, the keybinds
 > and the floating `FindReplaceBar`. Everything but slides, stickies and vector also replaces (`⌥⌘F`).
 
-Matches are **plain serialisable data** (`id` + `label` + `context`) revealed by id, never closures —
+Matches are **plain serializable data** (`id` + `label` + `context`) revealed by id, never closures —
 so the same controller also feeds the command palette `doc:` scope and the `?q=` deep link. Comment
 threads on a board are searched server-side through a separate `DocCommentSearch` capability backed
 by `comments.db`'s `comments_fts`. Core contract in `packages/lib/src/types/doc-search.ts`; the bar
@@ -51,7 +51,7 @@ Rules baked into the contract:
 - **`highlightAll` is a paint hint.** Some surfaces ignore its array: docs paints from its own installed
   `prosemirror-search` query rather than these ids. The asymmetry is intended.
 - **`reveal` tolerates stale ids** (validate / clamp / no-op, never throw) and **must not move focus**
-  while a bar session is open — that would break `Enter` / `⌘G` stepping. It centres the match so the
+  while a bar session is open — that would break `Enter` / `⌘G` stepping. It centers the match so the
   bar can't cover it.
 - **Replace returns the fresh post-edit match list**, which the provider *adopts* — it never re-runs
   `search()` after an edit (a React context is one render behind then). The query is explicit on every

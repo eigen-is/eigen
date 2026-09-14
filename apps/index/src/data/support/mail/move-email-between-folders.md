@@ -3,7 +3,7 @@ title: "Move email between folders"
 description: "Move messages from one folder to another in Mail, by dragging them onto a folder or using the Move to folder menu."
 type: how-to
 category: Basics
-tags: [mail, email, folders, organise]
+tags: [mail, email, folders, organize]
 related: [mail/get-started, mail/archive-delete-spam, mail/work-with-several-emails]
 order: 50
 updated: 2026-06-08
@@ -19,7 +19,7 @@ The folders you can move between are the ones in the sidebar: **Inbox**, **Draft
 ## Drag a message onto a folder
 
 1. Open the folder the message is in, then find it in the message list.
-2. Click and drag the message towards the sidebar on the left.
+2. Click and drag the message toward the sidebar on the left.
 3. Drop it on the folder you want. The folder highlights while the message is over it, so you can see where it
    will land.
 

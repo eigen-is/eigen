@@ -14,7 +14,7 @@ Changes are saved automatically.
 
 ## Type into a cell
 
-1. Click the cell where you want to enter data. A coloured outline shows it is selected.
+1. Click the cell where you want to enter data. A colored outline shows it is selected.
 2. Start typing. The cell opens for editing and the text appears as you type.
 3. Press **Enter** to confirm and move to the next row.
 
@@ -29,7 +29,7 @@ Select the cell, then do one of the following:
 - Click the formula bar (the input area just below the menu bar) and edit there.
 
 While the cell is open for editing, the arrow keys move the cursor within the text rather than moving to a
-neighbouring cell. Press **Enter** when you are done.
+neighboring cell. Press **Enter** when you are done.
 
 <div class="eigen-callout">
 

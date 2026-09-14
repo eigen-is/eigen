@@ -69,7 +69,7 @@ rather than passing a file back and forth. For more on attachments, see
 
 ## Your mail storage is full
 
-Sent and received mail counts towards your storage limit. When it's full, adding an attachment or sending fails
+Sent and received mail counts toward your storage limit. When it's full, adding an attachment or sending fails
 with **Insufficient Storage**.
 
 Free up some space, then try again:

@@ -68,7 +68,7 @@ current sheet's config with `getSheetConfig(ctx, id?)` (`state/context.ts`, besi
   collections already exist, no writer needs to create one, so this cannot happen by accident; `src/test/state/rejected-writes.test.ts`
   is the table-driven gate that keeps it that way. Add a row to it when you add a writer.
 
-**`config.borderInfo` is a map of each cell's own sides, keyed `"r_c"` like `merge`.** Toolbar layouts are expanded per cell at write time (`applyBorder`, `state/modules/border.ts`); `border-none` and every carry tombstone delete the key; a shared edge never *creates* the neighbour's key (that would be one whole-object `add`, the first-write clobber above), but a neighbour entry that already exists gets its facing side overridden on apply — and removed by `border-none` — so the freshly drawn edge wins on screen. When two neighbours disagree on a shared edge (A1's right vs B1's left, common after an xlsx import that writes both), the canvas paints it deterministically — the higher-index neighbour's facing side wins (B1.l over A1.r, B2.t over B1.b) — so the color can't flip with the viewport's border walk mode. A whole-column/row header click clips to the used extent (`clipToUsedExtent`, scanning only the selected axis) — one menu click cannot write ~1M keys — with the accepted divergence from Excel/Google that cells filled in later rows show no border. Merges are a read-time filter over raw storage — `mergeEdgeSides` in `packages/lib/src/sheets/borders.ts` is the one predicate the canvas, xlsx and HTML export share — and only the canvas pass skips hidden rows and columns. Order carries nothing, so two clients bordering different cells converge (`src/test/state/modules/border-convergence.test.ts`); two clients bordering the *same* cell still do not, because each applies its own op optimistically — see [PROPOSAL_SHEETS_YJS_CONFIG.md](proposals/PROPOSAL_SHEETS_YJS_CONFIG.md).
+**`config.borderInfo` is a map of each cell's own sides, keyed `"r_c"` like `merge`.** Toolbar layouts are expanded per cell at write time (`applyBorder`, `state/modules/border.ts`); `border-none` and every carry tombstone delete the key; a shared edge never *creates* the neighbor's key (that would be one whole-object `add`, the first-write clobber above), but a neighbor entry that already exists gets its facing side overridden on apply — and removed by `border-none` — so the freshly drawn edge wins on screen. When two neighbors disagree on a shared edge (A1's right vs B1's left, common after an xlsx import that writes both), the canvas paints it deterministically — the higher-index neighbor's facing side wins (B1.l over A1.r, B2.t over B1.b) — so the color can't flip with the viewport's border walk mode. A whole-column/row header click clips to the used extent (`clipToUsedExtent`, scanning only the selected axis) — one menu click cannot write ~1M keys — with the accepted divergence from Excel/Google that cells filled in later rows show no border. Merges are a read-time filter over raw storage — `mergeEdgeSides` in `packages/lib/src/sheets/borders.ts` is the one predicate the canvas, xlsx and HTML export share — and only the canvas pass skips hidden rows and columns. Order carries nothing, so two clients bordering different cells converge (`src/test/state/modules/border-convergence.test.ts`); two clients bordering the *same* cell still do not, because each applies its own op optimistically — see [PROPOSAL_SHEETS_YJS_CONFIG.md](proposals/PROPOSAL_SHEETS_YJS_CONFIG.md).
 
 **Resize measures page coordinates.** Mousedown stores `e.pageX`/`e.pageY`; mouseup subtracts it. Mousedown and
 mouseup measure from different elements (the header vs the overlay container), so anything element-relative needs a
@@ -225,13 +225,13 @@ keyboard user who arrowed onto a validated cell saw nothing, and a read-only vie
   `cellRender` and `nullCellRender` — in a real workbook most list-validated cells are empty, and a blank
   validated cell is otherwise indistinguishable from a blank free-text one.
 - **One geometry, painter and hit-test.** `dropdownChevronRect` (`state/modules/data-verification.ts`)
-  right-aligns the 8px glyph and centres it vertically; `isDropdownChevronClick` builds its click target
+  right-aligns the 8px glyph and centers it vertically; `isDropdownChevronClick` builds its click target
   from the same rect, and both drop out below `DROPDOWN_CHEVRON_MIN_WIDTH`. Same split as
   `checkboxRect` and `FILTER_BUTTON_WIDTH`/`HEIGHT`.
 - **It overlays the cell text** rather than reserving width, the way Google's does — reserving would
   reflow every validated column.
-- **Colour is the cell's own `fc` at 55% alpha**, not a flat grey: real workbooks put list rules on
-  dark-filled cells a fixed grey would vanish into.
+- **Color is the cell's own `fc` at 55% alpha**, not a flat gray: real workbooks put list rules on
+  dark-filled cells a fixed gray would vanish into.
 - **Clicking it opens the list**; a click anywhere else in the cell just selects. Read-only viewers still
   see the chevron but get no list — `cellFocus` never positions the anchor when editing is disallowed.
 - The DOM element that remains (`#sheet-dataVerification-dropdown-btn`) is an invisible,
@@ -259,7 +259,7 @@ value in it fails the rule — why. Both render through one React card,
 
 ## Cell corner indicators
 
-Three marks can sit in a cell's corners: a comment (top-right), an invalid value and a forced string (top-left). One painter, `drawCellIndicator` in `state/render/cells.ts`, and one geometry, `cellIndicatorRect` in `state/modules/cell-glyph.ts` over the shared `CELL_INDICATOR_SIZE` (`packages/lib/src/constants/comment-indicator.ts`, which the canvas apps' `CommentIndicator` reads too). `nullCellRender` and `cellRender` both reach the same painter, so a commented empty cell and a commented filled one draw one mark. A comment triangle takes its card's colour; a card with no colour of its own falls back to the default red. Colours are hardcoded light like every other canvas colour (RENDERING.md § Theming).
+Three marks can sit in a cell's corners: a comment (top-right), an invalid value and a forced string (top-left). One painter, `drawCellIndicator` in `state/render/cells.ts`, and one geometry, `cellIndicatorRect` in `state/modules/cell-glyph.ts` over the shared `CELL_INDICATOR_SIZE` (`packages/lib/src/constants/comment-indicator.ts`, which the canvas apps' `CommentIndicator` reads too). `nullCellRender` and `cellRender` both reach the same painter, so a commented empty cell and a commented filled one draw one mark. A comment triangle takes its card's color; a card with no color of its own falls back to the default red. Colors are hardcoded light like every other canvas color (RENDERING.md § Theming).
 
 ## Cell glyphs outrank the drag handles
 

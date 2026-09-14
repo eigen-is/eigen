@@ -37,7 +37,7 @@ The card shows the person's name and, if they are in your Contacts, their compan
 
 | Command | What it does |
 |---|---|
-| `/me [action]` | Posts an emote in italics describing your action. For example, `/me stretches and yawns` appears as an italicised line with your name. |
+| `/me [action]` | Posts an emote in italics describing your action. For example, `/me stretches and yawns` appears as an italicized line with your name. |
 
 ## Built-in emotes
 

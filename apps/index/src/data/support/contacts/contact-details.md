@@ -31,19 +31,19 @@ you click **Save**.
 
 In the **Basic Information** section:
 
-- **Company**: the organisation this person works for.
-- **Job title**: their role at that organisation.
+- **Company**: the organization this person works for.
+- **Job title**: their role at that organization.
 
 Both fields appear together in the contact detail view, shown as "Job title at Company".
 
 ## Labels
 
 Labels let you group contacts into categories. In the **Labels** row, pick a label from the dropdown to
-add it to this contact. A label appears as a coloured badge. To remove it, click the small trash icon on
+add it to this contact. A label appears as a colored badge. To remove it, click the small trash icon on
 the badge. You can apply more than one label to the same contact.
 
 Labels must exist before you can assign them. See
-[Organise contacts with labels and groups](/support/contacts/labels-and-groups) for how to create them.
+[Organize contacts with labels and groups](/support/contacts/labels-and-groups) for how to create them.
 
 ## Postal addresses
 

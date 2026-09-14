@@ -25,7 +25,7 @@ You can also create a presentation while you already have one open. Click **File
 The editor has three areas:
 
 - **Slide panel** on the left: numbered thumbnails of every slide. Click a thumbnail to switch to that slide.
-- **Canvas** in the centre: the editing surface for the active slide at 1920×1080 pixels.
+- **Canvas** in the center: the editing surface for the active slide at 1920×1080 pixels.
 - **Properties panel** on the right: reflects whatever you have selected. With nothing selected it shows the slide background. With an object selected it shows that object's properties.
 
 ## Add a text box
@@ -67,7 +67,7 @@ The properties panel also has an **Arrange** section with the same buttons, show
 
 ## Change the slide background
 
-With no object selected, the properties panel shows the background for the active slide. You can set a solid colour, a gradient, or an image. Use the **Apply to** dropdown to choose **This slide**, **This and following**, or **All slides**, then click **Apply**.
+With no object selected, the properties panel shows the background for the active slide. You can set a solid color, a gradient, or an image. Use the **Apply to** dropdown to choose **This slide**, **This and following**, or **All slides**, then click **Apply**.
 
 ## Undo and redo
 

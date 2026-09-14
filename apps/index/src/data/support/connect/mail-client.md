@@ -32,7 +32,7 @@ Your Eigen **email address** is the username for both IMAP and SMTP.
 ## Connection settings
 
 All the values you need are on the [**Integrations**](/space/services) page under **IMAP (Email sync)**. The
-table below summarises them.
+table below summarizes them.
 
 | Setting | Value |
 |---|---|

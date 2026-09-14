@@ -44,7 +44,7 @@ A file's general access starts as **Restricted**, which means only the people yo
 
 A shared link is a shortcut to the item inside Eigen, not a public web page. Whoever opens it has to sign in first, so there's no anonymous, sign-in-free access.
 
-They don't need an account set up for them in advance, though. Anyone you share with can sign in as a guest using a one-time code sent to their email address, then see only the things that have been shared with them. That's how you share with someone outside your organisation. How guests sign in, and the control an administrator has over it, are covered in [guest access](/support/admin/guests).
+They don't need an account set up for them in advance, though. Anyone you share with can sign in as a guest using a one-time code sent to their email address, then see only the things that have been shared with them. That's how you share with someone outside your organization. How guests sign in, and the control an administrator has over it, are covered in [guest access](/support/admin/guests).
 
 <div class="eigen-callout">
 

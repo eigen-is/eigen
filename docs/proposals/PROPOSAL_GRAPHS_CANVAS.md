@@ -43,12 +43,12 @@ The canvas engine got its clean design and years of fixes by porting Excalidraw'
 
 | Source | Port | Leave |
 |---|---|---|
-| **Excalidraw** `packages/excalidraw/charts/` (bar, line, radar from pasted spreadsheet text) | `tryParseNumber` (sign, currency symbol, thousands separators, trailing `%`); header detection (a first row with no numeric cell); the wide-format rule (more value columns than rows transposes so rows become series); the label slot layout (`CARTESIAN_BASE_SLOT_WIDTH` 44, `CARTESIAN_LABEL_MIN_WIDTH` 28, slot padding, the rotated-label fallback at `CARTESIAN_LABEL_ROTATION`); `GRID_OPACITY` 10; series colours picked from the palette by a seeded offset (`getSeriesColors(count, getColorOffset(seed))`) so two charts on one page differ; its `charts.test.tsx` fixtures as our parser test corpus. Paste-spreadsheet-text-as-chart is the natural creation path on the canvas and should ship in phase 1. | Its storage model: a chart is loose rectangles, lines and text with no data behind them (the "convert to shapes" we reject as the native form). Negative values clamped to zero. Radar, for now. |
+| **Excalidraw** `packages/excalidraw/charts/` (bar, line, radar from pasted spreadsheet text) | `tryParseNumber` (sign, currency symbol, thousands separators, trailing `%`); header detection (a first row with no numeric cell); the wide-format rule (more value columns than rows transposes so rows become series); the label slot layout (`CARTESIAN_BASE_SLOT_WIDTH` 44, `CARTESIAN_LABEL_MIN_WIDTH` 28, slot padding, the rotated-label fallback at `CARTESIAN_LABEL_ROTATION`); `GRID_OPACITY` 10; series colors picked from the palette by a seeded offset (`getSeriesColors(count, getColorOffset(seed))`) so two charts on one page differ; its `charts.test.tsx` fixtures as our parser test corpus. Paste-spreadsheet-text-as-chart is the natural creation path on the canvas and should ship in phase 1. | Its storage model: a chart is loose rectangles, lines and text with no data behind them (the "convert to shapes" we reject as the native form). Negative values clamped to zero. Radar, for now. |
 | **d3-scale, d3-shape** | Take as dependencies: linear `ticks` (human-readable multiples of powers of ten within the domain), `nice`, `tickFormat` (precision derived from the tick step); band `paddingInner`/`paddingOuter`/`align`/`round`; `arc` with `padAngle` and `cornerRadius`; `pie` with `sort` and `startAngle`; `line` with `defined` for gaps. | Nothing to leave; they are pure functions. |
 | **Observable Plot** | Its scale rules: bar domains include zero; band padding defaults to 0.1; band and point scales round to whole pixels; tick count derives from pixel spacing, not a fixed number; tick labels get `textOverflow: ellipsis` or wrap by `lineWidth` with reserved margin. | The DOM renderer and the mark/channel API surface. |
 | **ECharts** | The `dataset` + `encode` split: one table, series reference columns by name or index; `seriesLayoutBy` (series in columns or rows, the "switch rows/columns" every spreadsheet user expects); `sourceHeader` auto-detection; pie `avoidLabelOverlap` and label lines as the reference for pie label placement. | zrender, series-specific layout code, DOM-free SSR. |
 | **Vega** | The mental model only: data, then scales and encodings, then a scenegraph, then a renderer. Our `layoutChart` is that pipeline in one pure function. | The dataflow runtime, expressions, signals, canvas text measurement. |
-| **Excel, Google Sheets** | Chart-from-selection conventions: header row detection, series in columns by default with a rows/columns switch, the "hidden and empty cells" policy (gap, zero or connect, default gap), axis crossing at zero, cell number formats driving tick formats. | Their range-adjustment behaviour is not a spec for ours (§7 states Eigen's rules). |
+| **Excel, Google Sheets** | Chart-from-selection conventions: header row detection, series in columns by default with a rows/columns switch, the "hidden and empty cells" policy (gap, zero or connect, default gap), axis crossing at zero, cell number formats driving tick formats. | Their range-adjustment behavior is not a spec for ours (§7 states Eigen's rules). |
 | **roughViz** | Visual reference for what a sketched chart should look like: hachure per bar, marker size, axis weight. | Its D3 DOM pipeline. |
 
 Each ported rule lands with its test, the way Excalidraw's docking and elbow routing did.
@@ -95,15 +95,15 @@ Marks are temporary drawing records inside one `render` call, never Yjs children
 
 ### Paint semantics
 
-| Concern | Required behaviour |
+| Concern | Required behavior |
 |---|---|
 | Sketch options | Same `baseRoughOptions`: dash handling, multistroke policy, fill weight, hachure gap, vertex preservation, small-shape adjustment. |
 | Fill | Series and pie-category fills are canonical `Fill` values (paint plus `hachure \| cross-hatch \| solid \| zigzag`). Changing hatch preserves paint and vice versa, as the panel does for shapes. Gradients use the existing OKLab stops and transparent-stop treatment. |
 | Randomness | Each mark's seed derives from the element's persisted `seed` and the mark's stable ids, never from row position, value or render order. Reordering data must not reroll every hatch. |
 | SVG references | Gradient and clip ids go through `svgId` scoped by element id plus mark id; references stay in attributes, not CSS `url()`. A thumbnail and the editor showing the same chart do not collide because element ids are already the scope. |
 | Opacity | Applied once on the layer by `layerBoxCss`, never per mark. |
-| Typography | Plain SVG `<text>` with persisted `fontFamily`, `fontSize` and colour; the kind exposes `fontFamily` so `sceneFontFamilies` collects it for export font embedding. No `foreignObject`. |
-| Ownership | The element owns stroke, roughness, seed, opacity, typography and its box `fill` (the background). Series fills live in the definition, keyed by column id or row id. Colours are assigned from the Eigen palette once at creation and persisted, so hiding or reordering never reassigns them. |
+| Typography | Plain SVG `<text>` with persisted `fontFamily`, `fontSize` and color; the kind exposes `fontFamily` so `sceneFontFamilies` collects it for export font embedding. No `foreignObject`. |
+| Ownership | The element owns stroke, roughness, seed, opacity, typography and its box `fill` (the background). Series fills live in the definition, keyed by column id or row id. Colors are assigned from the Eigen palette once at creation and persisted, so hiding or reordering never reassigns them. |
 | Defaults | A new chart takes the host style table (`VECTOR_STYLE_DEFAULTS` or `SLIDES_STYLE_DEFAULTS`); docs and sheets get one explicit chart preset. Paste never restyles to the destination. Dark mode changes editor furniture only, as with the canvas paper. |
 
 Parity means the same layout, paths and paint options for the same inputs, compared as canonical SVG. It does not promise identical raster pixels across font engines.
@@ -145,15 +145,15 @@ type ChartDefinition = {
 type ChartMarkRef = { columnId: string; rowId: string };
 ```
 
-A series is a numeric column, so a mark is one column id and one row id; there is no separate series id to keep in sync with a column. `Fill` is the existing shared type. Values follow column order; configuration refers to ids. Ids survive relabelling, reordering and edits. Duplicate labels are legal, duplicate ids are not. Row and column ids are allocated once on insertion and never derived from a label or value; undo of a deleted row restores its id.
+A series is a numeric column, so a mark is one column id and one row id; there is no separate series id to keep in sync with a column. `Fill` is the existing shared type. Values follow column order; configuration refers to ids. Ids survive relabeling, reordering and edits. Duplicate labels are legal, duplicate ids are not. Row and column ids are allocated once on insertion and never derived from a label or value; undo of a deleted row restores its id.
 
 Expose only implemented types. Do not put scatter, area or stacking in the union and render something else.
 
 On a canvas element the definition rides one JSON scalar field, `chart`, validated in the kind's `read` like `points` or `fill`. Different charts merge independently. Concurrent edits to one chart's definition are whole-value last-writer-wins, the same limitation rich text's `html` has. The wizard edits a local draft that records the base definition; Apply compares the element's current value with that base and offers reload or overwrite instead of silently replacing a peer's newer definition. Apply is one sealed transaction; Cancel writes nothing.
 
-### Numeric behaviour
+### Numeric behavior
 
-| Input | v1 behaviour |
+| Input | v1 behavior |
 |---|---|
 | Finite number | Plotted. Negative bars extend below the baseline; a bar scale always includes zero. |
 | Missing value or formula error | Preserved as missing with its diagnostic. No zero-height bar; a line breaks at the gap. |
@@ -177,7 +177,7 @@ Today `boundEndpoint(arrow, end, shape, byId)` takes a bindable element and uses
 type Binding = { elementId: string; fixedPoint: [number, number]; mark?: ChartMarkRef };
 ```
 
-Introduce a `DockTarget = { box, outline(inflate), silhouette }` derived either from the whole element (today's behaviour, unchanged) or from a resolved mark, and make `boundEndpoint`, `followBindings`, `elbowAnchorScene`, the aim lines and the elbow router's obstacle set take a `DockTarget`. One docking algorithm, one gap policy, one set of tests. No `port` enum is needed: `fixedPoint` is a proportion of the mark's box, so `[0.5, 0]` on a bar is its value-end centre. To keep that meaning through a sign change, a bar's local box is oriented from baseline (`v = 1`) to value end (`v = 0`). Rotation of the chart rotates the mark box with it, as a rotated element already rotates its own.
+Introduce a `DockTarget = { box, outline(inflate), silhouette }` derived either from the whole element (today's behavior, unchanged) or from a resolved mark, and make `boundEndpoint`, `followBindings`, `elbowAnchorScene`, the aim lines and the elbow router's obstacle set take a `DockTarget`. One docking algorithm, one gap policy, one set of tests. No `port` enum is needed: `fixedPoint` is a proportion of the mark's box, so `[0.5, 0]` on a bar is its value-end center. To keep that meaning through a sign change, a bar's local box is oriented from baseline (`v = 1`) to value end (`v = 0`). Rotation of the chart rotates the mark box with it, as a rotated element already rotates its own.
 
 The chart stays the forward target `elementId`; `arrowsBoundTo` stays a derived reverse index; mark ids are scoped to their chart. Binding to the outer chart box keeps working exactly as a shape binding.
 
@@ -185,13 +185,13 @@ The chart stays the forward target `elementId`; `arrowsBoundTo` stays a derived 
 
 Add two optional members to `KindSpec`: `dockTargets(el)` returning every current mark's `DockTarget` with its `ChartMarkRef`, and `dockTarget(el, mark)` resolving one reference or `null`. Ordinary kinds omit both and keep their single outline. No chart branches appear in the tools.
 
-`OutlineShape` gains a `sector` variant (centre, radii, start and end angle) with path, containment and intersection in `outline.ts`, used by both the painter and docking, so an arrow meets the wedge the user sees. A full-circle single slice is an `ellipse`. Bars are `rounded` outlines with the chart's corner treatment; point markers are `ellipse`.
+`OutlineShape` gains a `sector` variant (center, radii, start and end angle) with path, containment and intersection in `outline.ts`, used by both the painter and docking, so an arrow meets the wedge the user sees. A full-circle single slice is an `ellipse`. Bars are `rounded` outlines with the chart's corner treatment; point markers are `ellipse`.
 
 | Mark | Default `fixedPoint` at bind time | Outline |
 |---|---|---|
-| Bar | Value-end centre `[0.5, 0]` in the oriented box | `rounded` |
+| Bar | Value-end center `[0.5, 0]` in the oriented box | `rounded` |
 | Pie slice | Outer arc at the angular midpoint | `sector` |
-| Line point | Marker centre; docking backs off to its boundary so the head does not cover the dot | `ellipse` |
+| Line point | Marker center; docking backs off to its boundary so the head does not cover the dot | `ellipse` |
 
 Dock against the unjittered outline, as the canvas already does; the rough stroke never changes which mark an arrow targets.
 
@@ -209,9 +209,9 @@ Dock against the unjittered outline, as the canvas already does; the rough strok
 
 ### Missing targets
 
-Deleting or filtering a row, hiding a column, a missing value or a zero slice can make a valid reference unresolvable. Keep the reference and the last committed endpoint, show an unresolved indicator on the arrow, and offer reattach or detach. Never retarget to the row now at the old index, to a matching label or to the whole chart. If undo or a refresh restores the same id it resolves again. Deleting the chart follows normal dangling-element behaviour. A type change keeps attachments whose column and row still exist. Exports with unresolved annotations render the fallback endpoint and surface a warning.
+Deleting or filtering a row, hiding a column, a missing value or a zero slice can make a valid reference unresolvable. Keep the reference and the last committed endpoint, show an unresolved indicator on the arrow, and offer reattach or detach. Never retarget to the row now at the old index, to a matching label or to the whole chart. If undo or a refresh restores the same id it resolves again. Deleting the chart follows normal dangling-element behavior. A type change keeps attachments whose column and row still exist. Exports with unresolved annotations render the fallback endpoint and surface a warning.
 
-Overlap resolves deterministically: nearest eligible target, then stable id. Respect the plot clip and the existing screen-space and coarse-pointer tolerances. Ctrl/Cmd still suppresses binding. Click selects the chart, double-click or Enter opens the editor. The data table offers a keyboard path to pick an attachment target; a title and "View data" are first-release requirements because colour and hover alone cannot convey values or targets.
+Overlap resolves deterministically: nearest eligible target, then stable id. Respect the plot clip and the existing screen-space and coarse-pointer tolerances. Ctrl/Cmd still suppresses binding. Click selects the chart, double-click or Enter opens the editor. The data table offers a keyboard path to pick an attachment target; a title and "View data" are first-release requirements because color and hover alone cannot convey values or targets.
 
 ## 6. Hosts
 
@@ -251,9 +251,9 @@ Start with explicit "Refresh from sheet". A refresh needs read permission on the
 
 ## 8. Clipboard, export and limits
 
-**Clipboard.** A native chart, alone or with bound arrows, rides the existing typed `elements` item; `readElementsClipboardItem` runs it through the reader like any record. Docs and sheets produce and consume a chart figure from that same item; never emit a second chart flavour beside it. The clipboard carries the snapshot table. "Copy as SVG" is derived output with embedded fonts, no source references and no hidden table metadata, under [CLIPBOARD.md](../CLIPBOARD.md)'s flavour arbitration so it never double-pastes with the native item.
+**Clipboard.** A native chart, alone or with bound arrows, rides the existing typed `elements` item; `readElementsClipboardItem` runs it through the reader like any record. Docs and sheets produce and consume a chart figure from that same item; never emit a second chart flavor beside it. The clipboard carries the snapshot table. "Copy as SVG" is derived output with embedded fonts, no source references and no hidden table metadata, under [CLIPBOARD.md](../CLIPBOARD.md)'s flavor arbitration so it never double-pastes with the native item.
 
-| Surface | Behaviour |
+| Surface | Behavior |
 |---|---|
 | Vector and slides live, thumbnail, present | The kind and resolved arrows; the finished scene scales. |
 | Docs and sheets live | Same renderer; the host owns placement only. |
@@ -278,7 +278,7 @@ Start with explicit "Refresh from sheet". A refresh needs read permission on the
 | 5. Cross-document linking | Permission-checked manual refresh, disclosure, stale-response handling, unlink. |
 | Later | Time, scatter, area and stacked charts; embedded canvas scenes for docs and sheets annotations; "convert to shapes"; native Office charts. |
 
-Acceptance exercises real output and behaviour:
+Acceptance exercises real output and behavior:
 
 1. **Paint parity.** An isolated bar or marker matches the equivalent rectangle or ellipse element across every fill style, gradient, stroke style, roughness and corner setting. Existing shape SVG is byte-identical after any painter extraction.
 2. **Determinism.** Reload, reorder, duplicate, thumbnail and export render the same SVG up to instance-scoped ids. Reordering data keeps unchanged marks' seeds.

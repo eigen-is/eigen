@@ -1,6 +1,6 @@
-# Proposal: Single Sign-On (SSO) for organisations
+# Proposal: Single Sign-On (SSO) for organizations
 
-> **TLDR**: Let an organisation that already runs an identity provider (Keycloak, Authentik,
+> **TLDR**: Let an organization that already runs an identity provider (Keycloak, Authentik,
 > Microsoft Entra, Okta, Google Workspace, Zitadel…) log into Eigen with it, instead of a separate
 > Eigen password. Use better-auth's `sso` plugin (`@better-auth/sso`, versioned in lockstep with
 > the installed `better-auth@1.5.6`), which lets providers be **registered at runtime** — so
@@ -17,7 +17,7 @@
 
 ## Goals
 
-1. An admin can register their organisation's OIDC IdP and have staff sign in with it.
+1. An admin can register their organization's OIDC IdP and have staff sign in with it.
 2. Users from a configured **email domain** are routed to the right provider and provisioned on
    first login (JIT), with the same org membership + Home bootstrap every Eigen user gets.
 3. SSO coexists with email/password: a deployment can be password-only or mixed; SSO-only is a
@@ -40,7 +40,7 @@
   Mapping IdP groups onto Eigen teams is a richer follow-up (`organizationProvisioning.getRole`
   is the seam for it).
 - **Consumer social login** (personal Google/GitHub/Apple). That's `socialProviders` — trivial to
-  add later, but a different audience from "my organisation's SSO".
+  add later, but a different audience from "my organization's SSO".
 - **Changing the collaboration or data model.** This touches authentication only.
 
 ## Why now — foundation verified (2026-07-06)
@@ -56,7 +56,7 @@ The auth foundation already fits; all of the following was re-verified against s
 - **Home provisioning is lazy, not waitlist-driven.** The waitlist
   (`../../apps/api/src/lib/waitlist/waitlist.ts`, `registerFromInvite`) only calls
   `auth.api.createUser` and signs the user in — it creates *no* Home. The Home, maildir, default
-  mount and quota all materialise on the first `getHome(userId)`
+  mount and quota all materialize on the first `getHome(userId)`
   (`../../apps/api/src/lib/home/get-home.ts` → `UserHome.init()` in `user-home.ts`, which seeds the
   default mount from server settings and runs `Drive.init(autoCreateDefaultMount)` +
   `Mail.init()` etc.; quotas are resolved at read time by `resolveUserQuotas`). `getHome` is
@@ -131,7 +131,7 @@ JIT provisioning needs, and gets, nothing new:
 The "SSO bypasses the waitlist" concern from the roadmap resolves to: the waitlist is a *signup
 gate*, not a provisioning step. For SSO users the signup gate is the IdP plus the provider's
 `domain` match — an email domain with no registered provider cannot SSO in. That is the intended
-enterprise behaviour.
+enterprise behavior.
 
 **Mail-domain caveat (deployment guidance, document it):** waitlist signup constructs addresses
 as `username@mailDomain`; an SSO user keeps their IdP email (e.g. `alice@acme.com`). Internal
@@ -165,7 +165,7 @@ Two small items:
   at the provider's registered domain links to that account; anything else is rejected (not a
   silent second account — duplicate identities with one email would confuse shares and mail).
   better-auth implements this via its domain-verification / `account.accountLinking` machinery —
-  configure it, don't hand-roll; verify the exact 1.5.6 behaviour (auto-link on verified domain)
+  configure it, don't hand-roll; verify the exact 1.5.6 behavior (auto-link on verified domain)
   in a test before shipping.
 - **Sessions/sign-out**: an SSO login produces a normal better-auth session cookie; sign-out
   revokes the Eigen session only. No IdP single-logout in v1.

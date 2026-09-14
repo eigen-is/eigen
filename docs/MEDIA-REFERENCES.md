@@ -34,7 +34,7 @@ The eigendoc image node is `figure` (`packages/lib/src/docs/eigendoc/nodes/figur
 atom whose `mediaName` attribute is the only durable reference; `src` is filled in at render time.
 A canvas frame background (one slide) is a `BackgroundFill` union (`packages/lib/src/types/background.ts`)
 of `solid` / `gradient` / `image`, and only the `image` variant carries a `mediaName`; the infinite
-canvas' own `meta.background` is a plain colour token and never names media. Comment
+canvas' own `meta.background` is a plain color token and never names media. Comment
 anchors are the exception to the name rule: the eigendoc `comment` mark stores a `cardId`, and the
 card itself (in the doc's Yjs `comments` map) carries the `chatName`.
 
@@ -56,7 +56,7 @@ Used by: eigendoc editor (wraps `TiptapEditor`), eigenslides editor, eigensheets
 
 ### The `pending:` optimistic-name protocol
 
-`startUpload(file)` hands back a synthetic name — `pending:<uuid>`, recognised by
+`startUpload(file)` hands back a synthetic name — `pending:<uuid>`, recognized by
 `isPendingMediaName()` — and registers a local `URL.createObjectURL(file)` blob for it. The caller
 writes that name into Yjs immediately, so `resolveMediaUrl()` returns the blob URL and the image
 renders on the very next frame. This is how insert and paste feel instant.

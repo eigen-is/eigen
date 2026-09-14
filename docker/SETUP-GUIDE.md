@@ -237,7 +237,7 @@ Restore an archive with `restore.sh`. It stops `eigen-api`, moves the current `d
 
 A demo box wipes and reseeds itself every hour, so strangers can try the product without a login and
 without leaving anything behind. Turn it on with `EIGEN_DEMO=1` in `.env.production` (any other value,
-or unset, keeps normal behaviour):
+or unset, keeps normal behavior):
 
 ```
 EIGEN_DEMO=1
@@ -288,7 +288,7 @@ ufw allow 993/tcp    # IMAP
 
 ### Mail abuse hardening
 
-One stolen account password is enough to turn a mail server into a spam relay. In August 2026 a botnet pushed about 17k messages through eigen.is on port 465 with one password, using forged sender addresses. Three defences are on by default. A fourth, fail2ban, is host config you install yourself.
+One stolen account password is enough to turn a mail server into a spam relay. In August 2026 a botnet pushed about 17k messages through eigen.is on port 465 with one password, using forged sender addresses. Three defenses are on by default. A fourth, fail2ban, is host config you install yourself.
 
 **Senders are bound to their login.** On the submission ports (587 and 465) an authenticated user can only send as their own address. Postfix checks the envelope sender against `smtpd_sender_login_maps` (`docker/postfix/main.cf.template`) with `reject_authenticated_sender_login_mismatch` on both services (`master.cf.template`). Eigen gives every user one address and has no aliases and no send-as, so the map is the identity map in `docker/postfix/sender_login.regexp`. A forged sender gets `553 5.7.1 ... not owned by user`. One exemption comes first (`docker/postfix/null_sender.regexp`): an empty envelope sender, `MAIL FROM:<>`, is permitted, because the identity map gives it no owner and read receipts and vacation replies are required to be sent that way (RFC 3834). It opens no relay — the recipient rules still demand a login. Inbound port 25 keeps accepting foreign senders: the `authenticated_` variant of the check does nothing when there is no login. The API sends over `postfix:25` without authenticating, so app mail is unaffected.
 
@@ -380,7 +380,7 @@ The `eigen-static` gateway only ever receives connections from your host proxy o
 
 **Apache notes:** the config header lists modules to enable (`a2enmod proxy proxy_http proxy_wstunnel rewrite ssl headers`) and a one-liner to switch from `mpm_prefork` to `mpm_event` — prefork uses one process per long-lived SSE/WebSocket connection and runs out of slots fast.
 
-#### Behind a dockerised webserver (nginx proxy manager, etc.)
+#### Behind a dockerized webserver (nginx proxy manager, etc.)
 
 When the webserver itself runs in docker, `127.0.0.1` inside that container is its own loopback — not the host — so the generated snippets' `proxy_pass http://127.0.0.1:8080` won't reach `eigen-static`. Two ways to fix it:
 
@@ -388,7 +388,7 @@ When the webserver itself runs in docker, `127.0.0.1` inside that container is i
   ```
   EIGEN_STATIC_HOST=0.0.0.0
   ```
-  Then point your dockerised webserver upstream at `<host-LAN-IP>:8080`. Simple, but exposes plain HTTP on the LAN — and a LAN client that reaches `8080` directly is a trusted private-range peer, so it can send its own `X-Real-IP` and choose its rate-limit key. Prefer the shared-network option below, or firewall the port to the proxy.
+  Then point your dockerized webserver upstream at `<host-LAN-IP>:8080`. Simple, but exposes plain HTTP on the LAN — and a LAN client that reaches `8080` directly is a trusted private-range peer, so it can send its own `X-Real-IP` and choose its rate-limit key. Prefer the shared-network option below, or firewall the port to the proxy.
 - **Share the eigen docker network.** Attach the webserver container to the `eigen_eigen` network and proxy to `eigen-static:8080` directly. In the webserver's compose file:
   ```yaml
   services:

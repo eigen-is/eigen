@@ -27,7 +27,7 @@ Select one or more objects, then use the arrow keys:
 
 ## Snap to guides
 
-When you drag an object near another object's edge or centre, a guide line appears and the object snaps to it. The same happens near the slide's own edges and its horizontal and vertical centre lines. Use the guides to line objects up by eye without typing exact values.
+When you drag an object near another object's edge or center, a guide line appears and the object snaps to it. The same happens near the slide's own edges and its horizontal and vertical center lines. Use the guides to line objects up by eye without typing exact values.
 
 ## Duplicate an object
 
@@ -46,7 +46,7 @@ On Windows, use **Ctrl** in place of **Cmd**.
 
 ## Line objects up with Align
 
-Select two or more objects and the properties panel adds an **Align** section. The first row lines the objects up along one edge or centre:
+Select two or more objects and the properties panel adds an **Align** section. The first row lines the objects up along one edge or center:
 
 - **Align left**, **Align horizontal center**, **Align right**.
 - **Align top**, **Align vertical center**, **Align bottom**.

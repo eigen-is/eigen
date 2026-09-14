@@ -31,7 +31,7 @@ The file list works the same way as the regular folder view. Click a file to ope
 right, or double-click to open it. Right-click a file (or click its **⋮** button) for options such as
 **Download**, **Share**, **Quick preview**, and **Move to trash**.
 
-You cannot upload files or create folders from a filtered view. To add or organise files, click **Drive** at
+You cannot upload files or create folders from a filtered view. To add or organize files, click **Drive** at
 the top of the sidebar to go back to your folder view.
 
 ## Return to your folders

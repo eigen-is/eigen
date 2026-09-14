@@ -157,7 +157,7 @@ Every export is a direct download: Docs, Sheets and Slides export to docx, xlsx 
 
 ## Rollout
 
-Four unit branches onto one integration branch, merged `--no-ff` in order. No pixel gate (D21): one screenshot round per UI unit, plus a behavioural probe each.
+Four unit branches onto one integration branch, merged `--no-ff` in order. No pixel gate (D21): one screenshot round per UI unit, plus a behavioral probe each.
 
 1. **The mail byte routes.** `mailAttachmentName`, `serveMailPart`, the `/embed/` route, both mail byte routes and the saved file on the helper, `getMailAttachmentEmbedUrl`. Tests: a part on another user's message → 403, a guest → 403, the real content type on both routes, the filename from the part, a 206 range, a 304 off the ETag. No Eden surface changes.
 2. **`FileSubject` and the overlay.** The type, `subjectFromPath`, `getPreviewMode`, `BROWSER_IMAGE_MIMES`, the registry, `useFileActionRunner`, `SaveToDrivePicker` on Drive subjects, the provider and overlay switch, the call sites, the palette wrap, `downloadMode` deleted, the footer rendered from the registry and the header's Import to Contacts button replaced by its footer row. The registry and the runner ship here because the footer needs them, with Drive's menu still on its own rows.
@@ -186,7 +186,7 @@ Four unit branches onto one integration branch, merged `--no-ff` in order. No pi
 | D4 | Drive's menu consumes the registry instead of its own rules. | Goal 2. A menu picks and places rows; it cannot add one. Save to Drive on a Drive item is Copy to…, which stays Drive's row. |
 | D5 | Client re-post only where no route exists: a vCard with no Drive path going into contacts. Mail into Drive, and a mail part on its way to a convert, keep the server-side route. | The bytes are capped at `IMPORT_MAX_BYTES`, and the alternative is a new backend seam for one action. Mail's route keeps validate-before-write for free. |
 | D6 | One `serveMailPart` for both mail byte routes; `serveFile` untouched. | One home for the inline-header fact is `scriptableInlineHeaders`; the mail helper only spreads it. |
-| D7 | `mailAttachmentName` is the one fallback name, on the chip, in the disposition and in Drive. `Attachment.filename` stays optional. | A missing filename is how outbound mail recognises inline cid parts. The chip, the header and the saved file must read alike. |
+| D7 | `mailAttachmentName` is the one fallback name, on the chip, in the disposition and in Drive. `Attachment.filename` stays optional. | A missing filename is how outbound mail recognizes inline cid parts. The chip, the header and the saved file must read alike. |
 | D8 | `downloadMode` is deleted; the footer renders from the registry, with "Save all (n)" on its own gate (D28). | One footer everywhere, and one fact deciding whether a set can be saved as a set. |
 | D9 | Every server-rendered preview mode gates on `subject.drive`; a subject without `drive` is `image` only for a browser-decodable mime (`BROWSER_IMAGE_MIMES`). | Drive's `<img>` never shows original bytes: `/preview` serves a resized WebP, with exiftool for HEIC, RAW and PSD. A mail part's `<img>` shows the original, which the browser must decode itself. The text renderer needs a mount, a path and a version key. |
 | D10 | Mail compose chips are out of scope. | `AttachmentMeta[]` is a different shape and a compose chip is a remove affordance, not an action list. |
@@ -200,7 +200,7 @@ Four unit branches onto one integration branch, merged `--no-ff` in order. No pi
 | D18 | `mailAttachmentName(att, index)` is `att.filename \|\| 'attachment-' + (index + 1)`: hyphenated, 1-based, no extension. | One name on the chip, in the disposition and in Drive; a space in an extensionless name is what shells and DAV clients trip over. |
 | D19 | Ranges stay; the ETag is the message id, the part index and the summary row's date and size, and a matching `If-None-Match` is answered before the message is parsed. | Safari refuses a media source that advertises no ranges, and reading a part re-parses the whole `.eml` — a miss still pays it, which is the `ROADMAP.md` row. |
 | D20 | D12 is out of this program: exports stay direct downloads. | The exports half needs the blob builder and five export menus of its own; it is a backlog row, not a unit here. |
-| D21 | No pixel gate: one screenshot round per UI unit plus behavioural probes. | A byte-identical gate belongs to a render-path refactor, and the footer is a deliberate design change. |
+| D21 | No pixel gate: one screenshot round per UI unit plus behavioral probes. | A byte-identical gate belongs to a render-path refactor, and the footer is a deliberate design change. |
 | D22 | A click on a mail attachment chip is Quick Look; saving moves to the footer and the chip menu. | The chip behaves like every other attachment chip, and one click no longer opens a dialog nobody asked for. |
 | D23 | A mail subject's siblings are the calendar-filtered chip list, in chip order. | ← → then pages exactly what the reader shows and never lands on a hidden invite. |
 | D24 | The mail chip gets a long-press onto the same menu; chat's chip rides the message long-press. | A right-click affordance needs its `pointer-coarse` equivalent, or the actions do not exist on a phone. |

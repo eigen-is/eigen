@@ -1,15 +1,15 @@
 ---
 title: "Change a slide's background"
-description: "Give a slide a solid colour, gradient, or image background, and apply it to one slide or the whole presentation."
+description: "Give a slide a solid color, gradient, or image background, and apply it to one slide or the whole presentation."
 type: how-to
 category: Editing
-tags: [slides, background, colours, images]
+tags: [slides, background, colors, images]
 related: [slides/add-slides, slides/create-and-edit, slides/style-objects]
 order: 35
 updated: 2026-09-11
 ---
 
-Every new slide starts plain white. You can give a slide a solid colour, a gradient, or an image behind your text and pictures, and choose whether the change lands on one slide, the slides that follow, or the whole presentation.
+Every new slide starts plain white. You can give a slide a solid color, a gradient, or an image behind your text and pictures, and choose whether the change lands on one slide, the slides that follow, or the whole presentation.
 
 You need editor access to change a background. If you can only view the presentation, the controls below are not available.
 
@@ -17,14 +17,14 @@ You need editor access to change a background. If you can only view the presenta
 
 1. Open your presentation in [Slides](/slides) and select the slide you want in the left panel.
 2. Click an empty part of the canvas so nothing is selected, or press **Escape** to clear the selection.
-3. The properties panel on the right now shows the **Background** section for that slide, with a row of buttons for the background type: no fill, solid colour, gradient, and image.
+3. The properties panel on the right now shows the **Background** section for that slide, with a row of buttons for the background type: no fill, solid color, gradient, and image.
 
 Whatever you set here changes the current slide straight away. To spread it to other slides, use **Apply to** at the bottom, described below.
 
-## Set a solid colour
+## Set a solid color
 
-1. Click the solid colour button (the palette icon) in the **Background** row.
-2. Click the swatch next to **Color** and pick a colour from the picker. The slide updates as you choose.
+1. Click the solid color button (the palette icon) in the **Background** row.
+2. Click the swatch next to **Color** and pick a color from the picker. The slide updates as you choose.
 
 ## Set a gradient
 
@@ -49,7 +49,7 @@ By default a background change affects only the current slide. To reuse it acros
 2. Open the **Apply to** dropdown and choose **This slide**, **This and following**, or **All slides**.
 3. Click **Apply**. The background copies to every slide in the range you picked.
 
-Applying to all slides is a deliberate step, so dragging a colour never changes the whole presentation by accident.
+Applying to all slides is a deliberate step, so dragging a color never changes the whole presentation by accident.
 
 ## Remove a background
 

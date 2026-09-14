@@ -18,7 +18,7 @@ saved to your account, so every Eigen app keeps the same look.
 2. Click **Theme**.
 3. Choose **Light**, **Dark**, or **System**.
 
-The colours change straight away.
+The colors change straight away.
 
 <div class="eigen-callout">
 

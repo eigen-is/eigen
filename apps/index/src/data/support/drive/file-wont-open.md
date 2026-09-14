@@ -52,7 +52,7 @@ Different file types open in different ways:
 - **Text and code files** (such as `.md`, `.txt`, `.json`) open in a text editor in the browser.
 - **Contact files** (`.vcf`) open in the preview overlay as contact cards, not as text. You can [import them to Contacts](/support/contacts/import-contacts) from there.
 
-If you want to open any file in a new browser tab rather than the default behaviour, right-click it and
+If you want to open any file in a new browser tab rather than the default behavior, right-click it and
 choose **Open in new tab**.
 
 ## The preview is slow or blank

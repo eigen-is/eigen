@@ -67,7 +67,7 @@ explain each one — read them before changing the render path.
   `drive/share-a-file.md` → `/support/drive/share-a-file`. Both are permanent identifiers — renaming breaks deep
   links and search ranking. `section` is never a frontmatter field.
 - `src/components/support/sections.ts` is the display registry: id (must match the folder), title, description,
-  icon and colour. App-backed sections pull their icon and brand colour from the shared `apps` registry, so an
+  icon and color. App-backed sections pull their icon and brand color from the shared `apps` registry, so an
   unknown app name throws at build.
 - `crossSections: [other-section]` lists an article on a second section page without changing its canonical URL.
 - `related` is explicit when set, otherwise resolved at build time from shared `tags` within the same section

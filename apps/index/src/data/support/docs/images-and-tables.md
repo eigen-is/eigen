@@ -42,7 +42,7 @@ Click an image to select it. Resize handles appear at the edges. Drag a handle t
 On a wide screen, selecting an image also opens the **Image** panel on the right side of the editor. From there you can:
 
 - **Style**: set the image to sit on its own line (the default), float to the left, or float to the right with text wrapping around it.
-- **Align**: when the image is on its own line, choose left, centre, or right alignment.
+- **Align**: when the image is on its own line, choose left, center, or right alignment.
 - **Alt**: add alternative text, which is used by screen readers and shown if the image fails to load.
 - **Cap**: add a caption that appears beneath the image.
 - **Replace image**: swap the image for a different file from your device or Drive, keeping the same position in the document.

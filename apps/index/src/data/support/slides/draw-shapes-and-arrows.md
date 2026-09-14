@@ -13,7 +13,7 @@ The middle of the toolbar holds the drawing tools. Use them to place shapes, dra
 
 ## The tools
 
-The cluster in the centre of the toolbar has, from left to right:
+The cluster in the center of the toolbar has, from left to right:
 
 - **Select**: the idle tool. Click to select, drag to move, or drag an empty area to select several objects at once.
 - **Rectangle**, **Diamond**, and **Ellipse**: the three shapes.

@@ -9,7 +9,7 @@ order: 60
 updated: 2026-06-08
 ---
 
-When text has accumulated bold, italic, colour, font changes, or other styles you no longer want, you
+When text has accumulated bold, italic, color, font changes, or other styles you no longer want, you
 can strip them all in one step rather than toggling each one off individually.
 
 ## What gets removed
@@ -17,7 +17,7 @@ can strip them all in one step rather than toggling each one off individually.
 Clearing formatting removes two kinds of style at once:
 
 - **Inline marks**: bold, italic, underline, strikethrough, inline code, superscript, subscript, small,
-  text colour, and highlight.
+  text color, and highlight.
 - **Block styles**: headings, blockquotes, code blocks, and lists. These are converted to normal
   paragraphs.
 

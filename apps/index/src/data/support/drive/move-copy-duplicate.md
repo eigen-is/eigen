@@ -3,7 +3,7 @@ title: "Move, copy, and duplicate files"
 description: "Use Move to, Copy to, and Duplicate to put a file somewhere else in Drive, including another drive."
 type: how-to
 category: Basics
-tags: [drive, files, folders, move, copy, duplicate, organise]
+tags: [drive, files, folders, move, copy, duplicate, organize]
 related: [drive/rename-move-organise, drive/share-a-file]
 order: 75
 updated: 2026-09-13
@@ -14,7 +14,7 @@ drive, the right-click menu has three options that open a folder picker instead:
 **Duplicate**.
 
 For dragging an item onto a folder, see
-[Rename, move, and organise files](/support/drive/rename-move-organise).
+[Rename, move, and organize files](/support/drive/rename-move-organise).
 
 ## Move a file to another folder
 

@@ -42,7 +42,7 @@ changed.
    than one article: the app's `get-started.md` overview, the how-to, and sometimes a `faq` or `connect` guide.
 2. **Verify against the real code, before writing a word.** Read the routes, components and hooks that implement
    it (`apps/<app>/src/`, `packages/ui/src/components/`, `packages/lib/src/core/`), and click it through in the
-   running app where you can. Work out the exact labels, the real steps, the actual behaviour. Copy button, menu
+   running app where you can. Work out the exact labels, the real steps, the actual behavior. Copy button, menu
    and field labels **verbatim**: they get bolded, so they must match the product character for character.
 3. **Correct, or cut.** Only write what you verified. Leave out the parts you couldn't confirm; incomplete is
    fine, incorrect is not. Never guess, never write "probably", never describe a control you haven't seen in the

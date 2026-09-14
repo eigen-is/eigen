@@ -183,7 +183,7 @@ shared-with-me view for free.
 MIME → icon is not a Drive concern: `getFileIconComponent` / `getFilePresentation` live in
 `packages/lib/src/core/file-presentation.ts` (DOM-free, so lib callers like the palette can use them),
 with the JSX wrapper `getFileIcon` re-exported from `drive/file-presentation.tsx`.
-Both take the file name beside the mime: a `.vcf` is often stored as `application/octet-stream`, and it carries the Contacts app's icon and colour the way an eigendoc carries its own app's.
+Both take the file name beside the mime: a `.vcf` is often stored as `application/octet-stream`, and it carries the Contacts app's icon and color the way an eigendoc carries its own app's.
 
 ## List Patterns
 
@@ -215,7 +215,7 @@ Defined in `packages/ui/src/styles/globals.css`:
 | `drag-badge`               | Off-screen badge for multi-drag image                                  |
 
 The wash is `--app-current-color-soft` and the stripe `--app-current-color`, so every list picks up
-its own app colour.
+its own app color.
 
 ### Setup Pattern
 
@@ -262,7 +262,7 @@ const contextItems = contextMenu.item
     : [];
 ```
 
-`ContextMenuAnchor` portals its zero-size trigger into `document.body`: the trigger is positioned in viewport coordinates, and a transformed ancestor (a dialog's centring translate) would otherwise become its containing block and open the menu somewhere else.
+`ContextMenuAnchor` portals its zero-size trigger into `document.body`: the trigger is positioned in viewport coordinates, and a transformed ancestor (a dialog's centering translate) would otherwise become its containing block and open the menu somewhere else.
 
 #### 4. Drag-and-Drop
 

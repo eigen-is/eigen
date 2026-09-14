@@ -25,7 +25,7 @@ open-source projects, listed on the [open-source licenses](/licenses) page.
 
 Each app does one job. You can use as many or as few as you like.
 
-- **Mail** is your inbox: read, write, and organise your email.
+- **Mail** is your inbox: read, write, and organize your email.
 - **Drive** is where your files live. Upload them, sort them into folders, and share them with other people.
 - **Docs** is for writing and editing documents in the browser.
 - **Sheets** is for spreadsheets and formulas.
@@ -37,7 +37,7 @@ Each app does one job. You can use as many or as few as you like.
 - **Stickies** is for notes and boards, to keep ideas and tasks in view.
 - **Space** is your account home, where you manage your profile, settings, and sign-in.
 
-If you help run your Eigen, you'll also see **Admin**, for managing organisations, teams, and the server.
+If you help run your Eigen, you'll also see **Admin**, for managing organizations, teams, and the server.
 
 ## Move between apps
 

@@ -21,7 +21,7 @@ Neither needs Docker-in-Docker, a privileged container, or the Docker socket mou
 
 Checked on 2026-09-06. The two rows marked **fixed** were repaired as part of this review.
 
-| Surface | Current behaviour | Consequence for this proposal |
+| Surface | Current behavior | Consequence for this proposal |
 |---|---|---|
 | [`scripts/setup.ts`](../../scripts/setup.ts) | Node built-ins plus `Bun.spawn`, no third-party imports. Spawns host `docker network ls/inspect` for subnet detection and `chown -R 1000:1000 data`. | Runs unchanged inside any Bun container, without `bun install`. Only the two spawns need a seam. **Fixed:** it omitted `VITE_APP_VECTOR_URL`, so a fresh install built without a Vector link until the first `update.sh` backfilled it, and it printed a dead `buildfordocker` step (the image runs from source and `.dockerignore` drops `apps/api/build`). |
 | [`scripts/generate-env.sh`](../../scripts/generate-env.sh) | A second, Bash-only generator of `.env.production`. | Two copies of the deployment rules already drift (the Vector gap above). Do not add a third; make this a thin wrapper. |
@@ -79,7 +79,7 @@ The preset is `COMPOSE_PROFILES=static` (or `static,mail`), `EIGEN_STATIC_HOST=1
 1. Download the release bundle and extract it into a folder such as `/volume1/docker/eigen` (an example, not a requirement).
 2. Over SSH, run `./setup.sh`. It asks the same questions `bun run setup` asks today.
 3. In DSM, Control Panel > Login Portal > Advanced > Reverse Proxy: terminate HTTPS for the Eigen hostname and forward to `http://127.0.0.1:8080`, with the WebSocket custom headers Synology documents in its [reverse proxy help](https://kb.synology.com/en-global/DSM/help/DSM/AdminCenter/system_login_portal_advanced?version=7) and a long proxy timeout, since collaborative editing and SSE hold connections open.
-4. Open `https://<hostname>/admin` and create the organisation and administrator.
+4. Open `https://<hostname>/admin` and create the organization and administrator.
 
 The API stays private on the Docker network. DSM proxies to `eigen-static`, never to port 8000: the static gateway serves the apps and owns the API prefix routing, DAV discovery, streaming, and the internal-route 404s. A proxy running in another container cannot reach the host's `127.0.0.1`; the guide's existing shared-network recipe applies unchanged.
 
@@ -137,7 +137,7 @@ Extend [`test-deployments.sh`](../../docker/test-deployments.sh), [`test-host-pr
 | Configuration | Interactive, piped, and flag-driven runs; aborted input; rerun preserves everything; custom subnets and ports; paths with spaces; credentials with quotes and `$`; file mode 0600; no container sees the Docker socket. |
 | Portable artifacts | One image digest on two hostnames: auth cookies, API, WebSocket, SSE, and app links all work; SEO metadata is absent by design; no secret or private file in any layer or bundle. |
 | DSM | Listed hardware, real Compose version, bind mounts writable as 1000:1000 under Synology ACLs, survives reboot, port and network collisions detected, unsupported device fails before any data is written. |
-| Real use | Admin enrolment, sign-in, upload and download, two-browser collaborative editing, notifications, previews and exports, DAV through the proxy. |
+| Real use | Admin enrollment, sign-in, upload and download, two-browser collaborative editing, notifications, previews and exports, DAV through the proxy. |
 | Mail | Simple preset shows the warning; full preset passes inbound, outbound, IMAP, submission, TLS, and a renewal reload. |
 | Operations | A failed pull leaves the running stack intact; a half-finished setup reruns cleanly; upgrade keeps data and config; restore brings back a known document and, where enabled, mail. |
 

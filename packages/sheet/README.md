@@ -5,7 +5,7 @@ Spreadsheet engine + React UI for [Eigen](../../README.md). Powers
 
 ## Origin
 
-This package is a heavily modified, type-tightened, modernised fork of
+This package is a heavily modified, type-tightened, modernized fork of
 [**fortune-sheet**](https://github.com/ruilisi/fortune-sheet) — a
 TypeScript spreadsheet library by Suzhou Ruilisi Technology Co., Ltd —
 which itself originated as a TypeScript/React rewrite of
@@ -29,7 +29,7 @@ was removed and the code became internal. The package is now treated as
 - `Cell`, `Sheet`, `Op`, `CellMatrix`, `Range`, `SingleRange`,
   `ConditionalFormatRule`, `MergeCell`, `CellBorderSides`,
   `DataVerificationRule`, `CalcChainEntry`, `AncestorFormulaCell` etc.
-  canonicalised into `@workspace/lib/sheets`; the sheet package
+  canonicalized into `@workspace/lib/sheets`; the sheet package
   re-exports the canonicals to keep the FE↔BE type chain honest.
 - Many `any`-typed APIs tightened to discriminated unions (conditional-format
   rules, freeze-pane data, sheet authority, range or whole-axis selections, …).
@@ -50,7 +50,7 @@ was removed and the code became internal. The package is now treated as
 
 In-progress work (see SHEETS-TODO.md for the canonical list):
 
-- One CSS file still un-Tailwindised (`SheetOverlay/index.css`).
+- One CSS file still un-Tailwindized (`SheetOverlay/index.css`).
 - Grammar parser (`engine/parser/grammar-parser/grammar-parser.ts`)
   regeneration from upstream jison.
 

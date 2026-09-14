@@ -19,8 +19,8 @@ from the same **Edit Event** dialog you use for every other change.
    calendar you want. The picker appears once you have more than one calendar to pick from.
 4. Click **Save**.
 
-Moving between two of your own calendars keeps everything as it was: the guest list, who organised the event, the
-repeat pattern, and any occurrences you changed on their own. Nothing is cancelled and nobody loses their place on
+Moving between two of your own calendars keeps everything as it was: the guest list, who organized the event, the
+repeat pattern, and any occurrences you changed on their own. Nothing is canceled and nobody loses their place on
 the guest list.
 
 If the event repeats, changing its calendar moves the whole series. Calendar does not ask which occurrences to
@@ -36,8 +36,8 @@ An event cannot be handed over as it stands, so Calendar creates a copy on the o
 original. Before it does, a **Move to another calendar owner?** dialog tells you what that costs. Depending on the
 event, it warns that:
 
-- Your guests are told the event was cancelled, then invited again.
-- The link to an event someone else invited you to is removed, and the person who organised it sees you as having
+- Your guests are told the event was canceled, then invited again.
+- The link to an event someone else invited you to is removed, and the person who organized it sees you as having
   declined.
 - Occurrences of a repeating event that you changed on their own do not come along.
 

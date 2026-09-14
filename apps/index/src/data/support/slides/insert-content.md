@@ -19,7 +19,7 @@ You need editor access to add or change content. If you can only view the presen
 3. Click once on the slide to drop a text box, or drag to draw one at the size you want.
 4. Type your text, then click outside the box when you are done.
 
-While you are editing, a small formatting toolbar floats above the text for basics like **Bold** and **Italic**. When the text box is selected but not in edit mode, the properties panel on the right holds the full set of options: font, size, weight, colour, alignment, letter spacing, and line height.
+While you are editing, a small formatting toolbar floats above the text for basics like **Bold** and **Italic**. When the text box is selected but not in edit mode, the properties panel on the right holds the full set of options: font, size, weight, color, alignment, letter spacing, and line height.
 
 ## Add an image
 
@@ -51,7 +51,7 @@ You can also type exact values in the **X**, **Y**, **W**, **H**, and **Angle** 
 
 Hold **Shift** and click objects to add them to the selection. You can also drag a selection box across the canvas to select everything it touches.
 
-With several objects selected, the properties panel adds an **Align** section. Use it to line objects up with each other (left, centre, right, top, middle, or bottom), match their width or height, or space three or more of them evenly.
+With several objects selected, the properties panel adds an **Align** section. Use it to line objects up with each other (left, center, right, top, middle, or bottom), match their width or height, or space three or more of them evenly.
 
 Any text or image properties you change while objects of the same type are selected apply to all of them at once.
 
@@ -64,8 +64,8 @@ Select an image and use the properties panel to give it an outline. The **Stroke
 Right-click an object and choose from the menu:
 
 - **Bring to front**: places the object in front of all others.
-- **Bring forward**: moves it one step towards the front.
-- **Send backward**: moves it one step towards the back.
+- **Bring forward**: moves it one step toward the front.
+- **Send backward**: moves it one step toward the back.
 - **Send to back**: places the object behind all others.
 
 The same menu has **Copy**, **Cut**, **Paste**, **Duplicate**, **Delete**, and **Add comment**.

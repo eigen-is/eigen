@@ -23,7 +23,7 @@
    positive is always recoverable from Junk.
 3. **The filter learns from users.** "Report Spam" trains Bayes; "Not spam" (and undo) untrains
    it. Intent is carried explicitly end-to-end.
-4. **Zero behaviour change when absent.** Deployments without the sidecar (or with rspamd down)
+4. **Zero behavior change when absent.** Deployments without the sidecar (or with rspamd down)
    deliver exactly as today — including when a sender forges spam headers. This is enforced at
    two layers: Postfix strips inbound instances of the verdict header, and the API ignores the
    header entirely unless `RSPAMD_URL` is set.
@@ -185,7 +185,7 @@ Use the per-milter override syntax (Postfix ≥ 3.0; we set `compatibility_level
 ```
 
 A dead or hung rspamd now delays a session by seconds, bounded, then mail flows unscored —
-today's behaviour.
+today's behavior.
 
 **c) The verdict header is a trusted boundary.** `/etc/postfix/header_checks` gets
 `/^X-Eigen-Spam:/ IGNORE`. Ordering makes this sound: cleanup applies `header_checks` **before**
@@ -210,7 +210,7 @@ HTTP), there is no sieve step that could file spam — the API must route it. `m
 already parses the message; hoist the parse and pick the target mailbox from the trusted
 verdict header — **only when the deployment declares rspamd** (`RSPAMD_URL` set). Without it
 the header is ignored entirely, so an rspamd-less deployment keeps byte-for-byte today's
-behaviour even against forged headers:
+behavior even against forged headers:
 
 ```typescript
 // mail-domain.ts (sketch)

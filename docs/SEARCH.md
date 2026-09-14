@@ -31,14 +31,14 @@ canonical write. Consequences worth knowing:
 - `bm25()` is comparable only *within* one index. Merging across mounts therefore never sorts on
   score — see below.
 
-Query text is sanitised by the shared `sanitizeFtsQuery` in `apps/api/src/lib/core/fts.ts`: FTS5
+Query text is sanitized by the shared `sanitizeFtsQuery` in `apps/api/src/lib/core/fts.ts`: FTS5
 grammar characters are replaced with spaces, each token is phrase-quoted, and a prefix wildcard is
 appended (`q3 budget!` → `"q3"* "budget"*`).
 
 ## Mail
 
 `mail.db` v3 adds `emails_fts` over seven columns (`subject`, `fromShort`, `fromAddress`,
-`toShort`, `toAddress`, `recipientsAll`, `textShort`), tokenised `porter unicode61`. Its UPDATE
+`toShort`, `toAddress`, `recipientsAll`, `textShort`), tokenized `porter unicode61`. Its UPDATE
 trigger fires unconditionally, because a draft edit rewrites several indexed columns at once.
 `textShort` is stored in full for the index; the 200-character truncation happens at the response
 seam, not in the database.
@@ -51,7 +51,7 @@ those ids through Drizzle so `mode: 'timestamp'` columns come back as `Date`, wi
 restoring rank order.
 
 `Trash` and `Junk` are excluded by default; naming a mailbox explicitly searches it.
-`MailDomain.search` canonicalises mailbox names first, so callers may pass any casing.
+`MailDomain.search` canonicalizes mailbox names first, so callers may pass any casing.
 
 ## Drive: names and bodies
 

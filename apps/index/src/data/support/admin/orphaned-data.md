@@ -1,6 +1,6 @@
 ---
 title: "Clean up orphaned data"
-description: "Find and remove user accounts that are no longer attached to your organisation."
+description: "Find and remove user accounts that are no longer attached to your organization."
 type: how-to
 tags: [admin, users, orphans, cleanup]
 related: [admin/manage-members]
@@ -8,7 +8,7 @@ order: 100
 updated: 2026-09-11
 ---
 
-Over time, your server may accumulate accounts that are not part of your organisation and are not guests. These are called orphaned accounts. They appear in the [**Users**](/admin/users) list in Admin, marked with a **no organisation** badge in place of a role, where you can review them and delete any you no longer need.
+Over time, your server may accumulate accounts that are not part of your organization and are not guests. These are called orphaned accounts. They appear in the [**Users**](/admin/users) list in Admin, marked with a **no organisation** badge in place of a role, where you can review them and delete any you no longer need.
 
 You need an admin or owner role to do this.
 

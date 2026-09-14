@@ -67,7 +67,7 @@ and sends a new invitation email.
 Select the entry and click **Delete** in the toolbar. A confirmation dialog asks you to confirm
 before removing it permanently.
 
-## Customise the invitation email
+## Customize the invitation email
 
 1. Open **Onboarding** in the sidebar.
 2. With **Enable waitlist** turned on, the **Invite Email** section appears below.

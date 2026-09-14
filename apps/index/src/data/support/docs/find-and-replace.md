@@ -46,7 +46,7 @@ every tab, and in Slides across every slide, so stepping on can move you somewhe
 
 Three toggles sit at the right-hand end of the **Find** box:
 
-- **Match case**: only match text with the same capitalisation.
+- **Match case**: only match text with the same capitalization.
 - **Whole word**: skip matches inside a longer word, so "art" no longer matches "start".
 - **Regex**: treat your term as a regular expression.
 
@@ -64,7 +64,7 @@ without replacing.
    **Replace** box does the same thing.
 5. Click **All** to change every match in one go. A short **Replaced 12** note tells you how many were changed.
 
-Turn on **Preserve case** in the replace row if you want each replacement to take on the capitalisation of the
+Turn on **Preserve case** in the replace row if you want each replacement to take on the capitalization of the
 text it replaces.
 
 A replace is an ordinary edit, so you can undo it. Press **⌘Z** (**Ctrl+Z**) without leaving the bar.

@@ -206,7 +206,7 @@ Mount configs (S3 credentials) come from the home's `settings.json`, same as `Dr
 A home directory with no matching auth row is itself a finding (orphan home).
 
 **A second connection on a live home's database is NOT safe here — the `atHome()` skip is
-mandatory, not an optimisation.** `ManagedDatabase.close()` runs `wal_checkpoint(TRUNCATE)` →
+mandatory, not an optimization.** `ManagedDatabase.close()` runs `wal_checkpoint(TRUNCATE)` →
 `close()` → `deleteJournalFiles()` (post-audit-item-4: only after a genuinely clean close — a
 lazy/zombie close keeps the journals, which strengthens this argument). With a sweep connection also open: the
 checkpoint silently can't complete, SQLite doesn't auto-remove the WAL (close isn't the last

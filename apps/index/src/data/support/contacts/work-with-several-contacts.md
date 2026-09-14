@@ -2,7 +2,7 @@
 title: "Work with several contacts at once"
 description: "Select several contacts in the list, then delete them or assign a label to all of them in one go."
 type: how-to
-tags: [contacts, select, delete, labels, organise]
+tags: [contacts, select, delete, labels, organize]
 related: [contacts/labels-and-groups, contacts/edit-or-delete, contacts/email-or-chat-a-contact]
 order: 80
 updated: 2026-09-13
@@ -61,7 +61,7 @@ deleted. Cmd-click it to drop it from the selection, and the option comes back.
    is removed from everyone.
 
 Labels have to exist before you can assign them, and you can also drag a selection onto a label in the sidebar.
-See [Organise contacts with labels](/support/contacts/labels-and-groups).
+See [Organize contacts with labels](/support/contacts/labels-and-groups).
 
 ## Export your selection
 

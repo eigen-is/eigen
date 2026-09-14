@@ -2,7 +2,7 @@
 
 > **TLDR**: Mailing an eigendoc/folder "attachment" ships one bare link to every recipient and
 > grants no access — externals hit `RequestAccessView`, and on `openSignup: false` servers a
-> dead login. Phase 1 fixes the link: `messageSend` canonicalises the recipient set (flatten
+> dead login. Phase 1 fixes the link: `messageSend` canonicalizes the recipient set (flatten
 > groups, dedupe, case-insensitive domain partition) and splits the SMTP send — one shared copy
 > for internal recipients, one copy per external with `?email=<recipient>` links in both the
 > HTML and text bodies — with identical headers via a pinned Message-ID, explicit
@@ -20,7 +20,7 @@
 > `openSignup: false` servers. Revised 2026-08-14 after two independent review passes; all
 > findings are folded in below.
 
-> **Shipped 2026-08-14.** As-built with two deviations from this design, which stays the design record: (1) the send payload carries `grantAccessRefIds: string[]` (the reference ids to share) rather than `grantReadAccess: boolean`, since an array lets one send grant some references and not others; (2) the pinned Message-ID and threading headers apply to *every* `messageSend`, not only split sends, because a copy-count-conditional Message-ID would be two behaviours for one fact. Both surfaces are documented in [MAIL.md § Send path](../MAIL.md#send-path) and [§ Send-time access grants](../MAIL.md#send-time-access-grants).
+> **Shipped 2026-08-14.** As-built with two deviations from this design, which stays the design record: (1) the send payload carries `grantAccessRefIds: string[]` (the reference ids to share) rather than `grantReadAccess: boolean`, since an array lets one send grant some references and not others; (2) the pinned Message-ID and threading headers apply to *every* `messageSend`, not only split sends, because a copy-count-conditional Message-ID would be two behaviors for one fact. Both surfaces are documented in [MAIL.md § Send path](../MAIL.md#send-path) and [§ Send-time access grants](../MAIL.md#send-time-access-grants).
 
 ## Goals
 
@@ -32,7 +32,7 @@
    `RequestAccessView`, and on `openSignup: false` servers they cannot even log in.
 3. **One email per recipient.** Recipients are deduplicated and grouped-address members are
    delivered; when the grant fires, the share-notification mail is suppressed — the user's own
-   message is the notification and carries the personalised link.
+   message is the notification and carries the personalized link.
 4. **The sender stays in control.** No silent ACL changes; one dialog per send with a good
    default.
 5. **Consistency.** User-composed mail is currently the *only* doc-link mail that ignores who
@@ -108,7 +108,7 @@ On send (`Mail.messageSend`, `apps/api/src/lib/mail/mail-domain.ts:538-575`):
 The link machinery that already exists (`../../apps/api/src/lib/core/mail-template.ts`):
 
 - `buildReferenceUrl(ref)` (`:49-68`) — per-type URLs
-  (`{DOCS}/doc/{ownerId}/{mountId}/{id}`, `{DRIVE}/fs/…` for folders, …), absolutised
+  (`{DOCS}/doc/{ownerId}/{mountId}/{id}`, `{DRIVE}/fs/…` for folders, …), absolutized
   against `API_URL` by `appUrl()` (`:42-47`).
 - `buildAttachmentUrl(ref, recipientEmail?)` (`:73-77`) — appends
   `?email=<recipient>` unless the address ends with `@${getMailDomain()}`
@@ -154,7 +154,7 @@ The guest/registry flow this proposal leans on ([GUEST-ACCESS.md](../GUEST-ACCES
 - For **team-owned** paths, ACL propagation stores `team_<id>` as the registry source
   (`acl-propagation.ts:157-174`), but `reconcileSharesForNewUser` treats every source as a
   user ID and skips it when `getUserById` finds none (`reconciliation.ts:14-17`). The entry
-  still admits OTP login and the owner-side ACL authorises the link, but the new guest gets
+  still admits OTP login and the owner-side ACL authorizes the link, but the new guest gets
   no shared-path mirror or notification. Phase 2 fixes this (see Design § 4).
 - `ACLPropagationOptions.suppressShareEmail` (`acl-propagation.ts:15`, used by the new-chat
   wizard) suppresses the share mail **only for registered users** — account-less emails
@@ -184,7 +184,7 @@ The guest/registry flow this proposal leans on ([GUEST-ACCESS.md](../GUEST-ACCES
    fix is a manual detour through the share dialog; nobody takes it, recipients hit
    `RequestAccessView`, and on `openSignup: false` servers they hit a dead login. Half a
    feature.
-3. **Hybrid: auto-grant internal, prompt external** — rejected. Two behaviours, two mental
+3. **Hybrid: auto-grant internal, prompt external** — rejected. Two behaviors, two mental
    models, and internal recipients are the cheap case anyway (their links are bare and
    their accounts exist; a prompt costs them one click).
 4. **Prompt at attach time** — rejected. The recipient set isn't final (or even non-empty)
@@ -193,7 +193,7 @@ The guest/registry flow this proposal leans on ([GUEST-ACCESS.md](../GUEST-ACCES
    zero recipients, so an attach-time dialog has nothing to ask. ACLs and the sender's own
    share capability also drift while a draft sits — `missing` and `canShare` are
    time-of-send properties, and the server re-derives them at send anyway. (Outlook's
-   attach-time behaviour is not a consent precedent; it's the silent auto-grant of
+   attach-time behavior is not a consent precedent; it's the silent auto-grant of
    alternative 1.) A passive, non-consent hint on the compose pill ("Only you can open
    this") is a fine deferred addition.
 5. **Prompt with read-grant default at send time (Google-style)** — **recommended.** Keeps
@@ -201,9 +201,9 @@ The guest/registry flow this proposal leans on ([GUEST-ACCESS.md](../GUEST-ACCES
 
 ## Design
 
-### 0 — Recipient canonicalisation (Phase 1)
+### 0 — Recipient canonicalization (Phase 1)
 
-One server-side canonicaliser in `lib/mail`, consumed by delivery, the access check, and the
+One server-side canonicalizer in `lib/mail`, consumed by delivery, the access check, and the
 grants — never three inline copies of the recipient set:
 
 - Recursively flatten RFC 2822 address groups (fixing the pre-existing drop in
@@ -226,7 +226,7 @@ one `sendMail`.
 - Partition the canonical recipient set with `isInternalAddress`. No `driveReferences`, or
   no external recipients → exactly today's single send. The common case is untouched.
 - Otherwise send **one copy for all internal recipients** (bare links) and **one copy per
-  external recipient** with personalised links — rendered into **both** the HTML and the
+  external recipient** with personalized links — rendered into **both** the HTML and the
   plain-text alternative (`appendReferenceLinks` gains a text sibling; today plain-text
   clients get no link at all). All copies keep the composed To/Cc headers so every recipient
   sees the same message; no copy carries a Bcc header; delivery is steered by an explicit
@@ -285,7 +285,7 @@ New route `POST /drive/:ownerId/:mountId/path/:pathId/access-check`, body
   non-checkable — no prompt for it, mail sends as-is (the link may be dead, exactly as
   today).
 - Implemented as a Drive method with a `SharedDrive` wrapper per the architecture rule,
-  gated on the share capability like the share dialog. (Not as an "ACL oracle" defence —
+  gated on the share capability like the share dialog. (Not as an "ACL oracle" defense —
   any reader can already enumerate members via the read-gated
   `GET …/effective-members` — but because prompting a sender who can't act on the answer is
   useless.)
@@ -366,9 +366,9 @@ SMTP copy so every registry entry exists the moment a recipient clicks.
 
 - **Sender can't share** (read-only access to someone else's doc): the reference shows as a
   non-actionable note if a dialog opens at all; links go out with `?email=` (Phase 1
-  behaviour); externals land on guest login → doc → `RequestAccessView`, the existing,
+  behavior); externals land on guest login → doc → `RequestAccessView`, the existing,
   working fallback ([GUEST-ACCESS.md](../GUEST-ACCESS.md) § access requests).
-- **Bcc'd externals**: their copy is personalised (Phase 1) but never granted (decided). On
+- **Bcc'd externals**: their copy is personalized (Phase 1) but never granted (decided). On
   `openSignup: false` servers they cannot log in — the accepted trade-off; use To/Cc or the
   share dialog for someone who must have access.
 - **Forwarded mail**: the `?email=` value prefills the original recipient's address for a
@@ -387,10 +387,10 @@ SMTP copy so every registry entry exists the moment a recipient clicks.
 
 ## Phased rollout
 
-- **Phase 1 — personalised links** (~1 day): recipient canonicaliser + `isInternalAddress`,
+- **Phase 1 — personalized links** (~1 day): recipient canonicalizer + `isInternalAddress`,
   `envelope { from, to }` + `messageId` (+ threading headers) on `OutboundMail`, recipient
   partition + attempt-all copy loop in `messageSend`, `recipientEmail` threaded through
-  `appendReferenceLinks` for both HTML and text. Ships alone; behaviour-invariant for
+  `appendReferenceLinks` for both HTML and text. Ships alone; behavior-invariant for
   internal-only mail. Honest caveat: on `openSignup: false` servers Phase 1 alone still
   prefills a login that cannot succeed — the registry entry from Phase 2 is the real fix.
 - **Phase 2 — access grant** (~2–3 days): `checkAccessForEmails` + `SharedDrive` wrappers
@@ -403,7 +403,7 @@ SMTP copy so every registry entry exists the moment a recipient clicks.
 
 ## Verification gate
 
-- **Canonicaliser unit tests**: group flattening, cross-field dedupe with to > cc > bcc
+- **Canonicalizer unit tests**: group flattening, cross-field dedupe with to > cc > bcc
   precedence, case-insensitive internal/external classification, caps → 400.
 - **Send tests** (extend `../../apps/api/src/test/mail/mail-drive-attachments.test.ts`, send-bake test
   at `:403-455`): mixed internal/external recipients produce one internal + N external
@@ -417,7 +417,7 @@ SMTP copy so every registry entry exists the moment a recipient clicks.
   ancestor → `hasReadAccess`; registered guest vs unknown recipient across
   `openSignup` true/false → `needsGuestAdmission` matrix; sender's own address excluded;
   read-only sender → 200 `canShare: false`; unreadable path → 403; team-expanded ACLs
-  honoured; stale reference → 404.
+  honored; stale reference → 404.
 - **Grant-on-send tests**: ACL updated for needing To/Cc recipients only; **Bcc identities
   never written to any ACL** (explicit test); registry entry created for an unknown email;
   public path → registry-only, zero ACL delta; **zero** share-notification mails sent;

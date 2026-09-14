@@ -18,14 +18,14 @@ Shortcuts are written for macOS and for Windows and Linux. On a Mac, **⌘** is 
 You pan and zoom the canvas with the mouse or trackpad. Nothing you do here changes the drawing, so pan and zoom freely to find your place.
 
 - **Pan** by scrolling. A scroll wheel or a two-finger trackpad swipe moves the canvas. Hold **Shift** while scrolling a wheel to pan sideways.
-- **Zoom** by holding **Ctrl** or **⌘** and scrolling, or by pinching on a trackpad. The canvas zooms towards the pointer, so the spot under your cursor stays put.
+- **Zoom** by holding **Ctrl** or **⌘** and scrolling, or by pinching on a trackpad. The canvas zooms toward the pointer, so the spot under your cursor stays put.
 - **Pan by dragging** when you'd rather not scroll. Hold the **Space** bar and drag, or drag with the middle mouse button. Both move the canvas without touching your objects.
 
 Zoom runs from 10% right up to 3000%.
 
 ### The zoom readout
 
-The bottom-right corner shows the current zoom as a percentage. Click it to reset the view to 100%, centred on the middle of the canvas. Its tooltip reads **Reset zoom**.
+The bottom-right corner shows the current zoom as a percentage. Click it to reset the view to 100%, centered on the middle of the canvas. Its tooltip reads **Reset zoom**.
 
 ## Find text in a drawing
 

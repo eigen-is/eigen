@@ -28,13 +28,13 @@ You don't have to open a drawing to download it. In Drive, right-click the drawi
 
 SVG scales to any size without losing quality, and it opens in web browsers and most other design tools. Choose it when you want to place the drawing at any size or keep working on it in another tool.
 
-If the drawing has a background colour, the SVG includes it. A drawing with a transparent background stays transparent.
+If the drawing has a background color, the SVG includes it. A drawing with a transparent background stays transparent.
 
 ## PDF
 
 A PDF is best for printing or for sharing a fixed page that looks the same everywhere. The page is sized to fit the drawing.
 
-If the drawing has a background colour, the PDF includes it. A drawing with a transparent background prints on a white page.
+If the drawing has a background color, the PDF includes it. A drawing with a transparent background prints on a white page.
 
 <div class="eigen-callout">
 

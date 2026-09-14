@@ -196,7 +196,7 @@ and [`docs/COMMENTS.md`](../../docs/COMMENTS.md).
 Three modes:
 1. **Read-only toolbar**: link text + copy/edit/unlink buttons. The only absolutely-positioned one,
    anchored near the active cell
-2. **Edit form**: text input + type select + address input, in a centred shared `Dialog`
+2. **Edit form**: text input + type select + address input, in a centered shared `Dialog`
    (`@workspace/ui/components/dialog`)
 3. **Range picker**: `CellRangeDialog`, opened through `useDialog().showNonModalDialog` so the grid
    stays clickable while a range is picked
@@ -215,7 +215,7 @@ to query — the card's state lives in `ctx.linkCard` and is driven from `state/
 - Geometry is `dropdownChevronRect` in `state/modules/data-verification.ts` — the same function the
   mousedown hit-test reads, so glyph and click target cannot drift; narrower than
   `DROPDOWN_CHEVRON_MIN_WIDTH` and the glyph is dropped rather than filling the cell
-- Colour is the cell's own `fc` at 55% alpha, not a flat grey — validated cells sit on dark fills
+- Color is the cell's own `fc` at 55% alpha, not a flat gray — validated cells sit on dark fills
 - The **menu** is a portaled shadcn `DropdownMenu` (checkbox items for multi-select validations, plain
   items otherwise) on shadcn's default `z-index: 50`, not a bespoke high z-index
 - Its trigger div is a pure anchor: invisible, `pointer-events: none`, positioned on the focus cell by

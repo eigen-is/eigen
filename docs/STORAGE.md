@@ -64,7 +64,7 @@ without reading data into memory. Callers stream or buffer as needed (e.g., `fil
 
 ### Storage fault injection (dev only)
 
-`EIGEN_STORAGE_FAULT` (`apps/api/src/lib/storage/fault-storage.ts`) wraps every mount's backend with a delegating one that injects a single fault, so create/open behaviour can be verified against degraded storage without a real outage.
+`EIGEN_STORAGE_FAULT` (`apps/api/src/lib/storage/fault-storage.ts`) wraps every mount's backend with a delegating one that injects a single fault, so create/open behavior can be verified against degraded storage without a real outage.
 
 | Value | Effect |
 |-------|--------|

@@ -42,7 +42,7 @@ Tick **Keep aspect ratio** to lock width and height together, so changing one ch
 
 ## Snap to other objects
 
-As you drag or resize an object near another one, Vector shows thin guide lines when their edges or centres line up, and pulls the object onto that line. This helps you match positions by eye without typing exact values. The guides disappear as soon as you move away.
+As you drag or resize an object near another one, Vector shows thin guide lines when their edges or centers line up, and pulls the object onto that line. This helps you match positions by eye without typing exact values. The guides disappear as soon as you move away.
 
 ## Duplicate, copy, cut, and delete
 
@@ -65,8 +65,8 @@ Use **Ctrl** in place of **⌘** on Windows.
 
 Select two or more objects and an **Align** section appears in the properties panel. Hover over a button to see what it does:
 
-- **Align left**, **Align horizontal center**, or **Align right** to line objects up along a vertical edge or their centres.
-- **Align top**, **Align vertical center**, or **Align bottom** to line them up along a horizontal edge or their centres.
+- **Align left**, **Align horizontal center**, or **Align right** to line objects up along a vertical edge or their centers.
+- **Align top**, **Align vertical center**, or **Align bottom** to line them up along a horizontal edge or their centers.
 - **Match width** or **Match height** to give every selected object the same size in that direction.
 
 Select three or more objects to unlock **Distribute horizontally** and **Distribute vertically**, which spread the objects out with equal gaps between them.

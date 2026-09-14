@@ -34,7 +34,7 @@ fine; the callers are not. The 2026-07-04 seam audit (recorded in the roadmap ro
 against source 2026-07-05 and again 2026-07-06 post-unified-activity) found five fan-out sites,
 each with a different failure mode:
 
-| Seam | File | Verified behaviour today |
+| Seam | File | Verified behavior today |
 |---|---|---|
 | Drive ACL fan-out | `lib/drive/acl-propagation.ts` | Async since 2026-07-04: bounded (Semaphore 8), per-path FIFO promise chain, drain-on-shutdown. **In-memory only — a crash loses every queued delivery**; a failed delivery is logged and dropped (no retry). |
 | Calendar share | `lib/calendar/share-propagation.ts` | `propagateCalendarShare` is **awaited on the share PUT** (`Calendar.setCalendarShares` path), sequential per target, one cold home open each. Failures logged and dropped. |
@@ -410,7 +410,7 @@ staged uploads).
 - **Q2 — Should a dead row block its FIFO lane?** Blocking preserves strict order but lets one
   poisoned create freeze an event's lane forever. *Recommendation:* dead rows don't block; for
   state-replacement verbs successors carry full state, and for invitation lanes the skip degrades
-  to today's behaviour while remaining visible and replayable — and for state-replacement verbs
+  to today's behavior while remaining visible and replayable — and for state-replacement verbs
   the coalesce upsert's dead-row revival makes manual replay provably safe (a newer change has
   already reclaimed the key). Say it in a comment on the lane predicate.
 - **Q3 — Delivery concurrency value?** 8 matches `FAN_OUT_CONCURRENCY`. Honest limit: K bounds

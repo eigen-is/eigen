@@ -198,7 +198,7 @@ as-is.
 ## Resolved questions
 
 - **Naming**: *Recents* — matches the OS idiom for LRU-shaped data.
-- **Email normalisation**: lowercase the whole address on store; keep `+tag`
+- **Email normalization**: lowercase the whole address on store; keep `+tag`
   aliases distinct; preserve IDN as typed, match case-insensitively.
 - **Mail-send write timing**: after sendmail succeeds.
 - **GDPR / user delete**: removing the home directory removes `recents.db` by
