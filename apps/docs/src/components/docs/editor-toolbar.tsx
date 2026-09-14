@@ -4,6 +4,7 @@ import { EIGEN_FONTS, getFontFamily, getFontName } from '@workspace/lib/constant
 import { DOCX_MIME } from '@workspace/lib/constants/mime';
 import { useIsCompactToolbar } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { isImageMime } from '@workspace/lib/types/drive';
 import {
     CenteredToolbar,
     DocumentShareCluster,
@@ -699,7 +700,7 @@ export const EditorToolbar = ({
                     open={imagePickerOpen}
                     onOpenChange={setImagePickerOpen}
                     title="Insert image"
-                    mimeFilter={['image/*']}
+                    canPick={(item) => isImageMime(item.mimeType)}
                     onPickFromDrive={(paths) => onImagePickFromDrive?.(paths)}
                     onPickFromDevice={handleImageFromDevice}
                     accept="image/*"

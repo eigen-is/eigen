@@ -343,14 +343,18 @@ export function isOpenable(path: { type: DrivePathType; mimeType: string; name: 
     return path.type !== 'file' || isInlineEditable(path.mimeType, path.name);
 }
 
+// Every image picker takes the whole image/* family, so no caller spells the prefix test itself.
+export function isImageMime(mimeType: string): boolean {
+    return mimeType.startsWith('image/');
+}
+
 export const VCARD_MIMES = ['text/vcard', 'text/x-vcard'] as const;
 
 // The `accept` list for a file input that takes a vCard, named so the picker never re-spells the fact.
 export const VCARD_ACCEPT = `.vcf,${VCARD_MIMES.join(',')}`;
 
 // Exporters disagree on the MIME (Apple writes text/vcard, older clients text/x-vcard, browsers
-// often application/octet-stream), so the .vcf extension counts on its own — the reason both vCard
-// pickers take a `canPick` predicate instead of a mime filter.
+// often application/octet-stream), so the .vcf extension counts on its own.
 export function isVCardFile(mimeType: string, name: string): boolean {
     return name.toLowerCase().endsWith('.vcf') || VCARD_MIMES.some((m) => m === mimeType);
 }

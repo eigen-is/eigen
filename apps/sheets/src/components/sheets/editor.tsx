@@ -13,6 +13,7 @@ import {
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { isImageMime } from '@workspace/lib/types/drive';
 import { fitImageSize, type ImageSize } from '@workspace/lib/vector';
 import { type Image as SheetImage, Workbook, type WorkbookInstance } from '@workspace/sheet';
 import {
@@ -348,7 +349,7 @@ function SheetEditorInner({
                     open={imagePickerOpen}
                     onOpenChange={setImagePickerOpen}
                     title="Insert image"
-                    mimeFilter={['image/*']}
+                    canPick={(item) => isImageMime(item.mimeType)}
                     onPickFromDrive={handleImagePickFromDrive}
                     onPickFromDevice={handleImageFromDevice}
                     accept="image/*"

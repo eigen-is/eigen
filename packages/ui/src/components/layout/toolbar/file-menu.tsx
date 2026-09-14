@@ -182,7 +182,7 @@ export function FileMenu({
                 open={openPickerOpen}
                 onOpenChange={setOpenPickerOpen}
                 title={openConfig.title}
-                mimeFilter={[openConfig.mime]}
+                canPick={(item) => item.mimeType === openConfig.mime}
                 onSelect={(paths) => {
                     const picked = paths[0];
                     if (picked) openDocument(picked);

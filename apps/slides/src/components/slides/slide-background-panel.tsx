@@ -5,6 +5,7 @@
 
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { isImageMime } from '@workspace/lib/types/drive';
 import { serializeBackgroundFill, type VectorFrame } from '@workspace/lib/vector';
 import { Button } from '@workspace/ui/components/button';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
@@ -86,7 +87,7 @@ export function SlideBackgroundPanel({
                 open={pickerOpen}
                 onOpenChange={setPickerOpen}
                 title="Background image"
-                mimeFilter={['image/*']}
+                canPick={(item) => isImageMime(item.mimeType)}
                 onPickFromDrive={onPickImageFromDrive}
                 onPickFromDevice={handleImageFromDevice}
                 accept="image/*"
