@@ -3,7 +3,7 @@
 // modules/text.ts.
 
 // One red for both attention marks: the invalid-value triangle, and the comment
-// triangle's fallback when its card carries no colour of its own.
+// triangle's fallback when its card carries no color of its own.
 import { INDICATOR_RED } from '@workspace/lib/constants/comment-indicator';
 import { isForcedStringNumber, normalizedAttr } from '../modules/cell';
 import { cellIndicatorRect } from '../modules/cell-glyph';
@@ -29,7 +29,7 @@ import { defaultStyle } from './types';
 
 // Data-verification tick box. Hardcoded light like every other canvas color —
 // the workbook surface is pinned light via `.eigen-paper` (RENDERING.md
-// § Theming) — and grey rather than black, the way Google draws the box.
+// § Theming) — and gray rather than black, the way Google draws the box.
 const CHECKBOX_STROKE = '#5f6368';
 
 const FORCED_STRING_INDICATOR_COLOR = '#487f1e';
@@ -79,8 +79,8 @@ function drawTickBox(renderCtx: CanvasRenderingContext2D, rect: CellGlyphRect, c
 // empty ones included, which is where it earns its keep: a blank validated cell
 // is otherwise indistinguishable from a blank free-text one. It overlays the
 // cell text rather than reserving width, the way Google's does, and takes the
-// cell's OWN text colour at low alpha instead of a flat grey: validated cells
-// sit on dark fills a fixed grey would vanish into.
+// cell's OWN text color at low alpha instead of a flat gray: validated cells
+// sit on dark fills a fixed gray would vanish into.
 const DROPDOWN_CHEVRON_ALPHA = 0.55;
 
 function renderDropdownChevron(pass: RenderPass, r: number, c: number, box: Rect) {

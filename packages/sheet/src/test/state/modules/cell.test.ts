@@ -39,7 +39,7 @@ describe('state/modules/cell — getInlineStringHTML', () => {
     });
 
     test('a style value cannot close its own attribute', () => {
-        // `fc` comes from the cell, so a colour like `red' onload='alert(1)` would otherwise
+        // `fc` comes from the cell, so a color like `red' onload='alert(1)` would otherwise
         // end the style attribute and start an event handler. Stripping quotes leaves the
         // text inert inside the value; what matters is that nothing can escape the quotes.
         const html = getInlineStringHTML(0, 0, inlineCell([{ v: 'x', fc: "red' onload='alert(1)" }]));
@@ -50,7 +50,7 @@ describe('state/modules/cell — getInlineStringHTML', () => {
 });
 
 // getCellValue returns the attribute it is asked for, and getFormulaHtml is where the
-// formula becomes coloured spans. They were one function until a shipped regression:
+// formula becomes colored spans. They were one function until a shipped regression:
 // an escaping pass wrapped what read as a plain attribute read, and printed the markup
 // at the user instead of rendering it.
 describe('state/modules/cell — getCellValue / getFormulaHtml', () => {

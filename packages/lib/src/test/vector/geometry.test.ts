@@ -190,7 +190,7 @@ describe('hitTestElement', () => {
     };
 
     test('dispatches shape geometry per type — corner hits a rectangle but not an ellipse', () => {
-        // Shapes ignore the outline threshold (inside/outline behaviour unchanged); pass 0.
+        // Shapes ignore the outline threshold (inside/outline behavior unchanged); pass 0.
         expect(hitTestElement(make('rectangle'), { x: 0, y: 0 }, 0)).toBe(true);
         expect(hitTestElement(make('ellipse'), { x: 0, y: 0 }, 0)).toBe(false);
         expect(hitTestElement(make('diamond'), { x: 0, y: 0 }, 0)).toBe(false);
@@ -256,7 +256,7 @@ describe('parsePoints / serializePoints', () => {
 });
 
 // The scene position of a stored local point p under the renderer's transform:
-// translate(x,y) then rotate(angle) about the box centre (w/2, h/2).
+// translate(x,y) then rotate(angle) about the box center (w/2, h/2).
 const sceneOf = (n: { x: number; y: number; width: number; height: number }, angle: number, p: Point): Point => {
     const center = { x: n.width / 2, y: n.height / 2 };
     const rotated = rotatePoint(p, center, angle);
@@ -823,10 +823,10 @@ describe('boundEndpoint', () => {
     });
 
     // Excalidraw's updateBoundPoint aims the chord from the ADJACENT vertex (index 1 / -2), not the far
-    // endpoint — for a multi-point arrow the attachment must face the neighbouring vertex, so dragging a
+    // endpoint — for a multi-point arrow the attachment must face the neighboring vertex, so dragging a
     // mid point around the shape slides the endpoint along the outline. Identical for 2-point arrows.
     test('a multi-point end aims the chord from the adjacent vertex, not the far end', () => {
-        // scene: start (-30,0), mid (-10,40), end near the rect; anchor = rect centre (25,0).
+        // scene: start (-30,0), mid (-10,40), end near the rect; anchor = rect center (25,0).
         // From the mid vertex the chord crosses the inflated outline on the TOP edge (2.25, 26);
         // from the far end it would cross the left edge at (-1, 0).
         const arrow = arrowEl({
@@ -913,7 +913,7 @@ describe('boundEndpoint — curve-exact docking', () => {
     const ell = shapeEl({ id: 'ell', type: 'ellipse', x: 5, y: -20, width: 40, height: 40, strokeWidth: 2 });
     const dia = shapeEl({ id: 'dia', type: 'diamond', x: 5, y: -20, width: 40, height: 40, strokeWidth: 2 });
 
-    // A strongly curved 3-point arrow that swings up from below-left toward the shape centre; the curved
+    // A strongly curved 3-point arrow that swings up from below-left toward the shape center; the curved
     // shaft meets the outline at a different place than the straight chord from the adjacent vertex.
     const curvedArrow = (over: Partial<VectorArrowElement> = {}) =>
         arrowEl({
@@ -1204,7 +1204,7 @@ describe('followBindings — an arrow bound at both ends', () => {
         expect(gapOutlineDistance(movedA, start)).toBeCloseTo(0, 2);
         expect(gapOutlineDistance(shapeB, end)).toBeCloseTo(0, 2);
 
-        // Both anchors are the shape centres, so the settled shaft lies on the line through them.
+        // Both anchors are the shape centers, so the settled shaft lies on the line through them.
         const centreA = boxCenter(movedA);
         const centreB = boxCenter(shapeB);
         const dx = end.x - start.x;
@@ -1518,7 +1518,7 @@ describe('elbow arrows — derived-route consumption', () => {
 
 // --- projectFixedPointOntoDiagonal (bind-time aim) ---------------------------------
 // Excalidraw's projectFixedPointOntoDiagonal: a straight arrow's bind-time aim snaps to a side midpoint the
-// cursor is near, else projects onto the shape's diagonals (rect) / centre lines (ellipse/diamond) along the
+// cursor is near, else projects onto the shape's diagonals (rect) / center lines (ellipse/diamond) along the
 // ray from the other end, accepted only inside the shape; null → fall back to the raw cursor.
 describe('projectFixedPointOntoDiagonal', () => {
     // A point P is collinear with the infinite line through A,B (the shrunk diagonal is a sub-segment of it).

@@ -8,7 +8,7 @@
 // happy-dom document at module scope and drives handlePaste with a structurally
 // stubbed ClipboardEvent. Tests pin observable output in the resulting Context
 // (cell values/ct/styles, cfg.merge, cfg.borderInfo, cfg.rowlen, selections) so the
-// upcoming refactors near the paste pipeline are gated on current behaviour. They
+// upcoming refactors near the paste pipeline are gated on current behavior. They
 // never assert on internal call sequences.
 
 import { describe, expect, it, spyOn } from 'bun:test';
@@ -278,7 +278,7 @@ describe('HTML-table paste — merges, borders, row height', () => {
         const ctx = makeCtx();
         pasteHtml(ctx, '<table><tr><td style="border:1px solid #0000ff">B</td></tr></table>');
 
-        // 1px solid -> getQKBorder style 1; colour passes through verbatim
+        // 1px solid -> getQKBorder style 1; color passes through verbatim
         expect(ctx.sheets[0].config!.borderInfo!['0_0']).toEqual({
             l: { style: 1, color: '#0000ff' },
             r: { style: 1, color: '#0000ff' },

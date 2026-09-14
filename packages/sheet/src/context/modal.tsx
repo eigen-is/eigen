@@ -8,7 +8,7 @@ export type ModalOptions = {
     modal?: boolean;
     // Dialog width in px — forms want the default, a small picker overrides it.
     width?: number;
-    // Viewport point the dialog's top-left opens at, clamped on screen. Centred when absent.
+    // Viewport point the dialog's top-left opens at, clamped on screen. Centered when absent.
     anchor?: ViewportPoint;
     // Runs on every close route — a Cancel button, Escape, anything Radix adds later — so
     // callers holding state for an open dialog (the range picker's grid-select flag) can
@@ -112,7 +112,7 @@ function ModalProvider({ children }: { children?: React.ReactNode }) {
                     showCloseButton={false}
                     onPointerDownOutside={(e) => e.preventDefault()}
                     onInteractOutside={(e) => e.preventDefault()}
-                    // An anchored dialog drops DialogContent's centring translate; the pair of
+                    // An anchored dialog drops DialogContent's centering translate; the pair of
                     // left/top below places it instead.
                     className={cn('max-w-[90vw]', position && 'translate-x-0 translate-y-0')}
                     style={{

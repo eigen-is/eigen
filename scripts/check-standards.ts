@@ -158,7 +158,7 @@ const METRICS: Metric[] = [
     },
     {
         id: 'raw-colors',
-        label: 'Raw Tailwind colour utilities',
+        label: 'Raw Tailwind color utilities',
         hardZero: false,
         count: ({ path, text }) => (path.endsWith('.tsx') ? countMatches(text, RAW_COLOR) : 0),
     },

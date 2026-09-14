@@ -3,7 +3,7 @@
 // Source: https://www.npmjs.com/package/fractional-indexing (via Excalidraw's fork,
 //         packages/fractional-indexing/src/index.ts). License: CC0 (no rights reserved).
 // Based on https://observablehq.com/@dgreensp/implementing-fractional-indexing
-// Vendored verbatim to pin z-order behaviour; the Eigen repair layer follows below.
+// Vendored verbatim to pin z-order behavior; the Eigen repair layer follows below.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const BASE_62_DIGITS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
@@ -252,7 +252,7 @@ export function generateNKeysBetween(
 
 type IndexedElement = { id: string; index: string };
 
-// Format-check `index`, then confirm it sits strictly between its neighbours.
+// Format-check `index`, then confirm it sits strictly between its neighbors.
 export function isValidFractionalIndex(
     index: string | undefined,
     predecessor: string | undefined,

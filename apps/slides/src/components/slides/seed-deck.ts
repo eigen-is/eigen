@@ -15,11 +15,11 @@ const SEED_ORIGIN = Symbol('deck-seed');
 const SEED_FRAME_ID = 'fr-deck-seed';
 const SEED_ELEMENT_ID = 'el-deck-seed';
 
-// The colour a brand-new deck opens on — the title slide only. Every later page, including one added
+// The color a brand-new deck opens on — the title slide only. Every later page, including one added
 // with +, is painted with the shared DEFAULT_FRAME_BACKGROUND by writeFrame.
 const SEED_BACKGROUND_COLOR = '#f6339a';
 
-// The centred title band a deck has always opened with, in frame coordinates (0,0 → 1920,1080).
+// The centered title band a deck has always opened with, in frame coordinates (0,0 → 1920,1080).
 const WELCOME: VectorElementPatch = {
     x: 192,
     y: 378,

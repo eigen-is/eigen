@@ -61,7 +61,7 @@ export function setConditionRules(ctx: Context, rules: ConditionRulesProps) {
 
     // The dialog seeds rules.rulesType from a substring of the rangeDialog type
     // (`conditionRules` prefix stripped) and never validates against the engine's
-    // canonical name set. Bail out on names the engine doesn't recognise rather
+    // canonical name set. Bail out on names the engine doesn't recognize rather
     // than persisting a rule that would silently no-op on every paint.
     if (!isKnownConditionName(rules.rulesType)) {
         return;

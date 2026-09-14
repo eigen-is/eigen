@@ -68,11 +68,11 @@ const arrow = (over: Partial<VectorArrowElement> & { points: string }): VectorAr
     ...over,
 });
 
-// Regression: a straight arrow's bind projects the raw endpoint onto a diagonal / centre
+// Regression: a straight arrow's bind projects the raw endpoint onto a diagonal / center
 // line ONLY when the endpoint lands OUTSIDE the shape's fill (Excalidraw's "orbit" strategy). A drop INSIDE
 // the fill is the "inside" strategy and stores the RAW cursor ratio verbatim — re-projecting an inside drop
 // flung the stored anchor off the release point onto the diagonal (the hollow dot lands deep toward the
-// centre). This is what breaks when an already-bound endpoint is re-dragged to a new spot on the same shape.
+// center). This is what breaks when an already-bound endpoint is re-dragged to a new spot on the same shape.
 describe('bindArrow — inside drop stores the raw release ratio (no diagonal overshoot)', () => {
     // The bound-endpoint drop is inside the 200×100 fill at scene (60,30) → ratio [0.3, 0.3]; the OTHER end
     // is free far away so it can't bind and only serves as the projection ray origin.
@@ -126,7 +126,7 @@ describe('bindArrow — inside drop stores the raw release ratio (no diagonal ov
 });
 
 // The complement: releasing ON a lit side-midpoint snap dot (OUTSIDE the fill) still snaps — the anchor
-// lands exactly on the dot and the bound endpoint docks at the outline right there, not toward the centre.
+// lands exactly on the dot and the bound endpoint docks at the outline right there, not toward the center.
 describe('bindArrow — outside side-midpoint drop snaps the anchor onto the dot', () => {
     for (const end of ['start', 'end'] as const) {
         for (const angle of [0, 30]) {

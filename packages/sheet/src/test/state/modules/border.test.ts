@@ -194,7 +194,7 @@ describe('border-none erases', () => {
         expect(map['2_1']).toEqual({ l: SIDE, r: SIDE, b: SIDE });
         expect(map['1_0']).toEqual({ l: SIDE, t: SIDE, b: SIDE });
         expect(map['1_2']).toEqual({ r: SIDE, t: SIDE, b: SIDE });
-        // Diagonal neighbours share no edge with the erased cell.
+        // Diagonal neighbors share no edge with the erased cell.
         expect(map['0_0']).toEqual({ l: SIDE, r: SIDE, t: SIDE, b: SIDE });
     });
 

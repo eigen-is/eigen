@@ -25,7 +25,7 @@ import { type CardReportRequest, parseCardReport } from './xml-parser';
 const MULTIGET_HREF_LIMIT = 500;
 const QUERY_RESULT_CAP = 1000;
 
-// RFC 6578 recovery: a token the book can't honour (stale generation, future ctag, or malformed) forces the
+// RFC 6578 recovery: a token the book can't honor (stale generation, future ctag, or malformed) forces the
 // client to redo the full comparison. sabre answers 403 (InvalidSyncToken extends Forbidden) with
 // D:valid-sync-token; RFC 3253 § 1.6 marshals precondition failures as 403, and clients key full resync on it.
 const invalidSyncToken = () => davError(403, '<D:valid-sync-token/>');
@@ -85,7 +85,7 @@ async function handleMultiget(
     // wins, preserving request order.
     const seen = new Set<string>();
     for (const href of report.hrefs) {
-        // Normalise an absolute-path href down to the book prefix (the caldav report.ts move), then percent-decode
+        // Normalize an absolute-path href down to the book prefix (the caldav report.ts move), then percent-decode
         // the single resource segment. A malformed escape or a href outside this book is a 404 row, not a throw.
         const normalized = href.replace(/^\/+/, '/');
         const encodedUri = normalized.startsWith(prefix) ? normalized.slice(prefix.length) : '';

@@ -465,7 +465,7 @@ describe('CalDAV', () => {
         );
         expect(updateRes.status).toBe(204);
 
-        // GET the event — the cancelled exception round-trips as EXDATE on the master, not as a
+        // GET the event — the canceled exception round-trips as EXDATE on the master, not as a
         // STATUS:CANCELLED override VEVENT (clients like Thunderbird drop those from their next PUT).
         const getRes = await app.handle(
             new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-recur-1.ics`, {
@@ -1279,7 +1279,7 @@ describe('CalDAV', () => {
         expect(mkRes.status).toBe(201);
         expect(mkRes.headers.get('Location')).toBe(`/dav/calendars/${userId}/${calId}/`);
 
-        // PROPFIND the exact client-chosen URL resolves and carries the displayname + colour the client set.
+        // PROPFIND the exact client-chosen URL resolves and carries the displayname + color the client set.
         const propRes = await app.handle(
             new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
                 method: 'PROPFIND',

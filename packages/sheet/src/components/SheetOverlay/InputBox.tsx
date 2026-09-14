@@ -82,7 +82,7 @@ export const InputBox: React.FC = () => {
                     value = getInlineStringHTML(row_index, col_index, flowdata);
                     isGeneratedHtml = true;
                 } else if (cell.f) {
-                    // Coloured spans, escaped at their leaves — render, do not escape again.
+                    // Colored spans, escaped at their leaves — render, do not escape again.
                     // createRangeHightlight parses those spans, so it wants the markup too.
                     value = getFormulaHtml(row_index, col_index, flowdata) ?? '';
                     isGeneratedHtml = true;

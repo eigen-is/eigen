@@ -30,7 +30,7 @@ async function openPopover(props: { value: string; allowNone?: boolean; noneLabe
     return { labels, cleanup };
 }
 
-// A picked colour is replaced by picking another one, and where paint is optional None is the way back
+// A picked color is replaced by picking another one, and where paint is optional None is the way back
 // — so a Reset row was a third way to say what the popover already says. It is gone from every row.
 test('the popover never offers a Reset row', async () => {
     const withNone = await openPopover({ value: '#ff0000', allowNone: true });
@@ -42,7 +42,7 @@ test('the popover never offers a Reset row', async () => {
     await withoutNone.cleanup();
 });
 
-// None stays opt-in: an arrow IS its stroke, so its colour row must not offer a way to erase it.
+// None stays opt-in: an arrow IS its stroke, so its color row must not offer a way to erase it.
 test('the None row shows only where the caller allows it', async () => {
     const optional = await openPopover({ value: '#ff0000', allowNone: true });
     expect(optional.labels).toContain('None');

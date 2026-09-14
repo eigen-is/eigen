@@ -44,7 +44,7 @@ export const cssDomKeyForAttr = {
 
 // Cell fields stamped transiently by `getCssText` for the underline (`un`) branch.
 // They never persist on stored cells — only read by `getFontStyleByCell` to size /
-// colour the rendered underline.
+// color the rendered underline.
 export type UnderlineHints = { _color?: string; _fontSize?: number };
 
 export const inlineStyleAffectAttribute = {

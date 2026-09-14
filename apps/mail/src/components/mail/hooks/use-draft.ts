@@ -298,7 +298,7 @@ function reducer(state: DraftState, action: Action): DraftState {
             };
         case 'sync-editor': {
             // Snapshot the editor's canonical HTML/text post-parse and reset the saved
-            // fingerprint to match. Without this, TipTap's normalisation of the seeded body
+            // fingerprint to match. Without this, TipTap's normalization of the seeded body
             // (or its emission of the quoted-content text via getText) drifts from the seed
             // on first interaction and tricks the auto-save into firing without any user edit.
             const fields = { ...state.fields, body: action.html, bodyText: action.text };

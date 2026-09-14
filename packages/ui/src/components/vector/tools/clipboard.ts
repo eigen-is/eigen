@@ -1,7 +1,7 @@
 // Vector clipboard PRODUCER — the selection→payload builder, moved out of canvas-editor.tsx (a self-
 // contained pure block) so the canvas stays a dispatcher. A selection rides as ONE typed `elements`
 // item (whole stored records, so a canvas→canvas paste restores exactly what was copied), plus the
-// per-image and per-rich-text items every other app reads, plus the self-contained SVG flavour. The
+// per-image and per-rich-text items every other app reads, plus the self-contained SVG flavor. The
 // paste CONSUMER is tools/paste-elements.ts.
 
 import {
@@ -41,7 +41,7 @@ function foreignItems(
                 buildTextClipboardItem({
                     text: stripTagsServer(el.html),
                     box,
-                    // The whole modelled set, not a subset: these are exactly the fields a rich-text box
+                    // The whole modeled set, not a subset: these are exactly the fields a rich-text box
                     // stores, and dropping six of them was how bold/italic/underline/spacing quietly
                     // stopped surviving a copy into docs. Every one has a consumer (see the type).
                     typography: {
@@ -63,7 +63,7 @@ function foreignItems(
     return items;
 }
 
-// The SVG flavour for a selection, or undefined when it must not be written. Two gates:
+// The SVG flavor for a selection, or undefined when it must not be written. Two gates:
 //
 // TEXT-ONLY selections skip it. Every foreign host runs its svg rung BEFORE the typed items, so a
 // drawing that is nothing but a rich-text box would land in a document as a flat picture of itself —
@@ -75,7 +75,7 @@ function foreignItems(
 // items are the lossless half.
 //
 // What it is otherwise: a self-contained render carrying the items in a `<metadata>` block, so it
-// round-trips back to native elements if pasted into a canvas without the eigen flavour. Images are
+// round-trips back to native elements if pasted into a canvas without the eigen flavor. Images are
 // referenced BY NAME — `href="eigen-media:<name>"`, never bytes — so the sync copy path stays byte-free
 // and the ref resolves against the target's own media/ on paste (materializeClipboardSvg re-uploads,
 // then the display path inlines, see CLIPBOARD.md). An elbow arrow bound to an UNSELECTED shape draws
@@ -105,7 +105,7 @@ function selectionSvg(
 
 // The full eigen payload for a selection: the native `elements` item (a canvas→canvas paste), the typed
 // image/text items beside it (every other host) and — unless a gate above says otherwise — the SVG
-// flavour for hosts that can place neither.
+// flavor for hosts that can place neither.
 //
 // It returns the ids it ACTUALLY serialized alongside the payload, and they are not always the
 // selection: an image whose media path doesn't resolve yet (a still-pending upload, or one whose folder

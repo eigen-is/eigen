@@ -2,7 +2,7 @@
 // packages/element/src/elbowArrow.ts + linearElementEditor.ts). Once an elbow arrow has ≥1 pin its
 // `points` hold the full routed polyline and the A* router never runs on it again (see arrowRoute's
 // two-mode fork). Every mutation is pure point surgery on that stored polyline: a segment move slides the
-// dragged segment and stretches its neighbours in place (zero new interior corners); renormalization on
+// dragged segment and stretches its neighbors in place (zero new interior corners); renormalization on
 // commit merges collinear runs, drops sub-pixel debris and reindexes pins; unpin re-routes only the freed
 // gap. All functions are pure over the parsed arrow — the UI/geometry seams call them and write the patch.
 //
@@ -166,8 +166,8 @@ function moveFixedSegment(arrow: VectorArrowElement, index: number, cursorScene:
     return [...byIndex.values()].sort((a, b) => a.index - b.index);
 }
 
-// Excalidraw's handleSegmentMove: overwrite the dragged pin's two vertices, stretch each neighbour's far
-// endpoint along the neighbour's own axis (so no new corner appears on an interior drag), and weld any
+// Excalidraw's handleSegmentMove: overwrite the dragged pin's two vertices, stretch each neighbor's far
+// endpoint along the neighbor's own axis (so no new corner appears on an interior drag), and weld any
 // adjacent pinned segment to the moved vertex. When the dragged segment is the FIRST or LAST one it inserts
 // an L-jog so the pinned segment becomes interior and the endpoint is preserved (unshift/push, +1/+2
 // reindex, plus a BASE_PADDING outer-vertex prelude when that end is bound) — the arrow's stored invariant
@@ -239,8 +239,8 @@ function handleSegmentMove(
             ? headingIsHorizontalVec(newPoints[endIdx + 1], newPoints[endIdx])
             : undefined;
 
-    // Slide the neighbour's far endpoint along the neighbour's own axis (dominant axis ⇒ move the OTHER
-    // coordinate: horizontal neighbour keeps y, so take start.y; vertical keeps x, so take start.x).
+    // Slide the neighbor's far endpoint along the neighbor's own axis (dominant axis ⇒ move the OTHER
+    // coordinate: horizontal neighbor keeps y, so take start.y; vertical keeps x, so take start.x).
     if (prevSegmentIsHorizontal !== undefined) {
         if (prevSegmentIsHorizontal) newPoints[startIdx - 1].y = start.y;
         else newPoints[startIdx - 1].x = start.x;
@@ -252,7 +252,7 @@ function handleSegmentMove(
         else newPoints[endIdx + 1].x = end.x;
     }
 
-    // Weld a neighbouring pinned segment to the moved vertex so adjacent pins stay welded (no notch).
+    // Weld a neighboring pinned segment to the moved vertex so adjacent pins stay welded (no notch).
     const prevPinned = nextSegments.find((s) => s.index === startIdx);
     if (prevPinned) {
         if (headingIsHorizontalVec(prevPinned.start, prevPinned.end)) prevPinned.start.y = start.y;
@@ -329,7 +329,7 @@ export function materializeFirstPin(
 
 // --- renormalization on commit ------------------------------------------------------
 
-// Excalidraw's handleSegmentRenormalization: merge collinear neighbour segments (pin reindex −1), drop
+// Excalidraw's handleSegmentRenormalization: merge collinear neighbor segments (pin reindex −1), drop
 // sub-pixel segments (reindex −2), and drop any pin that ends up first/last. Run as the LAST step of every
 // sealed write of a pinned arrow. If no pin survives ⇒ '' (the caller returns to derived mode).
 export function renormalize(arrow: VectorArrowElement): PinPatch {
@@ -487,7 +487,7 @@ export function moveEndpoints(
 
 // Remove the pin at `index`. Removing the LAST pin returns the arrow to derived mode (points collapse to
 // the two endpoints, fixedSegments ''); the derived route takes over — visually what Excalidraw's release
-// does with no neighbour pins. Removing a non-last pin drops the constraint and renormalizes, keeping the
+// does with no neighbor pins. Removing a non-last pin drops the constraint and renormalizes, keeping the
 // polyline where it is (the gap-reroute of handleSegmentRelease is deferred with the multi-pin UI).
 export function unpinSegment(arrow: VectorArrowElement, index: number): PinPatch {
     const w = toWorking(arrow);

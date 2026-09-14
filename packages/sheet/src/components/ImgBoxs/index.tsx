@@ -50,7 +50,7 @@ function ActiveImage({ img }: { img: Image }) {
     return (
         // Positioned, UNROTATED container: the imperative move mutates its left/top directly, and the
         // ObjectTransform ring (a child) moves with it. Rotation lives on the content + ring, both
-        // around this box's centre, so they overlap exactly. Sits inside the 'main' pane region, so it
+        // around this box's center, so they overlap exactly. Sits inside the 'main' pane region, so it
         // inherits the same scroll offset + freeze clipping as every image.
         <div
             id="sheet-modal-dialog-activeImage"
@@ -87,7 +87,7 @@ function ActiveImage({ img }: { img: Image }) {
                 <ObjectTransform
                     box={box}
                     // The ring fills this already-positioned container; ObjectTransform adds its own
-                    // centre-origin rotate, so the ring tracks the rotated content. x/y in `box` still
+                    // center-origin rotate, so the ring tracks the rotated content. x/y in `box` still
                     // drive the resize math + commit; only the visual position is inherited from here.
                     boxToStyle={() => ({ left: 0, top: 0, width: box.width, height: box.height })}
                     // Grid is unzoomed: a screen px is a scene px.

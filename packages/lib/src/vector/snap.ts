@@ -3,8 +3,8 @@ import type { Box } from './geometry';
 // Guide-line snapping shared by slides + vector (U7a). Pure math over Box in the host's coordinate
 // space; the host supplies the threshold in those units (a zoom-aware host divides a screen-px
 // threshold by zoom so snapping feels constant at any zoom). The rotated-object rule (Override-24)
-// lives here: a rotated box's axis-aligned edges lie about its visual box, so it snaps by CENTRE only
-// as a mover (`centerOnly`) and contributes CENTRE only as a target.
+// lives here: a rotated box's axis-aligned edges lie about its visual box, so it snaps by CENTER only
+// as a mover (`centerOnly`) and contributes CENTER only as a target.
 
 // Default screen-space snap radius (px) for zoom-aware hosts: pass SNAP_SCREEN_THRESHOLD / zoom.
 export const SNAP_SCREEN_THRESHOLD = 8;
@@ -25,9 +25,9 @@ function edgesOf(b: Box) {
 }
 
 // Candidate snap coordinates from the other objects (excludeIds skips the ones being dragged) plus any
-// host guide lines in `extraV`/`extraH` (frame mode: the frame's edges + centre; the infinite canvas
+// host guide lines in `extraV`/`extraH` (frame mode: the frame's edges + center; the infinite canvas
 // has none).
-// A rotated target contributes centre only.
+// A rotated target contributes center only.
 export function computeSnapTargets(
     boxes: { id: string; box: Box }[],
     excludeIds: Set<string>,
@@ -51,8 +51,8 @@ export function computeSnapTargets(
 }
 
 // Snap `box` to the targets. `mode` is 'move' or 'resize-<dir>'. `threshold` is in box units.
-// `centerOnly` (move) snaps the box by its centre alone — the rule for a rotated mover, whose edges
-// lie but whose centre is rotation-invariant. `lockAxis` (move) is the Shift dominant-axis constraint:
+// `centerOnly` (move) snaps the box by its center alone — the rule for a rotated mover, whose edges
+// lie but whose center is rotation-invariant. `lockAxis` (move) is the Shift dominant-axis constraint:
 // 'x' keeps x fixed (skip vertical snapping + guides), 'y' keeps y fixed — so a locked axis never
 // gets a correction to undo at the call site. Returns the snapped box + the guide lines that matched.
 // The post-snap 0.1 line-detection epsilon is a coordinate-exactness check (the snap made the edge

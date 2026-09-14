@@ -408,7 +408,7 @@ describe.skipIf(isWindows)('Mail — grant access to references at send', () => 
         expect(await getAcl(docId)).toEqual(before);
     });
 
-    // 10. Without grantAccessRefIds nothing is granted (today's behaviour: refs are just links).
+    // 10. Without grantAccessRefIds nothing is granted (today's behavior: refs are just links).
     test('without grantAccessRefIds the ACL is unchanged', async () => {
         startCapture();
         const docId = await createDoc(`grant-absent-${randomUUID()}`);

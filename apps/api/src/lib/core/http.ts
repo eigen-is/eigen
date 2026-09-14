@@ -155,7 +155,7 @@ export function contentDisposition(type: 'attachment' | 'inline', fileName: stri
 // scriptable-type set and the CSP string (serve-file's /embed and the /preview route both consult it).
 export function scriptableInlineHeaders(mimeType: string): Record<string, string> {
     const baseMime = (mimeType.split(';')[0] ?? '').trim().toLowerCase();
-    // Every XML flavour scripts too: an `<?xml-stylesheet?>` PI runs XSLT. The `+xml` suffix already
+    // Every XML flavor scripts too: an `<?xml-stylesheet?>` PI runs XSLT. The `+xml` suffix already
     // covers image/svg+xml and application/xhtml+xml, so neither needs an entry of its own.
     const isXml = baseMime === 'text/xml' || baseMime === 'application/xml' || baseMime.endsWith('+xml');
     if (baseMime === 'text/html' || isXml) {

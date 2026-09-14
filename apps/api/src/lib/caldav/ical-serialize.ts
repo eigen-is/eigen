@@ -80,7 +80,7 @@ function buildVEvent(
         prop(`RRULE:${rruleValue}`);
     }
 
-    // A cancelled exception is a deleted occurrence: emit it as EXDATE in the master's own DTSTART
+    // A canceled exception is a deleted occurrence: emit it as EXDATE in the master's own DTSTART
     // form — the shape every client round-trips — never as a STATUS:CANCELLED override VEVENT,
     // which Thunderbird omits from its next PUT (the full-replace exception prune would then
     // resurrect the deleted occurrence).

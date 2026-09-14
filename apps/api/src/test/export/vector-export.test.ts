@@ -17,7 +17,7 @@ import { authedRequest, driveGet, drivePost, getTestContext, TEST_PNG_BYTES } fr
 // Response contract of GET /drive/:ownerId/:mountId/file/:pathId/export/:format for
 // eigenvector: the svg download inlines fonts + media as the drawing's own SVG, the pdf
 // download is the same SVG on a white page rendered by WeasyPrint, and both share the
-// route's content-type / filename / error behaviour with the other document types.
+// route's content-type / filename / error behavior with the other document types.
 
 const mountId = 'default';
 let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -196,7 +196,7 @@ describe('Eigenvector export — the .svg download is XML', () => {
     test('void tags and entities in a rich-text box come out as well-formed XML', async () => {
         // A .svg file is parsed by an XML parser (browser, Inkscape, librsvg), where an unclosed <br>
         // or a bare &nbsp; is a FATAL error: the whole drawing renders as nothing. LightEditor writes
-        // both, so the SVG arm must serialise the foreignObject body as XHTML.
+        // both, so the SVG arm must serialize the foreignObject body as XHTML.
         const created = await seedVector('XML Text', false);
         const home = await getHome(ctx.alice.user.id);
         const collab = await home.drive.getCollabDocument(mountId, created.id);

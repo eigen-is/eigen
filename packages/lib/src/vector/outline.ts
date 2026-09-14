@@ -23,7 +23,7 @@ const ADAPTIVE_RADIUS = 32;
 const ELLIPSE_SEED = 0.707;
 
 // The `round` corner radius: the shape's INRADIUS — the largest radius that keeps the silhouette
-// recognisable, degenerating exactly to the inscribed circle (or a pill, for a rect with w ≠ h).
+// recognizable, degenerating exactly to the inscribed circle (or a pill, for a rect with w ≠ h).
 //   rect:    min(w, h) / 2
 //   diamond: (w·h) / (2·√(w² + h²))          [= a·b/√(a²+b²) with a = w/2, b = h/2]
 function roundRadius(box: OutlineBox, kind: 'rectangle' | 'diamond'): number {
@@ -46,8 +46,8 @@ function rectCore(box: OutlineBox, radius: number): Point[] {
 }
 
 // The inset core of a rounded diamond: a SIMILAR diamond scaled by k = 1 − radius / inradius, because
-// offsetting every edge inward by `radius` scales the distance-from-centre-to-edge (= the inradius)
-// by that factor. k = 0 ⇒ the core is the centre point ⇒ the shape is the inscribed circle.
+// offsetting every edge inward by `radius` scales the distance-from-center-to-edge (= the inradius)
+// by that factor. k = 0 ⇒ the core is the center point ⇒ the shape is the inscribed circle.
 function diamondCore(box: OutlineBox, radius: number): Point[] {
     const a = box.width / 2;
     const b = box.height / 2;
@@ -328,8 +328,8 @@ function ellipseEdgeDistance(shape: { cx: number; cy: number; rx: number; ry: nu
     if (a === 0 || b === 0) {
         return distanceToSegment(p, { x: shape.cx - a, y: shape.cy - b }, { x: shape.cx + a, y: shape.cy + b });
     }
-    // The iteration divides by |q|, which is 0 at the exact centre (Excalidraw returns NaN there). The
-    // nearest edge point from the centre is the semi-minor axis.
+    // The iteration divides by |q|, which is 0 at the exact center (Excalidraw returns NaN there). The
+    // nearest edge point from the center is the semi-minor axis.
     if (px === 0 && py === 0) return Math.min(a, b);
     let tx = ELLIPSE_SEED;
     let ty = ELLIPSE_SEED;

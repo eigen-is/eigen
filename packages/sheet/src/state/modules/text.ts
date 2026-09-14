@@ -26,7 +26,7 @@ type MeasureTextMetrics = {
 };
 
 // Inline-string run produced from `Cell['ct'].s` by the inline-cell branch below.
-// Carries the resolved fontset string for the run, the colour/decoration values
+// Carries the resolved fontset string for the run, the color/decoration values
 // normalized to non-null defaults, and the lazily-computed measureText cache for
 // the run text (filled by the wrap pass).
 type InlineRun = {

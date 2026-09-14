@@ -36,11 +36,11 @@ export function isOutOfRangeRecurrenceStart(startTime: Date): boolean {
     return !(t >= MIN_RECURRENCE_START && t <= MAX_RECURRENCE_START);
 }
 
-// Hard ceiling on occurrences materialised per expansion — defence in depth beneath the sub-daily
+// Hard ceiling on occurrences materialised per expansion — defense in depth beneath the sub-daily
 // reject and the window clamp. Far larger than any real calendar view so it never clips a legit series.
 export const MAX_OCCURRENCES = 10000;
 
-// Widest window the range reads honour. The calendar FE only ever asks for a month/week and CalDAV
+// Widest window the range reads honor. The calendar FE only ever asks for a month/week and CalDAV
 // initial-sync windows are far narrower, so 5 years is generous headroom while bounding rrule's
 // iteration and stopping the `event-range/0/253402300799` (year-9999) span from the audit.
 const MAX_RANGE_SPAN_MS = 5 * 366 * 24 * 60 * 60 * 1000;

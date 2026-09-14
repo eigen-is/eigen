@@ -321,7 +321,7 @@ export const STROKE_WIDTH_OPTIONS: { value: string; label: string }[] = [
     { value: '4', label: 'Bold' },
 ];
 
-// The ONE labelling of the Roundness vocabulary, consumed by the panel's Edges row for boxes and
+// The ONE labeling of the Roundness vocabulary, consumed by the panel's Edges row for boxes and
 // lines and by the arrow section (where an elbow's roundness means its corner style).
 export const EDGES_OPTIONS: { value: Roundness; label: string }[] = [
     { value: 'sharp', label: 'Sharp' },

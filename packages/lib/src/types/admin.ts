@@ -11,7 +11,7 @@ export type AdminUserRow = {
     name: string;
     email: string;
     memberId: string | null; // member-table row id — the role mutation needs it; null = orphan
-    role: 'owner' | 'admin' | 'member' | null; // org role; null = orphan (no organisation)
+    role: 'owner' | 'admin' | 'member' | null; // org role; null = orphan (no organization)
     createdAt: Date;
     lastActiveAt: Date | null; // max(lastLoginAt, MAX(session.updatedAt)); null = pre-migration, never seen
     teams: string[]; // team names

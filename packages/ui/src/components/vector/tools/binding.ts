@@ -36,7 +36,7 @@ import {
 
 // Is `point` inside the shape's own outline grown by `pad` (shrunk, for a negative pad)? The kind owns
 // the curve, so a rounded corner binds where it is drawn rather than out at the sharp box. The outline
-// lives in the shape's unrotated frame, so the query point is unrotated about the centre to match.
+// lives in the shape's unrotated frame, so the query point is unrotated about the center to match.
 function insideShape(shape: VectorBindableElement, point: Point, pad: number): boolean {
     const local = rotatePoint(point, boxCenter(shape), -shape.angle);
     return outlineContains(ELEMENT_KINDS[shape.type].outline(shape, pad), local);
@@ -74,7 +74,7 @@ export function bindingCandidate(
 }
 
 // The shape-following highlight over a bindable target: the kind's OWN outline — the one the dock is
-// resolved against — stroked in the selection colour, rotated about the shape's centre the way every
+// resolved against — stroked in the selection color, rotated about the shape's center the way every
 // caller of `outline()` rotates. Drawn from the outline rather than by re-rendering the element, so a
 // rich text box or an image is traced without its words or its pixels being painted a second time.
 // `currentColor` lets the caller tint it via a `text-selection-handle` group; the width ÷ zoom keeps it
@@ -121,12 +121,12 @@ function bindingFor(
     const shape = bindingCandidate(ordered, scene, zoom, suppressed);
     if (!shape) return '';
     // Straight arrows aim the stored ratio through a natural line — project the raw endpoint onto the shape's
-    // diagonals / centre lines (or snap to a side midpoint), Excalidraw's bind-time nicety that makes fresh
+    // diagonals / center lines (or snap to a side midpoint), Excalidraw's bind-time nicety that makes fresh
     // arrows point through the middle rather than at wherever the cursor landed. But that projection is the
     // "orbit" strategy — it applies ONLY when the endpoint lands OUTSIDE the shape's fill. A drop INSIDE the
     // fill is the "inside" strategy and stores the RAW cursor ratio verbatim (Excalidraw's getBindingStrategy*
     // → calculateFixedPointForNonElbowArrowBinding, gated on isPointInElement). Re-projecting an inside drop
-    // would fling the anchor off the release point onto the diagonal, toward the centre.
+    // would fling the anchor off the release point onto the diagonal, toward the center.
     // Elbow arrows keep the raw anchor too (their outline dock is resolved separately, never a diagonal).
     const focus =
         arrow.elbow || pointInsideShape(shape, scene)

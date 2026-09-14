@@ -36,7 +36,7 @@ export const rectangleKind = defineKind<VectorRectangleElement>({
     hitTest: (el, point) => hitTestBox(el, point),
     outline: (el, inflate) =>
         rectOutline({ x: el.x, y: el.y, width: el.width, height: el.height }, cornerRadius(el, 'rectangle'), inflate),
-    // The rectangle is Excalidraw's one exception to the centre-line default: a straight arrow's bind-time
+    // The rectangle is Excalidraw's one exception to the center-line default: a straight arrow's bind-time
     // aim projects onto its two corner diagonals, pulled in by DIAGONAL_SHRINK at both ends.
     aimLines: (el) => {
         const center = boxCenter(el);

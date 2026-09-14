@@ -13,7 +13,7 @@ import { Window } from 'happy-dom';
 import { buildSelectionData } from '../../../../components/vector/tools/clipboard';
 
 // The rich-text sanitizer parses with DOMParser and builds through document.createElement, so the
-// svg-flavour test below needs a DOM at module scope (the element-layer tests' recipe).
+// svg-flavor test below needs a DOM at module scope (the element-layer tests' recipe).
 const window = new Window();
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
 const g = globalThis as any;
@@ -87,7 +87,7 @@ const mediaPath = {
 describe('buildSelectionData', () => {
     test('the selection round-trips losslessly through the elements item', () => {
         // Whole stored records ride the wire, so every field of every kind comes back — including the
-        // rich-text colour and the arrow's bindings, which the paste remaps across the pasted set.
+        // rich-text color and the arrow's bindings, which the paste remaps across the pasted set.
         const selection = [rect('r1', 'a0'), richtext('t1', 'a1'), elbowArrow('a1', 'a2')];
         const { data } = buildSelectionData(selection, ['r1', 't1', 'a1'], meta, '', () => undefined);
         const read = readElementsClipboardItem(data.items);
@@ -116,7 +116,7 @@ describe('buildSelectionData', () => {
         expect(data.items.some((i) => i.type === 'text')).toBe(true);
         const text = data.items.find((i) => i.type === 'text');
         expect(text?.text).toBe('hello');
-        // The FULL modelled set: dropping bold/italic/underline/spacing here is how they stopped
+        // The FULL modeled set: dropping bold/italic/underline/spacing here is how they stopped
         // surviving a copy into docs.
         expect(text?.typography).toEqual({
             fontFamily: 'Excalifont',

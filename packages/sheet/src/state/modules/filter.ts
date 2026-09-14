@@ -116,7 +116,7 @@ export function getFilterButtonAtPosition(ctx: Context, x: number, y: number) {
     if (options == null) return undefined;
     if (y < options.top || y >= options.top + FILTER_BUTTON_HEIGHT) return undefined;
     // Last match, not first: a column narrower than the button (the resize floor is 10px, the
-    // button is 20) overlaps its neighbour, and the draw loop leaves the later one on top.
+    // button is 20) overlaps its neighbor, and the draw loop leaves the later one on top.
     return options.items.findLast((item) => x >= item.left && x < item.left + FILTER_BUTTON_WIDTH);
 }
 

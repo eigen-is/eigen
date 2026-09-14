@@ -238,7 +238,7 @@ export class UploadQueue {
 
     // PUT one staged copy to its storage key. Re-checks the row immediately before the PUT so a
     // cancel/restore/supersede that landed since dequeue aborts it. On success: clear the row iff
-    // still ours, delete the staged copy, and — if the row was cancelled mid-PUT — delete the object
+    // still ours, delete the staged copy, and — if the row was canceled mid-PUT — delete the object
     // the PUT just resurrected. On failure: back off and leave both for a later retry. Never throws.
     private async performUpload(
         storageKey: string,
@@ -252,13 +252,13 @@ export class UploadQueue {
         const stagingPath = this.resolveStagingPath(storedStaging);
         const current = this.getPendingStagingPath(storageKey);
         if (current !== stagingPath) {
-            // superseded by a newer enqueue, or cancelled — our staged copy is no longer current
+            // superseded by a newer enqueue, or canceled — our staged copy is no longer current
             await bestEffortUnlink(stagingPath);
             return;
         }
         const file = Bun.file(stagingPath);
         if (!(await file.exists())) {
-            // staged copy vanished mid-flight (cancelled, or superseded before inFlight was set);
+            // staged copy vanished mid-flight (canceled, or superseded before inFlight was set);
             // the keyed delete only drops a row still pointing at this staging
             if (!this.closing) this.deletePendingRow(storageKey, storedStaging);
             return;
@@ -330,10 +330,10 @@ export class UploadQueue {
         const stillCurrent = after === stagingPath;
 
         if (putOk && after === null) {
-            // The row was CANCELLED (permanent delete / chat restore) while our PUT was in flight, so
+            // The row was CANCELED (permanent delete / chat restore) while our PUT was in flight, so
             // the PUT just resurrected a deleted object. Delete it (invariant 7). The key is a dead
             // UUID — never reused — so this can't clobber a fresh object. (A row that merely changed
-            // stagingPath was superseded, not cancelled: leave it, the newer staging overwrites it.)
+            // stagingPath was superseded, not canceled: leave it, the newer staging overwrites it.)
             await this.storage.delete(storageKey).catch(() => {});
         }
         if (!putOk && stillCurrent) {

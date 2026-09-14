@@ -49,7 +49,7 @@ const OPTION_LABEL: Record<string, string> = {
 };
 
 // Cell value handed to validateCellData by callers. Canvas passes the
-// formatted/raw cell value (`Cell['v']` flavour) and `updateCell` in cell.ts
+// formatted/raw cell value (`Cell['v']` flavor) and `updateCell` in cell.ts
 // passes the user-typed innerText.
 type CellValueForValidation = string | number | boolean | null | undefined;
 
@@ -345,7 +345,7 @@ export function isCheckboxChecked(item: DataVerificationRule, cellValue: CellVal
 }
 
 // `horizonAlign`/`verticalAlign` are the normalized ht/vt attrs
-// (ht 0 centre / 1 left / 2 right, vt 0 middle / 1 top / 2 bottom); an empty
+// (ht 0 center / 1 left / 2 right, vt 0 middle / 1 top / 2 bottom); an empty
 // cell yields NaN, which lands on the same left/middle default the painter uses.
 export function checkboxRect(box: Rect, horizonAlign: number, verticalAlign: number): CellGlyphRect {
     let x = box.left + CHECKBOX_PADDING;
@@ -365,7 +365,7 @@ export function checkboxRect(box: Rect, horizonAlign: number, verticalAlign: num
     return { x, y, size: CHECKBOX_SIZE };
 }
 
-// The rule that governs one cell on the current sheet, modelled on the sibling
+// The rule that governs one cell on the current sheet, modeled on the sibling
 // getCellHyperlink (modules/hyperlink.ts) — the same lookup was written inline at
 // every callsite, most of them casting the sheet index past its not-found case.
 export function getCellDataVerification(ctx: Context, r: number, c: number) {
@@ -422,7 +422,7 @@ export const DROPDOWN_CHEVRON_HIT_WIDTH = 20;
 const DROPDOWN_CHEVRON_MIN_WIDTH = DROPDOWN_CHEVRON_SIZE * 2 + DROPDOWN_CHEVRON_PADDING;
 
 // The one geometry the painter (render/cells.ts) and the mousedown hit-test
-// share. Right-aligned and vertically centred whatever the cell's alignment —
+// share. Right-aligned and vertically centered whatever the cell's alignment —
 // the chevron marks the cell, it is not part of its content.
 export function dropdownChevronRect(box: Rect): CellGlyphRect | undefined {
     if (box.width < DROPDOWN_CHEVRON_MIN_WIDTH) return undefined;

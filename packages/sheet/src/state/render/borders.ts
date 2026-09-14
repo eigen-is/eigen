@@ -115,11 +115,11 @@ export function drawCellBorders(pass: RenderPass) {
             renderBorder(bdInfo.l.style, bdInfo.l.color, 'v', leftX, topY - 1, leftX, bottomY);
         }
 
-        // Two neighbours can each declare the shared edge (A1.r vs B1.l) with different styles —
+        // Two neighbors can each declare the shared edge (A1.r vs B1.l) with different styles —
         // common after xlsx import. Both paint the same pixel line, so the last stroke wins, and
         // forEachInRect's walk mode (row-major vs key order) flips which is last as the viewport
         // changes — the edge changes color on zoom. Deterministic rule: the higher-index
-        // neighbour's facing side wins, so skip this cell's right/bottom when the neighbour past
+        // neighbor's facing side wins, so skip this cell's right/bottom when the neighbor past
         // it declares its opposite (its left/top).
         if (
             bdInfo.r &&

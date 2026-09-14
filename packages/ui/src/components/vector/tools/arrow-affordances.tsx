@@ -2,7 +2,7 @@
 // (the snap dots and the straight-arrow focus point). Pulled out of canvas-editor.tsx and use-drawing-tools
 // (the canvas only dispatches; this unit owns its own render) so neither file grows. All geometry is SCENE
 // space — the group scales by zoom, so screen-constant sizes divide by zoom and stroke widths ride
-// `vectorEffect="non-scaling-stroke"`, exactly as SnapGuides does. Colours are ours (the selection-handle
+// `vectorEffect="non-scaling-stroke"`, exactly as SnapGuides does. Colors are ours (the selection-handle
 // accent), the geometry/sizes are Excalidraw's (interactiveScene.ts).
 
 import {
@@ -232,7 +232,7 @@ export function FocusPointHandles({
         startHandleDrag(e, {
             move: (me) => {
                 const scene = clientToScene(me.clientX, me.clientY);
-                // Eigen extension: magnet the aim onto the shape's snap points (side midpoints + centre),
+                // Eigen extension: magnet the aim onto the shape's snap points (side midpoints + center),
                 // unless Ctrl/Cmd suppresses it — consistent with every other bind/snap here. The raw pointer
                 // is still handed up so the host lights the SnapDots (the nearest side-midpoint highlights).
                 const suppressed = me.ctrlKey || me.metaKey;

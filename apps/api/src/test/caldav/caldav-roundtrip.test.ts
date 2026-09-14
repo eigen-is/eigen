@@ -260,7 +260,7 @@ describe('CalDAV round-trip fidelity', () => {
             expect(dtstart.toJSDate().toISOString()).toBe('2026-04-08T14:00:00.000Z');
         });
 
-        // Audit #C, TZID flavour: the rid must be in the MASTER's timezone form even though the
+        // Audit #C, TZID flavor: the rid must be in the MASTER's timezone form even though the
         // stored exception row may carry a different (or legacy null) timezone.
         test('moved override of a TZID series echoes the rid in the master timezone', async () => {
             const body = vcal(
@@ -290,7 +290,7 @@ describe('CalDAV round-trip fidelity', () => {
         });
 
         // Audit #D: syncExceptionEvents must treat a PUT as a full-resource replace. Apple models
-        // "undo delete occurrence" as a re-PUT without the EXDATE; the stale cancelled exception
+        // "undo delete occurrence" as a re-PUT without the EXDATE; the stale canceled exception
         // row would otherwise keep the occurrence hidden forever.
         test('removing an EXDATE on re-PUT restores the occurrence (Apple undo)', async () => {
             const master = (exdate: boolean) =>
@@ -321,7 +321,7 @@ describe('CalDAV round-trip fidelity', () => {
                 (o) => o.uid === 'rt-undo@eigen',
             );
             expect(occs.map((o) => new Date(o.startTime).toISOString())).toContain('2026-04-15T10:00:00.000Z');
-            // and the restore sticks on the next GET (no stale cancelled override re-taught)
+            // and the restore sticks on the next GET (no stale canceled override re-taught)
             const ics = await getIcs('rt-undo.ics');
             expect(ics).not.toContain('STATUS:CANCELLED');
         });
@@ -366,7 +366,7 @@ describe('CalDAV round-trip fidelity', () => {
 
             const calendar = (await getHome(userId)).calendar;
             const masterRow = calendar.getEventByUri(calendarId, 'rt-lone.ics')!;
-            // Both rows survive: the override (updated by the PUT) and the cancelled EXDATE row.
+            // Both rows survive: the override (updated by the PUT) and the canceled EXDATE row.
             expect(calendar.getExceptionsForParent(masterRow.id)).toHaveLength(2);
         });
 

@@ -39,7 +39,7 @@ export function getBackgroundStyle(
 
 // The same fill as CSS declarations, for the serializers that build a style STRING (the rich-text layer
 // body, shared verbatim by the live canvas, the SVG foreignObject and the print compositor). Derived
-// from getBackgroundStyle so the gradient/colour syntax has one owner.
+// from getBackgroundStyle so the gradient/color syntax has one owner.
 export function backgroundCss(
     fill: BackgroundFill | null | undefined,
     resolveMediaUrl?: (mediaName: string) => string | null,

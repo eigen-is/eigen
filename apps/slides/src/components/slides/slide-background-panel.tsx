@@ -36,7 +36,7 @@ export function SlideBackgroundPanel({
     const [pickerOpen, setPickerOpen] = useState(false);
 
     // Editing paints THIS slide; the Apply button re-sends the current paint at the chosen scope, so
-    // "all slides" is an explicit act rather than something a colour drag does to the whole deck.
+    // "all slides" is an explicit act rather than something a color drag does to the whole deck.
     const write = useCallback(
         (next: BackgroundFill | null, scope: ApplyTo) => {
             const value = serializeBackgroundFill(next);

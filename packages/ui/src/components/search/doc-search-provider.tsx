@@ -48,7 +48,7 @@ export type DocSearchProviderProps = {
     onOpenChange?: (open: boolean) => void;
     // The surface's own undo/redo, routed out of the bar's inputs (⌘Z / ⇧⌘Z) so Replace stays
     // undoable without leaving the bar. Passed straight to FindReplaceBar; omitted by search-only
-    // surfaces (slides/stickies), where the default keeps native behaviour.
+    // surfaces (slides/stickies), where the default keeps native behavior.
     onUndo?: () => void;
     onRedo?: () => void;
 };
@@ -182,7 +182,7 @@ export function DocSearchProvider({
     // search so n of m stays live. Clamp the index; do NOT reveal (don't yank the user's scroll).
     // Throttle, not debounce: slides/stickies republish per Yjs transaction, so a sustained remote
     // edit stream would reset a trailing debounce forever and freeze the session (the F1 shape). A
-    // scheduled tick is never cancelled by the next republish — it reads the live controllerRef.
+    // scheduled tick is never canceled by the next republish — it reads the live controllerRef.
     const republishTickRef = useRef<ReturnType<typeof setTimeout>>(undefined);
     useEffect(() => {
         void controller;

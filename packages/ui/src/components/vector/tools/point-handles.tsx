@@ -95,7 +95,7 @@ export function LinePointHandles({
             },
             end: () => {
                 setDrag(null);
-                // A midpoint click that never travelled leaves `latest` null → nothing is inserted.
+                // A midpoint click that never traveled leaves `latest` null → nothing is inserted.
                 if (latest) {
                     onCommit(latest, index);
                     // Leave the dragged vertex selected on release (a midpoint drag selects the vertex it
@@ -115,7 +115,7 @@ export function LinePointHandles({
     // stored points. Midpoint dots are hidden mid-drag so they never sit on a stale segment.
     const vertices = drag ? drag.base : points;
 
-    // Position a dot centred on a local point, in the host's screen frame — its 22px hit area / 20px hover
+    // Position a dot centered on a local point, in the host's screen frame — its 22px hit area / 20px hover
     // halo / dot size all come from the .eigen-*-handle CSS token, so the JSX only places it.
     const dotStyle = (local: Point): React.CSSProperties => {
         const scene = linearLocalToScene(line, local);
@@ -125,9 +125,9 @@ export function LinePointHandles({
 
     // The vertex position a dot renders at (its live drag position for the grabbed one).
     const vertexLocal = (i: number, p: Point) => (drag?.index === i ? drag.local : p);
-    // Overlap merge: a vertex within OVERLAP_MERGE_SCREEN_PX of a HIGHER-index neighbour is hidden
-    // into it, and that neighbour draws doubled — so coincident points read as one dot and a click resolves
-    // to the higher (top-most) index. Suppressed mid-drag, where the grabbed vertex has left its neighbours.
+    // Overlap merge: a vertex within OVERLAP_MERGE_SCREEN_PX of a HIGHER-index neighbor is hidden
+    // into it, and that neighbor draws doubled — so coincident points read as one dot and a click resolves
+    // to the higher (top-most) index. Suppressed mid-drag, where the grabbed vertex has left its neighbors.
     const mergeGap = OVERLAP_MERGE_SCREEN_PX / zoom;
     const hiddenVertex = (i: number): boolean =>
         !drag &&
@@ -165,7 +165,7 @@ export function LinePointHandles({
                     // Hide the midpoint dot on a segment too short to be worth one — screen length.
                     if (Math.hypot(next.x - p.x, next.y - p.y) * zoom < MIDPOINT_MIN_SEGMENT_SCREEN_PX) return null;
                     const mid = { x: (p.x + next.x) / 2, y: (p.y + next.y) / 2 };
-                    // The vertex this dot would insert, at index i+1 between its two neighbours.
+                    // The vertex this dot would insert, at index i+1 between its two neighbors.
                     const base = [...points.slice(0, i + 1), mid, ...points.slice(i + 1)];
                     return (
                         <div

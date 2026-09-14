@@ -180,7 +180,7 @@ const TEXT_ALIGNS = new Set(['left', 'center', 'right', 'justify']);
 const PANEL_INTRUSION_PX = PROPERTIES_PANEL_WIDTH_PX - 16;
 // Only the text column has to stay clear of the panel; the page's right margin may tuck under it.
 const TEXT_COLUMN_RIGHT_PX = A4_WIDTH_PX - PAGE_MARGIN_PX;
-// Above this the panel clears the centred page outright: every value below is pinned, so stop storing width.
+// Above this the panel clears the centered page outright: every value below is pinned, so stop storing width.
 const PANEL_CLEAR_WIDTH_PX = 2 * (TEXT_COLUMN_RIGHT_PX + PANEL_INTRUSION_PX) - A4_WIDTH_PX;
 
 export const CollaborativeEditor = ({
@@ -477,12 +477,12 @@ const TiptapEditor = ({
                         // which is what a canvas text copy writes, and PM fallthrough there would paste
                         // nothing. A rich-HTML producer (sheets tables) is left to PM so its <table>
                         // parses as a real docs table. A canvas TEXT-ONLY copy reaches this rung at all
-                        // only because the producer omits the svg flavour for it (see CLIPBOARD.md);
+                        // only because the producer omits the svg flavor for it (see CLIPBOARD.md);
                         // anything with a shape or an image lands as a figure at the svg rung above.
                         //
                         // Claimed only when there is an item this editor can actually place, the way
                         // sheets' rung guards: a big canvas selection can ride as its `elements` item
-                        // alone (the svg flavour is capped), and preventDefault on that would make ⌘V a
+                        // alone (the svg flavor is capped), and preventDefault on that would make ⌘V a
                         // dead key.
                         const hasImage = paste.eigen.items.some((i) => i.type === 'image');
                         const hasText = paste.eigen.items.some(
@@ -812,7 +812,7 @@ const TiptapEditor = ({
 
     const showSidebar = !isMobile && (panel !== null || (canWrite && sidebarContext !== 'document'));
 
-    // Slide the centred page left by its overlap with the panel; only shrink once the slack runs out.
+    // Slide the centered page left by its overlap with the panel; only shrink once the slack runs out.
     const centredSlack = Math.max(0, (containerWidth - A4_WIDTH_PX) / 2);
     const panelLeft = containerWidth - PANEL_INTRUSION_PX;
     const panelOverlap = showSidebar ? Math.max(0, centredSlack + TEXT_COLUMN_RIGHT_PX - panelLeft) : 0;

@@ -1290,7 +1290,7 @@ export class Calendar {
         return `${year}-${pad(month)}-${pad(day)}`;
     }
 
-    // Inbound iMIP: an external organizer cancelled ONE occurrence of a recurring invite. Cancel just
+    // Inbound iMIP: an external organizer canceled ONE occurrence of a recurring invite. Cancel just
     // that instance — removeInvitation would delete the attendee's entire linked series.
     public cancelInvitationOccurrence(
         orgEventId: string,
@@ -1304,7 +1304,7 @@ export class Calendar {
         const key = this.recurrenceKeyForSeries(recurrenceDate, recurrenceInstant, linked.timezone);
         // RFC 5546 replay guard, mirroring receiveInvitationException: a stale redelivered CANCEL must
         // not re-cancel an occurrence a newer REQUEST re-instated. Strictly `<` (not `<=`) — clients
-        // may cancel without bumping SEQUENCE, and re-cancelling a cancelled row is idempotent.
+        // may cancel without bumping SEQUENCE, and re-canceling a canceled row is idempotent.
         const existing = this.getException(linked.id, key);
         if (existing && sequence < existing.sequence) return;
         this.removeOccurrence(linked.id, key, sequence);
@@ -1322,7 +1322,7 @@ export class Calendar {
         this.home.notifications?.persist({
             type: 'calendar-invite-cancelled',
             actorEmail: organizer?.email,
-            title: `${actorDisplayName(organizer?.name, organizer?.email)} cancelled an invitation`,
+            title: `${actorDisplayName(organizer?.name, organizer?.email)} canceled an invitation`,
             body: linked.title,
             tag: `calendar-invite:${orgEventId}:${linked.startTime.getTime()}`,
         });

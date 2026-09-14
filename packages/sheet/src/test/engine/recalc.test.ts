@@ -60,7 +60,7 @@ describe('engine/recalc — recalcSheets', () => {
         // isFunctionRange rather than the naive tokenizer (audit Risk 8). INDEX
         // over literals resolves through the range read. (Note: a plain range
         // arg registers no ORDERING dependency — that is the state layer's own
-        // behaviour, faithfully preserved: only single-quoted range endpoints do.)
+        // behavior, faithfully preserved: only single-quoted range endpoints do.)
         const sheets = [sheet('s1', 'Sheet1', [[num(10), num(20), formula('=INDEX(A1:B1,1,2)')]])];
         const out = recalcSheets(sheets);
         expect(out[0].data![0][2]?.v).toBe(20);

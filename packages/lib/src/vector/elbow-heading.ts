@@ -77,7 +77,7 @@ export function aabbForElement(shape: VectorBindableElement, offset?: B4): B4 {
 }
 
 // The heading a bound endpoint leaves its shape by (Excalidraw's getHeadingForElbowArrowSnap): far from the
-// shape it points from the shape centre to the endpoint; close to it, the search-cone / diamond-sector test
+// shape it points from the shape center to the endpoint; close to it, the search-cone / diamond-sector test
 // picks the side. `origPoint` (the stored, pre-dock endpoint) gates the distance; `p` (the rest endpoint)
 // and `aabb` drive the cone. An unbound end has no shape → it just points at the other endpoint.
 export function getHeadingForElbowArrowSnap(
@@ -109,7 +109,7 @@ export function distanceToElement(shape: VectorBindableElement, p: Point): numbe
     return outlineDistance(ELEMENT_KINDS[shape.type].outline(shape, 0), rp);
 }
 
-// Heading from the ×2 search cones around the shape's (inflated) AABB centre — a wide shape gets wider
+// Heading from the ×2 search cones around the shape's (inflated) AABB center — a wide shape gets wider
 // UP/DOWN cones. Diamonds use vertex sectors instead. Excalidraw's headingForPointFromElement.
 function headingForPointFromElement(shape: VectorBindableElement, aabb: B4, p: Point): Heading {
     if (capabilitiesOf(shape).silhouette === 'diamond') {
@@ -200,7 +200,7 @@ function triangleIncludesPoint(a: Point, b: Point, c: Point, p: Point): boolean 
 // (fixedPoint = the stored anchor); boundEndpoint then reproduces the same dock at rest via elbowAnchorScene.
 
 // Below this w/h a shape has no interior to anchor a proportional point into — bind to the (0.5-dodged)
-// centre so the arrow stays put on a later resize. Excalidraw's MIN_BINDABLE_SIZE.
+// center so the arrow stays put on a later resize. Excalidraw's MIN_BINDABLE_SIZE.
 const MIN_BINDABLE_SIZE = 1;
 // The elbow base gap, used only for the axis-swap intersection fallback (Excalidraw's BASE_BINDING_GAP_ELBOW).
 const BASE_BINDING_GAP_ELBOW = 5;
@@ -267,7 +267,7 @@ function elbowDock(shape: VectorBindableElement, point: Point): Point {
     return intersection;
 }
 
-// One axis of the dock intersection: a ray from the shape centre (on the chosen axis line through `resolved`)
+// One axis of the dock intersection: a ray from the shape center (on the chosen axis line through `resolved`)
 // outward through `resolved`, crossing the outline+gap. `isHorizontal` picks the ray's free axis exactly as
 // Excalidraw does. Null when the ray is degenerate or misses.
 function dockIntersection(
@@ -315,7 +315,7 @@ function avoidRectangularCorner(shape: VectorBindableElement, p: Point, gap: num
 
 // Excalidraw's snapToMid: within an adaptive band of a side (or a diamond vertex) the dock snaps to that
 // side/vertex midpoint, so an endpoint dragged near the middle of an edge locks to it. The band is
-// clamp(5%·size, 5, 80). The centre carries Excalidraw's −0.1 tie-break nudge. Null = no snap (caller keeps
+// clamp(5%·size, 5, 80). The center carries Excalidraw's −0.1 tie-break nudge. Null = no snap (caller keeps
 // the raw point).
 function snapToMid(shape: VectorBindableElement, p: Point, tolerance: number, gap: number): Point | null {
     const { x, y, width: w, height: h } = shape;
@@ -325,7 +325,7 @@ function snapToMid(shape: VectorBindableElement, p: Point, tolerance: number, ga
     const vThresh = clamp(tolerance * h, 5, 80);
     const hThresh = clamp(tolerance * w, 5, 80);
     const rot = (q: Point): Point => rotatePoint(q, center, shape.angle);
-    // Too close to the centre makes the direction ambiguous.
+    // Too close to the center makes the direction ambiguous.
     if (Math.hypot(center.x - np.x, center.y - np.y) < gap) return null;
     if (np.x <= x + w / 2 && np.y > center.y - vThresh && np.y < center.y + vThresh)
         return rot({ x: x - gap, y: center.y });

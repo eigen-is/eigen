@@ -39,7 +39,7 @@ const QUALITY_RANK: Record<NonNullable<ReturnType<typeof structuralMatchQuality>
 //   4. Files              — search results
 //   5. Mail               — search results
 //   6. Contacts           — search results
-//   7. Help               — help-centre articles (client-side Pagefind)
+//   7. Help               — help-center articles (client-side Pagefind)
 //   8. Actions            — catalog commands ("Go to Mail", "New doc", …)
 //
 // Catalog actions live at the bottom because they're the least time-sensitive — the

@@ -45,7 +45,7 @@ export function baseElement(
 }
 
 // What a builder supplies on top of the kind's defaults: its box, plus whatever it overrides. `id` and
-// `type` are the factory's own, so a caller cannot make an element the registry would not recognise.
+// `type` are the factory's own, so a caller cannot make an element the registry would not recognize.
 type ElementFields<T extends VectorElement> = Omit<Partial<T>, 'id' | 'type'> & Box;
 
 // The two kinds both demos write, built the way the editor's own addElement builds them: shared base,

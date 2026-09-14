@@ -7,7 +7,7 @@ type FileDropOverlayProps = {
     visible: boolean;
     label: string;
     icon?: LucideIcon;
-    // Extra classes on the overlay itself — the canvas passes its paper pin so the primary-coloured
+    // Extra classes on the overlay itself — the canvas passes its paper pin so the primary-colored
     // treatment reads against the page it covers, not the app theme around it.
     className?: string;
 };

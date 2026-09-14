@@ -1,5 +1,5 @@
 // One scene element as its own memoized, absolutely positioned layer: a div carrying the element's
-// box (a transform to its origin + rotate about the box centre, which is CSS's default
+// box (a transform to its origin + rotate about the box center, which is CSS's default
 // transform-origin) holding the kind's body as layerInnerHtml writes it. The SAME lib render path
 // previews, embeds, export and the print compositor use — elementLayer is the one definition of where
 // an element goes and what it draws.

@@ -188,7 +188,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
                 new Date(params.to * 1000),
             );
             if (permission === 'free-busy') {
-                // Exclude cancelled events: their existence + time must not leak into another
+                // Exclude canceled events: their existence + time must not leak into another
                 // user's free/busy view, and excluding them makes the status cast below valid.
                 return events
                     .filter((e) => e.status !== 'cancelled')

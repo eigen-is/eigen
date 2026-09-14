@@ -82,7 +82,7 @@ export function expandRecurrence(event: CalendarEvent, rangeStart: Date, rangeEn
 
     const durationMs = event.endTime.getTime() - event.startTime.getTime();
 
-    // Defence in depth: only a legacy stored row can still hold a sub-daily rrule or an out-of-range
+    // Defense in depth: only a legacy stored row can still hold a sub-daily rrule or an out-of-range
     // dtstart (the write and ICS boundaries now reject/strip them). Never feed one to rrule.between —
     // it would iterate to the window and hang. Surface just the base occurrence if it falls in the
     // window (treat as a single event, matching the ingest-time degrade).

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 // The async-confirm lifecycle shared by every dialog whose primary action awaits a mutation: disable
-// the actions in-flight (no double-submit), close only after the callback fulfils, and stay open on
+// the actions in-flight (no double-submit), close only after the callback fulfills, and stay open on
 // rejection so the caller's error toast reads with the retry. `handleOpenChange` blocks every close
 // path (Escape/backdrop/X) while pending so the retry surface survives; opening is always allowed.
 export function useDialogPending(onOpenChange: (open: boolean) => void): {

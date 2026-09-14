@@ -64,7 +64,7 @@ export function setSearchHighlights(ctx: Context, cells: SearchHighlight[]) {
     if (cells.length === 0) ctx.searchActive = null;
 }
 
-// Centre the match in the viewport (amendment 11) so the floating find bar can't cover it. The
+// Center the match in the viewport (amendment 11) so the floating find bar can't cover it. The
 // native scroll surface clamps the request, so out-of-range coordinates from a stale id no-op
 // instead of throwing (contract rule 2).
 function centerCellInView(ctx: Context, r: number, c: number) {

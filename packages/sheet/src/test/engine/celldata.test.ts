@@ -33,7 +33,7 @@ describe('dataToCelldata', () => {
 
 describe('celldataToData', () => {
     test('empty celldata expands to a 1x1 null matrix', () => {
-        // Matches legacy behaviour from state/api/common.ts: maxBy returns
+        // Matches legacy behavior from state/api/common.ts: maxBy returns
         // undefined → bbox is 1x1, populated with null. Engine consumers
         // (rowcol, replay) expect a non-null matrix even for empty sheets.
         expect(celldataToData([])).toEqual([[null]]);

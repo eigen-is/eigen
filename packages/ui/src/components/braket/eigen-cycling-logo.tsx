@@ -11,8 +11,8 @@ type EigenCyclingLogoProps = {
 const CYCLE_MS = 2000;
 
 // Animated "eigen|app>" wordmark that cycles through every app. Matches the
-// topbar AppLogo colour split: "eigen" in the foreground, the bra-ket and app
-// name in the app's own colour. Size and spacing come from `className`.
+// topbar AppLogo color split: "eigen" in the foreground, the bra-ket and app
+// name in the app's own color. Size and spacing come from `className`.
 export function EigenCyclingLogo({ className }: EigenCyclingLogoProps) {
     const [appIndex, setAppIndex] = useState(0);
     const app = apps[appIndex];

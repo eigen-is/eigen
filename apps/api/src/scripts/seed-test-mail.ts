@@ -28,7 +28,7 @@ import { parseArgs } from 'node:util';
 import { PATHS, STANDARD_MAILBOXES } from '../lib/core/constants';
 import { buildMaildirFilename, createUniqueMessageId } from '../lib/mail/mailutils';
 
-// Data root: honour EIGEN_DATA_ROOT (as the server does), else the repo's ./data resolved from
+// Data root: honor EIGEN_DATA_ROOT (as the server does), else the repo's ./data resolved from
 // this file's location so the script works regardless of the cwd it's launched from.
 const DATA_ROOT = process.env['EIGEN_DATA_ROOT'] || path.resolve(import.meta.dir, '../../../../data');
 

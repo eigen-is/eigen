@@ -6,7 +6,7 @@ import { defineKind } from './kind';
 import { oneOf, str } from './read-fields';
 import { isBordered, renderRoughShape, svgId } from './render-utils';
 
-// The dashed grey box a picture with no resolvable file draws in its place.
+// The dashed gray box a picture with no resolvable file draws in its place.
 const MISSING_MEDIA_COLOR = '#9ca3af';
 const MISSING_MEDIA_DASH = '6 6';
 

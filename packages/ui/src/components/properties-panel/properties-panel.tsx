@@ -67,7 +67,7 @@ type PropertyRowProps = {
 };
 
 // One row grammar for every panel: a fixed label column and the control filling the rest, so number
-// inputs, selects, colour swatches and toggle groups all start on the same vertical line.
+// inputs, selects, color swatches and toggle groups all start on the same vertical line.
 export function PropertyRow({ label, children, className, compact }: PropertyRowProps) {
     return (
         <div className={cn('flex items-center gap-2', className)}>

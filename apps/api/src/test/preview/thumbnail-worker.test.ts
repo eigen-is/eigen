@@ -23,9 +23,9 @@ afterAll(() => {
     fs.rmSync(TMP_DIR, { recursive: true, force: true });
 });
 
-// A JPEG only exiftool can read: a real EXIF thumbnail in the given colour plus a truncated scan, so sharp's
+// A JPEG only exiftool can read: a real EXIF thumbnail in the given color plus a truncated scan, so sharp's
 // own decode fails and the worker falls through to the exiftool fallback — its only path that needs a file
-// on disk. The colour makes each conversion's output traceable back to its own input.
+// on disk. The color makes each conversion's output traceable back to its own input.
 async function thumbnailOnlyJpeg(name: string, background: { r: number; g: number; b: number }): Promise<Buffer> {
     fs.mkdirSync(TMP_DIR, { recursive: true });
     const thumbPath = path.join(TMP_DIR, `${name}-thumb.jpg`);

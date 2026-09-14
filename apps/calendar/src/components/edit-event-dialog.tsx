@@ -134,7 +134,7 @@ export function EditEventDialog({
     const moveLossReasons: string[] = [];
     if (isLinkedEvent) moveLossReasons.push('the invitation link will be removed (the organizer will see a decline)');
     else if (event.data?.attendees?.length)
-        moveLossReasons.push('guests will be notified it was cancelled and re-invited');
+        moveLossReasons.push('guests will be notified it was canceled and re-invited');
     if (isRecurring) moveLossReasons.push("modified occurrences of the series won't move");
 
     const handleSaveClick = () => {

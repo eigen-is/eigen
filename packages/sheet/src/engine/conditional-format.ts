@@ -39,7 +39,7 @@ function cellValueAt(data: CellMatrix, r: number, c: number) {
 
 // Merge a partial cell style into the map, creating the entry if absent. The CF evaluator
 // applies overlapping rules in order, so later rules layer onto earlier entries instead of
-// overwriting them — matching canvas-painter behaviour. Null/undefined fields are skipped:
+// overwriting them — matching canvas-painter behavior. Null/undefined fields are skipped:
 // a later rule that sets only a fill must not erase the text color an earlier rule
 // contributed (Excel resolves each style property independently by rule precedence, and
 // the xlsx importer relies on this by emitting rules in ascending-precedence order).

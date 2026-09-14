@@ -84,7 +84,7 @@ export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseView
     // instead of at each callsite: its ZOOM is the fit's answer, never the user's — a ctrl-wheel, a
     // pinch or a zoom shortcut keeps the zoom it came in with — and a pan may never push the page off
     // screen. Holding the zoom is what makes the pan moot too: at the fit, the clamp pins the scroll to
-    // the centred value on both axes, so a pan settles back to where it started. Only `set` (the fit
+    // the centered value on both axes, so a pan settles back to where it started. Only `set` (the fit
     // itself) bypasses this.
     const settle = useCallback(
         (next: CanvasViewport): CanvasViewport => {
@@ -167,11 +167,11 @@ export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseView
         return true;
     }, [containerExtent, set]);
 
-    // Opening view: the scene origin at the container centre (infinite), or the frame letterboxed
+    // Opening view: the scene origin at the container center (infinite), or the frame letterboxed
     // (frame mode, re-run on every `resetKey` change so a frame switch resets the pan). Waits for a
     // real size: a mobile comment deep link mounts the canvas inside a hidden wrapper, which measures
     // 0 until the pane closes. Frame mode keeps observing — a letterboxed page must stay letterboxed
-    // across a resize; infinite mode centres once and disconnects.
+    // across a resize; infinite mode centers once and disconnects.
     useLayoutEffect(() => {
         const el = containerRef.current;
         if (!el) return;
@@ -246,7 +246,7 @@ export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseView
         [write],
     );
 
-    // Zoom-pill reset: back to 100%, keeping the scene point at the container centre fixed. A bounded
+    // Zoom-pill reset: back to 100%, keeping the scene point at the container center fixed. A bounded
     // page has no zoom of its own, so it re-fits instead (the pill is hidden there anyway).
     const resetZoom = useCallback(() => {
         if (fitFrame()) return;

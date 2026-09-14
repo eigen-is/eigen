@@ -197,7 +197,7 @@ export function ServerSettingsPage() {
                     />
                     <SwitchRow
                         label="Email users for calendar invites"
-                        description="Time-sensitive — matches Google/Outlook behaviour."
+                        description="Time-sensitive — matches Google/Outlook behavior."
                         checked={current.notifications.email.userOnCalendarInvite}
                         onChange={(v) => updateEmailFlag('userOnCalendarInvite', v)}
                     />

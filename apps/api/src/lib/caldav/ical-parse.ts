@@ -254,7 +254,7 @@ export function parseIcs(icsText: string): IcsParseResult {
 
         // EXDATE: Thunderbird uses EXDATE to exclude dates from recurring events
         // (instead of separate VEVENT with STATUS:CANCELLED).
-        // Convert each EXDATE to a synthetic cancelled ParsedEvent.
+        // Convert each EXDATE to a synthetic canceled ParsedEvent.
         if (rrule) {
             const exdateProps = vevent.getAllProperties('exdate');
             for (const exdateProp of exdateProps) {

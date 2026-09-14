@@ -17,7 +17,7 @@ type LabelBox = { center: Point; width: number; height: number };
 
 // Ported from Excalidraw's generateElbowArrowShape (radius 16): each interior bend becomes an inset-before
 // point, a quadratic control at the raw corner, and an inset-after point, so the corner rounds without moving
-// the neighbouring vertices. The corner radius is min(16, half the shorter adjacent segment) so a short leg
+// the neighboring vertices. The corner radius is min(16, half the shorter adjacent segment) so a short leg
 // never over-rounds. The first and last route points — and thus the final segment's direction the head reads —
 // are emitted verbatim. Full-precision numbers go to roughjs (like Excalidraw); rounding happens at serialize.
 export function elbowRoundedShaftPath(points: Point[]): string {
@@ -140,7 +140,7 @@ export function labelClipPath(points: Point[], label: LabelBox, strokeWidth: num
 }
 
 // The label text, centered on the label rect in the arrow's local frame — the renderText baseline math
-// with text-anchor="middle" and colour = strokeColor. Height/position come from arrowLabelBox.
+// with text-anchor="middle" and color = strokeColor. Height/position come from arrowLabelBox.
 export function renderArrowLabel(el: VectorArrowElement, label: LabelBox): string {
     const lineHeightPx = getLineHeightPx(el.fontFamily, el.fontSize);
     const verticalOffset = getVerticalOffset(el.fontFamily, el.fontSize, lineHeightPx);

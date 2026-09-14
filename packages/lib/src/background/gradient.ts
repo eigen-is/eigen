@@ -1,19 +1,19 @@
 // The stop list behind every gradient we paint, in one place so CSS and SVG say the same thing.
 //
 // Both renderers interpolate a two-stop ramp in sRGB, and so does WeasyPrint — which takes red → blue
-// through a washed-out grey-purple. Sampling the ramp here in OKLab and emitting the samples as plain
+// through a washed-out gray-purple. Sampling the ramp here in OKLab and emitting the samples as plain
 // sRGB stops moves the interpolation into our code: canvas, thumbnails, previews, SVG export and PDF
 // all render the same stop list, so all of them show the same perceptually even ramp.
 //
 // A gradient end may be the transparent sentinel, and both renderers read that as transparent BLACK:
 // `#e60076 → transparent` then ramps through dark pink and paints a dirty band across the middle of
-// the shape. CSS and SVG both carry opacity beside the colour, so a transparent end is emitted as the
-// OTHER end's colour at opacity 0 — the ramp keeps its hue and only fades out.
+// the shape. CSS and SVG both carry opacity beside the color, so a transparent end is emitted as the
+// OTHER end's color at opacity 0 — the ramp keeps its hue and only fades out.
 
 import { TRANSPARENT_COLOR } from '../vector/fill';
 import { round4 } from '../vector/outline';
 
-// Opacity rides beside the colour rather than inside an #rrggbbaa, because that is the shape SVG
+// Opacity rides beside the color rather than inside an #rrggbbaa, because that is the shape SVG
 // wants: `stop-color` plus its own `stop-opacity` attribute.
 type GradientStop = { offset: number; color: string; opacity: number };
 
@@ -25,9 +25,9 @@ type Lab = [number, number, number];
 // defs stay small.
 const GRADIENT_STOP_COUNT = 9;
 
-// The stored gradient as sampled stops. A transparent end borrows its neighbour's colour, so an
+// The stored gradient as sampled stops. A transparent end borrows its neighbor's color, so an
 // alpha-0 stop never drags the ramp toward black and a plain lerp is all the alpha channel needs; a
-// gradient transparent at both ends paints nothing, so the colour there is arbitrary.
+// gradient transparent at both ends paints nothing, so the color there is arbitrary.
 export function gradientStops(from: string, to: string, count: number = GRADIENT_STOP_COUNT): GradientStop[] {
     const start = parsePaint(from);
     const end = parsePaint(to);
@@ -78,7 +78,7 @@ function cssColor(stop: GradientStop): string {
 
 // #rgb / #rrggbb / #rrggbbaa / the transparent sentinel — the tokens isColorToken admits. The alpha
 // is split out of the hex so both renderers get it in the channel they understand. Anything else is
-// opaque black, which is what a browser does with a colour it cannot parse.
+// opaque black, which is what a browser does with a color it cannot parse.
 function parsePaint(token: string): Paint {
     if (token === TRANSPARENT_COLOR) return { color: null, alpha: 0 };
     const hex = token.startsWith('#') ? token.slice(1) : '';
@@ -86,7 +86,7 @@ function parsePaint(token: string): Paint {
     if (wide.length !== 6 && wide.length !== 8) return { color: '#000000', alpha: 1 };
     const alpha = wide.length === 8 ? round4(byteAt(wide, 6) / 255) : 1;
     // A fully transparent hex says as little about the ramp's hue as the sentinel does, so it borrows
-    // the other end's colour the same way — #e60076 → #00000000 fades out instead of darkening.
+    // the other end's color the same way — #e60076 → #00000000 fades out instead of darkening.
     return { color: alpha === 0 ? null : `#${wide.slice(0, 6).toLowerCase()}`, alpha };
 }
 

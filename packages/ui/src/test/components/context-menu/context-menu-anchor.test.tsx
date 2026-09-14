@@ -8,7 +8,7 @@ const { createRoot } = await import('react-dom/client');
 const { DropdownMenuItem } = await import('../../../components/dropdown-menu');
 const { ContextMenuAnchor } = await import('../../../components/context-menu/context-menu-anchor');
 
-// A dialog's centring transform: the containing block a fixed trigger would inherit if it stayed here.
+// A dialog's centering transform: the containing block a fixed trigger would inherit if it stayed here.
 async function mountInTransformedHost() {
     const container = document.createElement('div');
     container.style.transform = 'translate(-50%, -50%)';

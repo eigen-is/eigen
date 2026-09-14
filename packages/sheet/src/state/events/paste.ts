@@ -1387,7 +1387,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
             }
         }
     } else if (ctx.editingCellPosition.length > 0) {
-        // prevent default paste behaviour
+        // prevent default paste behavior
         e.preventDefault();
 
         const { clipboardData } = e;

@@ -14,7 +14,7 @@ export function htmlToPlainText(html: string): string {
 // The tags of ./html's shared LightEditor set, matched here on the uppercase DOM tagName. Everything
 // else is unwrapped (children preserved) or dropped, so pasted rich HTML converges to that schema.
 const BLOCK_TAGS = new Set<string>(LIGHT_EDITOR_BLOCK_TAGS.map((tag) => tag.toUpperCase()));
-// Inline marks → their canonical element, so the stored HTML is born the way Tiptap re-serialises it
+// Inline marks → their canonical element, so the stored HTML is born the way Tiptap re-serializes it
 // (b→strong, i→em, del/strike→s) and a first edit is a no-op rather than a spurious diff.
 const MARK_TAG_CANON: Record<string, (typeof LIGHT_EDITOR_MARK_TAGS)[number]> = {
     STRONG: 'strong',
@@ -135,7 +135,7 @@ function appendSanitized(node: Node, parent: HTMLElement, opts: SanitizeOptions)
             // A link always opens in a new tab, with the opener sealed. Forced here rather than trusted
             // from the source markup: this is the one seam every rendered surface passes through, and a
             // canvas link that navigates in place would take a presenter out of their own deck. Written
-            // in Tiptap's own serialisation order (Link merges its configured HTMLAttributes before
+            // in Tiptap's own serialization order (Link merges its configured HTMLAttributes before
             // href), so a pasted link is already canonical and the first keystroke rewrites nothing.
             clean.setAttribute('target', '_blank');
             clean.setAttribute('rel', 'noopener noreferrer');

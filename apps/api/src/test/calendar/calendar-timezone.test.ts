@@ -640,7 +640,7 @@ describe('Calendar Timezone', () => {
     // Audit #8: a RECURRENCE-ID / EXDATE is keyed by the event's wall-clock date, not the UTC date of
     // the instant. For a timed series whose occurrences cross midnight UTC (23:00 America/New_York =
     // next-day 04:00Z), the pre-fix parser stored the UTC date, so exceptions attached to the wrong
-    // occurrence: the cancellation killed a neighbour and the modification duplicated.
+    // occurrence: the cancellation killed a neighbor and the modification duplicated.
     describe('#8 RECURRENCE-ID keyed on wall-clock date (CalDAV PUT)', () => {
         const basicAuth = (email: string, password = 'testpassword123') => `Basic ${btoa(`${email}:${password}`)}`;
         const VTIMEZONE_NY = [
@@ -760,7 +760,7 @@ describe('Calendar Timezone', () => {
             const jan15 = at('2026-01-16T04:00:00.000Z');
             expect(jan15).toHaveLength(1);
             expect(jan15[0].title).toBe('Moved occurrence');
-            // Neighbour (wall-clock Jan 17, instant Jan 18 04:00Z) untouched — no collateral mis-key.
+            // Neighbor (wall-clock Jan 17, instant Jan 18 04:00Z) untouched — no collateral mis-key.
             const jan17 = at('2026-01-18T04:00:00.000Z');
             expect(jan17).toHaveLength(1);
             expect(jan17[0].title).toBe('Late Standup');
@@ -812,7 +812,7 @@ describe('Calendar Timezone', () => {
             ).filter((e) => e.uid === UID);
             const moved = occ.filter((e) => e.title === 'DST Moved');
             expect(moved).toHaveLength(1);
-            // Substituted onto wall-clock Nov 2 (instant Nov 3 04:00Z), not the UTC-date neighbour.
+            // Substituted onto wall-clock Nov 2 (instant Nov 3 04:00Z), not the UTC-date neighbor.
             expect(new Date(moved[0].startTime).toISOString()).toBe('2026-11-03T04:00:00.000Z');
         });
 

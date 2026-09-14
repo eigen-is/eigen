@@ -14,7 +14,7 @@ export function useActiveFrame(frames: VectorFrame[]): {
     step: (delta: number) => void;
 } {
     const [requestedId, setRequestedId] = useState('');
-    // The position the active frame last held, so a delete can hand over to its neighbour rather than
+    // The position the active frame last held, so a delete can hand over to its neighbor rather than
     // falling back to the first slide. A ref, not state: it must not itself cause a render.
     const lastIndexRef = useRef(0);
 

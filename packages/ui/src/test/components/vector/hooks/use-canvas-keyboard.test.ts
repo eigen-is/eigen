@@ -4,7 +4,7 @@ import { createNudgeBurst, endsNudgeBurst } from '../../../../components/vector/
 
 // One element whose x the arrow keys step, written the way `updateElements` writes it. The capture
 // timeout is set to 0 so every write lands OUTSIDE Y.UndoManager's merge window — the canvas' real
-// behaviour once a re-render pushes two taps further apart than the default 500 ms.
+// behavior once a re-render pushes two taps further apart than the default 500 ms.
 function scene() {
     const doc = new Y.Doc();
     const elements = doc.getMap<Y.Map<unknown>>('elements');

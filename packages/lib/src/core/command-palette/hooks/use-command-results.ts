@@ -27,7 +27,7 @@ function useStableWhilePending(results: PaletteResult[], isPending: boolean): Pa
 export function useCommandResults(ctx: CommandContext, input: string, scope?: PaletteScope): Sections {
     const parsed = parseQuery(input);
     // A typed prefix (mail:, file:, >, @, ?) is the strongest signal — if the user typed
-    // one, honour it over the chip scope they set earlier via Tab.
+    // one, honor it over the chip scope they set earlier via Tab.
     const effectiveScope = parsed.scope ?? scope;
     const action = useActionResults(ctx, parsed.q);
     const contact = useContactResults(ctx, parsed.q);

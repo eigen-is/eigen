@@ -1590,7 +1590,7 @@ describe('normalizeMonthMinuteTokens (Excel m/M → Google month/minute conventi
         expect(normalizeMonthMinuteTokens('[MM]:ss')).toBe('[mm]:ss');
         // Elapsed hours before a minute run: mm follows [h] → minute.
         expect(normalizeMonthMinuteTokens('[h]:mm:ss')).toBe('[h]:mm:ss');
-        // A colour bracket carries an M but is not a token — leave it alone.
+        // A color bracket carries an M but is not a token — leave it alone.
         expect(normalizeMonthMinuteTokens('[Red]mm/yyyy')).toBe('[Red]MM/yyyy');
     });
 

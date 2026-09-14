@@ -146,7 +146,7 @@ describe('a ray exits on the arc, not the sharp corner', () => {
     test('pill: a diagonal ray from the centre lands on the cap arc, strictly inside the sharp box', () => {
         const seg = ray(centre(PILL), 3, 1);
         const hit = nearest(outlineHits(rectOutline(PILL, 50, 0), seg.a, seg.b), centre(PILL));
-        // the right cap's arc centre is (150, 50), radius 50
+        // the right cap's arc center is (150, 50), radius 50
         expect(dist(hit, { x: 150, y: 50 })).toBeCloseTo(50, 6);
         expect(hit.x).toBeLessThan(200 - 1e-6);
         expect(hit.y).toBeLessThan(100 - 1e-6);
@@ -199,7 +199,7 @@ describe('gap inflation: an inflated rounded shape has radius r + gap', () => {
             const inner = nearest(outlineHits(rectOutline(RECT, 24, 0), seg.a, seg.b), c);
             const outer = nearest(outlineHits(rectOutline(RECT, 24, 8), seg.a, seg.b), c);
             // both docks lie on the same ray; the outward offset along the ray is >= 8 (= 8 on flats,
-            // exactly 8 on arcs too, since the arc centre is unchanged and only the radius grows)
+            // exactly 8 on arcs too, since the arc center is unchanged and only the radius grows)
             expect(dist(c, outer) - dist(c, inner)).toBeGreaterThan(7.99);
         }
     });
@@ -483,7 +483,7 @@ describe('outlineDistance', () => {
 
     test('a rounded shape measures to the arc, so a deep point keeps getting further from the edge', () => {
         const shape = rectOutline(box, 25, 0);
-        // The centre is inside the inset core: the distance is the core distance (25) PLUS the radius.
+        // The center is inside the inset core: the distance is the core distance (25) PLUS the radius.
         expect(outlineDistance(shape, { x: 100, y: 50 })).toBeCloseTo(50, 9);
         expect(outlineDistance(shape, { x: 100, y: -10 })).toBeCloseTo(10, 9);
         // Diagonally past a corner the rounded edge has pulled AWAY, so the same point sits further out.

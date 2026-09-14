@@ -44,7 +44,7 @@ export function CalendarInviteWidget({ invite }: CalendarInviteWidgetProps) {
         >
             <Calendar className={cn('mt-0.5 h-5 w-5 shrink-0', isCancelled ? 'text-destructive' : 'text-primary')} />
             <div className="flex-1 min-w-0 space-y-1">
-                {isCancelled && <p className="text-sm font-medium text-destructive">This event has been cancelled</p>}
+                {isCancelled && <p className="text-sm font-medium text-destructive">This event has been canceled</p>}
                 {isReply && <p className="text-sm font-medium text-muted-foreground">Calendar RSVP response</p>}
                 {invite.summary && (
                     <p className={cn('text-sm font-medium', isCancelled && 'line-through text-muted-foreground')}>

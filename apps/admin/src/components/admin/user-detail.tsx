@@ -67,7 +67,7 @@ export function UserDetail({ user, usage, organizationId }: UserDetailProps) {
 
     const handleSave = async () => {
         // Both are set wherever the select that changes the draft is rendered: a user with no
-        // organisation row has no role to pick and no member row to change.
+        // organization row has no role to pick and no member row to change.
         if (!user.memberId || !draftRole) return;
         await updateRole.mutateAsync({ memberId: user.memberId, userId: user.id, role: draftRole });
     };
@@ -90,7 +90,7 @@ export function UserDetail({ user, usage, organizationId }: UserDetailProps) {
                     <h3 className="text-sm font-medium text-muted-foreground mb-2">Role</h3>
                     {user.role === null ? (
                         <p className="text-sm text-muted-foreground">
-                            No organisation — this user is not a member of the organisation
+                            No organization — this user is not a member of the organization
                         </p>
                     ) : user.role === 'owner' ? (
                         <Badge variant="default">owner</Badge>

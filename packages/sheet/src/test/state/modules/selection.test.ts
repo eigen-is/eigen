@@ -1,7 +1,7 @@
-// The clipboard table this builds serialises each cell's style object into a
+// The clipboard table this builds serializes each cell's style object into a
 // `style="…"` attribute. That serializer is the same one the rich-text runs in
 // modules/cell.ts use — it lived in both files, and only cell.ts's copy was ever
-// hardened, so a colour authored by a collaborator could close the attribute here.
+// hardened, so a color authored by a collaborator could close the attribute here.
 
 import { describe, expect, test } from 'bun:test';
 import type { Context } from '../../../state/context';

@@ -101,7 +101,7 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
         });
     }, []);
 
-    // acceptShiftEnter matches historic behaviour where shift+Enter also committed the
+    // acceptShiftEnter matches historic behavior where shift+Enter also committed the
     // @-mention; the slash suggests below intentionally let shift+Enter through as a newline.
     // passthroughWhenEmpty lets `@foo` with no matches keep its text and send normally on
     // Enter, rather than being silently stripped by a commit on an empty list.

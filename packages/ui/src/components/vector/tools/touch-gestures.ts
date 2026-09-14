@@ -1,7 +1,7 @@
 // Touch / stylus gesture policy for the canvas editor, ported from Excalidraw (App.tsx:8398-8432 spike
 // discard, 8446-8453 penMode latch, 8578-8588 palm-rejection allowlist, 9061 pinch-pin-mid-freedraw).
 // The canvas only DISPATCHES into these handlers; all touch LOGIC lives here so the canvas file stays
-// flat. The behaviours are documented in docs/CANVAS.md § Touch / stylus policy.
+// flat. The behaviors are documented in docs/CANVAS.md § Touch / stylus policy.
 
 import { type MutableRefObject, useRef } from 'react';
 import type { VectorTool } from '../hooks/use-tool';

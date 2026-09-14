@@ -660,7 +660,7 @@ function sheetHasFormula(sheet: Sheet): boolean {
 }
 
 // calcChain is an editor-only excess field the wire Sheet type omits; recalc
-// writes it so the read gate recognises a computed doc (audit DP4).
+// writes it so the read gate recognizes a computed doc (audit DP4).
 type SheetWithCalcChain = Sheet & { calcChain?: CalcChainEntry[] };
 
 // ── Orchestration ──────────────────────────────────────────────────────────────
@@ -733,7 +733,7 @@ export function recalcSheets(sheets: Sheet[]): Sheet[] {
     const allInfos = Object.values(infoMap);
     if (allInfos.length === 0) {
         // No formulas: still return a normalized shape (synced celldata +
-        // calcChain) so the read gate recognises the doc as computed.
+        // calcChain) so the read gate recognizes the doc as computed.
         return finalize(working, sheets, calcChainBySheet);
     }
 

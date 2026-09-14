@@ -1111,7 +1111,7 @@ export function getStyleByCell(ctx: Context, d: CellMatrix, r: number, c: number
     return style;
 }
 
-// A formula is shown in the formula bar and the in-cell editor as coloured spans, not as
+// A formula is shown in the formula bar and the in-cell editor as colored spans, not as
 // text — the reference tokens have to be clickable and highlightable. Returns null when
 // the cell carries no formula, so the caller applies its own fallback: the two editors
 // disagree about rich text (the bar shows it plain, the cell shows it styled), so that
@@ -1134,7 +1134,7 @@ export function getInlineStringHTML(r: number, c: number, data: CellMatrix) {
         for (let i = 0; i < strings.length; i += 1) {
             const strObj = strings[i];
             if (strObj.v) {
-                // Both halves come from the cell: a colour like `red' onload='...` would
+                // Both halves come from the cell: a color like `red' onload='...` would
                 // otherwise close the style attribute and open an event handler. The HTML
                 // parser decodes entities inside an attribute before CSS sees it, so a
                 // quoted font family survives escaping intact.

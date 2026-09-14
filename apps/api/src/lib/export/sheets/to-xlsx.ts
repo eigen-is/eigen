@@ -185,7 +185,7 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
         }
 
         // Gridlines and frozen panes must live in ONE view object — exceljs renders
-        // a <sheetView> per entry and Excel only honours the first.
+        // a <sheetView> per entry and Excel only honors the first.
         const view: { showGridLines?: boolean; state?: 'frozen'; xSplit?: number; ySplit?: number } = {};
         if (sheet.showGridLines === false || sheet.showGridLines === 0) {
             view.showGridLines = false;

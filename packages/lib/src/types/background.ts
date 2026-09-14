@@ -5,7 +5,7 @@ export type BackgroundFill =
     | { type: 'gradient'; from: string; to: string; angle: number }
     | { type: 'image'; mediaName: string; fit: 'cover' | 'contain' };
 
-// The paint half of a fill: a background minus the image variant — a shape paints a colour or a
+// The paint half of a fill: a background minus the image variant — a shape paints a color or a
 // two-stop linear gradient, never a picture (the `image` kind is how you put a picture on a canvas).
 export type FillPaint = Exclude<BackgroundFill, { type: 'image' }>;
 
