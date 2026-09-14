@@ -8,16 +8,16 @@ import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace
 import type { DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import { Check, RotateCcw } from 'lucide-react';
-import { useCallback, useMemo, useRef } from 'react';
-import { useLongPress } from '../../hooks/use-long-press';
+import { useCallback, useMemo } from 'react';
 import { AttachmentChip } from '../attachment/attachment-chip';
 import { ReferenceAttachmentChip } from '../attachment/reference-attachment-chip';
-import { attachmentKeyAt, SimpleAttachmentChip } from '../attachment/simple-attachment-chip';
+import { SimpleAttachmentChip } from '../attachment/simple-attachment-chip';
+import { useAttachmentChipMenu } from '../attachment/use-attachment-chip-menu';
 import { AssigneeChip } from '../comments/assignee-chip';
 import { AssigneePicker } from '../comments/assignee-picker';
 import { CommentThread } from '../comments/comment-thread';
 import { CreatedByMeta } from '../comments/created-by-meta';
-import { ContextMenuAnchor, useContextMenu } from '../context-menu';
+import { ContextMenuAnchor } from '../context-menu';
 import { FileActionMenuItems } from '../file-actions/file-action-menu-items';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
 import { NoteCardDialog } from '../notes/note-card-dialog';
@@ -64,25 +64,14 @@ export function CardDialog({
     const { findByName } = useFolderLookup(ownerId, mountId, mediaFolderId);
 
     // A chip's file actions open on right-click, and on touch through the long-press the chips share.
-    const chipMenu = useContextMenu<FileSubject>();
-    const openMenuAt = chipMenu.openAt;
-    const subjectOfChip = useCallback(
-        (name: string | null): FileSubject | undefined => {
+    const chipSubject = useCallback(
+        (_row: null, name: string | null): FileSubject | undefined => {
             const path = name ? findByName(name) : undefined;
             return path ? subjectFromPath(path) : undefined;
         },
         [findByName],
     );
-    // The chip under the finger at press time: a long-press only reports where it started.
-    const pressedChip = useRef<string | null>(null);
-    const handleLongPress = useCallback(
-        (_chips: null, x: number, y: number) => {
-            const subject = subjectOfChip(pressedChip.current);
-            if (subject) openMenuAt(subject, x, y);
-        },
-        [openMenuAt, subjectOfChip],
-    );
-    const longPress = useLongPress<null>(handleLongPress);
+    const { contextMenu: chipMenu, bind } = useAttachmentChipMenu<null, FileSubject>(chipSubject);
     const attachmentSubjects = useMemo(
         () =>
             (card?.attachments ?? [])
@@ -93,7 +82,7 @@ export function CardDialog({
         [card?.attachments, findByName],
     );
     // The card's own attachments are the siblings, so a quick look from here keeps its Save all row.
-    const runner = useFileActionRunner(chipMenu.item, attachmentSubjects, { batch: true });
+    const runner = useFileActionRunner(chipMenu.item, attachmentSubjects, { attachment: true });
 
     if (!card) return null;
 
@@ -217,17 +206,7 @@ export function CardDialog({
             onDescriptionChange={onUpdate ? (html) => onUpdate({ description: html }) : undefined}
             attachments={
                 card.attachments && card.attachments.length > 0 ? (
-                    <div
-                        className="flex flex-wrap gap-2"
-                        onContextMenu={(e) => {
-                            const subject = subjectOfChip(attachmentKeyAt(e.target));
-                            if (subject) chipMenu.handleContextMenu(e, subject);
-                        }}
-                        onPointerDownCapture={(e) => {
-                            pressedChip.current = attachmentKeyAt(e.target);
-                        }}
-                        {...longPress.bind(null)}
-                    >
+                    <div className="flex flex-wrap gap-2" {...bind(null)}>
                         {card.attachments.map((attachment) =>
                             isAttachmentReference(attachment) ? (
                                 <ReferenceAttachmentChip key={`ref-${attachment.id}`} reference={attachment} />

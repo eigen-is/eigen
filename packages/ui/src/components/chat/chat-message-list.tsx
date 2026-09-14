@@ -7,15 +7,13 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import { UserNameCard } from '@workspace/ui/components/user/user-name-card';
 import { Download, Pencil, Trash2 } from 'lucide-react';
-import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { useLongPress } from '../../hooks/use-long-press';
 import { cn } from '../../lib/utils';
 import { AttachmentChip } from '../attachment/attachment-chip';
 import { ReferenceAttachmentChip } from '../attachment/reference-attachment-chip';
-import { attachmentKeyAt } from '../attachment/simple-attachment-chip';
+import { useAttachmentChipMenu } from '../attachment/use-attachment-chip-menu';
 import { EigenLoader } from '../braket/eigen-loader';
-import { ContextMenuAnchor, useContextMenu } from '../context-menu';
+import { ContextMenuAnchor } from '../context-menu';
 import { DropdownMenuItem, DropdownMenuSeparator } from '../dropdown-menu';
 import { FileActionMenuItems } from '../file-actions/file-action-menu-items';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
@@ -77,11 +75,6 @@ export function ChatMessageList({
     const isInitialLoadRef = useRef(true);
     const { findByName } = useFolderLookup(ownerId ?? '', mountId ?? '', mediaFolderId ?? '');
 
-    // Message actions (Save attachments / Edit / Delete) and a chip's file actions reach the
-    // singleton context menu via right-click and touch long-press.
-    const contextMenu = useContextMenu<ChatMenuTarget>();
-    const openMenuAt = contextMenu.openAt;
-
     const subjectsOf = useCallback(
         (message: ChatMessage | undefined): FileSubject[] =>
             (message?.attachments ?? [])
@@ -100,20 +93,22 @@ export function ChatMessageList({
         [findByName],
     );
 
-    // The chip under the finger at press time: a long-press only reports where it started.
-    const pressedChip = useRef<string | null>(null);
-    const handleLongPress = useCallback(
-        (message: ChatMessage, x: number, y: number) => {
-            openMenuAt({ message, attachment: subjectOfChip(pressedChip.current) }, x, y);
-        },
-        [openMenuAt, subjectOfChip],
+    // Message actions (Save attachments / Edit / Delete) and a chip's file actions reach the
+    // singleton context menu via right-click and touch long-press, through the wiring the card
+    // dialog and the mail reader share.
+    const toMenuTarget = useCallback(
+        (message: ChatMessage, chipKey: string | null): ChatMenuTarget => ({
+            message,
+            attachment: subjectOfChip(chipKey),
+        }),
+        [subjectOfChip],
     );
-    const longPress = useLongPress(handleLongPress);
+    const { contextMenu, bind } = useAttachmentChipMenu<ChatMessage, ChatMenuTarget>(toMenuTarget);
 
     const menuTarget = contextMenu.item;
     const menuSubjects = useMemo(() => subjectsOf(menuTarget?.message), [subjectsOf, menuTarget?.message]);
     // The chip's siblings are its own message's attachments, so a quick look from here keeps Save all.
-    const runner = useFileActionRunner(menuTarget?.attachment ?? null, menuSubjects, { batch: true });
+    const runner = useFileActionRunner(menuTarget?.attachment ?? null, menuSubjects, { attachment: true });
 
     // One gating source shared by the hover bar and the context menu so the two action sets never drift.
     const getMessageActions = useCallback(
@@ -270,26 +265,7 @@ export function ChatMessageList({
 
                 const actions = getMessageActions(message);
                 const hasActions = actions.canSaveAttachments || actions.canEdit || actions.canDelete;
-                const actionProps = hasActions
-                    ? {
-                          onContextMenu: (e: React.MouseEvent) => {
-                              const chipName = attachmentKeyAt(e.target);
-                              // Leave links and selected text to the browser's native copy menu. A
-                              // chip is an anchor too, and it has its own rows to offer.
-                              const selection = window.getSelection();
-                              if (
-                                  (!chipName && (e.target as HTMLElement).closest('a')) ||
-                                  (selection && !selection.isCollapsed)
-                              )
-                                  return;
-                              contextMenu.handleContextMenu(e, { message, attachment: subjectOfChip(chipName) });
-                          },
-                          onPointerDownCapture: (e: React.PointerEvent) => {
-                              pressedChip.current = attachmentKeyAt(e.target);
-                          },
-                          ...longPress.bind(message),
-                      }
-                    : {};
+                const actionProps = hasActions ? bind(message) : {};
                 // Desktop-only hover affordance (fine pointer); touch has none — long-press opens the same menu.
                 const hoverActions = hasActions ? (
                     <div className="absolute right-2 top-1 z-10 flex items-center rounded-md border bg-background shadow-sm invisible pointer-fine:group-hover:visible">

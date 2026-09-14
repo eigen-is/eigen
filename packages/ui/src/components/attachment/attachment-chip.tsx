@@ -47,7 +47,7 @@ export function AttachmentChip({
                     const siblings = siblingFileNames
                         ?.map((n) => findByName(n))
                         .filter((p): p is DrivePath => p !== undefined);
-                    openPreview(subjectFromPath(fileInfo), siblings?.map(subjectFromPath), { batch: true });
+                    openPreview(subjectFromPath(fileInfo), siblings?.map(subjectFromPath), { attachment: true });
                 }
             }}
         />
