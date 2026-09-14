@@ -6,7 +6,7 @@ import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { AppError } from '../../api-error';
+import { AppError, retryWhenTransformBusy } from '../../api-error';
 import { driveKeys } from './keys';
 
 // GET MOUNTS
@@ -259,8 +259,6 @@ export function useVCardPreview(ownerId: string, mountId: string, pathId: string
         },
         enabled: !!ownerId && !!mountId && !!pathId && size <= IMPORT_MAX_BYTES,
         staleTime: Infinity,
-        // A file the parser refuses fails the same way every time, so only the transform runner's "busy"
-        // is worth another go — the cards are built off the same bounded queue every preview shares.
-        retry: (failureCount, error) => failureCount < 3 && error instanceof AppError && error.status === 503,
+        retry: retryWhenTransformBusy,
     });
 }

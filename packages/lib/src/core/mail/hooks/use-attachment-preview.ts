@@ -1,12 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { mailApi, mailVCardPreviewRoute } from '@workspace/lib/api';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
-import { AppError } from '../../api-error';
+import { AppError, retryWhenTransformBusy } from '../../api-error';
 import { emailKeys } from './keys';
 
 // A mail part's server-rendered previews — the same bodies and the same cards the Drive routes serve
 // (PREVIEWS.md), so the same components render them. The part is immutable except a draft rewrite, which
-// the URL carries no stamp for: hence a bounded staleTime rather than the Drive previews' Infinity.
+// the preview URL carries no stamp for: hence a bounded staleTime.
 export function useMailTextPreview(ownerId: string, messageId: string, index: number, enabled: boolean) {
     return useQuery({
         queryKey: emailKeys.textPreview(ownerId, messageId, index),
@@ -35,8 +35,6 @@ export function useMailVCardPreview(ownerId: string, messageId: string, index: n
         },
         enabled: enabled && !!ownerId && !!messageId,
         staleTime: STALE_TIME.FIVE_MINUTES,
-        // A file the parser refuses fails the same way every time, so only the transform runner's "busy"
-        // is worth another go.
-        retry: (failureCount, error) => failureCount < 3 && error instanceof AppError && error.status === 503,
+        retry: retryWhenTransformBusy,
     });
 }
