@@ -17,14 +17,54 @@ function inScope(path: string): boolean {
     return !(path.endsWith('.d.ts') || /\.test\.tsx?$/.test(path) || path.endsWith('routeTree.gen.ts'));
 }
 
-// Blanks out comment bodies and literal contents so identifier-shaped metrics never fire on prose
-// ("treat as text") or on a string that happens to spell a keyword. Line count is preserved.
-function stripNoise(source: string): string {
+// A `<` opens a JSX element only where an expression may start — after an operator, an opener or a
+// keyword. After an expression (identifier, `)`, `]`, literal) it is a comparison or a generic argument
+// list instead. `<T,>` and `<T extends …>` are the two generic forms .tsx still allows in that position.
+const JSX_ELEMENT_START = /(?:[([{=,:?;!+&|]|=>|&&|\|\||\b(?:return|yield|await|case|in|of|else|do))\s*$/;
+const JSX_TAG_OPEN = /^<(?:>|[A-Za-z][\w.:-]*\s*(?!,|extends\b))/;
+// Children are blanked only while they read as prose. Anything code-shaped means the `<` was misread —
+// a regex body spells `<p>` too — and blanking on it would hide the very casts the gate counts.
+const JSX_TEXT = /^[^;=()[\]"`\\|]*$/;
+
+// Blanks out comment bodies, literal contents and JSX text so identifier-shaped metrics never fire on
+// prose ("treat it as a secret") or on a string that happens to spell a keyword. Line count is preserved.
+// JSX needs its own mode because a text child is neither a comment nor a literal: `mode` tracks whether
+// we sit in code, between a tag's angle brackets, or in element children, and `{…}` in the latter two
+// pushes code back on. Only .tsx is scanned that way — in .ts every `<` is a comparison or a generic.
+function stripNoise(source: string, tsx = false): string {
     let out = '';
     let index = 0;
+    const modes: ('code' | 'tag' | 'jsx')[] = ['code'];
+    const depths = [0];
     while (index < source.length) {
         const char = source[index];
-        if (char === '/' && (source[index + 1] === '/' || source[index + 1] === '*')) {
+        const mode = modes[modes.length - 1];
+        if (mode === 'jsx') {
+            if (char === '{') {
+                modes.push('code');
+                depths.push(0);
+                out += char;
+                index++;
+            } else if (char === '<' && source[index + 1] === '/') {
+                const end = source.indexOf('>', index);
+                const stop = end < 0 ? source.length : end + 1;
+                out += source.slice(index, stop).replaceAll(/[^\n]/g, ' ');
+                index = stop;
+                modes.pop();
+                depths.pop();
+            } else if (char === '<' && JSX_TAG_OPEN.test(source.slice(index, index + 40))) {
+                modes.push('tag');
+                depths.push(0);
+                out += char;
+                index++;
+            } else {
+                let end = index + 1;
+                while (end < source.length && source[end] !== '{' && source[end] !== '<') end++;
+                const run = source.slice(index, end);
+                out += JSX_TEXT.test(run) ? run.replaceAll(/[^\n]/g, ' ') : run;
+                index = end;
+            }
+        } else if (char === '/' && (source[index + 1] === '/' || source[index + 1] === '*')) {
             const end = source[index + 1] === '/' ? source.indexOf('\n', index) : source.indexOf('*/', index + 2) + 2;
             const stop = end <= index ? source.length : end;
             out += source.slice(index, stop).replaceAll(/[^\n]/g, ' ');
@@ -40,6 +80,34 @@ function stripNoise(source: string): string {
             out += char;
             index++;
         } else {
+            if (char === '{') {
+                if (mode === 'tag') {
+                    modes.push('code');
+                    depths.push(0);
+                } else depths[depths.length - 1]++;
+            } else if (char === '}' && mode === 'code') {
+                if (depths[depths.length - 1] > 0) depths[depths.length - 1]--;
+                else if (modes.length > 1) {
+                    modes.pop();
+                    depths.pop();
+                }
+            } else if (mode === 'tag' && char === '>') {
+                modes.pop();
+                depths.pop();
+                if (source[index - 1] !== '/') {
+                    modes.push('jsx');
+                    depths.push(0);
+                }
+            } else if (
+                tsx &&
+                mode === 'code' &&
+                char === '<' &&
+                JSX_TAG_OPEN.test(source.slice(index, index + 40)) &&
+                JSX_ELEMENT_START.test(out.slice(-24).trimEnd())
+            ) {
+                modes.push('tag');
+                depths.push(0);
+            }
             out += char;
             index++;
         }
@@ -238,7 +306,7 @@ const breakdown = new Map<string, Map<string, number>>(METRICS.map((metric) => [
 
 for (const path of paths) {
     const text = await Bun.file(path).text();
-    const file: SourceFile = { path, text, code: stripNoise(text) };
+    const file: SourceFile = { path, text, code: stripNoise(text, path.endsWith('.tsx')) };
     for (const metric of METRICS) {
         const hits = metric.count(file);
         if (hits === 0) continue;
