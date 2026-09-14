@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
-import { api, contactsApi, vcardPreviewApi } from '../../core/api';
+import { api, contactsApi, vcardPreviewRoute } from '../../core/api';
 
 afterEach(() => mock.restore());
 
@@ -47,9 +47,7 @@ describe('API date parsing', () => {
             }),
         );
 
-        const response = await vcardPreviewApi({ ownerId: 'owner-1' })({ mountId: 'm1' })
-            .file({ pathId: 'p1' })
-            ['vcard-preview'].get({ query: {} });
+        const response = await vcardPreviewRoute('owner-1', 'm1', 'p1').get({ query: {} });
 
         expect(response.error).toBeNull();
         expect(response.data?.cards[0]?.contact.birthday).toBe('1990-01-01');

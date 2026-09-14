@@ -71,9 +71,11 @@ describe('useVCardPreview', () => {
             });
         }
 
-        const contact = seen.latest?.data?.cards[0]?.contact;
-        expect(contact?.birthday).toBe('1990-01-01');
-        expect(contact?.birthday).not.toBeInstanceOf(Date);
+        // The annotation is the type assertion: Eden carries the route's return type to the hook, so a
+        // Date on the wire — or a payload that stopped being the preview's — fails `bun run typecheck`.
+        const birthday: string | undefined = seen.latest?.data?.cards[0]?.contact.birthday;
+        expect(birthday).toBe('1990-01-01');
+        expect(birthday).not.toBeInstanceOf(Date);
         await act(() => root.unmount());
     });
 });

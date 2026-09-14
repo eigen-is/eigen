@@ -18,7 +18,6 @@ import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
 import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
 import { getScreenPreview, getTextPreview, getVCardPreview } from '../lib/preview/preview-cache';
-import { vCardPreviewSchema } from '../lib/preview/vcard-preview-payload';
 import { getThumbnail } from '../lib/shared/thumbnails';
 import { SNAPSHOT_NAME_FORMAT } from '../lib/versioning/timestamp';
 import { betterAuth } from './auth';
@@ -363,11 +362,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             else setCacheHeaders(set, 86400);
             return result.value;
         },
-        {
-            auth: true,
-            query: t.Object({ updatedAt: t.Optional(t.String()) }),
-            response: vCardPreviewSchema,
-        },
+        { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
     )
     // Version history (file-level snapshots; see lib/versioning). Access flows
     // through getSharedDrive() → SharedDrive ACL, like every other drive route.

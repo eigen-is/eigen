@@ -1,5 +1,5 @@
 import { useQueries, useQuery } from '@tanstack/react-query';
-import { driveApi, vcardPreviewApi } from '@workspace/lib/api';
+import { driveApi, vcardPreviewRoute } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
@@ -249,11 +249,11 @@ export function useVCardPreview(ownerId: string, mountId: string, pathId: string
     return useQuery({
         queryKey: driveKeys.vcardPreview(ownerId, mountId, pathId, updatedAt),
         queryFn: async () => {
-            // vcardPreviewApi, not driveApi: a card's birthday is a date-only string, and the default
+            // vcardPreviewRoute, not driveApi: a card's birthday is a date-only string, and the default
             // treaty's reviver would hand the renderer a Date (api.ts).
-            const response = await vcardPreviewApi({ ownerId })({ mountId })
-                .file({ pathId })
-                ['vcard-preview'].get({ query: { updatedAt: updatedAt.toISOString() } });
+            const response = await vcardPreviewRoute(ownerId, mountId, pathId).get({
+                query: { updatedAt: updatedAt.toISOString() },
+            });
             if (response.error) throw new AppError(response);
             return response.data;
         },

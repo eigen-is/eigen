@@ -56,9 +56,10 @@ const plainApi = treaty<app>(API_HOST, {
 });
 
 export const contactsApi = plainApi.contacts;
-// Only for the vcard-preview route: it serves parsed contacts, so it takes the no-revival treaty while
-// every other drive route reads through `driveApi`.
-export const vcardPreviewApi = plainApi.drive;
+// A key to one door: the vcard-preview route serves cards with bare YYYY-MM-DD birthdays, so it reads
+// through the no-revival treaty, and reaching it by hand keeps every other drive route on `driveApi`.
+export const vcardPreviewRoute = (ownerId: string, mountId: string, pathId: string) =>
+    plainApi.drive({ ownerId })({ mountId }).file({ pathId })['vcard-preview'];
 export const mailApi = api.mail;
 export const publicApi = api.p;
 export const driveApi = api.drive;

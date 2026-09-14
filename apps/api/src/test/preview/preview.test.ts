@@ -567,10 +567,9 @@ describe('vCard preview route', () => {
         expect(res.status).toBe(413);
     });
 
-    // The cached body is the only thing this route trusts off disk (a previewsDir restored from a build
-    // whose payload shape differed, say). Serving a 500 for it would be permanent: it is the CURRENT
-    // version, so nothing would ever regenerate it.
-    test('a cached payload the schema refuses is regenerated, not served as an error', async () => {
+    // A cached file can be half-written or truncated on disk. Serving a 500 for it would be permanent:
+    // it is the CURRENT version, so nothing would ever regenerate it.
+    test('a truncated cached payload is regenerated, not served as an error', async () => {
         const content = 'BEGIN:VCARD\r\nVERSION:3.0\r\nN:Roe;Richard;;;\r\nFN:Richard Roe\r\nEND:VCARD\r\n';
         const uploaded = await uploadVCard('corrupt-cache.vcf', content);
         const url = `/drive/${ownerId}/${mountId}/file/${uploaded.id}/vcard-preview`;
@@ -579,7 +578,7 @@ describe('vCard preview route', () => {
         const home = await getHome(ownerId);
         const { mount } = await home.drive.resolveFile(mountId, uploaded.id);
         const cached = readdirSync(mount.previewsDir).find((name) => name.startsWith(`${uploaded.id}-`));
-        writeFileSync(`${mount.previewsDir}/${cached}`, JSON.stringify({ body: '{"cards":"not an array"}' }));
+        writeFileSync(`${mount.previewsDir}/${cached}`, JSON.stringify({ body: '{"cards":[{"contact":' }));
 
         const res = await authedRequest(token, url);
         expect(res.status).toBe(200);

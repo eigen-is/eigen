@@ -12,7 +12,7 @@ import { isExiftoolCandidate } from './exiftool-preview';
 import { generateDocumentPreview } from './preview-document';
 import { inlineSvgMediaRefs } from './svg-media-inline';
 import { generateTextPreview, type TextPreviewResult } from './text-preview';
-import { parseVCardPreview, type VCardPreview } from './vcard-preview-payload';
+import { parseVCardPreview, type VCardPreview } from './vcard-preview';
 
 type ImagePreview = { type: 'image'; data: Buffer; contentType: string };
 type ScreenPreviewResult = ImagePreview | { type: 'redirect'; url: string } | null;
@@ -35,7 +35,8 @@ const TEXT_FORMAT = 'f5';
 // A .vcf preview is a different artifact for the same path — contact cards, not a body — so it carries
 // its own format and neither kind ever reads the other's file as its stale predecessor. (pruneOldVersions
 // is not format-scoped, but a .vcf has exactly one cached artifact: getTextPreviewMode declines it and
-// getScreenPreview does not answer for its mimes.)
+// getScreenPreview does not answer for its mimes.) Bump on every change to the VCardPreview type: the stored
+// JSON is read back unchecked (vcard-preview.ts).
 const VCARD_FORMAT = 'vcard-f1';
 
 function textCacheName(drivePath: DrivePath, format: string): string {

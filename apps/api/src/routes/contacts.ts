@@ -2,9 +2,10 @@ import { IMPORT_MAX_BYTES, IMPORT_MAX_CARDS } from '@workspace/lib/constants/con
 import type { Contact, ImportContactsResult } from '@workspace/lib/types/contact';
 import { isVCardFile } from '@workspace/lib/types/drive';
 import type { Label } from '@workspace/lib/types/label';
+import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { enforceAvatarUpload } from '../lib/config/enforcement';
-import { CreateContactSchema } from '../lib/contacts/contact-schema';
+import { CARD_MAX_BYTES } from '../lib/contacts/card-store';
 import { getContacts } from '../lib/contacts/contacts';
 import { requireNonGuest, requireSelf } from '../lib/core/access';
 import { ApiError } from '../lib/core/errors';
@@ -13,9 +14,35 @@ import { getSharedDrive } from '../lib/drive';
 import { parseVCardLines, unescapeText } from '../lib/vcard';
 import { betterAuth } from './auth';
 
-// The bound every remaining field here is checked against; the contact fields carry their own, in
-// lib/contacts/contact-schema.ts, because the vCard preview spells the same shape.
+// Field bounds in front of the ceiling the write seam enforces on the assembled card: generous enough that
+// no real contact meets them, tight enough that no single value can be the whole card. Free text is capped
+// at the card ceiling itself — a value that cannot fit in a card is never worth parsing.
 const TEXT = { maxLength: 512 };
+const FREE_TEXT = { maxLength: CARD_MAX_BYTES };
+
+const AddressSchema = t.Object({
+    street: t.Optional(t.String(TEXT)),
+    city: t.Optional(t.String(TEXT)),
+    state: t.Optional(t.String(TEXT)),
+    zipCode: t.Optional(t.String(TEXT)),
+    country: t.Optional(t.String(TEXT)),
+});
+
+// The client-writable fields — the create body. The id and the etag are the server's to assign.
+const CreateContactSchema = t.Object({
+    firstName: t.String(TEXT),
+    lastName: t.String(TEXT),
+    email: t.Array(t.String({ maxLength: MAX_EMAIL_LENGTH }), { maxItems: 100 }),
+    phone: t.Array(t.String(TEXT), { maxItems: 100 }),
+    company: t.Optional(t.String(TEXT)),
+    jobTitle: t.Optional(t.String(TEXT)),
+    address: t.Optional(t.Array(AddressSchema, { maxItems: 50 })),
+    birthday: t.Optional(t.String(TEXT)),
+    notes: t.Optional(t.String(FREE_TEXT)),
+    avatar: t.Optional(t.String(TEXT)),
+    labels: t.Optional(t.Array(t.String(TEXT), { maxItems: 200 })),
+    eigenId: t.Optional(t.String(TEXT)),
+});
 
 // The update body: the same fields plus the etag the client loaded, required by the schema so a write that
 // carries no precondition is refused before any handler runs (UpdateContactInput).

@@ -13,7 +13,7 @@ import { COLLAB_DOCUMENT_TYPES } from '../document/collab-types';
 import { readStickiesContent, type StickiesContent } from '../document/stickies';
 import { runFileTransformToText, runTransformToExtractedText } from '../document/transform/run-transform';
 import type { Mount } from '../mount';
-import { parseVCardPreview } from '../preview/vcard-preview-payload';
+import { parseVCardPreview } from '../preview/vcard-preview';
 import { CONTENT_INDEX_MAX_BYTES } from './limits';
 
 export function collectStickiesText(content: StickiesContent, cap: number): string {

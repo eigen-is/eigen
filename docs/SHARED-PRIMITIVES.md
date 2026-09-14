@@ -883,7 +883,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `spaceApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `STICKIES_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `teamApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
-| `vcardPreviewApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `vcardPreviewRoute` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `VECTOR_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `waitlistApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getErrorMessage` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
