@@ -161,6 +161,16 @@ describe('Backup pack and verify', () => {
             new File([TEST_PNG_BYTES], `${'long-name-'.repeat(12)}.png`, { type: 'image/png' }),
         );
 
+        // A non-ASCII name: on a path-based mount it is a tar entry name, and the reader has to take
+        // it as UTF-8 (Bun.Archive 1.3.14 stops reading at the first one, or crashes on a ustar name).
+        await driveUpload(
+            alice.sessionToken,
+            ownerId,
+            mountId,
+            root.id,
+            new File([TEST_PNG_BYTES], 'café ünïcode.png', { type: 'image/png' }),
+        );
+
         const target = mkdtempSync(join(TEST_DATA_DIR, 'pack-'));
         manifest = await snapshotHome(home, target);
         const folder = join(target, folderName);
@@ -357,6 +367,12 @@ describe('Backup pack and verify', () => {
         const record = await verifyFolder(folder);
         expect(record.status).toBe('failed');
         expect(record.failures).toContain(`${sheetDataDb}: its Yjs blobs decode to an empty document`);
+    });
+
+    test('a non-ASCII file name survives pack and extract', async () => {
+        const dir = await extractFresh('utf8-');
+        const files = await listFiles(join(dir, folderName));
+        expect(files.some((f) => f.endsWith('café ünïcode.png'))).toBe(true);
     });
 
     test('readArtifactManifest reads the manifest without a full extract', async () => {

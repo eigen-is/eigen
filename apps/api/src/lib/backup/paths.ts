@@ -52,7 +52,7 @@ export function wipeBackupStaging(): void {
     fs.rmSync(getStagingRoot(), { recursive: true, force: true });
 }
 
-// Scratch space for packing and unpacking: the half-written artifact, the decompressed tar. Under
+// Scratch space for packing: the half-written artifact, the half-written sidecar. Under
 // the staging root so a crash leaves nothing behind that the boot-time wipe does not clear, and on
 // the same filesystem as the artifacts, so the last rename of a pack is atomic.
 export function getBackupTempPath(suffix: string): string {

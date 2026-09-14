@@ -138,7 +138,7 @@ Everything is inside one `home-{ownerId}/` folder: `manifest.json`, the `home/` 
 
 ## The archive format
 
-An artifact is a plain POSIX tar (pax headers for long paths, empty folders included) streamed through zstd, so any machine with `tar --zstd` reads one and nothing about it is Eigen-specific. Eigen writes the tar itself rather than through `Bun.Archive`; the reason is in `apps/api/src/lib/backup/archive.ts` and matters only to someone changing that file.
+An artifact is a plain POSIX tar (pax headers for long paths, empty folders included) streamed through zstd, so any machine with `tar --zstd` reads one and nothing about it is Eigen-specific. Eigen writes and reads the tar itself rather than through `Bun.Archive`; the reasons are in `apps/api/src/lib/backup/archive.ts` and matter only to someone changing that file.
 
 ## Interrupted restores
 
@@ -176,7 +176,7 @@ Use per-home backup for what the script cannot do: an archive of one user before
 What an operator never needs, and someone changing this code always does.
 
 - **One primitive**, `snapshotHome` (`apps/api/src/lib/backup/snapshot-home.ts`), writes a complete storage-independent copy of one home into a folder. `apps/api/src/lib/backup/archive.ts` packs that folder, `apps/api/src/lib/backup/verify.ts` judges it in the three stages above, `apps/api/src/lib/backup/restore.ts` installs one, and `apps/api/src/lib/backup/recovery.ts` runs the boot recovery.
-- **Never pack through `Bun.Archive.write`.** It writes a lazy `Bun.file` entry as an EMPTY one and buffers the whole archive in memory, so `archive.ts` streams a pax tar itself. This is not a complication to be simplified away. Reading stays on `Bun.Archive`.
+- **Never pack or read through `Bun.Archive`.** Its writer stores a lazy `Bun.file` entry as an EMPTY one and buffers the whole archive in memory; its reader (Bun 1.3.14) stops at the first entry whose name holds a non-ASCII byte on a pax archive and segfaults on a ustar one, so a home with one accented file name on a path-based mount could not be restored. `archive.ts` streams a pax tar out and parses one back itself. This is not a complication to be simplified away.
 - **The restore marker is `restoring.json`** in the job's staging folder, with the completion note beside it.
 - **`markHomeRestoring`** (`apps/api/src/lib/home/get-home.ts`) is what makes `getHome` refuse a home while its folder is replaced, which is why the refusal reaches every request-resolved surface at once. Its collab side is `closeCollabConnectionsForHome` — see [COLLAB.md](COLLAB.md).
 - **The SSE poke is `backup:job-updated`.** Job state itself lives in the in-memory map in `apps/api/src/lib/backup/jobs.ts`, so the event is only a nudge to re-poll; the backups folder and the sidecars are the record.
