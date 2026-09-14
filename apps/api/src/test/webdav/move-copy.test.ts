@@ -103,4 +103,26 @@ describe('WebDAV MOVE/COPY', () => {
         });
         expect(res.status).toBe(400);
     });
+
+    test('MOVE onto its own URL → 403 and the file is untouched', async () => {
+        await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/move-self.txt`, { body: 'keep' });
+        const res = await webdavRequest(ctx.alice.user.email, 'MOVE', `${baseHref}/move-self.txt`, {
+            headers: { Destination: `http://localhost${baseHref}/move-self.txt` },
+        });
+        expect(res.status).toBe(403);
+        const after = await webdavRequest(ctx.alice.user.email, 'GET', `${baseHref}/move-self.txt`);
+        expect(after.status).toBe(200);
+        expect(await after.text()).toBe('keep');
+    });
+
+    test('COPY onto its own URL → 403 and the file is untouched', async () => {
+        await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/copy-self.txt`, { body: 'keep' });
+        const res = await webdavRequest(ctx.alice.user.email, 'COPY', `${baseHref}/copy-self.txt`, {
+            headers: { Destination: `http://localhost${baseHref}/copy-self.txt` },
+        });
+        expect(res.status).toBe(403);
+        const after = await webdavRequest(ctx.alice.user.email, 'GET', `${baseHref}/copy-self.txt`);
+        expect(after.status).toBe(200);
+        expect(await after.text()).toBe('keep');
+    });
 });

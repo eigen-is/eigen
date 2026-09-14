@@ -4,6 +4,7 @@ import { type DriveLike, getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
 import { enclosingDocumentContainer } from './container-guard';
 import { assertWritable } from './locks';
+import { decodeHref } from './xml';
 
 type DestParts = { ownerId: string; mountId: string; pathStr: string };
 
@@ -14,12 +15,9 @@ function parseDestination(destHeader: string, requestUrl: string): DestParts {
     } catch {
         throw new ApiError(400, 'Invalid Destination header');
     }
-    // url.pathname keeps percent-encoding ("/webdav/U/M/My%20Folder"); decode each
-    // segment so the result matches in-database names.
-    const segments = url.pathname
-        .replace(/^\/+webdav\/+/, '')
-        .split('/')
-        .map(decodeURIComponent);
+    // url.pathname keeps percent-encoding ("/webdav/U/M/My%20Folder"); decode per segment
+    // so the result matches in-database names.
+    const segments = decodeHref(url.pathname.replace(/^\/+webdav\/+/, '')).split('/');
     const [ownerId, mountId, ...rest] = segments;
     if (!ownerId || !mountId) throw new ApiError(400, 'Destination not under /webdav');
     const pathStr = `/${rest.join('/').replace(/\/+$/, '')}`;
@@ -69,6 +67,9 @@ async function resolveMoveCopy(args: {
 
     const destPathStr = dest.pathStr || '/';
     const destExisting = await drive.resolvePath(mountId, destPathStr);
+    // RFC 4918 §9.8.5 / §9.9.4: same source and destination is 403 — the overwrite path below would
+    // trash the source before moving it.
+    if (destExisting?.id === src.id) throw new ApiError(403, 'Source and destination are the same');
     if (destExisting && !overwrite) throw new ApiError(412, 'Destination exists, no overwrite');
 
     const lastSlash = destPathStr.lastIndexOf('/');
