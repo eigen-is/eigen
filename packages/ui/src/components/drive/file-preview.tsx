@@ -258,7 +258,10 @@ function TextPreviewBody({ data, isLoading }: { data: TextPreviewData | undefine
                     <div className="w-full max-w-[960px]" dangerouslySetInnerHTML={{ __html: data.body }} />
                 </div>
             ) : (
-                <div className="eigen-prose p-8 max-w-4xl mx-auto" dangerouslySetInnerHTML={{ __html: data.body }} />
+                <div
+                    className="eigen-prose p-8 max-w-4xl mx-auto [&_pre]:whitespace-pre-wrap [&_pre]:break-words"
+                    dangerouslySetInnerHTML={{ __html: data.body }}
+                />
             )}
         </div>
     );
