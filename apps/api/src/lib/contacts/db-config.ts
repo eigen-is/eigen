@@ -45,7 +45,8 @@ export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
             // CardDAV refit: reshape the index around cards-as-truth (uri/uid/etag + a one-row book
             // carrying the ctag/syncGen, plus a tombstone log for sync-collection removals). The v1
             // rows are DROPPED, not migrated — once the file-backed refit lands the index is rebuilt
-            // at init from the vCard files on disk, which become the source of truth (Decision 2).
+            // at init from the vCard files on disk, which become the source of truth
+            // (docs/CONTACTS.md § Storage model — files as truth).
             // Runs inside ManagedDatabase's BEGIN/ROLLBACK, so a failure leaves the db at v1 untouched.
             version: 2,
             up: (db) =>

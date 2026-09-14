@@ -294,8 +294,8 @@ describe('vCard merge + builder', () => {
     });
 
     test('an escaped semicolon in an owned N component does not shift the preserved tail', () => {
-        // firstUnescapedSemi skips '\;', so the real family|given boundary is found even when the family name
-        // carries one — the tail (Quincy) is sliced from the second true separator, not the escaped one.
+        // splitValue keeps '\;' inside a component, so the real family|given boundary is found even when the
+        // family name carries one — the tail (Quincy) starts at the second true separator, not the escaped one.
         const card = vcard(['BEGIN:VCARD', 'VERSION:3.0', 'N:Do\\;e;John;Quincy;;', 'FN:John Do;e', 'END:VCARD']);
         const out = mergeVCard(parseVCard(card), { firstName: 'Jane', lastName: 'Smith' });
         expect(out).toContain('N:Smith;Jane;Quincy;;');

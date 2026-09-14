@@ -10,13 +10,13 @@ import {
     handleAddressbookPropfind,
     handleCardPropfind,
 } from './discovery';
-import { handleCardReport, REPORT_BODY_MAX_BYTES } from './report';
+import { handleCardReport } from './report';
 import { handleDeleteCard, handleGetCard, handlePutCard } from './resource';
-import { davError, PROPFIND_BODY_MAX_BYTES, parsePropfind, wantsBrief } from './xml-builder';
+import { DAV_BODY_MAX_BYTES, davError, parsePropfind, wantsBrief } from './xml-builder';
 
 // The wildcard decodes to at most two segments — the book and an optional card name. Card names are
 // client-chosen, so every segment is percent-decoded (the webdav/xml.ts convention); a malformed escape or a
-// third segment is a client error, not a silent misroute (spec § 4).
+// third segment is a client error, not a silent misroute.
 type ParsedPath = { ok: true; book: string | null; uri: string | null } | { ok: false };
 
 function parseAddressbookPath(wildcard: string): ParsedPath {
@@ -47,12 +47,25 @@ function resolveCardUri(parsed: ParsedPath): { uri: string } | Response {
     return { uri };
 }
 
+// One fixed book per user — MKCOL and MKADDRESSBOOK both create another collection, so both are forbidden.
+async function forbidCollectionCreate({
+    request,
+    params,
+}: {
+    request: Request;
+    params: { ownerId: string };
+}): Promise<Response> {
+    const user = await authenticateBasic(request);
+    requireSelf(params.ownerId, user.id);
+    return new Response('Forbidden', { status: 403 });
+}
+
 export const carddavRouter = new Elysia({ name: 'carddav' })
     // PROPFIND /dav/addressbooks/:ownerId — addressbook home (the /* route catches the trailing-slash variant)
     .route('PROPFIND', '/dav/addressbooks/:ownerId', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
-        const body = await readBoundedBody(request, PROPFIND_BODY_MAX_BYTES);
+        const body = await readBoundedBody(request, DAV_BODY_MAX_BYTES);
         if (body === null) return new Response('Payload Too Large', { status: 413 });
         const contacts = await getContacts(user);
         const depth = request.headers.get('Depth') || '0';
@@ -72,7 +85,7 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         const parsed = parseAddressbookPath(params['*']);
         if (!parsed.ok) return new Response('Bad Request', { status: 400 });
 
-        const body = await readBoundedBody(request, PROPFIND_BODY_MAX_BYTES);
+        const body = await readBoundedBody(request, DAV_BODY_MAX_BYTES);
         if (body === null) return new Response('Payload Too Large', { status: 413 });
         const req = parsePropfind(body);
         const brief = wantsBrief(request);
@@ -80,9 +93,8 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         const book = await contacts.getBook();
         const depth = request.headers.get('Depth') || '0';
 
-        // Empty wildcard — the home collection itself.
         if (!parsed.book) return handleAddressbookHomePropfind(params.ownerId, book, depth, req, brief);
-        // One fixed book named 'contacts'; any other name is a 404 (no MKADDRESSBOOK, spec § 4).
+        // One fixed book named 'contacts'; any other name is a 404 (no MKADDRESSBOOK).
         if (parsed.book !== ADDRESSBOOK_ID) return new Response('Not Found', { status: 404 });
 
         // A second segment is a single-resource PROPFIND — index-only lookup by folded uri key, 404 if unknown.
@@ -114,14 +126,15 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
     })
 
     // PUT a card resource — create or replace. The name is sanitized before putCard turns it into a filename,
-    // and the If-Match / If-None-Match preconditions are evaluated inside the store's write lock (spec § 3).
+    // and the If-Match / If-None-Match preconditions are evaluated inside the store's write lock.
     .put('/dav/addressbooks/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
         const resolved = resolveCardUri(parseAddressbookPath(params['*']));
         if (resolved instanceof Response) return resolved;
 
-        // Bound the body before buffering (1 GB server cap → heap); putCard re-checks CARD_MAX_BYTES as the store guard for its non-HTTP callers.
+        // Bound the body before buffering (1 GB server cap → heap); putCard re-checks CARD_MAX_BYTES as the
+        // store guard for its non-HTTP callers.
         const body = await readBoundedBody(request, CARD_MAX_BYTES);
         if (body === null) return davError(413, '<CARD:max-resource-size/>');
         const ifMatch = request.headers.get('If-Match');
@@ -141,8 +154,8 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
     })
 
     // REPORT — addressbook-multiget, addressbook-query, sync-collection. Targets the book collection (a REPORT
-    // on the home collection has nothing to report on → 400, like caldav's no-calendarId branch). The 1 MiB
-    // body cap is enforced HERE, before the body reaches the XML parser (spec § 4).
+    // on the home collection has nothing to report on → 400, like caldav's no-calendarId branch). The body cap
+    // is enforced HERE, before the body reaches the XML parser.
     .route('REPORT', '/dav/addressbooks/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
@@ -151,19 +164,10 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         if (!parsed.book) return new Response('Bad Request', { status: 400 });
         if (parsed.book !== ADDRESSBOOK_ID) return new Response('Not Found', { status: 404 });
 
-        const body = await readBoundedBody(request, REPORT_BODY_MAX_BYTES);
+        const body = await readBoundedBody(request, DAV_BODY_MAX_BYTES);
         if (body === null) return new Response('Payload Too Large', { status: 413 });
         return handleCardReport(await getContacts(user), params.ownerId, body);
     })
 
-    // One fixed book per user — creating another collection is forbidden (spec Non-goals).
-    .route('MKCOL', '/dav/addressbooks/:ownerId/*', async ({ request, params }) => {
-        const user = await authenticateBasic(request);
-        requireSelf(params.ownerId, user.id);
-        return new Response('Forbidden', { status: 403 });
-    })
-    .route('MKADDRESSBOOK', '/dav/addressbooks/:ownerId/*', async ({ request, params }) => {
-        const user = await authenticateBasic(request);
-        requireSelf(params.ownerId, user.id);
-        return new Response('Forbidden', { status: 403 });
-    });
+    .route('MKCOL', '/dav/addressbooks/:ownerId/*', forbidCollectionCreate)
+    .route('MKADDRESSBOOK', '/dav/addressbooks/:ownerId/*', forbidCollectionCreate);

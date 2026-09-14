@@ -4,7 +4,7 @@ import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { Label } from '@workspace/lib/types/label';
 import { AppError, onMutationError } from '../../api-error';
-import { invalidateLabelCreated, invalidateLabelDeleted, invalidateLabelUpdated, labelKeys } from './keys';
+import { invalidateLabelChanged, invalidateLabelCreated, labelKeys } from './keys';
 
 export function useLabels() {
     const { user } = useAuth();
@@ -53,7 +53,7 @@ export function useUpdateLabel() {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidateLabelUpdated(queryClient, ownerId, variables.id),
+        onSuccess: () => invalidateLabelChanged(queryClient, ownerId),
         onError: onMutationError,
     });
 }
@@ -69,7 +69,7 @@ export function useDeleteLabel() {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: (_data, labelId) => invalidateLabelDeleted(queryClient, ownerId, labelId),
+        onSuccess: () => invalidateLabelChanged(queryClient, ownerId),
         onError: onMutationError,
     });
 }

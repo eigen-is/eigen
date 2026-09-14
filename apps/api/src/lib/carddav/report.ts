@@ -19,10 +19,9 @@ import {
 } from './xml-builder';
 import { type CardReportRequest, parseCardReport } from './xml-parser';
 
-// Request bounds (spec § 4): the router rejects a REPORT body over this before it reaches the XML unfolder,
-// multiget refuses a client that asks for more than this many resources in one round-trip, and a query result
-// set is truncated to the cap rather than assembling an unbounded response.
-export const REPORT_BODY_MAX_BYTES = 1_048_576;
+// Request bounds: multiget refuses a client that asks for more than this many resources in one round-trip, and
+// a query result set is truncated to the cap rather than assembling an unbounded response. The body ceiling is
+// the shared DAV_BODY_MAX_BYTES, enforced in the router before the body reaches the XML unfolder.
 const MULTIGET_HREF_LIMIT = 500;
 const QUERY_RESULT_CAP = 1000;
 
@@ -62,7 +61,7 @@ export async function handleCardReport(contacts: Contacts, ownerId: string, body
 // subset is the only projection trigger. A stored card that won't parse can't be projected, so it's served
 // whole rather than 500-ing the whole REPORT — the same skip-on-throw stance the query loop takes below.
 function resolveAddressData(text: string, partialProps: string[] | null): string {
-    if (!partialProps?.length) return text;
+    if (!partialProps) return text;
     try {
         return projectAddressData(text, partialProps);
     } catch {
@@ -112,7 +111,6 @@ async function handleMultiget(
             continue;
         }
         const props = [...cardEtagProp(card.etag)];
-        // Full bytes verbatim, or the partial-retrieval projection when the client asked for a prop subset.
         if (report.wantsData) {
             props.push(addressDataProp(resolveAddressData(new TextDecoder().decode(card.bytes), report.partialProps)));
         }
@@ -123,7 +121,7 @@ async function handleMultiget(
 
 // addressbook-query: match-only server-side filtering (RFC 6352 § 8.6 — clients treat every returned card as a
 // match). Matching runs in-memory over every parsed card, group cards included (DAV sees the whole book); books
-// are small and queries rare, so this never touches an app hot path (spec § Performance).
+// are small and queries rare, so this never touches an app hot path.
 async function handleQuery(
     contacts: Contacts,
     ownerId: string,
@@ -131,11 +129,10 @@ async function handleQuery(
 ): Promise<Response> {
     // RFC 6352 § 8.6 requires a CARDDAV:filter in the report; a body without one is malformed.
     if (!report.filter) return new Response('Bad Request: addressbook-query requires a filter', { status: 400 });
-    const filter = report.filter;
 
     // The limit and cap bound the ASSEMBLY, not just the response: matching stops at the cap instead of
-    // retaining every remaining match's bytes (spec § 4 pins truncate + log). Book order is kept, so the
-    // served set equals slicing afterwards.
+    // retaining every remaining match's bytes (truncate + log, docs/CONTACTS.md § CardDAV surface). Book order
+    // is kept, so the served set equals slicing afterwards.
     const cap = Math.min(report.limit ?? QUERY_RESULT_CAP, QUERY_RESULT_CAP);
     const matched: { uri: string; etag: string; text: string }[] = [];
     for (const card of await contacts.listCards()) {
@@ -154,12 +151,11 @@ async function handleQuery(
         } catch {
             continue; // a stored card that won't parse can't match a filter (the same-stat replacement edge)
         }
-        if (matchCard(lines, filter)) matched.push({ uri: card.uri, etag: got.etag, text });
+        if (matchCard(lines, report.filter)) matched.push({ uri: card.uri, etag: got.etag, text });
     }
 
     const responses = matched.map((r) => {
         const props = [...cardEtagProp(r.etag)];
-        // Full text verbatim, or the partial-retrieval projection when the client asked for a prop subset.
         if (report.wantsData) props.push(addressDataProp(resolveAddressData(r.text, report.partialProps)));
         return response(cardHref(ownerId, r.uri), [propstatOk(props)]);
     });

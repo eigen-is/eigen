@@ -7,7 +7,7 @@
 // untouched. `createVCard` emits the minimal clean 3.0 card a brand-new contact starts from.
 import { escapeContentText, stripLineBreaks } from '@workspace/lib/content-line';
 import type { Address } from '@workspace/lib/types/contact';
-import { makeLine, photoParams, serializeVCardLines, unescapeText } from '../vcard';
+import { ISO_DATE, makeLine, photoParams, serializeVCardLines, splitValue, unescapeText } from '../vcard';
 import type { ParsedCard, VCardLine } from '../vcard/types';
 
 export type CardEdits = Partial<{
@@ -24,11 +24,6 @@ export type CardEdits = Partial<{
     eigenId: string | null; // null = remove X-EIGEN-ID
     photo: { bytes: Uint8Array; mediaType: string } | null; // null = remove PHOTO; absent key = keep
 }>;
-
-// BDAY is written verbatim (dates aren't TEXT-escaped), so only a strict YYYY-MM-DD value is ever emitted —
-// exactly what the parse side can produce. Any other non-empty value is treated as a clear, closing the
-// CR/newline injection path a raw BDAY string would otherwise open.
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 function addressEquals(a: Address, b: Address): boolean {
     return (
@@ -80,36 +75,23 @@ function writeSingle(lines: VCardLine[], name: string, changed: boolean, value: 
     return rewriteOwned(lines, name, value);
 }
 
-// Index of the first unescaped ';' in a structured value, or -1 — a preceding backslash escapes it.
-function firstUnescapedSemi(value: string): number {
-    for (let i = 0; i < value.length; i++) {
-        if (value[i] === '\\') i++;
-        else if (value[i] === ';') return i;
-    }
-    return -1;
-}
-
 // A company change keeps the card's existing trailing ORG components verbatim (`Acme;Engineering` +
 // `NewCorp` -> `NewCorp;Engineering`) — the department is unowned bytes, not ours to destroy.
 function buildOrgValue(card: ParsedCard, company: string): string {
     const existing = card.lines.find((l) => l.name === 'ORG');
     if (!existing) return escapeContentText(company);
-    const semi = firstUnescapedSemi(existing.value);
-    return escapeContentText(company) + (semi === -1 ? '' : existing.value.slice(semi));
+    const [, ...rest] = splitValue(existing.value, ';');
+    return [escapeContentText(company), ...rest].join(';');
 }
 
-// A name change keeps the N tail from the second unescaped ';' verbatim (`Doe;John;Quincy;Dr.;Jr.` ->
+// A name change keeps the N components from the third onwards verbatim (`Doe;John;Quincy;Dr.;Jr.` ->
 // `Smith;Jane;Quincy;Dr.;Jr.`) — components 3-5 are unowned, not ours to destroy (the buildOrgValue rule).
-// No N line, or fewer than two unescaped ';' -> the clean `family;given;;;` shape.
+// No N line, or fewer than three components -> the clean `family;given;;;` shape.
 function buildNameValue(card: ParsedCard, first: string, last: string): string {
     const owned = `${escapeContentText(last)};${escapeContentText(first)}`;
     const existing = card.lines.find((l) => l.name === 'N');
-    if (!existing) return `${owned};;;`;
-    const firstSemi = firstUnescapedSemi(existing.value);
-    if (firstSemi === -1) return `${owned};;;`;
-    const secondSemi = firstUnescapedSemi(existing.value.slice(firstSemi + 1));
-    if (secondSemi === -1) return `${owned};;;`;
-    return owned + existing.value.slice(firstSemi + 1 + secondSemi);
+    const rest = existing ? splitValue(existing.value, ';').slice(2) : [];
+    return rest.length === 0 ? `${owned};;;` : `${owned};${rest.join(';')}`;
 }
 
 // Order-insensitive multiset equality — CATEGORIES is a set of labels, order carries no meaning.
@@ -155,8 +137,6 @@ function diffAddresses(card: ParsedCard, wanted: Address[], toRemove: Set<VCardL
 }
 
 export function mergeVCard(card: ParsedCard, edits: CardEdits): string {
-    // Multi-value owned props: diff EMAIL/TEL/ADR against the projection, collecting drops + appends. Only
-    // touched when the edit key is present.
     const toRemove = new Set<VCardLine>();
     const toAppend: VCardLine[] = [];
     if (edits.email !== undefined) diffText(card.lines, 'EMAIL', edits.email, toRemove, toAppend);
@@ -197,6 +177,8 @@ export function mergeVCard(card: ParsedCard, edits: CardEdits): string {
         result = writeSingle(result, 'TITLE', edits.jobTitle !== card.jobTitle, value);
     }
     if (edits.birthday !== undefined) {
+        // BDAY is written verbatim (dates aren't TEXT-escaped), so anything but a strict ISO date is a clear —
+        // that is what closes the CR/newline injection path a raw value would open.
         const birthday = ISO_DATE.test(edits.birthday) ? edits.birthday : '';
         const value = birthday === '' ? null : birthday;
         result = writeSingle(result, 'BDAY', birthday !== card.birthday, value);

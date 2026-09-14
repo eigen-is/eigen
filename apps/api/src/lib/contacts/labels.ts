@@ -72,7 +72,7 @@ async function rewriteCardCategories(
         // One member corrupted out of band may not take the fan-out down with it: a throw here strands the
         // rename's journal record, and every later label mutation resumes it and fails again — one bad file
         // would brick all label writes. Skip-and-log instead (as buildCandidates does), leaving that card's
-        // CATEGORIES for the reconcile/rebuild that can read the file again to converge (spec § 1).
+        // CATEGORIES for the reconcile/rebuild that can read the file again to converge.
         let card: ParsedCard;
         try {
             card = parseVCard(new TextDecoder().decode(await contacts.readCardBytes(row.uri)));
@@ -102,10 +102,8 @@ async function rewriteCardCategories(
                     lastName: row.lastName,
                     eigenId: row.eigenId,
                     isGroup: row.isGroup,
-                    // Deliberately the stored projection, not the fresh parse: committing it with the
-                    // rewritten file's stats hides an out-of-band edit from the stat-only reconcile. Only
-                    // hand-editing a card file under a live server can produce that, so projecting from the
-                    // parse above is deferred to the phase-2 DAV PUT seam.
+                    // Deliberately the stored projection, not the fresh parse: committing the parse with
+                    // the rewritten file's stats hides an out-of-band edit from the stat-only reconcile.
                     data: row.data,
                     etag: computeCardEtag(bytes),
                     mtime: Math.round(mtime),
@@ -221,7 +219,7 @@ export async function updateLabel(contacts: Contacts, id: string, label: Omit<La
 
                 // The fan-out is owed from the moment the row changes, so the intent is durable from that
                 // same moment: the member files a crash never reaches stay stat-clean, and no reconcile
-                // can find them (the proposal's original no-journal claim — see PROPOSAL_CARDDAV.md § 1 amendment).
+                // can find them.
                 if (renamedFrom) {
                     tx.insert(schema.pendingLabelRenames)
                         .values({ labelId: id, oldName: renamedFrom.name, newName })

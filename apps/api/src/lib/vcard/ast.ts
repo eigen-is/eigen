@@ -7,7 +7,6 @@ import type { VCardLine } from './types';
 
 export class VCardError extends Error {}
 
-// First index of `ch` in `s` that sits outside a double-quoted section, or -1.
 function indexOfOutsideQuotes(s: string, ch: string): number {
     let quoted = false;
     for (let i = 0; i < s.length; i++) {
@@ -18,7 +17,6 @@ function indexOfOutsideQuotes(s: string, ch: string): number {
     return -1;
 }
 
-// Split on `delim`, ignoring delimiters inside double quotes.
 function splitOutsideQuotes(s: string, delim: string): string[] {
     const parts: string[] = [];
     let cur = '';
@@ -155,6 +153,28 @@ export function makeLine(
         value,
         raw: null,
     };
+}
+
+// Split a structured (';') or list (',') TEXT value on an unescaped delimiter, keeping the escape sequences
+// intact so each component can be unescaped afterward — and so joining the parts back on the delimiter
+// restores the exact source bytes (the merge seam edits one component and re-emits the rest verbatim).
+export function splitValue(value: string, delim: string): string[] {
+    const parts: string[] = [];
+    let cur = '';
+    for (let i = 0; i < value.length; i++) {
+        const c = value[i];
+        if (c === '\\' && i + 1 < value.length) {
+            cur += c + value[i + 1];
+            i++;
+        } else if (c === delim) {
+            parts.push(cur);
+            cur = '';
+        } else {
+            cur += c;
+        }
+    }
+    parts.push(cur);
+    return parts;
 }
 
 // One left-to-right pass so an escaped backslash (\\) can't recombine with the next char into a new

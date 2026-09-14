@@ -2,20 +2,12 @@ import type { QueryClient } from '@tanstack/react-query';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { debounce } from 'es-toolkit';
-import {
-    contactKeys,
-    invalidateContactList,
-    invalidateLabelCreated,
-    invalidateLabelDeleted,
-    invalidateLabelUpdated,
-} from './hooks/keys';
+import { invalidateContactList, invalidateLabelChanged, invalidateLabelCreated } from './hooks/keys';
 
-// A whole-book import or a CardDAV bulk sync emits one event per card, and every card's owner-wide
-// invalidation restarts the mounted list refetch — 500 cards used to mean 500 refetches per open tab,
-// enough to trip the per-IP rate limiter. The list, `me` and home-size half is collapsed per owner into
-// one trailing refetch instead; each card's own detail entry is still handled at once, so a burst never
-// drops the card an open detail pane is showing. The importing tab's own onSuccess invalidation is
-// untouched, so a single write still lands immediately.
+// A whole-book import or a CardDAV bulk sync emits one event per card, and every card's invalidation
+// restarts the mounted list refetch — 500 cards used to mean 500 refetches per open tab, enough to trip the
+// per-IP rate limiter. One trailing refetch per owner per burst instead. The importing tab's own onSuccess
+// invalidation is untouched, so a single write still lands immediately.
 const INVALIDATE_DEBOUNCE_MS = 250;
 const debouncedListInvalidations = new Map<string, (queryClient: QueryClient) => void>();
 
@@ -35,16 +27,8 @@ export function handleContactsSSEvent(event: SSEvent, queryClient: QueryClient, 
 
     switch (event.type) {
         case SSEventType.CONTACT_CREATED:
-            invalidateListSoon(queryClient, userId);
-            return true;
-
         case SSEventType.CONTACT_UPDATED:
-            queryClient.invalidateQueries({ queryKey: contactKeys.detail(userId, event.contactId) });
-            invalidateListSoon(queryClient, userId);
-            return true;
-
         case SSEventType.CONTACT_DELETED:
-            queryClient.removeQueries({ queryKey: contactKeys.detail(userId, event.contactId) });
             invalidateListSoon(queryClient, userId);
             return true;
 
@@ -53,11 +37,8 @@ export function handleContactsSSEvent(event: SSEvent, queryClient: QueryClient, 
             return true;
 
         case SSEventType.LABEL_UPDATED:
-            invalidateLabelUpdated(queryClient, userId, event.labelId);
-            return true;
-
         case SSEventType.LABEL_DELETED:
-            invalidateLabelDeleted(queryClient, userId, event.labelId);
+            invalidateLabelChanged(queryClient, userId);
             return true;
 
         default:

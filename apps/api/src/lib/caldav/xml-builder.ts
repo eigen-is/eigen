@@ -1,19 +1,11 @@
 import { escapeXml } from '@workspace/lib/html';
 import type { CalendarItem } from '@workspace/lib/types/calendar';
+import { calendarHomeHref } from '../dav/href';
 import type { PropMap } from '../dav/propfind';
 import { ownershipEntries } from '../dav/xml';
 
-export { PROPFIND_BODY_MAX_BYTES, parsePropfind, selectProps, wantsBrief } from '../dav/propfind';
-export {
-    davError,
-    multistatus,
-    multistatusResponse,
-    principalProps,
-    propstatNotFound,
-    propstatOk,
-    response,
-    XML_CONTENT_TYPE,
-} from '../dav/xml';
+export { DAV_BODY_MAX_BYTES, parsePropfind, selectProps, wantsBrief } from '../dav/propfind';
+export { davError, multistatusResponse, principalProps, propstatNotFound, propstatOk, response } from '../dav/xml';
 
 // For the discovery PROPFIND on /dav/ — returns current-user-principal
 export function currentUserPrincipalProp(userId: string): string {
@@ -85,7 +77,10 @@ export function homeCollectionProps(userId: string): PropMap {
             'current-user-principal',
             `<D:current-user-principal><D:href>/dav/principals/${userId}/</D:href></D:current-user-principal>`,
         ],
-        ['calendar-home-set', `<C:calendar-home-set><D:href>/dav/calendars/${userId}/</D:href></C:calendar-home-set>`],
+        [
+            'calendar-home-set',
+            `<C:calendar-home-set><D:href>${calendarHomeHref(userId)}</D:href></C:calendar-home-set>`,
+        ],
         ['displayname', `<D:displayname>Calendars</D:displayname>`],
         ...ownershipEntries(userId),
     ]);

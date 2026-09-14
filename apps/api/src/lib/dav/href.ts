@@ -2,3 +2,7 @@
 export function encodePathSegment(segment: string): string {
     return encodeURIComponent(segment).replace(/%(21|24|26|27|28|29|2A|2B|2C|3A|3B|3D|40)/g, decodeURIComponent);
 }
+
+// The two home collections one principal advertises; every CalDAV and CardDAV href builds on its own.
+export const calendarHomeHref = (ownerId: string) => `/dav/calendars/${ownerId}/`;
+export const addressbookHomeHref = (ownerId: string) => `/dav/addressbooks/${ownerId}/`;

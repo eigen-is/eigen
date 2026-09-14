@@ -1,9 +1,9 @@
-import { IMPORT_MAX_BYTES, IMPORT_MAX_CARDS } from '@workspace/lib/constants/contact';
-import type { Contact, ImportContactsResult } from '@workspace/lib/types/contact';
+import { IMPORT_MAX_BYTES, IMPORT_MAX_CARDS, VCARD_CONTENT_TYPE } from '@workspace/lib/constants/contact';
+import type { Contact, ContactTransferSource, ImportContactsResult } from '@workspace/lib/types/contact';
 import { isVCardFile } from '@workspace/lib/types/drive';
 import type { Label } from '@workspace/lib/types/label';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
-import { Elysia, t } from 'elysia';
+import { Elysia, type Static, t } from 'elysia';
 import { enforceAvatarUpload } from '../lib/config/enforcement';
 import { CARD_MAX_BYTES } from '../lib/contacts/card-store';
 import { getContacts } from '../lib/contacts/contacts';
@@ -56,6 +56,18 @@ const LabelSchema = t.Object({
     name: t.String(TEXT),
     color: t.String(TEXT),
 });
+
+const ImportFromDriveSchema = t.Object({
+    sourceOwnerId: t.String(),
+    sourceMountId: t.String(),
+    sourcePathId: t.String(),
+});
+// Compile-time guard: a field added to ContactTransferSource without a schema entry here would be stripped
+// by Elysia's normalize, so the key sets must match (a structural `extends` check would not catch it).
+type _ImportFromDriveSchemaCoversSource =
+    Exclude<keyof ContactTransferSource, keyof Static<typeof ImportFromDriveSchema>> extends never ? true : never;
+const _importFromDriveSchemaCheck: _ImportFromDriveSchemaCoversSource = true;
+void _importFromDriveSchemaCheck;
 
 // vCard files are UTF-8 (RFC 6350 §3.1). A Windows-1252 export decoded leniently would import with U+FFFD
 // in every accented name, stored in the card bytes and re-served to every DAV client, so it is refused.
@@ -218,7 +230,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
                 const name = fn ? unescapeText(fn.value).trim().slice(0, 200) : '';
                 fileName = `${name || 'contact'}.vcf`;
             }
-            set.headers['Content-Type'] = 'text/vcard; charset=utf-8';
+            set.headers['Content-Type'] = VCARD_CONTENT_TYPE;
             set.headers['Content-Disposition'] = contentDisposition('attachment', fileName);
             return text;
         },
@@ -261,11 +273,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             return await (await getContacts(user)).importCards(decodeVCardFile(bytes));
         },
         {
-            body: t.Object({
-                sourceOwnerId: t.String(),
-                sourceMountId: t.String(),
-                sourcePathId: t.String(),
-            }),
+            body: ImportFromDriveSchema,
             auth: true,
         },
     );

@@ -1,4 +1,5 @@
 import { escapeXml } from '@workspace/lib/html';
+import { addressbookHomeHref, calendarHomeHref } from './href';
 
 export const XML_CONTENT_TYPE = 'application/xml; charset=utf-8';
 
@@ -41,9 +42,9 @@ export function propstatNotFound(props: string[]): string {
 export function principalProps(userId: string): string[] {
     return [
         `<D:resourcetype><D:collection/><D:principal/></D:resourcetype>`,
-        `<C:calendar-home-set><D:href>/dav/calendars/${userId}/</D:href></C:calendar-home-set>`,
-        // One principal serves both protocols; clients read only the props they know (spec § 4).
-        `<CARD:addressbook-home-set><D:href>/dav/addressbooks/${userId}/</D:href></CARD:addressbook-home-set>`,
+        `<C:calendar-home-set><D:href>${calendarHomeHref(userId)}</D:href></C:calendar-home-set>`,
+        // One principal serves both protocols; clients read only the props they know.
+        `<CARD:addressbook-home-set><D:href>${addressbookHomeHref(userId)}</D:href></CARD:addressbook-home-set>`,
         `<D:principal-URL><D:href>/dav/principals/${userId}/</D:href></D:principal-URL>`,
     ];
 }

@@ -1,7 +1,6 @@
 // The addressbook-query filter engine (RFC 6352 § 8.6 / § 10.5). Matching runs in-memory over a card's
-// content-line AST — books are small and queries rare, so this stays off every hot path (spec § 4 /
-// § Performance). The parser (xml-parser.ts) builds a QueryFilter from the REPORT body; matchCard evaluates
-// one card against it. Partial address-data (a requested property subset) is a separate concern.
+// content-line AST — books are small and queries rare, so this stays off every hot path. The parser
+// (xml-parser.ts) builds a QueryFilter from the REPORT body; matchCard evaluates one card against it.
 import { unescapeText } from '../vcard';
 import type { VCardLine } from '../vcard/types';
 
@@ -25,7 +24,7 @@ export type QueryFilter = { test: 'anyof' | 'allof'; propFilters: PropFilter[] }
 // collations; anything else is answered 403 with CARD:supported-collation, never silently downgraded.
 export class UnsupportedCollationError extends Error {}
 // A filter whose structure the parser can't map to the types above — an unknown child element, a construct
-// beyond RFC 6352 § 10.5. Answered 403 with CARD:supported-filter, never a full-set superset (spec § 4).
+// beyond RFC 6352 § 10.5. Answered 403 with CARD:supported-filter, never a full-set superset.
 export class UnsupportedFilterError extends Error {}
 
 // The one source of truth for which collations the server accepts (RFC 6352 § 8.3). i;unicode-casemap is the
@@ -45,7 +44,6 @@ function foldForCollation(value: string, collation: string | null): string {
     return collation === 'i;ascii-casemap' ? value.replace(/[A-Z]/g, (c) => c.toLowerCase()) : value.toLowerCase();
 }
 
-// Does one value satisfy a single text-match (before negation)? Both sides are collation-folded.
 function textValueMatches(value: string, tm: TextMatch): boolean {
     const hay = foldForCollation(value, tm.collation);
     const needle = foldForCollation(tm.value, tm.collation);
@@ -91,8 +89,8 @@ function paramFilterSatisfied(lines: VCardLine[], pf: ParamFilter): boolean {
 function propFilterSatisfied(allLines: VCardLine[], pf: PropFilter): boolean {
     const lines = allLines.filter((l) => l.name === pf.name);
     if (pf.isNotDefined) return lines.length === 0;
-    if (lines.length === 0) return false; // property absent and no is-not-defined → the prop-filter can't match
-    if (pf.textMatches.length === 0 && pf.paramFilters.length === 0) return true; // bare existence
+    if (lines.length === 0) return false;
+    if (pf.textMatches.length === 0 && pf.paramFilters.length === 0) return true;
     const results = [
         ...pf.textMatches.map((tm) => textMatchSatisfied(lines, tm)),
         ...pf.paramFilters.map((p) => paramFilterSatisfied(lines, p)),
@@ -100,8 +98,7 @@ function propFilterSatisfied(allLines: VCardLine[], pf: PropFilter): boolean {
     return pf.test === 'allof' ? results.every(Boolean) : results.some(Boolean);
 }
 
-// Does a card (its content-line AST) satisfy the whole filter? anyof = any prop-filter matches, allof = all of
-// them. An empty filter follows array semantics: anyof of nothing matches nothing, allof of nothing matches.
+// An empty filter follows array semantics: anyof of nothing matches nothing, allof of nothing matches.
 export function matchCard(lines: VCardLine[], filter: QueryFilter): boolean {
     const results = filter.propFilters.map((pf) => propFilterSatisfied(lines, pf));
     return filter.test === 'allof' ? results.every(Boolean) : results.some(Boolean);
