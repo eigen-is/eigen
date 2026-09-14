@@ -112,8 +112,12 @@ export async function generateImagePreview(
     );
 }
 
+function thumbnailFileName(pathId: string): string {
+    return `${pathId}.webp`;
+}
+
 function getThumbnailPath(thumbsDir: string, pathId: string): string {
-    return path.join(thumbsDir, `${pathId}.webp`);
+    return path.join(thumbsDir, thumbnailFileName(pathId));
 }
 
 export async function saveThumbnail(
@@ -132,7 +136,15 @@ export async function saveThumbnail(
     const thumbPath = getThumbnailPath(thumbsDir, pathId);
     await Bun.write(thumbPath, result.data);
 
-    return { ...result, fileName: `${pathId}.webp` };
+    return { ...result, fileName: thumbnailFileName(pathId) };
+}
+
+// Returns the new thumbnail's file name, or null when the source row is stale and its file is gone.
+export async function copyThumbnail(thumbsDir: string, sourceFileName: string, pathId: string): Promise<string | null> {
+    const source = Bun.file(path.join(thumbsDir, sourceFileName));
+    if (!(await source.exists())) return null;
+    await Bun.write(getThumbnailPath(thumbsDir, pathId), source);
+    return thumbnailFileName(pathId);
 }
 
 export async function deleteThumbnail(thumbsDir: string, pathId: string): Promise<void> {
