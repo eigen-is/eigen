@@ -40,7 +40,7 @@ written).
   profile and team avatars. Fire-and-forget: no return value
 - **Pulls** — one typed function per cross-home read (`pullSharedPaths`, `pullCalendars`, `pullEventsInRange`,
   `pullDriveSearch`, team quota/mount lookups, …)
-- **Event mutations** — `createEventAt` / `updateEventAt` / `deleteEventAt`. Writes with return values, so they
+- **Event mutations** — `createEventAt` / `updateEventAt` / `deleteEventAt` / `moveEventAt`. Writes with return values, so they
   don't fit the fire-and-forget push shape
 
 Today all three are direct in-process calls via `getHome()`. In a sharded deployment only `home-relay.ts`
@@ -57,7 +57,7 @@ multi-step coordination needed across servers.
 
 The first step is smaller than this: several API processes on one box, sharing the filesystem, routed by Caddy.
 That is worked out in [PROPOSAL_SINGLE_MACHINE_CLUSTER.md](proposals/PROPOSAL_SINGLE_MACHINE_CLUSTER.md) (also not
-implemented). The picture below is the multi-machine end state.
+implemented; tracked as one row in [ROADMAP-POST-1.md](ROADMAP-POST-1.md)). The picture below is the multi-machine end state.
 
 ```
                            +-------------------+
@@ -113,7 +113,7 @@ machine, using Caddy as the only router so the application never hashes an owner
 ### Home Locality Enforcement
 
 A lint rule (`scripts/check-home-imports.ts`, run by `bun run check`) blocks new `getHome` imports
-in `lib/` — only route files and `home-relay.ts` may import it. Existing lib files are allowlisted
+in `lib/` — only route files and `lib/home/` may import it. Existing lib files are allowlisted
 pending refactor.
 
 **Future refactor**: Change lib functions to receive `Home` as a parameter instead of calling
