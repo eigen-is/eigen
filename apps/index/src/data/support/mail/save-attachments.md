@@ -23,8 +23,8 @@ the message, and press **Escape** to close it.
 
 Pictures, PDFs, video and sound play in the preview. Text and code files (such as `.txt`, `.md`, `.json`,
 `.yaml`) and contact files are shown there too: a `.vcf` reads as the contact cards it holds, not as its raw
-text. Anything else shows its name and an icon,
-with the same buttons along the bottom.
+text. Anything else shows its name and an icon, with the same buttons along the bottom. Text files over 1 MB
+show the file card instead.
 
 Along the bottom of the preview are the things you can do with the file: **Download**, **Save to Drive…**, and,
 depending on the file, **Convert to Sheet** for an `.xlsx` spreadsheet, **Convert to Document** for a `.docx`

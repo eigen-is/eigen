@@ -3,6 +3,7 @@ import {
     getBytesTextPreviewMode,
     getTextPreviewMode,
     isExiftoolExtension,
+    TEXT_PREVIEW_MAX_BYTES,
 } from '../constants/preview';
 import { type DrivePath, isCollabType, isVCardFile } from '../types/drive';
 import type { FileSubject, PreviewMode } from '../types/file-subject';
@@ -67,10 +68,10 @@ export function getPreviewMode(subject: FileSubject): PreviewMode {
     if (isVCardFile(mime, subject.name)) return 'vcard';
     // The gate the preview routes run: a container renders from its Yjs body, everything else from its
     // bytes, and an eigen mime on loose bytes is only the uploader's or the sender's word.
-    const textMode =
-        subject.drive && isCollabType(subject.drive.type)
-            ? getTextPreviewMode(mime, subject.name)
-            : getBytesTextPreviewMode(mime, subject.name);
-    if (textMode !== null) return 'text';
-    return 'fallback';
+    const container = subject.drive !== undefined && isCollabType(subject.drive.type);
+    const textMode = container ? getTextPreviewMode(mime, subject.name) : getBytesTextPreviewMode(mime, subject.name);
+    if (textMode === null) return 'fallback';
+    // Past the ceiling the text routes serve nothing; a container's size is its databases, not its body.
+    if (!container && subject.size > TEXT_PREVIEW_MAX_BYTES) return 'fallback';
+    return 'text';
 }
