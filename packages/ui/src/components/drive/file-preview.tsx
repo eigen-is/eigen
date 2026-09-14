@@ -1,8 +1,8 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { getDriveItemUrl } from '@workspace/lib/api';
-import type { PreviewMode } from '@workspace/lib/constants';
 import { useTextPreview } from '@workspace/lib/drive';
 import { fileActionsFor } from '@workspace/lib/file-actions';
+import type { PreviewMode } from '@workspace/lib/file-subject';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import { useFocusTrap } from '@workspace/ui/hooks/use-focus-trap';
@@ -10,7 +10,6 @@ import { ChevronLeft, ChevronRight, ExternalLink, FolderDown, Loader2, X } from 
 import { useRef, useState } from 'react';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
 import { getFileIcon } from './file-presentation';
-import { SaveToDrivePicker } from './save-to-drive-picker';
 import { VCardPreviewContent } from './vcard-preview-content';
 
 type FilePreviewProps = {
@@ -21,6 +20,8 @@ type FilePreviewProps = {
     hasNext: boolean;
     subject: FileSubject;
     siblings: FileSubject[];
+    // The siblings are a set to act on as a whole, not just a list to page through.
+    batch: boolean;
     onClose: () => void;
     onPrev: () => void;
     onNext: () => void;
@@ -34,6 +35,7 @@ export function FilePreview({
     hasNext,
     subject,
     siblings,
+    batch,
     onClose,
     onPrev,
     onNext,
@@ -55,12 +57,11 @@ export function FilePreview({
     useHotkey('ArrowDown', goNext, { enabled: true });
 
     const runner = useFileActionRunner(subject, siblings);
-    const [downloadAllOpen, setDownloadAllOpen] = useState(false);
 
     // Trap focus in the overlay, but hand it to a picker (a Radix dialog portaled to body)
     // while one is open.
     const overlayRef = useRef<HTMLDivElement>(null);
-    useFocusTrap(overlayRef, !runner.isDialogOpen && !downloadAllOpen);
+    useFocusTrap(overlayRef, !runner.isDialogOpen);
 
     const openUrl = subject.drive ? getDriveItemUrl(subject.drive) : undefined;
     const downloadableSiblings = siblings.filter((s) => !!s.downloadUrl);
@@ -170,24 +171,22 @@ export function FilePreview({
                 )}
                 {/* The overlay is Quick Look itself, so the registry's own row is the one it drops. */}
                 {fileActionsFor(subject, ['quick-look']).map((action) => (
-                    <FooterActionButton key={action.id} onClick={() => runner.run(action)}>
+                    <FooterActionButton key={action.id} onClick={() => runner.run(action)} disabled={runner.isPending}>
                         <action.icon className="size-3.5" />
                         {action.label}
                     </FooterActionButton>
                 ))}
-                {downloadableSiblings.length >= 2 && (
-                    <FooterActionButton onClick={() => setDownloadAllOpen(true)}>
+                {batch && downloadableSiblings.length >= 2 && (
+                    <FooterActionButton
+                        onClick={() => runner.openPicker(downloadableSiblings)}
+                        disabled={runner.isPending}
+                    >
                         <FolderDown className="size-3.5" />
                         Download all ({downloadableSiblings.length})
                     </FooterActionButton>
                 )}
             </div>
             {runner.dialogs}
-            <SaveToDrivePicker
-                subjects={downloadableSiblings}
-                open={downloadAllOpen}
-                onClose={() => setDownloadAllOpen(false)}
-            />
         </div>
     );
 }
@@ -314,11 +313,20 @@ function FooterButton({ href, children }: { href: string; children: React.ReactN
     );
 }
 
-function FooterActionButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+function FooterActionButton({
+    onClick,
+    disabled,
+    children,
+}: {
+    onClick: () => void;
+    disabled?: boolean;
+    children: React.ReactNode;
+}) {
     return (
         <button
             onClick={onClick}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white text-sm transition-colors"
+            disabled={disabled}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-default text-white text-sm transition-colors"
         >
             {children}
         </button>

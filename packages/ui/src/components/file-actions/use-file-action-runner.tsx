@@ -11,9 +11,12 @@ import { usePreview } from '../preview-provider/preview-context';
 
 type FileActionRunner = {
     run: (action: FileAction) => void;
+    // For a host with a batch of its own to save — the overlay's "Download all" row.
+    openPicker: (subjects: FileSubject[]) => void;
     // Rendered once by the host, so a picker opened from any row lives outside the menu that closed.
     dialogs: ReactNode;
     isDialogOpen: boolean;
+    isPending: boolean;
 };
 
 export function useFileActionRunner(subject: FileSubject, siblings?: FileSubject[]): FileActionRunner {
@@ -21,7 +24,7 @@ export function useFileActionRunner(subject: FileSubject, siblings?: FileSubject
     const convertDocument = useConvertDocument();
     const importContactsFromDrive = useImportContactsFromDrive();
     const importContacts = useImportContacts();
-    const [pickerOpen, setPickerOpen] = useState(false);
+    const [pickerSubjects, setPickerSubjects] = useState<FileSubject[] | null>(null);
 
     const convert = (targetType: 'eigensheets' | 'eigendoc') => {
         const { drive } = subject;
@@ -69,7 +72,7 @@ export function useFileActionRunner(subject: FileSubject, siblings?: FileSubject
                 if (subject.downloadUrl) triggerDownload(subject.downloadUrl);
                 return;
             case 'save-to-drive':
-                setPickerOpen(true);
+                setPickerSubjects([subject]);
                 return;
             case 'convert-to-sheet':
                 convert('eigensheets');
@@ -85,7 +88,17 @@ export function useFileActionRunner(subject: FileSubject, siblings?: FileSubject
 
     return {
         run,
-        dialogs: <SaveToDrivePicker subjects={[subject]} open={pickerOpen} onClose={() => setPickerOpen(false)} />,
-        isDialogOpen: pickerOpen,
+        openPicker: setPickerSubjects,
+        // Mounted while closed: the picker's "Download instead" fires staggered downloads from timers
+        // it clears when it unmounts.
+        dialogs: (
+            <SaveToDrivePicker
+                subjects={pickerSubjects ?? [subject]}
+                open={pickerSubjects !== null}
+                onClose={() => setPickerSubjects(null)}
+            />
+        ),
+        isDialogOpen: pickerSubjects !== null,
+        isPending: convertDocument.isPending || importContactsFromDrive.isPending || importContacts.isPending,
     };
 }

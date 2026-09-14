@@ -7,7 +7,9 @@ import { createContext, useContext } from 'react';
 // an import cycle back onto Dialog. This file must import nothing from that tree.
 
 export type PreviewContextValue = {
-    openPreview: (subject: FileSubject, siblings?: FileSubject[]) => void;
+    // `batch` marks the siblings as a set the overlay may act on as a whole (an attachment list), so
+    // a Drive listing handing over its whole folder for navigation gets no "Download all" row.
+    openPreview: (subject: FileSubject, siblings?: FileSubject[], options?: { batch?: boolean }) => void;
     updatePreview: (subject: FileSubject) => void;
     closePreview: () => void;
     isPreviewOpen: boolean;

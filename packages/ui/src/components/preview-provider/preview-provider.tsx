@@ -1,5 +1,5 @@
 import { getDrivePreviewUrl } from '@workspace/lib/api';
-import { getPreviewMode } from '@workspace/lib/constants';
+import { getPreviewMode } from '@workspace/lib/file-subject';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import type React from 'react';
 import { useCallback, useMemo, useState } from 'react';
@@ -15,13 +15,14 @@ export { useOptionalPreview, usePreview };
 type PreviewState = {
     subject: FileSubject;
     siblings: FileSubject[];
+    batch: boolean;
 };
 
 export function PreviewProvider({ children }: { children: React.ReactNode }) {
     const [preview, setPreview] = useState<PreviewState | null>(null);
 
-    const openPreview = useCallback((subject: FileSubject, siblings?: FileSubject[]) => {
-        setPreview({ subject, siblings: siblings || [] });
+    const openPreview = useCallback((subject: FileSubject, siblings?: FileSubject[], options?: { batch?: boolean }) => {
+        setPreview({ subject, siblings: siblings || [], batch: options?.batch ?? false });
     }, []);
 
     const updatePreview = useCallback((subject: FileSubject) => {
@@ -56,7 +57,7 @@ export function PreviewProvider({ children }: { children: React.ReactNode }) {
             ? getDrivePreviewUrl(drive.ownerId, drive.mountId, drive.id, updated)
             : subject.embedUrl;
         const aspectRatio =
-            drive?.details?.width && drive.details?.height ? drive.details.width / drive.details.height : undefined;
+            drive?.details?.width && drive.details.height ? drive.details.width / drive.details.height : undefined;
 
         const currentIdx = preview.siblings.findIndex((s) => s.key === subject.key);
         const hasPrev = currentIdx > 0;
@@ -70,6 +71,7 @@ export function PreviewProvider({ children }: { children: React.ReactNode }) {
             hasNext,
             subject,
             siblings: preview.siblings,
+            batch: preview.batch,
         };
     }, [preview]);
 
