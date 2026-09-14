@@ -204,6 +204,18 @@ describe('iMIP Outbound Email Composition', () => {
         expect(mail.icalEvent?.content).toContain('ATTENDEE');
     });
 
+    test('invitation mail labels a zone-less event UTC instead of guessing the server zone', () => {
+        const mail = composeInviteEmail(MOCK_EVENT, organizer, [attendee]);
+        expect(mail.text).toContain('10:00 AM – 11:00 AM (UTC)');
+        expect(mail.html).toContain('(UTC)');
+    });
+
+    test('invitation mail renders a stored zone as its own wall clock, unlabelled', () => {
+        const mail = composeInviteEmail({ ...MOCK_EVENT, timezone: 'Europe/Amsterdam' }, organizer, [attendee]);
+        expect(mail.text).toContain('12:00 PM – 1:00 PM');
+        expect(mail.text).not.toContain('(UTC)');
+    });
+
     test('composeUpdateEmail uses correct subject and method', () => {
         const updatedEvent = { ...MOCK_EVENT, sequence: 1 };
         const mail = composeUpdateEmail(updatedEvent, organizer, [attendee]);

@@ -11,12 +11,22 @@ import type { OutboundICalEvent, OutboundMail } from '../core/mailer';
 import type { Home } from '../home';
 import { verifyImipSender } from '../mail/imip-auth';
 import { computeOccurrenceTimes } from './recurrence';
+import { normalizeTimezone } from './timezone';
 import type { ReceiveInvitationPayload } from './types';
 
 type Organizer = NonNullable<EventData['organizer']>;
 
+// Invitation mail has no viewer, so a timed event that stored no usable zone (CalDAV/iMIP import,
+// API create) cannot borrow the browser's viewer zone or the server's own — either would name a wall
+// clock nobody agreed to. It renders in UTC and labels it, so the recipient can convert.
+function buildEventWhen(event: CalendarEvent): string {
+    const timezone = normalizeTimezone(event.timezone);
+    const when = formatEventWhen(event.startTime, event.endTime, event.allDay, timezone, 'UTC');
+    return timezone || event.allDay ? when : `${when} (UTC)`;
+}
+
 function buildEventSummary(event: CalendarEvent): string {
-    const when = formatEventWhen(event.startTime, event.endTime, event.allDay, event.timezone);
+    const when = buildEventWhen(event);
     const lines: string[] = [];
     lines.push(`What: ${event.title}`);
     lines.push(`When: ${when}`);
@@ -34,8 +44,7 @@ function buildSection(label: string, value: string): string {
 
 function buildEventBodyHtml(event: CalendarEvent): string {
     const sections: string[] = [];
-    const when = formatEventWhen(event.startTime, event.endTime, event.allDay, event.timezone);
-    sections.push(buildSection('When', escapeHtml(when)));
+    sections.push(buildSection('When', escapeHtml(buildEventWhen(event))));
     if (event.location) sections.push(buildSection('Where', escapeHtml(event.location)));
     if (event.description)
         sections.push(buildSection('Description', escapeHtml(event.description).replace(/\n/g, '<br>')));
