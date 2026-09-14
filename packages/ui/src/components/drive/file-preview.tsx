@@ -1,31 +1,26 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
-import { getDriveDownloadUrl, getDriveItemUrl } from '@workspace/lib/api';
-import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
-import { useImportContactsFromDrive } from '@workspace/lib/contacts';
-import { useCopyFiles, useTextPreview } from '@workspace/lib/drive';
+import { getDriveItemUrl } from '@workspace/lib/api';
+import type { PreviewMode } from '@workspace/lib/constants';
+import { useTextPreview } from '@workspace/lib/drive';
+import { fileActionsFor } from '@workspace/lib/file-actions';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { isDocumentType, isFolderType, isVCardFile } from '@workspace/lib/types/drive';
+import type { FileSubject } from '@workspace/lib/types/file-subject';
 import { useFocusTrap } from '@workspace/ui/hooks/use-focus-trap';
-import { BookUser, ChevronLeft, ChevronRight, Download, ExternalLink, FolderDown, Loader2, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import type { DownloadMode, PreviewMode } from '../preview-provider/preview-provider';
-import { DriveLocationPicker } from './drive-location-picker';
+import { ChevronLeft, ChevronRight, ExternalLink, FolderDown, Loader2, X } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { useFileActionRunner } from '../file-actions/use-file-action-runner';
 import { getFileIcon } from './file-presentation';
+import { SaveToDrivePicker } from './save-to-drive-picker';
 import { VCardPreviewContent } from './vcard-preview-content';
 
 type FilePreviewProps = {
     previewMode: PreviewMode;
     previewUrl: string;
-    thumbnailUrl?: string;
-    embedUrl: string;
-    downloadUrl?: string;
-    fileName: string;
     aspectRatio?: number;
     hasPrev: boolean;
     hasNext: boolean;
-    path: DrivePath;
-    downloadMode: DownloadMode;
-    siblings: DrivePath[];
+    subject: FileSubject;
+    siblings: FileSubject[];
     onClose: () => void;
     onPrev: () => void;
     onNext: () => void;
@@ -34,15 +29,10 @@ type FilePreviewProps = {
 export function FilePreview({
     previewMode,
     previewUrl,
-    thumbnailUrl,
-    embedUrl,
-    downloadUrl,
-    fileName,
     aspectRatio,
     hasPrev,
     hasNext,
-    path,
-    downloadMode,
+    subject,
     siblings,
     onClose,
     onPrev,
@@ -64,51 +54,16 @@ export function FilePreview({
     useHotkey('ArrowRight', goNext, { enabled: true });
     useHotkey('ArrowDown', goNext, { enabled: true });
 
-    const [locationPickerOpen, setLocationPickerOpen] = useState(false);
-    const [locationPickerMode, setLocationPickerMode] = useState<'single' | 'all'>('single');
-    const copyFiles = useCopyFiles(path.ownerId, path.mountId);
-    const importContacts = useImportContactsFromDrive();
-    const downloadTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
-    useEffect(
-        () => () => {
-            for (const timer of downloadTimers.current) clearTimeout(timer);
-        },
-        [],
-    );
+    const runner = useFileActionRunner(subject, siblings);
+    const [downloadAllOpen, setDownloadAllOpen] = useState(false);
 
-    // Trap focus in the overlay, but hand it to the save-to-drive picker (a Radix dialog
-    // portaled to body) while that is open.
+    // Trap focus in the overlay, but hand it to a picker (a Radix dialog portaled to body)
+    // while one is open.
     const overlayRef = useRef<HTMLDivElement>(null);
-    useFocusTrap(overlayRef, !locationPickerOpen);
+    useFocusTrap(overlayRef, !runner.isDialogOpen && !downloadAllOpen);
 
-    const openUrl = getDriveItemUrl(path);
-    // Eigendocs (doc/stickies/slides/sheets/chat) can't be downloaded as raw files — they're
-    // containers with internal dbs. The "Open" button takes the user to the app instead.
-    const canDownload = !isDocumentType(path.type);
-    const downloadableSiblings = siblings.filter((s) => !isFolderType(s.type) && !isDocumentType(s.type));
-
-    const triggerDownload = (url: string) => {
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = '';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-    };
-
-    const downloadAll = () => {
-        for (const timer of downloadTimers.current) clearTimeout(timer);
-        downloadTimers.current = [];
-        for (let i = 0; i < downloadableSiblings.length; i++) {
-            const s = downloadableSiblings[i];
-            downloadTimers.current.push(
-                setTimeout(
-                    () => triggerDownload(getDriveDownloadUrl(s.ownerId, s.mountId, s.id, s.updatedAt)),
-                    i * 300,
-                ),
-            );
-        }
-    };
+    const openUrl = subject.drive ? getDriveItemUrl(subject.drive) : undefined;
+    const downloadableSiblings = siblings.filter((s) => !!s.downloadUrl);
 
     return (
         <div
@@ -116,7 +71,7 @@ export function FilePreview({
             data-preview-overlay
             role="dialog"
             aria-modal="true"
-            aria-label={fileName}
+            aria-label={subject.name}
             tabIndex={-1}
             className="fixed inset-0 z-[100] bg-black/80 flex flex-col animate-in fade-in outline-none"
             style={{ pointerEvents: 'auto' }}
@@ -133,25 +88,9 @@ export function FilePreview({
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex items-center gap-2 min-w-0">
-                    <span className="truncate text-sm font-medium">{fileName}</span>
+                    <span className="truncate text-sm font-medium">{subject.name}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                    {/* Over the ceiling the import itself 413s, and the body says so — offer nothing to click. */}
-                    {isVCardFile(path.mimeType, path.name) && path.size <= IMPORT_MAX_BYTES && (
-                        <NavButton
-                            onClick={() =>
-                                importContacts.mutate({
-                                    sourceOwnerId: path.ownerId,
-                                    sourceMountId: path.mountId,
-                                    sourcePathId: path.id,
-                                })
-                            }
-                            disabled={importContacts.isPending}
-                            title="Import to Contacts"
-                        >
-                            <BookUser className="size-4" />
-                        </NavButton>
-                    )}
                     <NavButton onClick={onPrev} disabled={!hasPrev} title="Previous (←)">
                         <ChevronLeft className="size-4" />
                     </NavButton>
@@ -177,15 +116,15 @@ export function FilePreview({
                 >
                     {previewMode === 'image' && (
                         <ProgressiveImage
-                            thumbnailUrl={thumbnailUrl}
+                            thumbnailUrl={subject.thumbnailUrl}
                             previewUrl={previewUrl}
-                            alt={fileName}
+                            alt={subject.name}
                             aspectRatio={aspectRatio}
                         />
                     )}
                     {previewMode === 'video' && (
                         <video
-                            src={embedUrl}
+                            src={subject.embedUrl}
                             controls
                             autoPlay
                             className="max-w-full max-h-[calc(100vh-7rem)] rounded"
@@ -194,21 +133,24 @@ export function FilePreview({
                     )}
                     {previewMode === 'audio' && (
                         <div className="bg-background rounded-lg p-8 flex flex-col items-center gap-4">
-                            <span className="text-sm text-muted-foreground">{fileName}</span>
-                            <audio src={embedUrl} controls autoPlay className="w-80" />
+                            <span className="text-sm text-muted-foreground">{subject.name}</span>
+                            <audio src={subject.embedUrl} controls autoPlay className="w-80" />
                         </div>
                     )}
                     {previewMode === 'pdf' && (
-                        <iframe src={embedUrl} className="w-[80vw] h-[calc(100vh-7rem)] rounded bg-background" />
+                        <iframe
+                            src={subject.embedUrl}
+                            className="w-[80vw] h-[calc(100vh-7rem)] rounded bg-background"
+                        />
                     )}
-                    {previewMode === 'text' && <TextPreviewContent path={path} />}
-                    {previewMode === 'vcard' && <VCardPreviewContent path={path} />}
+                    {previewMode === 'text' && subject.drive && <TextPreviewContent path={subject.drive} />}
+                    {previewMode === 'vcard' && subject.drive && <VCardPreviewContent path={subject.drive} />}
                     {previewMode === 'fallback' && (
                         <div className="flex flex-col items-center gap-4 text-white">
-                            {getFileIcon(path.mimeType, path.type, path.name, {
+                            {getFileIcon(subject.mimeType, subject.drive?.type ?? 'file', subject.name, {
                                 className: 'size-16 text-muted-foreground',
                             })}
-                            <span className="text-lg font-medium">{fileName}</span>
+                            <span className="text-lg font-medium">{subject.name}</span>
                             <span className="text-sm text-muted-foreground">No preview available</span>
                         </div>
                     )}
@@ -226,67 +168,26 @@ export function FilePreview({
                         Open
                     </FooterButton>
                 )}
-                {canDownload && downloadUrl && downloadMode === 'direct' && (
-                    <FooterButton href={downloadUrl} download>
-                        <Download className="size-3.5" />
-                        Download
-                    </FooterButton>
-                )}
-                {canDownload && downloadUrl && downloadMode === 'save-to-drive' && (
-                    <FooterActionButton
-                        onClick={() => {
-                            setLocationPickerMode('single');
-                            setLocationPickerOpen(true);
-                        }}
-                    >
-                        <Download className="size-3.5" />
-                        Download
+                {/* The overlay is Quick Look itself, so the registry's own row is the one it drops. */}
+                {fileActionsFor(subject, ['quick-look']).map((action) => (
+                    <FooterActionButton key={action.id} onClick={() => runner.run(action)}>
+                        <action.icon className="size-3.5" />
+                        {action.label}
                     </FooterActionButton>
-                )}
-                {canDownload && downloadableSiblings.length >= 2 && downloadMode === 'save-to-drive' && (
-                    <FooterActionButton
-                        onClick={() => {
-                            setLocationPickerMode('all');
-                            setLocationPickerOpen(true);
-                        }}
-                    >
+                ))}
+                {downloadableSiblings.length >= 2 && (
+                    <FooterActionButton onClick={() => setDownloadAllOpen(true)}>
                         <FolderDown className="size-3.5" />
                         Download all ({downloadableSiblings.length})
                     </FooterActionButton>
                 )}
             </div>
-            {downloadMode === 'save-to-drive' && (
-                <DriveLocationPicker
-                    open={locationPickerOpen}
-                    onOpenChange={setLocationPickerOpen}
-                    abovePreview
-                    mode="folder"
-                    title={locationPickerMode === 'all' ? 'Download all' : 'Download'}
-                    confirmLabel="Save here"
-                    defaultOwnerId={path.ownerId}
-                    defaultMountId={path.mountId}
-                    onConfirm={async (location) => {
-                        const pathIds =
-                            locationPickerMode === 'all' ? downloadableSiblings.map((s) => s.id) : [path.id];
-                        // Await the copy so the picker closes on success and stays open (with the failure
-                        // toast) on error, instead of closing immediately.
-                        await copyFiles.mutateAsync({
-                            pathIds,
-                            targetOwnerId: location.ownerId,
-                            targetMountId: location.mountId,
-                            targetParentId: location.folderId,
-                        });
-                    }}
-                    onDownloadInstead={() => {
-                        setLocationPickerOpen(false);
-                        if (locationPickerMode === 'all') {
-                            downloadAll();
-                        } else if (downloadUrl) {
-                            triggerDownload(downloadUrl);
-                        }
-                    }}
-                />
-            )}
+            {runner.dialogs}
+            <SaveToDrivePicker
+                subjects={downloadableSiblings}
+                open={downloadAllOpen}
+                onClose={() => setDownloadAllOpen(false)}
+            />
         </div>
     );
 }
@@ -400,13 +301,12 @@ function ProgressiveImage({
     );
 }
 
-function FooterButton({ href, download, children }: { href: string; download?: boolean; children: React.ReactNode }) {
+function FooterButton({ href, children }: { href: string; children: React.ReactNode }) {
     return (
         <a
             href={href}
             target="_blank"
             rel="noopener noreferrer"
-            download={download || undefined}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white text-sm transition-colors"
         >
             {children}

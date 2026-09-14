@@ -78,6 +78,7 @@
     "./components/context-menu": "./src/components/context-menu/index.ts",
     "./components/drive": "./src/components/drive/index.ts",
     "./components/editor": "./src/components/editor/index.ts",
+    "./components/file-actions": "./src/components/file-actions/index.ts",
     "./components/home": "./src/components/home/index.ts",
     "./components/labels": "./src/components/labels/index.ts",
     "./components/media": "./src/components/media/index.ts",
