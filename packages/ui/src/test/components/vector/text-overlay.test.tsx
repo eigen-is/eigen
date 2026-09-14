@@ -1,38 +1,8 @@
-import { afterAll, expect, test } from 'bun:test';
+import { expect, test } from 'bun:test';
 import { labelText } from '@workspace/lib/vector';
-import { Window } from 'happy-dom';
+import { installHappyDom } from '../../happy-dom';
 
-// The overlay commits through React state, so this file borrows a whole happy-dom window the way the
-// color-row test next door does, and puts every global back afterwards.
-const window = new Window({ url: 'http://localhost:3000' });
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-const borrowed: string[] = [];
-for (const key of Object.getOwnPropertyNames(window)) {
-    // biome-ignore lint/suspicious/noExplicitAny: reading the happy-dom window's own globals
-    const value = (window as any)[key];
-    if (g[key] === undefined && value !== undefined) {
-        g[key] = value;
-        borrowed.push(key);
-    }
-}
-for (const key of ['Event', 'CustomEvent', 'MouseEvent', 'KeyboardEvent', 'Node', 'Element', 'HTMLElement']) {
-    // biome-ignore lint/suspicious/noExplicitAny: reading the happy-dom window's own globals
-    g[key] = (window as any)[key];
-    borrowed.push(key);
-}
-g.window = window;
-g.document = window.document;
-g.navigator = window.navigator;
-g.IS_REACT_ACT_ENVIRONMENT = true;
-
-afterAll(() => {
-    for (const key of borrowed) g[key] = undefined;
-    g.window = undefined;
-    g.document = undefined;
-    g.navigator = undefined;
-    g.IS_REACT_ACT_ENVIRONMENT = undefined;
-});
+installHappyDom();
 
 const { act, createElement, createRef } = await import('react');
 const { createRoot } = await import('react-dom/client');

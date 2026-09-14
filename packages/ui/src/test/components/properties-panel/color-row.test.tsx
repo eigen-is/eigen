@@ -1,58 +1,7 @@
-import { afterAll, expect, test } from 'bun:test';
-import { Window } from 'happy-dom';
+import { expect, test } from 'bun:test';
+import { installHappyDom } from '../../happy-dom';
 
-// react-dom needs a DOM to render into, and the popover is a real Radix layer (portal + focus scope +
-// floating-ui), so this file borrows the whole happy-dom window rather than the handful of globals the
-// merged-slider test next door needs. Everything borrowed is put back in afterAll so later test files
-// see the plain bun environment. The event constructors are overridden even where bun already has one:
-// happy-dom rejects a foreign Event instance, and Radix dispatches its own CustomEvents.
-const window = new Window({ url: 'http://localhost:3000' });
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-const borrowed: string[] = [];
-for (const key of Object.getOwnPropertyNames(window)) {
-    // biome-ignore lint/suspicious/noExplicitAny: reading the happy-dom window's own globals
-    const value = (window as any)[key];
-    if (g[key] === undefined && value !== undefined) {
-        g[key] = value;
-        borrowed.push(key);
-    }
-}
-for (const key of ['Event', 'CustomEvent', 'MouseEvent', 'KeyboardEvent', 'Node', 'Element', 'HTMLElement']) {
-    // biome-ignore lint/suspicious/noExplicitAny: reading the happy-dom window's own globals
-    g[key] = (window as any)[key];
-    borrowed.push(key);
-}
-g.window = window;
-g.document = window.document;
-g.navigator = window.navigator;
-g.getComputedStyle = window.getComputedStyle.bind(window);
-g.IS_REACT_ACT_ENVIRONMENT = true;
-class FakeResizeObserver {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-}
-g.ResizeObserver = FakeResizeObserver;
-g.requestAnimationFrame = (callback: () => void) => {
-    callback();
-    return 0;
-};
-g.cancelAnimationFrame = () => {};
-
-afterAll(async () => {
-    // floating-ui positions asynchronously; let its pending work finish while the DOM is still there.
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    for (const key of borrowed) g[key] = undefined;
-    g.window = undefined;
-    g.document = undefined;
-    g.navigator = undefined;
-    g.getComputedStyle = undefined;
-    g.ResizeObserver = undefined;
-    g.requestAnimationFrame = undefined;
-    g.cancelAnimationFrame = undefined;
-    g.IS_REACT_ACT_ENVIRONMENT = undefined;
-});
+installHappyDom();
 
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');

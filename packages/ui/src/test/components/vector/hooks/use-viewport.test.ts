@@ -1,49 +1,11 @@
-import { afterAll, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { fitFrameViewport } from '@workspace/lib/vector';
-import { Window } from 'happy-dom';
-
-// react-dom needs a DOM to render the hook harness into, and the hook itself needs a ResizeObserver
-// (its re-fit trigger) and an rAF (its paint). The globals are removed again in afterAll so later test
-// files see the plain bun environment. Recipe: lib's use-collab-doc test.
-const window = new Window({ url: 'http://localhost:3000' });
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-g.window = window;
-g.document = window.document;
-g.navigator = window.navigator;
-g.DOMRect = window.DOMRect;
-g.WheelEvent = window.WheelEvent;
-g.IS_REACT_ACT_ENVIRONMENT = true;
+import { installHappyDom } from '../../../happy-dom';
 
 // One callback list: a test resizes the container by re-stubbing its rect and firing them, which is
 // exactly what the browser does.
 const resizeCallbacks: (() => void)[] = [];
-class FakeResizeObserver {
-    constructor(callback: () => void) {
-        resizeCallbacks.push(callback);
-    }
-    observe() {}
-    disconnect() {}
-}
-g.ResizeObserver = FakeResizeObserver;
-// The hook paints inside one rAF; running it inline keeps every assertion on the settled viewport.
-g.requestAnimationFrame = (callback: () => void) => {
-    callback();
-    return 0;
-};
-g.cancelAnimationFrame = () => {};
-
-afterAll(() => {
-    g.window = undefined;
-    g.document = undefined;
-    g.navigator = undefined;
-    g.DOMRect = undefined;
-    g.WheelEvent = undefined;
-    g.ResizeObserver = undefined;
-    g.requestAnimationFrame = undefined;
-    g.cancelAnimationFrame = undefined;
-    g.IS_REACT_ACT_ENVIRONMENT = undefined;
-});
+installHappyDom({ onResizeObserver: (callback) => resizeCallbacks.push(callback) });
 
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
