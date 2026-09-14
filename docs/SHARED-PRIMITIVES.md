@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1400 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1404 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -201,7 +201,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (262)
+## Hooks (263)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -428,6 +428,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useApp` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 | `useContactAvatarUpload` | `@workspace/ui` | packages/ui/src/components/use-contact-avatar-upload.ts |
 | `useLayout` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
+| `useAttachmentChipMenu` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/use-attachment-chip-menu.ts |
 | `useAttachmentMeta` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/use-attachment-meta.ts |
 | `useAwarenessIdentity` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/use-awareness-identity.ts |
 | `useAwarenessPeers` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/use-awareness-peers.ts |
@@ -468,7 +469,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (332)
+## Types (334)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -763,6 +764,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SortDir` | `@workspace/ui` | packages/ui/src/components/sort-header.tsx |
 | `SortHeaderProps` | `@workspace/ui` | packages/ui/src/components/sort-header.tsx |
 | `TooltipButtonProps` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/tooltip-button.tsx |
+| `AttachmentChipMenu` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/use-attachment-chip-menu.ts |
+| `ChipMenuHandlers` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/use-attachment-chip-menu.ts |
 | `ChatMessageInputHandle` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-message-input.tsx |
 | `SlashTargetContext` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-utils.ts |
 | `CursorPeerState` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/cursor-layer.tsx |
@@ -805,7 +808,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (631)
+## Utilities & constants (632)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1059,6 +1062,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getFileIconComponent` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
 | `getFilePresentation` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
 | `getPreviewMode` | `@workspace/lib/file-subject` | packages/lib/src/core/file-subject.ts |
+| `subjectFromMailAttachment` | `@workspace/lib/file-subject` | packages/lib/src/core/file-subject.ts |
 | `subjectFromPath` | `@workspace/lib/file-subject` | packages/lib/src/core/file-subject.ts |
 | `bytesToBase64` | `@workspace/lib/format` | packages/lib/src/core/format.ts |
 | `formatFileSize` | `@workspace/lib/format` | packages/lib/src/core/format.ts |
