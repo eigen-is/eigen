@@ -50,14 +50,11 @@ export const BROWSER_IMAGE_MIMES = new Set([
     'image/svg+xml',
 ]);
 
-export type TextPreviewMode =
-    | 'markdown'
-    | 'plaintext'
-    | 'code'
-    | 'eigendoc'
-    | 'eigenslides'
-    | 'eigensheets'
-    | 'eigenvector';
+// What a file's own bytes render as. The rest of TextPreviewMode names a collab document, whose body
+// comes from its Yjs document instead.
+export type BytesTextPreviewMode = 'markdown' | 'plaintext' | 'code';
+
+export type TextPreviewMode = BytesTextPreviewMode | 'eigendoc' | 'eigenslides' | 'eigensheets' | 'eigenvector';
 
 // The logical box a canvas preview body is composed at: the drive hero scales a preview from its
 // intrinsic width (drive-preview.tsx), so a drawing of any size previews through one known number,
@@ -70,11 +67,9 @@ export function getExtension(fileName: string): string {
     return dot === -1 ? '' : fileName.slice(dot).toLowerCase();
 }
 
-export function getTextPreviewMode(mimeType: string, fileName: string): TextPreviewMode | null {
-    if (mimeType === DRIVE_MIME_DOC) return 'eigendoc';
-    if (mimeType === DRIVE_MIME_SLIDES) return 'eigenslides';
-    if (mimeType === DRIVE_MIME_SHEETS) return 'eigensheets';
-    if (mimeType === DRIVE_MIME_VECTOR) return 'eigenvector';
+// The mode loose bytes render as, eigen mimes included: a mime is caller-controlled — on upload and on a
+// mail part it is the sender's word — so bytes are only ever what their name and a plain text mime say.
+export function getBytesTextPreviewMode(mimeType: string, fileName: string): BytesTextPreviewMode | null {
     // A vCard is text, but its raw body is mostly base64 photo: it previews as contact cards instead.
     if (isVCardFile(mimeType, fileName)) return null;
     const ext = getExtension(fileName);
@@ -83,6 +78,14 @@ export function getTextPreviewMode(mimeType: string, fileName: string): TextPrev
     if (CODE_MIMES.some((prefix) => mimeType.startsWith(prefix))) return 'code';
     if (CODE_EXTENSIONS.has(ext)) return 'code';
     return null;
+}
+
+export function getTextPreviewMode(mimeType: string, fileName: string): TextPreviewMode | null {
+    if (mimeType === DRIVE_MIME_DOC) return 'eigendoc';
+    if (mimeType === DRIVE_MIME_SLIDES) return 'eigenslides';
+    if (mimeType === DRIVE_MIME_SHEETS) return 'eigensheets';
+    if (mimeType === DRIVE_MIME_VECTOR) return 'eigenvector';
+    return getBytesTextPreviewMode(mimeType, fileName);
 }
 
 // Which files drive-wide content search indexes from their own bytes: the text preview modes whose RAW

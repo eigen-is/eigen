@@ -3,7 +3,8 @@
 > **TLDR**: Server-side preview generation, cached per file version in a tmp dir. Images become
 > screen-res WebP (max 2560px). Text, code, markdown and eigen-native files become a small HTML body
 > served as JSON and rendered client-side with shared `eigen-prose` styles; a `.vcf` answers on its own
-> route with the contact cards themselves, rendered by `ContactDetailCard`. Eigen-native previews render
+> route with the contact cards themselves, rendered by `ContactDetailCard`. A mail part reaches the same
+> two renderers through its own routes, on the part's bytes. Eigen-native previews render
 > off-thread in a one-shot document-transform Worker (bounded first-sheet / 20-block / 8-slide / 500-element budgets);
 > text previews serve stale-while-revalidate. Video, audio and PDF redirect to the embed URL. The overlay
 > lives in `packages/ui`, with keyboard and sibling nav.
@@ -57,7 +58,8 @@ stale content after an inline edit.
 ## Text Previews
 
 `text-preview.ts` returns `{ body: string, mode: TextPreviewMode }`. Modes (defined in
-`packages/lib/src/constants/preview.ts`):
+`packages/lib/src/constants/preview.ts`, where `BytesTextPreviewMode` is the first three — the ones a
+file's own bytes render as):
 
 | Mode           | Rendering                                       |
 |----------------|-------------------------------------------------|
@@ -80,6 +82,10 @@ Body is consumed via the `useTextPreview()` hook (TanStack Query) and rendered w
 
 Shared `eigen-prose.css` in `packages/ui/src/styles/` provides prose typography + Catppuccin code highlighting,
 used by both previews and the docs editor.
+
+## Mail Parts
+
+A mail part previews through the same renderers on its own bytes: `GET /mail/:ownerId/message/:id/attachment/:index/text-preview` and `.../vcard-preview` (`routes/mail.ts`) answer with `{ body, mode }` and the `VCardPreview` cards, the shapes the Drive routes answer with, so the same components render both. Both end in the one bytes-in entry point beside the cached ones — `getBytesTextPreview` and `getBytesVCardPreview` (`preview-cache.ts`) — which own the decode and the Worker job; Drive reaches the same renderers through `getOrCacheText`, a part reaches them directly, because a part has no version stamp to key a cache on. `getBytesTextPreview` owns the text mode gate (`getBytesVCardPreview` has none — the routes run `assertVCardPreviewable` before it), and it gates on `getBytesTextPreviewMode`, never `getTextPreviewMode`: an eigen mime is the uploader's or the sender's word, so loose bytes render — and are labelled — as what their name says, rather than being drawn inside the A4, slide or canvas frame their mime claims. `assertVCardPreviewable` is the one `.vcf` gate both routes run (400 for a file the mime and name don't call a vCard, 413 past `IMPORT_MAX_BYTES`); Drive runs it on the row before reading the bytes, mail on the parsed part, whose size is not known until then. The responses are `private, no-cache` with the ETag the byte routes serve, so a rewritten draft revalidates rather than serving what it had ([MAIL.md](MAIL.md)). `useMailTextPreview` / `useMailVCardPreview` (`packages/lib/src/core/mail/hooks/use-attachment-preview.ts`) read them, keyed per owner, message and part index; the cards ride the no-revival treaty (`mailVCardPreviewRoute`) for the same reason the Drive cards do — a bare `YYYY-MM-DD` birthday must not become a `Date`.
 
 ## Compact Previews vs Full Export
 
@@ -169,9 +175,9 @@ FilePreview (fixed, z-[100])
     video:    <video src={embedUrl} controls>
     audio:    <audio src={embedUrl} controls>
     pdf:      <iframe src={embedUrl}>
-    text:     TextPreviewContent (useTextPreview → eigen-prose div; the eigenvector
-              body is a self-contained page, centred rather than prose-styled)
-    vcard:    VCardPreviewContent (useVCardPreview → one ContactDetailCard per card)
+    text:     TextPreviewContent / MailTextPreviewContent (→ one eigen-prose div; the
+              eigenvector body is a self-contained page, centred rather than prose-styled)
+    vcard:    VCardPreviewContent / MailVCardPreviewContent (→ one ContactDetailCard per card)
     fallback: file icon + "No preview available"
   Footer   — Open (a Drive subject), then one button per FILE_ACTIONS row the subject
              qualifies for (Download, Save to Drive…, Convert to Sheet, Convert to
@@ -189,11 +195,15 @@ FilePreview (fixed, z-[100])
 **Progressive image loading:** For images with thumbnails, `ProgressiveImage` stacks two `<img>` elements — the 512px
 thumbnail renders instantly while the screen-resolution preview (max 2560px) loads on top. Both use `object-contain`
 within a fixed-size container so there's no size change when the preview loads. Images without thumbnails load the
-preview directly.
+preview directly. The container is sized from the aspect ratio the Drive row carries; a subject that has none — a mail
+part stores no width or height — falls back to the loaded image's own `naturalWidth / naturalHeight`, measured in the
+full image's `onLoad`. Until something loads the box spans the viewport, which is invisible because nothing is drawn in
+it yet; once the box hugs the image, a click beside it reaches the backdrop that closes the overlay. The component is
+keyed on the preview URL, so paging to a sibling starts from an unmeasured box rather than the previous image's.
 
 **PreviewProvider** stores the subject + `siblings[]` + the `attachment` flag and exposes `openPreview(subject, siblings?, options?)`, `updatePreview(subject)` and `closePreview()`. One memo derives the preview URL (the transcode route for a Drive subject, the subject's own `embedUrl` otherwise), the aspect ratio and the preview mode.
 
-`previewMode` is decided client-side by `getPreviewMode(subject)` (`packages/lib/src/core/file-subject.ts`, beside the subject builder) from the mime prefix, `application/pdf`, `isExiftoolExtension(name)`, `isVCardFile` and `getTextPreviewMode`. Every server-rendered mode needs a mount to query, so those branches gate on `subject.drive`; without one the `<img>` points at the original bytes, which makes it an image preview only for a mime in `BROWSER_IMAGE_MIMES` (`packages/lib/src/constants/preview.ts`) — a HEIC gets the fallback card instead of a broken box.
+`previewMode` is decided client-side by `getPreviewMode(subject)` (`packages/lib/src/core/file-subject.ts`, beside the subject builder) from the mime prefix, `application/pdf`, `isExiftoolExtension(name)`, `isVCardFile` and `getTextPreviewMode`. The image branch needs a mount to resize from, so it gates on `subject.drive`; without one the `<img>` points at the original bytes, which makes it an image preview only for a mime in `BROWSER_IMAGE_MIMES` (`packages/lib/src/constants/preview.ts`) — a HEIC gets the fallback card instead of a broken box. The `text` and `vcard` branches gate on carrying either identity, `drive` or `mail`, because both have a route that renders them.
 
 ## Inline Editor Integration
 
@@ -213,6 +223,8 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 | `packages/lib/src/constants/preview.ts`                                   | `TextPreviewMode`, `getTextPreviewMode()`, `isExiftoolExtension()`, `CANVAS_PREVIEW_WIDTH`, `CANVAS_PREVIEW_HEIGHT` |
 | `apps/api/src/lib/drive/drive.ts`                                         | `resolveFile()` → ACL-checked `{ mount, path }` for preview/export/thumb routes |
 | `apps/api/src/routes/drive.ts`                                            | `/preview` + `/text-preview` + `/vcard-preview` routes |
+| `apps/api/src/routes/mail.ts`                                             | The same two preview routes for one mail part          |
+| `packages/lib/src/core/mail/hooks/use-attachment-preview.ts`              | `useMailTextPreview()` + `useMailVCardPreview()` hooks  |
 | `packages/ui/src/styles/eigen-prose.css`                                  | Shared prose + code highlight styles             |
 | `packages/ui/src/components/drive/file-preview.tsx`                | Preview overlay component                        |
 | `packages/lib/src/types/file-subject.ts`                                  | `FileSubject`: the one file shape every surface acts on |

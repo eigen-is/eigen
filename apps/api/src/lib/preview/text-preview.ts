@@ -1,4 +1,4 @@
-import { getExtension, type TextPreviewMode } from '@workspace/lib/constants/preview';
+import { type BytesTextPreviewMode, getExtension, type TextPreviewMode } from '@workspace/lib/constants/preview';
 import { escapeHtml } from '@workspace/lib/html';
 import { hastToHtml } from '../export/doc/render';
 import { sanitizeExportHtml } from '../export/sanitize';
@@ -67,9 +67,10 @@ export type TextPreviewResult = {
     mode: TextPreviewMode;
 };
 
+// The mode is the narrow one: this renders bytes, and the collab modes come from the Yjs loaders.
 export async function generateTextPreview(
     content: string,
-    mode: TextPreviewMode,
+    mode: BytesTextPreviewMode,
     fileName: string,
 ): Promise<TextPreviewResult> {
     if (mode === 'markdown') {

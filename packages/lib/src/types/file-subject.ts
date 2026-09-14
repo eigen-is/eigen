@@ -15,5 +15,8 @@ export type FileSubject = {
     // Present: Open, the server-rendered previews, and every Drive-side action.
     drive?: DrivePath;
     // Present on a mail part: what a write route needs to name it. Never parse the key for it.
-    mail?: { ownerId: string; messageId: string; index: number };
+    mail?: MailPartRef;
 };
+
+// One part of one message, by the RAW part index the mail routes address.
+export type MailPartRef = { ownerId: string; messageId: string; index: number };

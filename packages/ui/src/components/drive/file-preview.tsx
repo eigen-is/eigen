@@ -3,14 +3,15 @@ import { getDriveItemUrl } from '@workspace/lib/api';
 import { useTextPreview } from '@workspace/lib/drive';
 import { fileActionsFor } from '@workspace/lib/file-actions';
 import type { PreviewMode } from '@workspace/lib/file-subject';
+import { useMailTextPreview } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import type { FileSubject } from '@workspace/lib/types/file-subject';
+import type { FileSubject, MailPartRef } from '@workspace/lib/types/file-subject';
 import { useFocusTrap } from '@workspace/ui/hooks/use-focus-trap';
 import { ChevronLeft, ChevronRight, ExternalLink, FolderDown, Loader2, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
 import { getFileIcon } from './file-presentation';
-import { VCardPreviewContent } from './vcard-preview-content';
+import { MailVCardPreviewContent, VCardPreviewContent } from './vcard-preview-content';
 
 type FilePreviewProps = {
     previewMode: PreviewMode;
@@ -120,7 +121,10 @@ export function FilePreview({
                     style={{ cursor: 'default' }}
                 >
                     {previewMode === 'image' && (
+                        // Keyed: paging to a sibling must not inherit the loaded flag or the measured
+                        // ratio of the image before it.
                         <ProgressiveImage
+                            key={previewUrl}
                             thumbnailUrl={subject.thumbnailUrl}
                             previewUrl={previewUrl}
                             alt={subject.name}
@@ -148,8 +152,14 @@ export function FilePreview({
                             className="w-[80vw] h-[calc(100vh-7rem)] rounded bg-background"
                         />
                     )}
+                    {/* Drive and mail serve the same preview shapes; the subject's identity picks the
+                        query, and each component calls exactly one hook. */}
                     {previewMode === 'text' && subject.drive && <TextPreviewContent path={subject.drive} />}
+                    {previewMode === 'text' && subject.mail && <MailTextPreviewContent part={subject.mail} />}
                     {previewMode === 'vcard' && subject.drive && <VCardPreviewContent path={subject.drive} />}
+                    {previewMode === 'vcard' && subject.mail && (
+                        <MailVCardPreviewContent part={subject.mail} size={subject.size} />
+                    )}
                     {previewMode === 'fallback' && (
                         <div className="flex flex-col items-center gap-4 text-white">
                             {getFileIcon(subject.mimeType, subject.drive?.type ?? 'file', subject.name, {
@@ -197,7 +207,19 @@ export function FilePreview({
 
 function TextPreviewContent({ path }: { path: DrivePath }) {
     const { data, isLoading } = useTextPreview(path.ownerId, path.mountId, path.id, path.updatedAt, true);
+    return <TextPreviewBody data={data} isLoading={isLoading} />;
+}
 
+function MailTextPreviewContent({ part }: { part: MailPartRef }) {
+    const { data, isLoading } = useMailTextPreview(part.ownerId, part.messageId, part.index, true);
+    return <TextPreviewBody data={data} isLoading={isLoading} />;
+}
+
+// Both routes serve one shape, so one renderer reads it — and a mail preview that drifted from the Drive
+// one would not compile.
+type TextPreviewData = NonNullable<ReturnType<typeof useTextPreview>['data']>;
+
+function TextPreviewBody({ data, isLoading }: { data: TextPreviewData | undefined; isLoading: boolean }) {
     if (isLoading) {
         return (
             <div className="flex items-center justify-center w-[80vw] h-[calc(100vh-7rem)]">
@@ -277,11 +299,15 @@ function ProgressiveImage({
     aspectRatio?: number;
 }) {
     const [previewReady, setPreviewReady] = useState(false);
+    // A mail part carries no width/height details, so the box hugs the image once it has loaded: an
+    // unmeasured box spans the whole viewport and swallows the clicks that should close the overlay.
+    const [loadedRatio, setLoadedRatio] = useState<number>();
 
-    const style: React.CSSProperties = aspectRatio
+    const ratio = aspectRatio ?? loadedRatio;
+    const style: React.CSSProperties = ratio
         ? {
-              width: `min(90vw, calc((100vh - 7rem) * ${aspectRatio}))`,
-              height: `min(calc(100vh - 7rem), calc(90vw / ${aspectRatio}))`,
+              width: `min(90vw, calc((100vh - 7rem) * ${ratio}))`,
+              height: `min(calc(100vh - 7rem), calc(90vw / ${ratio}))`,
           }
         : { width: '90vw', height: 'calc(100vh - 7rem)' };
 
@@ -293,12 +319,14 @@ function ProgressiveImage({
             )}
             {/* Full preview: loads in background, fades in on top when ready */}
             <img
-                key={previewUrl}
                 src={previewUrl}
                 alt={alt}
                 className="absolute inset-0 w-full h-full rounded object-contain transition-opacity duration-300"
                 style={{ opacity: previewReady ? 1 : 0 }}
-                onLoad={() => setPreviewReady(true)}
+                onLoad={(e) => {
+                    setPreviewReady(true);
+                    setLoadedRatio(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight);
+                }}
             />
         </div>
     );

@@ -25,6 +25,12 @@ export class AppError extends Error {
     }
 }
 
+// The retry every preview that runs a transform shares: the runner's queue is bounded, so its "busy"
+// (503) is worth another go, while a file the parser refuses fails the same way every time.
+export function retryWhenTransformBusy(failureCount: number, error: unknown): boolean {
+    return failureCount < 3 && error instanceof AppError && error.status === 503;
+}
+
 export function getErrorMessage(error: unknown): string {
     if (error instanceof AppError) return `${error.message} (${error.status})`;
     if (error instanceof Error) return error.message;

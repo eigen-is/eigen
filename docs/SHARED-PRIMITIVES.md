@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1404 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1411 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -201,7 +201,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (263)
+## Hooks (265)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -378,6 +378,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useEmailById` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-emails.ts |
 | `useEmails` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-emails.ts |
 | `useMailboxes` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-mailboxes.ts |
+| `useMailTextPreview` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-attachment-preview.ts |
+| `useMailVCardPreview` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-attachment-preview.ts |
 | `useMoveEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-emails.ts |
 | `useOpenWriteEmailTo` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-emails.ts |
 | `useSaveMailAttachmentsToDrive` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
@@ -469,7 +471,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (334)
+## Types (336)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -489,6 +491,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CommentAssigneeFilter` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
 | `CommentFilter` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
 | `CreateCommentCardInput` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
+| `BytesTextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `EigenColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EigenFont` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `TextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
@@ -701,6 +704,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DocSearchSession` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
 | `AttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
 | `FileSubject` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
+| `MailPartRef` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
 | `Snapshot` | `@workspace/lib/types/versioning` | packages/lib/src/types/versioning.ts |
 | `CommandValidationResult` | `@workspace/lib/validation` | packages/lib/src/validation/command.ts |
 | `ParsedContactInput` | `@workspace/lib/validation` | packages/lib/src/validation/contact-input.ts |
@@ -808,7 +812,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (632)
+## Utilities & constants (635)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -878,6 +882,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `INDEX_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `MAIL_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `mailApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `mailVCardPreviewRoute` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `notificationApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `openDocument` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `openMailComposeWith` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
@@ -897,6 +902,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `waitlistApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getErrorMessage` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `onMutationError` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
+| `retryWhenTransformBusy` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `wasToasted` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `apps` | `@workspace/lib/apps` | packages/lib/src/core/apps.ts |
 | `authClient` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-auth-client.ts |
@@ -996,6 +1002,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EIGEN_STICKIES_INDICATOR_ROW` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `emptyContact` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
 | `fontNameToCss` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
+| `getBytesTextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `getExtension` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `getFontFamily` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `getFontName` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |

@@ -2,15 +2,40 @@ import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { droppedLine, remainingLine } from '@workspace/lib/contacts';
 import { useVCardPreview } from '@workspace/lib/drive';
 import { formatFileSize } from '@workspace/lib/format';
+import { useMailVCardPreview } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type { MailPartRef } from '@workspace/lib/types/file-subject';
 import { EmptyState } from '../layout/app/empty-state';
 import { ErrorState } from '../layout/app/error-state';
 import { LoadingState } from '../layout/app/loading-state';
 import { ContactDetailCard } from '../user/contact-detail-card';
 
+// The served cards, whichever route served them. Drive and mail each have their own component, so exactly
+// one query hook runs per render and the overlay picks by the subject it holds.
 export function VCardPreviewContent({ path }: { path: DrivePath }) {
     const { data, isLoading } = useVCardPreview(path.ownerId, path.mountId, path.id, path.updatedAt, path.size);
+    return <VCardCards data={data} isLoading={isLoading} oversize={path.size > IMPORT_MAX_BYTES} />;
+}
 
+export function MailVCardPreviewContent({ part, size }: { part: MailPartRef; size: number }) {
+    const oversize = size > IMPORT_MAX_BYTES;
+    const { data, isLoading } = useMailVCardPreview(part.ownerId, part.messageId, part.index, !oversize);
+    return <VCardCards data={data} isLoading={isLoading} oversize={oversize} />;
+}
+
+// Both routes serve one shape, so one renderer reads it — and a mail preview that drifted from the Drive
+// one would not compile.
+type VCardPreviewData = NonNullable<ReturnType<typeof useVCardPreview>['data']>;
+
+function VCardCards({
+    data,
+    isLoading,
+    oversize,
+}: {
+    data: VCardPreviewData | undefined;
+    isLoading: boolean;
+    oversize: boolean;
+}) {
     // The cards the file holds that this preview shows no card for — the unreadable ones get their own line.
     const remaining = data ? data.total - data.dropped - data.cards.length : 0;
     // Both counts, for the empty state: a file whose every readable card failed still says how many it
@@ -22,7 +47,7 @@ export function VCardPreviewContent({ path }: { path: DrivePath }) {
 
     return (
         <div className="w-[80vw] h-[calc(100vh-7rem)] overflow-auto rounded bg-background">
-            {path.size > IMPORT_MAX_BYTES ? (
+            {oversize ? (
                 <EmptyState
                     message="File too large to preview"
                     hint={`A file over ${formatFileSize(IMPORT_MAX_BYTES)} can’t be imported either.`}
