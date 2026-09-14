@@ -100,7 +100,8 @@ POST   /mail/:ownerId/message/send                        send draft (→ Sent, 
 PUT    /mail/:ownerId/message/:id/read                    set read/unread (→ MAIL_READ_CHANGED)
 PUT    /mail/:ownerId/message/:id/flagged                 set star (→ MAIL_FLAGS_CHANGED)
 POST   /mail/:ownerId/message/:id/attachments/save-to-drive   save received attachments into Drive
-GET    /mail/:ownerId/message/:id/attachment/:index/:fileName download one attachment
+GET    /mail/:ownerId/message/:id/attachment/:index/:fileName       download one attachment
+GET    /mail/:ownerId/message/:id/attachment/:index/embed/:fileName serve the same part inline
 ```
 
 ## Reading and the list (FE)
@@ -206,6 +207,10 @@ as reference-pill `<a>` links at save/send (`renderAttachmentPills`, `mail-templ
 [MEDIA-REFERENCES.md](MEDIA-REFERENCES.md). Received attachments re-parse from the `.eml` on read and can be
 copied into Drive (`saveAttachmentsToDrive`); `text/calendar` parts are additionally summarized into a typed
 `Attachment.calendarInvite` for the invite widget — see [CALENDAR.md § iMIP](CALENDAR.md#imip-email-based-calendar-invitations).
+
+**Serving one part.** Both byte routes hand the parsed part to `serveMailPart` (`lib/mail/serve-mail-part.ts`): `Content-Type` from the part, `Content-Disposition` from `mailAttachmentName(att, index)`, `X-Content-Type-Options: nosniff` always, `scriptableInlineHeaders` spread in on the `/embed/` route so a scriptable part renders under the sandbox CSP, `private, max-age=86400`, and `Accept-Ranges: bytes` with a 206 over `att.content.subarray` (a mail `video/mp4` or `audio/mpeg` part reaches a media element whose seeking needs ranges, and Safari refuses a source that advertises none). The `:fileName` segment is decoration: the served name comes from the part. `mailAttachmentName` (`packages/lib/src/types/mail.ts`) is the one fallback name — a part with no filename is `attachment-<n>`, 1-based — shared by the reader chip label, the disposition and the file `saveAttachmentsToDrive` writes.
+
+**ETag and re-parsing.** A Maildir body never changes, so the ETag is the message id plus the part index. Both routes answer a matching `If-None-Match` with a 304 *before* calling `messageGetAttachment`, because reading a part re-parses and decodes the whole `.eml`: without that check every range request of a seeked video would pay one full parse. A cache miss still does — each range request re-parses the message.
 
 ## Delivery and inbound
 
