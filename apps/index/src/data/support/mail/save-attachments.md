@@ -33,9 +33,10 @@ ends with **Save all**, followed by the number of files.
 3. Choose **Save to Drive…**.
 4. In the **Save to Drive** dialog, browse to the folder in Drive where you want it, then click **Save here**.
 
-The same menu holds every action the preview's bottom bar offers, so you can download a file, convert it, or
-import a contact file without opening it first. When you convert one, Eigen asks for a Drive folder first, saves
-the file there, and creates the converted copy beside it when you click **Save and convert**.
+The same menu holds every action the preview's bottom bar offers, so you can download a file, convert it, or import a
+contact file without opening it first. When you convert one, Eigen asks for a Drive folder first, saves the file
+there, and creates the converted copy beside it when you click **Save and convert**. The new spreadsheet or document
+opens straight away, so you leave your mailbox.
 
 ## Save all of them at once
 
