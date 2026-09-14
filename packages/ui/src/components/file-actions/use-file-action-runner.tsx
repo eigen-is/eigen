@@ -155,7 +155,7 @@ export function useFileActionRunner(
                 />
             </>
         ),
-        isDialogOpen: pickerOpen,
+        isDialogOpen: pickerOpen || convertDocument.isPending,
         isPending: convertDocument.isPending || importContactsFromDrive.isPending || importContacts.isPending,
     };
 }

@@ -92,6 +92,7 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
             '',
             'odd name',
             `--${boundary}`,
+            'Content-Type:',
             'Content-Disposition: attachment; filename="typeless.bin"',
             '',
             'no type here',
@@ -308,7 +309,7 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
 
     test('a negative index is refused by the domain method, never dereferenced', async () => {
         const home = await getHome(ctx.alice.user.id);
-        expect(home.mail.messageGetAttachment(messageId, -1)).rejects.toThrow(/not found/);
+        await expect(home.mail.messageGetAttachment(messageId, -1)).rejects.toThrow(/not found/);
     });
 
     test('a negative index is refused at the schema boundary on both routes', async () => {
