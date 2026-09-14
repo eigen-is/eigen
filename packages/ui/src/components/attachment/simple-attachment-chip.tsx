@@ -19,6 +19,13 @@ type SimpleAttachmentChipProps = {
     className?: string;
 };
 
+// Reads back the key of the chip under a pointer event, so a host that opens one menu for a whole
+// row (a chat message, a card) can offer that one file's actions when the press landed on a chip.
+export function attachmentKeyAt(target: EventTarget | null): string | null {
+    if (!(target instanceof HTMLElement)) return null;
+    return target.closest('[data-attachment-chip]')?.getAttribute('data-attachment-chip') ?? null;
+}
+
 // Shared compact chip for attachment UIs (mail compose, mail reader, chat).
 // One visual style, varying actions: remove (X), download (icon), or open-preview (onClick).
 export function SimpleAttachmentChip({

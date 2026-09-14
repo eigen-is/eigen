@@ -12,7 +12,7 @@ import { useCallback, useMemo, useRef } from 'react';
 import { useLongPress } from '../../hooks/use-long-press';
 import { AttachmentChip } from '../attachment/attachment-chip';
 import { ReferenceAttachmentChip } from '../attachment/reference-attachment-chip';
-import { SimpleAttachmentChip } from '../attachment/simple-attachment-chip';
+import { attachmentKeyAt, SimpleAttachmentChip } from '../attachment/simple-attachment-chip';
 import { AssigneeChip } from '../comments/assignee-chip';
 import { AssigneePicker } from '../comments/assignee-picker';
 import { CommentThread } from '../comments/comment-thread';
@@ -220,15 +220,11 @@ export function CardDialog({
                     <div
                         className="flex flex-wrap gap-2"
                         onContextMenu={(e) => {
-                            const chip = (e.target as HTMLElement).closest('[data-attachment-chip]');
-                            const subject = subjectOfChip(chip?.getAttribute('data-attachment-chip') ?? null);
+                            const subject = subjectOfChip(attachmentKeyAt(e.target));
                             if (subject) chipMenu.handleContextMenu(e, subject);
                         }}
                         onPointerDownCapture={(e) => {
-                            pressedChip.current =
-                                (e.target as HTMLElement)
-                                    .closest('[data-attachment-chip]')
-                                    ?.getAttribute('data-attachment-chip') ?? null;
+                            pressedChip.current = attachmentKeyAt(e.target);
                         }}
                         {...longPress.bind(null)}
                     >

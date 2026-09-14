@@ -13,6 +13,7 @@ import { useLongPress } from '../../hooks/use-long-press';
 import { cn } from '../../lib/utils';
 import { AttachmentChip } from '../attachment/attachment-chip';
 import { ReferenceAttachmentChip } from '../attachment/reference-attachment-chip';
+import { attachmentKeyAt } from '../attachment/simple-attachment-chip';
 import { EigenLoader } from '../braket/eigen-loader';
 import { ContextMenuAnchor, useContextMenu } from '../context-menu';
 import { DropdownMenuItem, DropdownMenuSeparator } from '../dropdown-menu';
@@ -272,25 +273,19 @@ export function ChatMessageList({
                 const actionProps = hasActions
                     ? {
                           onContextMenu: (e: React.MouseEvent) => {
-                              const chip = (e.target as HTMLElement).closest('[data-attachment-chip]');
+                              const chipName = attachmentKeyAt(e.target);
                               // Leave links and selected text to the browser's native copy menu. A
                               // chip is an anchor too, and it has its own rows to offer.
                               const selection = window.getSelection();
                               if (
-                                  (!chip && (e.target as HTMLElement).closest('a')) ||
+                                  (!chipName && (e.target as HTMLElement).closest('a')) ||
                                   (selection && !selection.isCollapsed)
                               )
                                   return;
-                              contextMenu.handleContextMenu(e, {
-                                  message,
-                                  attachment: subjectOfChip(chip?.getAttribute('data-attachment-chip') ?? null),
-                              });
+                              contextMenu.handleContextMenu(e, { message, attachment: subjectOfChip(chipName) });
                           },
                           onPointerDownCapture: (e: React.PointerEvent) => {
-                              pressedChip.current =
-                                  (e.target as HTMLElement)
-                                      .closest('[data-attachment-chip]')
-                                      ?.getAttribute('data-attachment-chip') ?? null;
+                              pressedChip.current = attachmentKeyAt(e.target);
                           },
                           ...longPress.bind(message),
                       }
