@@ -51,7 +51,7 @@ export function useDriveLayoutDialogs({
     const copyPath = useCopyPath();
     const duplicatePath = useDuplicatePath();
     const deletePathsMutation = useDeletePaths();
-    const convertMutation = useConvertDocument(ownerId, mountId);
+    const convertMutation = useConvertDocument();
     const importContactsMutation = useImportContactsFromDrive();
     const isCoarsePointer = useIsCoarsePointer();
     const isEffectiveOwnerOf = useIsEffectiveOwnerOf();
@@ -158,7 +158,13 @@ export function useDriveLayoutDialogs({
         (path: DrivePath, targetType: 'eigensheets' | 'eigendoc') => {
             if (!path.parentId) return;
             convertMutation.mutate(
-                { pathId: path.id, targetType, parentId: path.parentId },
+                {
+                    ownerId: path.ownerId,
+                    mountId: path.mountId,
+                    pathId: path.id,
+                    parentId: path.parentId,
+                    targetType,
+                },
                 {
                     onSuccess: (newPath) => {
                         openDocument(newPath);
