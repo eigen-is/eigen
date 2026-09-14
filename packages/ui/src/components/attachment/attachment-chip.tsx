@@ -37,6 +37,7 @@ export function AttachmentChip({
     return (
         <SimpleAttachmentChip
             filename={name}
+            attachmentKey={fileName}
             downloadUrl={downloadUrl}
             thumbnailUrl={thumbnailUrl}
             onRemove={onRemove}

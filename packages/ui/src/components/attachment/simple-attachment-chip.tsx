@@ -5,6 +5,9 @@ import { AttachmentChipRemoveButton, CHIP_BASE_CLASS } from './attachment-chip-s
 
 type SimpleAttachmentChipProps = {
     filename: string;
+    // What a host's context menu resolves back to the file it names — the stored file name for a
+    // chat or card attachment, where the label is the original name instead. Defaults to the label.
+    attachmentKey?: string;
     // Wraps the chip in an anchor with `download` pointing at this URL. Shows a Download icon.
     downloadUrl?: string;
     // Intercepts the anchor click — use when the chip should open a preview instead of downloading.
@@ -20,6 +23,7 @@ type SimpleAttachmentChipProps = {
 // One visual style, varying actions: remove (X), download (icon), or open-preview (onClick).
 export function SimpleAttachmentChip({
     filename,
+    attachmentKey,
     downloadUrl,
     onClick,
     thumbnailUrl,
@@ -59,11 +63,16 @@ export function SimpleAttachmentChip({
                 rel="noopener noreferrer"
                 className={outerClass}
                 onClick={onClick}
+                data-attachment-chip={attachmentKey ?? filename}
             >
                 {content}
             </a>
         );
     }
 
-    return <div className={outerClass}>{content}</div>;
+    return (
+        <div className={outerClass} data-attachment-chip={attachmentKey ?? filename}>
+            {content}
+        </div>
+    );
 }

@@ -1,11 +1,15 @@
 import { useResolveCardAttachments } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
-import { useMediaResolver } from '@workspace/lib/drive';
+import { useFolderLookup, useMediaResolver } from '@workspace/lib/drive';
+import { subjectFromPath } from '@workspace/lib/file-subject';
 import type { ChatAttachment, CommentEntry } from '@workspace/lib/types/chat';
 import { isAttachmentReference } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace/lib/types/comments';
-import type { EffectiveMember } from '@workspace/lib/types/drive';
+import type { DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
+import type { FileSubject } from '@workspace/lib/types/file-subject';
 import { Check, RotateCcw } from 'lucide-react';
+import { useCallback, useMemo, useRef } from 'react';
+import { useLongPress } from '../../hooks/use-long-press';
 import { AttachmentChip } from '../attachment/attachment-chip';
 import { ReferenceAttachmentChip } from '../attachment/reference-attachment-chip';
 import { SimpleAttachmentChip } from '../attachment/simple-attachment-chip';
@@ -13,6 +17,9 @@ import { AssigneeChip } from '../comments/assignee-chip';
 import { AssigneePicker } from '../comments/assignee-picker';
 import { CommentThread } from '../comments/comment-thread';
 import { CreatedByMeta } from '../comments/created-by-meta';
+import { ContextMenuAnchor, useContextMenu } from '../context-menu';
+import { FileActionMenuItems } from '../file-actions/file-action-menu-items';
+import { useFileActionRunner } from '../file-actions/use-file-action-runner';
 import { NoteCardDialog } from '../notes/note-card-dialog';
 import { CardForm } from './card-form';
 
@@ -54,6 +61,39 @@ export function CardDialog({
 }: CardDialogProps) {
     const { mediaFolderId } = useMediaResolver();
     const resolveAttachments = useResolveCardAttachments(ownerId, mountId, mediaFolderId);
+    const { findByName } = useFolderLookup(ownerId, mountId, mediaFolderId);
+
+    // A chip's file actions open on right-click, and on touch through the long-press the chips share.
+    const chipMenu = useContextMenu<FileSubject>();
+    const openMenuAt = chipMenu.openAt;
+    const subjectOfChip = useCallback(
+        (name: string | null): FileSubject | undefined => {
+            const path = name ? findByName(name) : undefined;
+            return path ? subjectFromPath(path) : undefined;
+        },
+        [findByName],
+    );
+    // The chip under the finger at press time: a long-press only reports where it started.
+    const pressedChip = useRef<string | null>(null);
+    const handleLongPress = useCallback(
+        (_chips: null, x: number, y: number) => {
+            const subject = subjectOfChip(pressedChip.current);
+            if (subject) openMenuAt(subject, x, y);
+        },
+        [openMenuAt, subjectOfChip],
+    );
+    const longPress = useLongPress<null>(handleLongPress);
+    const attachmentSubjects = useMemo(
+        () =>
+            (card?.attachments ?? [])
+                .filter((attachment): attachment is string => typeof attachment === 'string')
+                .map((name) => findByName(name))
+                .filter((path): path is DrivePath => path !== undefined)
+                .map(subjectFromPath),
+        [card?.attachments, findByName],
+    );
+    // The card's own attachments are the siblings, so a quick look from here keeps its Save all row.
+    const runner = useFileActionRunner(chipMenu.item, attachmentSubjects, { batch: true });
 
     if (!card) return null;
 
@@ -177,7 +217,21 @@ export function CardDialog({
             onDescriptionChange={onUpdate ? (html) => onUpdate({ description: html }) : undefined}
             attachments={
                 card.attachments && card.attachments.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
+                    <div
+                        className="flex flex-wrap gap-2"
+                        onContextMenu={(e) => {
+                            const chip = (e.target as HTMLElement).closest('[data-attachment-chip]');
+                            const subject = subjectOfChip(chip?.getAttribute('data-attachment-chip') ?? null);
+                            if (subject) chipMenu.handleContextMenu(e, subject);
+                        }}
+                        onPointerDownCapture={(e) => {
+                            pressedChip.current =
+                                (e.target as HTMLElement)
+                                    .closest('[data-attachment-chip]')
+                                    ?.getAttribute('data-attachment-chip') ?? null;
+                        }}
+                        {...longPress.bind(null)}
+                    >
                         {card.attachments.map((attachment) =>
                             isAttachmentReference(attachment) ? (
                                 <ReferenceAttachmentChip key={`ref-${attachment.id}`} reference={attachment} />
@@ -194,6 +248,10 @@ export function CardDialog({
                                 <SimpleAttachmentChip key={`name-${attachment}`} filename={attachment} />
                             ),
                         )}
+                        <ContextMenuAnchor contextMenu={chipMenu} className="min-w-48">
+                            <FileActionMenuItems runner={runner} />
+                        </ContextMenuAnchor>
+                        {runner.dialogs}
                     </div>
                 ) : undefined
             }
