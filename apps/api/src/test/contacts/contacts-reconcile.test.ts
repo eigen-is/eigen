@@ -4,7 +4,6 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, uti
 import { join } from 'node:path';
 import type { Contact } from '@workspace/lib/types/contact';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { parseVCard } from '@workspace/lib/vcard';
 import { eq } from 'drizzle-orm';
 import { mergeVCard } from '../../lib/carddav/vcard-serialize';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
@@ -14,6 +13,7 @@ import { CONTACTS_DB_CONFIG } from '../../lib/contacts/db-config';
 import * as contactsSchema from '../../lib/contacts/schema';
 import { ManagedDatabase } from '../../lib/core';
 import type { Home } from '../../lib/home';
+import { parseVCard } from '../../lib/vcard';
 import {
     avatarsDirOf,
     CONTACTS_TEST_ROOT,

@@ -1,6 +1,7 @@
 import { useQueries, useQuery } from '@tanstack/react-query';
-import { driveApi } from '@workspace/lib/api';
+import { driveApi, vcardPreviewApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
+import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
@@ -238,5 +239,28 @@ export function useTextPreview(
         // the current one regenerates server-side) self-heals: after 30s the query is stale, so
         // the next refetch trigger (window focus or remount) fetches the fresh copy.
         staleTime: STALE_TIME.THIRTY_SECONDS,
+    });
+}
+
+// GET VCARD PREVIEW — the contact cards a .vcf holds, parsed server-side (PREVIEWS.md). The quick look
+// and the drive hero read the same query. `updatedAt` is in the key, so a new version is a new entry and
+// the cards never go stale; the query stays off a file the import ceiling would refuse anyway.
+export function useVCardPreview(ownerId: string, mountId: string, pathId: string, updatedAt: Date, size: number) {
+    return useQuery({
+        queryKey: driveKeys.vcardPreview(ownerId, mountId, pathId, updatedAt),
+        queryFn: async () => {
+            // vcardPreviewApi, not driveApi: a card's birthday is a date-only string, and the default
+            // treaty's reviver would hand the renderer a Date (api.ts).
+            const response = await vcardPreviewApi({ ownerId })({ mountId })
+                .file({ pathId })
+                ['vcard-preview'].get({ query: { updatedAt: updatedAt.toISOString() } });
+            if (response.error) throw new AppError(response);
+            return response.data;
+        },
+        enabled: !!ownerId && !!mountId && !!pathId && size <= IMPORT_MAX_BYTES,
+        staleTime: Infinity,
+        // A file the parser refuses fails the same way every time, so only the transform runner's "busy"
+        // is worth another go — the cards are built off the same bounded queue every preview shares.
+        retry: (failureCount, error) => failureCount < 3 && error instanceof AppError && error.status === 503,
     });
 }

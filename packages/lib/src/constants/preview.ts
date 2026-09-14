@@ -37,8 +37,6 @@ const EXIFTOOL_EXTENSIONS = new Set([
     '.heif',
 ]);
 
-// `vcard` is a served mode only: getTextPreviewMode declines a .vcf (see there), and preview-cache
-// picks the vCard renderer off isVCardFile instead.
 export type TextPreviewMode =
     | 'markdown'
     | 'plaintext'
@@ -46,8 +44,7 @@ export type TextPreviewMode =
     | 'eigendoc'
     | 'eigenslides'
     | 'eigensheets'
-    | 'eigenvector'
-    | 'vcard';
+    | 'eigenvector';
 
 // The logical box a canvas preview body is composed at: the drive hero scales a preview from its
 // intrinsic width (drive-preview.tsx), so a drawing of any size previews through one known number,
@@ -65,8 +62,7 @@ export function getTextPreviewMode(mimeType: string, fileName: string): TextPrev
     if (mimeType === DRIVE_MIME_SLIDES) return 'eigenslides';
     if (mimeType === DRIVE_MIME_SHEETS) return 'eigensheets';
     if (mimeType === DRIVE_MIME_VECTOR) return 'eigenvector';
-    // A vCard is text, but its raw body is mostly base64 photo: it previews as contact cards instead,
-    // through the mode of the same name the server picks for it — never as raw text here.
+    // A vCard is text, but its raw body is mostly base64 photo: it previews as contact cards instead.
     if (isVCardFile(mimeType, fileName)) return null;
     const ext = getExtension(fileName);
     if (mimeType === 'text/markdown' || ext === '.md' || ext === '.markdown') return 'markdown';
@@ -76,10 +72,12 @@ export function getTextPreviewMode(mimeType: string, fileName: string): TextPrev
     return null;
 }
 
-// The subset of text preview modes whose RAW BODY is indexed by drive-wide content
-// search. Eigen container modes (eigendoc/eigenslides/eigensheets/eigenvector) are excluded
-// here — their bodies come from the Yjs loaders via the content-reindex sweep, not a raw read.
+// Which files drive-wide content search indexes from their own bytes: the text preview modes whose RAW
+// BODY is the content, plus a .vcf, whose names and organisations the extractor pulls out of the cards
+// rather than the raw body (docs/SEARCH.md). Eigen container modes (eigendoc/eigenslides/eigensheets/
+// eigenvector) are excluded — their bodies come from the Yjs loaders via the content-reindex sweep.
 export function isSearchableTextFile(mimeType: string, fileName: string): boolean {
+    if (isVCardFile(mimeType, fileName)) return true;
     const mode = getTextPreviewMode(mimeType, fileName);
     return mode === 'markdown' || mode === 'plaintext' || mode === 'code';
 }

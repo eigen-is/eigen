@@ -1,5 +1,7 @@
+import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { MAX_SEND_RECIPIENTS } from '@workspace/lib/constants/mail';
 import type { DriveAccessCheckResult, DrivePath } from '@workspace/lib/types/drive';
+import { isVCardFile } from '@workspace/lib/types/drive';
 import type { FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
@@ -15,7 +17,8 @@ import { getUniqueFileName } from '../lib/drive/naming';
 import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
 import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
-import { getScreenPreview, getTextPreview } from '../lib/preview/preview-cache';
+import { getScreenPreview, getTextPreview, getVCardPreview } from '../lib/preview/preview-cache';
+import { vCardPreviewSchema } from '../lib/preview/vcard-preview-payload';
 import { getThumbnail } from '../lib/shared/thumbnails';
 import { SNAPSHOT_NAME_FORMAT } from '../lib/versioning/timestamp';
 import { betterAuth } from './auth';
@@ -339,6 +342,32 @@ export const driveRouter = new Elysia({ name: 'drive' })
         // updatedAt is a cache-buster — browser HTTP cache and TanStack queryKey both key
         // off the URL, so a stale URL serves stale content after an inline edit.
         { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
+    )
+    // A .vcf previews as contact cards, so it answers with the cards themselves rather than a body —
+    // the overlay and the drive hero render them (PREVIEWS.md). Same ACL path and cache-bust
+    // convention as the text preview beside it.
+    .get(
+        '/drive/:ownerId/:mountId/file/:pathId/vcard-preview',
+        async ({ params, user, set }) => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
+            if (!isVCardFile(path.mimeType || '', path.name)) throw new ApiError(400, 'Not a vCard file');
+            // The file is parsed whole, so the preview carries the import's ceiling — and refuses
+            // before the bytes are read, not after.
+            if (path.size > IMPORT_MAX_BYTES) throw new ApiError(413, 'File too large to preview');
+
+            const result = await getVCardPreview(mount, path);
+            if (!result) throw new ApiError(404, 'No preview available');
+            // Stale-while-revalidate and the long max-age work exactly as they do for a text preview.
+            if (result.stale) set.headers['Cache-Control'] = 'no-store';
+            else setCacheHeaders(set, 86400);
+            return result.value;
+        },
+        {
+            auth: true,
+            query: t.Object({ updatedAt: t.Optional(t.String()) }),
+            response: vCardPreviewSchema,
+        },
     )
     // Version history (file-level snapshots; see lib/versioning). Access flows
     // through getSharedDrive() → SharedDrive ACL, like every other drive route.

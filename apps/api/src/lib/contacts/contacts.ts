@@ -1,15 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import type {
-    Address,
-    Contact,
-    CreateContactInput,
-    ImportContactsResult,
-    ParsedCard,
-    ParsedCardPhoto,
-} from '@workspace/lib/types/contact';
+import type { Address, Contact, CreateContactInput, ImportContactsResult } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { normalizeBirthday, parseVCard } from '@workspace/lib/vcard';
 import { eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { Semaphore } from '../../utils/semaphore';
@@ -23,6 +15,8 @@ import { atHome, getHome } from '../home';
 import { pushUserProfile } from '../home/home-relay';
 import type { User } from '../user';
 import { getOrgOwner } from '../user/';
+import { normalizeBirthday, parseVCard } from '../vcard';
+import type { ParsedCard, ParsedCardPhoto } from '../vcard/types';
 import type { StagedAvatarPair } from './avatars';
 import * as avatars from './avatars';
 import {

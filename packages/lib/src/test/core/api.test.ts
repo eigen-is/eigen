@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
-import { api, contactsApi } from '../../core/api';
+import { api, contactsApi, vcardPreviewApi } from '../../core/api';
 
 afterEach(() => mock.restore());
 
@@ -23,6 +23,37 @@ describe('API date parsing', () => {
         expect(response.error).toBeNull();
         expect(response.data?.[0]?.birthday).toBe('1990-01-01');
         expect(response.data?.[0]?.birthday).not.toBeInstanceOf(Date);
+    });
+
+    test('keeps vCard preview birthdays as date-only strings', async () => {
+        spyOn(globalThis, 'fetch').mockResolvedValue(
+            Response.json({
+                cards: [
+                    {
+                        contact: {
+                            id: '',
+                            etag: '',
+                            firstName: 'Ada',
+                            lastName: 'Lovelace',
+                            email: [],
+                            phone: [],
+                            birthday: '1990-01-01',
+                        },
+                        categories: [],
+                    },
+                ],
+                dropped: 0,
+                total: 1,
+            }),
+        );
+
+        const response = await vcardPreviewApi({ ownerId: 'owner-1' })({ mountId: 'm1' })
+            .file({ pathId: 'p1' })
+            ['vcard-preview'].get({ query: {} });
+
+        expect(response.error).toBeNull();
+        expect(response.data?.cards[0]?.contact.birthday).toBe('1990-01-01');
+        expect(response.data?.cards[0]?.contact.birthday).not.toBeInstanceOf(Date);
     });
 
     test('keeps default Eden date revival for instant domains', async () => {

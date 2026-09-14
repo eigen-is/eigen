@@ -2,7 +2,6 @@
 // their three counts through one copy, so the message is pinned here rather than in each caller.
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
-import { IMPORT_MAX_CARDS } from '@workspace/lib/constants/contact';
 import type { ImportContactsResult } from '@workspace/lib/types/contact';
 
 const OWNER = 'a1b2c3d4';
@@ -46,14 +45,10 @@ mock.module('../../../../core/api', () => ({
     }),
 }));
 
-// The import POSTs a file and reads JSON back; the preview GETs a file and reads vCard text back.
+// The import POSTs a file and reads its three counts back as JSON.
 const realFetch = g.fetch;
 let fileImportResult: ImportContactsResult = { imported: 0, skipped: 0, failed: 0 };
-let vcardFileText = '';
-g.fetch = async (_url: string, init?: { method?: string }) =>
-    init?.method === 'POST'
-        ? new Response(JSON.stringify(fileImportResult), { status: 200 })
-        : new Response(vcardFileText, { status: 200 });
+g.fetch = async () => new Response(JSON.stringify(fileImportResult), { status: 200 });
 
 afterAll(() => {
     g.fetch = realFetch;
@@ -67,10 +62,7 @@ afterAll(() => {
 });
 
 // One React root for every hook that has to be rendered to be observed. Recipe: the use-backup test.
-async function renderHook<T>(
-    use: () => T,
-    queryClient: QueryClient,
-): Promise<{ latest: T; seen: { latest: T | null }; unmount: () => void }> {
+async function renderHook<T>(use: () => T, queryClient: QueryClient): Promise<{ latest: T; unmount: () => void }> {
     const { act, createElement } = await import('react');
     const { createRoot } = await import('react-dom/client');
     const { QueryClientProvider } = await import('@tanstack/react-query');
@@ -85,7 +77,7 @@ async function renderHook<T>(
     await act(async () => {
         root.render(createElement(QueryClientProvider, { client: queryClient }, createElement(Harness, null)));
     });
-    return { latest: seen.latest as T, seen, unmount: () => root.unmount() };
+    return { latest: seen.latest as T, unmount: () => root.unmount() };
 }
 
 async function importFile(result: ImportContactsResult): Promise<string> {
@@ -130,37 +122,6 @@ describe('useImportContacts', () => {
     test('a file whose every card was unreadable says so, not that it held no contacts', async () => {
         expect(await importFile({ imported: 0, skipped: 0, failed: 2 })).toBe('error: 2 contacts could not be read');
         expect(await importFile({ imported: 0, skipped: 0, failed: 1 })).toBe('error: 1 contact could not be read');
-    });
-});
-
-// A minimal card, repeated: the preview only has to split and parse them, not make sense of them.
-const minimalCards = (count: number) =>
-    Array.from({ length: count }, (_, i) => `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:card-${i}\r\nFN:Card ${i}\r\nEND:VCARD`)
-        .join('\r\n')
-        .concat('\r\n');
-
-describe('useVCardFile', () => {
-    test('reads at most as many cards as an import would take, and still reports what the file holds', async () => {
-        const { act } = await import('react');
-        const { useVCardFile } = await import('../../../../core/contacts/hooks/use-transfer');
-        vcardFileText = minimalCards(IMPORT_MAX_CARDS + 5);
-        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-        const { seen, unmount } = await renderHook(
-            () => useVCardFile(OWNER, 'm1', 'p1', new Date(1), 1024),
-            queryClient,
-        );
-
-        // The query resolves off a microtask and re-renders on a scheduled batch, so let it land.
-        while (!seen.latest?.data) {
-            await act(async () => {
-                await new Promise((resolve) => setTimeout(resolve, 0));
-            });
-        }
-
-        expect(seen.latest?.data?.cards.length).toBe(IMPORT_MAX_CARDS);
-        expect(seen.latest?.data?.total).toBe(IMPORT_MAX_CARDS + 5);
-        expect(seen.latest?.data?.dropped).toBe(0);
-        await act(() => unmount());
     });
 });
 

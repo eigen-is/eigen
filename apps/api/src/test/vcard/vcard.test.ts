@@ -2,7 +2,7 @@
 // transcode. The CardDAV-only seams (merge/create, addressbook-query, address-data) are tested beside
 // them in apps/api/src/test/carddav/vcard.test.ts.
 import { describe, expect, test } from 'bun:test';
-import { escapeContentText } from '../../core/content-line';
+import { escapeContentText } from '@workspace/lib/content-line';
 import {
     getVersion,
     makeLine,
@@ -12,7 +12,7 @@ import {
     transcodeTo30,
     unescapeText,
     VCardError,
-} from '../../vcard';
+} from '../../lib/vcard';
 
 // Wrap a single content line in a minimal valid vCard so it can go through the public parser.
 const parseCard = (line: string) => parseVCardLines(`BEGIN:VCARD\r\nVERSION:3.0\r\n${line}\r\nEND:VCARD\r\n`);
@@ -20,7 +20,7 @@ const parseCard = (line: string) => parseVCardLines(`BEGIN:VCARD\r\nVERSION:3.0\
 // A vCard is CRLF-joined and CRLF-terminated; fixtures are written as physical lines so folding is literal.
 const vcard = (lines: string[]) => `${lines.join('\r\n')}\r\n`;
 
-// The encode side of the parser's atob decode — kept off Node globals, like the module it exercises.
+// The encode side of the parser's base64 decode.
 const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 
 // Apple-Contacts-shaped vCard 3.0: UID, N/FN, ORG, two folded properties (TITLE, NOTE), a grouped
@@ -265,6 +265,20 @@ describe('vCard projection parse', () => {
 
     test('a comma-less data: PHOTO degrades to no photo', () => {
         expect(parseLineCard('PHOTO:data:junk').photo).toBeNull();
+    });
+
+    // Buffer decodes leniently, so the regex is what refuses a PHOTO: what matters is that a malformed
+    // one is a no-photo — never a throw, and never a uri the renderer would fetch.
+    test('a PHOTO that is not base64 degrades to no photo', () => {
+        expect(parseLineCard('PHOTO;ENCODING=b:not base64!!').photo).toBeNull();
+    });
+
+    test('a truncated base64 PHOTO still yields the bytes it did carry', () => {
+        expect(parseLineCard('PHOTO;ENCODING=b:AAAAA').photo).toEqual({
+            kind: 'inline',
+            bytes: Uint8Array.from([0, 0, 0]),
+            mediaType: null,
+        });
     });
 
     test('normalizes a compact BDAY to YYYY-MM-DD', () => {

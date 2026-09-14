@@ -2,7 +2,6 @@
 // matcher, and the address-data partial projection. The AST, projection parse and 4.0 -> 3.0 transcode are
 // tested in packages/lib/src/test/vcard/vcard.test.ts.
 import { describe, expect, test } from 'bun:test';
-import { parseVCard, parseVCardLines } from '@workspace/lib/vcard';
 import { projectAddressData } from '../../lib/carddav/address-data';
 import {
     matchCard,
@@ -12,6 +11,7 @@ import {
     type TextMatch,
 } from '../../lib/carddav/query-filter';
 import { createVCard, mergeVCard } from '../../lib/carddav/vcard-serialize';
+import { parseVCard, parseVCardLines } from '../../lib/vcard';
 
 // A vCard is CRLF-joined and CRLF-terminated; fixtures are written as physical lines so folding is literal.
 const vcard = (lines: string[]) => `${lines.join('\r\n')}\r\n`;

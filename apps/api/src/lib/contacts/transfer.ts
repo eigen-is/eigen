@@ -1,16 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { IMPORT_MAX_CARDS } from '@workspace/lib/constants/contact';
-import type { ImportContactsResult, ParsedCard } from '@workspace/lib/types/contact';
-import {
-    makeLine,
-    parseVCard,
-    serializeVCardLines,
-    splitVCards,
-    transcodeTo30,
-    VCardError,
-} from '@workspace/lib/vcard';
+import type { ImportContactsResult } from '@workspace/lib/types/contact';
 import { eq } from 'drizzle-orm';
 import { ApiError } from '../core';
+import { makeLine, parseVCard, serializeVCardLines, splitVCards, transcodeTo30, VCardError } from '../vcard';
+import type { ParsedCard } from '../vcard/types';
 import type { Contacts } from './contacts';
 import * as schema from './schema';
 

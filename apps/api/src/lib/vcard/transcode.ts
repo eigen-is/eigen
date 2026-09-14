@@ -5,9 +5,9 @@
 // TEL values, ISO-basic BDAY dates and numeric PREF get their real 3.0 form; every construct with no 3.0
 // equivalent (ANNIVERSARY, KIND, PID/ALTID params, …) rides through verbatim rather than failing the card.
 // Any non-4.0 card is returned unchanged.
-import type { VCardLine } from '../types/contact';
 import { getVersion, makeLine, parseVCardLines, photoParams, serializeVCardLines, splitDataUri } from './ast';
 import { normalizeBirthday } from './parse';
+import type { VCardLine } from './types';
 
 // 4.0 spells preference as PREF=<1..100> on any property, lowest wins (RFC 6350 §5.3); 3.0 has only TYPE=PREF
 // and no ordering, so exactly one line per property name can carry it.

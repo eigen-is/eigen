@@ -26,7 +26,7 @@ type PreviewState = {
     downloadMode: DownloadMode;
 };
 
-export type PreviewMode = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'fallback';
+export type PreviewMode = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'vcard' | 'fallback';
 
 function getPreviewMode(path: DrivePath): PreviewMode {
     const mime = path.mimeType || '';
@@ -35,9 +35,9 @@ function getPreviewMode(path: DrivePath): PreviewMode {
     if (mime.startsWith('video/')) return 'video';
     if (mime.startsWith('audio/')) return 'audio';
     if (mime === 'application/pdf') return 'pdf';
-    // A .vcf reads as contact cards, never as its raw text: the server renders them into the text
-    // mode's body, which is why getTextPreviewMode declines it and this test stands beside it.
-    if (isVCardFile(mime, path.name) || getTextPreviewMode(mime, path.name) !== null) return 'text';
+    // A .vcf reads as contact cards, never as its raw text — which is why getTextPreviewMode declines it.
+    if (isVCardFile(mime, path.name)) return 'vcard';
+    if (getTextPreviewMode(mime, path.name) !== null) return 'text';
     return 'fallback';
 }
 

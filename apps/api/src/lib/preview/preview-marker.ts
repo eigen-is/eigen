@@ -1,16 +1,11 @@
 import type { TransformWarning } from '../document/transform/protocol';
 
-// One line of preview chrome: why there is less to look at than the file holds, or nothing at all.
-// Inline-styled because preview HTML is embedded without the document <head>, so external CSS isn't
-// available. Muted color (#6b7280) matches the resolved --color-muted-foreground used elsewhere in
-// the export pipeline. Callers pass their own literal or a counted line, never file content.
-export function renderPreviewNotice(text: string): string {
-    return `<div style="margin:1rem 0;text-align:center;color:#6b7280;font-size:13px">${text}</div>`;
-}
-
-// Appended to compact quick-look previews when content was dropped to keep the cached body small.
+// Appended to compact quick-look previews when content was dropped to keep the
+// cached body small. Inline-styled because preview HTML is embedded without the
+// document <head>, so external CSS isn't available. Muted color (#6b7280) matches
+// the resolved --color-muted-foreground used elsewhere in the export pipeline.
 export function renderPreviewTruncatedMarker(): string {
-    return renderPreviewNotice('Preview truncated — open to see everything');
+    return '<div style="margin:1rem 0;text-align:center;color:#6b7280;font-size:13px">Preview truncated — open to see everything</div>';
 }
 
 // Final defense in depth after each type's own budget: a body past this size is

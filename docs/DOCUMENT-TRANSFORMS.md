@@ -32,14 +32,14 @@ Main thread                                       One-shot Bun Worker
 | `run-transform.ts`  | The one main-thread seam every transform goes through (`runTransformToText` / `runTransformToBytes` / `runFileTransformToText` / import variants): owns capture timing, per-operation deadline, admission, warning surfacing, failure mapping |
 | `runner.ts`         | Admission + Worker lifecycle only, no document logic; `TRANSFORM_LIMITS` lives here |
 | `worker.ts`         | Operation dispatch with lazy imports — a doc preview never evaluates the sheet engine or ExcelJS |
-| `protocol.ts`       | Closed discriminated request/response unions, transfer lists, result↔request pairing, result sizing. Two source shapes: a collab job carries the captured Yjs payload, a bytes job (the vCard preview, both imports) carries a transferred `ArrayBuffer` |
+| `protocol.ts`       | Closed discriminated request/response unions, transfer lists, result↔request pairing, result sizing. Two source shapes: a collab job carries the captured Yjs payload, a bytes job (the vCard preview, both imports) carries a transferred `ArrayBuffer`. A preview result is a string either way — the vCard one carries its cards as JSON |
 | `collab-source.ts`  | Main-thread capture of the compressed Yjs payload (`readYjsStatePayload`) |
 
 Every operation follows the same layout: a Worker-pure module per type behind a thin main-thread entry.
 
 | Operation | Main-thread entry | Worker-pure modules | Detail doc |
 |---|---|---|---|
-| Preview  | `preview/preview-document.ts` (collab), `preview/preview-cache.ts` (vCard) | `preview/eigen{doc,slides,sheets,vector}-render.ts`, `preview/vcard-render.ts` | [PREVIEWS.md](PREVIEWS.md) |
+| Preview  | `preview/preview-document.ts` (collab), `preview/preview-cache.ts` (vCard) | `preview/eigen{doc,slides,sheets,vector}-render.ts`, `preview/vcard-preview.ts` | [PREVIEWS.md](PREVIEWS.md) |
 | Export   | `export/export-document.ts` (`runDocumentExport` + the format→envelope table) | `export/{doc,sheets,vector}/{render,transform}.ts`, `export/canvas/{render,transform}.ts` (both canvas types) | [EXPORT.md](EXPORT.md) |
 | Import / convert | `import/import-document.ts` | `import/{doc,sheets}/transform.ts` | [EXPORT.md](EXPORT.md), [SHEETS.md](SHEETS.md) |
 | Search extraction | `search/extract-text.ts` | `search/extract-render.ts` | [SEARCH.md](SEARCH.md) |

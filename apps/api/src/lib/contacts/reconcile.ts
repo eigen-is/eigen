@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import type { ParsedCard } from '@workspace/lib/types/contact';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq, sql } from 'drizzle-orm';
 import { mergeVCard } from '../carddav/vcard-serialize';
 import { PATHS } from '../core';
+import type { ParsedCard } from '../vcard/types';
 import { cardPath, computeCardEtag, listCardUris, uriKeyOf, writeCardFile } from './card-store';
 import type { CardRowInput, Contacts } from './contacts';
 import * as schema from './schema';

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import type { ParsedCardPhoto } from '@workspace/lib/types/contact';
 import { ApiError, PATHS } from '../core';
 import { generateImagePreview } from '../shared/thumbnails';
+import type { ParsedCardPhoto } from '../vcard/types';
 import {
     AVATAR_FILENAME,
     avatarCacheName,

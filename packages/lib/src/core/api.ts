@@ -44,14 +44,21 @@ export const api = treaty<app>(API_HOST, {
     },
 });
 
-// The one treaty without date revival: a birthday is a date-only string ("1990-01-01") and reviving it
-// into a Date shifts the day by timezone. Deliberate break from the Date wire convention, pinned by api.test.ts.
-export const contactsApi = treaty<app>(API_HOST, {
+// The one treaty without date revival: Eden's reviver matches a bare "1990-01-01" too, and a date-only
+// string turned into a Date shifts the day by timezone. Every route serving one reads through here —
+// contact birthdays, and the same birthdays on the Drive vCard preview. Deliberate break from the Date
+// wire convention, pinned by api.test.ts.
+const plainApi = treaty<app>(API_HOST, {
     fetch: {
         credentials: 'include',
     },
     parseDate: false,
-}).contacts;
+});
+
+export const contactsApi = plainApi.contacts;
+// Only for the vcard-preview route: it serves parsed contacts, so it takes the no-revival treaty while
+// every other drive route reads through `driveApi`.
+export const vcardPreviewApi = plainApi.drive;
 export const mailApi = api.mail;
 export const publicApi = api.p;
 export const driveApi = api.drive;

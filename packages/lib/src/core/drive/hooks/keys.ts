@@ -32,6 +32,9 @@ export const driveKeys = {
     textPreviews: (ownerId: string) => [...driveKeys.owner(ownerId), 'text-preview'] as const,
     textPreview: (ownerId: string, mountId: string, pathId: string, updatedAt?: Date) =>
         [...driveKeys.textPreviews(ownerId), mountId, pathId, updatedAt?.getTime()] as const,
+    vcardPreviews: (ownerId: string) => [...driveKeys.owner(ownerId), 'vcard-preview'] as const,
+    vcardPreview: (ownerId: string, mountId: string, pathId: string, updatedAt: Date) =>
+        [...driveKeys.vcardPreviews(ownerId), mountId, pathId, updatedAt.getTime()] as const,
     // Owner-scoped prefix for the effective-members family (every mount+path under one owner).
     // invalidateEffectiveMembers drops the whole family on an ancestor ACL change.
     effectiveMembersForOwner: (ownerId: string) => [...driveKeys.owner(ownerId), 'effective-members'] as const,

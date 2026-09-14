@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import type { ParsedCard } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { parseVCard } from '@workspace/lib/vcard';
 import { eq, inArray, sql } from 'drizzle-orm';
 import { mergeVCard } from '../carddav/vcard-serialize';
 import { ApiError } from '../core';
+import { parseVCard } from '../vcard';
+import type { ParsedCard } from '../vcard/types';
 import { computeCardEtag, normalizeLabelName, writeCardFile } from './card-store';
 import type { Contacts } from './contacts';
 import * as schema from './schema';

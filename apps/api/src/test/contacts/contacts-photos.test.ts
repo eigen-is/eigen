@@ -2,13 +2,13 @@ import { afterAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomFillSync, randomUUID } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ParsedCardPhoto } from '@workspace/lib/types/contact';
-import { parseVCard } from '@workspace/lib/vcard';
 import { eq } from 'drizzle-orm';
 import { createVCard } from '../../lib/carddav/vcard-serialize';
 import { computeCardEtag } from '../../lib/contacts/card-store';
 import type { Contacts } from '../../lib/contacts/contacts';
 import * as contactsSchema from '../../lib/contacts/schema';
+import { parseVCard } from '../../lib/vcard';
+import type { ParsedCardPhoto } from '../../lib/vcard/types';
 import {
     avatarsDirOf,
     CONTACTS_TEST_ROOT,

@@ -1,13 +1,13 @@
-// The parsed-card -> Contact projection the import preview and the Drive quick-look render a file through.
+// The parsed-card -> Contact projection the Drive vCard preview serves a file through.
 // The parser itself is covered in vcard.test.ts; this pins what the projection does with its output.
 import { describe, expect, test } from 'bun:test';
-import { parseVCard } from '../../vcard';
-import { parsedCardToContact } from '../../vcard/to-contact';
+import { parseVCard } from '../../lib/vcard';
+import { parsedCardToContact } from '../../lib/vcard/to-contact';
 
 // A vCard is CRLF-joined and CRLF-terminated; fixtures are written as physical lines.
 const vcard = (lines: string[]) => `${lines.join('\r\n')}\r\n`;
 
-// The encode side of the parser's atob decode — kept off Node globals, like the module it exercises.
+// The encode side of the parser's base64 decode.
 const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 const PNG = toBase64(new Uint8Array([137, 80, 78, 71]));
 

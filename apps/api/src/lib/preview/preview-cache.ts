@@ -1,8 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getTextPreviewMode } from '@workspace/lib/constants';
-import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
-import { type DrivePath, isCollabType, isVCardFile } from '@workspace/lib/types/drive';
+import { type DrivePath, isCollabType } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
 import { COLLAB_DOCUMENT_TYPES } from '../document/collab-types';
 import { runFileTransformToText } from '../document/transform/run-transform';
@@ -11,9 +10,9 @@ import type { Mount } from '../mount';
 import { generateImagePreview } from '../shared/thumbnails';
 import { isExiftoolCandidate } from './exiftool-preview';
 import { generateDocumentPreview } from './preview-document';
-import { renderPreviewNotice } from './preview-marker';
 import { inlineSvgMediaRefs } from './svg-media-inline';
 import { generateTextPreview, type TextPreviewResult } from './text-preview';
+import { parseVCardPreview, type VCardPreview } from './vcard-preview-payload';
 
 type ImagePreview = { type: 'image'; data: Buffer; contentType: string };
 type ScreenPreviewResult = ImagePreview | { type: 'redirect'; url: string } | null;
@@ -33,8 +32,14 @@ function screenCacheName(drivePath: DrivePath, ext: 'webp' | 'svg'): string {
 // f5: a deck previews as canvas compositor pages, not slide divs.
 const TEXT_FORMAT = 'f5';
 
-function textCacheName(drivePath: DrivePath): string {
-    return `${drivePath.id}-${drivePath.updatedAt.getTime()}.${TEXT_FORMAT}.json`;
+// A .vcf preview is a different artifact for the same path — contact cards, not a body — so it carries
+// its own format and neither kind ever reads the other's file as its stale predecessor. (pruneOldVersions
+// is not format-scoped, but a .vcf has exactly one cached artifact: getTextPreviewMode declines it and
+// getScreenPreview does not answer for its mimes.)
+const VCARD_FORMAT = 'vcard-f1';
+
+function textCacheName(drivePath: DrivePath, format: string): string {
+    return `${drivePath.id}-${drivePath.updatedAt.getTime()}.${format}.json`;
 }
 
 // Delete previously-cached versions of this path (older updatedAt stamps) so previewsDir
@@ -91,10 +96,11 @@ async function getOrCacheImage(
     }
 }
 
-// A served text preview plus whether it's the current version. `stale` previews are the
+// A served preview plus whether it's the current version. `stale` previews are the
 // previous version, returned immediately while the current one regenerates in the
 // background — the route marks them no-store so the client refetches the fresh copy.
-type ServedTextPreview = { value: TextPreviewResult; stale: boolean };
+type Served<T> = { value: T; stale: boolean };
+type ServedTextPreview = Served<TextPreviewResult>;
 
 // Collab generators run through the document-transform runner: a first cache miss
 // is foreground work (the request waits on it), a stale regeneration is background
@@ -106,36 +112,53 @@ type TextPreviewGenerator = (priority: TransformPriority) => Promise<string | nu
 const inFlightText = new Map<string, Promise<void>>();
 
 // In-flight first-ever generations, so concurrent misses for the same cache key
-// share one generation (mirrors inFlightImage above).
-const inFlightFirstText = new Map<string, Promise<ServedTextPreview | null>>();
+// share one generation (mirrors inFlightImage above). It holds the generated body, not the parsed
+// value, so one generation serves callers whatever each of them parses it into.
+const inFlightFirstText = new Map<string, Promise<string | null>>();
 
-// The cached current version, or null when the file is missing, mid-write or corrupt.
-async function readCachedText(cacheFile: string): Promise<TextPreviewResult | null> {
+// The JSON envelope every generated text artifact is cached in. What is served on top of it is the
+// caller's business — the text preview adds the mode it already knows — so only the body is stored.
+type CachedText = { body: string };
+
+// A stored body turned into what the caller serves. It is the only check this module makes on a file
+// it reads back, so a body the parser rejects counts as a corrupt cache file.
+type CachedTextParser<T> = (body: string) => T;
+
+// The cached current version, or null when the file is missing, mid-write, corrupt or of a shape the
+// parser refuses. An unusable file is deleted rather than left behind: it is the CURRENT version, so it
+// would be read again on every request, and regenerateTextInBackground skips a cache name that exists.
+async function readCachedText<T>(cacheFile: string, parse: CachedTextParser<T>): Promise<T | null> {
     if (!fs.existsSync(cacheFile)) return null;
     try {
-        return await Bun.file(cacheFile).json();
-    } catch {
+        const cached: CachedText = await Bun.file(cacheFile).json();
+        return parse(cached.body);
+    } catch (err) {
+        console.error(`[preview] Discarding unreadable cache file ${cacheFile}:`, err);
+        await fs.promises.unlink(cacheFile).catch(() => {});
         return null;
     }
 }
 
-// Read-through cache for a text preview artifact (the JSON { body, mode } envelope).
-async function getOrCacheText(
+// Read-through cache for a generated text artifact, versioned by `format` so a shape change (and a
+// second artifact for the same path) regenerates instead of being read back wrong.
+async function getOrCacheText<T>(
     previewsDir: string,
-    pathId: string,
-    cacheName: string,
-    mode: TextPreviewResult['mode'],
+    drivePath: DrivePath,
+    format: string,
+    parse: CachedTextParser<T>,
     generate: TextPreviewGenerator,
-): Promise<ServedTextPreview | null> {
+): Promise<Served<T> | null> {
+    const pathId = drivePath.id;
+    const cacheName = textCacheName(drivePath, format);
     const cacheFile = path.join(previewsDir, cacheName);
-    const current = await readCachedText(cacheFile);
-    if (current) return { value: current, stale: false };
+    const current = await readCachedText(cacheFile, parse);
+    if (current !== null) return { value: current, stale: false };
 
     // Current version missing. If a previous version is cached, serve it immediately and
     // regenerate the current one in the background (stale-while-revalidate).
-    const stale = await readNewestStaleText(previewsDir, pathId, cacheName);
-    if (stale) {
-        regenerateTextInBackground(previewsDir, pathId, cacheName, mode, generate);
+    const stale = await readNewestStaleText(previewsDir, pathId, cacheName, format, parse);
+    if (stale !== null) {
+        regenerateTextInBackground(previewsDir, pathId, cacheName, format, generate);
         return { value: stale, stale: true };
     }
 
@@ -143,45 +166,51 @@ async function getOrCacheText(
     // the previous version and wrote the current one: join it rather than start a foreground
     // generation of a file that exists (or is about to).
     await inFlightText.get(cacheName);
-    const landed = await readCachedText(cacheFile);
-    if (landed) return { value: landed, stale: false };
+    const landed = await readCachedText(cacheFile, parse);
+    if (landed !== null) return { value: landed, stale: false };
 
     // First-ever preview for this path: nothing to serve, so generate synchronously.
     const existing = inFlightFirstText.get(cacheName);
-    if (existing) return existing;
+    if (existing) return served(await existing, parse);
 
-    const task = (async (): Promise<ServedTextPreview | null> => {
+    const task = (async (): Promise<string | null> => {
         try {
             const body = await generate('foreground');
             if (!body) return null;
-            const result: TextPreviewResult = { body, mode };
+            const result: CachedText = { body };
             await Bun.write(cacheFile, JSON.stringify(result));
             pruneOldVersions(previewsDir, pathId, cacheName).catch(() => {});
-            return { value: result, stale: false };
+            return body;
         } catch (err) {
-            // Overload is not "no preview": surface the runner's 503 so the client
-            // can retry, instead of caching the miss as a 404.
-            if (err instanceof ApiError && err.status === 503) throw err;
-            console.error(`[preview] Failed to generate ${mode} preview for ${pathId}:`, err);
+            // Overload is not "no preview", and neither is a file the renderer refused: a controlled
+            // status reaches the client instead of being cached as a 404.
+            if (err instanceof ApiError) throw err;
+            console.error(`[preview] Failed to generate ${format} preview for ${pathId}:`, err);
             return null;
         }
     })();
     inFlightFirstText.set(cacheName, task);
     try {
-        return await task;
+        return served(await task, parse);
     } finally {
         inFlightFirstText.delete(cacheName);
     }
 }
 
+function served<T>(body: string | null, parse: CachedTextParser<T>): Served<T> | null {
+    return body === null ? null : { value: parse(body), stale: false };
+}
+
 // Find and read the newest previously-cached version of this path's text preview. Returns
 // null if none exists (first preview) or every candidate was pruned mid-read by a concurrent
 // regeneration — callers then fall back to synchronous generation.
-async function readNewestStaleText(
+async function readNewestStaleText<T>(
     previewsDir: string,
     pathId: string,
     cacheName: string,
-): Promise<TextPreviewResult | null> {
+    format: string,
+    parse: CachedTextParser<T>,
+): Promise<T | null> {
     const prefix = `${pathId}-`;
     let files: string[];
     try {
@@ -193,7 +222,7 @@ async function readNewestStaleText(
     // Current-format names only: a body a previous renderer wrote is a different SHAPE, and the
     // consumers that scale and lay it out have moved on. Stale-while-revalidate trades freshness of
     // CONTENT for latency, never correctness of shape — an older format regenerates synchronously.
-    const suffix = `.${TEXT_FORMAT}.json`;
+    const suffix = `.${format}.json`;
     const candidates = files
         .filter((name) => name !== cacheName && name.startsWith(prefix) && name.endsWith(suffix))
         .map((name) => ({ name, stamp: Number(name.slice(prefix.length, -suffix.length)) }))
@@ -202,10 +231,10 @@ async function readNewestStaleText(
 
     for (const { name } of candidates) {
         try {
-            const cached: TextPreviewResult = await Bun.file(path.join(previewsDir, name)).json();
-            return cached;
+            const cached: CachedText = await Bun.file(path.join(previewsDir, name)).json();
+            return parse(cached.body);
         } catch {
-            // Pruned between readdir and read — try the next-newest version.
+            // Pruned between readdir and read, or of a shape the parser refuses — try the next-newest.
         }
     }
     return null;
@@ -220,7 +249,7 @@ function regenerateTextInBackground(
     previewsDir: string,
     pathId: string,
     cacheName: string,
-    mode: TextPreviewResult['mode'],
+    format: string,
     generate: TextPreviewGenerator,
 ): void {
     const cacheFile = path.join(previewsDir, cacheName);
@@ -229,11 +258,11 @@ function regenerateTextInBackground(
         try {
             const body = await generate('background');
             if (!body) return;
-            const result: TextPreviewResult = { body, mode };
+            const result: CachedText = { body };
             await Bun.write(cacheFile, JSON.stringify(result));
             pruneOldVersions(previewsDir, pathId, cacheName).catch(() => {});
         } catch (err) {
-            console.error(`[preview] Background regeneration failed for ${mode} preview ${pathId}:`, err);
+            console.error(`[preview] Background regeneration failed for ${format} preview ${pathId}:`, err);
             // A partial file would pass the existence check above and pin the stale version.
             await fs.promises.unlink(cacheFile).catch(() => {});
         } finally {
@@ -303,39 +332,44 @@ export async function getScreenPreview(
 // upload, and a plain file wearing an eigen mime must keep the preview its bytes deserve.
 export async function getTextPreview(mount: Mount, drivePath: DrivePath): Promise<ServedTextPreview | null> {
     const documentType = isCollabType(drivePath.type) ? COLLAB_DOCUMENT_TYPES.get(drivePath.mimeType || '') : undefined;
-    if (documentType) {
-        return getOrCacheText(mount.previewsDir, drivePath.id, textCacheName(drivePath), documentType, (priority) =>
-            generateDocumentPreview(documentType, mount, drivePath, priority),
-        );
-    }
-    if (isVCardFile(drivePath.mimeType || '', drivePath.name)) return getVCardTextPreview(mount, drivePath);
-    return getFileTextPreview(mount, drivePath);
-}
-
-// A .vcf reads as contact cards, never as its raw text — which is why getTextPreviewMode declines it
-// and this branch sits beside the collab one. The file is parsed whole, so the preview carries the
-// import's ceiling: over it the body says so, without the file ever being read.
-async function getVCardTextPreview(mount: Mount, drivePath: DrivePath): Promise<ServedTextPreview | null> {
-    return getOrCacheText(mount.previewsDir, drivePath.id, textCacheName(drivePath), 'vcard', (priority) =>
-        drivePath.size > IMPORT_MAX_BYTES
-            ? Promise.resolve(renderPreviewNotice('File too large to preview'))
-            : runFileTransformToText(mount, drivePath, { kind: 'preview', documentType: 'vcard' }, { priority }),
-    );
-}
-
-async function getFileTextPreview(mount: Mount, drivePath: DrivePath): Promise<ServedTextPreview | null> {
-    const mode = getTextPreviewMode(drivePath.mimeType || '', drivePath.name);
+    const mode = documentType ?? getTextPreviewMode(drivePath.mimeType || '', drivePath.name);
     if (mode === null) return null;
 
-    return getOrCacheText(mount.previewsDir, drivePath.id, textCacheName(drivePath), mode, async () => {
-        const file = await mount.readFile(drivePath.id);
-        if (!file) return null;
-        let content: string;
-        try {
-            content = await file.text();
-        } catch {
-            return null;
-        }
-        return (await generateTextPreview(content, mode, drivePath.name)).body;
-    });
+    // A body is served exactly as it was stored; the mode is composed here, where it is already known.
+    const cached = await getOrCacheText(
+        mount.previewsDir,
+        drivePath,
+        TEXT_FORMAT,
+        (body) => body,
+        (priority) =>
+            documentType
+                ? generateDocumentPreview(documentType, mount, drivePath, priority)
+                : generateFileTextPreview(mount, drivePath, mode),
+    );
+    return cached && { value: { body: cached.value, mode }, stale: cached.stale };
+}
+
+async function generateFileTextPreview(
+    mount: Mount,
+    drivePath: DrivePath,
+    mode: TextPreviewResult['mode'],
+): Promise<string | null> {
+    const file = await mount.readFile(drivePath.id);
+    if (!file) return null;
+    let content: string;
+    try {
+        content = await file.text();
+    } catch {
+        return null;
+    }
+    return (await generateTextPreview(content, mode, drivePath.name)).body;
+}
+
+// A .vcf reads as contact cards, never as its raw text — which is why getTextPreviewMode declines it and
+// its preview is its own route. The cards are produced in the Worker from the file's own bytes and cached
+// per file version like every other preview; the caller admits the file's size before asking.
+export async function getVCardPreview(mount: Mount, drivePath: DrivePath): Promise<Served<VCardPreview> | null> {
+    return getOrCacheText(mount.previewsDir, drivePath, VCARD_FORMAT, parseVCardPreview, (priority) =>
+        runFileTransformToText(mount, drivePath, { kind: 'preview', documentType: 'vcard' }, { priority }),
+    );
 }

@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
 import type { ImportContactsResult } from '@workspace/lib/types/contact';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { splitVCards } from '@workspace/lib/vcard';
+import { splitVCards } from '../../lib/vcard';
 import {
     app,
     assertJson,

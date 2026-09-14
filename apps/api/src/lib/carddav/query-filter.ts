@@ -2,8 +2,8 @@
 // content-line AST — books are small and queries rare, so this stays off every hot path (spec § 4 /
 // § Performance). The parser (xml-parser.ts) builds a QueryFilter from the REPORT body; matchCard evaluates
 // one card against it. Partial address-data (a requested property subset) is a separate concern.
-import type { VCardLine } from '@workspace/lib/types/contact';
-import { unescapeText } from '@workspace/lib/vcard';
+import { unescapeText } from '../vcard';
+import type { VCardLine } from '../vcard/types';
 
 export type TextMatch = {
     collation: string | null;

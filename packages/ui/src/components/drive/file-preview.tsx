@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { DownloadMode, PreviewMode } from '../preview-provider/preview-provider';
 import { DriveLocationPicker } from './drive-location-picker';
 import { getFileIcon } from './file-presentation';
+import { VCardPreviewContent } from './vcard-preview-content';
 
 type FilePreviewProps = {
     previewMode: PreviewMode;
@@ -201,6 +202,7 @@ export function FilePreview({
                         <iframe src={embedUrl} className="w-[80vw] h-[calc(100vh-7rem)] rounded bg-background" />
                     )}
                     {previewMode === 'text' && <TextPreviewContent path={path} />}
+                    {previewMode === 'vcard' && <VCardPreviewContent path={path} />}
                     {previewMode === 'fallback' && (
                         <div className="flex flex-col items-center gap-4 text-white">
                             {getFileIcon(path.mimeType, path.type, path.name, {
@@ -329,10 +331,6 @@ function TextPreviewContent({ path }: { path: DrivePath }) {
                 <div className="p-8 min-h-full flex justify-center">
                     <div className="w-full max-w-[960px]" dangerouslySetInnerHTML={{ __html: data.body }} />
                 </div>
-            ) : data.mode === 'vcard' ? (
-                // Contact cards, not prose: the body carries its own .vcard-preview layout (globals.css),
-                // so wrapping it in eigen-prose would paint headings, list bullets and image margins over it.
-                <div className="p-8 max-w-3xl mx-auto" dangerouslySetInnerHTML={{ __html: data.body }} />
             ) : (
                 <div className="eigen-prose p-8 max-w-4xl mx-auto" dangerouslySetInnerHTML={{ __html: data.body }} />
             )}

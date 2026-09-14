@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { DRIVE_MIME_SLIDES } from '@workspace/lib/types/drive';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
@@ -47,17 +47,11 @@ describe('Preview', () => {
         expect(data.mode).toBe('plaintext');
     });
 
-    test('vcard file returns contact cards under its own mode', async () => {
-        // A .vcf reads as contact cards, never as its raw text (mostly base64 photo), so it rides the
-        // text-preview route with a server-rendered body instead of being parsed in the browser.
-        const content =
-            'BEGIN:VCARD\r\nVERSION:3.0\r\nN:Doe;Jane;;;\r\nFN:Jane Doe\r\nEMAIL:jane@example.com\r\nEND:VCARD\r\n';
-        const { res } = await uploadAndTextPreview('team.vcf', content, 'text/vcard');
-        expect(res.status).toBe(200);
-        const data = await res.json();
-        expect(data.mode).toBe('vcard');
-        expect(data.body).toContain('Jane Doe');
-        expect(data.body).toContain('jane@example.com');
+    // It answers under its own route instead — a raw body is mostly base64 photo.
+    test('a vcard has no text preview — it answers under its own route instead', async () => {
+        const content = 'BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Jane Doe\r\nEND:VCARD\r\n';
+        const { res } = await uploadAndTextPreview('no-text.vcf', content, 'text/vcard');
+        expect(res.status).toBe(404);
     });
 
     test('plaintext preview renders prose paragraphs, not a code block', async () => {
@@ -503,27 +497,101 @@ describe('getTextPreview (stale-while-revalidate)', () => {
         const served = await getTextPreview(mount, { ...path, mimeType: DRIVE_MIME_SLIDES });
         expect(served?.value.body).toContain('plain text pretending to be a deck');
     });
+});
 
-    test('a vcard over the import ceiling answers with a notice instead of being read', async () => {
-        // The file would be parsed whole, so the preview is bounded by the same ceiling an import is:
-        // over it the overlay shows a body that says so, rather than no preview at all.
-        const { mkdirSync } = await import('node:fs');
-        const tmpDir = mkdtempSync('/tmp/eigen-vcard-limit-test-');
-        mkdirSync(tmpDir, { recursive: true });
+// A .vcf previews as the contact cards it holds, served as JSON the overlay and the drive hero render
+// (PREVIEWS.md). The parse itself is covered in vcard-preview.test.ts; this pins what the route answers.
+describe('vCard preview route', () => {
+    let token: string;
+    let ownerId: string;
+    const mountId = 'default';
+    let rootId: string;
 
-        const config = createTestMountConfig('test-vcard-limit', 'local-key');
-        const mount = new Mount('test-owner-id', tmpDir, config, createGetLocalDatabase(tmpDir));
-        await mount.init();
-        const rootId = (await mount.getRootFolder())!.id;
+    beforeAll(async () => {
+        const ctx = await getTestContext();
+        token = ctx.alice.user.sessionToken;
+        ownerId = ctx.alice.user.id;
+        const root = await driveGet(token, ownerId, mountId, 'root');
+        rootId = root.id;
+    });
 
+    async function uploadVCard(name: string, content: string) {
+        const file = new File([content], name, { type: 'text/vcard' });
+        return await driveUpload(token, ownerId, mountId, rootId, file);
+    }
+
+    // The birthday is served as the date-only string it is on the card: the client reads this route
+    // through the no-revival treaty, and a Date here would reach ContactDetailCard's formatDateOnly.
+    test('serves the cards a file holds, with their categories and a date-only birthday', async () => {
+        const content =
+            'BEGIN:VCARD\r\nVERSION:3.0\r\nN:Doe;Jane;;;\r\nFN:Jane Doe\r\nEMAIL:jane@example.com\r\nBDAY:1984-03-21\r\nCATEGORIES:Work\r\nEND:VCARD\r\n';
+        const uploaded = await uploadVCard('team.vcf', content);
+
+        const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${uploaded.id}/vcard-preview`);
+        expect(res.status).toBe(200);
+        const data = await res.json();
+        expect(data).toEqual({
+            cards: [
+                {
+                    contact: {
+                        id: '',
+                        etag: '',
+                        firstName: 'Jane',
+                        lastName: 'Doe',
+                        email: ['jane@example.com'],
+                        phone: [],
+                        company: '',
+                        jobTitle: '',
+                        address: [],
+                        birthday: '1984-03-21',
+                        notes: '',
+                        labels: [],
+                    },
+                    categories: ['Work'],
+                },
+            ],
+            dropped: 0,
+            total: 1,
+        });
+    });
+
+    test('a file over the import ceiling is refused before its bytes are read', async () => {
+        // The stored size is what the route admits on, so a small file claiming a large one still 413s.
         const bytes = Buffer.from('BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Jane Doe\r\nEND:VCARD\r\n');
-        const fileId = await mount.createFile(rootId, 'huge.vcf', 'text/vcard', bytes.length, bytes);
-        const path = await mount.getActivePath(fileId);
+        const seed = await uploadVCard('seed-for-mount.vcf', bytes.toString());
+        const home = await getHome(ownerId);
+        const { mount } = await home.drive.resolveFile(mountId, seed.id);
+        const hugeId = await mount.createFile(rootId, 'huge.vcf', 'text/vcard', IMPORT_MAX_BYTES + 1, bytes);
 
-        const served = await getTextPreview(mount, { ...path, size: IMPORT_MAX_BYTES + 1 });
-        expect(served?.value.mode).toBe('vcard');
-        expect(served?.value.body).toContain('File too large to preview');
-        expect(served?.value.body).not.toContain('Jane Doe');
+        const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${hugeId}/vcard-preview`);
+        expect(res.status).toBe(413);
+    });
+
+    // The cached body is the only thing this route trusts off disk (a previewsDir restored from a build
+    // whose payload shape differed, say). Serving a 500 for it would be permanent: it is the CURRENT
+    // version, so nothing would ever regenerate it.
+    test('a cached payload the schema refuses is regenerated, not served as an error', async () => {
+        const content = 'BEGIN:VCARD\r\nVERSION:3.0\r\nN:Roe;Richard;;;\r\nFN:Richard Roe\r\nEND:VCARD\r\n';
+        const uploaded = await uploadVCard('corrupt-cache.vcf', content);
+        const url = `/drive/${ownerId}/${mountId}/file/${uploaded.id}/vcard-preview`;
+        expect((await authedRequest(token, url)).status).toBe(200);
+
+        const home = await getHome(ownerId);
+        const { mount } = await home.drive.resolveFile(mountId, uploaded.id);
+        const cached = readdirSync(mount.previewsDir).find((name) => name.startsWith(`${uploaded.id}-`));
+        writeFileSync(`${mount.previewsDir}/${cached}`, JSON.stringify({ body: '{"cards":"not an array"}' }));
+
+        const res = await authedRequest(token, url);
+        expect(res.status).toBe(200);
+        expect((await res.json()).cards[0].contact.firstName).toBe('Richard');
+    });
+
+    test('a file that is not a vCard is refused outright', async () => {
+        const file = new File(['ford prefect'], 'notes.txt', { type: 'text/plain' });
+        const uploaded = await driveUpload(token, ownerId, mountId, rootId, file);
+
+        const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${uploaded.id}/vcard-preview`);
+        expect(res.status).toBe(400);
     });
 });
 

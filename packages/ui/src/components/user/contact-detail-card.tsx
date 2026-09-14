@@ -1,7 +1,6 @@
 import { getMailComposeUrl } from '@workspace/lib/api';
-import { formatContactAddress, formatContactCompany, formatContactRole } from '@workspace/lib/contacts';
 import { formatDateOnly } from '@workspace/lib/date';
-import type { Contact } from '@workspace/lib/types/contact';
+import type { Address, Contact } from '@workspace/lib/types/contact';
 import { cn } from '@workspace/ui/lib/utils';
 import { Building, Calendar, Mail, MapPin, Phone } from 'lucide-react';
 import { Badge } from '../badge';
@@ -13,8 +12,10 @@ export type ContactDetailCardProps = {
     className?: string;
 };
 
-// Shows the same fields as the server-rendered vCard preview (apps/api/src/lib/preview/vcard-render.ts):
-// a stored contact and a previewed card must read alike, so the two stay in sync.
+function formatAddress(address: Address) {
+    return [address.street, address.city, address.state, address.zipCode, address.country].filter(Boolean).join(', ');
+}
+
 export function ContactDetailCard({ contact, labels, className }: ContactDetailCardProps) {
     const addresses = contact.address ?? [];
 
@@ -25,7 +26,7 @@ export function ContactDetailCard({ contact, labels, className }: ContactDetailC
                 name={`${contact.firstName} ${contact.lastName}`}
                 email={contact.email[0]}
                 imageUrl={contact.avatar}
-                subtitle={formatContactRole(contact) || undefined}
+                subtitle={contact.jobTitle && contact.company ? `${contact.jobTitle} at ${contact.company}` : undefined}
                 badges={
                     labels.length > 0
                         ? labels.map((label, index) => (
@@ -83,7 +84,10 @@ export function ContactDetailCard({ contact, labels, className }: ContactDetailC
                                 <Building className="h-4 w-4" />
                                 Company
                             </h4>
-                            <div className="pl-6">{formatContactCompany(contact)}</div>
+                            <div className="pl-6">
+                                {contact.company}
+                                {contact.jobTitle && ` - ${contact.jobTitle}`}
+                            </div>
                         </div>
                     )}
 
@@ -108,7 +112,7 @@ export function ContactDetailCard({ contact, labels, className }: ContactDetailC
                                     <MapPin className="h-4 w-4" />
                                     Address {addresses.length > 1 ? index + 1 : ''}
                                 </h4>
-                                <div className="pl-6">{formatContactAddress(address)}</div>
+                                <div className="pl-6">{formatAddress(address)}</div>
                             </div>
                         ))}
                     </div>

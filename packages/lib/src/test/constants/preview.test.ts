@@ -15,10 +15,11 @@ describe('isSearchableTextFile', () => {
     test('binary is not searchable', () => {
         expect(isSearchableTextFile('image/png', 'photo.png')).toBe(false);
     });
-    test('a vCard is not searchable — it has no text preview to index', () => {
-        expect(isSearchableTextFile('text/vcard', 'team.vcf')).toBe(false);
-        expect(isSearchableTextFile('text/x-vcard', 'team.vcf')).toBe(false);
-        expect(isSearchableTextFile('application/octet-stream', 'team.vcf')).toBe(false);
+    // The extractor indexes the cards a .vcf holds, not its raw body — which is mostly base64 photo.
+    test('a vCard is searchable, on every mime its exporters spell', () => {
+        expect(isSearchableTextFile('text/vcard', 'team.vcf')).toBe(true);
+        expect(isSearchableTextFile('text/x-vcard', 'team.vcf')).toBe(true);
+        expect(isSearchableTextFile('application/octet-stream', 'team.vcf')).toBe(true);
     });
 });
 

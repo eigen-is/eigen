@@ -1,9 +1,9 @@
 // Hand-rolled vCard content-line AST (RFC 2426 / RFC 6350 §3). Parses a vCard into logical lines and
 // serializes them back, keeping the exact source bytes of any line we don't rewrite so an untouched
 // card round-trips byte-for-byte through a CardDAV GET. The fold and TEXT-escape algorithms are the
-// shared MIME-directory primitives in ../core/content-line.
-import { foldLine, isIllegalC0, neuterParamValue } from '../core/content-line';
-import type { VCardLine } from '../types/contact';
+// shared MIME-directory primitives in @workspace/lib/content-line.
+import { foldLine, isIllegalC0, neuterParamValue } from '@workspace/lib/content-line';
+import type { VCardLine } from './types';
 
 export class VCardError extends Error {}
 

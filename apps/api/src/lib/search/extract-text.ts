@@ -1,10 +1,19 @@
 import { isSearchableTextFile } from '@workspace/lib/constants';
-import { DRIVE_MIME_CHAT, DRIVE_MIME_STICKIES, type DrivePath, isDocumentType } from '@workspace/lib/types/drive';
+import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
+import {
+    DRIVE_MIME_CHAT,
+    DRIVE_MIME_STICKIES,
+    type DrivePath,
+    isDocumentType,
+    isVCardFile,
+} from '@workspace/lib/types/drive';
+import { ApiError } from '../core/errors';
 import { readChatContent } from '../document/chat';
 import { COLLAB_DOCUMENT_TYPES } from '../document/collab-types';
 import { readStickiesContent, type StickiesContent } from '../document/stickies';
-import { runTransformToExtractedText } from '../document/transform/run-transform';
+import { runFileTransformToText, runTransformToExtractedText } from '../document/transform/run-transform';
 import type { Mount } from '../mount';
+import { parseVCardPreview } from '../preview/vcard-preview-payload';
 import { CONTENT_INDEX_MAX_BYTES } from './limits';
 
 export function collectStickiesText(content: StickiesContent, cap: number): string {
@@ -49,6 +58,46 @@ export async function extractText(mount: Mount, path: DrivePath): Promise<string
     }
     if (containerMime === DRIVE_MIME_CHAT) return readChatContent(mount, path, CONTENT_INDEX_MAX_BYTES);
     if (!isSearchableTextFile(path.mimeType, path.name)) return '';
+    if (isVCardFile(path.mimeType, path.name)) return extractVCardText(mount, path);
     const file = await mount.readRange(path.id, 0, CONTENT_INDEX_MAX_BYTES);
     return file ? await file.text() : '';
+}
+
+// A .vcf indexes by the contacts it holds: its raw body is mostly base64 photo, and a name folded across
+// physical lines isn't there to be matched. The cards come from the same Worker job the preview runs
+// (PREVIEWS.md), so they carry that job's ceilings — a file over the import ceiling, and a file the
+// decoder refuses, index as nothing rather than staying dirty for every later drain.
+async function extractVCardText(mount: Mount, path: DrivePath): Promise<string> {
+    if (path.size > IMPORT_MAX_BYTES) return '';
+
+    let body: string | null;
+    try {
+        body = await runFileTransformToText(
+            mount,
+            path,
+            { kind: 'preview', documentType: 'vcard' },
+            { priority: 'background' },
+        );
+    } catch (err) {
+        if (err instanceof ApiError && err.status === 422) return '';
+        throw err;
+    }
+    if (!body) return '';
+
+    const parts: string[] = [];
+    let total = 0;
+    for (const { contact } of parseVCardPreview(body).cards) {
+        if (total >= CONTENT_INDEX_MAX_BYTES) break;
+        const line = [
+            `${contact.firstName} ${contact.lastName}`.trim(),
+            ...contact.email,
+            contact.company,
+            contact.jobTitle,
+        ]
+            .filter(Boolean)
+            .join(' ');
+        parts.push(line);
+        total += line.length;
+    }
+    return parts.join(' ');
 }

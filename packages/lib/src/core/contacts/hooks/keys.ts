@@ -10,8 +10,6 @@ export const contactKeys = {
     details: (ownerId: string) => [...contactKeys.owner(ownerId), 'detail'] as const,
     detail: (ownerId: string, id: string) => [...contactKeys.details(ownerId), id] as const,
     me: (ownerId: string) => [...contactKeys.owner(ownerId), 'me'] as const,
-    vcardFile: (ownerId: string, mountId: string, pathId: string, updatedAt: number) =>
-        [...contactKeys.owner(ownerId), 'vcard-file', mountId, pathId, updatedAt] as const,
 };
 
 // Query keys for labels

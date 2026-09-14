@@ -6,7 +6,6 @@ import { join } from 'node:path';
 import { EIGEN_ACCENT_COLORS } from '@workspace/lib/constants/colors';
 import type { CreateContactInput } from '@workspace/lib/types/contact';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { parseVCard } from '@workspace/lib/vcard';
 import { eq } from 'drizzle-orm';
 import { createVCard, mergeVCard } from '../../lib/carddav/vcard-serialize';
 import {
@@ -24,6 +23,7 @@ import {
 } from '../../lib/contacts/card-store';
 import * as contactsSchema from '../../lib/contacts/schema';
 import { LocalFilesystem } from '../../lib/core';
+import { parseVCard } from '../../lib/vcard';
 import { CONTACTS_TEST_ROOT, cardsDirOf, makeContacts, validContact } from '../contacts-test-helpers';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-card-store-${Date.now()}`);

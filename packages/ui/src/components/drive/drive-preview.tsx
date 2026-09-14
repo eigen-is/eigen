@@ -1,14 +1,13 @@
 import { getDriveItemThumbnail } from '@workspace/lib/api';
 import { CANVAS_PREVIEW_WIDTH, getTextPreviewMode, type TextPreviewMode } from '@workspace/lib/constants';
 import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
-import { useVCardFile } from '@workspace/lib/contacts';
+import { droppedLine, remainingLine } from '@workspace/lib/contacts';
 import { A4_WIDTH_PX } from '@workspace/lib/docs/eigendoc';
-import { useTextPreview } from '@workspace/lib/drive';
+import { useTextPreview, useVCardPreview } from '@workspace/lib/drive';
 import type { Contact } from '@workspace/lib/types/contact';
 import { type DrivePath, isVCardFile } from '@workspace/lib/types/drive';
-import { droppedLine, parsedCardToContact, remainingLine } from '@workspace/lib/vcard';
 import type { LucideIcon } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cn } from '../../lib/utils';
 import { UserAvatar } from '../user/user-avatar';
 import { getFilePresentation } from './file-presentation';
@@ -23,7 +22,7 @@ type DrivePreviewProps = {
 export function DrivePreview({ path, onActivate, className }: DrivePreviewProps) {
     const presentation = getFilePresentation(path.mimeType, path.type, path.name);
     const hasTextPreview = getTextPreviewMode(path.mimeType, path.name) !== null;
-    // Same guard as the quick look: a file an import would refuse is never downloaded to be parsed.
+    // Same guard as the quick look: a file an import would refuse never gets a preview either.
     const hasVCardPreview = isVCardFile(path.mimeType, path.name) && path.size <= IMPORT_MAX_BYTES;
     const { showThumbnail, thumbnailUrl } = getDriveItemThumbnail(path);
 
@@ -80,15 +79,11 @@ function IconFallback({ icon: Icon, color }: { icon: LucideIcon; color: string }
 // What fits the 16:9 box at reading size, badge and counted lines included.
 const HERO_CARD_LIMIT = 3;
 
-// The quick look's server body is a column of full cards; the hero needs three rows, so it parses
-// the file in the browser instead — which is why a .vcf never asks for its text preview here.
+// The quick look reads a column of full cards; the hero shows the first three as compact rows, off the
+// same query — which is why a .vcf never asks for its text preview here.
 function VCardHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; color: string }) {
-    const { data, isLoading } = useVCardFile(path.ownerId, path.mountId, path.id, path.updatedAt, path.size);
-    // Inline photos become data URIs, so this is real work per card — never per render.
-    const contacts = useMemo(
-        () => (data?.cards ?? []).slice(0, HERO_CARD_LIMIT).map(parsedCardToContact),
-        [data?.cards],
-    );
+    const { data, isLoading } = useVCardPreview(path.ownerId, path.mountId, path.id, path.updatedAt, path.size);
+    const contacts = data?.cards.slice(0, HERO_CARD_LIMIT) ?? [];
 
     // Loading reads as the empty tinted box, the same as a text hero with no body yet.
     if (isLoading) return null;
@@ -108,7 +103,7 @@ function VCardHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; c
     );
 }
 
-// The card's own name and email, not the address book's: this previews a file; UserAvatar resolves the same avatar the quick look shows
+// The card's own name and email, not the address book's: this previews a file.
 function VCardRow({ contact }: { contact: Contact }) {
     const email = contact.email[0];
     const title = `${contact.firstName} ${contact.lastName}`.trim() || email;
@@ -125,8 +120,8 @@ function VCardRow({ contact }: { contact: Contact }) {
 }
 
 // The width a mode composes at, so the hero scales by containerW / that width: text modes render
-// into an A4 page, a deck and a drawing both compose at CANVAS_PREVIEW_WIDTH. Sheets and contact
-// cards vary with their content — null falls back to measuring the rendered body.
+// into an A4 page, a deck and a drawing both compose at CANVAS_PREVIEW_WIDTH. Sheets vary with
+// their content — null falls back to measuring the rendered body.
 const INTRINSIC_WIDTH: Record<TextPreviewMode, number | null> = {
     eigendoc: A4_WIDTH_PX,
     eigenslides: CANVAS_PREVIEW_WIDTH,
@@ -135,12 +130,11 @@ const INTRINSIC_WIDTH: Record<TextPreviewMode, number | null> = {
     markdown: A4_WIDTH_PX,
     plaintext: A4_WIDTH_PX,
     code: A4_WIDTH_PX,
-    vcard: null,
 };
 
 // eigen-prose for rendered prose, drive-preview-code for raw <pre><code> blocks — eigen-prose's
 // <pre> rule paints a dark code-block background that is wrong for a whole-file code thumbnail.
-// A deck, a drawing and a contact-card body need none: each carries its own box and its own paint.
+// A deck and a drawing need none: a compositor page carries its own box and its own paint.
 const WRAPPER_CLASS: Record<TextPreviewMode, string> = {
     eigendoc: 'eigen-prose tiptap',
     eigenslides: '',
@@ -149,7 +143,6 @@ const WRAPPER_CLASS: Record<TextPreviewMode, string> = {
     markdown: 'eigen-prose',
     plaintext: 'eigen-prose',
     code: 'drive-preview-code',
-    vcard: '',
 };
 
 // Scale a server-rendered HTML preview down to fit the thumbnail panel.

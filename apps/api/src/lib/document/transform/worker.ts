@@ -83,16 +83,16 @@ async function runImport(request: ImportTransformJob & { data: ArrayBuffer }): P
     }
 }
 
-// The bytes-sourced kinds convert what they were handed: an upload to import, or the .vcf a
-// preview renders. Closed over the kind like every other dispatch here.
+// The bytes-sourced kinds read what they were handed: an upload to import, or the .vcf a preview
+// serves as cards. Closed over the kind like every other dispatch here.
 async function runBytesRequest(request: BytesTransformJob & { data: ArrayBuffer }): Promise<DocumentTransformResponse> {
     switch (request.kind) {
         case 'import':
             return runImport(request);
         case 'preview': {
-            const { renderVCardPreviewBody } = await import('../../preview/vcard-render');
-            const { body, warnings } = renderVCardPreviewBody(request.data);
-            return { ok: true, result: { body }, warnings };
+            const { buildVCardPreviewPayload } = await import('../../preview/vcard-preview');
+            // The preview result carries a string, so the cards ride back as the JSON the route serves.
+            return { ok: true, result: { body: JSON.stringify(buildVCardPreviewPayload(request.data)) }, warnings: [] };
         }
     }
 }

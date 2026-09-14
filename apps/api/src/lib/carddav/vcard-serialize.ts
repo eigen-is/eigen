@@ -6,8 +6,9 @@
 // Everything else — IMPP, URL, X-SOCIALPROFILE, unknown props, VERSION/UID/PRODID/REV — rides through
 // untouched. `createVCard` emits the minimal clean 3.0 card a brand-new contact starts from.
 import { escapeContentText, stripLineBreaks } from '@workspace/lib/content-line';
-import type { Address, ParsedCard, VCardLine } from '@workspace/lib/types/contact';
-import { makeLine, photoParams, serializeVCardLines, unescapeText } from '@workspace/lib/vcard';
+import type { Address } from '@workspace/lib/types/contact';
+import { makeLine, photoParams, serializeVCardLines, unescapeText } from '../vcard';
+import type { ParsedCard, VCardLine } from '../vcard/types';
 
 export type CardEdits = Partial<{
     firstName: string;

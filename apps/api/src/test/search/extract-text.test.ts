@@ -56,6 +56,27 @@ describe('extraction dispatch', () => {
         expect(await extractText(mount, path)).toBe('');
     });
 
+    // A .vcf is indexed by the contacts it holds: its raw body is mostly base64 photo, and a folded
+    // name is not there to be matched.
+    test('a vcard indexes the names, addresses and organisations of its cards', async () => {
+        const content =
+            'BEGIN:VCARD\r\nVERSION:3.0\r\nN:Beeblebrox;Zaphod;;;\r\nFN:Zaphod Beeblebrox\r\nEMAIL:zaphod@heartofgold.example\r\nORG:Galactic Government\r\nTITLE:President\r\nEND:VCARD\r\n';
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            new File([content], 'crew-extract.vcf', { type: 'text/vcard' }),
+        );
+
+        const { mount, path } = await resolve(uploaded.id);
+        const text = await extractText(mount, path);
+        expect(text).toContain('Zaphod Beeblebrox');
+        expect(text).toContain('zaphod@heartofgold.example');
+        expect(text).toContain('Galactic Government');
+        expect(text).toContain('President');
+    });
+
     test('a plain text file still reads its own bytes', async () => {
         const uploaded = await driveUpload<DrivePath>(
             ctx.alice.user.sessionToken,

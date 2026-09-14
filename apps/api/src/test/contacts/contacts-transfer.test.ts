@@ -2,9 +2,9 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { IMPORT_MAX_CARDS } from '@workspace/lib/constants/contact';
-import { parseVCard, splitVCards } from '@workspace/lib/vcard';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { getHome } from '../../lib/home';
+import { parseVCard, splitVCards } from '../../lib/vcard';
 import { CONTACTS_TEST_ROOT, makeContacts, stageAvatar, validContact } from '../contacts-test-helpers';
 import { createTestUser, getTestContext } from '../setup';
 

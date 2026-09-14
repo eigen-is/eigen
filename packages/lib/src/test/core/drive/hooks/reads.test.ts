@@ -1,0 +1,79 @@
+// The drive read hooks, rendered against a stubbed transport. What this pins is the treaty choice:
+// useVCardPreview reads a route that serves contact birthdays, and a Date here reaches
+// ContactDetailCard's formatDateOnly, which splits a string.
+import { afterAll, describe, expect, test } from 'bun:test';
+import { QueryClient } from '@tanstack/react-query';
+
+// react-dom needs a DOM to render the hooks into; the globals are removed again in afterAll so later
+// test files see the plain bun environment. Recipe: the use-transfer test.
+const { Window } = await import('happy-dom');
+const window = new Window({ url: 'http://localhost:3000' });
+// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
+const g = globalThis as any;
+g.window = window;
+g.document = window.document;
+g.navigator = window.navigator;
+g.IS_REACT_ACT_ENVIRONMENT = true;
+
+// The real Eden client, so the reviver the hook reads through is the one under test.
+const realFetch = g.fetch;
+const payload = {
+    cards: [
+        {
+            contact: {
+                id: '',
+                etag: '',
+                firstName: 'Ada',
+                lastName: 'Lovelace',
+                email: ['ada@example.com'],
+                phone: [],
+                birthday: '1990-01-01',
+            },
+            categories: ['Work'],
+        },
+    ],
+    dropped: 0,
+    total: 1,
+};
+g.fetch = async () => Response.json(payload);
+
+afterAll(() => {
+    g.fetch = realFetch;
+    g.window = undefined;
+    g.document = undefined;
+    g.navigator = undefined;
+    g.IS_REACT_ACT_ENVIRONMENT = undefined;
+});
+
+describe('useVCardPreview', () => {
+    test('serves a card birthday as the date-only string it is, never a Date', async () => {
+        const { act, createElement } = await import('react');
+        const { createRoot } = await import('react-dom/client');
+        const { QueryClientProvider } = await import('@tanstack/react-query');
+        const { useVCardPreview } = await import('../../../../core/drive/hooks/reads');
+
+        const seen: { latest: ReturnType<typeof useVCardPreview> | null } = { latest: null };
+        function Harness() {
+            seen.latest = useVCardPreview('owner-1', 'm1', 'p1', new Date(1), 1024);
+            return null;
+        }
+        const container = window.document.createElement('div');
+        const root = createRoot(container as unknown as Element);
+        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        await act(async () => {
+            root.render(createElement(QueryClientProvider, { client: queryClient }, createElement(Harness, null)));
+        });
+
+        // The query resolves off a microtask and re-renders on a scheduled batch, so let it land.
+        while (!seen.latest?.data) {
+            await act(async () => {
+                await new Promise((resolve) => setTimeout(resolve, 0));
+            });
+        }
+
+        const contact = seen.latest?.data?.cards[0]?.contact;
+        expect(contact?.birthday).toBe('1990-01-01');
+        expect(contact?.birthday).not.toBeInstanceOf(Date);
+        await act(() => root.unmount());
+    });
+});

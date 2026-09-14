@@ -1,10 +1,10 @@
 // splitVCards is the only multi-card entry point in the codebase: parseVCardLines rejects multi-card
 // payloads, so an import file is split here first and each card parsed on its own.
 import { describe, expect, test } from 'bun:test';
-import { splitVCards, VCardError } from '../../vcard';
+import { splitVCards, VCardError } from '../../lib/vcard';
 
 const card = (fn: string, eol = '\r\n') =>
-    ['BEGIN:VCARD', 'VERSION:3.0', `FN:${fn}`, 'N:;' + fn + ';;;', 'END:VCARD'].join(eol);
+    ['BEGIN:VCARD', 'VERSION:3.0', `FN:${fn}`, `N:;${fn};;;`, 'END:VCARD'].join(eol);
 
 describe('splitVCards', () => {
     test('empty and whitespace-only input yields no cards', () => {
@@ -13,16 +13,16 @@ describe('splitVCards', () => {
     });
     test('one CRLF card round-trips byte-identically', () => {
         const c = card('Ada');
-        expect(splitVCards(c + '\r\n')).toEqual([c + '\r\n']);
+        expect(splitVCards(`${c}\r\n`)).toEqual([`${c}\r\n`]);
     });
     test('three LF cards with blank lines and a BOM', () => {
-        const text = '\uFEFF' + [card('A', '\n'), '', card('B', '\n'), '', '', card('C', '\n')].join('\n') + '\n';
+        const text = `\uFEFF${[card('A', '\n'), '', card('B', '\n'), '', '', card('C', '\n')].join('\n')}\n`;
         expect(splitVCards(text).map((c) => c.split('\n')[2])).toEqual(['FN:A', 'FN:B', 'FN:C']);
     });
     test('a BOM between cards belongs to neither and is not content outside the envelope', () => {
         // `cat a.vcf b.vcf`: every exported file carries its own BOM, so one lands mid-file.
-        const text = '\uFEFF' + card('A') + '\r\n\uFEFF' + card('B') + '\r\n';
-        expect(splitVCards(text)).toEqual([card('A') + '\r\n', card('B') + '\r\n']);
+        const text = `\uFEFF${card('A')}\r\n\uFEFF${card('B')}\r\n`;
+        expect(splitVCards(text)).toEqual([`${card('A')}\r\n`, `${card('B')}\r\n`]);
     });
     test('case-insensitive envelope markers', () => {
         expect(splitVCards('begin:vcard\r\nVERSION:3.0\r\nFN:x\r\nend:vcard\r\n')).toHaveLength(1);
@@ -35,7 +35,7 @@ describe('splitVCards', () => {
         expect(() => splitVCards('BEGIN:VCARD\r\nVERSION:3.0\r\nFN:x\r\n')).toThrow(VCardError);
     });
     test('non-blank content outside an envelope throws', () => {
-        expect(() => splitVCards('junk\r\n' + card('A'))).toThrow(VCardError);
+        expect(() => splitVCards(`junk\r\n${card('A')}`)).toThrow(VCardError);
     });
     test('a folded continuation line is never an envelope marker', () => {
         const begin = 'BEGIN:VCARD\r\nVERSION:3.0\r\nNOTE:aaa\r\n BEGIN:VCARD\r\nFN:x\r\nEND:VCARD\r\n';
