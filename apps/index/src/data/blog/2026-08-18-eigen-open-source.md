@@ -1,10 +1,10 @@
 ---
 id: eigen-open-source
 title: "Eigen: Open Source"
-description: "Eigen is open source. You can try the public demo or install the workspace on your own server. Here is what's new, and how you can help."
+description: "Eigen is open source. You can install the workspace on your own server with one Docker Compose stack. Here is what's new, and how you can help."
 ---
 
-Eigen is a European Google Workspace alternative where you own your data. In [the last post](https://eigen.is/blog/eigen-six-months-later) I listed three possible directions for the project: open source the code, find an organization to adopt it, or build a team around it.
+Eigen is a European Google Workspace alternative where you own your data. In [an earlier post](https://eigen.is/blog/eigen-six-months-later) I listed three possible directions for the project: open source the code, find an organization to adopt it, or build a team around it.
 
 I started with the first one, because I could do that myself.
 
@@ -20,13 +20,7 @@ Reality check: Eigen is pre-1.0.0. Expect rough edges, and expect breaking chang
 
 If you self-host, this is where you can help: install Eigen and use it for real. Tell me what breaks, what is missing and what feels wrong. Open an issue on [GitHub](https://github.com/eigen-is/eigen/issues) or mail me. Pull requests are welcome too, but right now feedback from real use is the most valuable thing I can get.
 
-## Try it in your browser
-
-You can also try Eigen without installing anything.
-
-Go to [demo.eigen.is](https://demo.eigen.is) and press "Enter demo". You land in a shared workspace as a member of a small festival team, with mail, files, documents, spreadsheets, stickies and a calendar already filled with data.
-
-The demo is a real Eigen server. Everyone shares the same workspace. It resets every hour, and outgoing mail is disabled. So click around, edit things, break things. That is what it is for.
+If you want to look before you install, there is a [public demo](https://eigen.is/blog/eigen-demo) that runs in your browser.
 
 ## What's new
 
@@ -49,6 +43,6 @@ If you know which funds might suit a project like Eigen, or have experience writ
 
 ## How you can help
 
-So: try the [demo](https://demo.eigen.is), install Eigen if you like what you see, and tell me how it goes. And if you can help with funding, I would love to hear from you.
+So: install Eigen if you like what you see in the [demo](https://demo.eigen.is), and tell me how it goes. And if you can help with funding, I would love to hear from you.
 
 [reinder@eigen.is](mailto:reinder@eigen.is) | [reindernijhoff.net](https://reindernijhoff.net/)
