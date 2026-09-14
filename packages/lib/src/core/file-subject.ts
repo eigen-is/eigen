@@ -52,21 +52,23 @@ export function subjectFromMailAttachment(
 
 export type PreviewMode = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'vcard' | 'fallback';
 
-// How the preview overlay renders a file. Every server-rendered mode needs a mount to query, so it
-// gates on `drive`. Without one the <img> shows the original bytes instead of a resized WebP, which
-// only a browser-decodable mime survives.
+// How the preview overlay renders a file. An image preview needs a mount to resize from, so it gates on
+// `drive`; without one the <img> shows the original bytes, which only a browser-decodable mime survives.
+// The text and card previews answer for a mail part too — the same renderers on the part's own bytes
+// (PREVIEWS.md) — so they gate on carrying either identity.
 export function getPreviewMode(subject: FileSubject): PreviewMode {
     const mime = subject.mimeType || '';
     const isImage = subject.drive
         ? mime.startsWith('image/') || isExiftoolExtension(subject.name)
         : BROWSER_IMAGE_MIMES.has(mime);
+    const served = !!subject.drive || !!subject.mail;
 
     if (isImage) return 'image';
     if (mime.startsWith('video/')) return 'video';
     if (mime.startsWith('audio/')) return 'audio';
     if (mime === 'application/pdf') return 'pdf';
     // A .vcf reads as contact cards, never as its raw text — which is why getTextPreviewMode declines it.
-    if (subject.drive && isVCardFile(mime, subject.name)) return 'vcard';
-    if (subject.drive && getTextPreviewMode(mime, subject.name) !== null) return 'text';
+    if (served && isVCardFile(mime, subject.name)) return 'vcard';
+    if (served && getTextPreviewMode(mime, subject.name) !== null) return 'text';
     return 'fallback';
 }

@@ -13,6 +13,12 @@ export const emailKeys = {
         [...emailKeys.lists(ownerId), { mailbox: mailbox === '' ? 'inbox' : mailbox.toLowerCase() }] as const,
     details: (ownerId: string) => [...emailKeys.owner(ownerId), 'detail'] as const,
     detail: (ownerId: string, id: string) => [...emailKeys.details(ownerId), id] as const,
+    // One attachment's server-rendered preview: the part index identifies it inside the message.
+    previews: (ownerId: string) => [...emailKeys.owner(ownerId), 'attachment-preview'] as const,
+    textPreview: (ownerId: string, messageId: string, index: number) =>
+        [...emailKeys.previews(ownerId), 'text', messageId, index] as const,
+    vcardPreview: (ownerId: string, messageId: string, index: number) =>
+        [...emailKeys.previews(ownerId), 'vcard', messageId, index] as const,
 };
 
 export const mailboxKeys = {

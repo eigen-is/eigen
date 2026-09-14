@@ -60,6 +60,10 @@ export const contactsApi = plainApi.contacts;
 // through the no-revival treaty, and reaching it by hand keeps every other drive route on `driveApi`.
 export const vcardPreviewRoute = (ownerId: string, mountId: string, pathId: string) =>
     plainApi.drive({ ownerId })({ mountId }).file({ pathId })['vcard-preview'];
+// The mail part beside it serves the same cards with the same bare birthdays, so it reads through the
+// same no-revival treaty.
+export const mailVCardPreviewRoute = (ownerId: string, messageId: string, index: number) =>
+    plainApi.mail({ ownerId }).message({ id: messageId }).attachment({ index })['vcard-preview'];
 export const mailApi = api.mail;
 export const publicApi = api.p;
 export const driveApi = api.drive;

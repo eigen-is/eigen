@@ -78,10 +78,14 @@ function driveSubject(name: string, mimeType: string, type: DrivePathType = 'fil
     return subjectFromPath(path({ name, type, mimeType }));
 }
 
-// A subject with no Drive path behind it: a mail part, once that lands.
-function partSubject(name: string, mimeType: string): FileSubject {
+function mailSubject(name: string, mimeType: string): FileSubject {
+    return subjectFromMailAttachment('owner-1', 'message-1', 0, { contentType: mimeType, filename: name, size: 1024 });
+}
+
+// A subject holding neither identity: there is no route to ask for a rendered preview.
+function bareSubject(name: string, mimeType: string): FileSubject {
     return {
-        key: 'mail:owner-1:message-1:0',
+        key: 'blob:1',
         name,
         mimeType,
         size: 1024,
@@ -99,7 +103,7 @@ describe('getPreviewMode', () => {
             ['archive.zip', 'application/zip', 'fallback'],
         ] as const) {
             expect(getPreviewMode(driveSubject(name, mime))).toBe(mode);
-            expect(getPreviewMode(partSubject(name, mime))).toBe(mode);
+            expect(getPreviewMode(mailSubject(name, mime))).toBe(mode);
         }
     });
 
@@ -109,17 +113,23 @@ describe('getPreviewMode', () => {
         expect(getPreviewMode(driveSubject('shoot.cr2', 'application/octet-stream'))).toBe('image');
     });
 
-    test('a file without a Drive path is an image only where the browser decodes it', () => {
-        expect(getPreviewMode(partSubject('holiday.png', 'image/png'))).toBe('image');
-        expect(getPreviewMode(partSubject('holiday.heic', 'image/heic'))).toBe('fallback');
-        expect(getPreviewMode(partSubject('shoot.cr2', 'application/octet-stream'))).toBe('fallback');
+    test('a mail part is an image only where the browser decodes it', () => {
+        expect(getPreviewMode(mailSubject('holiday.png', 'image/png'))).toBe('image');
+        expect(getPreviewMode(mailSubject('holiday.heic', 'image/heic'))).toBe('fallback');
+        expect(getPreviewMode(mailSubject('shoot.cr2', 'application/octet-stream'))).toBe('fallback');
     });
 
-    test('the text and vCard modes need the mount they query', () => {
-        expect(getPreviewMode(driveSubject('notes.txt', 'text/plain'))).toBe('text');
-        expect(getPreviewMode(partSubject('notes.txt', 'text/plain'))).toBe('fallback');
-        expect(getPreviewMode(driveSubject('team.vcf', 'text/vcard'))).toBe('vcard');
-        expect(getPreviewMode(partSubject('team.vcf', 'text/vcard'))).toBe('fallback');
+    test('the text and card previews answer for a Drive item and a mail part alike', () => {
+        for (const subject of [driveSubject, mailSubject]) {
+            expect(getPreviewMode(subject('notes.txt', 'text/plain'))).toBe('text');
+            expect(getPreviewMode(subject('readme.md', 'text/markdown'))).toBe('text');
+            expect(getPreviewMode(subject('team.vcf', 'text/vcard'))).toBe('vcard');
+        }
+    });
+
+    test('a subject holding neither identity has nothing to render a preview from', () => {
+        expect(getPreviewMode(bareSubject('notes.txt', 'text/plain'))).toBe('fallback');
+        expect(getPreviewMode(bareSubject('team.vcf', 'text/vcard'))).toBe('fallback');
     });
 });
 
