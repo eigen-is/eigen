@@ -79,7 +79,7 @@ export function DriveDetail({
         if (isDocumentType(path.type)) {
             onItemOpen?.(path);
         } else {
-            preview?.openPreview(subjectFromPath(path), []);
+            if (subject) preview?.openPreview(subject, []);
         }
     };
 

@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { IMPORT_MAX_BYTES } from '../../constants/contact';
 import { DOCX_MIME, XLSX_MIME } from '../../constants/mime';
-import { type FileActionId, fileActionsFor } from '../../core/file-actions';
+import { fileActionsFor } from '../../core/file-actions';
 import { subjectFromPath } from '../../core/file-subject';
 import type { DrivePath, DrivePathType } from '../../types/drive';
-import type { FileSubject } from '../../types/file-subject';
+import type { FileActionId, FileSubject } from '../../types/file-subject';
 
 function path(p: Partial<DrivePath> & { name: string; type: DrivePathType }): DrivePath {
     return {
@@ -39,35 +39,35 @@ describe('fileActionsFor on a Drive item', () => {
         { item: path({ name: 'Notes.eigendoc', type: 'doc', mimeType: 'application/eigendoc' }), ids: ['quick-look'] },
         {
             item: path({ name: 'holiday.jpg', type: 'file', mimeType: 'image/jpeg' }),
-            ids: ['quick-look', 'download', 'save-to-drive'],
+            ids: ['quick-look', 'download'],
         },
         {
             item: path({ name: 'Budget.XLSX', type: 'file', mimeType: XLSX_MIME }),
-            ids: ['quick-look', 'download', 'save-to-drive', 'convert-to-sheet'],
+            ids: ['quick-look', 'download', 'convert-to-sheet'],
         },
         {
             item: path({ name: 'Report.docx', type: 'file', mimeType: DOCX_MIME }),
-            ids: ['quick-look', 'download', 'save-to-drive', 'convert-to-document'],
+            ids: ['quick-look', 'download', 'convert-to-document'],
         },
         {
             item: path({ name: 'team.vcf', type: 'file', mimeType: 'text/vcard' }),
-            ids: ['quick-look', 'download', 'save-to-drive', 'import-contacts'],
+            ids: ['quick-look', 'download', 'import-contacts'],
         },
         // The convert gate is the extension alone, matching the server: a spreadsheet or a document
         // that lost its name — a mail part called `attachment-2` — offers no convert, because the
         // import refuses it.
         {
             item: path({ name: 'budget', type: 'file', mimeType: XLSX_MIME }),
-            ids: ['quick-look', 'download', 'save-to-drive'],
+            ids: ['quick-look', 'download'],
         },
         {
             item: path({ name: 'report', type: 'file', mimeType: DOCX_MIME }),
-            ids: ['quick-look', 'download', 'save-to-drive'],
+            ids: ['quick-look', 'download'],
         },
         // Over the import ceiling the row is gone: the route answers a bigger vCard with a 413.
         {
             item: path({ name: 'huge.vcf', type: 'file', mimeType: 'text/vcard', size: IMPORT_MAX_BYTES + 1 }),
-            ids: ['quick-look', 'download', 'save-to-drive'],
+            ids: ['quick-look', 'download'],
         },
     ];
 
@@ -84,10 +84,7 @@ describe('fileActionsFor on a Drive item', () => {
 
     test('exclude drops a row the registry approved', () => {
         const item = path({ name: 'holiday.jpg', type: 'file', mimeType: 'image/jpeg' });
-        expect(fileActionsFor(subjectFromPath(item), ['quick-look']).map((action) => action.id)).toEqual([
-            'download',
-            'save-to-drive',
-        ]);
+        expect(fileActionsFor(subjectFromPath(item), ['quick-look']).map((action) => action.id)).toEqual(['download']);
     });
 });
 
@@ -100,7 +97,20 @@ describe('fileActionsFor on a subject without a Drive path', () => {
         embedUrl: 'https://example.test/embed',
         downloadUrl: 'https://example.test/download',
         mail: { ownerId: 'owner-1', messageId: 'message-1', index: 2 },
+        attachment: true,
     };
+
+    test('a chat attachment is a Drive path that still saves to Drive: its copy sits in a hidden media folder', () => {
+        const attachment: FileSubject = {
+            ...subjectFromPath(path({ name: 'holiday.jpg', type: 'file', mimeType: 'image/jpeg' })),
+            attachment: true,
+        };
+        expect(fileActionsFor(attachment).map((action) => action.id)).toEqual([
+            'quick-look',
+            'download',
+            'save-to-drive',
+        ]);
+    });
 
     test('quick look applies without a path to check the type of', () => {
         expect(fileActionsFor(subject).map((action) => action.id)).toEqual(['quick-look', 'download', 'save-to-drive']);

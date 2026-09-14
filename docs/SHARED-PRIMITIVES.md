@@ -501,10 +501,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DirectAccessItem` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
 | `DriveAccessItem` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
 | `InheritedAccessItem` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
-| `FileAction` | `@workspace/lib/file-actions` | packages/lib/src/core/file-actions.ts |
-| `FileActionId` | `@workspace/lib/file-actions` | packages/lib/src/core/file-actions.ts |
 | `FilePresentation` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
-| `PreviewMode` | `@workspace/lib/file-subject` | packages/lib/src/core/file-subject.ts |
 | `CanonicalRecipient` | `@workspace/lib/mail` | packages/lib/src/core/mail/addresses.ts |
 | `RecipientField` | `@workspace/lib/mail` | packages/lib/src/core/mail/addresses.ts |
 | `BorderSide` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
@@ -704,8 +701,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DocSearchOptions` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
 | `DocSearchSession` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
 | `AttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
+| `FileAction` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
+| `FileActionId` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
 | `FileSubject` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
 | `MailPartRef` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
+| `PreviewMode` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
 | `Snapshot` | `@workspace/lib/types/versioning` | packages/lib/src/types/versioning.ts |
 | `CommandValidationResult` | `@workspace/lib/validation` | packages/lib/src/validation/command.ts |
 | `ParsedContactInput` | `@workspace/lib/validation` | packages/lib/src/validation/contact-input.ts |

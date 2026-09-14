@@ -37,10 +37,7 @@ export type Attachment = {
     calendarInvite?: CalendarInvite | null;
 };
 
-// The chip label, the Content-Disposition filename and the saved file all read this, so a
-// filename-less part (outbound inline cid parts carry none) shows one name everywhere. The sender
-// writes that name and it reaches a response header and a Drive file name, so only the basename
-// survives: a path would escape the target folder, a control byte would forge a header line.
+// The one name for a part (chip, Content-Disposition, saved file); sender-written, so basename only.
 export function mailAttachmentName(att: Pick<Attachment, 'filename'>, index: number): string {
     const name = (att.filename ?? '').replace(/\p{Cc}/gu, '').replace(/^.*[/\\]/, '');
     return name || `attachment-${index + 1}`;

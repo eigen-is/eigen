@@ -1,22 +1,7 @@
-import { BookUser, Download, Eye, FileText, FolderDown, type LucideIcon, Sheet } from 'lucide-react';
+import { BookUser, Download, Eye, FileText, FolderDown, Sheet } from 'lucide-react';
 import { IMPORT_MAX_BYTES } from '../constants/contact';
 import { isFolderType, isVCardFile } from '../types/drive';
-import type { FileSubject } from '../types/file-subject';
-
-export type FileActionId =
-    | 'quick-look'
-    | 'download'
-    | 'save-to-drive'
-    | 'convert-to-sheet'
-    | 'convert-to-document'
-    | 'import-contacts';
-
-export type FileAction = {
-    id: FileActionId;
-    label: string;
-    icon: LucideIcon;
-    applies: (subject: FileSubject) => boolean;
-};
+import type { FileAction, FileActionId, FileSubject } from '../types/file-subject';
 
 // What can be done with a file, answered once for every surface; a predicate never asks which menu is drawing.
 export const FILE_ACTIONS: readonly FileAction[] = [
@@ -27,7 +12,13 @@ export const FILE_ACTIONS: readonly FileAction[] = [
         applies: (subject) => !subject.drive || !isFolderType(subject.drive.type),
     },
     { id: 'download', label: 'Download', icon: Download, applies: (subject) => !!subject.downloadUrl },
-    { id: 'save-to-drive', label: 'Save to Drive…', icon: FolderDown, applies: (subject) => !!subject.downloadUrl },
+    {
+        id: 'save-to-drive',
+        label: 'Save to Drive…',
+        icon: FolderDown,
+        // A file already at a Drive location has Drive's own Copy to… instead.
+        applies: (subject) => !!subject.downloadUrl && (!subject.drive || !!subject.attachment),
+    },
     {
         id: 'convert-to-sheet',
         label: 'Convert to Sheet',

@@ -30,7 +30,6 @@ import { formatDownloadLabel } from '../layout/toolbar/file-menu';
 import { useWatchToggle } from '../layout/toolbar/watch-toggle-button';
 
 // Drive keeps its own "Copy to…" row, so the registry's save-to-drive would say the same thing twice.
-const DRIVE_EXCLUDED_ACTIONS = ['save-to-drive'] as const;
 
 type DriveItemMenuItemsProps = {
     item: DrivePath;
@@ -77,7 +76,7 @@ export function DriveItemMenuItems({
     // draw the same rows and the export route gates on the same list.
     const exportFormats = exportFormatsFor(item.type);
     // Read here too, so the separator above the registry rows appears only when there are any.
-    const fileActions = runner.subject ? fileActionsFor(runner.subject, DRIVE_EXCLUDED_ACTIONS) : [];
+    const fileActions = runner.subject ? fileActionsFor(runner.subject) : [];
     const accessible = !!item.acl?.length || item.visibility !== 'private';
 
     const { direct, label, isPending, toggle } = useWatchToggle(item.ownerId, item.mountId, item.id);
@@ -109,7 +108,7 @@ export function DriveItemMenuItems({
                     !!onMoveTo ||
                     !!onCopyTo ||
                     !!onDuplicate) && <DropdownMenuSeparator />}
-            <FileActionMenuItems runner={runner} exclude={DRIVE_EXCLUDED_ACTIONS} />
+            <FileActionMenuItems runner={runner} />
             {exportFormats.length > 0 && onExport && (
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>

@@ -2,10 +2,8 @@ import { type Attachment, mailAttachmentName } from '@workspace/lib/types/mail';
 import { ApiError, contentDisposition, etagMatches, parseByteRange, scriptableInlineHeaders } from '../core';
 import type { Mail } from './mail-domain';
 
-// The part every mail byte and preview route serves, or null when the client's copy is current. The
-// ETag comes off the summary row, so a 304 never pays messageGetAttachment's re-parse of the whole
-// .eml; no-cache because the URL carries no version stamp and a draft save rewrites the message under
-// its id — date and size change with it, and unlike the filename carry no comma for etagMatches.
+// The part every mail route serves, or null on a 304 answered off the summary row, before the .eml is parsed.
+// no-cache: the URL has no version stamp, and a draft save rewrites the message under its id (date + size move).
 export async function readMailPart(
     mail: Mail,
     messageId: string,

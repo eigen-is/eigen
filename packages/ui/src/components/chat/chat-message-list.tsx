@@ -85,7 +85,7 @@ export function ChatMessageList({
     const menuTarget = contextMenu.item;
     const menuSubjects = useMemo(() => subjectsOf(menuTarget?.message.attachments), [subjectsOf, menuTarget?.message]);
     // The chip's siblings are its own message's attachments, so a quick look from here keeps Save all.
-    const runner = useFileActionRunner(menuTarget?.attachment ?? null, menuSubjects, { attachment: true });
+    const runner = useFileActionRunner(menuTarget?.attachment ?? null, menuSubjects);
 
     // One gating source shared by the hover bar and the context menu so the two action sets never drift.
     const getMessageActions = useCallback(
