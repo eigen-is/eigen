@@ -38,6 +38,10 @@ bun test --preload ./src/test/preload.ts
 - `--preload ./src/test/preload.ts` registers an `afterAll` hook that calls `cleanup()`
 - No path argument: the layout rule already says where tests are, and a path here would mean a stray
   test file silently never runs
+- Slow end-to-end suites are gated on `CI` (set by GitHub Actions) or `EIGEN_SLOW_TESTS=1`: the demo
+  seeder contract test (`server/seed-demo.test.ts`, ~30 s, spawns the whole seeder) skips in a plain
+  local run. Run it locally with `EIGEN_SLOW_TESTS=1 bun run test:api` after touching
+  `src/scripts/demo/` or the readers it decodes with
 - Files run sequentially by default. `--parallel=N` is supported and safe: it implies `--isolate`, so
   every test file evaluates in a fresh module graph, gets its own `EIGEN_DATA_ROOT` (a per-process dir
   under `data-test/`, see below) and boots its own server on first use. No two files share a Home

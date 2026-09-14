@@ -35,6 +35,8 @@ import {
 // (the Elysia app, the auth DB, the Home map), so it cannot run in-process alongside the
 // test harness — spawn it as a subprocess against a throwaway data root and inspect the
 // produced files directly with a readonly bun:sqlite handle.
+// Seeding the whole world takes ~30 s, so the file runs on CI and locally only on request.
+const runSlow = Boolean(process.env['CI'] || process.env['EIGEN_SLOW_TESTS']);
 const MAIL_DOMAIN = 'tuimel.test';
 const API_DIR = join(import.meta.dir, '../../..');
 
@@ -81,7 +83,7 @@ function findContainerDataDb(metadataDb: string, mountsDir: string, mountId: str
     return join(mountsDir, mountId, 'data', dataDbRow[0].file);
 }
 
-describe('seed-demo', () => {
+describe.skipIf(!runSlow)('seed-demo', () => {
     test('produces a coherent Tuimel Festival world', async () => {
         const root = mkdtempSync(join(tmpdir(), 'eigen-demo-seed-'));
         try {
