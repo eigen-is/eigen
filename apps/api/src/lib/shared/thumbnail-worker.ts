@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { ImageDimensions } from '@workspace/lib/types/drive';
-import sharp from 'sharp';
+import sharp, { type Sharp } from 'sharp';
 import { cleanupExtract, extractEmbeddedPreview } from '../preview/exiftool-preview';
 import { extractVideoFrame } from './video-thumbnail';
 
@@ -60,7 +60,7 @@ async function sharpResize(source: Buffer | string, options: WorkerInput['option
             withoutEnlargement: options.fit === 'inside',
         });
         // png/gif take no quality — they encode at sharp's defaults; webp is the default target.
-        let encoded: sharp.Sharp;
+        let encoded: Sharp;
         switch (options.format) {
             case 'jpeg':
                 encoded = resized.jpeg({ quality: options.quality });
