@@ -80,6 +80,13 @@ export function EigenDocListView({
         return <EmptyState message="Encountering the null vector: a rendezvous with nothing at all." />;
     }
 
+    const capabilities = {
+        ...DRIVE_CAPABILITIES.listing,
+        canMove: allowMove,
+        createTypes: new Set([config.type]),
+    };
+    const subjectOf = (path: DrivePath) => subjectFromPath(path, capabilities);
+
     return (
         <DriveLayout
             pid={pid}
@@ -91,14 +98,10 @@ export function EigenDocListView({
             error={isFolderContentLoadingError}
             onRowSelect={onRowSelect}
             onRowActivate={openDocument}
-            onQuickLook={(path, siblings) => openPreview(subjectFromPath(path), siblings.map(subjectFromPath))}
+            onQuickLook={(path, siblings) => openPreview(subjectOf(path), siblings.map(subjectOf))}
             onBackToList={onNavigateBack}
             onAfterAction={onNavigateBack}
-            capabilities={{
-                ...DRIVE_CAPABILITIES.listing,
-                canMove: allowMove,
-                createTypes: new Set([config.type]),
-            }}
+            capabilities={capabilities}
             title={config.allLabel}
             currentPath={rootPath}
             emptyState={<EmptyState hint={`Use the “${config.newLabel}” button to create one.`} />}

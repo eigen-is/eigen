@@ -29,6 +29,8 @@ type CardDialogProps = {
     entry?: CommentEntry;
     ownerId: string;
     mountId: string;
+    // The container the card belongs to — the comment thread's notifications are tagged with it.
+    pathId: string;
     canWrite?: boolean;
     // Edit mode is owned by the lifecycle bundle so the menus' Edit row can open straight into it.
     isEditing: boolean;
@@ -48,6 +50,7 @@ export function CardDialog({
     entry,
     ownerId,
     mountId,
+    pathId,
     canWrite = true,
     isEditing,
     onEditingChange,
@@ -216,7 +219,13 @@ export function CardDialog({
             {...action}
         >
             {chatName ? (
-                <CommentThread ownerId={ownerId} mountId={mountId} chatName={chatName} className="h-full" />
+                <CommentThread
+                    ownerId={ownerId}
+                    mountId={mountId}
+                    pathId={pathId}
+                    chatName={chatName}
+                    className="h-full"
+                />
             ) : (
                 <div className="px-4 pb-4 text-sm text-muted-foreground">No chat available for this card.</div>
             )}

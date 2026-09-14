@@ -169,6 +169,9 @@ DriveLayout (list/detail columns; every action gated by one required `capabiliti
 Render sites declare their whole surface as one `DriveCapabilities` value (`drive-capabilities.ts`):
 the fs browser passes `DRIVE_CAPABILITIES.browse`, watched passes `.readOnly`, and the flat views
 (mime filters, per-app doc lists, shared-by/with-me) spread `.listing` with their own overrides.
+`canWrite` rides down into the subjects the view's menus, detail column and quick look act on
+(`subjectFromPath(item, capabilities)`), because a file action that writes beside its source — Convert
+to Sheet, Convert to Document — has nowhere to write in a read-only feed ([PREVIEWS.md](PREVIEWS.md)).
 
 `DriveBrowser` (`drive-browser.tsx`) is a separate, lighter layer over `DriveTable`: breadcrumb + mount
 list, no dialogs and no detail column. The file picker (`drive-file-picker.tsx`) and the location field

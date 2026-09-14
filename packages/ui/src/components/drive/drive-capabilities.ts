@@ -5,6 +5,8 @@ import type { EigenDocType } from '@workspace/lib/types/drive';
 export type DriveCapabilities = {
     canCreateFolder: boolean;
     canUpload: boolean;
+    // May write where the listed items sit — a convert saves the new document beside its source.
+    canWrite: boolean;
     canDelete: boolean;
     canRename: boolean;
     canMove: boolean;
@@ -20,6 +22,7 @@ export const DRIVE_CAPABILITIES = {
     browse: {
         canCreateFolder: true,
         canUpload: true,
+        canWrite: true,
         canDelete: true,
         canRename: true,
         canMove: true,
@@ -31,6 +34,7 @@ export const DRIVE_CAPABILITIES = {
     listing: {
         canCreateFolder: false,
         canUpload: false,
+        canWrite: true,
         canDelete: true,
         canRename: true,
         canMove: false,
@@ -42,6 +46,7 @@ export const DRIVE_CAPABILITIES = {
     readOnly: {
         canCreateFolder: false,
         canUpload: false,
+        canWrite: false,
         canDelete: false,
         canRename: false,
         canMove: false,

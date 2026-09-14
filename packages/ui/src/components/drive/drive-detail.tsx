@@ -47,6 +47,8 @@ type DriveDetailProps = {
     onExport?: (path: DrivePath, format: string) => void;
     onEmailCollaborators?: (path: DrivePath) => void;
     allowDelete?: boolean;
+    // The listing's own write capability, carried into the subject the menu and preview act on.
+    canWrite?: boolean;
     highlightHistory?: boolean;
 };
 
@@ -64,11 +66,15 @@ export function DriveDetail({
     onExport,
     onEmailCollaborators,
     allowDelete,
+    canWrite = true,
     highlightHistory,
 }: DriveDetailProps) {
     const preview = useOptionalPreview();
-    const subject = useMemo(() => (path ? subjectFromPath(path) : null), [path]);
-    const siblingSubjects = useMemo(() => siblings?.map(subjectFromPath), [siblings]);
+    const subject = useMemo(() => (path ? subjectFromPath(path, { canWrite }) : null), [path, canWrite]);
+    const siblingSubjects = useMemo(
+        () => siblings?.map((sibling) => subjectFromPath(sibling, { canWrite })),
+        [siblings, canWrite],
+    );
     const runner = useFileActionRunner(subject, siblingSubjects);
 
     if (!path) return null;

@@ -47,6 +47,7 @@ export function CommentLifecycleDialogs({
                 entry={openEntry}
                 ownerId={path.ownerId}
                 mountId={path.mountId}
+                pathId={path.id}
                 canWrite={canWrite}
                 isEditing={lifecycle.openCardEditing}
                 onEditingChange={lifecycle.setOpenCardEditing}

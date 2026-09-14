@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1440 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1446 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -473,7 +473,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (342)
+## Types (343)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -547,6 +547,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ChatMatch` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `ChatMessage` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `ChatMessageType` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
+| `ChatNotificationThread` | `@workspace/lib/types` | packages/lib/src/types/notification.ts |
 | `ClientFileEventRecord` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `ClientFileEventType` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `CollabDocumentInfo` | `@workspace/lib/types` | packages/lib/src/types/collab.ts |
@@ -820,7 +821,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (656)
+## Utilities & constants (661)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1121,10 +1122,15 @@ rather than inlining `queryClient.invalidateQueries`.
 | `handleMailSSEvent` | `@workspace/lib/mail` | packages/lib/src/core/mail/sse-handlers.ts |
 | `CUSTOM_MAILBOX_ICON` | `@workspace/lib/mailbox-icons` | packages/lib/src/core/mailbox-icons.ts |
 | `MAILBOX_ICONS` | `@workspace/lib/mailbox-icons` | packages/lib/src/core/mailbox-icons.ts |
+| `CHAT_NOTIFICATION_TYPES` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `CHAT_TEXT_NOTIFICATION_TYPES` | `@workspace/lib/notification` | packages/lib/src/core/notification/describe.ts |
+| `chatActivityTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
+| `chatMentionTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
+| `chatThreadKey` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `describeNotification` | `@workspace/lib/notification` | packages/lib/src/core/notification/describe.ts |
 | `handleNotificationSSEvent` | `@workspace/lib/notification` | packages/lib/src/core/notification/sse-handlers.ts |
 | `isClickableNotification` | `@workspace/lib/notification` | packages/lib/src/core/notification/resolve-link.ts |
+| `parseChatNotificationThread` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `resolveNotificationLink` | `@workspace/lib/notification` | packages/lib/src/core/notification/resolve-link.ts |
 | `loadPagefind` | `@workspace/lib/search` | packages/lib/src/core/search/pagefind.ts |
 | `hardenFailure` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-check.ts |

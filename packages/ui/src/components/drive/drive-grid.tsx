@@ -31,6 +31,7 @@ export function DriveGrid({
     onQuickLook,
     onEmailCollaborators,
     allowDelete = false,
+    canWrite = true,
     selection,
     onSelectionChange,
     contextMenuItems,
@@ -139,6 +140,7 @@ export function DriveGrid({
                 onEmailCollaborators={onEmailCollaborators}
                 onDelete={onDelete}
                 allowDelete={allowDelete}
+                canWrite={canWrite}
                 renderItems={contextMenuItems}
             />
         </div>

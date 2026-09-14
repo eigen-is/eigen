@@ -62,6 +62,7 @@
     "./mail/addresses": "./src/core/mail/addresses.ts",
     "./media": "./src/core/media/index.ts",
     "./notification": "./src/core/notification/index.ts",
+    "./notification/tags": "./src/core/notification/tags.ts",
     "./admin": "./src/core/admin/index.ts",
     "./public": "./src/core/public/index.ts",
     "./search": "./src/core/search/index.ts",
