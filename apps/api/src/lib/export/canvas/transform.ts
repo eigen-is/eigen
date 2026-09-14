@@ -97,7 +97,7 @@ img { display: block; max-width: 100%; }
 svg { display: block; }
 `;
 
-// A page column, centred, with print rules — the deck's HTML download. The `.page-fit` rules mirror
+// A page column, centered, with print rules — the deck's HTML download. The `.page-fit` rules mirror
 // packages/ui/src/styles/globals.css: a standalone document cannot import the app stylesheet, and
 // renderFittedPage's custom properties are what keep the two from drifting into different boxes.
 // `100cqw / <n>px` is a length over a length, i.e. the plain number `scale()` wants — CSS Values 4,

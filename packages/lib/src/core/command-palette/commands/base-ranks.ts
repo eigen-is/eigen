@@ -10,7 +10,7 @@
 //     creating is a deliberate verb; the topbar app switcher already covers casual
 //     "jump to" navigation, so creation should out-rank it in the empty state.
 //   NAV_APP          (10) — "Go to <App>". Mid-tier.
-//   CREATE_FOLDER     (8) — Below nav: folders are organisational, not the typical
+//   CREATE_FOLDER     (8) — Below nav: folders are organizational, not the typical
 //     "what do I want to do".
 //   VIEW_UTILITY      (4) — Rarely-used preferences (theme toggle, …).
 //

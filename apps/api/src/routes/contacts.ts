@@ -222,7 +222,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             requireSelf(params.ownerId, user.id);
             const text = await (await getContacts(user)).exportCards(body.ids);
             // A one-card export is named after the card itself — its FN, the display name every client
-            // writes — a multi-card one generically. contentDisposition sanitises whatever comes back
+            // writes — a multi-card one generically. contentDisposition sanitizes whatever comes back
             // before it reaches the header; the clamp keeps one absurd FN from filling it.
             let fileName = 'contacts.vcf';
             if (body.ids?.length === 1) {

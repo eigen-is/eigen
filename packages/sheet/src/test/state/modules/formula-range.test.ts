@@ -49,7 +49,7 @@ function editor(html = '') {
     return el;
 }
 
-// The reference is a fresh token: a new coloured span is parsed and inserted.
+// The reference is a fresh token: a new colored span is parsed and inserted.
 describe('rangeSetValue — inserting a new reference', () => {
     test('writes markup in a sheet name as text, not as an element', () => {
         const $editor = editor();

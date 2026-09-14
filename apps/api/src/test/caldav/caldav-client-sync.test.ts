@@ -165,7 +165,7 @@ describe('CalDAV client sync on web-created events', () => {
             rrule: 'FREQ=WEEKLY',
         });
 
-        // The web "delete this occurrence" owner flow: a cancelled exception row.
+        // The web "delete this occurrence" owner flow: a canceled exception row.
         await createWebEvent({
             title: 'Weekly review',
             startTime: '2026-09-14T10:00:00.000Z',
@@ -186,7 +186,7 @@ describe('CalDAV client sync on web-created events', () => {
         expect(ics).toContain('EXDATE;TZID=Europe/Amsterdam:20260914T120000');
         expect(ics).not.toContain('STATUS:CANCELLED');
 
-        // TB re-PUT: served bytes minus any cancelled override VEVENT.
+        // TB re-PUT: served bytes minus any canceled override VEVENT.
         const lines = ics.split(/\r?\n/);
         const out: string[] = [];
         let block: string[] | null = null;

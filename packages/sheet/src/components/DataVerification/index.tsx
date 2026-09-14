@@ -153,7 +153,7 @@ export function DataVerification() {
     );
 
     // Initialize
-    // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only — initialises the data-verification dialog from current selection + rangeDialog
+    // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only — initializes the data-verification dialog from current selection + rangeDialog
     useEffect(() => {
         setContext((ctx) => {
             let rangeT = '';

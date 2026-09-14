@@ -22,7 +22,7 @@ export function frameClipRadius(zoom: number): number {
     return FRAME_CARD_RADIUS / zoom;
 }
 
-// Centres `extent` in `visible` scene units, or clamps the pan to its edges when it is the larger of
+// Centers `extent` in `visible` scene units, or clamps the pan to its edges when it is the larger of
 // the two — the visible window then stays inside the extent instead of running past it.
 function clampAxis(scroll: number, visible: number, extent: number): number {
     if (visible >= extent) return (visible - extent) / 2;
@@ -37,7 +37,7 @@ export function clampFrameViewport(v: CanvasViewport, container: Extent, frame: 
     };
 }
 
-// Letterbox: the largest zoom that shows the whole frame with padding, centred. A container that has
+// Letterbox: the largest zoom that shows the whole frame with padding, centered. A container that has
 // not been measured yet (0x0) still yields a positive zoom, so nothing divides by zero downstream.
 export function fitFrameViewport(container: Extent, frame: Extent, padding = FRAME_FIT_PADDING): CanvasViewport {
     const width = Math.max(1, container.width - padding * 2);

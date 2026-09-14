@@ -1,5 +1,5 @@
 // Characterization tests for the paste pipeline (SHEETS-TODO E1). These pin the
-// CURRENT contract-level behaviour — resulting cell values / styles / merges /
+// CURRENT contract-level behavior — resulting cell values / styles / merges /
 // conditional-format ranges — so the phase-5 clone-cluster refactors (border C1,
 // dropCell C3, selection C4, tokenizer C5) can be gated on them. They assert on
 // observable output in the resulting Context, never on internal call sequences.

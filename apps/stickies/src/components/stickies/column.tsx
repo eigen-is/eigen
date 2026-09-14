@@ -64,7 +64,7 @@ export const Column = memo(function Column({
 
     // Double-click on a column's empty space adds a card (same flow as the + button). Guarded to the
     // background container itself (e.target === currentTarget) so a double-click on a card bubbling up
-    // never fires — the card keeps its own single-click-to-open behaviour.
+    // never fires — the card keeps its own single-click-to-open behavior.
     const handleEmptyDoubleClick = (e: React.MouseEvent) => {
         if (canWrite && e.target === e.currentTarget) onAddCard(column.id);
     };

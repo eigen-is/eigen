@@ -108,7 +108,7 @@ type Gesture = { pointerId: number } & (
           // The selected elements, snapshotted here (committed geometry is invariant for the gesture —
           // only previews move), so the move tick reads them instead of re-scanning the scene per frame.
           selById: Map<string, VectorElement>;
-          // Snap targets = every OTHER element's edges/centre, invariant for the gesture (only
+          // Snap targets = every OTHER element's edges/center, invariant for the gesture (only
           // previews move; committed elements don't), so compute once here instead of per tick.
           snapTargets: SnapTargets;
       }
@@ -117,7 +117,7 @@ type Gesture = { pointerId: number } & (
 );
 
 // Imperative image-insert surface the canvas publishes for the toolbar's Insert entries — the
-// editor owns the picker dialog, but placement needs the live viewport (centre + zoom).
+// editor owns the picker dialog, but placement needs the live viewport (center + zoom).
 export type CanvasImageInsert = {
     insertFiles: (files: File[]) => void;
     insertDrivePaths: (paths: DrivePath[]) => Promise<void>;
@@ -159,7 +159,7 @@ type CanvasEditorProps = {
     // Comments. A commented element marks its top-right corner; clicking the mark opens the first card
     // (the host reveals it). Omitting onOpenCard hides the marks, omitting onAddComment the menu row.
     onOpenCard?: (cardId: string) => void;
-    // The document's cards, for the mark's colour — the card's own, like a commented sheet cell's.
+    // The document's cards, for the mark's color — the card's own, like a commented sheet cell's.
     commentCards?: Record<string, CommentCard>;
     onAddComment?: (elementId: string) => void;
     // ⌘F: every matching element rings, the stepped-to one rings brighter and flashes. Both come from
@@ -316,7 +316,7 @@ export function CanvasEditor({
     const ordered = useMemo(() => orderByFractionalIndex(visibleElements), [visibleElements]);
 
     // The marked elements: those carrying at least one comment card, with the corner the mark sits on
-    // (a zero-size box, so boxToStyle maps it to the screen point at render time) and the card's colour.
+    // (a zero-size box, so boxToStyle maps it to the screen point at render time) and the card's color.
     const commentedElements = useMemo(
         () =>
             ordered.flatMap((el) => {
@@ -484,7 +484,7 @@ export function CanvasEditor({
             frozenRef.current = false;
             transformStartedRef.current = false;
             setPreviews((p) => (Object.keys(p).length ? {} : p));
-            // Escape-cancelled resizes fire no onCommit, so stale guide lines land here.
+            // Escape-canceled resizes fire no onCommit, so stale guide lines land here.
             setSnapLines((l) => (l.length ? [] : l));
         };
         const onBlur = () => {
@@ -528,7 +528,7 @@ export function CanvasEditor({
                 frozenRef.current = false;
                 if (g.kind === 'create') {
                     setCreating(null);
-                    // The padlock survives a CANCELLED placement exactly as it survives a completed one.
+                    // The padlock survives a CANCELED placement exactly as it survives a completed one.
                     if (!s.toolLocked) setTool('select');
                 } else if (g.kind === 'marquee') {
                     setMarquee(null);
@@ -568,9 +568,9 @@ export function CanvasEditor({
     const elementsRef = useRef(elements);
     elementsRef.current = elements;
 
-    // Snap targets = every OTHER visible element's edges/centre (rotated → centre only), plus the
-    // frame's own edges and centre lines when there is one — an object aligns to the page the way it
-    // aligns to its neighbours. The infinite canvas has no edges to seed. Threshold is screen-space:
+    // Snap targets = every OTHER visible element's edges/center (rotated → center only), plus the
+    // frame's own edges and center lines when there is one — an object aligns to the page the way it
+    // aligns to its neighbors. The infinite canvas has no edges to seed. Threshold is screen-space:
     // SNAP_SCREEN_THRESHOLD / zoom keeps the snap radius a constant pixel distance at any zoom.
     const buildSnapTargets = useCallback(
         (excludeIds: Set<string>) =>
@@ -724,7 +724,7 @@ export function CanvasEditor({
     }, [clientToScene, containerRef]);
 
     // Natural-size boxes for a batch of images: each fits within the visible viewport (uniform,
-    // never upscale), centred on `anchor`, cascading +20,+20 per item — shared by every insert path.
+    // never upscale), centered on `anchor`, cascading +20,+20 per item — shared by every insert path.
     const imagePlacements = useCallback(
         (intrinsics: (ImageSize | null)[], anchor: { x: number; y: number }) => {
             const rect = containerRef.current?.getBoundingClientRect();
@@ -795,7 +795,7 @@ export function CanvasEditor({
     );
 
     // Drive-picked images: copy into media/, measure, then place all at natural size around the
-    // viewport centre in ONE transact = one undo step. Measuring goes by the copy result's own path —
+    // viewport center in ONE transact = one undo step. Measuring goes by the copy result's own path —
     // by NAME it would miss the pre-copy media listing (the slides idiom).
     const insertDrivePaths = useCallback(
         async (paths: DrivePath[]) => {
@@ -1123,7 +1123,7 @@ export function CanvasEditor({
 
             const selById = g.selById;
             const selEls = [...selById.values()];
-            // Snap the selection's AABB to the other elements (centre-only if any member is rotated —
+            // Snap the selection's AABB to the other elements (center-only if any member is rotated —
             // Override-24), then apply the snap correction to every moved element. Empty lines = no snap.
             // A Shift-locked axis (the zeroed one) is passed to snap as lockAxis so it never produces a
             // correction or guide line to undo here.
@@ -1595,7 +1595,7 @@ export function CanvasEditor({
                     Enter or double-click to finish · Esc to cancel
                 </HintPill>
             )}
-            {/* Zoom readout; click resets to 100% about the viewport centre. Bottom-RIGHT: the
+            {/* Zoom readout; click resets to 100% about the viewport center. Bottom-RIGHT: the
                 router devtools badge owns the bottom-left corner in dev. A framed page has no zoom of
                 its own — it always shows the whole page — so it shows no pill. */}
             {viewport === 'infinite' && (

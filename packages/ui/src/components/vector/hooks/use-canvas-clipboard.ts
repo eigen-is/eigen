@@ -129,7 +129,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
     const { resolveMediaPath, resolveMediaUrl, uploadFile } = params;
 
     // The clipboard PRODUCER (the native elements item, the typed image/text items and the
-    // self-contained SVG flavour) + the plain-text flavor live in ../tools/clipboard; this calls them
+    // self-contained SVG flavor) + the plain-text flavor live in ../tools/clipboard; this calls them
     // with the live z-order, selection, background, home frame and path resolver.
     const buildData = useCallback(
         () => buildSelectionData(ordered, selectedIds, meta, frameId, resolveMediaPath),
@@ -141,7 +141,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
     // inliner. For the async menu-copy path only, build a foreign-visible `<img src="data:svg…">` whose
     // images are inlined as base64 data URIs, so a plain contenteditable pastes the drawing as an image.
     // Bytes come from the credentialed media resolver; over the soft cap (or on inline failure) we skip
-    // the flavour and write today's payload. The sync ⌘C path stays byte-free (a copy event can't fetch).
+    // the flavor and write today's payload. The sync ⌘C path stays byte-free (a copy event can't fetch).
     const fetchMediaBlob = useCallback(
         async (name: string): Promise<Blob | null> => {
             const url = resolveMediaUrl(name);
@@ -168,7 +168,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
         [fetchMediaBlob],
     );
 
-    // A payload with no native elements item: another app's images and text. Each lands centred on the
+    // A payload with no native elements item: another app's images and text. Each lands centered on the
     // viewport, cascading so a multi-item paste stays visible. An image sizes from the TYPED wire box
     // (authoritative), text re-measures LOCALLY (a wire size is never written onto text).
     const planForeignPaste = useCallback(
@@ -321,7 +321,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
         [pasteEigenItems],
     );
 
-    // Plain-text paste (no eigen payload, no OS files) → ONE rich-text box at the viewport centre, in the
+    // Plain-text paste (no eigen payload, no OS files) → ONE rich-text box at the viewport center, in the
     // HOST's typography and with a locally-measured box (the pasteEigenItems text idiom). The partial names
     // no font, so the box is created with the same table it is measured with. Multi-line text is preserved
     // — textToParagraphHtml keeps one paragraph per line. One sealed undo step.
@@ -516,7 +516,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             const data = await readEigenClipboardAsync();
             if (data && pasteEigenItems(data.items)) return;
             // Nothing placed yet: walk the SAME ladder ⌘V does, over the same classifier, so the menu
-            // row and the keystroke are one behaviour — an SVG restores our elements or lands as an
+            // row and the keystroke are one behavior — an SVG restores our elements or lands as an
             // image, anything else becomes a rich-text box. OS-file image paste stays ⌘V-only (the async
             // API exposes no File objects for the drop pipeline).
             let html = '';

@@ -529,7 +529,7 @@ export class Mail {
         mailToSend: NewDraft | EmailDraft,
         options?: { grantAccessRefIds?: string[] },
     ): Promise<SentMailResult> {
-        // Full EML rebuild so attachment content is available for SMTP; a blank id must normalise to
+        // Full EML rebuild so attachment content is available for SMTP; a blank id must normalize to
         // undefined or `?? createUniqueMessageId()` bakes a `Message-ID: <@domain>` into the EML.
         const mail = await this.draftFullSave(mailToSend, mailToSend.id?.trim() || undefined, {});
         const message = draftToOutboundMail(mail, this.home.user.email);

@@ -16,7 +16,7 @@ const EMPTY_PREVIEW_HEIGHT = 120;
 // through the URL map the main thread prepared (the Worker has no Mount).
 //
 // The body renders as live DOM in the drive hero and the preview pane, so it is filtered twice. The
-// reader is the trust boundary for every scalar field (XML-invalid characters stripped, colours
+// reader is the trust boundary for every scalar field (XML-invalid characters stripped, colors
 // reduced to hex or 'transparent', coordinates clamped) but NOT for a rich-text box's `html`, which
 // it caps and cleans without filtering tags: each of those goes through the shared ref restriction
 // first, so a collaborator's `<img src=https://…>` or `background:url(https://…)` cannot beacon
@@ -47,7 +47,7 @@ function renderPreviewPage(page: CanvasPage): string {
     const scale = Math.min(CANVAS_PREVIEW_WIDTH / page.width, CANVAS_PREVIEW_HEIGHT / page.height);
     // A page fitted by height composes narrower than CANVAS_PREVIEW_WIDTH, and drive-preview.tsx
     // scales the body from exactly that intrinsic width. Widen the page in SCENE units and shift its
-    // origin by half the difference: the box comes out full width with the drawing centred in it.
+    // origin by half the difference: the box comes out full width with the drawing centered in it.
     const width = CANVAS_PREVIEW_WIDTH / scale;
     return renderFittedPage({ ...page, width, originX: page.originX - (width - page.width) / 2 }, scale);
 }

@@ -101,7 +101,7 @@ type CanvasPropertiesPanelProps = {
     // Panel title with nothing selected; defaults to the canvas.
     emptyTitle?: string;
     // What the panel shows with nothing selected — the host's own question about the surface, which
-    // the engine has no words for: the drawing canvas' background colour, the deck's slide background
+    // the engine has no words for: the drawing canvas' background color, the deck's slide background
     // with its apply-to scope.
     emptySection?: ReactNode;
     // Aspect lock, owned by the editor so the panel checkbox and the canvas'
@@ -131,10 +131,10 @@ export function CanvasPropertiesPanel({
     // open freedraw paints no fill and so offers none.
     const showFill = all((el) => capabilitiesOf(el).fill);
     // A border can be switched off only where the element still has a body without it; a line or an
-    // arrow IS its stroke, so its colour row offers no None swatch.
+    // arrow IS its stroke, so its color row offers no None swatch.
     const strokeOptional = all((el) => capabilitiesOf(el).strokeOptional);
     // The hatch row sits INSIDE the Fill block — it is the other half of the same stored fill — and shows
-    // only for the kinds whose renderer honours it.
+    // only for the kinds whose renderer honors it.
     const showFillStyle = showFill && all((el) => capabilitiesOf(el).fillStyle);
     // Corners follow the kind's own capability; the separate Edges row is the shaft curvature a line or
     // an arrow carries (round curve vs sharp polyline), never freedraw.

@@ -197,7 +197,7 @@ function syncExceptionEvents(
 
     // A CalDAV PUT is a full-resource replace: stored exceptions absent from the payload were
     // removed on the client (e.g. Apple's "undo delete occurrence" re-PUTs the series without the
-    // EXDATE). Without the prune the stale cancelled row keeps the occurrence hidden forever
+    // EXDATE). Without the prune the stale canceled row keeps the occurrence hidden forever
     // (audit #D). Only a payload that carries the master VEVENT is a credible full-resource
     // representation — a degenerate master-less PUT proves nothing about the exceptions it omits.
     // Unkeyable legacy rows are inert everywhere, so the replace may drop them too.

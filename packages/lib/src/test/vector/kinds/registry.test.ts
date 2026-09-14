@@ -336,8 +336,8 @@ describe('baseDefaults', () => {
     });
 
     test('baseDefaultsFor answers what creating the kind would give it — what a panel reset restores', () => {
-        // The reset bug: an image whose border was coloured must reset to none, not to the shared ink
-        // colour. The panel reads this, the creation path spreads it, so the two cannot drift.
+        // The reset bug: an image whose border was colored must reset to none, not to the shared ink
+        // color. The panel reads this, the creation path spreads it, so the two cannot drift.
         for (const [type, kind] of Object.entries(ELEMENT_KINDS)) {
             expect([type, baseDefaultsFor(kind.type, VECTOR_STYLE_DEFAULTS)]).toEqual([
                 type,

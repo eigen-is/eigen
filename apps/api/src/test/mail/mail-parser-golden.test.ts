@@ -1,6 +1,6 @@
 // Golden contract for the mail parser: parses every .eml in fixtures/mail-corpus and pins a
 // consumed-field projection (attachment bytes as SHA-256) against a committed .golden.json, so a
-// parser rewrite can be verified behaviour-identical. Regenerate the goldens with UPDATE_GOLDEN=1.
+// parser rewrite can be verified behavior-identical. Regenerate the goldens with UPDATE_GOLDEN=1.
 
 import { expect, test } from 'bun:test';
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';

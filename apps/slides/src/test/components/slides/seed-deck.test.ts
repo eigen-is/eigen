@@ -13,7 +13,7 @@ describe('seedDeck', () => {
         const welcome = scene.elements[0];
         expect(welcome.frameId).toBe(scene.frames[0].id);
         expect(welcome.type).toBe('richtext');
-        // A new deck opens on the seed colour with white text on it. Only the seeded slide: one added
+        // A new deck opens on the seed color with white text on it. Only the seeded slide: one added
         // with + keeps the shared DEFAULT_FRAME_BACKGROUND.
         expect(parseBackgroundFill(scene.frames[0].background)).toEqual({ type: 'solid', color: '#f6339a' });
         expect(welcome.type === 'richtext' && welcome.color).toBe('#ffffff');

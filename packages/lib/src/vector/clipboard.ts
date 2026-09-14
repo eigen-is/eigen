@@ -46,7 +46,7 @@ export function buildElementsClipboardItem(
 }
 
 // A forged wire can claim any number of elements, and every one of them is read, validated and written
-// into the doc inside a single transact. Far past any real selection — the svg flavour stops rendering
+// into the doc inside a single transact. Far past any real selection — the svg flavor stops rendering
 // at 300 — so nothing a user can actually copy is truncated.
 const MAX_PASTED_ELEMENTS = 10_000;
 
@@ -61,7 +61,7 @@ export function readElementsClipboardItem(
         // A forged wire can hold anything, including a null entry — `record[key]` would throw inside the
         // host's paste handler, after its preventDefault, and swallow the paste silently.
         if (!record || typeof record !== 'object') continue;
-        // The document reader IS the trust boundary: enums, clamps and colour tokens all apply.
+        // The document reader IS the trust boundary: enums, clamps and color tokens all apply.
         const el = readElementFromFields({ get: (key: string) => record[key] });
         if (el) elements.push(el);
     }
@@ -75,7 +75,7 @@ export function reanchorElements(elements: VectorElement[], dx: number, dy: numb
 
 // Where a pasted set lands, as one translation of the whole set: the ⌘D step within one frame, in
 // place across two frames (frame-relative coordinates mean the same spot on the new slide), and
-// otherwise the bounding box re-anchored on the viewport centre — falling back to the ⌘D step when
+// otherwise the bounding box re-anchored on the viewport center — falling back to the ⌘D step when
 // that re-anchor is under one step, or the copy would land exactly on top of the original.
 export function pasteAnchorOffset(
     elements: VectorElement[],

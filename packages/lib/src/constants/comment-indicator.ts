@@ -6,12 +6,12 @@ import { EIGEN_STICKIES_INDICATOR_MAP } from './colors';
 
 export const CELL_INDICATOR_SIZE = 11;
 
-// The attention red: a comment whose card carries no colour, and sheets' invalid-value triangle.
+// The attention red: a comment whose card carries no color, and sheets' invalid-value triangle.
 // Hardcoded rather than a theme token — the canvas surfaces that paint it are pinned light.
 export const INDICATOR_RED = '#FC6666';
 
-// A card's own colour as its mark's colour: a stickies palette colour paints in its stronger
-// indicator tone, any other colour paints as given, and a colourless card falls back to the red.
+// A card's own color as its mark's color: a stickies palette color paints in its stronger
+// indicator tone, any other color paints as given, and a colorless card falls back to the red.
 export function commentIndicatorColor(color?: string | null): string {
     if (!color) return INDICATOR_RED;
     return EIGEN_STICKIES_INDICATOR_MAP.get(color) ?? color;

@@ -85,7 +85,7 @@ export class ManagedDatabase<S extends SchemaType> {
 
         if (this.mustExist) {
             // "Open existing" must find a populated db. A missing OR 0-byte working copy would
-            // otherwise be initialised as a fresh EMPTY db — the 2026-06-08 data-loss shape (a
+            // otherwise be initialized as a fresh EMPTY db — the 2026-06-08 data-loss shape (a
             // failed/empty S3 GET leaves a 0-byte temp, itself a valid empty SQLite). Refuse it so
             // the caller re-fetches the authoritative object or fails loud, never silently wipes.
             const size = fs.existsSync(this.localPath) ? fs.statSync(this.localPath).size : -1;

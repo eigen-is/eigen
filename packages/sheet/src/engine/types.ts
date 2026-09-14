@@ -151,7 +151,7 @@ export type FormulaOutput = FormulaValue | FormulaValue[] | FormulaValue[][] | E
 // as a single `params` array (not spread), matching the parser convention.
 export type FormulaFunction = (params: FormulaArg[]) => FormulaOutput;
 
-// Acknowledgement callback the parser passes to `callCellValue` / `callRangeValue` /
+// Acknowledgment callback the parser passes to `callCellValue` / `callRangeValue` /
 // `callFunction` / `callVariable` listeners so they can supply the resolved value.
 export type ParserDoneCallback = (value: unknown) => void;
 

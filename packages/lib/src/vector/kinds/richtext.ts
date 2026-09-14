@@ -51,7 +51,7 @@ export const richTextKind = defineKind<VectorRichTextElement>({
         fontSize: style.fontSize,
         color: style.color,
     }),
-    // The stroke is this kind's border, so a fresh box paints none until the user picks a colour.
+    // The stroke is this kind's border, so a fresh box paints none until the user picks a color.
     baseDefaults: { strokeColor: 'transparent' },
     read: (src, base) => ({
         ...base,
@@ -84,7 +84,7 @@ export const richTextKind = defineKind<VectorRichTextElement>({
 });
 
 // The box's TYPOGRAPHY as CSS, the one body the foreignObject wrapper, the live layer renderer and the
-// in-place editor share; its paint is the roughjs backdrop drawn behind it. No highlight colour on the
+// in-place editor share; its paint is the roughjs backdrop drawn behind it. No highlight color on the
 // box: a highlight is a text mark inside `html`.
 export function richTextCssText(el: VectorRichTextElement): string {
     const justify =

@@ -125,7 +125,7 @@ export function fillDefs(el: FillSource): string {
 
 // The stored Fill as roughjs options: what to paint with, and the hatch style it carries. drawableToSvg
 // copies the paint into `fill=` on fillPath sets and `stroke=` on the fillSketch sets hachure/cross-hatch/
-// zigzag emit, which is what a gradient needs on both. The stroke proper stays a solid colour.
+// zigzag emit, which is what a gradient needs on both. The stroke proper stays a solid color.
 // `fill: undefined` (a transparent paint) leaves roughjs drawing the outline alone.
 function fillOptions(el: FillSource): { fill: string | undefined; fillStyle: FillStyle } {
     const fill = parseFill(el.fill);

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef } from 'react';
 
 // Long-press opens the singleton context menus on touch surfaces where the browser
 // never synthesises a `contextmenu` (WebKit/iOS, or anywhere `touch-none` suppresses
-// native synthesis). Touch only: mouse and pen keep their native right-click behaviour.
+// native synthesis). Touch only: mouse and pen keep their native right-click behavior.
 // A stationary press for LONG_PRESS_MS fires; any move past MOVE_CANCEL_PX (scroll/drag)
 // cancels it. On Chromium a stationary press may ALSO synthesise a native contextmenu that
 // the surface routes to the same menu at (near-)identical coords — a harmless double-fire,
@@ -64,7 +64,7 @@ export function useLongPress<T>(
                 pressed.current = { item };
                 timer.current = setTimeout(() => {
                     timer.current = null;
-                    // Fire at the press-start coords: a move past MOVE_CANCEL_PX has already cancelled,
+                    // Fire at the press-start coords: a move past MOVE_CANCEL_PX has already canceled,
                     // so the drift from finger jitter is sub-threshold and imperceptible.
                     fired.current = onLongPress(pressed.current!.item, x, y) !== false;
                 }, LONG_PRESS_MS);

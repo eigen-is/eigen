@@ -19,7 +19,7 @@
 // item that doesn't match its own variant is dropped there, because a consumer that trusted it would
 // throw inside a paste handler that has already called preventDefault, and silently eat the paste.
 //
-// No `x`/`y` on the image and text items: paste anchors at each app's own default/cursor/viewport-centre.
+// No `x`/`y` on the image and text items: paste anchors at each app's own default/cursor/viewport-center.
 // The `elements` item is the exception, and says why on itself — a canvas selection carries the stored
 // coordinates so a canvas→canvas paste can place it relative to where it was copied from.
 
@@ -29,7 +29,7 @@
 //
 // The set is exactly what `VectorRichTextElement` models, which is also the widest thing any consumer
 // can place: vector's foreign-paste writes all ten onto the rich-text box it creates, and docs maps
-// the six it has nodes/marks for (family, colour, alignment, bold, italic, underline/strike). Nothing
+// the six it has nodes/marks for (family, color, alignment, bold, italic, underline/strike). Nothing
 // goes on this wire that no consumer reads.
 export type EigenClipboardTypography = {
     fontFamily?: string;
@@ -76,9 +76,9 @@ export type EigenClipboardImageItem = {
 
 // A canvas selection as NATIVE elements: whole stored records (the ELEMENT_FIELDS scalars), so a
 // canvas→canvas paste restores exactly what was copied — including every field a future kind adds, which
-// the old per-kind `meta.vector` carrier had to re-list by hand and kept losing (rich text's colour, most
+// the old per-kind `meta.vector` carrier had to re-list by hand and kept losing (rich text's color, most
 // recently). Consumers that cannot place elements ignore this item and read the image / text items beside
-// it, or the `svg` flavour. Coordinates are the STORED ones (scene coordinates on an infinite canvas,
+// it, or the `svg` flavor. Coordinates are the STORED ones (scene coordinates on an infinite canvas,
 // frame-relative inside a frame) — the one item type that carries position, because a canvas paste is
 // placed RELATIVE to where the set was copied from, not "at the app's default spot".
 export type EigenClipboardElementsItem = {
@@ -86,7 +86,7 @@ export type EigenClipboardElementsItem = {
     elements: Record<string, string | number | boolean>[];
     // '' when the source was an infinite canvas. A paste into the SAME frame offsets the copy by the
     // duplicate step; one into a DIFFERENT frame lands in place; anything crossing to or from an infinite
-    // canvas re-anchors on the viewport centre — unless that would land the copy on top of the original,
+    // canvas re-anchors on the viewport center — unless that would land the copy on top of the original,
     // which falls back to the duplicate step too (the placement table lives in use-canvas-clipboard).
     sourceFrameId: string;
     // The selection's bounding box, so every item on the wire carries both dimensions and
@@ -100,11 +100,11 @@ export type EigenClipboardItem = EigenClipboardTextItem | EigenClipboardImageIte
 export type EigenClipboardData = {
     version: 1;
     items: EigenClipboardItem[];
-    // Optional self-contained SVG of the copied selection (the canvas' copy flavour), the element JSON
+    // Optional self-contained SVG of the copied selection (the canvas' copy flavor), the element JSON
     // embedded in a `<metadata>` block. eigen-aware hosts that can't place the typed items (docs, sheets)
     // render it as an image; a canvas reads the typed `items` and ignores it. A TEXT-ONLY selection omits
     // it, so a copied text box lands in docs as styled editable text rather than a picture of itself, and
     // so does a selection too big to put a multi-MB string on the clipboard. The producer policy and the
-    // Chromium-flavour reason live in CLIPBOARD.md.
+    // Chromium-flavor reason live in CLIPBOARD.md.
     svg?: string;
 };

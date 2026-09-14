@@ -45,7 +45,7 @@ function removeSide(map: Record<string, CellBorderSides>, r: number, c: number, 
     if (Object.keys(entry).length === 0) delete map[`${r}_${c}`];
 }
 
-// Mirror of removeSide: overrides one side of an EXISTING neighbour entry, never creating one.
+// Mirror of removeSide: overrides one side of an EXISTING neighbor entry, never creating one.
 function overrideSide(
     map: Record<string, CellBorderSides>,
     r: number,
@@ -76,8 +76,8 @@ export function clearSides(
 }
 
 // Expands a toolbar layout into the cells' own sides. A border belongs to the cell it was
-// drawn on — no neighbour key is ever created (that would clobber a peer's write to it), but
-// an EXISTING outside neighbour's facing side is overridden so a stale mirror can't repaint
+// drawn on — no neighbor key is ever created (that would clobber a peer's write to it), but
+// an EXISTING outside neighbor's facing side is overridden so a stale mirror can't repaint
 // the shared edge (border-none clears the same facing sides symmetrically).
 export function applyBorder(cfg: SheetConfig, type: BorderType, side: BorderSide, ranges: Selection[]) {
     const map = (cfg.borderInfo ??= {});
@@ -85,7 +85,7 @@ export function applyBorder(cfg: SheetConfig, type: BorderType, side: BorderSide
         const [r1, r2] = row;
         const [c1, c2] = column;
         if (type === 'border-none') {
-            // The outside neighbours lose their facing side too, so the shared edges go fully blank.
+            // The outside neighbors lose their facing side too, so the shared edges go fully blank.
             clearSides(map, r1, r2, c1, c2);
             for (let c = c1; c <= c2; c += 1) {
                 removeSide(map, r1 - 1, c, 'b');
@@ -104,7 +104,7 @@ export function applyBorder(cfg: SheetConfig, type: BorderType, side: BorderSide
                 let entry: CellBorderSides | undefined;
                 const set = (key: BorderSideKey) => {
                     (entry ??= map[`${r}_${c}`] ??= {})[key] = { style: side.style, color: side.color };
-                    // On the range's outer edge, override the facing side of an existing outside neighbour.
+                    // On the range's outer edge, override the facing side of an existing outside neighbor.
                     if (key === 'l' && c === c1) overrideSide(map, r, c - 1, 'r', side);
                     else if (key === 'r' && c === c2) overrideSide(map, r, c + 1, 'l', side);
                     else if (key === 't' && r === r1) overrideSide(map, r - 1, c, 'b', side);

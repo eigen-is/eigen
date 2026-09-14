@@ -9,7 +9,7 @@ export type SectionConfig = {
     color: string;
 };
 
-// App-backed sections take their icon and brand colour from the shared app
+// App-backed sections take their icon and brand color from the shared app
 // registry, so the help center stays in sync with the rest of Eigen.
 const appsByName = new Map(apps.map((a) => [a.name, a]));
 function app(name: string): Pick<SectionConfig, 'icon' | 'color'> {
@@ -18,11 +18,11 @@ function app(name: string): Pick<SectionConfig, 'icon' | 'color'> {
     return { icon: entry.icon, color: entry.color };
 }
 
-// Sections without their own app take the index app's own colour — the greenish
+// Sections without their own app take the index app's own color — the greenish
 // brand used by the help center header and callouts (var(--app-current-color)).
 const INDEX = 'var(--app-current-color)';
 
-// Display order, titles, icons, and colours for help center sections. The `id`
+// Display order, titles, icons, and colors for help center sections. The `id`
 // matches the folder name under src/data/support/.
 export const SECTIONS: SectionConfig[] = [
     {
@@ -59,7 +59,7 @@ export const SECTIONS: SectionConfig[] = [
     {
         id: 'admin',
         title: 'Admin',
-        description: 'Organisations, teams, the server.',
+        description: 'Organizations, teams, the server.',
         icon: Shield,
         color: INDEX,
     },

@@ -175,16 +175,16 @@ async function blobToDataUri(blob: Blob): Promise<string> {
 }
 
 // A whole SVG string as a base64 `data:image/svg+xml` URI — the `src` for the foreign-visible `<img>`
-// flavour the async menu-copy path writes. Goes through blobToDataUri so UTF-8 text in the drawing is
+// flavor the async menu-copy path writes. Goes through blobToDataUri so UTF-8 text in the drawing is
 // encoded correctly (a naive btoa over the raw string throws on non-Latin1 characters).
 export async function svgToImageDataUri(svg: string): Promise<string> {
     return blobToDataUri(new Blob([svg], { type: 'image/svg+xml' }));
 }
 
-// Caps on the `svg` copy flavour, the expensive half of a canvas copy: the same records are serialized
+// Caps on the `svg` copy flavor, the expensive half of a canvas copy: the same records are serialized
 // once as typed items, again into the SVG's `<metadata>`, and the whole SVG is then URI-encoded into an
 // HTML attribute, so a 500-shape select-all put ~1.1MB on `text/html`. Over either cap the producer
-// SKIPS the flavour — the count is checked before the render so a huge selection never pays for it, the
+// SKIPS the flavor — the count is checked before the render so a huge selection never pays for it, the
 // byte budget catches the few-but-enormous case (long freedraw point lists). The failure mode is
 // deliberate and total: every eigen host still pastes losslessly from the typed items, and a foreign
 // host gets the text/plain fallback instead of an image (the same thing it gets for a shape-only copy).
@@ -192,18 +192,18 @@ export const CLIPBOARD_SVG_MAX_ELEMENTS = 300;
 export const CLIPBOARD_SVG_MAX_BYTES = 512 * 1024;
 
 // Soft cap on the total inlined payload (the sum of the image data-URIs). Beyond it the async copy
-// path skips the foreign `<img>` flavour entirely rather than put a multi-MB, clipboard-rejectable
+// path skips the foreign `<img>` flavor entirely rather than put a multi-MB, clipboard-rejectable
 // blob on the clipboard — the eigen name-ref svg still travels for every eigen host. base64 inflates
 // the raw bytes ~1.37×, so a ~3MB image already lands here.
 const INLINE_SVG_SOFT_CAP_BYTES = 4 * 1024 * 1024;
 
 // Inline an image-bearing vector SVG's `eigen-media:` name refs into self-contained base64 data URIs,
-// for the foreign-visible copy flavour (an `<img src="data:image/svg+xml…">` that no eigen server-side
+// for the foreign-visible copy flavor (an `<img src="data:image/svg+xml…">` that no eigen server-side
 // inliner will serve). `resolve` fetches a ref's bytes — the caller wires it to the credentialed media
 // resolver; a null/failed fetch STRIPS that image's ref exactly as materializeClipboardSvg strips a
 // failed re-upload, so the svg never references bytes it can't show. Returns the svg unchanged when it
 // has no refs, or null when the total inlined payload would exceed the soft cap (the caller then skips
-// the foreign flavour). React-free: the browser fetch belongs to the caller, passed in as `resolve`.
+// the foreign flavor). React-free: the browser fetch belongs to the caller, passed in as `resolve`.
 export async function inlineClipboardSvgMedia(
     svg: string,
     resolve: (name: string) => Promise<Blob | null>,

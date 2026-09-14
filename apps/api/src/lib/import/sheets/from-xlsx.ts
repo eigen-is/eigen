@@ -1094,7 +1094,7 @@ function normalizeSectionMonthMinute(section: string): string {
                     out.push(section.slice(i, end + 1));
                     chunks.push({ size: DATE_SEC });
                 } else {
-                    // Colour / condition / currency locale — not a date token.
+                    // Color / condition / currency locale — not a date token.
                     out.push(section.slice(i, end + 1));
                 }
                 i = end + 1;

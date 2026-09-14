@@ -5,7 +5,7 @@ import { domainToASCII } from 'node:url';
 // domain? Inbound iMIP acts automatically only on a verified sender; every other input is unverified.
 
 // Fold a domain to lowercase punycode. The mail parser decodes From domains to unicode
-// (`domainToUnicode`) while OpenDKIM writes `header.d` in ASCII, so both sides normalise here first.
+// (`domainToUnicode`) while OpenDKIM writes `header.d` in ASCII, so both sides normalize here first.
 function normalizeDomain(domain: string): string {
     const trimmed = domain.toLowerCase().replace(/\.$/, '');
     return domainToASCII(trimmed) || trimmed;
@@ -16,7 +16,7 @@ function authservIdOf(value: string): string {
     return value.split(';', 1)[0].trim().split(/\s+/)[0].toLowerCase();
 }
 
-// DMARC-style relaxed alignment: equal, or one is a subdomain of the other. A full organisational-domain
+// DMARC-style relaxed alignment: equal, or one is a subdomain of the other. A full organizational-domain
 // (public-suffix) comparison would need the PSL; subdomain-suffix matching covers the real cases without it.
 export function domainsAligned(a: string, b: string): boolean {
     const x = normalizeDomain(a);

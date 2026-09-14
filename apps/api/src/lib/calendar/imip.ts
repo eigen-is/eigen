@@ -88,9 +88,9 @@ export function composeCancelEmail(event: CalendarEvent, organizer: Organizer, a
     return {
         from: { name: organizer.name ?? '', address: organizer.email },
         to: attendees.map((a) => ({ name: a.name ?? '', address: a.email })),
-        subject: `Cancelled: ${event.title}`,
-        text: `This event has been cancelled:\n\n${buildEventSummary(event)}`,
-        html: buildEventHtml(event, footer, 'This event has been cancelled'),
+        subject: `Canceled: ${event.title}`,
+        text: `This event has been canceled:\n\n${buildEventSummary(event)}`,
+        html: buildEventHtml(event, footer, 'This event has been canceled'),
         icalEvent: icalEvent(withOrganizer(event, organizer), 'CANCEL'),
     };
 }
@@ -295,7 +295,7 @@ export function processInboundImip(
             const organizerEmail = parsed.data?.organizer?.email;
             if (!sentBy(organizerEmail)) continue;
             if (parsed.recurrenceDate) {
-                // Cancelling one occurrence must cancel that instance only — removeInvitation would
+                // Canceling one occurrence must cancel that instance only — removeInvitation would
                 // delete the attendee's entire linked series (audit #B).
                 calendar.cancelInvitationOccurrence(
                     parsed.uid,

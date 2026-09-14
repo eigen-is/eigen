@@ -1,5 +1,5 @@
 // The engine's tool list as toolbar surfaces: dropdown rows for a host's Edit/Insert menus, and the
-// centred button cluster. The list, its order and its icons come from VECTOR_TOOLS (which derives
+// centered button cluster. The list, its order and its icons come from VECTOR_TOOLS (which derives
 // from the registry), so a new kind appears in both apps' toolbars without either app being edited.
 
 import { DropdownMenuItem, DropdownMenuShortcut } from '../dropdown-menu';

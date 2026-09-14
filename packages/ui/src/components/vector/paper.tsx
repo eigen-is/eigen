@@ -10,7 +10,7 @@ import type { ReactNode } from 'react';
 // the drawing, so the container carries the pin. A framed canvas letterboxes one page instead: the
 // surface around the page is the app's own furniture and follows the theme (bg-muted — dark in dark
 // mode), and the pin moves onto the page card plus the chrome layers that dress it. Keeping the chrome
-// on the paper's palette is what stops a resize grip (bg-background) from going dark grey on a white
+// on the paper's palette is what stops a resize grip (bg-background) from going dark gray on a white
 // slide, and an empty-element outline (--border) from fading out on it.
 export const CANVAS_PAPER_CLASS = 'eigen-paper';
 

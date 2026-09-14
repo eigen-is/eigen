@@ -17,7 +17,7 @@ const MAX_FONT_SIZE = 400;
 
 // Rich text is the first byte-capped string field: one pasted document must not make every peer's read,
 // render and export unbounded. 64 KiB per element, truncated on a UTF-8 boundary. This reader does NOT
-// sanitise the markup — the DOM allowlist needs a DOM, and this module runs in the API Worker too. The
+// sanitize the markup — the DOM allowlist needs a DOM, and this module runs in the API Worker too. The
 // mount seam does it instead: ElementLayer (every live/preview/present surface) and the paste planner
 // both run sanitizeToLightEditorHtml, so a torn tag here is a cosmetic loss, never an injection.
 const MAX_HTML_BYTES = 64 * 1024;
@@ -105,7 +105,7 @@ export function cleanStr(v: unknown, fallback: string): string {
     return typeof v === 'string' ? v.replace(XML_INVALID, '') : fallback;
 }
 
-// Colours come from the ColorPicker: hex or the 'transparent' sentinel (fill.ts owns the vocabulary).
+// Colors come from the ColorPicker: hex or the 'transparent' sentinel (fill.ts owns the vocabulary).
 // Anything else → the field default; this closes `url(...)` paint-server smuggling into export.
 export function color(v: unknown, fallback: string): string {
     return isColorToken(v) ? v : fallback;

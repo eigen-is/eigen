@@ -90,7 +90,7 @@ export function ArrowPanelSection({ elements, scene, onChange, onChangeEach }: K
     return (
         <>
             {allLabeled && (
-                /* Font + size only — the label is always centered and its colour comes from Stroke. */
+                /* Font + size only — the label is always centered and its color comes from Stroke. */
                 <PropertySection title="Text">
                     <FontRow
                         value={fontFamily}

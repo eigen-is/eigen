@@ -88,7 +88,7 @@ export function getTextPreviewMode(mimeType: string, fileName: string): TextPrev
 }
 
 // Which files drive-wide content search indexes from their own bytes: the text preview modes whose RAW
-// BODY is the content, plus a .vcf, whose names and organisations the extractor pulls out of the cards
+// BODY is the content, plus a .vcf, whose names and organizations the extractor pulls out of the cards
 // rather than the raw body (docs/SEARCH.md). Eigen container modes (eigendoc/eigenslides/eigensheets/
 // eigenvector) are excluded — their bodies come from the Yjs loaders via the content-reindex sweep.
 export function isSearchableTextFile(mimeType: string, fileName: string): boolean {

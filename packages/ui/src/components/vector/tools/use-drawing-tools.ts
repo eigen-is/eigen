@@ -903,7 +903,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
 
     // The shape-following outline over the shape a dragged/hovered arrow endpoint reaches (creation, a
     // point-handle drag, or the pre-click hover). An SVG `<g>` for the scene group: the kind's own outline
-    // stroked in the selection colour (`currentColor`, tinted by the `text-selection-handle` group), so no
+    // stroked in the selection color (`currentColor`, tinted by the `text-selection-handle` group), so no
     // shape math is duplicated here.
     const candidate = bindHint ? ordered.find((el) => el.id === bindHint.shapeId) : undefined;
     const bindingOutline =
@@ -943,7 +943,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             if (lineRef.current) {
                 // Escape CANCELS a mid-gesture create, here as everywhere else on the canvas (and as the
                 // draft's own hint says); Enter and a double-click are the finish triggers. The tool stays
-                // active, like a cancelled freehand stroke.
+                // active, like a canceled freehand stroke.
                 clearLine();
                 return true;
             }

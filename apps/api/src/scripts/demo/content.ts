@@ -222,7 +222,7 @@ export type DeckSlide = {
     images?: DeckImage[];
 };
 
-// The deck's ink: every text box that does not name its own colour is built in this.
+// The deck's ink: every text box that does not name its own color is built in this.
 export const DECK_INK = '#111111';
 // Body copy sits one shade back from the heading above it.
 const DECK_MUTED = '#444444';
@@ -230,7 +230,7 @@ const DECK_MUTED = '#444444';
 const DECK_HAND = 'Excalifont';
 // The same sunrise behind every slide.
 const DECK_BACKGROUND: FillPaint = { type: 'gradient', from: '#fff085', to: '#e17100', angle: 180 };
-// After the title, every slide is one layout: a heading over a single line of body copy, both centred
+// After the title, every slide is one layout: a heading over a single line of body copy, both centered
 // in a 1536px column. Only the words change.
 const DECK_HEADING = {
     x: 192,
@@ -495,10 +495,10 @@ export const BRANDING: BrandingAsset[] = [{ file: 'logo.svg', mimeType: 'image/s
 
 // --- Site plan (a vector drawing the seeder builds straight into the container's Y.Doc from this
 // spec — no fixture bytes; see vector-build.ts). Scene units are pixels, y down; every shape's
-// label is centred inside it. Shape keys are stable so arrows can bind to them by name. ---
+// label is centered inside it. Shape keys are stable so arrows can bind to them by name. ---
 
 // An arrow end: docked on a named shape's side (a real binding) or a free scene point.
-// `along` (0..1) docks off-centre on a rectangle side; default is the side midpoint.
+// `along` (0..1) docks off-center on a rectangle side; default is the side midpoint.
 export type SitePlanEnd = { shape: string; side: CanvasSide; along?: number } | { at: [number, number] };
 
 export type SitePlanShape = {
@@ -571,7 +571,7 @@ export const SITE_PLAN = {
     lines: [
         // The dune ridge west of the field, the sea just behind it. It sits a walk away from the fence:
         // that western margin balances the photo-and-legend column hanging off the east side, which is
-        // what puts the scene's centre on the crowd-flow arrow.
+        // what puts the scene's center on the crowd-flow arrow.
         {
             points: [
                 [-118, 150],

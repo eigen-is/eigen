@@ -26,7 +26,7 @@ describe('snapBoxToTargets', () => {
     const targets = { vSnaps: [100], hSnaps: [200] };
 
     test('move: left edge snaps to a vertical target within threshold, emits a guide line', () => {
-        // left edge 103 is 3 from target 100 (closest edge — centre 108 and right 113 are out).
+        // left edge 103 is 3 from target 100 (closest edge — center 108 and right 113 are out).
         const { box: snapped, lines } = snapBoxToTargets(box(103, 0, 10, 10), targets, 'move', 8);
         expect(snapped.x).toBe(100);
         expect(lines).toContainEqual({ orientation: 'vertical', position: 100 });
@@ -40,14 +40,14 @@ describe('snapBoxToTargets', () => {
     });
 
     test('move centerOnly: only the centre snaps (rotated mover)', () => {
-        // centre at x=95 is 5 from target 100 (< 8); left edge at 90 is 10 away and must NOT snap.
+        // center at x=95 is 5 from target 100 (< 8); left edge at 90 is 10 away and must NOT snap.
         const { box: snapped, lines } = snapBoxToTargets(box(90, 0, 10, 10, 30), targets, 'move', 8, true);
         expect(snapped.x).toBe(95); // centre pulled to 100 → x = 95
         expect(lines).toContainEqual({ orientation: 'vertical', position: 100 });
     });
 
     test('threshold scales: a wider threshold catches a farther edge', () => {
-        // left edge 110 is 10 from target 100 (centre 115 / right 120 are farther).
+        // left edge 110 is 10 from target 100 (center 115 / right 120 are farther).
         expect(snapBoxToTargets(box(110, 0, 10, 10), targets, 'move', 8).box.x).toBe(110); // 10 > 8, no snap
         expect(snapBoxToTargets(box(110, 0, 10, 10), targets, 'move', 15).box.x).toBe(100); // 10 < 15
     });

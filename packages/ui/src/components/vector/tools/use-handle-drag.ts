@@ -12,7 +12,7 @@ type HandleDragOptions = {
     threshold?: number;
     move: (e: PointerEvent) => void;
     // Pointer released. The caller decides commit-or-nothing from its own draft state, because a
-    // gesture that never travelled must not write.
+    // gesture that never traveled must not write.
     end: () => void;
     cancel: () => void;
 };

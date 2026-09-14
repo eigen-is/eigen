@@ -31,7 +31,7 @@ function carryColor(value: BackgroundFill | null): string {
     return DEFAULT_FILL_COLOR;
 }
 
-// 3x3 grid (centre cell is empty). CSS `linear-gradient` angle convention.
+// 3x3 grid (center cell is empty). CSS `linear-gradient` angle convention.
 const DIRECTIONS = [
     { angle: 315, Icon: ArrowUpLeft, label: 'Top-left' },
     { angle: 0, Icon: ArrowUp, label: 'Top' },

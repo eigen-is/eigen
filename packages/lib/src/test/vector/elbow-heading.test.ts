@@ -84,7 +84,7 @@ describe('elbowBindPoint — far-side dock', () => {
 
     test('a cursor past the left edge docks on the left outline+gap, storing a far-side fixedPoint', () => {
         const { dock, fixedPoint } = elbowBindPoint(rect, { x: -10, y: 50 });
-        // Left outline + gap(6): dock at x = -6, snapped toward the left side-midpoint (y ≈ centre).
+        // Left outline + gap(6): dock at x = -6, snapped toward the left side-midpoint (y ≈ center).
         expect(dock.x).toBeCloseTo(-6);
         expect(dock.y).toBeCloseTo(49.9); // centre carries Excalidraw's -0.1 tie-break nudge
         // fixedPoint is the dock's ratio — a little OUTSIDE [0,1] on x, which is exactly what elbows must store.
@@ -119,7 +119,7 @@ describe('elbowBindPoint — far-side dock', () => {
 describe('elbowBindPoint — snapToMid band = clamp(5%·size, 5, 80)', () => {
     test('the 5px FLOOR: on a short 200×100 rect the vertical band is 5px', () => {
         const rect = shapeEl({ id: 'R', type: 'rectangle', x: 0, y: 0, width: 200, height: 100, strokeWidth: 2 });
-        // centre.y = 49.9; a cursor 3.1px off it (< 5) snaps to the mid...
+        // center.y = 49.9; a cursor 3.1px off it (< 5) snaps to the mid...
         expect(elbowBindPoint(rect, { x: -10, y: 53 }).dock.y).toBeCloseTo(49.9);
         // ...one 7.1px off it (> 5) docks at its own height on the left edge.
         expect(elbowBindPoint(rect, { x: -10, y: 57 }).dock.y).toBeCloseTo(57);
@@ -127,7 +127,7 @@ describe('elbowBindPoint — snapToMid band = clamp(5%·size, 5, 80)', () => {
 
     test('the 80px CAP: on a tall 200×2000 rect the band tops out at 80px, not 5%·2000 = 100px', () => {
         const rect = shapeEl({ id: 'R', type: 'rectangle', x: 0, y: 0, width: 200, height: 2000, strokeWidth: 2 });
-        // centre.y = 999.9; 70px off it (< 80) snaps to the mid...
+        // center.y = 999.9; 70px off it (< 80) snaps to the mid...
         expect(elbowBindPoint(rect, { x: -10, y: 929.9 }).dock.y).toBeCloseTo(999.9);
         // ...90px off it (> 80) docks at its own height (the cap held, so it did NOT snap).
         expect(elbowBindPoint(rect, { x: -10, y: 1089.9 }).dock.y).toBeCloseTo(1089.9);
@@ -156,7 +156,7 @@ describe('elbowBindPoint — rectangular corner avoidance', () => {
 describe('elbowRoute — pre-dock origPoint seam', () => {
     test('a far origPoint flips the heading gate off the cone, changing the route', () => {
         // A WIDE rect: its heading cone widens UP/DOWN, so a point just above the top edge but off to the left
-        // resolves to UP by the cone, yet to LEFT by the raw centre→point vector the far-distance branch uses —
+        // resolves to UP by the cone, yet to LEFT by the raw center→point vector the far-distance branch uses —
         // the two branches disagree, so which one the gate picks is observable in the route.
         const rect = shapeEl({ id: 'R', type: 'rectangle', x: 0, y: 0, width: 200, height: 40, strokeWidth: 2 });
         const start = { x: 10, y: -6 };
@@ -183,11 +183,11 @@ describe('elbowRoute — pre-dock origPoint seam', () => {
 // The commit→resolve round-trip pinned end-to-end: the elbow bind path
 // (bindingFor → elbowBindPoint) must store the DOCKED fixedPoint (the outline+gap ratio), and boundEndpoint's
 // elbow branch must resolve that stored ratio back to the very same outline point. The two halves are a pair —
-// if a commit stored the raw cursor ratio instead of the dock, or the read stopped honouring the fixedPoint,
+// if a commit stored the raw cursor ratio instead of the dock, or the read stopped honoring the fixedPoint,
 // the endpoint would float at the cursor instead of sitting on the outline. Nothing pinned that pairing before.
 describe('elbow bind → resolve round-trip (commit pin)', () => {
     const rect = shapeEl({ id: 'R', type: 'rectangle', x: 0, y: 0, width: 100, height: 100, strokeWidth: 2 });
-    // A cursor well OUTSIDE the left edge, off the vertical centre so no 0.5 dodge blurs the round-trip.
+    // A cursor well OUTSIDE the left edge, off the vertical center so no 0.5 dodge blurs the round-trip.
     const cursor = { x: -50, y: 70 };
 
     test('the stored fixedPoint is the dock, and boundEndpoint resolves it back to that same outline point', () => {
@@ -268,7 +268,7 @@ describe('distanceToElement', () => {
         expect(distanceToElement(square('straight'), { x: 140, y: 140 })).toBeCloseTo(Math.hypot(40, 40), 6);
     });
 
-    // The centre sits INSIDE a curved rect's inset core, where the outline distance is the core distance
+    // The center sits INSIDE a curved rect's inset core, where the outline distance is the core distance
     // PLUS the radius — a core distance clamped at 0 would answer the radius (25) instead.
     test('a point inside the shape measures out to the edge', () => {
         expect(distanceToElement(square('straight'), { x: 50, y: 50 })).toBeCloseTo(50, 6);

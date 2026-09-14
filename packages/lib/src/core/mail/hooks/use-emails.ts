@@ -267,7 +267,7 @@ export async function beginOptimisticMailMutation(
     await queryClient.cancelQueries({ queryKey: emailKeys.lists(ownerId) });
     const snapshot = queryClient.getQueriesData<InfiniteData<EmailSummary[]>>({ queryKey: emailKeys.lists(ownerId) });
     // cancelQueries on a list whose very first fetch was still in flight (no prior data) leaves it
-    // stuck pending forever — TanStack doesn't auto-restart a cancelled query with no fallback data.
+    // stuck pending forever — TanStack doesn't auto-restart a canceled query with no fallback data.
     // Kick those back off so a cold-open deep-link (e.g. auto-mark-as-read racing the initial inbox
     // load) can't strand the list on "No emails found" with no self-heal.
     for (const [key, data] of snapshot) {

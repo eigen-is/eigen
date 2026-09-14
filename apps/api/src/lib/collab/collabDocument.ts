@@ -26,7 +26,7 @@ export const MESSAGE_AWARENESS = 1;
 // 8 tolerates a client that churns a few ids on one socket while stopping a flood that bloats the
 // shared map (fanned out to every peer, replayed to every joiner).
 const MAX_AWARENESS_CLIENT_IDS = 8;
-// A legitimate awareness state is name + colour + userId + a cursor/selection — ~100-300 bytes, a
+// A legitimate awareness state is name + color + userId + a cursor/selection — ~100-300 bytes, a
 // few KiB for a large multi-element canvas selection. 16 KiB leaves generous headroom while capping
 // the per-state bytes fanned out to every peer and replayed to every joiner.
 const MAX_AWARENESS_STATE_BYTES = 16 * 1024;
@@ -156,7 +156,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 // A client may publish presence for itself only: an awareness `user` field must carry the session
-// user's id, so a reader can't paint another person's name/colour. A state with no `user` field (the
+// user's id, so a reader can't paint another person's name/color. A state with no `user` field (the
 // initial empty handshake state) carries no identity to spoof.
 function awarenessIdentityMatches(state: unknown, userId: string): boolean {
     if (!isRecord(state)) return true;

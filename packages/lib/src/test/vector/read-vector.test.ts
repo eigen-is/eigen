@@ -712,7 +712,7 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
 });
 
 describe('readVectorFromDoc — rich text', () => {
-    // There is no per-box marker colour: it is redundant with the box `fill`, and a real highlight is a
+    // There is no per-box marker color: it is redundant with the box `fill`, and a real highlight is a
     // TipTap mark inside `html`. A value left in a document written by an older build is dropped.
     test('a stored highlightColor is not read back onto the element', () => {
         const doc = docWith((elements) =>

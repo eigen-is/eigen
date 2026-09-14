@@ -19,7 +19,7 @@ describe('fitFrameViewport', () => {
     test('letterboxes a wide container: the height is the binding constraint', () => {
         const v = fitFrameViewport({ width: 4000, height: 1000 }, FRAME);
         expect(v.zoom).toBeCloseTo((1000 - FRAME_FIT_PADDING * 2) / 1080, 10);
-        // Centred: equal slack on both sides in SCENE units.
+        // Centered: equal slack on both sides in SCENE units.
         expect(v.scrollX).toBeCloseTo((4000 / v.zoom - FRAME.width) / 2, 6);
         expect(v.scrollY).toBeCloseTo((1000 / v.zoom - FRAME.height) / 2, 6);
     });
@@ -40,7 +40,7 @@ describe('fitFrameViewport', () => {
 
 describe('re-fitting on a container resize', () => {
     // The deck canvas holds no zoom of its own: every resize re-fits, so the page is always the
-    // largest one the new container can show with padding, and always centred in it.
+    // largest one the new container can show with padding, and always centered in it.
     const fitsExactly = (container: { width: number; height: number }) => {
         const v = fitFrameViewport(container, FRAME);
         const shown = { width: FRAME.width * v.zoom, height: FRAME.height * v.zoom };
@@ -50,7 +50,7 @@ describe('re-fitting on a container resize', () => {
         const slackX = container.width - FRAME_FIT_PADDING * 2 - shown.width;
         const slackY = container.height - FRAME_FIT_PADDING * 2 - shown.height;
         expect(Math.min(slackX, slackY)).toBeCloseTo(0, 9);
-        // Centred on both axes.
+        // Centered on both axes.
         expect((v.scrollX + FRAME.width / 2) * v.zoom).toBeCloseTo(container.width / 2, 6);
         expect((v.scrollY + FRAME.height / 2) * v.zoom).toBeCloseTo(container.height / 2, 6);
         return v;

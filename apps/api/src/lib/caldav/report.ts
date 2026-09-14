@@ -20,7 +20,7 @@ import { parseReport, type ReportRequest } from './xml-parser';
 // ceiling every route shares is DAV_BODY_MAX_BYTES, enforced in the router before the body reaches the parser.
 const MULTIGET_HREF_LIMIT = 500;
 
-// RFC 6578 recovery: a token the calendar can't honour (future ctag or malformed) forces the client to redo
+// RFC 6578 recovery: a token the calendar can't honor (future ctag or malformed) forces the client to redo
 // the full comparison. sabre answers 403 (InvalidSyncToken extends Forbidden) with D:valid-sync-token; RFC 3253
 // § 1.6 marshals precondition failures as 403, and clients key their full-resync recovery on it.
 const invalidSyncToken = () => davError(403, '<D:valid-sync-token/>');
@@ -161,7 +161,7 @@ function handleSyncCollection(
         // Incremental sync — read the since-ctag from the token.
         const token = parseSyncToken(report.syncToken);
         if (!token) return invalidSyncToken();
-        // A token ahead of the calendar (post-restore/rebuild) can't be honoured either: an empty delta plus
+        // A token ahead of the calendar (post-restore/rebuild) can't be honored either: an empty delta plus
         // a LOWER token would stall the client forever, blind to every change until the ctag catches back up.
         if (token.since > currentCtag) return invalidSyncToken();
 

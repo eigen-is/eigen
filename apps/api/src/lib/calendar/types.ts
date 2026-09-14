@@ -35,7 +35,7 @@ export type InvitationUpdatePayload = {
     attendees?: Attendee[];
 };
 
-// A single moved/cancelled occurrence of an externally-organized recurring invite (inbound iMIP
+// A single moved/canceled occurrence of an externally-organized recurring invite (inbound iMIP
 // REQUEST/CANCEL carrying a RECURRENCE-ID). Attaches as an exception on the linked series.
 export type InvitationExceptionPayload = {
     recurrenceDate: string;

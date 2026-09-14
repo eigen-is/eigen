@@ -4,7 +4,7 @@ import { type RefObject, useEffect, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 
-// All five hosts want the same provider behaviour, so the options live here rather than per app.
+// All five hosts want the same provider behavior, so the options live here rather than per app.
 const WS_PROVIDER_OPTIONS = { resyncInterval: 5000, connect: true } as const;
 
 // How long to stay disconnected after a storage-unavailable close before trying again.

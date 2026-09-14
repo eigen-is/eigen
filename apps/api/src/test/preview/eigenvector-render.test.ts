@@ -70,7 +70,7 @@ describe('renderEigenvectorPreviewBody', () => {
         // Scaled on width alone this 70x5020 page (content + padding) would be 96,000px tall.
         expect(body).toContain(`width:${CANVAS_PREVIEW_WIDTH}px;height:${CANVAS_PREVIEW_HEIGHT}px`);
         // The box stays full width — drive-preview.tsx scales the body from exactly that width — so
-        // the page is widened in scene units and the drawing sits centred in it.
+        // the page is widened in scene units and the drawing sits centered in it.
         expect(body).toContain(`width:${round(CANVAS_PREVIEW_WIDTH / (CANVAS_PREVIEW_HEIGHT / 5020))}px;height:5020px`);
     });
 

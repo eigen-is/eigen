@@ -74,7 +74,7 @@ export function isVectorElementType(v: unknown): v is VectorElementType {
 // The shared base props a NEW element of this kind is created with, under the kind's own overrides —
 // the two the creation path spreads before the kind's own fields. The panel's reset affordances read
 // the same table, so "reset" restores exactly what "create" would have given: an image's border resets
-// to none, a rectangle's to the shared ink colour.
+// to none, a rectangle's to the shared ink color.
 export function baseDefaultsFor(
     type: VectorElementType,
     style: StyleDefaults,

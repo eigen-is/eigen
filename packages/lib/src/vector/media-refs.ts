@@ -77,7 +77,7 @@ export function rewriteEigenMediaRefs(svg: string, renames: Map<string, string>)
 // Replace each `eigen-media:` ref named in `replacements` with an arbitrary href value (e.g. a base64
 // `data:` URI) — the same token-precise `href="…"` swap stripEigenMediaRefs does, only substituting
 // instead of removing. A name absent from the map is left untouched. Called by the clipboard's
-// foreign-flavour SVG inliner; the value is the full replacement href, not another eigen-media token.
+// foreign-flavor SVG inliner; the value is the full replacement href, not another eigen-media token.
 export function replaceEigenMediaHrefs(svg: string, replacements: Map<string, string>): string {
     if (replacements.size === 0) return svg;
     let out = svg;

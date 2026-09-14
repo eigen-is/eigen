@@ -8,13 +8,13 @@ import { isSafeMediaName } from './media-refs';
 import { normalizeAngle, round4 } from './outline';
 import { DEFAULT_FILL_STYLE, FILL_STYLES, type FillStyle, prop } from './types';
 
-// "Paint nothing" as a bare colour: a fill with no paint, a scene with no background, a shape or box
+// "Paint nothing" as a bare color: a fill with no paint, a scene with no background, a shape or box
 // whose border is switched off. One token, so the predicate and every writer agree on the spelling.
 export const TRANSPARENT_COLOR = 'transparent';
 
 export const TRANSPARENT_FILL: Fill = { type: 'solid', color: TRANSPARENT_COLOR, style: DEFAULT_FILL_STYLE };
 
-// Colours come from the ColorPicker: hex (#rgb/#rrggbb/#rrggbbaa) or the 'transparent' sentinel.
+// Colors come from the ColorPicker: hex (#rgb/#rrggbb/#rrggbbaa) or the 'transparent' sentinel.
 // Anything else is rejected; this closes `url(...)` paint-server smuggling into export.
 const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
@@ -82,7 +82,7 @@ function jsonObject(value: string): object | null {
     return typeof raw === 'object' && raw !== null ? raw : null;
 }
 
-// The paint half both codecs share, so the element fill and a frame background agree on what a colour
+// The paint half both codecs share, so the element fill and a frame background agree on what a color
 // and a gradient are.
 function paintOf(raw: object): FillPaint | null {
     const type = prop(raw, 'type');

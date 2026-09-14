@@ -19,7 +19,7 @@ const glob = new Glob('**/*.ts');
 const violations: string[] = [];
 
 for await (const path of glob.scan('apps/api/src/lib')) {
-    // Bun.Glob yields platform-native separators on Windows — normalise so the basename
+    // Bun.Glob yields platform-native separators on Windows — normalize so the basename
     // extraction and the home/ prefix check work regardless of platform.
     const normalized = path.replaceAll('\\', '/');
     const filename = normalized.split('/').pop()!;

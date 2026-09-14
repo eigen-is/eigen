@@ -540,7 +540,7 @@ export function buildGoldenVectorScene(): VectorScene {
             fontFamily: 'Excalifont',
             labelWidth: 0,
         },
-        // A gradient fill painted through the hachure sketch: phase 0 proved WeasyPrint honours an
+        // A gradient fill painted through the hachure sketch: phase 0 proved WeasyPrint honors an
         // SVG linearGradient as `stroke=` on the fill-sketch paths, but ONLY when the <defs> lives
         // inside the element's own <svg>. The export golden is what keeps that true.
         {

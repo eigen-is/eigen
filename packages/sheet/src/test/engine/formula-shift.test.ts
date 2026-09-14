@@ -82,7 +82,7 @@ describe('engine/formula-shift — functionCopy formulas', () => {
         expect(functionCopy('=SUM(A1,B1,C1)', 'down', 1)).toBe('SUM(A2,B2,C2)');
         expect(functionCopy('=SUM(A1:A3)', 'down', 1)).toBe('SUM(A2:A4)');
         // Note: leading whitespace inside arguments is discarded by `str.trim()` at the
-        // recursion boundary — same behaviour as the original state-side functionCopy.
+        // recursion boundary — same behavior as the original state-side functionCopy.
         expect(functionCopy('=AND(A1>0, B1>0)', 'down', 1)).toBe('AND(A2>0,B2>0)');
     });
 

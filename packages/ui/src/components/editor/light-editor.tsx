@@ -20,7 +20,7 @@ type LightEditorProps = {
     editable?: boolean;
     proseStyle?: boolean;
     containerClassName?: string;
-    // Read once at mount — useEditor doesn't re-initialise on prop change.
+    // Read once at mount — useEditor doesn't re-initialize on prop change.
     taskList?: boolean;
     // Inside a form: swallow Mod+Enter so StarterKit's HardBreak doesn't insert a
     // line break before the host's submit hotkey fires. Read once at mount.

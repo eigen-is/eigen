@@ -115,7 +115,7 @@ export function CardDialog({
                 >
                     <button
                         type="button"
-                        // items-baseline (avatar self-centres) aligns the name with the Created-by baseline.
+                        // items-baseline (avatar self-centers) aligns the name with the Created-by baseline.
                         className="-my-0.5 inline-flex items-baseline gap-1 rounded-sm px-1 py-0.5 hover:bg-muted"
                     >
                         {assignee ? (

@@ -46,7 +46,7 @@ function CalendarCheckbox({ color, checked, onChange }: { color: string; checked
 }
 
 // One row for both personal calendars and shared/team calendars — callers resolve
-// the colour, label and checked state from whichever calendar shape they hold.
+// the color, label and checked state from whichever calendar shape they hold.
 function CalendarRow({
     color,
     label,

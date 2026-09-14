@@ -12,8 +12,8 @@ type ColorPickerButtonProps = {
     value: string;
     onChange: (color: string) => void;
     resetLabel?: string;
-    // Underline the icon with a swatch of the current colour (text/fill pickers); omit
-    // when the icon itself carries the colour, e.g. the highlighter.
+    // Underline the icon with a swatch of the current color (text/fill pickers); omit
+    // when the icon itself carries the color, e.g. the highlighter.
     showSwatch?: boolean;
     // Render the trigger in the active (secondary) variant, e.g. when a highlight is set.
     active?: boolean;

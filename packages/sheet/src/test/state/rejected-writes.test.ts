@@ -36,7 +36,7 @@ function bareSheet(): Context {
 // A sheet as it actually arrives in the editor: initSheetData materializes every config
 // collection, so no writer ever has to create one and no `??=` can emit a patch. That is the
 // mechanism that closes this class — the ordering of seeds against guards is a second line
-// of defence, checked above on a deliberately un-normalized sheet.
+// of defense, checked above on a deliberately un-normalized sheet.
 function freshSheet(): Context {
     const ctx = withGridGeometry(contextFactory() as Context);
     ctx.sheets[0].config = undefined;

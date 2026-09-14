@@ -138,7 +138,7 @@ export function getNowDateTime(format: number) {
 // declaration list. Both HTML producers in this package — the clipboard table in
 // modules/selection.ts and the rich-text runs in modules/cell.ts — wrote the same
 // three lines by hand, and only one of them was ever hardened. Callers escape the
-// result themselves: both halves come from the cell, and a colour like
+// result themselves: both halves come from the cell, and a color like
 // `red' onload='…` would otherwise close the style attribute and open an event
 // handler. Numeric values are the pixel ones (font size, indent).
 export function styleObjectToCss(style: Record<string, string>): string {

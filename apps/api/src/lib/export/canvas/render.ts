@@ -72,19 +72,19 @@ export function framePages(scene: VectorScene, resolveMedia: MediaResolver): Can
 // A page of the given box with nothing on it, for a caller that must produce a page even when the
 // document has no content to size one from (the preview cache stores only a non-empty body, so an
 // emptied document would otherwise keep serving the preview it had when it still had content). The
-// background is the caller's: a drawing paints its scene colour, a deck the frame default.
+// background is the caller's: a drawing paints its scene color, a deck the frame default.
 export function emptyPage(background: BackgroundFill | null, width: number, height: number): CanvasPage {
     return { width, height, originX: 0, originY: 0, background, layers: [] };
 }
 
-// The scene background is a colour token; 'transparent' is no paint at all, not a
+// The scene background is a color token; 'transparent' is no paint at all, not a
 // `background-color: transparent` declaration.
 export function sceneBackground(scene: VectorScene): BackgroundFill | null {
     return isTransparentColor(scene.meta.background) ? null : { type: 'solid', color: scene.meta.background };
 }
 
 // One page: a clipped box at `scale`, holding the scene at 1:1 with the whole thing scaled once. The
-// resolver is only for a frame's IMAGE background — a drawing's background is a colour token, so
+// resolver is only for a frame's IMAGE background — a drawing's background is a color token, so
 // those callers pass nothing.
 export function renderCanvasPage(page: CanvasPage, scale: number, resolveMedia?: MediaResolver): string {
     const pageStyle = [

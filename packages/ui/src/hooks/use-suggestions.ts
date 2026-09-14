@@ -13,7 +13,7 @@ type UseSuggestionsOptions = {
     // that want to consume keys even with an empty list (default).
     passthroughWhenEmpty?: boolean;
     // Accept Shift+Enter as commit too. Default false (shift+Enter inserts a newline). Set
-    // true on the @-mention suggest to preserve its historic commit-on-any-Enter behaviour.
+    // true on the @-mention suggest to preserve its historic commit-on-any-Enter behavior.
     acceptShiftEnter?: boolean;
 };
 

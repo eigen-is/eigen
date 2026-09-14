@@ -69,7 +69,7 @@ export function renderEigenvectorExport(
 
 // An .svg file is read by an XML parser, and a rich-text box's HTML is not XML: an unclosed <br>/<img>
 // or a named entity is a fatal parse error that renders the whole drawing as nothing. DOMPurify hands
-// back HTML serialisation, so take its markup through the DOM once more and serialise it as XML. The
+// back HTML serialization, so take its markup through the DOM once more and serialize it as XML. The
 // literal xmlns attributes go first — the serializer writes the namespace declarations itself, and a
 // second one on the same element is a duplicate attribute.
 function toXmlDocument(svg: string): string {

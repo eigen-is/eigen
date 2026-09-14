@@ -63,7 +63,7 @@ type AdditionalProps = {
 
 // The copied cell range as a text item. Every clipboard item carries its rendered box, and sheets'
 // document-space units are px (no zoom), so the cumulative edge arrays give both dims directly. The
-// anchor cell's font size rides along so a consumer that honours the box (slides) renders the text
+// anchor cell's font size rides along so a consumer that honors the box (slides) renders the text
 // at the size it had here rather than at its own much larger default, which the box would clip.
 // A staged copy always has a selection (handleCopy bails without one); the [0, 0] only satisfies TS.
 function buildCellRangeClipboardItem(ctx: Context, text: string): EigenClipboardTextItem {
@@ -636,7 +636,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
                     // A same-tab sheet→sheet copy tags text/html with COPY_ACTION_TABLE_MARKER and is
                     // served from ctx.copyState (formulas/formats), not the eigen wire — the classifier
-                    // suppresses the eigen + svg flavours for it, so those rungs skip and we fall through
+                    // suppresses the eigen + svg flavors for it, so those rungs skip and we fall through
                     // to the native table paste below. Every other producer flows through the rungs.
                     const paste = classifyPaste(clipboardData, { internalMarkerText: COPY_ACTION_TABLE_MARKER });
 

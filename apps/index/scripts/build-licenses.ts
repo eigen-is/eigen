@@ -26,13 +26,13 @@ const VENDORED: LicenseVendored[] = [
         name: 'Luckysheet',
         license: 'MIT',
         url: 'https://github.com/dream-num/Luckysheet',
-        note: "fortune-sheet's own origin; the conditional-format colour presets come from it",
+        note: "fortune-sheet's own origin; the conditional-format color presets come from it",
     },
     {
         name: 'fractional-indexing',
         license: 'CC0-1.0',
         url: 'https://github.com/rocicorp/fractional-indexing',
-        note: 'vendored verbatim to pin z-order behaviour in eigen|vector>',
+        note: 'vendored verbatim to pin z-order behavior in eigen|vector>',
     },
 ];
 

@@ -147,7 +147,7 @@ describe('the layer box', () => {
     });
 
     test('a rotated layer composes rotate after translate, pivoting on the default centre origin', () => {
-        // transform-origin is the box centre, and translate is origin-independent, so this is the old
+        // transform-origin is the box center, and translate is origin-independent, so this is the old
         // renderer's `translate(x y) rotate(angle w/2 h/2)` exactly.
         const html = renderToStaticMarkup(<ElementLayer el={rect({ ...box, angle: 30 })} />);
         expect(html).toContain('transform:translate(12.5px,-3.25px) rotate(30deg)');

@@ -68,7 +68,7 @@ describe('handleDriveSSEvent — DRIVE_FILE_UPLOADED (overwrite)', () => {
         const handled = handleDriveSSEvent(driveEvent(SSEventType.DRIVE_FILE_UPLOADED), queryClient);
 
         expect(handled).toBe(true);
-        // Parent folder listing (existing behaviour) still invalidated.
+        // Parent folder listing (existing behavior) still invalidated.
         expect(hasKey(invalidated, driveKeys.folder(OWNER, MOUNT, PARENT))).toBe(true);
         // The file's OWN detail must be invalidated so an overwrite refreshes the open detail/preview.
         expect(hasKey(invalidated, driveKeys.path(OWNER, MOUNT, PATH))).toBe(true);

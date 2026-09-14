@@ -141,7 +141,7 @@ export function MailLink({
     );
 }
 
-// Collect the leaf addresses of a header field: normalise the ParsedMail AddressObject | AddressObject[]
+// Collect the leaf addresses of a header field: normalize the ParsedMail AddressObject | AddressObject[]
 // container, then expand RFC 2822 groups via the shared send-path helper so group members appear here too.
 function collectAddresses(field?: AddressObject | AddressObject[]): { name: string; address: string }[] {
     const objects = Array.isArray(field) ? field : field ? [field] : [];

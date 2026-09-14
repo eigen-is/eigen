@@ -246,7 +246,7 @@ export function AdminUsersTable({ users, usage, searchQuery, activeUserId, onRow
                                 </Badge>
                             ) : (
                                 <Badge variant="outline" className="text-xs text-muted-foreground">
-                                    no organisation
+                                    no organization
                                 </Badge>
                             )}
                         </div>

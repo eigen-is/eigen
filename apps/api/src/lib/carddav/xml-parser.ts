@@ -40,7 +40,7 @@ type XmlNode = Record<string, unknown>;
 
 const asNode = (v: unknown): XmlNode => (v && typeof v === 'object' && !Array.isArray(v) ? (v as XmlNode) : {});
 // fast-xml-parser collapses a single repeated child to the value itself; the filter grammar's `*`/`?` children
-// are normalised to arrays here rather than via isArray so the config comment above stays about `href`/`prop`.
+// are normalized to arrays here rather than via isArray so the config comment above stays about `href`/`prop`.
 const asArray = (v: unknown): unknown[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
 const attr = (node: XmlNode, name: string): string | null => {
     const v = node[`@_${name}`];

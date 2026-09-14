@@ -48,7 +48,7 @@ export type FindReplaceBarProps = {
     onReplaceAll: () => void;
     // Route the surface's own undo/redo out of the bar (⌘Z / ⇧⌘Z / Ctrl+Y). Focus lives in the bar's
     // input after Replace, so the editor keymap never sees the key — without this the browser applies
-    // useless native input-undo. Absent → default behaviour (search-only surfaces don't wire them).
+    // useless native input-undo. Absent → default behavior (search-only surfaces don't wire them).
     onUndo?: () => void;
     onRedo?: () => void;
 };

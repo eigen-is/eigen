@@ -58,7 +58,7 @@ describe('elbow-pins — interior segment drag', () => {
         const pts = scenePoints(patch);
         // Still four points — no new corners.
         expect(pts.length).toBe(4);
-        // The same L, its vertical segment now at x=60, neighbours stretched.
+        // The same L, its vertical segment now at x=60, neighbors stretched.
         expect(pts).toEqual([
             [0, 0],
             [60, 0],

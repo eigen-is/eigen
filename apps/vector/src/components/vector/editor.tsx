@@ -152,10 +152,10 @@ export function VectorEditor({
                         onAspectLockChange={setAspectLocked}
                         emptySection={
                             <PropertySection title="Background">
-                                {/* The scene background is a plain colour (meta.background), not a Fill —
+                                {/* The scene background is a plain color (meta.background), not a Fill —
                                     a frame's background is a Fill and the deck's own panel edits it.
                                     Transparent is its default and a rendered state, so None is the way
-                                    back from a colour. */}
+                                    back from a color. */}
                                 <ColorRow
                                     label="Color"
                                     value={doc.meta.background}

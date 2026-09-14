@@ -119,7 +119,7 @@ export async function getHome(ownerId: string): Promise<Home> {
         });
 
         // Install only if no factory exists; if a concurrent caller won the install race, discard
-        // ours and re-loop to use theirs — honouring createAsyncSingleton's "build once" contract.
+        // ours and re-loop to use theirs — honoring createAsyncSingleton's "build once" contract.
         if (homeFactories.has(ownerId)) {
             continue;
         }

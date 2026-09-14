@@ -1080,7 +1080,7 @@ export default class Drive {
         user: User,
         event: ClientFileEventRecord,
     ): Promise<void> {
-        // Defence in depth — the route's typebox union is the primary gate.
+        // Defense in depth — the route's typebox union is the primary gate.
         if (!isClientFileEventType(event.eventType)) {
             throw new ApiError(400, `Event type not client-postable: ${event.eventType}`);
         }

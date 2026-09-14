@@ -65,7 +65,7 @@ describe('classifyPaste', () => {
         const data: EigenClipboardData = { version: 1, items, svg };
         const html = markerHtml(data, '<img src="data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=">');
         const c = classifyPaste(stubClipboard({ [EIGEN_MIME]: JSON.stringify(data), 'text/html': html }));
-        // The extra <img> is real HTML beyond the marker, but it must NOT suppress the eigen/svg flavours.
+        // The extra <img> is real HTML beyond the marker, but it must NOT suppress the eigen/svg flavors.
         expect(c.eigen?.items).toEqual(items);
         expect(c.svg?.svg).toBe(svg);
     });
@@ -125,7 +125,7 @@ describe('classifyPaste', () => {
             svg: embedClipboardSvgMetadata(SVG, { version: 1, items }),
         };
         // A same-tab sheet copy also writes the eigen payload, but the marker means paste comes from
-        // ctx.copyState — the classifier must suppress both flavours so the caller falls through.
+        // ctx.copyState — the classifier must suppress both flavors so the caller falls through.
         const html = `${markerHtml(data)}<table class="${SHEET_MARKER}"><tr><td>1</td></tr></table>`;
         const c = classifyPaste(stubClipboard({ [EIGEN_MIME]: JSON.stringify(data), 'text/html': html }), {
             internalMarkerText: SHEET_MARKER,

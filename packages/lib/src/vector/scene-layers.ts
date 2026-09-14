@@ -65,7 +65,7 @@ type LayerBoxCss = { width: string; height: string; transform: string; opacity?:
 // into a style attribute by the compositor, so what a user sees is what prints. The origin rides in a
 // transform rather than in left/top because a browser pixel-snaps a fractional box origin before
 // painting the layer's own <svg>; transforms are not snapped. transform-origin stays the default box
-// centre and translate is origin-independent, so `translate(x,y) rotate(a)` is the single-<svg>
+// center and translate is origin-independent, so `translate(x,y) rotate(a)` is the single-<svg>
 // renderer's `translate(x y) rotate(a w/2 h/2)` exactly.
 export function layerBoxCss({ box, opacity }: Pick<Layer, 'box' | 'opacity'>): LayerBoxCss {
     const rotate = box.angle === 0 ? '' : ` rotate(${round(box.angle)}deg)`;

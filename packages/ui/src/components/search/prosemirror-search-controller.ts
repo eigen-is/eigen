@@ -127,8 +127,8 @@ export function useProseMirrorSearchController(editor: Editor | null, canWrite: 
                 const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, from, to));
                 if (flash) tr.setMeta(searchFlashKey, { from, to });
                 view.dispatch(tr);
-                // Centre the match (amendment 11) so the top-right bar can't cover it. The painted
-                // decoration span exists synchronously after dispatch; native centring is scale-aware.
+                // Center the match (amendment 11) so the top-right bar can't cover it. The painted
+                // decoration span exists synchronously after dispatch; native centering is scale-aware.
                 const el = view.dom.querySelector('.ProseMirror-active-search-match, .search-flash-match');
                 if (el) el.scrollIntoView({ block: 'center', inline: 'nearest' });
                 else view.dispatch(view.state.tr.scrollIntoView());

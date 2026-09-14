@@ -1,4 +1,4 @@
-// Shared FE contract for in-document search. Matches are plain serialisable data
+// Shared FE contract for in-document search. Matches are plain serializable data
 // (no closures) so the command palette can list them and reveal keys by id.
 
 export type DocSearchOptions = {
@@ -32,7 +32,7 @@ export type DocSearchController = {
     highlightAll(matches: DocSearchMatch[]): void;
     // scroll-to + flash; MUST tolerate stale ids (validate/clamp/no-op, never throw). MUST NOT
     // move focus while a bar session is open — that would break Enter/⌘G stepping (docs uses
-    // setTextSelection; never chain .focus()). Reveal centres the match so the bar can't cover it.
+    // setTextSelection; never chain .focus()). Reveal centers the match so the bar can't cover it.
     reveal(matchId: string): void;
 
     // v1.5 — replace (docs + sheets). Optional: slides/stickies leave these unset and stay

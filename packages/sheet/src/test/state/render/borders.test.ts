@@ -1,5 +1,5 @@
-// A shared edge two neighbours both declare (A1.r vs B1.l) must paint deterministically: the
-// higher-index neighbour's facing side wins, regardless of the order drawCellBorders happens to
+// A shared edge two neighbors both declare (A1.r vs B1.l) must paint deterministically: the
+// higher-index neighbor's facing side wins, regardless of the order drawCellBorders happens to
 // walk the map in. Without the rule the last stroke wins and the winner flips with the viewport
 // (forEachInRect's walk mode), so the edge changes color on zoom.
 

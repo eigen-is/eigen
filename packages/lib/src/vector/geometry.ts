@@ -238,8 +238,8 @@ export function serializePressures(pressures: number[]): string {
 // non-negative) and width/height span the raw bbox — so the box ALWAYS equals the content and bounds,
 // viewBox, selection ring, rotation pivot and hit-testing agree with no special case. `box` is the
 // element's CURRENT box (its width/height only matter when rotated): the renderer rotates about the
-// box centre, so translating the points by -min AND changing the extent both move that pivot; x/y
-// shift so every point keeps its scene position (Excalidraw's _updatePoints centre correction).
+// box center, so translating the points by -min AND changing the extent both move that pivot; x/y
+// shift so every point keeps its scene position (Excalidraw's _updatePoints center correction).
 export function normalizeLinear(
     box: Box,
     points: Point[],
@@ -432,7 +432,7 @@ export function bindingAnchor(shape: VectorBindableElement, point: Point): [numb
     return [(local.x - shape.x) / Math.max(shape.width, gap), (local.y - shape.y) / Math.max(shape.height, gap)];
 }
 
-// Is a SCENE point inside a shape's exact fill (by type, unrotated about the centre) — the "focus point
+// Is a SCENE point inside a shape's exact fill (by type, unrotated about the center) — the "focus point
 // sits inside the box" test Excalidraw's projection uses to accept a diagonal hit (isPointInElement) and to
 // suppress the side-midpoint snap when the cursor is buried inside (hitElementItself).
 function pointInShape(shape: VectorBindableElement, point: Point): boolean {
@@ -448,11 +448,11 @@ export function shapeAnchorPoints(shape: VectorBindableElement): Point[] {
     return ELEMENT_KINDS[shape.type].anchorPoints(shape);
 }
 
-// The nearest focus SNAP target for a dragged aim — one of the shape's four side midpoints or its centre,
+// The nearest focus SNAP target for a dragged aim — one of the shape's four side midpoints or its center,
 // within bindingDistance + strokeWidth/2, else null (eigen extension: Excalidraw's focus-point drag
 // stores the RAW pointer ratio and lights no dots — arrows/focus.ts handleFocusPointDrag; Reinder wants the
 // aim to snap to and light the shape's snap points, so this magnet mirrors SnapDots' side-midpoint set plus
-// the centre). Scene coordinates throughout; the caller suppresses it on Ctrl/Cmd like every other snap.
+// the center). Scene coordinates throughout; the caller suppresses it on Ctrl/Cmd like every other snap.
 export function focusSnapPoint(shape: VectorBindableElement, point: Point, zoom: number): Point | null {
     const within = bindingDistance(zoom) + shape.strokeWidth / 2;
     const targets = [...shapeAnchorPoints(shape), boxCenter(shape)];
@@ -484,7 +484,7 @@ function snapOutlineMidPoint(shape: VectorBindableElement, point: Point, zoom: n
 // projectFixedPointOntoDiagonal), so a fresh bind aims THROUGH the shape rather than at the raw cursor.
 // Returns a SCENE point, or null to fall back to the raw cursor. In order: a snap to a side midpoint the
 // cursor is near (outside the shape); else the crossing of the ray `otherEnd → point` (extended) with the
-// shape's diagonals/centre lines, nearest to `otherEnd`, accepted only when it lands inside the shape.
+// shape's diagonals/center lines, nearest to `otherEnd`, accepted only when it lands inside the shape.
 // `otherEnd` is the arrow's opposite aim (the other endpoint, or its anchor when that end is bound) — the
 // point that stays put while this endpoint drags. Applied at BIND time only (creation + endpoint-drag);
 // dragging the focus dot stores the raw aim, never re-projected (handleFocusPointDrag). Elbow arrows never
@@ -731,8 +731,8 @@ export function boundEndpoint(
 
 // Recompute both bound endpoints from the CURRENT shapes and re-normalize; null when nothing
 // changed (the caller then skips the write). Each new scene endpoint converts into the arrow's local
-// frame by unrotating about the arrow's OLD centre (linearSceneToLocal reads the current box), so a
-// rotated arrow's untouched vertices hold their place — never recompute the centre from the new bbox
+// frame by unrotating about the arrow's OLD center (linearSceneToLocal reads the current box), so a
+// rotated arrow's untouched vertices hold their place — never recompute the center from the new bbox
 // first (that would be circular).
 export function followBindings(
     arrow: VectorArrowElement,
@@ -752,7 +752,7 @@ export function followBindings(
         const moved = moveEndpoints(arrow, newStart, newEnd, elbowRoutingContext(arrow, byId));
         patch = renormalize({ ...arrow, ...moved });
     } else {
-        // DERIVED: recompute the two endpoints and re-normalize (unchanged pre-pin behaviour). The docks
+        // DERIVED: recompute the two endpoints and re-normalize (unchanged pre-pin behavior). The docks
         // round to stored precision here, not only on serialization, and so does the box normalizeLinear
         // derives from them — a box carrying a digit the serialized points cannot is what leaves x/width
         // drifting by 1e-14 under a settled arrow, follow after follow.

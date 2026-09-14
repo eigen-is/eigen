@@ -4,7 +4,7 @@
 // kinds/graph.ts, add one line to kinds/index.ts. Nothing else in the engine changes.
 //
 // FRAMES: `outline(el, inflate)` works in the element's unrotated SCENE frame (it includes el.x/el.y;
-// callers rotate around the element centre). `render(el, ctx)` draws in the element's LOCAL frame
+// callers rotate around the element center). `render(el, ctx)` draws in the element's LOCAL frame
 // (origin at its top-left) — elementToSvg's <g transform> is what places and rotates it.
 
 import { serializeFill, TRANSPARENT_FILL } from '../fill';
@@ -34,17 +34,17 @@ export type Capabilities = {
     // Whether the kind paints a Fill at all. GEOMETRY-DEPENDENT on the linear kinds (an open stroke has
     // nothing to fill), so read it through capabilitiesOf(el), never off this table.
     fill: boolean;
-    // Whether the kind's renderer honours the hatch style HALF of that fill. An arrow's fill is its
+    // Whether the kind's renderer honors the hatch style HALF of that fill. An arrow's fill is its
     // arrowheads', so it hatches nothing.
     fillStyle: boolean;
-    // Whether the kind's renderer honours the dash style of that stroke. A freehand stroke is a filled
+    // Whether the kind's renderer honors the dash style of that stroke. A freehand stroke is a filled
     // outline rather than a drawn line, so dashes mean nothing to it.
     strokeStyle: boolean;
     corners: boolean;
     // Whether the shaft's curvature is the user's to pick (the Edges row): a drawn polyline's is, a
     // freehand stroke's is not — its roundness is how the stroke is rendered, not a style it offers.
     edges: boolean;
-    // Whether the stroke may be switched OFF (the Stroke colour row offers a None swatch). True where
+    // Whether the stroke may be switched OFF (the Stroke color row offers a None swatch). True where
     // the element still has a body without it — a shape's fill, an image's pixels, a text box's text.
     // Not derivable from `fill`: a line fills only when its path closes yet IS its stroke, and an
     // image's body is pixels rather than a Fill.
@@ -82,7 +82,7 @@ type KindSpec<T extends VectorElement> = {
     capabilities: Capabilities;
     defaults(style: StyleDefaults): KindFields<T>;
     // Overrides of the shared base defaults for a NEW element of this kind. The DOM-box kinds use the
-    // stroke as a BORDER, and a fresh box paints none until the user picks a colour (slides' borderWidth
+    // stroke as a BORDER, and a fresh box paints none until the user picks a color (slides' borderWidth
     // 0, same intent). Omit where the base table already answers.
     baseDefaults?: BasePaintDefaults;
     // Capabilities that depend on the ELEMENT rather than the kind, layered over the static table.
@@ -145,7 +145,7 @@ function boxAnchorPoints(el: VectorElement): Point[] {
     ].map((p) => rotatePoint(p, center, el.angle));
 }
 
-// The default aim lines: the vertical + horizontal centre lines, un-shrunk. Excalidraw uses these for every
+// The default aim lines: the vertical + horizontal center lines, un-shrunk. Excalidraw uses these for every
 // bindable shape except the rectangle, which overrides with its shrunk corner diagonals.
 function boxAimLines(el: VectorElement): [[Point, Point], [Point, Point]] {
     const { x, y, width: w, height: h } = el;
@@ -165,7 +165,7 @@ export const NEW_TEXT_BOX_SIZE = { width: 320, height: 48 };
 
 // The vector app's style table: roughness 1, cross-hatch, Excalifont, curved corners (SLIDES_STYLE_DEFAULTS
 // is the deck's flat counterpart). A fresh element starts unpainted but hatched — the hatch style rides
-// the fill, so the first colour the user picks lands as cross-hatch.
+// the fill, so the first color the user picks lands as cross-hatch.
 export const VECTOR_STYLE_DEFAULTS: StyleDefaults = {
     strokeColor: DEFAULT_ELEMENT_PROPS.strokeColor,
     strokeWidth: DEFAULT_ELEMENT_PROPS.strokeWidth,

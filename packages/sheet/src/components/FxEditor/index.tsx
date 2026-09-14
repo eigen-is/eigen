@@ -57,7 +57,7 @@ export function FxEditor() {
                 if (isInlineStringCell(cell)) {
                     value = getInlineStringNoStyle(r, c, d);
                 } else if (cell.f) {
-                    // Coloured spans, escaped at their leaves — render, do not escape again.
+                    // Colored spans, escaped at their leaves — render, do not escape again.
                     value = getFormulaHtml(r, c, d) ?? '';
                     isGeneratedHtml = true;
                 } else {

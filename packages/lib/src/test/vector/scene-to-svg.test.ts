@@ -702,7 +702,7 @@ describe('gradient fills', () => {
     });
 
     // A transparent end reads as transparent BLACK in both renderers, which paints a dark band across
-    // the middle of the shape. It is emitted as the other end's colour at stop-opacity 0 instead.
+    // the middle of the shape. It is emitted as the other end's color at stop-opacity 0 instead.
     test('a gradient fading to transparent emits no black stop', () => {
         const svg = elementToSvg(
             goldenShape({

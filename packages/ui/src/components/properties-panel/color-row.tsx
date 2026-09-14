@@ -22,7 +22,7 @@ type ColorButtonProps = {
     noneLabel?: string;
 };
 
-// The one colour control every panel row uses: a select-shaped trigger (swatch + hex, or None / —)
+// The one color control every panel row uses: a select-shaped trigger (swatch + hex, or None / —)
 // opening the shared picker, with the None swatch inside the same popover.
 function ColorButton({ value, onChange, allowNone, noneLabel = 'None' }: ColorButtonProps) {
     const [open, setOpen] = useState(false);
@@ -65,7 +65,7 @@ function ColorButton({ value, onChange, allowNone, noneLabel = 'None' }: ColorBu
                             <span>{noneLabel}</span>
                         </button>
                     )}
-                    {/* No Reset row: a picked colour is replaced by picking another, and where paint is
+                    {/* No Reset row: a picked color is replaced by picking another, and where paint is
                         optional the None swatch is the way back. */}
                     <ColorPicker value={displayColor ?? ''} onChange={pick} showReset={false} />
                 </div>

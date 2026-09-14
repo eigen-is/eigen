@@ -6,7 +6,7 @@ import type { Mail } from '../../lib/mail/mail-domain';
 import type { User } from '../../lib/user';
 
 // AUDIT 13: Home.init() opens subsystem DBs + starts upload/reindex timers in parallel. If one
-// subsystem's init() throws, the peers that already initialised must be torn down — otherwise their
+// subsystem's init() throws, the peers that already initialized must be torn down — otherwise their
 // open fds + live intervals leak for the process lifetime. This drives that path with fakes: mail's
 // init() throws while drive's init() is held open by a gate, and asserts drive.destruct() ran — but
 // only AFTER drive.init() finished (the allSettled-before-teardown invariant: a regression back to

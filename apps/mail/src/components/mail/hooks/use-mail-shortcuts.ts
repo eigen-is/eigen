@@ -241,7 +241,7 @@ export function useMailShortcuts({
         }
         if (cursorIndex >= 0 && cursorIndex < orderedEmails.length) {
             const id = orderedEmails[cursorIndex].id;
-            // Neighbour computed BEFORE mutating; the cursor slides there once the row is gone.
+            // Neighbor computed BEFORE mutating; the cursor slides there once the row is gone.
             const nextId = orderedEmails[cursorIndex + 1]?.id ?? orderedEmails[cursorIndex - 1]?.id;
             if (action === 'delete') {
                 void requestDeleteById(id).then((deleted) => {
@@ -272,7 +272,7 @@ export function useMailShortcuts({
         if (open && openEmailId) {
             const idx = orderedEmails.findIndex((e) => e.id === openEmailId);
             // idx<0 (open email not in the list) would make orderedEmails[idx+1]=[0] land on the top
-            // row for 'older'/[ — guard it so the neighbour is undefined and we fall back to the list.
+            // row for 'older'/[ — guard it so the neighbor is undefined and we fall back to the list.
             const neighbourId = idx < 0 ? undefined : orderedEmails[idx + delta]?.id;
             void moveEmailByIdOnly(openEmailId, 'Archive');
             if (neighbourId) onRowClick(neighbourId);
@@ -285,9 +285,9 @@ export function useMailShortcuts({
             void moveEmailByIdOnly(id, 'Archive');
         }
     };
-    // ] — archive and go to the newer neighbour.
+    // ] — archive and go to the newer neighbor.
     useHotkey(']', () => archiveAndAdvance('newer'), { enabled });
-    // [ — archive and go to the older neighbour.
+    // [ — archive and go to the older neighbor.
     useHotkey('[', () => archiveAndAdvance('older'), { enabled });
 
     // s — toggle flag. Priority open > selection > cursor; no landing change. Pass the row's CURRENT

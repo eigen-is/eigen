@@ -616,7 +616,7 @@ describe('Calendar', () => {
                 (e: CalendarEventOccurrence) =>
                     e.title === 'Exception Delete Test' || e.title === 'Exception Delete Test (modified)',
             );
-            // Should have 3 occurrences (4 total - 1 cancelled), not 4
+            // Should have 3 occurrences (4 total - 1 canceled), not 4
             expect(remaining.length).toBe(3);
             expect(
                 remaining.find((e: CalendarEventOccurrence) => e.occurrenceDate === firstOcc.occurrenceDate),

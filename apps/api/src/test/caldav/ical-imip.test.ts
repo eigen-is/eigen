@@ -214,7 +214,7 @@ describe('iMIP Outbound Email Composition', () => {
 
     test('composeCancelEmail uses METHOD:CANCEL', () => {
         const mail = composeCancelEmail(MOCK_EVENT, organizer, [attendee]);
-        expect(mail.subject).toBe('Cancelled: Team Standup');
+        expect(mail.subject).toBe('Canceled: Team Standup');
         expect(mail.icalEvent?.method).toBe('CANCEL');
         expect(mail.icalEvent?.content).toContain('METHOD:CANCEL');
     });
@@ -1234,7 +1234,7 @@ describe('iMIP inbound sender binding (audit P1-7a)', () => {
     });
 });
 
-// Audit #A / #B: an external organizer editing or cancelling ONE occurrence of a recurring meeting
+// Audit #A / #B: an external organizer editing or canceling ONE occurrence of a recurring meeting
 // sends a lone VEVENT with a RECURRENCE-ID. Pre-fix, REQUEST fed it to receiveInvitationUpdate (which
 // nulled the master's rrule and moved its start) and CANCEL fed it to removeInvitation (which dropped
 // the whole event) — either way the attendee lost the entire series the first time the organizer
@@ -1398,7 +1398,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
         const master = after.find((e) => !e.parentEventId && e.rrule);
         expect(master).toBeDefined(); // pre-fix: whole series deleted
         expect(master!.rrule).toContain('WEEKLY');
-        // The cancellation landed as a cancelled exception on the intended occurrence.
+        // The cancellation landed as a canceled exception on the intended occurrence.
         const cancelled = after.find((e) => e.parentEventId && e.status === 'cancelled');
         expect(cancelled).toBeDefined();
         expect(cancelled!.recurrenceDate).toBe('2026-04-08');
@@ -1587,7 +1587,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
     });
 
     // The guard is strictly `<`, unlike the REQUEST path's `<=`: clients may cancel an occurrence
-    // without bumping SEQUENCE, and re-cancelling an already-cancelled row is idempotent.
+    // without bumping SEQUENCE, and re-canceling an already-canceled row is idempotent.
     test('a single-occurrence CANCEL with an equal SEQUENCE still cancels', async () => {
         const UID = 'audit-imip-cancel-equal@ext';
         const home = await getHome(ctx.alice.user.id);
@@ -1644,7 +1644,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
         expect(exception!.status).toBe('cancelled');
     });
 
-    // The cancelled exception must carry the CANCEL's SEQUENCE, so the REQUEST-path replay guard
+    // The canceled exception must carry the CANCEL's SEQUENCE, so the REQUEST-path replay guard
     // also rejects a stale REQUEST arriving after a newer CANCEL.
     test('a stale single-occurrence REQUEST does not resurrect an occurrence cancelled with a newer SEQUENCE', async () => {
         const UID = 'audit-imip-cancel-then-stale-request@ext';
@@ -1756,7 +1756,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             timezone: 'America/New_York',
             data: { attendees: [{ email: ATT, name: 'Occurrence Replier', status: 'pending', role: 'required' }] },
         });
-        // The organizer deletes the Apr 8 occurrence (the FE stores a cancelled exception).
+        // The organizer deletes the Apr 8 occurrence (the FE stores a canceled exception).
         home.calendar.createEvent(calendarId, {
             title: 'Own Weekly Deleted',
             startTime: new Date('2026-04-08T14:00:00.000Z'),
@@ -1939,7 +1939,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
                 'CANCEL',
             ),
         );
-        // A stale move (SEQUENCE 3) is redelivered — must stay cancelled.
+        // A stale move (SEQUENCE 3) is redelivered — must stay canceled.
         processInboundImip(
             home,
             icsMail(

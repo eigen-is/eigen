@@ -128,7 +128,7 @@ describe('the elements clipboard item', () => {
 });
 
 describe('pasteAnchorOffset', () => {
-    // BASE puts a shape at (0,0) 100×60, so its bounds centre is (50, 30).
+    // BASE puts a shape at (0,0) 100×60, so its bounds center is (50, 30).
     const set = [shape({ id: 'r', type: 'rectangle' })];
     const CENTRE = { x: 50, y: 30 };
 
@@ -141,7 +141,7 @@ describe('pasteAnchorOffset', () => {
     });
 
     test('a crossing re-anchors the bounding box on the viewport centre', () => {
-        // Infinite canvas → frame, and the viewport centre is far from the copied bounds.
+        // Infinite canvas → frame, and the viewport center is far from the copied bounds.
         expect(pasteAnchorOffset(set, '', 'f2', { x: 1050, y: 530 })).toEqual({ dx: 1000, dy: 500 });
         // Frame → infinite canvas, same rule.
         expect(pasteAnchorOffset(set, 'f1', '', { x: 1050, y: 530 })).toEqual({ dx: 1000, dy: 500 });
