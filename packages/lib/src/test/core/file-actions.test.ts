@@ -3,7 +3,7 @@ import { IMPORT_MAX_BYTES } from '../../constants/contact';
 import { DOCX_MIME, XLSX_MIME } from '../../constants/mime';
 import { type FileActionId, fileActionsFor } from '../../core/file-actions';
 import { subjectFromPath } from '../../core/file-subject';
-import { type DrivePath, type DrivePathType, isFolderType, isVCardFile } from '../../types/drive';
+import type { DrivePath, DrivePathType } from '../../types/drive';
 import type { FileSubject } from '../../types/file-subject';
 
 function path(p: Partial<DrivePath> & { name: string; type: DrivePathType }): DrivePath {
@@ -27,100 +27,53 @@ function path(p: Partial<DrivePath> & { name: string; type: DrivePathType }): Dr
     };
 }
 
-// The five booleans drive-item-menu.tsx gates its rows on today. The registry has to answer the
-// same for every Drive item, or a row appears (or vanishes) on the surfaces that read it.
-function menuGates(item: DrivePath) {
-    const nameLower = item.name.toLowerCase();
-    return {
-        'quick-look': !isFolderType(item.type),
-        download: item.type === 'file',
-        'convert-to-sheet': item.type === 'file' && nameLower.endsWith('.xlsx'),
-        'convert-to-document': item.type === 'file' && nameLower.endsWith('.docx'),
-        'import-contacts': item.type === 'file' && isVCardFile(item.mimeType, item.name),
-    };
-}
-
 function idsFor(item: DrivePath): string[] {
     return fileActionsFor(subjectFromPath(item)).map((action) => action.id);
 }
 
-describe('fileActionsFor parity with the Drive item menu', () => {
-    // `answers` is where the registry deliberately answers differently from the menu's gates: every
-    // widening and narrowing is named here, so neither can happen by accident.
-    const items: { item: DrivePath; answers?: Partial<Record<FileActionId, boolean>> }[] = [
-        { item: path({ name: 'Photos', type: 'folder', mimeType: 'folder' }) },
-        { item: path({ name: 'Notes.eigendoc', type: 'doc', mimeType: 'application/eigendoc' }) },
-        { item: path({ name: 'holiday.jpg', type: 'file', mimeType: 'image/jpeg' }) },
-        { item: path({ name: 'Budget.XLSX', type: 'file', mimeType: XLSX_MIME }) },
-        { item: path({ name: 'Report.docx', type: 'file', mimeType: DOCX_MIME }) },
-        { item: path({ name: 'team.vcf', type: 'file', mimeType: 'text/vcard' }) },
-        // Wider than the menu, which reads the extension alone: an .xlsx that lost its name still
-        // converts, the way a mail part named `attachment` would.
+// The Drive item menu draws whatever the registry returns, so these fixtures are the contract for
+// what a Drive item offers. Rows come back in registry order.
+describe('fileActionsFor on a Drive item', () => {
+    const items: { item: DrivePath; ids: FileActionId[] }[] = [
+        { item: path({ name: 'Photos', type: 'folder', mimeType: 'folder' }), ids: [] },
+        { item: path({ name: 'Notes.eigendoc', type: 'doc', mimeType: 'application/eigendoc' }), ids: ['quick-look'] },
+        {
+            item: path({ name: 'holiday.jpg', type: 'file', mimeType: 'image/jpeg' }),
+            ids: ['quick-look', 'download', 'save-to-drive'],
+        },
+        {
+            item: path({ name: 'Budget.XLSX', type: 'file', mimeType: XLSX_MIME }),
+            ids: ['quick-look', 'download', 'save-to-drive', 'convert-to-sheet'],
+        },
+        {
+            item: path({ name: 'Report.docx', type: 'file', mimeType: DOCX_MIME }),
+            ids: ['quick-look', 'download', 'save-to-drive', 'convert-to-document'],
+        },
+        {
+            item: path({ name: 'team.vcf', type: 'file', mimeType: 'text/vcard' }),
+            ids: ['quick-look', 'download', 'save-to-drive', 'import-contacts'],
+        },
+        // An .xlsx that lost its extension still converts, the way a mail part named `attachment` would.
         {
             item: path({ name: 'budget', type: 'file', mimeType: XLSX_MIME }),
-            answers: { 'convert-to-sheet': true },
+            ids: ['quick-look', 'download', 'save-to-drive', 'convert-to-sheet'],
         },
-        // Narrower than the menu, which offers the row on a file the import answers with a 413.
+        // Over the import ceiling the row is gone: the route answers a bigger vCard with a 413.
         {
             item: path({ name: 'huge.vcf', type: 'file', mimeType: 'text/vcard', size: IMPORT_MAX_BYTES + 1 }),
-            answers: { 'import-contacts': false },
+            ids: ['quick-look', 'download', 'save-to-drive'],
         },
     ];
 
-    for (const { item, answers } of items) {
-        test(`${item.name} offers the menu's rows`, () => {
-            const ids = idsFor(item);
-            for (const [id, expected] of Object.entries({ ...menuGates(item), ...answers })) {
-                expect({ name: item.name, id, applies: ids.includes(id) }).toEqual({
-                    name: item.name,
-                    id,
-                    applies: expected,
-                });
-            }
+    for (const { item, ids } of items) {
+        test(`${item.name} offers ${ids.join(', ') || 'nothing'}`, () => {
+            expect(idsFor(item)).toEqual(ids);
         });
     }
 
-    test('a folder offers nothing', () => {
-        expect(idsFor(path({ name: 'Photos', type: 'folder', mimeType: 'folder' }))).toEqual([]);
-    });
-
-    test('an eigendoc offers quick look only', () => {
-        expect(idsFor(path({ name: 'Notes.eigendoc', type: 'doc', mimeType: 'application/eigendoc' }))).toEqual([
-            'quick-look',
-        ]);
-    });
-
-    test('a plain file offers quick look, download and save to Drive', () => {
-        expect(idsFor(path({ name: 'holiday.jpg', type: 'file', mimeType: 'image/jpeg' }))).toEqual([
-            'quick-look',
-            'download',
-            'save-to-drive',
-        ]);
-    });
-
-    test('an .xlsx converts to a sheet, a .docx to a document, neither to the other', () => {
-        expect(idsFor(path({ name: 'Budget.xlsx', type: 'file', mimeType: XLSX_MIME }))).toContain('convert-to-sheet');
-        expect(idsFor(path({ name: 'Budget.xlsx', type: 'file', mimeType: XLSX_MIME }))).not.toContain(
-            'convert-to-document',
-        );
-        expect(idsFor(path({ name: 'Report.docx', type: 'file', mimeType: DOCX_MIME }))).toContain(
-            'convert-to-document',
-        );
-        expect(idsFor(path({ name: 'Report.docx', type: 'file', mimeType: DOCX_MIME }))).not.toContain(
-            'convert-to-sheet',
-        );
-    });
-
-    test('a mime-only .xlsx and .docx convert without the extension', () => {
-        expect(idsFor(path({ name: 'budget', type: 'file', mimeType: XLSX_MIME }))).toContain('convert-to-sheet');
-        expect(idsFor(path({ name: 'report', type: 'file', mimeType: DOCX_MIME }))).toContain('convert-to-document');
-    });
-
-    test('a .vcf imports to contacts under the ceiling and not over it', () => {
-        const small = path({ name: 'team.vcf', type: 'file', mimeType: 'text/vcard', size: IMPORT_MAX_BYTES });
-        const large = path({ name: 'team.vcf', type: 'file', mimeType: 'text/vcard', size: IMPORT_MAX_BYTES + 1 });
-        expect(idsFor(small)).toContain('import-contacts');
-        expect(idsFor(large)).not.toContain('import-contacts');
+    test('a .vcf imports to contacts right up to the ceiling', () => {
+        const atCeiling = path({ name: 'team.vcf', type: 'file', mimeType: 'text/vcard', size: IMPORT_MAX_BYTES });
+        expect(idsFor(atCeiling)).toContain('import-contacts');
     });
 
     test('exclude drops a row the registry approved', () => {
@@ -140,6 +93,7 @@ describe('fileActionsFor on a subject without a Drive path', () => {
         size: 2048,
         embedUrl: 'https://example.test/embed',
         downloadUrl: 'https://example.test/download',
+        mail: { ownerId: 'owner-1', messageId: 'message-1', index: 2 },
     };
 
     test('quick look applies without a path to check the type of', () => {
