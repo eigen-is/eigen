@@ -84,7 +84,7 @@ export function DriveDetail({
     };
 
     const canOpen = !!onItemOpen && isOpenable(path);
-    const canDownload = !!onDownload && path.type === 'file';
+    const canDownload = !!onDownload && !!subject?.downloadUrl;
 
     return (
         <div className="flex flex-col h-full bg-background">
