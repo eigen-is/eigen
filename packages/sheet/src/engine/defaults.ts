@@ -10,6 +10,10 @@ import { normalizeSheetConfig } from './sheet-config';
 export const DEFAULT_SHEET_ROW_COUNT = 100;
 export const DEFAULT_SHEET_COLUMN_COUNT = 26;
 
+// Ceilings an insert may reach but not pass. The help center quotes both.
+export const MAX_SHEET_ROW_COUNT = 10000;
+export const MAX_SHEET_COLUMN_COUNT = 1000;
+
 // A factory rather than a shared constant: Workbook's initSheetData mutates the
 // sheets handed to it (writes `data`, deletes `celldata`), so a module-level
 // constant would be aliased and mutated across mounts. The id must stay

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Sheet, SheetConfig } from '@workspace/lib/sheets';
+import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol, RowColError } from '../../engine/rowcol';
 import type { EditorSheetConfigExtras } from '../../engine/types';
 
@@ -281,16 +282,55 @@ describe('applySheetsInsertRowCol/Delete — guards', () => {
         expect(getThrownCode(run)).toBe('readOnly');
     });
 
-    test('throws maxExceeded for row count >= 10000', () => {
-        const sheets: Sheet[] = [
+    test('insert up to exactly the row ceiling passes, one past it throws maxExceeded', () => {
+        const rows = (n: number) =>
             makeSheet(
                 's1',
                 'Sheet1',
-                new Array(9999).fill(null).map(() => [cell('x')]),
-            ),
-        ];
+                new Array(n).fill(null).map(() => [cell('x')]),
+            );
+
+        const atCeiling = applySheetsInsertRowCol([rows(MAX_SHEET_ROW_COUNT - 1)], {
+            type: 'row',
+            index: 0,
+            count: 1,
+            direction: 'lefttop',
+            id: 's1',
+        });
+        expect(atCeiling[0].data).toHaveLength(MAX_SHEET_ROW_COUNT);
+
         const run = () =>
-            applySheetsInsertRowCol(sheets, { type: 'row', index: 0, count: 1, direction: 'lefttop', id: 's1' });
+            applySheetsInsertRowCol([rows(MAX_SHEET_ROW_COUNT)], {
+                type: 'row',
+                index: 0,
+                count: 1,
+                direction: 'lefttop',
+                id: 's1',
+            });
+        expect(run).toThrow(RowColError);
+        expect(getThrownCode(run)).toBe('maxExceeded');
+    });
+
+    test('insert up to exactly the column ceiling passes, one past it throws maxExceeded', () => {
+        const cols = (n: number) => makeSheet('s1', 'Sheet1', [new Array(n).fill(null).map(() => cell('x'))]);
+
+        const atCeiling = applySheetsInsertRowCol([cols(MAX_SHEET_COLUMN_COUNT - 1)], {
+            type: 'column',
+            index: 0,
+            count: 1,
+            direction: 'lefttop',
+            id: 's1',
+        });
+        expect(atCeiling[0].data?.[0]).toHaveLength(MAX_SHEET_COLUMN_COUNT);
+
+        const run = () =>
+            applySheetsInsertRowCol([cols(MAX_SHEET_COLUMN_COUNT)], {
+                type: 'column',
+                index: 0,
+                count: 1,
+                direction: 'lefttop',
+                id: 's1',
+            });
         expect(run).toThrow(RowColError);
         expect(getThrownCode(run)).toBe('maxExceeded');
     });

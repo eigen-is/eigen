@@ -1,4 +1,5 @@
 import { cloneSides, type MergeCell, parseCellKey, type Sheet } from '@workspace/lib/sheets';
+import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from './defaults';
 import { functionStrChange } from './formula-shift';
 import type { ExtendedSheetConfig } from './types';
 
@@ -277,8 +278,9 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
 
     if (op.type === 'row' && cfg.rowReadOnly?.[op.index]) throw new RowColError('readOnly');
     if (op.type === 'column' && cfg.colReadOnly?.[op.index]) throw new RowColError('readOnly');
-    if (op.type === 'row' && data.length + op.count >= 10000) throw new RowColError('maxExceeded');
-    if (op.type === 'column' && data[0] && data[0].length + op.count >= 1000) throw new RowColError('maxExceeded');
+    if (op.type === 'row' && data.length + op.count > MAX_SHEET_ROW_COUNT) throw new RowColError('maxExceeded');
+    if (op.type === 'column' && data[0] && data[0].length + op.count > MAX_SHEET_COLUMN_COUNT)
+        throw new RowColError('maxExceeded');
 
     const { count } = op;
     const newTarget = { ...target };

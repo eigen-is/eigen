@@ -1,3 +1,4 @@
+import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { RowColError } from '../../engine/rowcol';
 import type { Context } from '../context';
 import { deleteRowCol, insertRowCol } from '../modules/rowcol';
@@ -18,7 +19,9 @@ export function tryInsertRowCol(
     } catch (e) {
         if (!(e instanceof RowColError)) throw e;
         if (e.code === 'maxExceeded')
-            return op.type === 'row' ? '10000 row limit exceeded' : '1000 column limit exceeded';
+            return op.type === 'row'
+                ? `${MAX_SHEET_ROW_COUNT} row limit exceeded`
+                : `${MAX_SHEET_COLUMN_COUNT} column limit exceeded`;
         return op.type === 'row' ? 'Cannot insert on a read-only row' : 'Cannot insert into a read-only column';
     }
     return null;
