@@ -38,9 +38,17 @@ export type Attachment = {
 };
 
 // The chip label, the Content-Disposition filename and the saved file all read this, so a
-// filename-less part (outbound inline cid parts carry none) shows one name everywhere.
+// filename-less part (outbound inline cid parts carry none) shows one name everywhere. The sender
+// writes that name and it reaches a response header and a Drive file name, so only the basename
+// survives: a path would escape the target folder, a control byte would forge a header line.
+// A code-point check, not a regex: biome rejects a control-character class.
 export function mailAttachmentName(att: Pick<Attachment, 'filename'>, index: number): string {
-    return att.filename || `attachment-${index + 1}`;
+    let name = '';
+    for (const ch of att.filename?.split(/[/\\]/).pop() ?? '') {
+        const code = ch.charCodeAt(0);
+        if (code > 0x1f && code !== 0x7f) name += ch;
+    }
+    return name || `attachment-${index + 1}`;
 }
 
 export type ParsedMail = {
