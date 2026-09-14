@@ -46,8 +46,8 @@ export const api = treaty<app>(API_HOST, {
 
 // The one treaty without date revival: Eden's reviver matches a bare "1990-01-01" too, and a date-only
 // string turned into a Date shifts the day by timezone. Every route serving one reads through here —
-// contact birthdays, and the same birthdays on the Drive vCard preview. Deliberate break from the Date
-// wire convention, pinned by api.test.ts.
+// contact birthdays, and the same birthdays on the Drive vCard preview and the mail part's. Deliberate
+// break from the Date wire convention, pinned by api.test.ts.
 const plainApi = treaty<app>(API_HOST, {
     fetch: {
         credentials: 'include',

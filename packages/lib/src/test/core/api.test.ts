@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
-import { api, contactsApi, vcardPreviewRoute } from '../../core/api';
+import { api, contactsApi, mailVCardPreviewRoute, vcardPreviewRoute } from '../../core/api';
 
 afterEach(() => mock.restore());
 
@@ -48,6 +48,35 @@ describe('API date parsing', () => {
         );
 
         const response = await vcardPreviewRoute('owner-1', 'm1', 'p1').get({ query: {} });
+
+        expect(response.error).toBeNull();
+        expect(response.data?.cards[0]?.contact.birthday).toBe('1990-01-01');
+        expect(response.data?.cards[0]?.contact.birthday).not.toBeInstanceOf(Date);
+    });
+
+    test('keeps mail part vCard preview birthdays as date-only strings', async () => {
+        spyOn(globalThis, 'fetch').mockResolvedValue(
+            Response.json({
+                cards: [
+                    {
+                        contact: {
+                            id: '',
+                            etag: '',
+                            firstName: 'Ada',
+                            lastName: 'Lovelace',
+                            email: [],
+                            phone: [],
+                            birthday: '1990-01-01',
+                        },
+                        categories: [],
+                    },
+                ],
+                dropped: 0,
+                total: 1,
+            }),
+        );
+
+        const response = await mailVCardPreviewRoute('owner-1', 'msg-1', 0).get();
 
         expect(response.error).toBeNull();
         expect(response.data?.cards[0]?.contact.birthday).toBe('1990-01-01');
