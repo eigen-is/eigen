@@ -74,7 +74,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
             if (!isTeam && members.length === 0) throw new ApiError(422, 'At least one member is required');
             // The wizard guards this client-side, but the API contract must too — an empty name
             // would create (and share) a bare '.eigenchat' dotfile.
-            let fileName = body.fileName.trim();
+            let fileName = body.fileName.trim().normalize('NFC');
             if (!fileName) throw new ApiError(422, 'A chat name is required');
 
             const parentId = body.parentId ?? (await drive.ensureChatsFolder(params.mountId));

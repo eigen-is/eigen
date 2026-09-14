@@ -167,7 +167,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
             // WebDAV COPY keeps its overwrite/409 semantics. The self-into-subtree cycle guard lives
             // in Drive.copyPath now — cross-mount copies can never be self-descendant.
             const targetDrive = sameMount ? sourceDrive : await getSharedDrive(body.targetOwnerId, user);
-            const desired = (body.name ?? src.name).replace(/[/\\]/g, '_');
+            // NFC first: the store keeps names NFC, so the compare below has to see the same form.
+            const desired = (body.name ?? src.name).replace(/[/\\]/g, '_').normalize('NFC');
             const siblings = await targetDrive.getFolderContents(body.targetMountId, body.targetParentId);
             const used = new Set(siblings.map((s) => s.name.toLowerCase()));
             const finalName = used.has(desired.toLowerCase()) ? getUniqueFileName(desired, used) : desired;
