@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import type { EmailSummary } from '@workspace/lib/types/mail';
+import type { EmailDraft, EmailSummary } from '@workspace/lib/types/mail';
 import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
@@ -9,6 +9,35 @@ import { assertJson, authedRequest, findOrFail, getTestContext } from '../setup'
 const isWindows = process.platform === 'win32';
 const SUBJECT = 'Attachment route fixture';
 const RANGED_BODY = '0123456789';
+const ODD_NAME = 'räp"ort.txt';
+
+async function uploadDraftAttachment(sessionToken: string, ownerId: string, file: File): Promise<{ tempId: string }> {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await authedRequest(sessionToken, `/mail/${ownerId}/message/draft/attachment`, {
+        method: 'POST',
+        body: form,
+    });
+    return assertJson(res);
+}
+
+async function putDraft(
+    sessionToken: string,
+    ownerId: string,
+    mail: Partial<EmailDraft>,
+    options: { tempAttachmentIds?: string[]; keepAttachmentIndexes?: number[] },
+): Promise<EmailDraft> {
+    const res = await authedRequest(sessionToken, `/mail/${ownerId}/message/draft`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            mail,
+            tempAttachmentIds: options.tempAttachmentIds,
+            keepAttachmentIndexes: options.keepAttachmentIndexes,
+        }),
+    });
+    return assertJson(res);
+}
 
 describe.skipIf(isWindows)('Mail attachment routes', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -51,6 +80,16 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
             'Content-Disposition: attachment; filename="ranged.txt"',
             '',
             RANGED_BODY,
+            `--${boundary}`,
+            'Content-Type: application/xml',
+            'Content-Disposition: attachment; filename="feed.xml"',
+            '',
+            '<?xml version="1.0"?><rss/>',
+            `--${boundary}`,
+            'Content-Type: text/plain; charset=utf-8',
+            `Content-Disposition: attachment; filename="=?UTF-8?B?${Buffer.from(ODD_NAME).toString('base64')}?="`,
+            '',
+            'odd name',
             `--${boundary}--`,
         ].join('\r\n');
 
@@ -180,5 +219,76 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
         const first = await authedRequest(ctx.alice.user.sessionToken, downloadUrl(0, 'page.html'));
         const second = await authedRequest(ctx.alice.user.sessionToken, downloadUrl(1, 'attachment-2'));
         expect(first.headers.get('etag')).not.toBe(second.headers.get('etag'));
+    });
+
+    test('a rewritten draft serves a new ETag for the same part index', async () => {
+        const token = ctx.alice.user.sessionToken;
+        const ownerId = ctx.alice.user.id;
+        const uploadA = await uploadDraftAttachment(token, ownerId, new File(['AAA'], 'a.txt', { type: 'text/plain' }));
+        const draft = await putDraft(
+            token,
+            ownerId,
+            { subject: 'Rewritten draft', text: 'first', html: '<p>first</p>', isDraft: true, mailbox: 'Drafts' },
+            { tempAttachmentIds: [uploadA.tempId] },
+        );
+        const partUrl = `/mail/${ownerId}/message/${draft.id}/attachment/0/part.txt`;
+
+        const before = await authedRequest(token, partUrl);
+        expect(await before.text()).toBe('AAA');
+        const staleEtag = before.headers.get('etag') ?? '';
+        expect(staleEtag).not.toBe('');
+
+        const uploadB = await uploadDraftAttachment(
+            token,
+            ownerId,
+            new File(['BBBBBB'], 'b.txt', { type: 'text/plain' }),
+        );
+        const resaved = await putDraft(
+            token,
+            ownerId,
+            { ...draft, text: 'second', html: '<p>second</p>' },
+            { tempAttachmentIds: [uploadB.tempId], keepAttachmentIndexes: [] },
+        );
+        expect(resaved.id).toBe(draft.id);
+
+        const after = await authedRequest(token, partUrl);
+        expect(await after.text()).toBe('BBBBBB');
+        expect(after.headers.get('etag')).not.toBe(staleEtag);
+
+        const revalidated = await authedRequest(token, partUrl, { headers: { 'if-none-match': staleEtag } });
+        expect(revalidated.status).toBe(200);
+        expect(await revalidated.text()).toBe('BBBBBB');
+    });
+
+    test('the download route serves a range as 206', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, downloadUrl(2, 'ranged.txt'), {
+            headers: { range: 'bytes=4-' },
+        });
+        expect(res.status).toBe(206);
+        expect(res.headers.get('content-range')).toBe(`bytes 4-9/${RANGED_BODY.length}`);
+        expect(res.headers.get('content-length')).toBe('6');
+        expect(await res.text()).toBe('456789');
+    });
+
+    test('an XML part is sandboxed on the embed route', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, embedUrl(3, 'feed.xml'));
+        expect(res.status).toBe(200);
+        expect(res.headers.get('content-type')).toBe('application/xml');
+        expect(res.headers.get('content-security-policy')).toBe("sandbox; default-src 'none'");
+    });
+
+    test('a non-ASCII filename with a quote is served as an RFC 5987 disposition', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, downloadUrl(4, 'odd.txt'));
+        expect(res.status).toBe(200);
+        expect(res.headers.get('content-disposition')).toBe(
+            `attachment; filename="r_p_ort.txt"; filename*=UTF-8''${encodeURIComponent(ODD_NAME)}`,
+        );
+    });
+
+    test('a negative index is refused at the schema boundary on both routes', async () => {
+        const download = await authedRequest(ctx.alice.user.sessionToken, downloadUrl(-1, 'page.html'));
+        expect(download.status).toBe(422);
+        const embed = await authedRequest(ctx.alice.user.sessionToken, embedUrl(-1, 'page.html'));
+        expect(embed.status).toBe(422);
     });
 });

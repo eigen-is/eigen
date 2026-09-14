@@ -12,7 +12,7 @@ import {
     saveAttachmentsToDrive,
     uploadDraftAttachment,
 } from '../lib/mail/mail';
-import { mailPartEtag, mailPartNotModified, serveMailPart } from '../lib/mail/serve-mail-part';
+import { serveMailPart } from '../lib/mail/serve-mail-part';
 import { betterAuth } from './auth';
 import { attachmentReferenceSchema } from './shared-schemas';
 
@@ -49,10 +49,10 @@ const _mailDraftSchemaCheck: _MailDraftSchemaCoversNewDraft = true;
 void _mailDraftSchemaCheck;
 
 // The :fileName segment is decoration: both byte routes take the served name from the part itself.
-const AttachmentParams = t.Object({
+const AttachmentParamsSchema = t.Object({
     ownerId: t.String(),
     id: t.String(),
-    index: t.Integer(),
+    index: t.Integer({ minimum: 0 }),
     fileName: t.String(),
 });
 
@@ -305,24 +305,16 @@ export const mailRouter = new Elysia({ name: 'mail' })
         async ({ params, request, user }): Promise<Response> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            const etag = mailPartEtag(params.id, params.index);
-            const notModified = mailPartNotModified(etag, request.headers.get('if-none-match'));
-            if (notModified) return notModified;
-            const attachment = await (await getMailClient(user)).messageGetAttachment(params.id, params.index);
-            return serveMailPart(attachment, params.index, 'attachment', request.headers.get('range'), etag);
+            return serveMailPart(await getMailClient(user), params.id, params.index, 'attachment', request);
         },
-        { auth: true, params: AttachmentParams },
+        { auth: true, params: AttachmentParamsSchema },
     )
     .get(
         '/mail/:ownerId/message/:id/attachment/:index/embed/:fileName',
         async ({ params, request, user }): Promise<Response> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            const etag = mailPartEtag(params.id, params.index);
-            const notModified = mailPartNotModified(etag, request.headers.get('if-none-match'));
-            if (notModified) return notModified;
-            const attachment = await (await getMailClient(user)).messageGetAttachment(params.id, params.index);
-            return serveMailPart(attachment, params.index, 'inline', request.headers.get('range'), etag);
+            return serveMailPart(await getMailClient(user), params.id, params.index, 'inline', request);
         },
-        { auth: true, params: AttachmentParams },
+        { auth: true, params: AttachmentParamsSchema },
     );
