@@ -1,5 +1,6 @@
-import { XMLParser } from 'fast-xml-parser';
+import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { ApiError } from '../core/errors';
+import { isNcName } from '../dav/propfind';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
 import { enclosingDocumentContainer } from './container-guard';
@@ -87,7 +88,9 @@ function* iterPropChildren(
 }
 
 function extractPropOps(body: string): PropOp[] {
-    if (!body?.trim()) return [];
+    if (!body.trim()) return [];
+    // fxp is lenient: a truncated body still yields ops. Validate first, like PROPFIND does.
+    if (XMLValidator.validate(body) !== true) throw new ApiError(400, 'Malformed XML');
     const parsed = parser.parse(body) as Record<string, unknown>;
     const rootKey = Object.keys(parsed).find((k) => stripPrefix(k).local === 'propertyupdate');
     if (!rootKey) return [];
@@ -114,6 +117,8 @@ function extractPropOps(body: string): PropOp[] {
             if (!propKey) continue;
             for (const child of iterPropChildren((entry as Record<string, unknown>)[propKey])) {
                 const { prefix, local } = stripPrefix(child.tag);
+                // The name is persisted and echoed as an element; fxp accepts names XML forbids.
+                if (!isNcName(local)) throw new ApiError(400, `Invalid property name: ${local}`);
                 const namespace = resolveNamespace(prefix, { ...docAttrs, ...child.attrs }, 'DAV:');
                 ops.push({ op: verb, namespace, name: local, value: child.value });
             }

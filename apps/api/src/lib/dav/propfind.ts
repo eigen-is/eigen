@@ -99,12 +99,13 @@ export function wantsBrief(request: Request): boolean {
 
 // fxp accepts tag names XML forbids (`<`, `&`), which would make the echoed element non-well-formed.
 const NCNAME_ISH = /^[A-Za-z_][A-Za-z0-9._-]*$/;
+export const isNcName = (name: string): boolean => NCNAME_ISH.test(name);
 
 // An unknown prop echoed inside the 404 propstat, self-declaring its namespace (<x:name xmlns:x="uri"/>). A
 // default-namespace prop needs a synthetic prefix to be self-declared; an unresolvable namespace or a
 // non-NCName name/prefix is dropped (degrading to today's silence for that one prop).
 function echoMissing(p: RequestedProp): string | null {
-    if (p.ns === null || !NCNAME_ISH.test(p.name) || (p.prefix !== '' && !NCNAME_ISH.test(p.prefix))) return null;
+    if (p.ns === null || !isNcName(p.name) || (p.prefix !== '' && !isNcName(p.prefix))) return null;
     const prefix = p.prefix || 'x';
     return `<${prefix}:${p.name} xmlns:${prefix}="${escapeXml(p.ns)}"/>`;
 }
