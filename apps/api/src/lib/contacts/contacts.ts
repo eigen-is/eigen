@@ -41,7 +41,7 @@ import { CONTACTS_DB_CONFIG } from './db-config';
 import * as labels from './labels';
 import * as reconcile from './reconcile';
 import * as schema from './schema';
-import { buildContactEvent, buildLabelEvent } from './sse-events';
+import { buildContactEvent, buildContactsChangedEvent, buildLabelEvent } from './sse-events';
 import * as transfer from './transfer';
 
 export async function getContacts(user: User): Promise<Contacts> {
@@ -121,6 +121,11 @@ export class Contacts {
     // Whether card writes are quota-metered — see the assignment in init() for what turns it on.
     private meteredIngest = false;
 
+    // Set while a bulk write runs (a whole-file import), holding the per-card events back for the one
+    // list-level event that closes it. Whatever sets this owes that event, so a card written by something
+    // else in the same window loses nothing: its invalidation is owner-wide and the batch still fires.
+    batchingContactEvents = false; // internal — used by contacts/*.ts
+
     constructor(home: Home) {
         this.home = home;
         this.storage = new LocalFilesystem(`${home.homeDir}/${PATHS.CONTACTS.ROOT}`);
@@ -128,7 +133,13 @@ export class Contacts {
 
     // internal — used by contacts/*.ts
     emitContact(type: Parameters<typeof buildContactEvent>[0], contactId: string): void {
+        if (this.batchingContactEvents) return;
         this.home.broadcast(buildContactEvent(type, contactId));
+    }
+
+    // internal — used by contacts/*.ts
+    emitContactsChanged(): void {
+        this.home.broadcast(buildContactsChangedEvent());
     }
 
     // internal — used by contacts/*.ts

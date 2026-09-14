@@ -1,5 +1,6 @@
-// A whole-book import or a CardDAV bulk sync broadcasts one contacts:contact-* per card, so the handler's
-// job during a burst is to refetch the list once.
+// A CardDAV bulk sync broadcasts one contacts:contact-* per card, so the handler's job during a burst is to
+// refetch the list once — and the batched contacts:changed a whole-file import sends instead has to reach the
+// very same keys.
 import { describe, expect, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -47,6 +48,17 @@ describe('handleContactsSSEvent — burst', () => {
         expect(countKey(touched, contactKeys.lists(owner))).toBe(0);
 
         await settle();
+        expect(countKey(touched, contactKeys.lists(owner))).toBe(1);
+        expect(countKey(touched, contactKeys.me(owner))).toBe(1);
+    });
+
+    test('the batched event invalidates the same keys a card event does', async () => {
+        const owner = 'owner-batched';
+        const { queryClient, touched } = trackingClient();
+
+        expect(handleContactsSSEvent({ type: SSEventType.CONTACTS_CHANGED }, queryClient, owner)).toBe(true);
+        await settle();
+
         expect(countKey(touched, contactKeys.lists(owner))).toBe(1);
         expect(countKey(touched, contactKeys.me(owner))).toBe(1);
     });

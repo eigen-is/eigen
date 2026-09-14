@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1419 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1420 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -473,7 +473,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (339)
+## Types (340)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -657,6 +657,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SSEventCalendar` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventChat` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventContact` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
+| `SSEventContactsChanged` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventDrive` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventLabel` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventMail` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |

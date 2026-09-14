@@ -4,10 +4,11 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import { debounce } from 'es-toolkit';
 import { invalidateContactList, invalidateLabelChanged, invalidateLabelCreated } from './hooks/keys';
 
-// A whole-book import or a CardDAV bulk sync emits one event per card, and every card's invalidation
-// restarts the mounted list refetch — 500 cards used to mean 500 refetches per open tab, enough to trip the
-// per-IP rate limiter. One trailing refetch per owner per burst instead. The importing tab's own onSuccess
-// invalidation is untouched, so a single write still lands immediately.
+// A CardDAV bulk sync emits one event per card (a whole-file import sends the one batched contacts:changed
+// instead), and every card's invalidation restarts the mounted list refetch — 500 cards would mean 500
+// refetches per open tab, enough to trip the per-IP rate limiter. One trailing refetch per owner per burst
+// instead. The importing tab's own onSuccess invalidation is untouched, so a single write still lands
+// immediately.
 const INVALIDATE_DEBOUNCE_MS = 250;
 const debouncedListInvalidations = new Map<string, (queryClient: QueryClient) => void>();
 
@@ -29,6 +30,8 @@ export function handleContactsSSEvent(event: SSEvent, queryClient: QueryClient, 
         case SSEventType.CONTACT_CREATED:
         case SSEventType.CONTACT_UPDATED:
         case SSEventType.CONTACT_DELETED:
+        // The batched event stands for a burst of the three above, so it invalidates exactly what they do.
+        case SSEventType.CONTACTS_CHANGED:
             invalidateListSoon(queryClient, userId);
             return true;
 

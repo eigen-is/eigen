@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { IMPORT_MAX_CARDS } from '@workspace/lib/constants/contact';
+import { SSEventType } from '@workspace/lib/types/sse';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { getHome } from '../../lib/home';
 import { parseVCard, splitVCards } from '../../lib/vcard';
@@ -170,6 +171,23 @@ describe('Contacts import', () => {
     test('text that is not a vCard file throws 400', async () => {
         const { contacts } = await makeContacts();
         await expect(contacts.importCards('just some notes\n')).rejects.toMatchObject({ status: 400 });
+    });
+
+    test('a whole file broadcasts one batched event, not one per card', async () => {
+        const { contacts, broadcasts } = await makeContacts();
+        const text = Array.from({ length: 25 }, (_, i) =>
+            card30(`Batch${i} Import`, `batch-${i}@example.com`, randomUUID()),
+        ).join('');
+        broadcasts.length = 0;
+
+        expect(await contacts.importCards(text)).toEqual({ imported: 25, skipped: 0, failed: 0 });
+        expect(broadcasts.filter((e) => e.type === SSEventType.CONTACT_CREATED).length).toBe(0);
+        expect(broadcasts.filter((e) => e.type === SSEventType.CONTACTS_CHANGED).length).toBe(1);
+
+        // A re-import stores nothing, so there is nothing for the tabs to refetch.
+        broadcasts.length = 0;
+        expect(await contacts.importCards(text)).toEqual({ imported: 0, skipped: 25, failed: 0 });
+        expect(broadcasts.length).toBe(0);
     });
 
     test('more than IMPORT_MAX_CARDS throws 413', async () => {

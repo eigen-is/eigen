@@ -46,7 +46,8 @@ Events are minimal — only what the frontend handler needs for cache invalidati
 - Mail: `mail.messageId`, `mail.mailbox`, optional `mail.toMailbox`
 - Calendar: `ownerId`
 - Chat: `chat.chatId`, `chat.ownerId`, `chat.mountId`
-- Contacts: `contactId` or `labelId`
+- Contacts: `contactId` or `labelId`; the batched `contacts:changed` a whole-file import sends in place of one
+  event per card carries neither — a card change invalidates the owner's whole list ([CONTACTS.md](CONTACTS.md))
 - Notification: `title`, optional `body`, optional `notificationType` + `tag` — the last two let the toast's **View**
   action resolve the same deep link the bell uses (`resolveNotificationLink`), without shipping the whole row
 - Space: just the event type
