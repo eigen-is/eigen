@@ -1,56 +1,9 @@
-import { afterAll, expect, test } from 'bun:test';
+import { expect, test } from 'bun:test';
 import type { FileAction, FileActionId } from '@workspace/lib/file-actions';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
-import { Window } from 'happy-dom';
+import { installHappyDom } from '../../happy-dom';
 
-// The rows are real Radix menu items (portal + focus scope + floating-ui), so this file borrows the
-// whole happy-dom window and puts it back in afterAll, exactly like the color-row test next door.
-const window = new Window({ url: 'http://localhost:3000' });
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-const borrowed: string[] = [];
-for (const key of Object.getOwnPropertyNames(window)) {
-    // biome-ignore lint/suspicious/noExplicitAny: reading the happy-dom window's own globals
-    const value = (window as any)[key];
-    if (g[key] === undefined && value !== undefined) {
-        g[key] = value;
-        borrowed.push(key);
-    }
-}
-for (const key of ['Event', 'CustomEvent', 'MouseEvent', 'KeyboardEvent', 'Node', 'Element', 'HTMLElement']) {
-    // biome-ignore lint/suspicious/noExplicitAny: reading the happy-dom window's own globals
-    g[key] = (window as any)[key];
-    borrowed.push(key);
-}
-g.window = window;
-g.document = window.document;
-g.navigator = window.navigator;
-g.getComputedStyle = window.getComputedStyle.bind(window);
-g.IS_REACT_ACT_ENVIRONMENT = true;
-class FakeResizeObserver {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-}
-g.ResizeObserver = FakeResizeObserver;
-g.requestAnimationFrame = (callback: () => void) => {
-    callback();
-    return 0;
-};
-g.cancelAnimationFrame = () => {};
-
-afterAll(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    for (const key of borrowed) g[key] = undefined;
-    g.window = undefined;
-    g.document = undefined;
-    g.navigator = undefined;
-    g.getComputedStyle = undefined;
-    g.ResizeObserver = undefined;
-    g.requestAnimationFrame = undefined;
-    g.cancelAnimationFrame = undefined;
-    g.IS_REACT_ACT_ENVIRONMENT = undefined;
-});
+installHappyDom();
 
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
