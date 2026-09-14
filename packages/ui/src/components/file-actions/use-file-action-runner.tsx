@@ -6,10 +6,14 @@ import { useConvertDocument } from '@workspace/lib/drive';
 import type { FileAction } from '@workspace/lib/file-actions';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import { type ReactNode, useState } from 'react';
+import { ProgressDialog } from '../drive/progress-dialog';
 import { SaveToDrivePicker } from '../drive/save-to-drive-picker';
-import { usePreview } from '../preview-provider/preview-context';
+import { type PreviewOptions, usePreview } from '../preview-provider/preview-context';
 
-type FileActionRunner = {
+export type FileActionRunner = {
+    // The menu component draws the rows from the same subject the runner acts on, so a host can
+    // never pair one with another's.
+    subject: FileSubject | null;
     run: (action: FileAction) => void;
     // For a host with a batch of its own to save — the overlay's "Save all" row.
     openPicker: (subjects: FileSubject[]) => void;
@@ -19,7 +23,12 @@ type FileActionRunner = {
     isPending: boolean;
 };
 
-export function useFileActionRunner(subject: FileSubject, siblings?: FileSubject[]): FileActionRunner {
+// A host whose subject is state — the right-clicked chip or row — passes null while there is none.
+export function useFileActionRunner(
+    subject: FileSubject | null,
+    siblings?: FileSubject[],
+    options?: PreviewOptions,
+): FileActionRunner {
     const { openPreview } = usePreview();
     const convertDocument = useConvertDocument();
     const importContactsFromDrive = useImportContactsFromDrive();
@@ -27,7 +36,7 @@ export function useFileActionRunner(subject: FileSubject, siblings?: FileSubject
     const [pickerSubjects, setPickerSubjects] = useState<FileSubject[] | null>(null);
 
     const convert = (targetType: 'eigensheets' | 'eigendoc') => {
-        const { drive } = subject;
+        const drive = subject?.drive;
         // A later unit saves a non-Drive subject to Drive first, then converts what it saved.
         if (!drive?.parentId) return;
         convertDocument.mutate(
@@ -43,6 +52,7 @@ export function useFileActionRunner(subject: FileSubject, siblings?: FileSubject
     };
 
     const runImportContacts = () => {
+        if (!subject) return;
         const { drive, downloadUrl } = subject;
         if (drive) {
             importContactsFromDrive.mutate({
@@ -64,9 +74,10 @@ export function useFileActionRunner(subject: FileSubject, siblings?: FileSubject
     };
 
     const run = (action: FileAction) => {
+        if (!subject) return;
         switch (action.id) {
             case 'quick-look':
-                openPreview(subject, siblings);
+                openPreview(subject, siblings, options);
                 return;
             case 'download':
                 if (subject.downloadUrl) triggerDownload(subject.downloadUrl);
@@ -87,16 +98,27 @@ export function useFileActionRunner(subject: FileSubject, siblings?: FileSubject
     };
 
     return {
+        subject,
         run,
         openPicker: setPickerSubjects,
         // Mounted while closed: the picker's "Download instead" fires staggered downloads from timers
         // it clears when it unmounts.
         dialogs: (
-            <SaveToDrivePicker
-                subjects={pickerSubjects ?? [subject]}
-                open={pickerSubjects !== null}
-                onClose={() => setPickerSubjects(null)}
-            />
+            <>
+                <SaveToDrivePicker
+                    subjects={pickerSubjects ?? []}
+                    open={pickerSubjects !== null}
+                    onClose={() => setPickerSubjects(null)}
+                />
+                <ProgressDialog
+                    open={convertDocument.isPending}
+                    title={
+                        convertDocument.variables?.targetType === 'eigendoc'
+                            ? 'Converting to document'
+                            : 'Converting to sheet'
+                    }
+                />
+            </>
         ),
         isDialogOpen: pickerSubjects !== null,
         isPending: convertDocument.isPending || importContactsFromDrive.isPending || importContacts.isPending,

@@ -7,7 +7,8 @@ import { DropdownMenu, DropdownMenuContent } from '@workspace/ui/components/drop
 import { KebabTrigger } from '@workspace/ui/components/layout/toolbar';
 import { WatchToggleButton } from '@workspace/ui/components/layout/toolbar/watch-toggle-button';
 import { Download, UserRoundPlus, X } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useMemo } from 'react';
+import { useFileActionRunner } from '../file-actions/use-file-action-runner';
 import { useLayout } from '../layout/app/layout-context';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { useOptionalPreview } from '../preview-provider/preview-provider';
@@ -33,6 +34,8 @@ export function DriveDetailToolbar({ onClose }: DriveDetailToolbarProps) {
 
 type DriveDetailProps = {
     path: DrivePath | null;
+    // The listing this item sits in, in its display order: Quick preview pages through it.
+    siblings?: DrivePath[];
     onDelete?: (items: DrivePath[]) => void;
     onShareClick?: (path: DrivePath) => void;
     onDownload?: (path: DrivePath) => void;
@@ -41,9 +44,6 @@ type DriveDetailProps = {
     onMoveTo?: (items: DrivePath[]) => void;
     onCopyTo?: (items: DrivePath[]) => void;
     onDuplicate?: (items: DrivePath[]) => void;
-    onQuickLook?: (path: DrivePath) => void;
-    onConvert?: (path: DrivePath, target: 'eigensheets' | 'eigendoc') => void;
-    onImportContacts?: (path: DrivePath) => void;
     onExport?: (path: DrivePath, format: string) => void;
     onEmailCollaborators?: (path: DrivePath) => void;
     allowDelete?: boolean;
@@ -52,6 +52,7 @@ type DriveDetailProps = {
 
 export function DriveDetail({
     path,
+    siblings,
     onDelete,
     onShareClick,
     onDownload,
@@ -60,15 +61,15 @@ export function DriveDetail({
     onMoveTo,
     onCopyTo,
     onDuplicate,
-    onQuickLook,
-    onConvert,
-    onImportContacts,
     onExport,
     onEmailCollaborators,
     allowDelete,
     highlightHistory,
 }: DriveDetailProps) {
     const preview = useOptionalPreview();
+    const subject = useMemo(() => (path ? subjectFromPath(path) : null), [path]);
+    const siblingSubjects = useMemo(() => siblings?.map(subjectFromPath), [siblings]);
+    const runner = useFileActionRunner(subject, siblingSubjects);
 
     if (!path) return null;
 
@@ -123,11 +124,8 @@ export function DriveDetail({
                             <DropdownMenuContent className="w-48">
                                 <DriveItemMenuItems
                                     item={path}
+                                    runner={runner}
                                     onItemOpen={onItemOpen}
-                                    onQuickLook={onQuickLook}
-                                    onDownload={onDownload}
-                                    onConvert={onConvert}
-                                    onImportContacts={onImportContacts}
                                     onExport={onExport}
                                     onRename={onRename}
                                     onMoveTo={onMoveTo}
@@ -147,6 +145,7 @@ export function DriveDetail({
                 <DriveAccessList path={path} onShareClick={onShareClick} />
                 <RecentActivity path={path} highlight={highlightHistory} />
             </div>
+            {runner.dialogs}
         </div>
     );
 }

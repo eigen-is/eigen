@@ -91,9 +91,6 @@ export function DriveLayout({
         ownerId,
         mountId,
         pathId,
-        onConvert: actions.onConvert,
-        onImportContacts: actions.onImportContacts,
-        onDownload: actions.onDownload,
         onExport: actions.onExport,
         // Every view links rows to the one canonical item URL.
         getItemHref: getDriveItemUrl,
@@ -131,6 +128,7 @@ export function DriveLayout({
 
     const detailProps = {
         path: detailPath,
+        siblings: sortedContents,
         onDelete: actions.onDelete,
         onShareClick: actions.onShareClick,
         onDownload: actions.onDownload,
@@ -140,9 +138,6 @@ export function DriveLayout({
         onMoveTo: actions.onMoveTo,
         onCopyTo: actions.onCopyTo,
         onDuplicate: actions.onDuplicate,
-        onQuickLook: onQuickLook ? wrappedQuickLook : undefined,
-        onConvert: actions.onConvert,
-        onImportContacts: actions.onImportContacts,
         onExport: actions.onExport,
         onEmailCollaborators: actions.onEmailCollaborators,
         highlightHistory,
