@@ -6,6 +6,7 @@ import {
     DRIVE_MIME_VECTOR,
     isVCardFile,
 } from '../types/drive';
+import type { FileSubject } from '../types/file-subject';
 
 const CODE_MIMES = [
     'text/',
@@ -35,6 +36,19 @@ const EXIFTOOL_EXTENSIONS = new Set([
     '.ai',
     '.heic',
     '.heif',
+]);
+
+// The image mimes a browser decodes on its own. A subject whose <img> points at the original bytes
+// (no Drive /preview route behind it) is only an image preview for one of these — an <img> never runs
+// script, so serving these inline is safe, and a HEIC gets the fallback card instead of a broken box.
+export const BROWSER_IMAGE_MIMES = new Set([
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'image/avif',
+    'image/bmp',
+    'image/svg+xml',
 ]);
 
 export type TextPreviewMode =
@@ -84,4 +98,23 @@ export function isSearchableTextFile(mimeType: string, fileName: string): boolea
 
 export function isExiftoolExtension(fileName: string): boolean {
     return EXIFTOOL_EXTENSIONS.has(getExtension(fileName));
+}
+
+export type PreviewMode = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'vcard' | 'fallback';
+
+// How the preview overlay renders a file. Every server-rendered mode needs a mount to query, so it
+// gates on `drive`. Without one the <img> shows the original bytes instead of a resized WebP, which
+// only a browser-decodable mime survives.
+export function getPreviewMode(subject: FileSubject): PreviewMode {
+    const mime = subject.mimeType || '';
+
+    if (subject.drive ? mime.startsWith('image/') || isExiftoolExtension(subject.name) : BROWSER_IMAGE_MIMES.has(mime))
+        return 'image';
+    if (mime.startsWith('video/')) return 'video';
+    if (mime.startsWith('audio/')) return 'audio';
+    if (mime === 'application/pdf') return 'pdf';
+    // A .vcf reads as contact cards, never as its raw text — which is why getTextPreviewMode declines it.
+    if (subject.drive && isVCardFile(mime, subject.name)) return 'vcard';
+    if (subject.drive && getTextPreviewMode(mime, subject.name) !== null) return 'text';
+    return 'fallback';
 }
