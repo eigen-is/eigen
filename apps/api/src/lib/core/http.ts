@@ -100,6 +100,8 @@ export function parseByteRange(
     const startStr = match[1];
     const endStr = match[2];
     if (startStr === '' && endStr === '') return null;
+    // A last-pos before its first-pos is an invalid spec, which also means "ignore" (RFC 9110 §14.1.1).
+    if (startStr !== '' && endStr !== '' && Number(startStr) > Number(endStr)) return null;
     if (size === 0) return 'unsatisfiable';
     // Suffix range "bytes=-N" means "last N bytes": start = size - N, end = size - 1.
     // Open-ended "bytes=N-" means "from N to EOF": end = size - 1.
