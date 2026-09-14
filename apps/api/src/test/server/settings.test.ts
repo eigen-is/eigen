@@ -20,7 +20,7 @@ import { getServerConfig } from '../../lib/config/server-config';
 import { atHome } from '../../lib/home/get-home';
 import { pullHomeSize } from '../../lib/home/home-relay';
 import * as s3Storage from '../../lib/storage/s3-storage';
-import { assertJson, authedRequest, getTestContext } from '../setup';
+import { assertJson, authedRequest, createTestUser, driveGet, driveUpload, getTestContext } from '../setup';
 
 describe('Server Settings', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -1050,10 +1050,21 @@ describe('GET /settings/users/usage', () => {
     // The admin view sizes from the home's own files, the user's own storage page from their booted
     // home: same paths table, same emails index, same cards and avatars, same quota resolution.
     test('reads the same totals the home itself reports', async () => {
-        const ctx = await getTestContext();
-        const sizeRes = await authedRequest(ctx.alice.user.sessionToken, `/home/${ctx.alice.user.id}/size`);
+        // A home of its own: Alice's carries documents earlier files left open, whose 30 s syncs re-stat
+        // sizes between the two reads below. One file and one card give both halves something to add up.
+        await getTestContext();
+        const owner = await createTestUser('usage-totals@test.eigen.is', 'testpassword123', 'Usage Totals');
+        const root = await driveGet(owner.sessionToken, owner.id, 'default', 'root');
+        await driveUpload(owner.sessionToken, owner.id, 'default', root.id, new File(['some bytes'], 'sized.txt'));
+        const cardRes = await authedRequest(owner.sessionToken, `/contacts/${owner.id}/contacts`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ firstName: 'Sized', lastName: 'Card', email: [], phone: [] }),
+        });
+        expect(cardRes.status).toBe(200);
+        const sizeRes = await authedRequest(owner.sessionToken, `/home/${owner.id}/size`);
         const live = await assertJson<HomeSizeResponse>(sizeRes);
-        const sized = await pullHomeSize(ctx.alice.user.id);
+        const sized = await pullHomeSize(owner.id);
         expect(sized).toEqual(live);
         // Both halves have to be reading something, or an always-zero reader would pass the above.
         expect(sized.drive.default.used).toBeGreaterThan(0);
