@@ -53,7 +53,10 @@ type DatabaseConfig<S extends SchemaType> = {
 ### Lifecycle
 
 1. `open(autoSyncMs)` — opens DB, runs pending migrations, starts sync timer (default 30s)
-2. `sync()` — runs `onSync` callback + `PRAGMA wal_checkpoint(PASSIVE)` (non-blocking). Skips if not dirty
+2. `sync()` — runs `onSync` callback + `PRAGMA wal_checkpoint(PASSIVE)` (non-blocking). Skips if not dirty. The
+   dirty watermark is captured before `onSync` runs and advanced only after it returns, so a throwing `onSync` leaves
+   the db dirty: the next tick retries, `flush()` propagates the error, and `close()` still tears down and passes
+   `syncFailed` to `onClose`
 3. `close()` — syncs, `PRAGMA wal_checkpoint(TRUNCATE)`, closes DB, deletes WAL/SHM journal files. The close is strict: drizzle's statements are finalized as they run (`withAutoFinalize`), because a lazy close leaves `-shm` mapped and unlinking it under that zombie makes the next open of the same file fail with `SQLITE_IOERR_VNODE`
 
 ### Migrations
@@ -67,6 +70,12 @@ DB whose stored `__schema_version` is *higher* than the binary's `config.current
 downgrading to an older server would otherwise silently open (and keep writing to) a schema it doesn't
 understand, corrupting it. The operator sees a 503 for that domain until the binary is rolled forward to a
 version that knows the on-disk schema; nothing on disk is touched in the meantime.
+
+The same read refuses a stamp that is not an integer (503 `unreadable schema stamp`): only our own migrations write it,
+and a non-number compares false against every migration, so without the guard the db would open with nothing migrated
+and fail on its first query instead of at open. A missing stamp row cannot go unnoticed either: `INSERT OR IGNORE`
+recreates it at 0, every migration re-runs and the first `CREATE TABLE` fails inside its own transaction. Any failure
+inside `open()` closes the raw handle before rethrowing, so the same file reopens cleanly once repaired.
 
 ### Pragmas
 

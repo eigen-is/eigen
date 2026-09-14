@@ -40,8 +40,7 @@ describe('parseByteRange', () => {
     });
 
     test('ignores a header it cannot parse rather than rejecting the request', () => {
-        // 'bytes=5-2': a last-pos before its first-pos is a syntactically invalid spec, and RFC 9110
-        // §14.1.1 says to ignore the whole header then, not to answer 416.
+        // 'bytes=5-2' parses, but last-pos before first-pos is an invalid spec → ignore, not 416 (RFC 9110 §14.1.1).
         for (const header of [
             'bytes=0-1,4-5',
             'bytes = 0-2',
