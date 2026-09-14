@@ -12,7 +12,7 @@ type ToMenuItem<H, T> = (host: H, chipKey: string | null) => T | undefined;
 export type AttachmentChipMenu<H, T> = {
     contextMenu: ReturnType<typeof useContextMenu<T>>;
     // Spread on the element holding the chips; `host` is the row the press belongs to.
-    bind: (host: H) => ReturnType<ReturnType<typeof useLongPress<unknown>>['bind']> & {
+    bind: (host: H) => ReturnType<ReturnType<typeof useLongPress<H>>['bind']> & {
         onContextMenu: (e: React.MouseEvent) => void;
         onPointerDownCapture: (e: React.PointerEvent) => void;
     };

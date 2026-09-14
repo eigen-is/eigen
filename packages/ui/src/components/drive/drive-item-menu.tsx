@@ -102,12 +102,13 @@ export function DriveItemMenuItems({
                 </DropdownMenuItem>
             )}
 
-            {(fileActions.length > 0 ||
-                exportFormats.length > 0 ||
-                !!onRename ||
-                !!onMoveTo ||
-                !!onCopyTo ||
-                !!onDuplicate) && <DropdownMenuSeparator />}
+            {((canOpen && onItemOpen) || href) &&
+                (fileActions.length > 0 ||
+                    exportFormats.length > 0 ||
+                    !!onRename ||
+                    !!onMoveTo ||
+                    !!onCopyTo ||
+                    !!onDuplicate) && <DropdownMenuSeparator />}
             <FileActionMenuItems runner={runner} exclude={DRIVE_EXCLUDED_ACTIONS} />
             {exportFormats.length > 0 && onExport && (
                 <DropdownMenuSub>

@@ -35,7 +35,7 @@ ends with **Save all**, followed by the number of files.
 
 The same menu holds every action the preview's bottom bar offers, so you can download a file, convert it, or
 import a contact file without opening it first. When you convert one, Eigen asks for a Drive folder first, saves
-the file there, and creates the converted copy beside it.
+the file there, and creates the converted copy beside it when you click **Save and convert**.
 
 ## Save all of them at once
 
