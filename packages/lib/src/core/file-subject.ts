@@ -1,5 +1,10 @@
-import { BROWSER_IMAGE_MIMES, getTextPreviewMode, isExiftoolExtension } from '../constants/preview';
-import { type DrivePath, isVCardFile } from '../types/drive';
+import {
+    BROWSER_IMAGE_MIMES,
+    getBytesTextPreviewMode,
+    getTextPreviewMode,
+    isExiftoolExtension,
+} from '../constants/preview';
+import { type DrivePath, isCollabType, isVCardFile } from '../types/drive';
 import type { FileSubject, PreviewMode } from '../types/file-subject';
 import { type Attachment, mailAttachmentName } from '../types/mail';
 import {
@@ -60,6 +65,12 @@ export function getPreviewMode(subject: FileSubject): PreviewMode {
     if (mime.startsWith('audio/')) return 'audio';
     if (mime === 'application/pdf') return 'pdf';
     if (isVCardFile(mime, subject.name)) return 'vcard';
-    if (getTextPreviewMode(mime, subject.name) !== null) return 'text';
+    // The gate the preview routes run: a container renders from its Yjs body, everything else from its
+    // bytes, and an eigen mime on loose bytes is only the uploader's or the sender's word.
+    const textMode =
+        subject.drive && isCollabType(subject.drive.type)
+            ? getTextPreviewMode(mime, subject.name)
+            : getBytesTextPreviewMode(mime, subject.name);
+    if (textMode !== null) return 'text';
     return 'fallback';
 }
