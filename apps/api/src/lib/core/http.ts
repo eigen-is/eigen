@@ -85,19 +85,22 @@ export async function readBoundedBody(request: Request, maxBytes: number): Promi
 }
 
 // RFC 7233 single byte-range. Returns the inclusive [start, end] when satisfiable,
-// 'unsatisfiable' when a range was requested but can't be served (caller responds 416),
-// or null when there's no Range header (caller serves the full 200 body).
+// 'unsatisfiable' when a parsed range lies outside the resource (caller responds 416),
+// or null when there is no range to serve (caller serves the full 200 body).
 // Single source for the byte math shared by serveFile (embed/download) and the WebDAV GET.
 export function parseByteRange(
     rangeHeader: string | null,
     size: number,
 ): { start: number; end: number } | 'unsatisfiable' | null {
     if (!rangeHeader) return null;
-    if (size === 0) return 'unsatisfiable';
     const match = rangeHeader.match(/^bytes=(\d*)-(\d*)$/);
-    if (!match) return 'unsatisfiable';
+    // §3.1: a Range we can't parse — a multi-range list, stray whitespace, another unit — is ignored,
+    // not rejected. Only a range we did parse and cannot serve is a 416.
+    if (!match) return null;
     const startStr = match[1];
     const endStr = match[2];
+    if (startStr === '' && endStr === '') return null;
+    if (size === 0) return 'unsatisfiable';
     // Suffix range "bytes=-N" means "last N bytes": start = size - N, end = size - 1.
     // Open-ended "bytes=N-" means "from N to EOF": end = size - 1.
     const start = startStr === '' ? Math.max(0, size - Number(endStr)) : Number(startStr);

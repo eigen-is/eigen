@@ -2,7 +2,9 @@ import { type EmailSummary, mailAttachmentName } from '@workspace/lib/types/mail
 import { ApiError, contentDisposition, etagMatches, parseByteRange, scriptableInlineHeaders } from '../core';
 import type { Mail } from './mail-domain';
 
-const MAIL_PART_CACHE_CONTROL = 'private, max-age=86400';
+// no-cache = revalidate on every use; the ETag makes that a cheap 304. The part URL carries no version
+// stamp, so a max-age would serve a rewritten draft's old bytes and skip the ownership check entirely.
+const MAIL_PART_CACHE_CONTROL = 'private, no-cache';
 
 // The message id alone doesn't pin the bytes: a draft save rewrites the message under its existing id,
 // re-delivering it as a fresh `<id>,S=<size>:2,<flags>` Maildir file. Date + size are what that rewrite
@@ -31,8 +33,10 @@ export async function serveMailPart(
     }
 
     const att = await mail.messageGetAttachment(messageId, index);
+    // A part with no Content-Type header parses to '', which is not a type any client can act on.
+    const contentType = att.contentType || 'application/octet-stream';
     const headers: Record<string, string> = {
-        'Content-Type': att.contentType,
+        'Content-Type': contentType,
         'Content-Disposition': contentDisposition(disposition, mailAttachmentName(att, index)),
         'Cache-Control': MAIL_PART_CACHE_CONTROL,
         ETag: etag,
@@ -42,7 +46,7 @@ export async function serveMailPart(
         'Accept-Ranges': 'bytes',
     };
     // /embed serves inline from the API's own origin, so a scriptable part gets a sandbox CSP.
-    if (disposition === 'inline') Object.assign(headers, scriptableInlineHeaders(att.contentType));
+    if (disposition === 'inline') Object.assign(headers, scriptableInlineHeaders(contentType));
 
     // The part is already in memory, so a range is two lines — mail video/audio parts reach a media
     // element whose seeking needs them, and Safari refuses a source that advertises none.

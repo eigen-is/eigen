@@ -34,7 +34,10 @@ export function useFileActionRunner(
     const convertDocument = useConvertDocument();
     const importContactsFromDrive = useImportContactsFromDrive();
     const importContacts = useImportContacts();
-    const [pickerSubjects, setPickerSubjects] = useState<FileSubject[] | null>(null);
+    // Open is its own flag: the picker reads its title and default location off subjects[0], and
+    // clearing those on close would redraw it mid exit-animation. The next open replaces them.
+    const [pickerOpen, setPickerOpen] = useState(false);
+    const [pickerSubjects, setPickerSubjects] = useState<FileSubject[]>([]);
     // Set while the picker is open for a convert: a subject with no Drive path has to land in Drive
     // first, and only the picker knows where it landed. The label names the row that asked.
     const pendingConvert = useRef<{ targetType: ConvertTarget; label: string } | null>(null);
@@ -43,6 +46,7 @@ export function useFileActionRunner(
         if (subjects.length === 0) return;
         pendingConvert.current = null;
         setPickerSubjects(subjects);
+        setPickerOpen(true);
     };
 
     const convertPath = (path: DrivePath, targetType: ConvertTarget) => {
@@ -66,6 +70,7 @@ export function useFileActionRunner(
         if (!subject.drive || options?.attachment) {
             pendingConvert.current = { targetType, label };
             setPickerSubjects([subject]);
+            setPickerOpen(true);
             return;
         }
         convertPath(subject.drive, targetType);
@@ -128,17 +133,15 @@ export function useFileActionRunner(
         dialogs: (
             <>
                 <SaveToDrivePicker
-                    subjects={pickerSubjects ?? []}
-                    open={pickerSubjects !== null}
+                    subjects={pickerSubjects}
+                    open={pickerOpen}
                     // A convert through the picker saves first, so the dialog says what it is asking for.
                     labels={pending ? { title: pending.label, confirmLabel: 'Save and convert' } : undefined}
-                    onClose={() => {
-                        pendingConvert.current = null;
-                        setPickerSubjects(null);
-                    }}
+                    onClose={() => setPickerOpen(false)}
+                    // Left set, like the subjects: the save closes the dialog, and clearing it here
+                    // would swap the title back mid exit-animation. Every open path rewrites it.
                     onSaved={(paths) => {
                         const convertTo = pendingConvert.current;
-                        pendingConvert.current = null;
                         if (convertTo) for (const path of paths) convertPath(path, convertTo.targetType);
                     }}
                 />
@@ -152,7 +155,7 @@ export function useFileActionRunner(
                 />
             </>
         ),
-        isDialogOpen: pickerSubjects !== null,
+        isDialogOpen: pickerOpen || convertDocument.isPending,
         isPending: convertDocument.isPending || importContactsFromDrive.isPending || importContacts.isPending,
     };
 }

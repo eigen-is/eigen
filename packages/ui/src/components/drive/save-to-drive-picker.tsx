@@ -49,7 +49,7 @@ export function SaveToDrivePicker({ subjects, open, onClose, onSaved, labels }: 
     };
 
     // Neither identity means no branch could write it: better nothing than a dialog that saves 0 files.
-    // An empty batch is the closed picker, which stays mounted for its exit animation.
+    // An empty batch is a picker nothing has opened yet; a closed one keeps its last subjects.
     if (subjects.length > 0 && !mail && !source) return null;
 
     return (

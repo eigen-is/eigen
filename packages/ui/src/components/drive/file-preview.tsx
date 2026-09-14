@@ -41,9 +41,14 @@ export function FilePreview({
     onPrev,
     onNext,
 }: FilePreviewProps) {
-    useHotkey('Escape', () => onClose(), { enabled: true });
+    const runner = useFileActionRunner(subject, siblings, { attachment });
+
+    // These register on document, and so does the picker's Escape (Radix stops nothing): without the
+    // gate one Escape would dismiss the dialog and the overlay under it in the same keystroke.
+    const keysEnabled = !runner.isDialogOpen;
+    useHotkey('Escape', () => onClose(), { enabled: keysEnabled });
     // Space closes it again, the way it opened it (Finder's Quick Look).
-    useHotkey('Space', () => onClose(), { enabled: true, preventDefault: true });
+    useHotkey('Space', () => onClose(), { enabled: keysEnabled, preventDefault: true });
     // The siblings arrive in the list's own order, so up/down step exactly like the drive list
     // does and left/right mean the same thing.
     const goPrev = () => {
@@ -52,12 +57,10 @@ export function FilePreview({
     const goNext = () => {
         if (hasNext) onNext();
     };
-    useHotkey('ArrowLeft', goPrev, { enabled: true });
-    useHotkey('ArrowUp', goPrev, { enabled: true });
-    useHotkey('ArrowRight', goNext, { enabled: true });
-    useHotkey('ArrowDown', goNext, { enabled: true });
-
-    const runner = useFileActionRunner(subject, siblings, { attachment });
+    useHotkey('ArrowLeft', goPrev, { enabled: keysEnabled });
+    useHotkey('ArrowUp', goPrev, { enabled: keysEnabled });
+    useHotkey('ArrowRight', goNext, { enabled: keysEnabled });
+    useHotkey('ArrowDown', goNext, { enabled: keysEnabled });
 
     // Trap focus in the overlay, but hand it to a picker (a Radix dialog portaled to body)
     // while one is open.

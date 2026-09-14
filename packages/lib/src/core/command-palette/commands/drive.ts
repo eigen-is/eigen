@@ -1,5 +1,7 @@
 import { getDriveItemUrl, getDriveShareUrl, openDocument } from '@workspace/lib/api';
 import { copyToClipboard } from '@workspace/lib/clipboard';
+import { fileActionsFor } from '@workspace/lib/file-actions';
+import { subjectFromPath } from '@workspace/lib/file-subject';
 import type { Command, CommandContext } from '@workspace/lib/types/command-palette';
 import { isOpenable, stripEigenExtension } from '@workspace/lib/types/drive';
 import { Download, ExternalLink, Eye, Link, Mail, Pencil, Trash2, UserRoundPlus } from 'lucide-react';
@@ -70,10 +72,15 @@ export const driveCommands: Command[] = [
         icon: Eye,
         baseRank: BASE_RANKS.DRIVE_QUICK_PREVIEW,
         group: 'selection',
-        availability: (ctx) =>
-            !ctx.selection?.isCurrentDocument &&
-            ctx.selection?.items.length === 1 &&
-            ctx.selection.items[0].type !== 'folder',
+        availability: (ctx) => {
+            const item = ctx.selection?.items[0];
+            return (
+                !ctx.selection?.isCurrentDocument &&
+                ctx.selection?.items.length === 1 &&
+                !!item &&
+                fileActionsFor(subjectFromPath(item)).some((action) => action.id === 'quick-look')
+            );
+        },
         dynamicTitle: (ctx) => `Preview ${selectionLabel(ctx)}`,
         run: (ctx) => {
             const item = ctx.selection?.items[0];
@@ -115,10 +122,15 @@ export const driveCommands: Command[] = [
         icon: Download,
         baseRank: BASE_RANKS.DRIVE_DOWNLOAD,
         group: 'selection',
-        availability: (ctx) =>
-            ctx.selection?.items.length === 1 &&
-            ctx.selection.items[0].type === 'file' &&
-            !!ctx.selectionActions?.onDownload,
+        availability: (ctx) => {
+            const item = ctx.selection?.items[0];
+            return (
+                ctx.selection?.items.length === 1 &&
+                !!item &&
+                fileActionsFor(subjectFromPath(item)).some((action) => action.id === 'download') &&
+                !!ctx.selectionActions?.onDownload
+            );
+        },
         dynamicTitle: (ctx) => `Download ${selectionLabel(ctx)}`,
         run: (ctx) => {
             const item = ctx.selection?.items[0];

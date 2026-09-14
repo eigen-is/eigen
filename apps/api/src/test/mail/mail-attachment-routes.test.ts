@@ -4,6 +4,7 @@ import type { EmailDraft, EmailSummary } from '@workspace/lib/types/mail';
 import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
+import { getHome } from '../../lib/home';
 import { assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
 
 const isWindows = process.platform === 'win32';
@@ -90,6 +91,11 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
             `Content-Disposition: attachment; filename="=?UTF-8?B?${Buffer.from(ODD_NAME).toString('base64')}?="`,
             '',
             'odd name',
+            `--${boundary}`,
+            'Content-Type:',
+            'Content-Disposition: attachment; filename="typeless.bin"',
+            '',
+            'no type here',
             `--${boundary}--`,
         ].join('\r\n');
 
@@ -146,7 +152,7 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
         expect(res.headers.get('content-type')).toBe('text/html');
         expect(res.headers.get('content-disposition')).toBe('attachment; filename="page.html"');
         expect(res.headers.get('x-content-type-options')).toBe('nosniff');
-        expect(res.headers.get('cache-control')).toBe('private, max-age=86400');
+        expect(res.headers.get('cache-control')).toBe('private, no-cache');
         expect(res.headers.get('accept-ranges')).toBe('bytes');
         expect(res.headers.get('content-length')).toBe('12');
         expect(await res.text()).toBe('<p>hello</p>');
@@ -283,6 +289,27 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
         expect(res.headers.get('content-disposition')).toBe(
             `attachment; filename="r_p_ort.txt"; filename*=UTF-8''${encodeURIComponent(ODD_NAME)}`,
         );
+    });
+
+    test('a multi-range header is ignored, so the whole body comes back as a 200', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, embedUrl(2, 'ranged.txt'), {
+            headers: { range: 'bytes=0-1,4-5' },
+        });
+        expect(res.status).toBe(200);
+        expect(res.headers.get('content-range')).toBeNull();
+        expect(await res.text()).toBe(RANGED_BODY);
+    });
+
+    test('a part with no Content-Type header is served as application/octet-stream', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, downloadUrl(5, 'typeless.bin'));
+        expect(res.status).toBe(200);
+        expect(res.headers.get('content-type')).toBe('application/octet-stream');
+        expect(await res.text()).toBe('no type here');
+    });
+
+    test('a negative index is refused by the domain method, never dereferenced', async () => {
+        const home = await getHome(ctx.alice.user.id);
+        await expect(home.mail.messageGetAttachment(messageId, -1)).rejects.toThrow(/not found/);
     });
 
     test('a negative index is refused at the schema boundary on both routes', async () => {

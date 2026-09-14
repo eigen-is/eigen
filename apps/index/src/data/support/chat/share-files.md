@@ -48,10 +48,11 @@ If you want the other person to have access to the document, share it with them 
 
 Attachments in a message appear as chips. Click a chip to open a preview of the file.
 
-Right-click a chip, or press and hold it on a phone, to see what else you can do with that one file:
-**Quick preview**, **Download**, and **Save to Drive…**. An Excel or Word file also offers to convert it, and a
-contact file offers **Import to Contacts**. When you convert one, Eigen asks for a Drive folder first, saves the
-file there, and creates the converted copy beside it when you click **Save and convert**.
+Right-click a chip for an uploaded file, or press and hold it on a phone, to see what else you can do with that one
+file: **Quick preview**, **Download**, and **Save to Drive…**. An Excel or Word file also offers to convert it, and a
+contact file offers **Import to Contacts**. When you convert one, Eigen asks for a Drive folder first, saves the file
+there, and creates the converted copy beside it when you click **Save and convert**. The new spreadsheet or document
+opens straight away, so you leave the chat.
 
 ## Save received attachments to Drive
 
