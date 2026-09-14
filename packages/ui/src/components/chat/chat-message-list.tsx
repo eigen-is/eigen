@@ -1,9 +1,7 @@
 import { formatDateTime } from '@workspace/lib/date';
-import { useFolderLookup } from '@workspace/lib/drive';
-import { subjectFromPath } from '@workspace/lib/file-subject';
+import { useAttachmentSubjects } from '@workspace/lib/drive';
 import type { ChatMessage } from '@workspace/lib/types/chat';
 import { isAttachmentReference } from '@workspace/lib/types/chat';
-import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import { UserNameCard } from '@workspace/ui/components/user/user-name-card';
 import { Download, Pencil, Trash2 } from 'lucide-react';
@@ -73,40 +71,19 @@ export function ChatMessageList({
     const scrollRef = useRef<HTMLDivElement>(null);
     const lastMessageIdRef = useRef('');
     const isInitialLoadRef = useRef(true);
-    const { findByName } = useFolderLookup(ownerId ?? '', mountId ?? '', mediaFolderId ?? '');
-
-    const subjectsOf = useCallback(
-        (message: ChatMessage | undefined): FileSubject[] =>
-            (message?.attachments ?? [])
-                .filter((attachment): attachment is string => typeof attachment === 'string')
-                .map((name) => findByName(name))
-                .filter((path): path is DrivePath => path !== undefined)
-                .map(subjectFromPath),
-        [findByName],
-    );
-
-    const subjectOfChip = useCallback(
-        (name: string | null): FileSubject | undefined => {
-            const path = name ? findByName(name) : undefined;
-            return path ? subjectFromPath(path) : undefined;
-        },
-        [findByName],
-    );
+    const { subjectOf, subjectsOf } = useAttachmentSubjects(ownerId ?? '', mountId ?? '', mediaFolderId ?? '');
 
     // Message actions (Save attachments / Edit / Delete) and a chip's file actions reach the
     // singleton context menu via right-click and touch long-press, through the wiring the card
     // dialog and the mail reader share.
     const toMenuTarget = useCallback(
-        (message: ChatMessage, chipKey: string | null): ChatMenuTarget => ({
-            message,
-            attachment: subjectOfChip(chipKey),
-        }),
-        [subjectOfChip],
+        (chipKey: string | null, message: ChatMessage): ChatMenuTarget => ({ message, attachment: subjectOf(chipKey) }),
+        [subjectOf],
     );
-    const { contextMenu, bind } = useAttachmentChipMenu<ChatMessage, ChatMenuTarget>(toMenuTarget);
+    const { contextMenu, bind } = useAttachmentChipMenu<ChatMenuTarget, ChatMessage>(toMenuTarget);
 
     const menuTarget = contextMenu.item;
-    const menuSubjects = useMemo(() => subjectsOf(menuTarget?.message), [subjectsOf, menuTarget?.message]);
+    const menuSubjects = useMemo(() => subjectsOf(menuTarget?.message.attachments), [subjectsOf, menuTarget?.message]);
     // The chip's siblings are its own message's attachments, so a quick look from here keeps Save all.
     const runner = useFileActionRunner(menuTarget?.attachment ?? null, menuSubjects, { attachment: true });
 
@@ -275,7 +252,7 @@ export function ChatMessageList({
                                 tooltipText="Save attachments"
                                 className="h-7 w-7"
                                 preventFocusLoss
-                                onClick={() => runner.openPicker(subjectsOf(message))}
+                                onClick={() => runner.openPicker(subjectsOf(message.attachments))}
                             />
                         )}
                         {actions.canEdit && onEditMessage && (

@@ -117,7 +117,8 @@ export function useFileActionRunner(
                 <SaveToDrivePicker
                     subjects={picker.subjects}
                     open={pickerOpen}
-                    labels={picker.convert && { title: picker.convert.label, confirmLabel: 'Save and convert' }}
+                    title={picker.convert?.label}
+                    confirmLabel={picker.convert && 'Save and convert'}
                     onClose={() => setPickerOpen(false)}
                     onSaved={(paths) => {
                         if (picker.convert) for (const path of paths) convertPath(path, picker.convert.targetType);

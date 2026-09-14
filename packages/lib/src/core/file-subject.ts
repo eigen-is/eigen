@@ -11,7 +11,7 @@ import {
 } from './api';
 
 export function subjectFromPath(path: DrivePath): FileSubject {
-    const updated = path.updatedAt instanceof Date ? path.updatedAt : new Date(path.updatedAt);
+    const updated = new Date(path.updatedAt);
     return {
         key: `drive:${path.ownerId}:${path.mountId}:${path.id}`,
         name: path.name,
@@ -56,13 +56,11 @@ export function getPreviewMode(subject: FileSubject): PreviewMode {
     const isImage = subject.drive
         ? mime.startsWith('image/') || isExiftoolExtension(subject.name)
         : BROWSER_IMAGE_MIMES.has(mime);
-    const served = !!subject.drive || !!subject.mail;
-
     if (isImage) return 'image';
     if (mime.startsWith('video/')) return 'video';
     if (mime.startsWith('audio/')) return 'audio';
     if (mime === 'application/pdf') return 'pdf';
-    if (served && isVCardFile(mime, subject.name)) return 'vcard';
-    if (served && getTextPreviewMode(mime, subject.name) !== null) return 'text';
+    if (isVCardFile(mime, subject.name)) return 'vcard';
+    if (getTextPreviewMode(mime, subject.name) !== null) return 'text';
     return 'fallback';
 }

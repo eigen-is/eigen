@@ -1,8 +1,6 @@
-import { getDrivePreviewUrl } from '@workspace/lib/api';
-import { getPreviewMode } from '@workspace/lib/file-subject';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import type React from 'react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { FilePreview } from '../drive/file-preview';
 import type { PreviewOptions } from './preview-context';
 import { PreviewContext, useOptionalPreview, usePreview } from './preview-context';
@@ -48,40 +46,12 @@ export function PreviewProvider({ children }: { children: React.ReactNode }) {
         });
     }, []);
 
-    const previewProps = useMemo(() => {
-        if (!preview) return null;
-        const { subject } = preview;
-        const { drive } = subject;
-        const updated = drive && (drive.updatedAt instanceof Date ? drive.updatedAt : new Date(drive.updatedAt));
-        // The transcode route is a Drive item's alone; anything else previews the bytes it embeds.
-        const previewUrl = drive
-            ? getDrivePreviewUrl(drive.ownerId, drive.mountId, drive.id, updated)
-            : subject.embedUrl;
-        const aspectRatio =
-            drive?.details?.width && drive.details.height ? drive.details.width / drive.details.height : undefined;
-
-        const currentIdx = preview.siblings.findIndex((s) => s.key === subject.key);
-        const hasPrev = currentIdx > 0;
-        const hasNext = currentIdx >= 0 && currentIdx < preview.siblings.length - 1;
-
-        return {
-            previewMode: getPreviewMode(subject),
-            previewUrl,
-            aspectRatio,
-            hasPrev,
-            hasNext,
-            subject,
-            siblings: preview.siblings,
-            attachment: preview.attachment,
-        };
-    }, [preview]);
-
     return (
         <PreviewContext.Provider value={{ openPreview, updatePreview, closePreview, isPreviewOpen: preview !== null }}>
             {children}
-            {previewProps && (
+            {preview && (
                 <FilePreview
-                    {...previewProps}
+                    {...preview}
                     onClose={closePreview}
                     onPrev={() => navigatePreview(-1)}
                     onNext={() => navigatePreview(1)}

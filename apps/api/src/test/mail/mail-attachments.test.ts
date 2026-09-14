@@ -1,42 +1,9 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { EmailDraft } from '@workspace/lib/types/mail';
-import { assertJson, authedRequest, getTestContext } from '../setup';
+import { assertJson, authedRequest, getTestContext, putDraft, uploadDraftAttachment } from '../setup';
 
 const isWindows = process.platform === 'win32';
-
-async function uploadDraftAttachment(
-    sessionToken: string,
-    ownerId: string,
-    file: File,
-): Promise<{ tempId: string; filename: string; size: number; contentType: string }> {
-    const form = new FormData();
-    form.append('file', file);
-    const res = await authedRequest(sessionToken, `/mail/${ownerId}/message/draft/attachment`, {
-        method: 'POST',
-        body: form,
-    });
-    return assertJson(res);
-}
-
-async function putDraft(
-    sessionToken: string,
-    ownerId: string,
-    mail: Partial<EmailDraft>,
-    options: { tempAttachmentIds?: string[]; keepAttachmentIndexes?: number[] } = {},
-): Promise<EmailDraft> {
-    const res = await authedRequest(sessionToken, `/mail/${ownerId}/message/draft`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            mail,
-            tempAttachmentIds: options.tempAttachmentIds,
-            keepAttachmentIndexes: options.keepAttachmentIndexes,
-        }),
-    });
-    return assertJson(res);
-}
 
 describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;

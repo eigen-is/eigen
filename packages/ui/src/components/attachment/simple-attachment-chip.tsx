@@ -37,6 +37,7 @@ export function SimpleAttachmentChip({
     onRemove,
     className,
 }: SimpleAttachmentChipProps) {
+    const chipKey = attachmentKey ?? filename;
     const outerClass = cn(
         CHIP_BASE_CLASS,
         (downloadUrl || onClick) && 'hover:bg-muted/80 transition-colors',
@@ -70,7 +71,7 @@ export function SimpleAttachmentChip({
                 rel="noopener noreferrer"
                 className={outerClass}
                 onClick={onClick}
-                data-attachment-chip={attachmentKey ?? filename}
+                data-attachment-chip={chipKey}
             >
                 {content}
             </a>
@@ -78,7 +79,7 @@ export function SimpleAttachmentChip({
     }
 
     return (
-        <div className={outerClass} data-attachment-chip={attachmentKey ?? filename}>
+        <div className={outerClass} data-attachment-chip={chipKey}>
             {content}
         </div>
     );

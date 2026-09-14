@@ -1,8 +1,8 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
-import { getDriveItemUrl } from '@workspace/lib/api';
+import { getDriveItemUrl, getDrivePreviewUrl } from '@workspace/lib/api';
 import { useTextPreview } from '@workspace/lib/drive';
 import { fileActionsFor } from '@workspace/lib/file-actions';
-import type { PreviewMode } from '@workspace/lib/file-subject';
+import { getPreviewMode } from '@workspace/lib/file-subject';
 import { useMailTextPreview } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileSubject, MailPartRef } from '@workspace/lib/types/file-subject';
@@ -14,11 +14,6 @@ import { getFileIcon } from './file-presentation';
 import { MailVCardPreviewContent, VCardPreviewContent } from './vcard-preview-content';
 
 type FilePreviewProps = {
-    previewMode: PreviewMode;
-    previewUrl: string;
-    aspectRatio?: number;
-    hasPrev: boolean;
-    hasNext: boolean;
     subject: FileSubject;
     siblings: FileSubject[];
     // The siblings are one container's attachments: a set to save as a whole, not only a list to page through.
@@ -28,20 +23,19 @@ type FilePreviewProps = {
     onNext: () => void;
 };
 
-export function FilePreview({
-    previewMode,
-    previewUrl,
-    aspectRatio,
-    hasPrev,
-    hasNext,
-    subject,
-    siblings,
-    attachment,
-    onClose,
-    onPrev,
-    onNext,
-}: FilePreviewProps) {
+export function FilePreview({ subject, siblings, attachment, onClose, onPrev, onNext }: FilePreviewProps) {
     const runner = useFileActionRunner(subject, siblings, { attachment });
+    const { drive } = subject;
+    const previewMode = getPreviewMode(subject);
+    // The transcode route is a Drive item's alone; anything else previews the bytes it embeds.
+    const previewUrl = drive
+        ? getDrivePreviewUrl(drive.ownerId, drive.mountId, drive.id, new Date(drive.updatedAt))
+        : subject.embedUrl;
+    const aspectRatio =
+        drive?.details?.width && drive.details.height ? drive.details.width / drive.details.height : undefined;
+    const index = siblings.findIndex((s) => s.key === subject.key);
+    const hasPrev = index > 0;
+    const hasNext = index >= 0 && index < siblings.length - 1;
 
     // Both listen on document and Radix stops nothing: ungated, one Escape would close the dialog and the overlay.
     const keysEnabled = !runner.isDialogOpen;
