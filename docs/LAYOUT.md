@@ -262,6 +262,8 @@ const contextItems = contextMenu.item
     : [];
 ```
 
+`ContextMenuAnchor` portals its zero-size trigger into `document.body`: the trigger is positioned in viewport coordinates, and a transformed ancestor (a dialog's centring translate) would otherwise become its containing block and open the menu somewhere else.
+
 #### 4. Drag-and-Drop
 
 ```tsx
