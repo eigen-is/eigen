@@ -169,17 +169,21 @@ async function buildDocumentDb<S extends SchemaType>(
                           // A VACUUM INTO copy of a managed database, so the queue holds it to the
                           // SQLite header check before the PUT (schema.ts, `isDatabase`).
                           mount.uploadQueue.enqueueStaged(currentKey, stagingPath, true);
+                          // Size the row from the staged copy, never the live temp: that copy is the
+                          // object byte ranges and HEAD are served against (the vacuum drops free
+                          // pages), and the queue only unlinks it once its PUT acks.
+                          await syncDocumentDbSize(mount, pathId, stagingPath);
                       } else {
                           await mount.uploadFromTemp(currentKey, pathId);
+                          await syncDocumentDbSize(mount, pathId, localPath);
                       }
-                      await syncDocumentDbSize(mount, pathId, localPath);
                       await markContainerContentDirty(mount, pathId);
                   },
-                  // onClose runs after wal_checkpoint(TRUNCATE), so the final stat captures
-                  // any pages PASSIVE left in WAL. cleanupTemp is safe under async: the
-                  // staged copy (not the live temp) is the upload payload.
+                  // Re-stat only where the live file IS the object (path-based local), now that
+                  // wal_checkpoint(TRUNCATE) folded its WAL in; a queued mount's row already matches
+                  // the staged copy. cleanupTemp is safe under async: that copy is the upload payload.
                   onClose: async (syncFailed) => {
-                      await syncDocumentDbSize(mount, pathId, localPath);
+                      if (!mount.uploadQueue) await syncDocumentDbSize(mount, pathId, localPath);
                       // A failed final sync means the temp is the only copy holding the tail —
                       // leave it as the Phase 1a unclean-shutdown marker (adopted + re-synced
                       // on the next open), never delete it.
