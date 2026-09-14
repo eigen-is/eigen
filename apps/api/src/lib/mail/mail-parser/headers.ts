@@ -2,7 +2,7 @@ import { extname } from 'node:path';
 import { domainToUnicode } from 'node:url';
 import type { AddressObject, EmailAddress, ParsedMail } from '@workspace/lib/types/mail';
 import libmime from 'libmime';
-import addressparser from 'nodemailer/lib/addressparser';
+import addressparser, { type Address } from 'nodemailer/lib/addressparser';
 
 export type StructuredValue = { value: string; params: Record<string, string> };
 
@@ -121,11 +121,11 @@ function parseAddresses(value: string): AddressObject {
     return { value: list, text: addressesText(list) };
 }
 
-function decodeAddresses(parsed: addressparser.AddressOrGroup[]): EmailAddress[] {
+function decodeAddresses(parsed: Address[]): EmailAddress[] {
     const result: EmailAddress[] = [];
-    const hidden: addressparser.AddressOrGroup[] = [];
+    const hidden: Address[] = [];
     for (const entry of parsed) {
-        if (!('group' in entry) && !entry.address && ENCODED_WORDS_ONLY.test(entry.name.trim())) {
+        if (entry.group === undefined && !entry.address && ENCODED_WORDS_ONLY.test(entry.name.trim())) {
             hidden.push(...addressparser(libmime.decodeWords(entry.name.trim())));
         } else {
             result.push(decodeAddress(entry));
@@ -135,9 +135,9 @@ function decodeAddresses(parsed: addressparser.AddressOrGroup[]): EmailAddress[]
     return result;
 }
 
-function decodeAddress(entry: addressparser.AddressOrGroup): EmailAddress {
+function decodeAddress(entry: Address): EmailAddress {
     const name = libmime.decodeWords(entry.name.trim());
-    if ('group' in entry) return { name, group: decodeAddresses(entry.group) };
+    if (entry.group !== undefined) return { name, group: decodeAddresses(entry.group) };
     const at = entry.address.lastIndexOf('@');
     const unicodeDomain = /@xn--/.test(entry.address) ? domainToUnicode(entry.address.slice(at + 1)) : '';
     return { name, address: unicodeDomain ? entry.address.slice(0, at + 1) + unicodeDomain : entry.address };
