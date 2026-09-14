@@ -137,8 +137,15 @@ export class ManagedDatabase<S extends SchemaType> {
     private async runMigrations(): Promise<void> {
         if (!this.rawDb) return;
 
-        const row = this.rawDb.query('SELECT version FROM __schema_version WHERE id = 1').get() as { version: number };
-        let currentVersion = row?.version ?? 0;
+        const stamp = this.rawDb
+            .query<{ version: number }, []>('SELECT version FROM __schema_version WHERE id = 1')
+            .get()?.version;
+        // Only our own migrations write the stamp; anything else is a db we don't understand, and a
+        // non-number compares false against every migration so the db would open unmigrated.
+        if (stamp === undefined || !Number.isInteger(stamp)) {
+            throw new ApiError(503, `${this.config.name}: unreadable schema stamp ${String(stamp)}`);
+        }
+        let currentVersion = stamp;
 
         // A db written by a newer binary carries a schema past what we know how to migrate. Rolling
         // back to an older server and silently opening it would corrupt it — refuse loudly instead.
