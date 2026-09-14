@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { getTextPreviewMode } from '@workspace/lib/constants';
+import { getBytesTextPreviewMode } from '@workspace/lib/constants';
 import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { type DrivePath, isCollabType, isVCardFile } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
@@ -335,7 +335,7 @@ export async function getScreenPreview(
 // upload, and a plain file wearing an eigen mime must keep the preview its bytes deserve.
 export async function getTextPreview(mount: Mount, drivePath: DrivePath): Promise<ServedTextPreview | null> {
     const documentType = isCollabType(drivePath.type) ? COLLAB_DOCUMENT_TYPES.get(drivePath.mimeType || '') : undefined;
-    const mode = documentType ?? getTextPreviewMode(drivePath.mimeType || '', drivePath.name);
+    const mode = documentType ?? getBytesTextPreviewMode(drivePath.mimeType || '', drivePath.name);
     if (mode === null) return null;
 
     // A body is served exactly as it was stored; the mode is composed here, where it is already known.
@@ -367,7 +367,7 @@ export async function getBytesTextPreview(
     fileName: string,
     contentType: string,
 ): Promise<TextPreviewResult | null> {
-    const mode = getTextPreviewMode(contentType, fileName);
+    const mode = getBytesTextPreviewMode(contentType, fileName);
     if (mode === null) return null;
     return generateTextPreview(new TextDecoder().decode(bytes), mode, fileName);
 }

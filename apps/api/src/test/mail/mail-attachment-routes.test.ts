@@ -125,6 +125,11 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
             'Content-Disposition: attachment; filename="card.vcf"',
             '',
             VCARD_BODY,
+            `--${boundary}`,
+            'Content-Type: application/eigendoc',
+            'Content-Disposition: attachment; filename="spoof.txt"',
+            '',
+            'Plain text wearing a document mime.',
             `--${boundary}--`,
         ].join('\r\n');
 
@@ -339,6 +344,15 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
         const preview = await assertJson<{ body: string; mode: string }>(res);
         expect(preview.mode).toBe('markdown');
         expect(preview.body).toContain('<h1>Title</h1>');
+    });
+
+    // A sender picks the content type, so a part wearing an eigen mime is still only its own bytes: it
+    // renders as the mode its name deserves, and is labelled with that mode — never inside a document frame.
+    test('a part wearing an eigen mime previews as the mode its bytes deserve', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, textPreviewUrl(8));
+        const preview = await assertJson<{ body: string; mode: string }>(res);
+        expect(preview.mode).toBe('plaintext');
+        expect(preview.body).toContain('Plain text wearing a document mime.');
     });
 
     test('a .vcf part previews as its cards', async () => {

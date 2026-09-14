@@ -496,6 +496,8 @@ describe('getTextPreview (stale-while-revalidate)', () => {
 
         const served = await getTextPreview(mount, { ...path, mimeType: DRIVE_MIME_SLIDES });
         expect(served?.value.body).toContain('plain text pretending to be a deck');
+        // And it is labelled as what it is: the deck mode would draw this body inside a slide frame.
+        expect(served?.value.mode).toBe('plaintext');
     });
 });
 

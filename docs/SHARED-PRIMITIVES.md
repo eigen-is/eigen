@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1408 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1411 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -471,7 +471,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (335)
+## Types (336)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -491,6 +491,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CommentAssigneeFilter` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
 | `CommentFilter` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
 | `CreateCommentCardInput` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
+| `BytesTextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `EigenColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EigenFont` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `TextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
@@ -811,7 +812,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (633)
+## Utilities & constants (635)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -901,6 +902,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `waitlistApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getErrorMessage` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `onMutationError` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
+| `retryWhenTransformBusy` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `wasToasted` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `apps` | `@workspace/lib/apps` | packages/lib/src/core/apps.ts |
 | `authClient` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-auth-client.ts |
@@ -1000,6 +1002,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EIGEN_STICKIES_INDICATOR_ROW` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `emptyContact` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
 | `fontNameToCss` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
+| `getBytesTextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `getExtension` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `getFontFamily` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `getFontName` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
