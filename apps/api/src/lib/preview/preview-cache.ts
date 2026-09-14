@@ -9,6 +9,7 @@ import { COLLAB_DOCUMENT_TYPES } from '../document/collab-types';
 import type { VCardPreviewJob } from '../document/transform/protocol';
 import { runBytesTransformToText, runFileTransformToText } from '../document/transform/run-transform';
 import type { TransformPriority } from '../document/transform/runner';
+import { decodeCharset } from '../mail/mail-parser/decode';
 import type { Mount } from '../mount';
 import { generateImagePreview } from '../shared/thumbnails';
 import { isExiftoolCandidate } from './exiftool-preview';
@@ -356,7 +357,14 @@ export async function getTextPreview(mount: Mount, drivePath: DrivePath): Promis
 async function generateFileTextPreview(mount: Mount, drivePath: DrivePath): Promise<string | null> {
     const file = await mount.readFile(drivePath.id);
     if (!file) return null;
-    const preview = await getBytesTextPreview(await file.arrayBuffer(), drivePath.name, drivePath.mimeType || '');
+    let bytes: ArrayBuffer;
+    try {
+        // External storage: the object behind a row can be gone or unreachable. No preview, not a 500.
+        bytes = await file.arrayBuffer();
+    } catch {
+        return null;
+    }
+    const preview = await getBytesTextPreview(bytes, drivePath.name, drivePath.mimeType || '');
     return preview?.body ?? null;
 }
 
@@ -365,10 +373,13 @@ export async function getBytesTextPreview(
     bytes: ArrayBuffer | Uint8Array,
     fileName: string,
     contentType: string,
+    charset?: string,
 ): Promise<TextPreviewResult | null> {
     const mode = getBytesTextPreviewMode(contentType, fileName);
     if (mode === null) return null;
-    return generateTextPreview(new TextDecoder().decode(bytes), mode, fileName);
+    // A mail part carries the charset its sender declared; Drive bytes have none and read as UTF-8.
+    const buffer = Buffer.from(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes));
+    return generateTextPreview(decodeCharset(buffer, charset ?? 'utf-8'), mode, fileName);
 }
 
 const VCARD_PREVIEW_JOB: VCardPreviewJob = { kind: 'preview', documentType: 'vcard' };

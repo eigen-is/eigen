@@ -326,9 +326,11 @@ export const mailRouter = new Elysia({ name: 'mail' })
         },
         { auth: true, params: AttachmentParamsSchema },
     )
-    // Previews run the renderers Drive's preview routes end in, on the part's bytes; same shapes, same components.
+    // Previews run the renderers Drive's preview routes end in, on the part's bytes; same shapes, same
+    // components. Two segments after the index, like /embed/:fileName: a sender names the part, and a
+    // one-segment preview route would be shadowed by a part called after it.
     .get(
-        '/mail/:ownerId/message/:id/attachment/:index/text-preview',
+        '/mail/:ownerId/message/:id/attachment/:index/preview/text',
         async ({ params, request, user, set }) => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
@@ -339,6 +341,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
                 att.content,
                 mailAttachmentName(att, params.index),
                 att.contentType,
+                att.charset,
             );
             if (!preview) throw new ApiError(404, 'No preview available');
             return preview;
@@ -346,7 +349,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
         { auth: true, params: AttachmentPreviewParamsSchema },
     )
     .get(
-        '/mail/:ownerId/message/:id/attachment/:index/vcard-preview',
+        '/mail/:ownerId/message/:id/attachment/:index/preview/vcard',
         async ({ params, request, user, set }) => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
