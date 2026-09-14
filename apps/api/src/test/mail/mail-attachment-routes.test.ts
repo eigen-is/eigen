@@ -373,6 +373,13 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
         expect(vcf.status).toBe(404);
     });
 
+    test('an out-of-range part carries no preview caching headers with its 404', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, textPreviewUrl(9));
+        expect(res.status).toBe(404);
+        expect(res.headers.get('etag')).toBeNull();
+        expect(res.headers.get('cache-control')).toBeNull();
+    });
+
     test('a part that is not a vCard is refused by the vcard preview', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, vcardPreviewUrl(5));
         expect(res.status).toBe(400);

@@ -33,10 +33,12 @@ export async function readMailPartForPreview(
     if (!summary) throw new ApiError(404, `Message '${messageId}' not found`);
 
     const etag = mailPartEtag(summary, index);
+    const notModified = mailPartNotModified(request, etag);
+    // The part is read first: the headers ride a 304 or a rendered body, never a part that throws.
+    const att = notModified ? null : await mail.messageGetAttachment(messageId, index);
     set.headers['Cache-Control'] = MAIL_PREVIEW_CACHE_CONTROL;
     set.headers['ETag'] = etag;
-    if (mailPartNotModified(request, etag)) return null;
-    return mail.messageGetAttachment(messageId, index);
+    return att;
 }
 
 // Serves one parsed mail part, shared by the download and the embed route. The 304 is answered off the
