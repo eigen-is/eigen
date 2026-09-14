@@ -88,6 +88,15 @@ test('a right-click on a chip opens the menu for that chip', async () => {
     await host.cleanup();
 });
 
+// The chip draws its paperclip and download marks as <svg>, which is an Element but not an HTMLElement.
+test('a right-click on the chip icon opens the menu for that chip', async () => {
+    const host = await mountHost();
+    const event = await rightClick(host.at('[data-attachment-chip="part-0"] svg'));
+    expect(host.last()).toBe('part-0');
+    expect(event.defaultPrevented).toBe(true);
+    await host.cleanup();
+});
+
 test('a right-click on a link that is not a chip is left to the browser', async () => {
     const host = await mountHost();
     const event = await rightClick(host.at('#other-link'));
