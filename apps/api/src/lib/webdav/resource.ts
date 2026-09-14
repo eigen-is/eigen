@@ -1,7 +1,7 @@
 import { isContainerType } from '@workspace/lib/types/drive';
 import { enforceMountQuota } from '../config/enforcement';
 import { ApiError } from '../core/errors';
-import { computeEtag, etagMatches, parseByteRange, scriptableInlineHeaders } from '../core/http';
+import { computeEtag, etagMatches, rangeResponse, scriptableInlineHeaders } from '../core/http';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
 import { enclosingDocumentContainer } from './container-guard';
@@ -62,30 +62,21 @@ export async function handleGet(args: {
 
     if (headOnly) return new Response(null, { status: 200, headers });
 
-    const range = parseByteRange(rangeHeader, path.size);
-    if (range === 'unsatisfiable') {
-        return new Response(null, { status: 416, headers: { ...headers, 'Content-Range': `bytes */${path.size}` } });
-    }
-    if (range) {
-        const slice = await drive.readRange(mountId, path.id, range.start, range.end + 1);
-        if (!slice) throw new ApiError(404, 'Not found');
-        // Stream the slice. Passing the BunFile/S3File directly loses the slice bounds
-        // somewhere in the response pipeline, so route through .stream() which respects them.
-        return new Response(slice.stream(), {
-            status: 206,
-            headers: {
-                ...headers,
-                'Content-Length': String(range.end - range.start + 1),
-                'Content-Range': `bytes ${range.start}-${range.end}/${path.size}`,
-            },
-        });
-    }
-
-    const file = await drive.downloadFile(mountId, path.id);
-    if (!file) throw new ApiError(404, 'Not found');
-    // S3File can't be used as a Response body directly — stream it. BunFile works either way.
-    const body: BodyInit = 'bucket' in file ? file.stream() : file;
-    return new Response(body, { status: 200, headers });
+    return rangeResponse(headers, path.size, rangeHeader, {
+        slice: async (start, end) => {
+            const slice = await drive.readRange(mountId, path.id, start, end);
+            if (!slice) throw new ApiError(404, 'Not found');
+            // Stream the slice. Passing the BunFile/S3File directly loses the slice bounds
+            // somewhere in the response pipeline, so route through .stream() which respects them.
+            return slice.stream();
+        },
+        full: async () => {
+            const file = await drive.downloadFile(mountId, path.id);
+            if (!file) throw new ApiError(404, 'Not found');
+            // S3File can't be used as a Response body directly — stream it. BunFile works either way.
+            return 'bucket' in file ? file.stream() : file;
+        },
+    });
 }
 
 export async function handlePut(args: {

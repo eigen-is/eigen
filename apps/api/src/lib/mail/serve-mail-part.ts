@@ -1,5 +1,5 @@
 import { type Attachment, mailAttachmentName } from '@workspace/lib/types/mail';
-import { ApiError, contentDisposition, etagMatches, parseByteRange, scriptableInlineHeaders } from '../core';
+import { ApiError, contentDisposition, etagMatches, rangeResponse, scriptableInlineHeaders } from '../core';
 import type { Mail } from './mail-domain';
 
 // The part every mail route serves, or null on a 304 answered off the summary row, before the .eml is parsed.
@@ -30,7 +30,7 @@ export function serveMailPart(
     index: number,
     disposition: 'attachment' | 'inline',
     range: string | null,
-): Response {
+): Promise<Response> {
     // A part with no Content-Type header parses to '', which no client can act on.
     const contentType = att.contentType || 'application/octet-stream';
     // A text part keeps the charset it declared: served bare, a latin-1 body is read as UTF-8 and shows
@@ -47,20 +47,9 @@ export function serveMailPart(
     };
 
     const size = att.content.byteLength;
-    const parsed = parseByteRange(range, size);
-    if (parsed === 'unsatisfiable') {
-        return new Response(null, { status: 416, headers: { ...headers, 'Content-Range': `bytes */${size}` } });
-    }
     // .slice(), not .subarray(): the decoders hand back a Uint8Array over ArrayBufferLike, which is no BodyInit.
-    if (parsed) {
-        return new Response(att.content.slice(parsed.start, parsed.end + 1), {
-            status: 206,
-            headers: {
-                ...headers,
-                'Content-Length': String(parsed.end - parsed.start + 1),
-                'Content-Range': `bytes ${parsed.start}-${parsed.end}/${size}`,
-            },
-        });
-    }
-    return new Response(att.content.slice(), { headers: { ...headers, 'Content-Length': String(size) } });
+    return rangeResponse(headers, size, range, {
+        slice: (start, end) => att.content.slice(start, end),
+        full: () => att.content.slice(),
+    });
 }

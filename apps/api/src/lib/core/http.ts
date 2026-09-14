@@ -109,6 +109,36 @@ export function parseByteRange(
     return { start, end };
 }
 
+// The RFC 7233 response shape the three byte-range servers share (drive serveFile, the WebDAV GET, the mail
+// part routes). Callers own their headers and ETag/304 handling and pass only the byte source; `end` is
+// exclusive because every reader takes it that way. Content-Length only binds for an in-memory body: Bun
+// derives it from a BunFile and sends a stream chunked.
+export async function rangeResponse(
+    headers: Record<string, string>,
+    size: number,
+    range: string | null,
+    source: {
+        slice: (start: number, end: number) => BodyInit | Promise<BodyInit>;
+        full: () => BodyInit | Promise<BodyInit>;
+    },
+): Promise<Response> {
+    const parsed = parseByteRange(range, size);
+    if (parsed === 'unsatisfiable') {
+        return new Response(null, { status: 416, headers: { ...headers, 'Content-Range': `bytes */${size}` } });
+    }
+    if (parsed) {
+        return new Response(await source.slice(parsed.start, parsed.end + 1), {
+            status: 206,
+            headers: {
+                ...headers,
+                'Content-Length': String(parsed.end - parsed.start + 1),
+                'Content-Range': `bytes ${parsed.start}-${parsed.end}/${size}`,
+            },
+        });
+    }
+    return new Response(await source.full(), { status: 200, headers: { ...headers, 'Content-Length': String(size) } });
+}
+
 export function contentDisposition(type: 'attachment' | 'inline', fileName: string): string {
     const ascii = fileName.replace(/[^\x20-\x7E]/g, '_');
     const encoded = encodeURIComponent(fileName);

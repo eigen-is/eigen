@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
+import { TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants/preview';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { eq } from 'drizzle-orm';
@@ -14,6 +15,7 @@ const SUBJECT = 'Attachment route fixture';
 const RANGED_BODY = '0123456789';
 const ODD_NAME = 'räp"ort.txt';
 const OVERSIZE_SUBJECT = 'Oversize vCard fixture';
+const OVERSIZE_TEXT_SUBJECT = 'Oversize text fixture';
 const NOTES_BODY = 'First line.\r\n\r\nSecond paragraph.';
 // A sender names the parts, so one named after a preview route must still download as its own bytes.
 const SHADOW_NAMED_BODY = 'bytes, not a preview';
@@ -439,6 +441,41 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
         expect(text.status).toBe(403);
         const vcard = await authedRequest(ctx.bob.user.sessionToken, vcardPreviewUrl(7));
         expect(vcard.status).toBe(403);
+    });
+
+    test('a text part past the preview ceiling has no preview', async () => {
+        const boundary = 'att-oversize-text';
+        const line = 'x'.repeat(TEXT_PREVIEW_MAX_BYTES / 8).concat('\r\n');
+        const eml = [
+            'From: sender@external.com',
+            `To: ${ctx.alice.user.email}`,
+            `Subject: ${OVERSIZE_TEXT_SUBJECT}`,
+            'MIME-Version: 1.0',
+            `Content-Type: multipart/mixed; boundary="${boundary}"`,
+            '',
+            `--${boundary}`,
+            'Content-Type: text/plain; charset=utf-8',
+            'Content-Disposition: attachment; filename="huge.txt"',
+            '',
+            line.repeat(9),
+            `--${boundary}--`,
+        ].join('\r\n');
+
+        const deliverRes = await authedRequest(ctx.alice.user.sessionToken, `/mail/deliver/${ctx.alice.user.email}`, {
+            method: 'POST',
+            body: new TextEncoder().encode(eml).buffer,
+        });
+        expect(deliverRes.status).toBe(200);
+
+        const listRes = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox/inbox`);
+        const list = await assertJson<EmailSummary[]>(listRes);
+        const bigId = findOrFail(list, (m) => m.subject === OVERSIZE_TEXT_SUBJECT).id;
+
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/mail/${ctx.alice.user.id}/message/${bigId}/attachment/0/preview/text`,
+        );
+        expect(res.status).toBe(404);
     });
 
     test('a vCard part past the import ceiling is refused with 413', async () => {

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { TEXT_PREVIEW_MAX_BYTES } from '../../constants/preview';
 import {
     getDriveDownloadUrl,
     getDriveEmbedUrl,
@@ -83,12 +84,12 @@ describe('subjectInfo on a Drive item', () => {
     });
 });
 
-function driveSubject(name: string, mimeType: string, type: DrivePathType = 'file'): FileSubject {
-    return subjectFromPath(path({ name, type, mimeType }));
+function driveSubject(name: string, mimeType: string, type: DrivePathType = 'file', size = 4096): FileSubject {
+    return subjectFromPath(path({ name, type, mimeType, size }));
 }
 
-function mailSubject(name: string, mimeType: string): FileSubject {
-    return subjectFromMailAttachment('owner-1', 'message-1', 0, { contentType: mimeType, filename: name, size: 1024 });
+function mailSubject(name: string, mimeType: string, size = 1024): FileSubject {
+    return subjectFromMailAttachment('owner-1', 'message-1', 0, { contentType: mimeType, filename: name, size });
 }
 
 describe('getPreviewMode', () => {
@@ -132,8 +133,22 @@ describe('getPreviewMode', () => {
         expect(getPreviewMode(driveSubject('report.txt', 'application/eigendoc'))).toBe('text');
     });
 
+    // The routes refuse to decode and highlight a body over TEXT_PREVIEW_MAX_BYTES, so a text panel
+    // mounted over it would only 404.
+    test('a text file past the preview ceiling gets the file card', () => {
+        const oversize = TEXT_PREVIEW_MAX_BYTES + 1;
+        expect(getPreviewMode(driveSubject('huge.txt', 'text/plain', 'file', oversize))).toBe('fallback');
+        expect(getPreviewMode(mailSubject('huge.txt', 'text/plain', oversize))).toBe('fallback');
+        expect(getPreviewMode(driveSubject('notes.txt', 'text/plain', 'file', TEXT_PREVIEW_MAX_BYTES))).toBe('text');
+        expect(getPreviewMode(mailSubject('notes.txt', 'text/plain', TEXT_PREVIEW_MAX_BYTES))).toBe('text');
+    });
+
     test('a Drive container previews as text, from its own document body', () => {
         expect(getPreviewMode(driveSubject('Notes.eigendoc', 'application/eigendoc', 'doc'))).toBe('text');
+        // A container's size is its databases, not the text it renders: the ceiling is for loose bytes.
+        expect(
+            getPreviewMode(driveSubject('Big.eigendoc', 'application/eigendoc', 'doc', TEXT_PREVIEW_MAX_BYTES + 1)),
+        ).toBe('text');
         expect(getPreviewMode(driveSubject('Team.eigenchat', 'application/eigenchat', 'chat'))).toBe('fallback');
     });
 });

@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { getBytesTextPreviewMode } from '@workspace/lib/constants';
+import { getBytesTextPreviewMode, TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants';
 import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { type DrivePath, isCollabType, isVCardFile } from '@workspace/lib/types/drive';
 import type { TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
@@ -339,6 +339,8 @@ export async function getTextPreview(mount: Mount, drivePath: DrivePath): Promis
     const documentType = isCollabType(drivePath.type) ? COLLAB_DOCUMENT_TYPES.get(drivePath.mimeType || '') : undefined;
     const mode = documentType ?? getBytesTextPreviewMode(drivePath.mimeType || '', drivePath.name);
     if (mode === null) return null;
+    // Refused off the row's size, before any read; a container's size is its databases, not its body.
+    if (!documentType && drivePath.size > TEXT_PREVIEW_MAX_BYTES) return null;
 
     // A body is served exactly as it was stored; the mode is composed here, where it is already known.
     const cached = await getOrCacheText(
@@ -370,6 +372,7 @@ export async function getBytesTextPreview(
 ): Promise<TextPreviewResult | null> {
     const mode = getBytesTextPreviewMode(contentType, fileName);
     if (mode === null) return null;
+    if (bytes.byteLength > TEXT_PREVIEW_MAX_BYTES) return null;
     // A mail part carries the charset its sender declared; Drive bytes have none and read as UTF-8.
     const buffer = Buffer.from(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes));
     return generateTextPreview(decodeCharset(buffer, charset ?? 'utf-8'), mode, fileName);
