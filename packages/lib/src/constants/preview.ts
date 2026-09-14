@@ -37,6 +37,19 @@ const EXIFTOOL_EXTENSIONS = new Set([
     '.heif',
 ]);
 
+// The image mimes a browser decodes on its own. A subject whose <img> points at the original bytes
+// (no Drive /preview route behind it) is only an image preview for one of these — an <img> never runs
+// script, so serving these inline is safe, and a HEIC gets the fallback card instead of a broken box.
+export const BROWSER_IMAGE_MIMES = new Set([
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'image/avif',
+    'image/bmp',
+    'image/svg+xml',
+]);
+
 export type TextPreviewMode =
     | 'markdown'
     | 'plaintext'

@@ -11,16 +11,32 @@ const TARGET_MIME: Record<ConvertTarget, string> = {
     eigendoc: DRIVE_MIME_DOC,
 };
 
-export function useConvertDocument(ownerId: string, mountId: string) {
+type ConvertVariables = {
+    ownerId: string;
+    mountId: string;
+    pathId: string;
+    parentId: string;
+    targetType: ConvertTarget;
+};
+
+// The source is per call, not per hook: a file action runs from a menu that only learns which file
+// the user picked when the row is clicked.
+export function useConvertDocument() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({ pathId, targetType }: { pathId: string; targetType: ConvertTarget; parentId: string }) => {
+        mutationFn: async ({ ownerId, mountId, pathId, targetType }: ConvertVariables) => {
             const response = await driveApi({ ownerId })({ mountId }).file({ pathId }).convert({ targetType }).post({});
             if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: (_data, variables) =>
-            invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId, TARGET_MIME[variables.targetType]),
+            invalidateItemCreated(
+                queryClient,
+                variables.ownerId,
+                variables.mountId,
+                variables.parentId,
+                TARGET_MIME[variables.targetType],
+            ),
         onError: onMutationError,
     });
 }

@@ -1,4 +1,4 @@
-import type { DrivePath } from '@workspace/lib/types/drive';
+import type { FileSubject } from '@workspace/lib/types/file-subject';
 import { createContext, useContext } from 'react';
 
 // Leaf module for the preview context so the base Dialog primitive can read the
@@ -6,15 +6,13 @@ import { createContext, useContext } from 'react';
 // whole Drive feature tree (FilePreview → DriveLocationPicker → Dialog) and closes
 // an import cycle back onto Dialog. This file must import nothing from that tree.
 
-export type DownloadMode = 'direct' | 'save-to-drive';
-
-export type PreviewOptions = {
-    downloadMode?: DownloadMode;
-};
+export type PreviewOptions = { batch?: boolean };
 
 export type PreviewContextValue = {
-    openPreview: (path: DrivePath, siblings?: DrivePath[], options?: PreviewOptions) => void;
-    updatePreview: (path: DrivePath) => void;
+    // `batch` marks the siblings as a set the overlay may act on as a whole (an attachment list), so
+    // a Drive listing handing over its whole folder for navigation gets no "Save all" row.
+    openPreview: (subject: FileSubject, siblings?: FileSubject[], options?: PreviewOptions) => void;
+    updatePreview: (subject: FileSubject) => void;
     closePreview: () => void;
     isPreviewOpen: boolean;
 };

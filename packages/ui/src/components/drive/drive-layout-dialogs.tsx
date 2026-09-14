@@ -1,6 +1,7 @@
 import { getDriveDownloadUrl, openDocument } from '@workspace/lib/api';
 import { usePaletteSelectionActions } from '@workspace/lib/command-palette';
 import { useImportContactsFromDrive } from '@workspace/lib/contacts';
+import { triggerDownload } from '@workspace/lib/download';
 import {
     useConvertDocument,
     useCopyPath,
@@ -51,7 +52,7 @@ export function useDriveLayoutDialogs({
     const copyPath = useCopyPath();
     const duplicatePath = useDuplicatePath();
     const deletePathsMutation = useDeletePaths();
-    const convertMutation = useConvertDocument(ownerId, mountId);
+    const convertMutation = useConvertDocument();
     const importContactsMutation = useImportContactsFromDrive();
     const isCoarsePointer = useIsCoarsePointer();
     const isEffectiveOwnerOf = useIsEffectiveOwnerOf();
@@ -144,13 +145,7 @@ export function useDriveLayoutDialogs({
 
     const handleDownloadPath = useCallback((path: DrivePath) => {
         if (path?.type === 'file' && path.id) {
-            const downloadUrl = getDriveDownloadUrl(path.ownerId, path.mountId, path.id, path.updatedAt);
-            const a = document.createElement('a');
-            a.href = downloadUrl;
-            a.download = path.name || 'download';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+            triggerDownload(getDriveDownloadUrl(path.ownerId, path.mountId, path.id, path.updatedAt));
         }
     }, []);
 
@@ -158,7 +153,13 @@ export function useDriveLayoutDialogs({
         (path: DrivePath, targetType: 'eigensheets' | 'eigendoc') => {
             if (!path.parentId) return;
             convertMutation.mutate(
-                { pathId: path.id, targetType, parentId: path.parentId },
+                {
+                    ownerId: path.ownerId,
+                    mountId: path.mountId,
+                    pathId: path.id,
+                    parentId: path.parentId,
+                    targetType,
+                },
                 {
                     onSuccess: (newPath) => {
                         openDocument(newPath);

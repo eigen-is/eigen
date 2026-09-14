@@ -1,4 +1,5 @@
 import { formatDateTime } from '@workspace/lib/date';
+import { subjectFromPath } from '@workspace/lib/file-subject';
 import { formatFileSize } from '@workspace/lib/format';
 import { type DrivePath, isDocumentType, isOpenable, stripEigenExtension } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
@@ -77,7 +78,7 @@ export function DriveDetail({
         if (isDocumentType(path.type)) {
             onItemOpen?.(path);
         } else {
-            preview?.openPreview(path, []);
+            preview?.openPreview(subjectFromPath(path), []);
         }
     };
 

@@ -5,7 +5,7 @@ type: how-to
 tags: [contacts, import, vcard, vcf]
 related: [contacts/export-contacts, contacts/get-started, connect/contacts-client]
 order: 90
-updated: 2026-09-13
+updated: 2026-09-14
 ---
 
 Most address books can save contacts as a vCard file, which has the extension `.vcf`. Contacts reads those files, so you can bring people over from a phone, from another mail provider, or from a colleague who sent you a card.
@@ -31,7 +31,7 @@ If the `.vcf` file is in Drive, you can import it without opening Contacts.
 2. Right-click the file, or click its **⋮** button.
 3. Click **Import to Contacts**.
 
-You can also look inside the file first. Select it and press **Space**, or choose **Quick preview** from the same menu. The preview shows each contact in the file as a card, with photo, addresses, and labels, up to the first 200. The first button in the top right of the preview, the one with the address-book icon, imports the file you are looking at. Hover over it and it says **Import to Contacts**.
+You can also look inside the file first. Select it and press **Space**, or choose **Quick preview** from the same menu. The preview shows each contact in the file as a card, with photo, addresses, and labels, up to the first 200. The bar at the bottom of the preview has an **Import to Contacts** button, which imports the file you are looking at.
 
 ## What comes across
 

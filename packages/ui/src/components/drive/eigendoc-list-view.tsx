@@ -7,6 +7,7 @@ import {
     useMountMimeContent,
     usePathInfo,
 } from '@workspace/lib/drive';
+import { subjectFromPath } from '@workspace/lib/file-subject';
 import { type DrivePath, type DriveSearchParams, isDocumentType } from '@workspace/lib/types/drive';
 import { useContext } from 'react';
 import { EmptyState } from '../layout/app/empty-state';
@@ -90,7 +91,7 @@ export function EigenDocListView({
             error={isFolderContentLoadingError}
             onRowSelect={onRowSelect}
             onRowActivate={openDocument}
-            onQuickLook={(path, siblings) => openPreview(path, siblings)}
+            onQuickLook={(path, siblings) => openPreview(subjectFromPath(path), siblings.map(subjectFromPath))}
             onBackToList={onNavigateBack}
             onAfterAction={onNavigateBack}
             capabilities={{

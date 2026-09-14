@@ -1,5 +1,6 @@
 import { getDriveDownloadUrl } from '@workspace/lib/api';
 import { formatDateTime } from '@workspace/lib/date';
+import { triggerDownload } from '@workspace/lib/download';
 import { useCopyFiles, useFolderLookup } from '@workspace/lib/drive';
 import type { ChatMessage } from '@workspace/lib/types/chat';
 import { isAttachmentReference } from '@workspace/lib/types/chat';
@@ -105,23 +106,17 @@ export function ChatMessageList({
         if (!saveAttachmentsMsg?.attachments || !ownerId || !mountId) return;
         downloadTimers.current.forEach(clearTimeout);
         downloadTimers.current = [];
-        saveAttachmentsMsg.attachments
-            .filter((a): a is string => typeof a === 'string')
-            .forEach((name, i) => {
-                const fileInfo = findByName(name);
-                if (fileInfo) {
-                    downloadTimers.current.push(
-                        setTimeout(() => {
-                            const a = document.createElement('a');
-                            a.href = getDriveDownloadUrl(ownerId, mountId, fileInfo.id, fileInfo.updatedAt);
-                            a.download = '';
-                            document.body.appendChild(a);
-                            a.click();
-                            a.remove();
-                        }, i * 300),
-                    );
-                }
-            });
+        const names = saveAttachmentsMsg.attachments.filter((a): a is string => typeof a === 'string');
+        for (const [i, name] of names.entries()) {
+            const fileInfo = findByName(name);
+            if (!fileInfo) continue;
+            downloadTimers.current.push(
+                setTimeout(
+                    () => triggerDownload(getDriveDownloadUrl(ownerId, mountId, fileInfo.id, fileInfo.updatedAt)),
+                    i * 300,
+                ),
+            );
+        }
         setSaveAttachmentsMsg(null);
     }, [saveAttachmentsMsg, ownerId, mountId, findByName]);
 

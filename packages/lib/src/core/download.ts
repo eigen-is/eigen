@@ -21,3 +21,14 @@ export function filenameFromDisposition(header: string | null, fallback: string)
     const plain = header.match(/filename="([^"]*)"|filename=([^;]+)/i);
     return plain?.[1] || plain?.[2]?.trim() || fallback;
 }
+
+// `download = ''` leaves the name to Content-Disposition (production is same-origin, where the
+// attribute would otherwise win).
+export function triggerDownload(url: string): void {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+}

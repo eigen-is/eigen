@@ -1,5 +1,6 @@
 import { getDriveDownloadUrl, getDriveItemThumbnail } from '@workspace/lib/api';
 import { useFolderLookup } from '@workspace/lib/drive';
+import { subjectFromPath } from '@workspace/lib/file-subject';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { usePreview } from '../preview-provider';
 import { SimpleAttachmentChip } from './simple-attachment-chip';
@@ -45,7 +46,7 @@ export function AttachmentChip({
                     const siblings = siblingFileNames
                         ?.map((n) => findByName(n))
                         .filter((p): p is DrivePath => p !== undefined);
-                    openPreview(fileInfo, siblings, { downloadMode: 'save-to-drive' });
+                    openPreview(subjectFromPath(fileInfo), siblings?.map(subjectFromPath), { batch: true });
                 }
             }}
         />
