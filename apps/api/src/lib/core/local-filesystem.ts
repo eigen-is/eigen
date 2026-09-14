@@ -10,9 +10,7 @@ export class LocalFilesystem {
 
     constructor(baseDir: string) {
         this.baseDir = path.resolve(baseDir);
-        if (!fs.existsSync(this.baseDir)) {
-            fs.mkdirSync(this.baseDir, { recursive: true });
-        }
+        fs.mkdirSync(this.baseDir, { recursive: true });
     }
 
     private getFilePath(filePath: string): string {
@@ -22,9 +20,7 @@ export class LocalFilesystem {
     async write(filePath: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile | string): Promise<number> {
         const fullPath = this.getFilePath(filePath);
         const dir = path.dirname(fullPath);
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-        }
+        fs.mkdirSync(dir, { recursive: true });
         return await Bun.write(fullPath, data);
     }
 
@@ -36,9 +32,7 @@ export class LocalFilesystem {
     async writeAtomic(filePath: string, data: Buffer | Uint8Array | string): Promise<void> {
         const fullPath = this.getFilePath(filePath);
         const dir = path.dirname(fullPath);
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-        }
+        fs.mkdirSync(dir, { recursive: true });
         const tempPath = path.join(dir, `.${path.basename(fullPath)}.tmp-${randomUUID()}`);
         try {
             const handle = await fsPromises.open(tempPath, 'w');
@@ -102,30 +96,16 @@ export class LocalFilesystem {
         }
     }
 
-    async listDirs(dirPath: string): Promise<string[]> {
-        const fullPath = this.getFilePath(dirPath);
-        try {
-            const entries = await fsPromises.readdir(fullPath, { withFileTypes: true });
-            return entries.filter((e) => e.isDirectory()).map((e) => e.name);
-        } catch {
-            return [];
-        }
-    }
-
     async mkdir(dirPath: string): Promise<void> {
         const fullPath = this.getFilePath(dirPath);
-        if (!fs.existsSync(fullPath)) {
-            fs.mkdirSync(fullPath, { recursive: true });
-        }
+        fs.mkdirSync(fullPath, { recursive: true });
     }
 
     async rename(oldPath: string, newPath: string): Promise<void> {
         const fullOldPath = this.getFilePath(oldPath);
         const fullNewPath = this.getFilePath(newPath);
         const newDir = path.dirname(fullNewPath);
-        if (!fs.existsSync(newDir)) {
-            fs.mkdirSync(newDir, { recursive: true });
-        }
+        fs.mkdirSync(newDir, { recursive: true });
         await fsPromises.rename(fullOldPath, fullNewPath);
     }
 
@@ -137,10 +117,6 @@ export class LocalFilesystem {
         } catch {
             return false;
         }
-    }
-
-    async fileExists(filePath: string): Promise<boolean> {
-        return await this.file(filePath).exists();
     }
 
     async dirSize(dirPath: string): Promise<number> {
@@ -171,7 +147,7 @@ export class LocalFilesystem {
         return await fsPromises.readdir(fullPath);
     }
 
-    async stat(filePath: string) {
+    async stat(filePath: string): Promise<fs.Stats> {
         const fullPath = this.getFilePath(filePath);
         return await fsPromises.stat(fullPath);
     }
@@ -189,16 +165,8 @@ export class LocalFilesystem {
         return fs.watch(this.getFilePath(relativePath), callback);
     }
 
-    pathJoin(...paths: string[]): string {
-        return path.join(...paths);
-    }
-
-    pathBasename(filePath: string): string {
-        return path.basename(filePath);
-    }
-
     private async cleanupEmptyDirs(dirPath: string): Promise<void> {
-        if (dirPath === this.baseDir || !dirPath.startsWith(this.baseDir)) {
+        if (dirPath === this.baseDir || !dirPath.startsWith(this.baseDir + path.sep)) {
             return;
         }
         try {

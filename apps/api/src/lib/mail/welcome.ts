@@ -1,5 +1,5 @@
 import { escapeHtml, stripTagsServer } from '@workspace/lib/html';
-import { getDomain, getMailDomain, getOrgName } from '../config/server-config';
+import { getDomain, getOrgName } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
 import { renderEigenEmail } from '../core/mail-template';
 import { composeRfc822 } from '../core/mailer';
@@ -27,7 +27,6 @@ export async function welcomeMail(name: string, email: string): Promise<Buffer |
         .replaceAll('{domain}', escapeHtml(domain));
 
     return composeRfc822({
-        from: { name: orgName, address: `noreply@${getMailDomain()}` },
         to: [{ name, address: email }],
         subject,
         text: stripTagsServer(bodyHtml),

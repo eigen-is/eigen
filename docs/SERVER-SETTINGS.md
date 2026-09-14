@@ -25,7 +25,10 @@ UserSettings and TeamSettings.
 
 - Constructed with a `LocalFilesystem`, a filename, and typed defaults
 - `load()` reads the file and deep-merges it onto the defaults, so keys added later get their default value. A
-  missing file or a parse error leaves the defaults in place
+  missing file leaves the defaults in place; a file that does not parse rejects the load, so the home fails to boot
+  rather than letting the next `set()` persist defaults over the real bytes
+- The merge recurses into plain objects only: an array or `null` in the update replaces the stored value wholesale,
+  and an explicitly `undefined` key clears it (how `routes/team.ts` clears a member override)
 - `get()` returns the in-memory state; `set(update)` deep-merges a partial, writes atomically (tmp + rename),
   rolls back on failure, and returns the merged state
 - The file is created on the first `set()`, not on `load()`

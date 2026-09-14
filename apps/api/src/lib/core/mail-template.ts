@@ -12,10 +12,11 @@ import {
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import { getDomain, isInternalAddress } from '../config/server-config';
 
-const EMAIL_BORDER = '#e0e0e0';
-const EMAIL_TEXT = '#1a1a1a';
-const EMAIL_MUTED = '#5f6368';
-const EMAIL_LINK = '#1a73e8';
+export const EMAIL_BORDER = '#e0e0e0';
+export const EMAIL_TEXT = '#1a1a1a';
+export const EMAIL_MUTED = '#5f6368';
+export const EMAIL_LINK = '#1a73e8';
+const EMAIL_PILL_TEXT = '#333';
 const EMAIL_BANNER_BG = '#fce8e6';
 const EMAIL_BANNER_FG = '#c5221f';
 const EMAIL_FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif";
@@ -32,8 +33,7 @@ export type EmailShellInput = {
     banner?: string;
     attachmentLinks?: AttachmentReference[];
     footerLine?: string;
-    // Pill URLs for external recipients gain a `?email=` suffix so the guest-OTP
-    // login page can pre-fill the address. No-op for users on this server's mail domain.
+    // Drives the `?email=` suffix on pill URLs — see buildAttachmentUrl.
     recipientEmail?: string;
 };
 
@@ -85,8 +85,8 @@ export function renderAttachmentPills(references: AttachmentReference[], recipie
         const href = buildAttachmentUrl(ref, recipientEmail);
         const name = escapeHtml(stripEigenExtension(ref.name));
         cards.push(
-            `<div style="display:inline-block;border:1px solid ${EMAIL_BORDER};border-radius:6px;padding:6px 10px;margin:4px 4px 4px 0;font-size:13px;font-family:${EMAIL_FONT};color:#333;text-decoration:none;">` +
-                `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" style="color:#333;text-decoration:none;">${PAPERCLIP_SVG}Open ${name} →</a>` +
+            `<div style="display:inline-block;border:1px solid ${EMAIL_BORDER};border-radius:6px;padding:6px 10px;margin:4px 4px 4px 0;font-size:13px;font-family:${EMAIL_FONT};color:${EMAIL_PILL_TEXT};text-decoration:none;">` +
+                `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" style="color:${EMAIL_PILL_TEXT};text-decoration:none;">${PAPERCLIP_SVG}Open ${name} →</a>` +
                 '</div>',
         );
     }
@@ -104,19 +104,6 @@ export function renderAttachmentLinksText(references: AttachmentReference[], rec
     return `\n\n${lines.join('\n')}`;
 }
 
-function renderBanner(banner: string): string {
-    return `<div style="background:${EMAIL_BANNER_BG};color:${EMAIL_BANNER_FG};font-weight:600;font-size:13px;padding:8px 12px;border-radius:4px;margin-bottom:16px">${escapeHtml(banner)}</div>`;
-}
-
-function renderFooter(footerLine: string): string {
-    const domain = getDomain();
-    const domainLink =
-        domain === 'localhost'
-            ? 'Eigen'
-            : `<a href="https://${domain}" style="color:${EMAIL_LINK};text-decoration:none">Eigen</a>`;
-    return `<div style="font-size:12px;color:${EMAIL_MUTED};padding:0 4px;margin-top:8px">${escapeHtml(footerLine)} · ${domainLink}</div>`;
-}
-
 // Wraps bare http(s) URLs in `<a href>` so admin-templated bodies (welcome, invite) get
 // clickable links even when the template stores the URL as plain text. URLs already inside
 // an existing `<a>...</a>` block are passed through; URLs inside double-quoted attribute
@@ -129,11 +116,21 @@ function autolinkUrls(html: string): string {
 }
 
 export function renderEigenEmail(input: EmailShellInput): string {
-    const banner = input.banner ? renderBanner(input.banner) : '';
+    const banner = input.banner
+        ? `<div style="background:${EMAIL_BANNER_BG};color:${EMAIL_BANNER_FG};font-weight:600;font-size:13px;padding:8px 12px;border-radius:4px;margin-bottom:16px">${escapeHtml(input.banner)}</div>`
+        : '';
     const pills = input.attachmentLinks?.length
         ? renderAttachmentPills(input.attachmentLinks, input.recipientEmail)
         : '';
-    const footer = input.footerLine ? renderFooter(input.footerLine) : '';
+    let footer = '';
+    if (input.footerLine) {
+        const domain = getDomain();
+        const domainLink =
+            domain === 'localhost'
+                ? 'Eigen'
+                : `<a href="https://${domain}" style="color:${EMAIL_LINK};text-decoration:none">Eigen</a>`;
+        footer = `<div style="font-size:12px;color:${EMAIL_MUTED};padding:0 4px;margin-top:8px">${escapeHtml(input.footerLine)} · ${domainLink}</div>`;
+    }
     const title = `<h2 style="margin:0 0 20px;font-size:18px;font-weight:600;color:${EMAIL_TEXT};font-family:${EMAIL_FONT}">${escapeHtml(input.title)}</h2>`;
     return `<div style="font-family:${EMAIL_FONT};padding:0 16px">
   <div style="background:#ffffff;border:1px solid ${EMAIL_BORDER};border-radius:${EMAIL_RADIUS};padding:24px;margin:16px 0;color:${EMAIL_TEXT}">

@@ -1,4 +1,5 @@
 import type { FSWatcher } from 'node:fs';
+import * as path from 'node:path';
 import type {
     Attachment,
     DraftAttachmentUpload,
@@ -60,7 +61,7 @@ export class MaildirStore implements MailStore {
             const mailboxPath = this.mailboxDir(mailbox);
             for (const subdir of [PATHS.MAIL.CUR, PATHS.MAIL.NEW]) {
                 try {
-                    const watcher = this.storage.watch(this.storage.pathJoin(mailboxPath, subdir), () =>
+                    const watcher = this.storage.watch(path.join(mailboxPath, subdir), () =>
                         this.syncMailbox(mailbox).catch((err) => console.error('maildir: mailbox sync failed', err)),
                     );
                     this.watchers.push(watcher);
@@ -338,7 +339,7 @@ export class MaildirStore implements MailStore {
     }
 
     private getDraftMetaPath(draftId: string): string {
-        return this.storage.pathJoin(this.getDraftMetaDir(), `${this.sanitizeTempId(draftId)}.json`);
+        return path.join(this.getDraftMetaDir(), `${this.sanitizeTempId(draftId)}.json`);
     }
 
     private async ensureDraftMetaDir(): Promise<void> {
@@ -354,16 +355,16 @@ export class MaildirStore implements MailStore {
     }
 
     async readDraftMeta(draftId: string): Promise<DraftMeta | null> {
-        const path = this.getDraftMetaPath(draftId);
-        if (!(await this.storage.fileExists(path))) return null;
-        return this.storage.file(path).json();
+        const metaPath = this.getDraftMetaPath(draftId);
+        if (!(await this.storage.exists(metaPath))) return null;
+        return this.storage.file(metaPath).json();
     }
 
     async deleteDraftMeta(draftId: string): Promise<void> {
-        const path = this.getDraftMetaPath(draftId);
+        const metaPath = this.getDraftMetaPath(draftId);
         try {
-            if (await this.storage.fileExists(path)) {
-                await this.storage.unlink(path);
+            if (await this.storage.exists(metaPath)) {
+                await this.storage.unlink(metaPath);
             }
         } catch {}
     }
@@ -450,7 +451,7 @@ export class MaildirStore implements MailStore {
     }
 
     private getDraftTempPath(tempId: string): string {
-        return this.storage.pathJoin(this.getDraftTempDir(), this.sanitizeTempId(tempId));
+        return path.join(this.getDraftTempDir(), this.sanitizeTempId(tempId));
     }
 
     private getDraftTempMetaPath(tempId: string): string {
@@ -461,12 +462,12 @@ export class MaildirStore implements MailStore {
         const tempPath = this.getDraftTempPath(tempId);
         const metaPath = this.getDraftTempMetaPath(tempId);
         try {
-            if (await this.storage.fileExists(tempPath)) {
+            if (await this.storage.exists(tempPath)) {
                 await this.storage.unlink(tempPath);
             }
         } catch {}
         try {
-            if (await this.storage.fileExists(metaPath)) {
+            if (await this.storage.exists(metaPath)) {
                 await this.storage.unlink(metaPath);
             }
         } catch {}
@@ -477,7 +478,7 @@ export class MaildirStore implements MailStore {
         if (!(await this.storage.dirExists(dir))) return;
         const now = Date.now();
         for (const name of await this.storage.readdir(dir)) {
-            const filePath = this.storage.pathJoin(dir, name);
+            const filePath = path.join(dir, name);
             try {
                 const stat = await this.storage.stat(filePath);
                 if (now - stat.mtimeMs > STALE_DRAFT_TEMP_MAX_AGE_MS) {
@@ -501,7 +502,7 @@ export class MaildirStore implements MailStore {
         }
 
         const subscriptions = `${STANDARD_MAILBOXES.filter((m) => m !== '').join('\n')}\n`;
-        await this.storage.write(this.storage.pathJoin(this.basePath, 'subscriptions'), subscriptions);
+        await this.storage.write(path.join(this.basePath, 'subscriptions'), subscriptions);
     }
 
     private async mailboxDirExists(mailbox: string): Promise<boolean> {
@@ -511,11 +512,11 @@ export class MaildirStore implements MailStore {
     private async createMailboxDir(mailbox: string): Promise<void> {
         const mailboxPath = this.mailboxDir(mailbox);
         await this.storage.mkdir(mailboxPath);
-        await this.storage.mkdir(this.storage.pathJoin(mailboxPath, PATHS.MAIL.CUR));
-        await this.storage.mkdir(this.storage.pathJoin(mailboxPath, PATHS.MAIL.NEW));
-        await this.storage.mkdir(this.storage.pathJoin(mailboxPath, PATHS.MAIL.TMP));
+        await this.storage.mkdir(path.join(mailboxPath, PATHS.MAIL.CUR));
+        await this.storage.mkdir(path.join(mailboxPath, PATHS.MAIL.NEW));
+        await this.storage.mkdir(path.join(mailboxPath, PATHS.MAIL.TMP));
         if (mailbox !== '') {
-            await this.storage.write(this.storage.pathJoin(mailboxPath, 'maildirfolder'), '');
+            await this.storage.write(path.join(mailboxPath, 'maildirfolder'), '');
         }
     }
 
@@ -525,10 +526,10 @@ export class MaildirStore implements MailStore {
         const filename = `${uniqueId},S=${size}`;
         const mailboxPath = this.mailboxDir(mailbox);
 
-        const tmpPath = this.storage.pathJoin(mailboxPath, PATHS.MAIL.TMP, filename);
+        const tmpPath = path.join(mailboxPath, PATHS.MAIL.TMP, filename);
         await this.storage.write(tmpPath, message);
 
-        const newPath = this.storage.pathJoin(mailboxPath, PATHS.MAIL.NEW, filename);
+        const newPath = path.join(mailboxPath, PATHS.MAIL.NEW, filename);
         await this.storage.rename(tmpPath, newPath);
 
         return { uniqueId, size };
@@ -548,10 +549,10 @@ export class MaildirStore implements MailStore {
         const filename = buildMaildirFilename(existingId, flags, size);
         const mailboxPath = this.mailboxDir(mailbox);
 
-        const tmpPath = this.storage.pathJoin(mailboxPath, PATHS.MAIL.TMP, filename);
+        const tmpPath = path.join(mailboxPath, PATHS.MAIL.TMP, filename);
         await this.storage.write(tmpPath, message);
 
-        const curPath = this.storage.pathJoin(mailboxPath, PATHS.MAIL.CUR, filename);
+        const curPath = path.join(mailboxPath, PATHS.MAIL.CUR, filename);
         await this.storage.rename(tmpPath, curPath);
 
         return { uniqueId: existingId, size, filename };
@@ -559,14 +560,14 @@ export class MaildirStore implements MailStore {
 
     private async moveNewToCur(mailbox: string): Promise<void> {
         const mailboxPath = this.mailboxDir(mailbox);
-        const newPath = this.storage.pathJoin(mailboxPath, PATHS.MAIL.NEW);
+        const newPath = path.join(mailboxPath, PATHS.MAIL.NEW);
         if (!(await this.storage.dirExists(newPath))) return;
 
         for (const fileName of await this.storage.readdir(newPath)) {
             if (fileName.startsWith('.')) continue;
-            const src = this.storage.pathJoin(newPath, fileName);
+            const src = path.join(newPath, fileName);
             const curName = fileName.includes(':') ? fileName : `${fileName}:2,`;
-            const dst = this.storage.pathJoin(mailboxPath, PATHS.MAIL.CUR, curName);
+            const dst = path.join(mailboxPath, PATHS.MAIL.CUR, curName);
             try {
                 await this.storage.rename(src, dst);
             } catch (e: unknown) {
@@ -576,33 +577,30 @@ export class MaildirStore implements MailStore {
     }
 
     private async listCurFiles(mailbox: string): Promise<string[]> {
-        const curPath = this.storage.pathJoin(this.mailboxDir(mailbox), PATHS.MAIL.CUR);
+        const curPath = path.join(this.mailboxDir(mailbox), PATHS.MAIL.CUR);
         if (!(await this.storage.dirExists(curPath))) return [];
         return this.storage.readdir(curPath);
     }
 
     getMessageFile(mailbox: string, filename: string): BunFile {
-        const filePath = this.storage.pathJoin(this.mailboxDir(mailbox), PATHS.MAIL.CUR, filename);
+        const filePath = path.join(this.mailboxDir(mailbox), PATHS.MAIL.CUR, filename);
         return this.storage.file(filePath);
     }
 
     private async moveMessage(fromMailbox: string, fromFilename: string, toMailbox: string): Promise<void> {
-        const srcPath = this.storage.pathJoin(this.mailboxDir(fromMailbox), PATHS.MAIL.CUR, fromFilename);
-        const dstPath = this.storage.pathJoin(this.mailboxDir(toMailbox), PATHS.MAIL.CUR, fromFilename);
+        const srcPath = path.join(this.mailboxDir(fromMailbox), PATHS.MAIL.CUR, fromFilename);
+        const dstPath = path.join(this.mailboxDir(toMailbox), PATHS.MAIL.CUR, fromFilename);
         await this.storage.rename(srcPath, dstPath);
     }
 
     private async renameInCur(mailbox: string, oldFilename: string, newFilename: string): Promise<void> {
-        const curPath = this.storage.pathJoin(this.mailboxDir(mailbox), PATHS.MAIL.CUR);
-        await this.storage.rename(
-            this.storage.pathJoin(curPath, oldFilename),
-            this.storage.pathJoin(curPath, newFilename),
-        );
+        const curPath = path.join(this.mailboxDir(mailbox), PATHS.MAIL.CUR);
+        await this.storage.rename(path.join(curPath, oldFilename), path.join(curPath, newFilename));
     }
 
     private async deleteMessage(mailbox: string, filename: string): Promise<void> {
-        const filePath = this.storage.pathJoin(this.mailboxDir(mailbox), PATHS.MAIL.CUR, filename);
-        if (await this.storage.fileExists(filePath)) {
+        const filePath = path.join(this.mailboxDir(mailbox), PATHS.MAIL.CUR, filename);
+        if (await this.storage.exists(filePath)) {
             await this.storage.unlink(filePath);
         }
     }

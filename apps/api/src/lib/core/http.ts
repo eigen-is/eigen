@@ -44,12 +44,9 @@ export function matchesIfNoneMatch(header: string, etag: string | null): boolean
     return header.split(',').some((raw) => raw.trim().replace(/^W\//, '').replace(/^"|"$/g, '') === etag);
 }
 
-// The bounded request-body reader every DAV router's XML/body seam sits on. Refuses to buffer more than
-// `maxBytes`: the Content-Length pre-check rejects an honest client early, and the read loop cancels the
-// stream the instant the running total crosses the cap — the load-bearing check, since a chunked or
-// Bun-string body carries no length header to trust. Returns the bytes (empty for an empty body), or null
-// when the cap is exceeded, leaving each caller to map null to its own rejection (WebDAV throws 413,
-// CalDAV/CardDAV return an explicit 413) so a hostile payload never reaches the synchronous XML parser.
+// The bounded request-body reader every DAV router's XML/body seam sits on. The Content-Length pre-check only
+// rejects an honest client early; the read loop's own cap is load-bearing, since a chunked or Bun-string body
+// carries no trustworthy length. null means the cap was exceeded, and each caller maps it to its rejection.
 export async function readBoundedBodyBytes(request: Request, maxBytes: number): Promise<Uint8Array | null> {
     const len = request.headers.get('Content-Length');
     if (len !== null && Number(len) > maxBytes) return null;
@@ -76,9 +73,7 @@ export async function readBoundedBodyBytes(request: Request, maxBytes: number): 
     return merged;
 }
 
-// The same read decoded as UTF-8 the lenient way, which is what an XML body wants. A caller whose body is
-// a user's file decodes the bytes itself, so a file in another encoding can be refused rather than stored
-// with replacement characters.
+// Lenient UTF-8 decode, which is what an XML body wants; a caller holding a user's file decodes it itself.
 export async function readBoundedBody(request: Request, maxBytes: number): Promise<string | null> {
     const bytes = await readBoundedBodyBytes(request, maxBytes);
     return bytes === null ? null : new TextDecoder().decode(bytes);
@@ -87,7 +82,6 @@ export async function readBoundedBody(request: Request, maxBytes: number): Promi
 // RFC 7233 single byte-range. Returns the inclusive [start, end] when satisfiable,
 // 'unsatisfiable' when a parsed range lies outside the resource (caller responds 416),
 // or null when there is no range to serve (caller serves the full 200 body).
-// Single source for the byte math shared by serveFile (embed/download) and the WebDAV GET.
 export function parseByteRange(
     rangeHeader: string | null,
     size: number,
@@ -100,6 +94,8 @@ export function parseByteRange(
     const startStr = match[1];
     const endStr = match[2];
     if (startStr === '' && endStr === '') return null;
+    // A last-pos before its first-pos is an invalid spec, which also means "ignore" (RFC 9110 §14.1.1).
+    if (startStr !== '' && endStr !== '' && Number(startStr) > Number(endStr)) return null;
     if (size === 0) return 'unsatisfiable';
     // Suffix range "bytes=-N" means "last N bytes": start = size - N, end = size - 1.
     // Open-ended "bytes=N-" means "from N to EOF": end = size - 1.
@@ -109,10 +105,9 @@ export function parseByteRange(
     return { start, end };
 }
 
-// The RFC 7233 response shape the three byte-range servers share (drive serveFile, the WebDAV GET, the mail
-// part routes). Callers own their headers and ETag/304 handling and pass only the byte source; `end` is
-// exclusive because every reader takes it that way. Content-Length only binds for an in-memory body: Bun
-// derives it from a BunFile and sends a stream chunked.
+// The RFC 7233 response shape the byte-range servers share. Callers own their headers and ETag/304 handling
+// and pass only the byte source; `end` is exclusive because every reader takes it that way. Content-Length
+// only binds for an in-memory body: Bun derives it from a BunFile and sends a stream chunked.
 export async function rangeResponse(
     headers: Record<string, string>,
     size: number,
@@ -148,13 +143,11 @@ export function contentDisposition(type: 'attachment' | 'inline', fileName: stri
     return `${type}; filename="${ascii.replace(/["\\]/g, '_')}"; filename*=UTF-8''${encoded}`;
 }
 
-// Security headers a body needs when served INLINE from the API's own origin: an uploaded HTML/SVG
-// could otherwise run script with the viewer's session. The sandbox CSP neutralises active content
-// while still rendering the file; nosniff stops the browser re-sniffing a disguised payload. Empty
-// for non-scriptable types (media/PDF), so callers can spread it unconditionally. One home for the
-// scriptable-type set and the CSP string (serve-file's /embed and the /preview route both consult it).
+// An uploaded HTML/SVG/XML served INLINE from the API's own origin could run script with the viewer's
+// session: the sandbox CSP neutralises active content while still rendering the file, and nosniff stops the
+// browser re-sniffing a disguised payload. Empty for other types, so callers spread it unconditionally.
 export function scriptableInlineHeaders(mimeType: string): Record<string, string> {
-    const baseMime = (mimeType.split(';')[0] ?? '').trim().toLowerCase();
+    const baseMime = mimeType.split(';')[0].trim().toLowerCase();
     // Every XML flavour scripts too: an `<?xml-stylesheet?>` PI runs XSLT. The `+xml` suffix already
     // covers image/svg+xml and application/xhtml+xml, so neither needs an entry of its own.
     const isXml = baseMime === 'text/xml' || baseMime === 'application/xml' || baseMime.endsWith('+xml');

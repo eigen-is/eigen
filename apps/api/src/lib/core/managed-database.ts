@@ -1,5 +1,4 @@
-import type Database from 'bun:sqlite';
-import { Database as BunDatabase, type Statement } from 'bun:sqlite';
+import { Database, type Statement } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { type BunSQLiteDatabase, drizzle } from 'drizzle-orm/bun-sqlite';
@@ -79,9 +78,7 @@ export class ManagedDatabase<S extends SchemaType> {
         await this.callbacks.onOpen?.();
 
         const dir = path.dirname(this.localPath);
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-        }
+        fs.mkdirSync(dir, { recursive: true });
 
         if (this.mustExist) {
             // "Open existing" must find a populated db. A missing OR 0-byte working copy would
@@ -97,8 +94,8 @@ export class ManagedDatabase<S extends SchemaType> {
         // create:false keeps a missing file an error; Bun needs an explicit access mode when create
         // is off, otherwise it raises SQLITE_MISUSE.
         this.rawDb = this.mustExist
-            ? new BunDatabase(this.localPath, { readwrite: true, create: false })
-            : new BunDatabase(this.localPath, { create: true });
+            ? new Database(this.localPath, { readwrite: true, create: false })
+            : new Database(this.localPath, { create: true });
         // A failed open — corrupt bytes tripping the first PRAGMA (SQLITE_NOTADB on a partial
         // download) or a throwing migration — must not leak the raw handle (fd + mapped journals).
         try {
@@ -114,14 +111,14 @@ export class ManagedDatabase<S extends SchemaType> {
                 INSERT OR IGNORE INTO __schema_version (id, version) VALUES (1, 0);
             `);
 
-            await this.runMigrations();
+            await this.runMigrations(this.rawDb);
         } catch (e) {
             this.rawDb.close();
             this.rawDb = null;
             throw e;
         }
 
-        this.drizzleDb = drizzle(withAutoFinalize(this.rawDb), { schema: this.config.schema }) as BunSQLiteDatabase<S>;
+        this.drizzleDb = drizzle(withAutoFinalize(this.rawDb), { schema: this.config.schema });
         this.lastSyncedChanges = 0;
         this.closed = false;
 
@@ -134,11 +131,16 @@ export class ManagedDatabase<S extends SchemaType> {
         return this.drizzleDb;
     }
 
-    private async runMigrations(): Promise<void> {
-        if (!this.rawDb) return;
-
-        const row = this.rawDb.query('SELECT version FROM __schema_version WHERE id = 1').get() as { version: number };
-        let currentVersion = row?.version ?? 0;
+    private async runMigrations(db: Database): Promise<void> {
+        const stamp = db
+            .query<{ version: number }, []>('SELECT version FROM __schema_version WHERE id = 1')
+            .get()?.version;
+        // Only our own migrations write the stamp; anything else is a db we don't understand, and a
+        // non-number compares false against every migration so the db would open unmigrated.
+        if (stamp === undefined || !Number.isInteger(stamp)) {
+            throw new ApiError(503, `${this.config.name}: unreadable schema stamp ${stamp}`);
+        }
+        let currentVersion = stamp;
 
         // A db written by a newer binary carries a schema past what we know how to migrate. Rolling
         // back to an older server and silently opening it would corrupt it — refuse loudly instead.
@@ -161,13 +163,13 @@ export class ManagedDatabase<S extends SchemaType> {
                         : `Migrating v${currentVersion} → v${migration.version}`;
                 console.log(`[${this.config.name}] ${msg}`);
             }
-            this.rawDb.run('BEGIN');
+            db.run('BEGIN');
             try {
-                migration.up(this.rawDb);
-                this.rawDb.run('UPDATE __schema_version SET version = ? WHERE id = 1', [migration.version]);
-                this.rawDb.run('COMMIT');
+                migration.up(db);
+                db.run('UPDATE __schema_version SET version = ? WHERE id = 1', [migration.version]);
+                db.run('COMMIT');
             } catch (e) {
-                this.rawDb.run('ROLLBACK');
+                db.run('ROLLBACK');
                 throw e;
             }
             currentVersion = migration.version;
@@ -176,7 +178,7 @@ export class ManagedDatabase<S extends SchemaType> {
 
     private getTotalChanges(): number {
         if (!this.rawDb) return 0;
-        const row = this.rawDb.query('SELECT total_changes() as tc').get() as { tc: number } | null;
+        const row = this.rawDb.query<{ tc: number }, []>('SELECT total_changes() as tc').get();
         return row?.tc ?? 0;
     }
 
@@ -238,9 +240,6 @@ export class ManagedDatabase<S extends SchemaType> {
         });
     }
 
-    // Public sync entry point — callers (e.g. Mount.createDatabase) use this
-    // to guarantee the current state has been pushed through the configured
-    // sync callback before returning, instead of waiting for the 30s timer.
     // Serialized against every other sync but NOT against the lifecycle op, so the re-entrant
     // flush from onSnapshot can't wedge (see lifecycleLock). Once close() has started this is a
     // no-op: close ran its own final sync, and nothing may touch the db it is tearing down.
@@ -250,10 +249,9 @@ export class ManagedDatabase<S extends SchemaType> {
         });
     }
 
-    // Write a frozen, WAL-complete copy of the current DB to destPath via VACUUM INTO.
-    // The write-behind upload pipeline (Phase 1b) uploads this copy, not the live file
-    // (which keeps mutating as the user edits). VACUUM INTO captures committed-but-
-    // uncheckpointed WAL frames, so the copy is complete without a prior checkpoint.
+    // The write-behind upload pipeline uploads the VACUUM INTO copy, not the live file (which keeps
+    // mutating as the user edits); VACUUM INTO captures committed-but-uncheckpointed WAL frames, so
+    // the copy is complete without a prior checkpoint.
     stageCopy(destPath: string): void {
         if (!this.rawDb) throw new Error('Database not open');
         this.rawDb.run('VACUUM INTO ?', [destPath]);
@@ -341,11 +339,11 @@ export class ManagedDatabase<S extends SchemaType> {
 // hasn't been swept yet still counts, which no Bun.gc() retry can force. Finalize each statement
 // right after its single execution instead. Migrations get the raw handle (they reuse statements
 // in loops) and finalize their own.
-export function withAutoFinalize(db: BunDatabase): BunDatabase {
+export function withAutoFinalize(db: Database): Database {
     return new Proxy(db, {
         get(target, prop) {
             if (prop === 'prepare') {
-                return (...args: Parameters<BunDatabase['prepare']>) => finalizeAfterRun(target.prepare(...args));
+                return (...args: Parameters<Database['prepare']>) => finalizeAfterRun(target.prepare(...args));
             }
             const value = Reflect.get(target, prop, target);
             return typeof value === 'function' ? value.bind(target) : value;
