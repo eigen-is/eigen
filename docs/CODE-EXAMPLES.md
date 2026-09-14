@@ -1,10 +1,10 @@
 # Code Examples
 
-> **TLDR**: The long-form companion to [CODE-STANDARDS.md](CODE-STANDARDS.md): the common LLM mistakes with BAD/GOOD code, the worked examples behind the key patterns, and exactly what `bun scripts/check-standards.ts` measures. CODE-STANDARDS.md carries the rules; this file carries the examples and the gate's metric list.
+> **TLDR**: The long-form companion to [CODE-STANDARDS.md](CODE-STANDARDS.md): the review hot spots with BAD/GOOD code, the worked examples behind the key patterns, and exactly what `bun scripts/check-standards.ts` measures. CODE-STANDARDS.md carries the rules; this file carries the examples and the gate's metric list.
 
-## Common LLM Mistakes
+## Review Hot Spots
 
-These mistakes come up in almost every LLM-generated code review. Don't make them.
+These six slips recur in review here. Each shows the shape to avoid and the shape this codebase uses.
 
 ### Over-engineering
 

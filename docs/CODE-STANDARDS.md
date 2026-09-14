@@ -11,9 +11,9 @@ This codebase values **simplicity, directness, and consistency** over cleverness
 - **Trust the type system** — no defensive null checks on typed data, no fallback defaults for required fields. Validate at system boundaries (user input, external APIs), trust internal code everywhere else
 - **Consistency over originality** — new code must look like the code next to it. Same patterns, same naming, same structure. Don't invent new patterns when existing ones work
 
-## Common LLM Mistakes
+## Review Hot Spots
 
-Six come up in almost every LLM-generated code review, each with BAD/GOOD code in [CODE-EXAMPLES.md § Common LLM Mistakes](CODE-EXAMPLES.md#common-llm-mistakes): over-engineering, unnecessary error handling (try-catch only for fire-and-forget, external integrations and cleanup; never re-wrap `ApiError`), not matching existing patterns, adding code where it doesn't belong, adding unnecessary complexity, reinventing existing code.
+Six slips recur in review here, each with BAD/GOOD code in [CODE-EXAMPLES.md § Review Hot Spots](CODE-EXAMPLES.md#review-hot-spots): over-engineering, unnecessary error handling (try-catch only for fire-and-forget, external integrations and cleanup; never re-wrap `ApiError`), not matching existing patterns, adding code where it doesn't belong, adding unnecessary complexity, reinventing existing code.
 
 ## Typing
 
