@@ -1,5 +1,4 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { MAILBOX_INBOX, MAILBOX_INBOX_KEY } from '@workspace/lib/constants/mailboxes';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { invalidateHomeSize } from '../home';
@@ -14,14 +13,12 @@ import {
 } from './hooks/keys';
 import { consumeRecentMailMutation } from './hooks/use-emails';
 
-const normalizeMailbox = (mailbox: string) => (mailbox === MAILBOX_INBOX ? MAILBOX_INBOX_KEY : mailbox);
-
 export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, userId: string): boolean {
     if (!event?.type?.startsWith('mail:')) return false;
     if (!('mail' in event)) return false;
 
     const { mail } = event;
-    const mailbox = normalizeMailbox(mail.mailbox);
+    const { mailbox } = mail;
 
     switch (event.type) {
         case SSEventType.MAIL_RECEIVED:
@@ -47,8 +44,7 @@ export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, user
             // Own move: source list already patched + target list invalidated in the mutation onSuccess,
             // so skip the echo. A move by another client (no registry entry) invalidates both lists here.
             if (!consumeRecentMailMutation(event.type, mail.messageId)) {
-                const toMailbox = mail.toMailbox != null ? normalizeMailbox(mail.toMailbox) : null;
-                invalidateMailMoved(queryClient, userId, mail.messageId, mailbox, toMailbox);
+                invalidateMailMoved(queryClient, userId, mail.messageId, mailbox, mail.toMailbox ?? null);
             }
             invalidateMailboxes(queryClient, userId);
             invalidateSearchOwner(queryClient, userId);

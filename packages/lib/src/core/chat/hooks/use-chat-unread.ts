@@ -6,12 +6,10 @@ import { notificationKeys } from '../../notification/hooks/keys';
 import { useNotifications } from '../../notification/hooks/use-notifications';
 import { chatThreadKey, parseChatNotificationThread } from '../../notification/tags';
 
-function unreadForThread(notifications: Notification[], key: string): Notification[] {
-    return notifications.filter((n) => {
-        if (n.read || !n.tag) return false;
-        const thread = parseChatNotificationThread(n.type, n.tag);
-        return !!thread && chatThreadKey(thread) === key;
-    });
+function isUnreadForThread(n: Notification, key: string): boolean {
+    if (n.read || !n.tag) return false;
+    const thread = parseChatNotificationThread(n.type, n.tag);
+    return !!thread && chatThreadKey(thread) === key;
 }
 
 // The pathId a row shows its unread dot on: a comment's notification names the container, so the
@@ -36,7 +34,7 @@ export function useAutoMarkChatRead(userId: string, pathId: string, chatName?: s
     const markChatRead = useMarkChatRead(userId);
     const key = chatThreadKey({ pathId, chatName });
 
-    const hasUnread = useMemo(() => unreadForThread(notifications, key).length > 0, [notifications, key]);
+    const hasUnread = useMemo(() => notifications.some((n) => isUnreadForThread(n, key)), [notifications, key]);
 
     useEffect(() => {
         if (hasUnread) markChatRead(pathId, chatName);
@@ -49,7 +47,8 @@ export function useMarkChatRead(userId: string) {
     return useCallback(
         (pathId: string, chatName?: string) => {
             const notifications = queryClient.getQueryData<Notification[]>(notificationKeys.list(userId)) ?? [];
-            const toMark = unreadForThread(notifications, chatThreadKey({ pathId, chatName }));
+            const key = chatThreadKey({ pathId, chatName });
+            const toMark = notifications.filter((n) => isUnreadForThread(n, key));
             if (toMark.length === 0) return;
 
             // Optimistically mark as read in cache — prevents loops and flicker

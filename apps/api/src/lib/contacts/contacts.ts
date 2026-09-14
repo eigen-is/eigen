@@ -121,11 +121,8 @@ export class Contacts {
     // Whether card writes are quota-metered — see the assignment in init() for what turns it on.
     private meteredIngest = false;
 
-    // Set while a bulk write runs (a whole-file import), holding the per-card events back for the one
-    // list-level event that closes it. Whatever sets this owes that event, so a card written by something
-    // else in the same window loses nothing: its invalidation is owner-wide and the batch still fires.
-    batchingContactEvents = false; // internal — used by contacts/*.ts
-    private heldContactEvents = false;
+    // Set while a bulk write runs; per-card events are held back and `withBatchedEvents` closes them.
+    private heldContactEvents: boolean | null = null;
 
     constructor(home: Home) {
         this.home = home;
@@ -134,7 +131,7 @@ export class Contacts {
 
     // internal — used by contacts/*.ts
     emitContact(type: Parameters<typeof buildContactEvent>[0], contactId: string): void {
-        if (this.batchingContactEvents) {
+        if (this.heldContactEvents !== null) {
             this.heldContactEvents = true;
             return;
         }
@@ -142,11 +139,18 @@ export class Contacts {
     }
 
     // internal — used by contacts/*.ts
-    // Closes a batch: one list-level event for whatever emitContact held back, nothing if nothing was.
-    emitContactsChanged(): void {
-        if (!this.heldContactEvents) return;
+    // A bulk write (a whole-file import) broadcasts one list-level event for every card event it held back,
+    // even when `fn` throws: the cards that landed before the throw still have to reach the tabs. A card
+    // written by something else in the window loses nothing — its invalidation is owner-wide too.
+    async withBatchedEvents<T>(fn: () => Promise<T>): Promise<T> {
         this.heldContactEvents = false;
-        this.home.broadcast(buildContactsChangedEvent());
+        try {
+            return await fn();
+        } finally {
+            const held = this.heldContactEvents;
+            this.heldContactEvents = null;
+            if (held) this.home.broadcast(buildContactsChangedEvent());
+        }
     }
 
     // internal — used by contacts/*.ts

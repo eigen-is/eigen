@@ -69,12 +69,12 @@ function DriveItemActionsMenu({
     const contextItems = contextItemsOf(controller);
 
     const subject = useMemo(
-        () => (contextMenu.item ? subjectFromPath(contextMenu.item, { canWrite }) : null),
+        () => (contextMenu.item ? subjectFromPath(contextMenu.item, canWrite) : null),
         [contextMenu.item, canWrite],
     );
     // Mapped only while the menu is open: a folder listing can run to thousands of rows.
     const siblings = useMemo(
-        () => (contextMenu.item ? items.map((item) => subjectFromPath(item, { canWrite })) : []),
+        () => (contextMenu.item ? items.map((item) => subjectFromPath(item, canWrite)) : []),
         [contextMenu.item, items, canWrite],
     );
     const runner = useFileActionRunner(subject, siblings);

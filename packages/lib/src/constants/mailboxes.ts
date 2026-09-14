@@ -1,7 +1,5 @@
-// The special mailboxes every Maildir carries: their canonical wire names, the IMAP special-use flag each
-// one advertises, and the label the UI shows for it. The wire name is what the DB `mailbox` column, the SSE
-// payloads and `canonicalMailbox()` speak, and there the inbox is the empty string. Icons sit beside this in
-// `core/mailbox-icons.ts`; they need React, and this module stays React-free so the API can import it.
+// The special mailboxes every Maildir carries: wire name (the DB column, SSE payloads; inbox = ''), IMAP
+// special-use flag and UI label. React-free so the API imports it; icons live in `core/mailbox-icons.ts`.
 
 export const MAILBOX_INBOX = '';
 export const MAILBOX_SENT = 'Sent';
@@ -61,7 +59,6 @@ export const SIDEBAR_MAILBOXES: readonly SpecialMailbox[] = (
 // Every mailbox row carries this; a special one adds its special-use flag after it.
 export const MAILBOX_NO_CHILDREN_FLAG = '\\HasNoChildren';
 
-const BY_PATH = new Map<string, SpecialMailbox>(Object.values(SPECIAL_MAILBOXES).map((box) => [box.path, box]));
 const BY_FLAG = new Map<string, SpecialMailbox>(Object.values(SPECIAL_MAILBOXES).map((box) => [box.flag, box]));
 
 // The `/box/:filterId` segment, and the mailbox part of a list query key: every mailbox lowercased, with
@@ -81,6 +78,6 @@ export function specialMailboxFromFlags(flags: readonly string[] = []): SpecialM
 
 // The flags a mailbox is listed with. Eigen nests no mailboxes, so every one of them has no children.
 export function mailboxListFlags(mailbox: string): string[] {
-    const box = BY_PATH.get(mailbox);
+    const box = Object.values(SPECIAL_MAILBOXES).find((special) => special.path === mailbox);
     return box ? [MAILBOX_NO_CHILDREN_FLAG, box.flag] : [MAILBOX_NO_CHILDREN_FLAG];
 }

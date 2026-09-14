@@ -14,7 +14,7 @@ import {
     Presentation,
     UsersRound,
 } from 'lucide-react';
-import { DRIVE_TYPE_FOLDER, type DrivePathType, getEigenDocInfoByMime, isVCardFile } from '../types';
+import { DRIVE_TYPE_FOLDER, type DrivePathType, getEigenDocInfoByMime, isImageMime, isVCardFile } from '../types';
 import { EIGEN_DOC_ICONS } from './eigendoc-icons';
 
 const ARCHIVE_MIMES = new Set([
@@ -69,7 +69,7 @@ export function getFileIconComponent(mimeType: string, type: string, name: strin
     if (isVCardFile(mimeType, name)) return UsersRound;
 
     if (!mimeType) return File;
-    if (mimeType.startsWith('image/')) return FileImage;
+    if (isImageMime(mimeType)) return FileImage;
     if (mimeType.startsWith('video/')) return FileVideo;
     if (mimeType.startsWith('audio/')) return FileAudio;
     if (mimeType === 'application/pdf') return FileType;

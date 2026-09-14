@@ -5,7 +5,7 @@ import {
     isExiftoolExtension,
     TEXT_PREVIEW_MAX_BYTES,
 } from '../constants/preview';
-import { type DrivePath, isCollabType, isVCardFile } from '../types/drive';
+import { type DrivePath, isCollabType, isImageMime, isVCardFile } from '../types/drive';
 import type { FileSubject, MailPartRef, PreviewMode, SubjectInfo } from '../types/file-subject';
 import { type Attachment, mailAttachmentName } from '../types/mail';
 import {
@@ -18,8 +18,10 @@ import {
 
 // `canWrite` is the holding surface's own capability: a listing the viewer may not write to marks its
 // subjects read-only, so a row that writes beside the file (convert) doesn't apply.
-export function subjectFromPath(path: DrivePath, capability?: { canWrite: boolean }): FileSubject {
-    return { drive: path, ...(capability?.canWrite === false && { readOnly: true as const }) };
+export function subjectFromPath(path: DrivePath, canWrite = true): FileSubject {
+    const subject: FileSubject = { drive: path };
+    if (!canWrite) subject.readOnly = true;
+    return subject;
 }
 
 // `index` is the raw part index the mail routes address, calendar parts included.
@@ -73,9 +75,7 @@ function mailInfo(
 // mime is an image. Text and vCard previews are served for Drive files and mail parts alike (PREVIEWS.md).
 export function getPreviewMode(subject: FileSubject): PreviewMode {
     const { name, mimeType: mime, size } = subjectInfo(subject);
-    const isImage = subject.drive
-        ? mime.startsWith('image/') || isExiftoolExtension(name)
-        : BROWSER_IMAGE_MIMES.has(mime);
+    const isImage = subject.drive ? isImageMime(mime) || isExiftoolExtension(name) : BROWSER_IMAGE_MIMES.has(mime);
     if (isImage) return 'image';
     if (mime.startsWith('video/')) return 'video';
     if (mime.startsWith('audio/')) return 'audio';

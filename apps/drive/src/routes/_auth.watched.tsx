@@ -30,7 +30,7 @@ function WatchedRoute() {
 
     const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
         items: watches,
-        canWrite: DRIVE_CAPABILITIES.readOnly.canWrite,
+        capabilities: DRIVE_CAPABILITIES.readOnly,
         onOpenFolder: (path: DrivePath) =>
             navigate({
                 to: '/fs/$ownerId/$mountId/$pathId',

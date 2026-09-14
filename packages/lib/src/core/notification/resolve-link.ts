@@ -1,26 +1,14 @@
 import { driveApi, getCalendarAppUrl, getDriveAppUrl, getDriveItemUrl, getMailAppUrl } from '@workspace/lib/api';
 import { getMonthRange } from '@workspace/lib/calendar';
 import { isChatType, isCollabType } from '@workspace/lib/types/drive';
-import type { Notification } from '@workspace/lib/types/notification';
+import type { ChatNotificationThread, Notification } from '@workspace/lib/types/notification';
+import { CHAT_NOTIFICATION_TYPES, parseChatNotificationThread } from './tags';
 
-function parseDriveTag(
-    tag: string,
-    hasChatName = false,
-): { ownerId: string; mountId: string; pathId: string; chatName?: string } | null {
-    const parts = tag.split(':');
-    if (
-        !['share', 'mention', 'chat-message', 'comment-reply', 'assigned'].includes(parts[0]) ||
-        !parts[1] ||
-        !parts[2] ||
-        !parts[3]
-    )
-        return null;
-    return {
-        ownerId: parts[1],
-        mountId: parts[2],
-        pathId: parts[3],
-        chatName: hasChatName && parts[4] ? parts[4] : undefined,
-    };
+// share:{ownerId}:{mountId}:{pathId}
+function parseShareTag(tag: string): ChatNotificationThread | null {
+    const [kind, ownerId, mountId, pathId] = tag.split(':');
+    if (kind !== 'share' || !ownerId || !mountId || !pathId) return null;
+    return { ownerId, mountId, pathId };
 }
 
 function parseAccessRequestTag(
@@ -43,8 +31,7 @@ function parseFileEventTag(tag: string): { ownerId: string; mountId: string; pat
     return { ownerId: parts[1], mountId: parts[2], pathId: parts[3] };
 }
 
-async function resolveDriveLink(tag: string, hasChatName = false): Promise<string> {
-    const parsed = parseDriveTag(tag, hasChatName);
+async function resolveDriveLink(parsed: ChatNotificationThread | null): Promise<string> {
     if (!parsed) return getDriveAppUrl();
 
     const response = await driveApi({ ownerId: parsed.ownerId })({ mountId: parsed.mountId })
@@ -77,12 +64,8 @@ async function resolveAccessRequestLink(tag: string): Promise<string | null> {
 
 export function isClickableNotification(type: string): boolean {
     return [
+        ...CHAT_NOTIFICATION_TYPES,
         'share',
-        'mention-chat',
-        'mention-comment',
-        'chat-message',
-        'comment-reply',
-        'assigned',
         'calendar-share',
         'calendar-unshare',
         'calendar-invite',
@@ -100,16 +83,12 @@ export async function resolveNotificationLink(
     const { type, tag, details } = notification;
     if (!tag) return null;
 
-    switch (type) {
-        case 'mention-comment':
-        case 'comment-reply':
-        case 'assigned':
-            return resolveDriveLink(tag, true);
+    if (CHAT_NOTIFICATION_TYPES.some((t) => t === type))
+        return resolveDriveLink(parseChatNotificationThread(type, tag));
 
+    switch (type) {
         case 'share':
-        case 'mention-chat':
-        case 'chat-message':
-            return resolveDriveLink(tag);
+            return resolveDriveLink(parseShareTag(tag));
 
         case 'calendar-invite':
         case 'calendar-invite-updated':

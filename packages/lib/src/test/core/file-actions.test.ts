@@ -87,7 +87,7 @@ describe('fileActionsFor on a Drive item', () => {
     test('a read-only listing offers no convert', () => {
         const xlsx = path({ name: 'Budget.xlsx', type: 'file', mimeType: XLSX_MIME });
         const docx = path({ name: 'Report.docx', type: 'file', mimeType: DOCX_MIME });
-        const readOnly = { canWrite: false };
+        const readOnly = false;
         expect(fileActionsFor(subjectFromPath(xlsx, readOnly)).map((action) => action.id)).toEqual([
             'quick-look',
             'download',
@@ -96,12 +96,8 @@ describe('fileActionsFor on a Drive item', () => {
             'quick-look',
             'download',
         ]);
-        expect(fileActionsFor(subjectFromPath(xlsx, { canWrite: true })).map((action) => action.id)).toContain(
-            'convert-to-sheet',
-        );
-        expect(fileActionsFor(subjectFromPath(docx, { canWrite: true })).map((action) => action.id)).toContain(
-            'convert-to-document',
-        );
+        expect(fileActionsFor(subjectFromPath(xlsx, true)).map((action) => action.id)).toContain('convert-to-sheet');
+        expect(fileActionsFor(subjectFromPath(docx, true)).map((action) => action.id)).toContain('convert-to-document');
     });
 
     test('exclude drops a row the registry approved', () => {
@@ -143,9 +139,9 @@ describe('fileActionsFor on an attachment subject', () => {
     });
 
     // The picker saves it where the user points, so where its Drive copy sits says nothing.
-    test('a read-only attachment still converts, through the picker', () => {
+    test('an attachment converts, through the picker', () => {
         const attachment: FileSubject = {
-            ...subjectFromPath(path({ name: 'Budget.xlsx', type: 'file', mimeType: XLSX_MIME }), { canWrite: false }),
+            ...subjectFromPath(path({ name: 'Budget.xlsx', type: 'file', mimeType: XLSX_MIME })),
             attachment: true,
         };
         expect(fileActionsFor(attachment).map((action) => action.id)).toContain('convert-to-sheet');

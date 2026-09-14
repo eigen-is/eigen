@@ -67,11 +67,8 @@ export async function importCards(contacts: Contacts, text: string): Promise<Imp
     }
 
     const result: ImportContactsResult = { imported: 0, skipped: 0, failed: 0 };
-    // One list-level event for the whole file instead of one per card: a thousand cards used to be a thousand
-    // broadcasts to every open tab, and every one of them asks the client for the same owner-wide refetch. The
-    // finally covers the quota throw too — the cards that landed before it still have to reach the tabs.
-    contacts.batchingContactEvents = true;
-    try {
+    // One list-level event for the whole file instead of one per card (a thousand cards were a thousand broadcasts).
+    await contacts.withBatchedEvents(async () => {
         for (const card of cards) {
             let parsed: ParsedCard;
             let body: string;
@@ -122,9 +119,6 @@ export async function importCards(contacts: Contacts, text: string): Promise<Imp
                 result.failed++;
             }
         }
-    } finally {
-        contacts.batchingContactEvents = false;
-        contacts.emitContactsChanged();
-    }
+    });
     return result;
 }

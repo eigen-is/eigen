@@ -1,17 +1,13 @@
 import type { ActivityLines } from '@workspace/lib/types/file-history';
 import type { Notification } from '@workspace/lib/types/notification';
 import { formatChatPreview } from '../chat/format-preview';
+import { CHAT_NOTIFICATION_TYPES } from './tags';
 
 // Notification types whose body is raw chat text (emote wire form + bare emails), so it must be
 // rendered through formatChatPreview. Shared with the SSE toast handler. file-event rows are
 // chat-derived only when their details carry chatName (checked below — card titles/filenames in
 // other file-event bodies must not be email-rewritten).
-export const CHAT_TEXT_NOTIFICATION_TYPES = new Set([
-    'mention-chat',
-    'mention-comment',
-    'chat-message',
-    'comment-reply',
-]);
+export const CHAT_TEXT_NOTIFICATION_TYPES = new Set<string>(CHAT_NOTIFICATION_TYPES.filter((t) => t !== 'assigned'));
 
 // The client-side mirror of describeFileEvent: maps a persisted Notification to the shared
 // ActivityLines shape. Old rows without details render action + body only; nothing breaks.

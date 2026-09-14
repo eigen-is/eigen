@@ -70,9 +70,9 @@ export function DriveDetail({
     highlightHistory,
 }: DriveDetailProps) {
     const preview = useOptionalPreview();
-    const subject = useMemo(() => (path ? subjectFromPath(path, { canWrite }) : null), [path, canWrite]);
+    const subject = useMemo(() => (path ? subjectFromPath(path, canWrite) : null), [path, canWrite]);
     const siblingSubjects = useMemo(
-        () => siblings?.map((sibling) => subjectFromPath(sibling, { canWrite })),
+        () => siblings?.map((sibling) => subjectFromPath(sibling, canWrite)),
         [siblings, canWrite],
     );
     const runner = useFileActionRunner(subject, siblingSubjects);

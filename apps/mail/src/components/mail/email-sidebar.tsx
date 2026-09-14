@@ -1,11 +1,5 @@
-import {
-    MAILBOX_INBOX,
-    MAILBOX_INBOX_KEY,
-    mailboxRouteSegment,
-    SIDEBAR_MAILBOXES,
-    specialMailboxFromFlags,
-} from '@workspace/lib/constants/mailboxes';
-import { CUSTOM_MAILBOX_ICON, MAILBOX_ICONS } from '@workspace/lib/mailbox-icons';
+import { mailboxRouteSegment, SIDEBAR_MAILBOXES, specialMailboxFromFlags } from '@workspace/lib/constants/mailboxes';
+import { MAILBOX_ICONS } from '@workspace/lib/mailbox-icons';
 import type { MaildirMailbox } from '@workspace/lib/types/mail';
 import { SidebarBody, SidebarItem, SidebarSection } from '@workspace/ui';
 import { StorageUsage } from '@workspace/ui/components/home';
@@ -21,7 +15,6 @@ type SidebarMailbox = {
     icon: React.ReactNode;
     href: string;
     unread: number;
-    isStandard: boolean;
 };
 
 const mailboxHref = (path: string) => `/box/${mailboxRouteSegment(path)}`;
@@ -35,7 +28,6 @@ const defaultMailboxes: SidebarMailbox[] = SIDEBAR_MAILBOXES.map((box) => ({
     icon: renderIcon(MAILBOX_ICONS[box.path]),
     href: mailboxHref(box.path),
     unread: 0,
-    isStandard: true,
 }));
 
 type AppSidebarProps = {
@@ -53,29 +45,22 @@ export function EmailSidebar({
     error = null,
     onMoveToFolder,
 }: AppSidebarProps) {
-    // Memoize the processed mailboxes to avoid unnecessary recalculations
+    // The special mailboxes in sidebar order, or the defaults while the list is loading or failed.
     const standardMailboxList = useMemo(() => {
-        const processedMailboxes: SidebarMailbox[] = mailboxes.map((mailbox) => {
-            const path = mailbox.path || '';
+        if (isLoading || error) return defaultMailboxes;
+        const bySpecialPath = new Map<string, SidebarMailbox>();
+        for (const mailbox of mailboxes) {
             const special = specialMailboxFromFlags(mailbox.flags);
-
-            return {
-                path,
-                name: special ? special.label : mailbox.name || path,
-                icon: renderIcon(special ? MAILBOX_ICONS[special.path] : CUSTOM_MAILBOX_ICON),
-                href: mailboxHref(path),
+            if (!special) continue;
+            bySpecialPath.set(special.path, {
+                path: mailbox.path,
+                name: special.label,
+                icon: renderIcon(MAILBOX_ICONS[special.path]),
+                href: mailboxHref(mailbox.path),
                 unread: mailbox.unread,
-                isStandard: !!special,
-            };
-        });
-
-        // Use API mailboxes if available, otherwise fall back to defaults
-        const displayMailboxes = isLoading || error ? defaultMailboxes : processedMailboxes;
-
-        // Keep only the special mailboxes, in the order the sidebar lists them
-        return SIDEBAR_MAILBOXES.flatMap((box) =>
-            displayMailboxes.filter((mailbox) => mailbox.isStandard && mailbox.name === box.label),
-        );
+            });
+        }
+        return SIDEBAR_MAILBOXES.flatMap((box) => bySpecialPath.get(box.path) ?? []);
     }, [mailboxes, isLoading, error]);
 
     return (
@@ -84,7 +69,6 @@ export function EmailSidebar({
 
             <SidebarSection condensed={condensed} loading={isLoading}>
                 {standardMailboxList.map((item) => {
-                    const folderId = item.path.toLowerCase() === MAILBOX_INBOX_KEY ? MAILBOX_INBOX : item.path;
                     if (onMoveToFolder) {
                         return (
                             <DroppableSidebarItem
@@ -94,7 +78,7 @@ export function EmailSidebar({
                                 to={item.href}
                                 condensed={condensed}
                                 acceptTypes={['email']}
-                                onDrop={(data) => onMoveToFolder(data.ids, folderId)}
+                                onDrop={(data) => onMoveToFolder(data.ids, item.path)}
                             />
                         );
                     }

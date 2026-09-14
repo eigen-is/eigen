@@ -85,7 +85,7 @@ export function EigenDocListView({
         canMove: allowMove,
         createTypes: new Set([config.type]),
     };
-    const subjectOf = (path: DrivePath) => subjectFromPath(path, capabilities);
+    const subjectOf = (path: DrivePath) => subjectFromPath(path, capabilities.canWrite);
 
     return (
         <DriveLayout

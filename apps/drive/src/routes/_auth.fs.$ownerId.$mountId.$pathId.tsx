@@ -58,7 +58,7 @@ function DriveRoute() {
 
     const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
         items: folderContents,
-        canWrite: DRIVE_CAPABILITIES.browse.canWrite,
+        capabilities: DRIVE_CAPABILITIES.browse,
         onOpenFolder: (path: DrivePath) =>
             navigate({
                 to: Route.fullPath,

@@ -10,6 +10,7 @@ import {
     type DriveItemRef,
     type DrivePath,
     isFolderType,
+    isImageMime,
     isInlineEditable,
 } from '../types/drive';
 
@@ -206,7 +207,7 @@ export const getDriveThumbnailUrl = (ownerId: string, mountId: string, fileName:
 // Cache-busted thumbnail for image/video items — shared by grid tiles and the preview panel.
 // Trashed items get none: the thumb route rejects paths in trash (getActivePath).
 export const getDriveItemThumbnail = (path: DrivePath): { showThumbnail: boolean; thumbnailUrl?: string } => {
-    const hasVisual = path.mimeType.startsWith('image/') || path.mimeType.startsWith('video/');
+    const hasVisual = isImageMime(path.mimeType) || path.mimeType.startsWith('video/');
     const thumbnailUrl =
         path.thumbnail && !path.trashedAt
             ? getDriveThumbnailUrl(path.ownerId, path.mountId, path.thumbnail, path.updatedAt)

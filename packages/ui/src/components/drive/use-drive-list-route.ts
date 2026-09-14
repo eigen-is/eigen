@@ -4,12 +4,13 @@ import { subjectFromPath } from '@workspace/lib/file-subject';
 import { type DrivePath, isDocumentType, isFolderType, isInlineEditable } from '@workspace/lib/types/drive';
 import { useLayout } from '../layout/app/layout-context';
 import { usePreview } from '../preview-provider';
+import type { DriveCapabilities } from './drive-capabilities';
 
 type UseDriveListRouteOptions = {
     // The unsorted items backing the list — the fallback preview passes this whole set as siblings.
     items: DrivePath[];
-    // The view's own DriveCapabilities.canWrite: the preview's convert rows need somewhere to write.
-    canWrite: boolean;
+    // The view's own capabilities: the preview's convert rows need somewhere to write.
+    capabilities: Pick<DriveCapabilities, 'canWrite'>;
     // Folder-branch target: fs stays in-route, shared/watched jump to /fs, mime clears the selection.
     onOpenFolder: (path: DrivePath) => void;
     // Desktop row-select target: where a single click on a non-openable row navigates.
@@ -29,7 +30,7 @@ type DriveListRouteHandlers = {
 // desktop select target vary, so the routes pass those two closures and keep the rest here.
 export function useDriveListRoute({
     items,
-    canWrite,
+    capabilities,
     onOpenFolder,
     onSelectItem,
 }: UseDriveListRouteOptions): DriveListRouteHandlers {
@@ -37,7 +38,7 @@ export function useDriveListRoute({
     const { isMobile } = useLayout();
     const { openPreview, updatePreview, isPreviewOpen } = usePreview();
 
-    const subjectOf = (path: DrivePath) => subjectFromPath(path, { canWrite });
+    const subjectOf = (path: DrivePath) => subjectFromPath(path, capabilities.canWrite);
 
     const onQuickLook = (path: DrivePath, sortedSiblings: DrivePath[]) => {
         openPreview(subjectOf(path), sortedSiblings.map(subjectOf));

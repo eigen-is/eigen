@@ -4,11 +4,8 @@ import { isFolderType, isVCardFile } from '../types/drive';
 import type { FileAction, FileActionId, FileSubject } from '../types/file-subject';
 import { subjectInfo } from './file-subject';
 
-// A convert writes the new document beside its source, so a file at a Drive location the viewer cannot
-// write to offers nothing; an attachment converts through the picker, which saves where the user points it.
-function canConvert(subject: FileSubject): boolean {
-    return !subject.drive || !!subject.attachment || !subject.readOnly;
-}
+// A convert writes the new document beside its source, so a read-only Drive subject offers nothing.
+const canConvert = (subject: FileSubject): boolean => !subject.readOnly;
 
 // What can be done with a file, answered once for every surface; a predicate never asks which menu is drawing.
 export const FILE_ACTIONS: readonly FileAction[] = [

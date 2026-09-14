@@ -254,7 +254,14 @@ export const driveRouter = new Elysia({ name: 'drive' })
             // the running total crosses it — never buffered whole first.
             const bytes = await readBoundedBodyBytes(request, maxSize);
             if (bytes === null) throw new ApiError(413, 'Upload too large');
-            await importIntoDocument(drive, mount, path, Buffer.from(bytes), user, request.signal);
+            await importIntoDocument(
+                drive,
+                mount,
+                path,
+                Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+                user,
+                request.signal,
+            );
             return { success: true };
         },
         { auth: true, parse: 'none' },

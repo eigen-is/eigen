@@ -1,14 +1,10 @@
 import type { ChatNotificationThread, NotificationType } from '../../types/notification';
 
-// A thread notification's tag is the row's identity — persist() upserts on it, and the reader matches it
-// back to the thread on screen — so the producer and every reader spell it here:
-//   chat-message:{ownerId}:{mountId}:{chatPathId}
-//   comment-reply:{ownerId}:{mountId}:{containerPathId}:{chatName}
-//   mention:{ownerId}:{mountId}:{chatPathId}:{email}
-//   mention:{ownerId}:{mountId}:{containerPathId}:{chatName}:{email}
+// The tag is the row's identity (persist() upserts on it) and what a reader matches back to a thread, so
+// every producer and reader spells it here. A comment thread names its container, then the chat name:
+//   chat-message:{ownerId}:{mountId}:{chatPathId}        comment-reply:{ownerId}:{mountId}:{containerPathId}:{chatName}
+//   mention:{ownerId}:{mountId}:{chatPathId}:{email}     mention:{ownerId}:{mountId}:{containerPathId}:{chatName}:{email}
 //   assigned:{ownerId}:{mountId}:{containerPathId}:{chatName}
-// An embedded chat names the container it comments on, never itself: the notification links to the
-// document, and `chatName` is the comment thread inside it.
 export const CHAT_NOTIFICATION_TYPES: readonly NotificationType[] = [
     'chat-message',
     'mention-chat',
@@ -29,8 +25,7 @@ export function chatMentionTag(thread: ChatNotificationThread, email: string): s
     return thread.chatName ? `${target}:${thread.chatName}:${email}` : `${target}:${email}`;
 }
 
-// An assignment points at one comment card, so it takes the comment shape. Only the assignee is ever
-// sent the row, so the card that clears it is by definition open in front of the assignee.
+// Only the assignee ever receives the row, so opening the card is the assignee opening it.
 export function commentAssignedTag(thread: ChatNotificationThread & { chatName: string }): string {
     return `assigned:${thread.ownerId}:${thread.mountId}:${thread.pathId}:${thread.chatName}`;
 }
@@ -44,8 +39,7 @@ export function parseChatNotificationThread(type: string, tag: string): ChatNoti
     return { ownerId, mountId, pathId, chatName };
 }
 
-// What a notification and the open thread are compared on: a standalone chat is its own path, a comment
-// is one thread inside a container, so opening one card clears that card's notifications and no other's.
+// What a notification and an open thread are compared on: one card clears its own notifications, no other's.
 export function chatThreadKey(thread: Pick<ChatNotificationThread, 'pathId' | 'chatName'>): string {
     return thread.chatName ? `${thread.pathId}:${thread.chatName}` : thread.pathId;
 }
