@@ -6,6 +6,7 @@
 
 import type { DocSearchController } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { isImageMime } from '@workspace/lib/types/drive';
 import { cn } from '@workspace/ui/lib/utils';
 import type { ReactNode, RefObject } from 'react';
 import { CardFormDialog } from '../cards';
@@ -99,7 +100,7 @@ export function CanvasDocumentShell({
                                 open={imagePickerOpen}
                                 onOpenChange={onImagePickerOpenChange}
                                 title="Add image"
-                                mimeFilter={['image/*']}
+                                canPick={(item) => isImageMime(item.mimeType)}
                                 multiSelect
                                 onPickFromDrive={(paths) =>
                                     void imageInsertRef.current?.insertDrivePaths(paths).catch(() => {})

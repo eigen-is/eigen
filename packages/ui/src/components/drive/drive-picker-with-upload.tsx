@@ -6,8 +6,6 @@ type DrivePickerWithUploadProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     title?: string;
-    mimeFilter?: string[];
-    // Takes precedence over mimeFilter when set — see DriveBrowser.
     canPick?: (item: DrivePath) => boolean;
     multiSelect?: boolean;
     onPickFromDrive: (paths: DrivePath[]) => void;
@@ -21,7 +19,6 @@ export function DrivePickerWithUpload({
     open,
     onOpenChange,
     title,
-    mimeFilter,
     canPick,
     multiSelect,
     onPickFromDrive,
@@ -49,7 +46,6 @@ export function DrivePickerWithUpload({
                 open={open}
                 onOpenChange={onOpenChange}
                 title={title}
-                mimeFilter={mimeFilter}
                 canPick={canPick}
                 multiSelect={multiSelect}
                 onSelect={onPickFromDrive}

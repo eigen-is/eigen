@@ -1157,6 +1157,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isEmailDraft` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `isExternalOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `isFolderType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `isImageMime` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isInlineEditable` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isOpenable` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isS3ConfigValid` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |

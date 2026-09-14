@@ -6,7 +6,7 @@ type FileImportPickerProps = {
     onOpenChange: (open: boolean) => void;
     title: string;
     accept: string;
-    // Which drive rows are pickable. Used instead of the browser's mime filter.
+    // Which drive rows are pickable.
     canPick: (item: DrivePath) => boolean;
     onDeviceFile: (file: File) => void;
     onDrivePick: (item: DrivePath) => void;

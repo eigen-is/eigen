@@ -19,18 +19,10 @@ import { DriveCreateItemDialog } from './drive-create-folder-item';
 import { DriveMountList, useMountLabel } from './drive-mount-list';
 import { DriveTable } from './drive-table';
 
-function matchesMimeFilter(mimeType: string, filters: string[]): boolean {
-    return filters.some((filter) => {
-        if (filter.endsWith('/*')) return mimeType.startsWith(filter.slice(0, -1));
-        return mimeType === filter;
-    });
-}
-
 type DriveBrowserProps = {
     ownerId: string;
     mode: 'file' | 'folder';
-    mimeFilter?: string[];
-    // Used instead of mimeFilter when set (see isVCardFile for why a .vcf needs it).
+    // Which rows are pickable; every row when omitted.
     canPick?: (item: DrivePath) => boolean;
     selectedId?: string | null;
     onSelect?: (path: DrivePath) => void;
@@ -56,7 +48,6 @@ type DriveBrowserProps = {
 export function DriveBrowser({
     ownerId,
     mode,
-    mimeFilter,
     canPick,
     selectedId,
     onSelect,
@@ -148,10 +139,7 @@ export function DriveBrowser({
 
     const currentPath = breadcrumbPaths[breadcrumbPaths.length - 1] ?? null;
 
-    const isPickable = useCallback(
-        (item: DrivePath) => (canPick ? canPick(item) : !mimeFilter || matchesMimeFilter(item.mimeType, mimeFilter)),
-        [canPick, mimeFilter],
-    );
+    const isPickable = useCallback((item: DrivePath) => canPick?.(item) ?? true, [canPick]);
 
     const handleMountSelect = useCallback((newOwnerId: string, mountId: string) => {
         setActiveOwnerId(newOwnerId);
