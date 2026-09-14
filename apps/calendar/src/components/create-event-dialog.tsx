@@ -3,7 +3,14 @@ import { toLocalDateString, useCalendars, useCreateEvent, useSharedCalendars } f
 import { useMyTeams } from '@workspace/lib/home';
 import type { Attendee } from '@workspace/lib/types/calendar';
 import { Button } from '@workspace/ui/components/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@workspace/ui/components/dialog';
 import { UsersRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { AttendeeEditor } from './attendee-editor';
@@ -96,6 +103,9 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
             <DialogContent size="md">
                 <DialogHeader>
                     <DialogTitle>New Event</DialogTitle>
+                    <DialogDescription className="sr-only">
+                        Set the title, time, guests and details for the new event.
+                    </DialogDescription>
                 </DialogHeader>
 
                 <EventFormFields

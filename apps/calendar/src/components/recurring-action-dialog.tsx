@@ -1,5 +1,12 @@
 import { Button } from '@workspace/ui/components/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@workspace/ui/components/dialog';
 import { Label } from '@workspace/ui/components/label';
 import { RadioGroup, RadioGroupItem } from '@workspace/ui/components/radio-group';
 import { useDialogPending } from '@workspace/ui/hooks/use-dialog-pending';
@@ -37,6 +44,9 @@ export function RecurringActionDialog({ open, onOpenChange, title, onConfirm, op
             <DialogContent size="xs">
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
+                    <DialogDescription className="sr-only">
+                        Choose which events in the series this applies to.
+                    </DialogDescription>
                 </DialogHeader>
 
                 <RadioGroup

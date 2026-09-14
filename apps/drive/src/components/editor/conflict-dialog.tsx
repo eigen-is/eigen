@@ -1,5 +1,12 @@
 import { Button } from '@workspace/ui/components/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@workspace/ui/components/dialog';
 
 type ConflictDialogProps = {
     open: boolean;
@@ -15,10 +22,10 @@ export function ConflictDialog({ open, onOpenChange, onOverwrite, onReload, onDo
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>File conflict</DialogTitle>
+                    <DialogDescription>
+                        This file was modified since you opened it. What would you like to do?
+                    </DialogDescription>
                 </DialogHeader>
-                <p className="text-sm text-muted-foreground">
-                    This file was modified since you opened it. What would you like to do?
-                </p>
                 <DialogFooter>
                     <Button variant="outline" onClick={onDownload}>
                         Download your version

@@ -4,7 +4,14 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@workspace/ui/components/dialog';
 import { LightEditor } from '@workspace/ui/components/editor/light-editor';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
@@ -68,6 +75,9 @@ export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmail
             <DialogContent size="sm">
                 <DialogHeader>
                     <DialogTitle>Email collaborators</DialogTitle>
+                    <DialogDescription className="sr-only">
+                        Send a message about this file to the people it is shared with.
+                    </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
                     <div className="space-y-2">

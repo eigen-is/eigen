@@ -707,7 +707,7 @@ export const EditorToolbar = ({
             )}
 
             <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
-                <DialogContent size="sm">
+                <DialogContent size="sm" aria-describedby={undefined}>
                     <DialogHeader>
                         <DialogTitle>Add link</DialogTitle>
                     </DialogHeader>

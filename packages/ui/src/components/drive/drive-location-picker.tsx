@@ -1,6 +1,13 @@
 import { useAuth } from '@workspace/lib/auth';
 import { Button } from '@workspace/ui/components/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { useDialogPending } from '@workspace/ui/hooks/use-dialog-pending';
@@ -95,6 +102,9 @@ export function DriveLocationPicker({
             >
                 <DialogHeader className="px-6 py-4 border-b">
                     <DialogTitle>{resolvedTitle}</DialogTitle>
+                    <DialogDescription className="sr-only">
+                        Pick the folder in your Drive where this goes.
+                    </DialogDescription>
                 </DialogHeader>
 
                 {hasName && (

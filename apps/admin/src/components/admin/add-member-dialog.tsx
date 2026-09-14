@@ -1,5 +1,5 @@
 import type { OrgMember } from '@workspace/lib/types/admin';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
 import { UserItem } from '@workspace/ui/components/user';
 import { Plus } from 'lucide-react';
@@ -33,6 +33,9 @@ export function AddMemberDialog({ open, onOpenChange, availableMembers, onAdd }:
             <DialogContent size="sm">
                 <DialogHeader>
                     <DialogTitle>Add Member to Team</DialogTitle>
+                    <DialogDescription className="sr-only">
+                        Search your users and add one to the team.
+                    </DialogDescription>
                 </DialogHeader>
                 <Input
                     placeholder="Search by name or email..."

@@ -2,7 +2,14 @@ import { useCreateUser } from '@workspace/lib/admin';
 import { usePublicConfig } from '@workspace/lib/public';
 import { validateUsername } from '@workspace/lib/validation';
 import { Button } from '@workspace/ui/components/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@workspace/ui/components/dialog';
 import { Field, FieldContent, FieldGroup, FieldLabel } from '@workspace/ui/components/field';
 import { Input } from '@workspace/ui/components/input';
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@workspace/ui/components/input-group';
@@ -59,6 +66,9 @@ export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) 
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>Create User</DialogTitle>
+                    <DialogDescription className="sr-only">
+                        Set the name, username, password and role for the new user.
+                    </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSubmit}>
                     <FieldGroup>
