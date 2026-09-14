@@ -124,7 +124,7 @@ export async function importCards(contacts: Contacts, text: string): Promise<Imp
         }
     } finally {
         contacts.batchingContactEvents = false;
-        if (result.imported > 0) contacts.emitContactsChanged();
+        contacts.emitContactsChanged();
     }
     return result;
 }

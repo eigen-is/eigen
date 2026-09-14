@@ -48,7 +48,7 @@ The **New Event** form opens as a dialog. Fill in the fields you need:
    with all the same fields.
 3. Make your changes, then click **Save**.
 
-On an event someone else invited you to, the details are greyed out, because only the organiser can
+On an event someone else invited you to, the details are grayed out, because only the organizer can
 change them. You can still move it to a different calendar, and you can
 [respond to the invitation](/support/calendar/respond-to-invitation).
 

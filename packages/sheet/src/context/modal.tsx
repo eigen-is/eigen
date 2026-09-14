@@ -109,6 +109,7 @@ function ModalProvider({ children }: { children?: React.ReactNode }) {
             >
                 <DialogContent
                     ref={contentRef}
+                    aria-describedby={undefined}
                     showCloseButton={false}
                     onPointerDownOutside={(e) => e.preventDefault()}
                     onInteractOutside={(e) => e.preventDefault()}

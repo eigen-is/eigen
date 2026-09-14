@@ -33,6 +33,7 @@ import {
     MAILBOX_SENT,
     MAILBOX_TRASH,
     mailboxRouteSegment,
+    SPECIAL_MAILBOXES,
     STANDARD_MAILBOXES,
 } from '@workspace/lib/constants/mailboxes';
 import { PATHS } from '../lib/core/constants';
@@ -212,7 +213,7 @@ for (let i = 1; i <= count; i++) {
     perMailbox[mailbox] = (perMailbox[mailbox] ?? 0) + 1;
 }
 
-const label = (mb: string) => (mb === '' ? 'Inbox' : mb);
+const label = (mb: string) => (mb === MAILBOX_INBOX ? SPECIAL_MAILBOXES[MAILBOX_INBOX].label : mb);
 console.log(`Seeded ${count} messages for ${account.email} in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 for (const mb of STANDARD_MAILBOXES) console.log(`  ${label(mb).padEnd(8)} ${perMailbox[mb] ?? 0}`);
 console.log('Open the account (or reload) to sync them in. Clean up later by deleting the [SEED] mail.');

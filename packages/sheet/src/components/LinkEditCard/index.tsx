@@ -218,6 +218,7 @@ export function LinkEditCard({
     return (
         <Dialog open onOpenChange={(open) => !open && hideLinkCard()}>
             <DialogContent
+                aria-describedby={undefined}
                 showCloseButton={false}
                 className="sm:max-w-md"
                 onPointerDownOutside={(e) => e.preventDefault()}

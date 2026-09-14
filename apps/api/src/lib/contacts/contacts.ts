@@ -125,6 +125,7 @@ export class Contacts {
     // list-level event that closes it. Whatever sets this owes that event, so a card written by something
     // else in the same window loses nothing: its invalidation is owner-wide and the batch still fires.
     batchingContactEvents = false; // internal — used by contacts/*.ts
+    private heldContactEvents = false;
 
     constructor(home: Home) {
         this.home = home;
@@ -133,12 +134,18 @@ export class Contacts {
 
     // internal — used by contacts/*.ts
     emitContact(type: Parameters<typeof buildContactEvent>[0], contactId: string): void {
-        if (this.batchingContactEvents) return;
+        if (this.batchingContactEvents) {
+            this.heldContactEvents = true;
+            return;
+        }
         this.home.broadcast(buildContactEvent(type, contactId));
     }
 
     // internal — used by contacts/*.ts
+    // Closes a batch: one list-level event for whatever emitContact held back, nothing if nothing was.
     emitContactsChanged(): void {
+        if (!this.heldContactEvents) return;
+        this.heldContactEvents = false;
         this.home.broadcast(buildContactsChangedEvent());
     }
 

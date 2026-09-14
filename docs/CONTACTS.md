@@ -310,6 +310,4 @@ CardDAV address card next to CalDAV/IMAP/WebDAV, carrying the address-book URL.
 - **`apps/api/src/routes/contacts.ts`** — thin REST bindings: contact and label CRUD with the conditional-write `etag`, avatar staging, and the three transfer routes above.
 - **`packages/lib/src/core/contacts/`** — FE hooks + SSE handlers, including `hooks/use-transfer.ts` (`useExportContacts`, `useImportContacts`, `useImportContactsFromUrl`, `useImportContactsFromDrive`) and `preview-lines.ts` (the two counted lines the Drive vCard preview ends on — [PREVIEWS.md](PREVIEWS.md)); shared types in `packages/lib/src/types/contact.ts`.
 
-Storage layout: [STORAGE.md](STORAGE.md). Database inventory: [DATABASE.md](DATABASE.md). The design spec this
-surface was built from (`docs/proposals/PROPOSAL_CARDDAV.md`, removed once implemented — see the repository
-history) holds the rejected alternatives and the folded review passes.
+Storage layout: [STORAGE.md](STORAGE.md). Database inventory: [DATABASE.md](DATABASE.md).

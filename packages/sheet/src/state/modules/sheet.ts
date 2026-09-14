@@ -1,5 +1,6 @@
 import { cloneDeep, isNil, sortBy, times } from 'es-toolkit/compat';
 import { v4 as uuidv4 } from 'uuid';
+import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { normalizeSheetConfig } from '../../engine/replay-ops';
 import type { CellMatrix } from '../../engine/types';
 import { initSheetData } from '../api/sheet';
@@ -223,12 +224,16 @@ export function expandRowsAndColumns(data: CellMatrix, rowsToAdd: number, column
         return data;
     }
 
-    if (data.length + rowsToAdd >= 10000) {
-        throw new Error('This action would increase the number of rows in the workbook above the limit of 10000.');
+    if (data.length + rowsToAdd > MAX_SHEET_ROW_COUNT) {
+        throw new Error(
+            `This action would increase the number of rows in the workbook above the limit of ${MAX_SHEET_ROW_COUNT}.`,
+        );
     }
 
-    if (data[0].length + columnsToAdd >= 1000) {
-        throw new Error('This action would increase the number of columns in the workbook above the limit of 1000.');
+    if (data[0].length + columnsToAdd > MAX_SHEET_COLUMN_COUNT) {
+        throw new Error(
+            `This action would increase the number of columns in the workbook above the limit of ${MAX_SHEET_COLUMN_COUNT}.`,
+        );
     }
     if (rowsToAdd <= 0) {
         rowsToAdd = 0;
