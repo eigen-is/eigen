@@ -37,9 +37,7 @@ const EXIFTOOL_EXTENSIONS = new Set([
     '.heif',
 ]);
 
-// The image mimes a browser decodes on its own. A subject whose <img> points at the original bytes
-// (no Drive /preview route behind it) is only an image preview for one of these — an <img> never runs
-// script, so serving these inline is safe, and a HEIC gets the fallback card instead of a broken box.
+// What a browser decodes in an <img> by itself; SVG included, an <img> never runs script.
 export const BROWSER_IMAGE_MIMES = new Set([
     'image/jpeg',
     'image/png',
@@ -50,8 +48,7 @@ export const BROWSER_IMAGE_MIMES = new Set([
     'image/svg+xml',
 ]);
 
-// What a file's own bytes render as. The rest of TextPreviewMode names a collab document, whose body
-// comes from its Yjs document instead.
+// What loose bytes render as; the other TextPreviewModes are collab documents rendered from Yjs.
 export type BytesTextPreviewMode = 'markdown' | 'plaintext' | 'code';
 
 export type TextPreviewMode = BytesTextPreviewMode | 'eigendoc' | 'eigenslides' | 'eigensheets' | 'eigenvector';
@@ -67,8 +64,7 @@ export function getExtension(fileName: string): string {
     return dot === -1 ? '' : fileName.slice(dot).toLowerCase();
 }
 
-// The mode loose bytes render as, eigen mimes included: a mime is caller-controlled — on upload and on a
-// mail part it is the sender's word — so bytes are only ever what their name and a plain text mime say.
+// A mime is the sender's word, so loose bytes are only what their name and a plain text mime say.
 export function getBytesTextPreviewMode(mimeType: string, fileName: string): BytesTextPreviewMode | null {
     // A vCard is text, but its raw body is mostly base64 photo: it previews as contact cards instead.
     if (isVCardFile(mimeType, fileName)) return null;

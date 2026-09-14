@@ -6,25 +6,27 @@ import { useConvertDocument } from '@workspace/lib/drive';
 import type { FileAction } from '@workspace/lib/file-actions';
 import type { ConvertTarget, DrivePath } from '@workspace/lib/types/drive';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
-import { type ReactNode, useRef, useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { ProgressDialog } from '../drive/progress-dialog';
 import { SaveToDrivePicker } from '../drive/save-to-drive-picker';
 import { type PreviewOptions, usePreview } from '../preview-provider/preview-context';
 
 export type FileActionRunner = {
-    // The menu component draws the rows from the same subject the runner acts on, so a host can
-    // never pair one with another's.
+    // The menu draws its rows from the subject the runner acts on, so a host can never pair two.
     subject: FileSubject | null;
     run: (action: FileAction) => void;
-    // For a host with a set of its own to save — the overlay's "Save all" row.
+    // For a host with a set of its own to save: the overlay's "Save all" row.
     openPicker: (subjects: FileSubject[]) => void;
-    // Rendered once by the host, so a picker opened from any row lives outside the menu that closed.
+    // Rendered once by the host, so a picker opened from a menu row outlives the menu that closed.
     dialogs: ReactNode;
     isDialogOpen: boolean;
     isPending: boolean;
 };
 
-// A host whose subject is state — the right-clicked chip or row — passes null while there is none.
+// A convert on a subject with nothing in Drive to convert saves first; the label names the row that asked.
+type PickerState = { subjects: FileSubject[]; convert?: { targetType: ConvertTarget; label: string } };
+
+// A host whose subject is state (the right-clicked chip or row) passes null while there is none.
 export function useFileActionRunner(
     subject: FileSubject | null,
     siblings?: FileSubject[],
@@ -34,46 +36,29 @@ export function useFileActionRunner(
     const convertDocument = useConvertDocument();
     const importContactsFromDrive = useImportContactsFromDrive();
     const importContacts = useImportContacts();
-    // Open is its own flag: the picker reads its title and default location off subjects[0], and
-    // clearing those on close would redraw it mid exit-animation. The next open replaces them.
+    // Open is its own flag: the closed picker keeps its subjects so its title holds through the exit animation.
+    const [picker, setPicker] = useState<PickerState>({ subjects: [] });
     const [pickerOpen, setPickerOpen] = useState(false);
-    const [pickerSubjects, setPickerSubjects] = useState<FileSubject[]>([]);
-    // Set while the picker is open for a convert: a subject with no Drive path has to land in Drive
-    // first, and only the picker knows where it landed. The label names the row that asked.
-    const pendingConvert = useRef<{ targetType: ConvertTarget; label: string } | null>(null);
 
-    const openPicker = (subjects: FileSubject[]) => {
+    const openPicker = (subjects: FileSubject[], convert?: PickerState['convert']) => {
         if (subjects.length === 0) return;
-        pendingConvert.current = null;
-        setPickerSubjects(subjects);
+        setPicker({ subjects, convert });
         setPickerOpen(true);
     };
 
     const convertPath = (path: DrivePath, targetType: ConvertTarget) => {
         if (!path.parentId) return;
         convertDocument.mutate(
-            {
-                ownerId: path.ownerId,
-                mountId: path.mountId,
-                pathId: path.id,
-                parentId: path.parentId,
-                targetType,
-            },
+            { ownerId: path.ownerId, mountId: path.mountId, pathId: path.id, parentId: path.parentId, targetType },
             { onSuccess: (newPath) => openDocument(newPath) },
         );
     };
 
     const convert = (targetType: ConvertTarget, label: string) => {
         if (!subject) return;
-        // Nothing in Drive to convert yet, or only a copy in a container's hidden media folder: save
-        // it where the user picks first, then convert what the save created.
-        if (!subject.drive || options?.attachment) {
-            pendingConvert.current = { targetType, label };
-            setPickerSubjects([subject]);
-            setPickerOpen(true);
-            return;
-        }
-        convertPath(subject.drive, targetType);
+        // An attachment's Drive path sits in a container's hidden media folder: save where the user picks, then convert that.
+        if (!subject.drive || options?.attachment) openPicker([subject], { targetType, label });
+        else convertPath(subject.drive, targetType);
     };
 
     const runImportContacts = () => {
@@ -122,27 +107,20 @@ export function useFileActionRunner(
         }
     };
 
-    const pending = pendingConvert.current;
-
     return {
         subject,
         run,
         openPicker,
-        // Mounted while closed: the picker's "Download instead" fires staggered downloads from timers
-        // it clears when it unmounts.
+        // Mounted while closed: "Download instead" fires staggered downloads from timers the picker clears on unmount.
         dialogs: (
             <>
                 <SaveToDrivePicker
-                    subjects={pickerSubjects}
+                    subjects={picker.subjects}
                     open={pickerOpen}
-                    // A convert through the picker saves first, so the dialog says what it is asking for.
-                    labels={pending ? { title: pending.label, confirmLabel: 'Save and convert' } : undefined}
+                    labels={picker.convert && { title: picker.convert.label, confirmLabel: 'Save and convert' }}
                     onClose={() => setPickerOpen(false)}
-                    // Left set, like the subjects: the save closes the dialog, and clearing it here
-                    // would swap the title back mid exit-animation. Every open path rewrites it.
                     onSaved={(paths) => {
-                        const convertTo = pendingConvert.current;
-                        if (convertTo) for (const path of paths) convertPath(path, convertTo.targetType);
+                        if (picker.convert) for (const path of paths) convertPath(path, picker.convert.targetType);
                     }}
                 />
                 <ProgressDialog
