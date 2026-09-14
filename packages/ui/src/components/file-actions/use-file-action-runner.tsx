@@ -66,7 +66,7 @@ export function useFileActionRunner(subject: FileSubject | null, siblings?: File
             return;
         }
         if (!downloadUrl) return;
-        importContactsFromUrl.mutate({ url: downloadUrl, name: subject.name, mimeType: subject.mimeType });
+        importContactsFromUrl.mutate({ url: downloadUrl });
     };
 
     const run = (action: FileAction) => {

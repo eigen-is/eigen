@@ -162,19 +162,12 @@ describe('useImportContactsFromUrl', () => {
         const { latest, unmount } = await renderHook(() => useImportContactsFromUrl(), queryClient);
 
         await act(async () => {
-            await latest.mutateAsync({
-                url: '/mail/owner/message/m1/attachment/0',
-                name: 'ada.vcf',
-                mimeType: 'text/vcard',
-            });
+            await latest.mutateAsync({ url: '/mail/owner/message/m1/attachment/0' });
         });
         await act(() => unmount());
 
         expect(fetchCalls[0]!.url).toBe('/mail/owner/message/m1/attachment/0');
-        const posted = fetchCalls[1]!.body;
-        if (!(posted instanceof File)) throw new Error('the import did not post a File');
-        expect(posted.name).toBe('ada.vcf');
-        expect(posted.type).toBe('text/vcard');
+        expect(fetchCalls[1]!.body).toBeInstanceOf(Blob);
         expect(toasts.at(-1)).toBe('success: Imported 2 contacts');
     });
 });

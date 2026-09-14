@@ -63,7 +63,7 @@ export function useExportContacts() {
 
 // The file travels as the raw body, not multipart: the route reads one vCard stream. Mirrors
 // useImportDocument.
-async function postImport(ownerId: string, file: File): Promise<ImportContactsResult> {
+async function postImport(ownerId: string, file: Blob): Promise<ImportContactsResult> {
     const response = await fetch(getContactsImportUrl(ownerId), {
         method: 'POST',
         headers: { 'content-type': VCARD_MIMES[0] },
@@ -97,18 +97,10 @@ export function useImportContactsFromUrl() {
     const ownerId = user?.id || '';
 
     return useMutation({
-        mutationFn: async ({
-            url,
-            name,
-            mimeType,
-        }: {
-            url: string;
-            name: string;
-            mimeType: string;
-        }): Promise<ImportContactsResult> => {
+        mutationFn: async ({ url }: { url: string }): Promise<ImportContactsResult> => {
             const response = await fetch(url, { credentials: 'include' });
             if (!response.ok) throw new Error(await response.text());
-            return postImport(ownerId, new File([await response.blob()], name, { type: mimeType }));
+            return postImport(ownerId, await response.blob());
         },
         onSuccess: (result) => {
             invalidateContactList(queryClient, ownerId);

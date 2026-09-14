@@ -357,14 +357,7 @@ export async function getTextPreview(mount: Mount, drivePath: DrivePath): Promis
 async function generateFileTextPreview(mount: Mount, drivePath: DrivePath): Promise<string | null> {
     const file = await mount.readFile(drivePath.id);
     if (!file) return null;
-    let bytes: ArrayBuffer;
-    try {
-        // External storage: the object behind a row can be gone or unreachable. No preview, not a 500.
-        bytes = await file.arrayBuffer();
-    } catch {
-        return null;
-    }
-    const preview = await getBytesTextPreview(bytes, drivePath.name, drivePath.mimeType || '');
+    const preview = await getBytesTextPreview(await file.arrayBuffer(), drivePath.name, drivePath.mimeType || '');
     return preview?.body ?? null;
 }
 
