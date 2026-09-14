@@ -151,8 +151,7 @@ temp-copy backend.
   ```
   `NoncurrentDays` trades recovery window against storage cost. A lifecycle configuration Eigen didn't author
   is never rewritten: the card reports it and shows the commands instead. Rule ID and defaults live in
-  `packages/lib/src/constants/s3.ts`; the design is in
-  [PROPOSAL_S3_VERSIONING_UX.md](proposals/PROPOSAL_S3_VERSIONING_UX.md).
+  `packages/lib/src/constants/s3.ts`.
 
 ## Residual limitations
 

@@ -2,7 +2,7 @@
 
 > **TLDR**: A chart is one native canvas element kind, `chart`, whose body is drawn by the existing roughjs painter from a small pure layout module (scales, ticks, arcs) over a validated table with durable row and column ids. Vector and slides get the kind directly. Docs and sheets embed the same renderer as a figure without changing their document or grid models. An arrow binds to a mark by id, and docking reuses today's box-plus-outline machinery with the mark's box substituted for the element's, so no second docking algorithm exists. Start with bar, line and pie, snapshot data only. Live sheet ranges come after row identity exists, in a separate phase. Learn from mature tools the way the canvas learned from Excalidraw: port their rules and tests (Excalidraw's own spreadsheet-to-chart parser and label layout, d3's tick and band rules, Plot's scale defaults, ECharts' table-plus-encode split), do not embed their runtimes. No Vega, no Recharts: the constraints the engine imposes (sync, DOM-free, deterministic in a Bun Worker) leave nothing of those libraries worth adapting.
 
-**Status:** Proposed, not implemented. Facts below were checked against the repository on 2026-09-07. This supersedes the architecture in [PROPOSAL_GRAPHS.md](PROPOSAL_GRAPHS.md), which predates the canvas engine; its data-first stance and small initial chart vocabulary carry over, its rendering and host integration do not. "Graphs" here means data charts, not node/edge diagrams.
+**Status:** Proposed, not implemented. Facts below were checked against the repository on 2026-09-07. This is the whole design; it replaced an earlier library-first proposal that predated the canvas engine, whose data-first stance and small initial chart vocabulary carry over and whose rendering and host integration do not. "Graphs" here means data charts, not node/edge diagrams.
 
 ## 1. What the original proposal got right and wrong
 
@@ -211,7 +211,7 @@ Dock against the unjittered outline, as the canvas already does; the rough strok
 
 Deleting or filtering a row, hiding a column, a missing value or a zero slice can make a valid reference unresolvable. Keep the reference and the last committed endpoint, show an unresolved indicator on the arrow, and offer reattach or detach. Never retarget to the row now at the old index, to a matching label or to the whole chart. If undo or a refresh restores the same id it resolves again. Deleting the chart follows normal dangling-element behaviour. A type change keeps attachments whose column and row still exist. Exports with unresolved annotations render the fallback endpoint and surface a warning.
 
-Overlap resolves deterministically: nearest eligible target, then stable id. Respect the plot clip and the existing screen-space and coarse-pointer tolerances. Ctrl/Cmd still suppresses binding. Click selects the chart, double-click or Enter opens the editor. The data table offers a keyboard path to pick an attachment target; a title and "View data" are first-release requirements because colour and hover alone cannot convey values or targets.
+Overlap resolves deterministically: nearest eligible target, then stable id. Respect the plot clip and the existing screen-space and coarse-pointer tolerances. Ctrl/Cmd still suppresses binding. Click selects the chart, double-click or Enter opens the editor. The data table offers a keyboard path to pick an attachment target; a title and "View data" are first-release requirements because colour and hover alone cannot convey values or targets. Concretely: the chart container carries `role="img"` with an `aria-label` of the title, or a generated description of type, series and range when there is none; Tab reaches the chart and Enter opens it; and "View data" renders the same table as an HTML `<table>` so a screen reader has a path to every value.
 
 ## 6. Hosts
 
@@ -227,7 +227,9 @@ A shared `ChartNode` beside `FigureNode` in `packages/lib/src/docs/eigendoc/node
 
 Add `charts?: SheetChart[]` to lib's `Sheet` (`packages/lib/src/sheets/types.ts`), each `{ id, x, y, width, height, angle, chart, style }` in document pixel coordinates like `Image`. Encode and decode it explicitly in `snapshot-codec.ts`; do not rely on the `...rest` passenger. Ops follow the image path: a `state/modules/chart.ts` sibling of `image.ts`, the same mirror in `patch.ts`, one immer recipe per move, resize or Apply, so collab and undo come from the existing pipeline rather than a second Yjs root. Overlay rendering follows `ImgBoxs` with `ObjectTransform` at the same z-index. `readSheetsFromDoc` returns charts so previews and exports draw them.
 
-"Insert chart from selection" takes a typed snapshot of the current computed values, allocates ids and opens the shared wizard. Label it as a snapshot.
+"Insert chart from selection" takes a typed snapshot of the current computed values, allocates ids and opens the shared wizard. Label it as a snapshot. Reading those values goes through `getCellsByRange` (`getdatabyselection`, a `(Cell | null)[][]` over the live `data` array) and takes each cell's own `v`: the engine's `getCellValue` special-cases dates (`ct.fa === 'yyyy-MM-dd'` returns `m`) and concatenates inline-string `ct.s` segments, neither of which a chart wants. Copy the matrix out before the read returns, so an immer replacement cannot leave the extractor holding a stale reference.
+
+One piece of dead scaffolding goes first: `chart_selection: unknown` in `packages/sheet/src/state/context.ts` (declared and initialised to `{}`, read nowhere) is fortune-sheet's abandoned chart state and must not be mistaken for a seam.
 
 ### Annotations in docs and sheets
 

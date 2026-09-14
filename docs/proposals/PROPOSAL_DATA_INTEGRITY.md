@@ -74,8 +74,8 @@ see § Frozen-format: the sweep's resumable cursor wants one additive `metadata.
 
 - **Restore tooling / UX.** The version-history UI and `restoreContainer` exist and work; this
   verifies what they restore *from*, it doesn't change them.
-- **S3 bucket versioning setup.** That safety net is
-  [PROPOSAL_S3_VERSIONING_UX.md](PROPOSAL_S3_VERSIONING_UX.md).
+- **S3 bucket versioning setup.** That safety net ships: the Bucket safety card hardens versioning and
+  the noncurrent-expiry lifecycle rule, described in [SYNC.md](../SYNC.md).
 - **CRDT format migration.** Separate concurrent proposal (`PROPOSAL_CRDT_MIGRATION.md`). Its
   pre-migration snapshots want exactly the semantic verification built here — the shared primitive
   is called out below so the two don't diverge.
