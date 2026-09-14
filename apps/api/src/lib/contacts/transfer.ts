@@ -67,55 +67,64 @@ export async function importCards(contacts: Contacts, text: string): Promise<Imp
     }
 
     const result: ImportContactsResult = { imported: 0, skipped: 0, failed: 0 };
-    for (const card of cards) {
-        let parsed: ParsedCard;
-        let body: string;
-        try {
-            body = transcodeTo30(card);
-            parsed = parseVCard(body);
-        } catch {
-            result.failed++;
-            continue;
-        }
+    // One list-level event for the whole file instead of one per card: a thousand cards used to be a thousand
+    // broadcasts to every open tab, and every one of them asks the client for the same owner-wide refetch. The
+    // finally covers the quota throw too — the cards that landed before it still have to reach the tabs.
+    contacts.batchingContactEvents = true;
+    try {
+        for (const card of cards) {
+            let parsed: ParsedCard;
+            let body: string;
+            try {
+                body = transcodeTo30(card);
+                parsed = parseVCard(body);
+            } catch {
+                result.failed++;
+                continue;
+            }
 
-        if (parsed.isGroup) {
-            result.skipped++;
-            continue;
-        }
-        if (parsed.uid) {
-            // Queried per card, so the loop's own writes count: a repeated UID skips like a re-import.
-            const stored = contacts.db
-                .select({ id: schema.contacts.id })
-                .from(schema.contacts)
-                .where(eq(schema.contacts.uid, parsed.uid))
-                .get();
-            if (stored) {
+            if (parsed.isGroup) {
                 result.skipped++;
                 continue;
             }
-        }
-        const firstEmail = parsed.email[0]?.trim().toLowerCase();
-        if (firstEmail && emails.has(firstEmail)) {
-            result.skipped++;
-            continue;
-        }
-        if (!parsed.uid) body = withMintedUid(parsed);
-
-        // A fresh resource name every time: a UID is not a safe filename (Apple's `…:ABPerson`, `urn:uuid:`
-        // and anything else sanitizeCardUri refuses), and If-None-Match: * keeps the write a create.
-        const put = await contacts.putCard(`${randomUUID()}.vcf`, body, { ifMatch: null, ifNoneMatch: '*' });
-        if (put.ok) {
-            result.imported++;
-            for (const email of parsed.email) {
-                if (email.trim()) emails.add(email.trim().toLowerCase());
+            if (parsed.uid) {
+                // Queried per card, so the loop's own writes count: a repeated UID skips like a re-import.
+                const stored = contacts.db
+                    .select({ id: schema.contacts.id })
+                    .from(schema.contacts)
+                    .where(eq(schema.contacts.uid, parsed.uid))
+                    .get();
+                if (stored) {
+                    result.skipped++;
+                    continue;
+                }
             }
-        } else if (put.error === 'uid-conflict') {
-            result.skipped++;
-        } else if (put.error === 'quota') {
-            throw new ApiError(507, `Storage quota exceeded after importing ${result.imported} contacts`);
-        } else {
-            result.failed++;
+            const firstEmail = parsed.email[0]?.trim().toLowerCase();
+            if (firstEmail && emails.has(firstEmail)) {
+                result.skipped++;
+                continue;
+            }
+            if (!parsed.uid) body = withMintedUid(parsed);
+
+            // A fresh resource name every time: a UID is not a safe filename (Apple's `…:ABPerson`, `urn:uuid:`
+            // and anything else sanitizeCardUri refuses), and If-None-Match: * keeps the write a create.
+            const put = await contacts.putCard(`${randomUUID()}.vcf`, body, { ifMatch: null, ifNoneMatch: '*' });
+            if (put.ok) {
+                result.imported++;
+                for (const email of parsed.email) {
+                    if (email.trim()) emails.add(email.trim().toLowerCase());
+                }
+            } else if (put.error === 'uid-conflict') {
+                result.skipped++;
+            } else if (put.error === 'quota') {
+                throw new ApiError(507, `Storage quota exceeded after importing ${result.imported} contacts`);
+            } else {
+                result.failed++;
+            }
         }
+    } finally {
+        contacts.batchingContactEvents = false;
+        if (result.imported > 0) contacts.emitContactsChanged();
     }
     return result;
 }

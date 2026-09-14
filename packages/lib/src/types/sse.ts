@@ -52,6 +52,7 @@ export const SSEventType = {
     CONTACT_CREATED: 'contacts:contact-created',
     CONTACT_UPDATED: 'contacts:contact-updated',
     CONTACT_DELETED: 'contacts:contact-deleted',
+    CONTACTS_CHANGED: 'contacts:changed',
     LABEL_CREATED: 'contacts:label-created',
     LABEL_UPDATED: 'contacts:label-updated',
     LABEL_DELETED: 'contacts:label-deleted',
@@ -85,6 +86,13 @@ type SSEventChat = {
 type SSEventContact = {
     type: typeof SSEventType.CONTACT_CREATED | typeof SSEventType.CONTACT_UPDATED | typeof SSEventType.CONTACT_DELETED;
     contactId: string;
+};
+
+// The list-level counterpart to the three per-card events, emitted once by a whole-file import instead of one
+// event per card. It carries no ids because the per-card handler ignores them too: a card change invalidates
+// the owner's whole list, so a thousand ids would be payload no handler reads.
+type SSEventContactsChanged = {
+    type: typeof SSEventType.CONTACTS_CHANGED;
 };
 
 type SSEventLabel = {
@@ -129,6 +137,7 @@ export type SSEvent =
     | SSEventCalendar
     | SSEventChat
     | SSEventContact
+    | SSEventContactsChanged
     | SSEventLabel
     | SSEventNotificationCreated
     | SSEventNotificationChanged
@@ -140,6 +149,7 @@ export type {
     SSEventCalendar,
     SSEventChat,
     SSEventContact,
+    SSEventContactsChanged,
     SSEventDrive,
     SSEventLabel,
     SSEventMail,
