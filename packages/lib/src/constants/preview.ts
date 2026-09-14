@@ -6,7 +6,6 @@ import {
     DRIVE_MIME_VECTOR,
     isVCardFile,
 } from '../types/drive';
-import type { FileSubject } from '../types/file-subject';
 
 const CODE_MIMES = [
     'text/',
@@ -98,23 +97,4 @@ export function isSearchableTextFile(mimeType: string, fileName: string): boolea
 
 export function isExiftoolExtension(fileName: string): boolean {
     return EXIFTOOL_EXTENSIONS.has(getExtension(fileName));
-}
-
-export type PreviewMode = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'vcard' | 'fallback';
-
-// How the preview overlay renders a file. Every server-rendered mode needs a mount to query, so it
-// gates on `drive`. Without one the <img> shows the original bytes instead of a resized WebP, which
-// only a browser-decodable mime survives.
-export function getPreviewMode(subject: FileSubject): PreviewMode {
-    const mime = subject.mimeType || '';
-
-    if (subject.drive ? mime.startsWith('image/') || isExiftoolExtension(subject.name) : BROWSER_IMAGE_MIMES.has(mime))
-        return 'image';
-    if (mime.startsWith('video/')) return 'video';
-    if (mime.startsWith('audio/')) return 'audio';
-    if (mime === 'application/pdf') return 'pdf';
-    // A .vcf reads as contact cards, never as its raw text — which is why getTextPreviewMode declines it.
-    if (subject.drive && isVCardFile(mime, subject.name)) return 'vcard';
-    if (subject.drive && getTextPreviewMode(mime, subject.name) !== null) return 'text';
-    return 'fallback';
 }

@@ -489,7 +489,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CreateCommentCardInput` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
 | `EigenColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EigenFont` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
-| `PreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `TextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `FigureAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
 | `FigureLayout` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
@@ -499,6 +498,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FileAction` | `@workspace/lib/file-actions` | packages/lib/src/core/file-actions.ts |
 | `FileActionId` | `@workspace/lib/file-actions` | packages/lib/src/core/file-actions.ts |
 | `FilePresentation` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
+| `PreviewMode` | `@workspace/lib/file-subject` | packages/lib/src/core/file-subject.ts |
 | `CanonicalRecipient` | `@workspace/lib/mail` | packages/lib/src/core/mail/addresses.ts |
 | `RecipientField` | `@workspace/lib/mail` | packages/lib/src/core/mail/addresses.ts |
 | `BorderSide` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
@@ -993,7 +993,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getExtension` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `getFontFamily` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `getFontName` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
-| `getPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `getTextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `IMPORT_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
 | `IMPORT_MAX_CARDS` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
@@ -1056,6 +1055,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `fileActionsFor` | `@workspace/lib/file-actions` | packages/lib/src/core/file-actions.ts |
 | `getFileIconComponent` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
 | `getFilePresentation` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
+| `getPreviewMode` | `@workspace/lib/file-subject` | packages/lib/src/core/file-subject.ts |
 | `subjectFromPath` | `@workspace/lib/file-subject` | packages/lib/src/core/file-subject.ts |
 | `bytesToBase64` | `@workspace/lib/format` | packages/lib/src/core/format.ts |
 | `formatFileSize` | `@workspace/lib/format` | packages/lib/src/core/format.ts |
