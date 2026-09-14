@@ -36,26 +36,6 @@ export type CardReportRequest =
       }
     | { type: 'sync-collection'; syncToken: string | undefined; wantsData: boolean };
 
-// The requested <D:prop> container: whether address-data was asked for at all, and the CARD:prop name list
-// under it (the partial-retrieval subset) when present. Full retrieval — <CARD:address-data/> with no
-// children — leaves partialProps null, which is the handler's "serve the stored bytes whole" signal.
-function readProps(root: Record<string, unknown>): { wantsData: boolean; partialProps: string[] | null } {
-    const prop = (root['prop'] ?? {}) as Record<string, unknown>;
-    const wantsData = Object.keys(prop).some((k) => k.includes('address-data'));
-    const addressData = prop['address-data'];
-    let partialProps: string[] | null = null;
-    if (addressData && typeof addressData === 'object') {
-        const list = (addressData as Record<string, unknown>)['prop'];
-        if (Array.isArray(list)) {
-            const names = list
-                .map((p) => (p as Record<string, unknown>)['@_name'])
-                .filter((n): n is string => typeof n === 'string');
-            if (names.length) partialProps = names;
-        }
-    }
-    return { wantsData, partialProps };
-}
-
 type XmlNode = Record<string, unknown>;
 
 const asNode = (v: unknown): XmlNode => (v && typeof v === 'object' && !Array.isArray(v) ? (v as XmlNode) : {});
@@ -67,8 +47,23 @@ const attr = (node: XmlNode, name: string): string | null => {
     return v == null ? null : String(v);
 };
 
+// The requested <D:prop> container: whether address-data was asked for at all, and the CARD:prop name list
+// under it (the partial-retrieval subset) when present. Full retrieval — <CARD:address-data/> with no
+// children — leaves partialProps null, which is the handler's "serve the stored bytes whole" signal.
+function readProps(root: Record<string, unknown>): { wantsData: boolean; partialProps: string[] | null } {
+    const prop = asNode(root['prop']);
+    const wantsData = Object.keys(prop).some((k) => k.includes('address-data'));
+    let partialProps: string[] | null = null;
+    const list = asNode(prop['address-data'])['prop'];
+    if (Array.isArray(list)) {
+        const names = list.map((p) => attr(asNode(p), 'name')).filter((n): n is string => n !== null);
+        if (names.length) partialProps = names;
+    }
+    return { wantsData, partialProps };
+}
+
 // A node's element children are its keys minus attributes (`@_…`) and text (`#text`). Anything outside the
-// grammar's allow-set is a filter the parser can't map → UnsupportedFilterError (403 supported-filter, § 4).
+// grammar's allow-set is a filter the parser can't map → UnsupportedFilterError (403 supported-filter).
 function assertOnlyChildren(node: XmlNode, allowed: Set<string>): void {
     for (const key of Object.keys(node)) {
         if (key.startsWith('@_') || key === '#text') continue;
@@ -76,7 +71,8 @@ function assertOnlyChildren(node: XmlNode, allowed: Set<string>): void {
     }
 }
 
-const MATCH_TYPES = new Set(['equals', 'contains', 'starts-with', 'ends-with']);
+const MATCH_TYPES = new Set<string>(['equals', 'contains', 'starts-with', 'ends-with']);
+const isMatchType = (v: string): v is TextMatch['matchType'] => MATCH_TYPES.has(v);
 const FILTER_CHILDREN = new Set(['prop-filter']);
 const PROP_FILTER_CHILDREN = new Set(['is-not-defined', 'text-match', 'param-filter']);
 const PARAM_FILTER_CHILDREN = new Set(['is-not-defined', 'text-match']);
@@ -89,14 +85,12 @@ function parseTextMatch(raw: unknown): TextMatch {
     if (typeof raw !== 'object' || raw === null) {
         return { collation: null, matchType: 'contains', negate: false, value: raw == null ? '' : String(raw) };
     }
-    const node = raw as XmlNode;
+    const node = asNode(raw);
     assertOnlyChildren(node, new Set());
     const collation = attr(node, 'collation');
     assertSupportedCollation(collation);
     const matchTypeAttr = attr(node, 'match-type');
-    const matchType = (
-        matchTypeAttr && MATCH_TYPES.has(matchTypeAttr) ? matchTypeAttr : 'contains'
-    ) as TextMatch['matchType'];
+    const matchType = matchTypeAttr !== null && isMatchType(matchTypeAttr) ? matchTypeAttr : 'contains';
     const text = node['#text'];
     return {
         collation,

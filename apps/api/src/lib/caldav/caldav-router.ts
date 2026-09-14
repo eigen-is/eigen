@@ -6,9 +6,9 @@ import { getHome } from '../home';
 import { handleCalendarHomePropfind, handlePrincipalPropfind, handleRootPropfind } from './discovery';
 import { handleCalendarPropfind, handleEventPropfind } from './propfind';
 import { handleMkcalendar, handleProppatch } from './proppatch';
-import { handleReport, REPORT_BODY_MAX_BYTES } from './report';
+import { handleReport } from './report';
 import { EVENT_MAX_BYTES, handleDelete, handleGet, handlePut } from './resource';
-import { davError, PROPFIND_BODY_MAX_BYTES, parsePropfind, wantsBrief } from './xml-builder';
+import { DAV_BODY_MAX_BYTES, davError, parsePropfind, wantsBrief } from './xml-builder';
 
 // The wildcard decodes to at most two segments — the calendar and an optional resource name. Resource names are
 // client-chosen, so every segment is percent-decoded (the carddav twin's parseAddressbookPath); a malformed
@@ -59,7 +59,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
     .route('PROPFIND', '/dav/calendars/:ownerId', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
-        const body = await readBoundedBody(request, PROPFIND_BODY_MAX_BYTES);
+        const body = await readBoundedBody(request, DAV_BODY_MAX_BYTES);
         if (body === null) return new Response('Payload Too Large', { status: 413 });
         const home = await getHome(params.ownerId);
         const calendars = home.calendar.getCalendars();
@@ -74,7 +74,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         const parsed = parseDavPath(params['*']);
         if (!parsed.ok) return new Response('Bad Request', { status: 400 });
 
-        const body = await readBoundedBody(request, PROPFIND_BODY_MAX_BYTES);
+        const body = await readBoundedBody(request, DAV_BODY_MAX_BYTES);
         if (body === null) return new Response('Payload Too Large', { status: 413 });
         const req = parsePropfind(body);
         const brief = wantsBrief(request);
@@ -174,7 +174,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         const calendarItem = home.calendar.getCalendarById(parsed.calendarId);
         if (!calendarItem) return new Response('Not Found', { status: 404 });
 
-        const body = await readBoundedBody(request, REPORT_BODY_MAX_BYTES);
+        const body = await readBoundedBody(request, DAV_BODY_MAX_BYTES);
         if (body === null) return new Response('Payload Too Large', { status: 413 });
         return handleReport(home.calendar, parsed.calendarId, calendarItem, params.ownerId, body);
     })
@@ -187,7 +187,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         if (!parsed.ok || !parsed.calendarId || parsed.resourceUri) return new Response('Bad Request', { status: 400 });
 
         const home = await getHome(params.ownerId);
-        const body = await readBoundedBody(request, REPORT_BODY_MAX_BYTES);
+        const body = await readBoundedBody(request, DAV_BODY_MAX_BYTES);
         if (body === null) return new Response('Payload Too Large', { status: 413 });
         return handleMkcalendar(home.calendar, params.ownerId, parsed.calendarId, body);
     })
@@ -200,7 +200,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         if (!parsed.ok || !parsed.calendarId) return new Response('Bad Request', { status: 400 });
 
         const home = await getHome(params.ownerId);
-        const body = await readBoundedBody(request, REPORT_BODY_MAX_BYTES);
+        const body = await readBoundedBody(request, DAV_BODY_MAX_BYTES);
         if (body === null) return new Response('Payload Too Large', { status: 413 });
         return handleProppatch(home.calendar, parsed.calendarId, params.ownerId, body);
     });

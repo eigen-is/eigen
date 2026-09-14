@@ -44,7 +44,7 @@ function withMintedUid(parsed: ParsedCard): string {
     return serializeVCardLines(lines);
 }
 
-// Replay a multi-card file into the book. Duplicates skip, never merge (spec R1): a card whose UID is
+// Replay a multi-card file into the book. Duplicates skip, never merge: a card whose UID is
 // already in the book, or whose first email already belongs to a contact, is counted and passed over — the
 // running Set means a file that repeats an address imports it once. A card that fails on its own content
 // (unparseable, refused by the PUT) is counted and the file continues; only the shared storage quota stops

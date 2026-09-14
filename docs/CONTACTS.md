@@ -71,7 +71,7 @@ for: a uri recorded there before its file was renamed and cleared inside the com
 survivor means the pair never completed, so `recoverPendingWork` at init re-indexes it. This covers the one
 case a stat-only reconcile cannot see — a replacement carrying the very same `mtime` and `size`.
 `pending_label_renames` `{labelId, oldName, newName}` is the label-fan-out twin (see Labels below). Init
-drains both before anything is served.
+drains both before anything is served. A drain that fails inside init is logged, not fatal (a home whose init throws cannot be opened at all): the card's journal row stays so the next init retries it, and until then its index row is served as it is — the one place a stale row can outlive a torn write.
 
 ## Reconcile vs. rebuild
 
@@ -179,7 +179,7 @@ XML parser), multiget hrefs at 500, query results at 1000.
 Reads touch `.vcf` files only where the payload *is* the card: `PROPFIND` Depth 1 is pure SQLite (uris, etags,
 tombstones), and so is `sync-collection` — unless the client also requests `address-data`, in which case each
 changed row streams its file bytes (as multiget does). GET / multiget / query always stream file bytes. Query
-filtering runs over a small book on a rare request, never on an app hot path.
+filtering runs over a small book on a rare request, never on an app hot path. A GET reads the index row and then the file without taking the write lock, so a fetch that races a PUT can pair the new bytes with the previous etag (never the reverse: the row is read first and the file is renamed before the row changes). That is the safe direction — the bumped `cardCtag` lists the card in the next `sync-collection`, the client re-fetches, and an `If-Match` on the stale etag is a 412 — so the read stays lock-free.
 
 ## Labels ↔ CATEGORIES
 
@@ -256,7 +256,7 @@ All three are `requireNonGuest` + `requireSelf`, like every other contacts route
 
 **Duplicates skip, never merge** (no field is ever combined into an existing card). A card is passed over when its `UID` is already in the book, when its first email address equals an address any contact already carries, or when that address appeared earlier in the same file: the running `Set` grows with every card that lands, so a file repeating an address imports it once. The UID check queries the index per card rather than pre-collecting, so the loop's own writes count — a file that repeats a UID skips its second copy through the same check a re-import takes. Group cards are skipped as well.
 
-**One import, one list refetch.** Every stored card broadcasts `contacts:contact-created`, so a whole-book import is a burst of them; `handleContactsSSEvent` (`packages/lib/src/core/contacts/sse-handlers.ts`) debounces the owner-wide half of the invalidation — `invalidateContactList`, which covers the list, `me` and the home size — by 250 ms per owner, so every open tab refetches the list once at the end instead of once per card. A card's own detail entry is still invalidated (or removed, for a delete) as its event arrives, so a bulk CardDAV sync never drops the card an open detail pane is showing, and the importing tab's own `onSuccess` invalidation is unchanged. A batched server-side event is the follow-up ([ROADMAP.md](ROADMAP.md)).
+**One import, one list refetch.** Every stored card broadcasts `contacts:contact-created`, so a whole-book import is a burst of them; `handleContactsSSEvent` (`packages/lib/src/core/contacts/sse-handlers.ts`) debounces the owner-wide half of the invalidation — `invalidateContactList`, which covers the list, `me` and the home size — by 250 ms per owner, so every open tab refetches the list once at the end instead of once per card. The detail pane renders from that list (`apps/contacts` `contact-detail.tsx`), so the debounced refetch is the whole invalidation; the importing tab's own `onSuccess` invalidation is unchanged. A batched server-side event is the follow-up ([ROADMAP.md](ROADMAP.md)).
 
 **The counters say what happened.** `ImportContactsResult` is `{ imported, skipped, failed }`. `skipped` is the duplicate and group cases above, plus a `uid-conflict` from `putCard`. `failed` is a card that is its own problem — one that won't transcode or parse, or that `putCard` refuses as `invalid`, `too-large` or on a precondition — and the file continues past it. Only the shared storage budget stops the run: a `quota` refusal throws `507` naming how many cards went in before it, and those cards stay committed, because every later card would be refused the same way.
 

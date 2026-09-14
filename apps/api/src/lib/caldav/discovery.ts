@@ -1,5 +1,5 @@
 import type { CalendarItem } from '@workspace/lib/types/calendar';
-import { encodePathSegment } from '../dav/href';
+import { calendarHomeHref, encodePathSegment } from '../dav/href';
 import type { PropfindRequest } from '../dav/propfind';
 import {
     calendarCollectionProps,
@@ -50,7 +50,7 @@ export function handleCalendarHomePropfind(
 ): Response {
     const responses: string[] = [
         // The home collection itself
-        response(`/dav/calendars/${ownerId}/`, selectProps(homeCollectionProps(ownerId), request, brief)),
+        response(calendarHomeHref(ownerId), selectProps(homeCollectionProps(ownerId), request, brief)),
     ];
 
     if (depth === '1') {

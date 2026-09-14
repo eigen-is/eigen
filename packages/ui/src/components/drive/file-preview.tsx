@@ -8,11 +8,12 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileSubject, MailPartRef } from '@workspace/lib/types/file-subject';
 import type { TextPreviewResult } from '@workspace/lib/types/preview';
 import { useFocusTrap } from '@workspace/ui/hooks/use-focus-trap';
+import { cn } from '@workspace/ui/lib/utils';
 import { ChevronLeft, ChevronRight, ExternalLink, FolderDown, Loader2, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
 import { getFileIcon } from './file-presentation';
-import { MailVCardPreviewContent, VCardPreviewContent } from './vcard-preview-content';
+import { MailVCardPreviewContent, PREVIEW_PANE_CLASS, VCardPreviewContent } from './vcard-preview-content';
 
 type FilePreviewProps = {
     subject: FileSubject;
@@ -133,7 +134,7 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
                         </div>
                     )}
                     {previewMode === 'pdf' && (
-                        <iframe src={info.embedUrl} className="w-[80vw] h-[calc(100vh-7rem)] rounded bg-background" />
+                        <iframe src={info.embedUrl} className={cn(PREVIEW_PANE_CLASS, 'rounded bg-background')} />
                     )}
                     {/* One shape from Drive and mail; the identity picks the query, one hook per component. */}
                     {previewMode === 'text' && drive && <TextPreviewContent path={drive} />}
@@ -200,7 +201,7 @@ function MailTextPreviewContent({ part }: { part: MailPartRef }) {
 function TextPreviewBody({ data, isLoading }: { data: TextPreviewResult | undefined; isLoading: boolean }) {
     if (isLoading) {
         return (
-            <div className="flex items-center justify-center w-[80vw] h-[calc(100vh-7rem)]">
+            <div className={cn('flex items-center justify-center', PREVIEW_PANE_CLASS)}>
                 <Loader2 className="size-6 text-white animate-spin" />
             </div>
         );
@@ -208,14 +209,14 @@ function TextPreviewBody({ data, isLoading }: { data: TextPreviewResult | undefi
 
     if (!data?.body) {
         return (
-            <div className="flex items-center justify-center w-[80vw] h-[calc(100vh-7rem)] text-white text-sm text-muted-foreground">
+            <div className={cn('flex items-center justify-center', PREVIEW_PANE_CLASS, 'text-white text-sm')}>
                 No preview available
             </div>
         );
     }
 
     return (
-        <div className="w-[80vw] h-[calc(100vh-7rem)] overflow-auto rounded bg-background">
+        <div className={cn(PREVIEW_PANE_CLASS, 'overflow-auto rounded bg-background')}>
             {data.mode === 'eigendoc' ? (
                 <div className="p-[2cm] w-[210mm] mx-auto">
                     <div className="eigen-prose tiptap" dangerouslySetInnerHTML={{ __html: data.body }} />

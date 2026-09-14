@@ -16,10 +16,8 @@ import {
 } from './xml-builder';
 import { parseReport, type ReportRequest } from './xml-parser';
 
-// Request bounds, the CardDAV twin's values (carddav/report.ts): the router rejects any XML request body
-// (REPORT/MKCALENDAR/PROPPATCH) over this before it reaches the parser, and multiget refuses a client that
-// asks for more than this many resources in one round-trip.
-export const REPORT_BODY_MAX_BYTES = 1_048_576;
+// Multiget refuses a client that asks for more than this many resources in one round-trip. The XML body
+// ceiling every route shares is DAV_BODY_MAX_BYTES, enforced in the router before the body reaches the parser.
 const MULTIGET_HREF_LIMIT = 500;
 
 // RFC 6578 recovery: a token the calendar can't honour (future ctag or malformed) forces the client to redo

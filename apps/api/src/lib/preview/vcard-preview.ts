@@ -1,10 +1,7 @@
 import { IMPORT_MAX_CARDS, VCARD_PREVIEW_MAX_CARDS } from '@workspace/lib/constants/contact';
 import type { VCardPreview } from '@workspace/lib/types/preview';
 import { ApiError } from '../core/errors';
-import { parseVCard } from '../vcard/parse';
-import { splitVCards } from '../vcard/split';
-import { parsedCardToContact } from '../vcard/to-contact';
-import { transcodeTo30 } from '../vcard/transcode';
+import { parsedCardToContact, parseVCard, splitVCards, transcodeTo30 } from '../vcard';
 
 // A cached body is JSON this process wrote from a value it built, so the read back is a typed assignment,
 // like the text preview's own cached JSON. Nothing else checks the shape: change VCardPreview and bump

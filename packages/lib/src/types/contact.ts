@@ -31,7 +31,7 @@ export type Contact = CreateContactInput & {
 };
 
 // The PUT body: a write must echo the etag it loaded so a stale form 412s instead of clobbering a card that
-// changed meanwhile (spec § 3). The id travels in the path, not the body.
+// changed meanwhile. The id travels in the path, not the body.
 export type UpdateContactInput = CreateContactInput & {
     etag: string;
 };

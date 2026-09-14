@@ -1,25 +1,16 @@
+import { VCARD_CONTENT_TYPE } from '@workspace/lib/constants/contact';
 import { escapeXml } from '@workspace/lib/html';
 import { CARD_MAX_BYTES } from '../contacts/card-store';
 import type { CardBook } from '../contacts/dav-store';
+import { addressbookHomeHref } from '../dav/href';
 import type { PropMap } from '../dav/propfind';
 // The multistatus/response/propstat helpers and the shared NS string (which already declares the CARD
 // namespace) live in the shared DAV envelope (lib/dav/xml.ts) — one principal and one XML envelope serve both
 // protocols, so these are imported, never duplicated. This file only adds the addressbook-specific property blocks.
 import { ownershipEntries } from '../dav/xml';
 
-export { PROPFIND_BODY_MAX_BYTES, parsePropfind, selectProps, wantsBrief } from '../dav/propfind';
-export {
-    davError,
-    multistatus,
-    multistatusResponse,
-    propstatNotFound,
-    propstatOk,
-    response,
-    XML_CONTENT_TYPE,
-} from '../dav/xml';
-
-// The addressbook HOME, one level above discovery.ts's bookHref (which points at the book itself).
-const homeHref = (userId: string) => `/dav/addressbooks/${userId}/`;
+export { DAV_BODY_MAX_BYTES, parsePropfind, selectProps, wantsBrief } from '../dav/propfind';
+export { davError, multistatusResponse, propstatNotFound, propstatOk, response } from '../dav/xml';
 
 // RFC 6578 token, generation-stamped so a rebuilt index invalidates every outstanding token. The only two
 // sites allowed to spell the grammar — emit/parse drift would 412 every client into a full-resync loop.
@@ -41,15 +32,15 @@ export function addressbookHomeProps(userId: string): PropMap {
         ],
         [
             'addressbook-home-set',
-            `<CARD:addressbook-home-set><D:href>${homeHref(userId)}</D:href></CARD:addressbook-home-set>`,
+            `<CARD:addressbook-home-set><D:href>${addressbookHomeHref(userId)}</D:href></CARD:addressbook-home-set>`,
         ],
         ...ownershipEntries(userId),
     ]);
 }
 
-// The one fixed book named "Contacts". supported-report-set advertises exactly the REPORTs that exist (spec
-// § 4 — no expand-property); the sync-token carries the rebuild generation so a rebuilt book forces a full
-// resync instead of stalling clients on a stale counter.
+// The one fixed book named "Contacts". supported-report-set advertises exactly the REPORTs that exist (no
+// expand-property); the sync-token carries the rebuild generation so a rebuilt book forces a full resync
+// instead of stalling clients on a stale counter.
 export function addressbookCollectionProps(book: CardBook, ownerId: string): PropMap {
     return new Map([
         ['resourcetype', `<D:resourcetype><D:collection/><CARD:addressbook/></D:resourcetype>`],
@@ -72,7 +63,7 @@ export function addressbookCollectionProps(book: CardBook, ownerId: string): Pro
 // The two card member fragments, single-sourced so the REPORT view (cardEtagProp) and the PROPFIND row map
 // (cardRowProps) can't drift.
 const cardGetetag = (etag: string) => `<D:getetag>"${escapeXml(etag)}"</D:getetag>`;
-const CARD_CONTENT_TYPE = `<D:getcontenttype>text/vcard; charset=utf-8</D:getcontenttype>`;
+const CARD_CONTENT_TYPE = `<D:getcontenttype>${VCARD_CONTENT_TYPE}</D:getcontenttype>`;
 
 // Card resource properties for REPORT rows (etag + content-type).
 export function cardEtagProp(etag: string): string[] {

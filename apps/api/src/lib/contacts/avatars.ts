@@ -5,6 +5,7 @@ import type { ParsedCardPhoto } from '../vcard/types';
 import {
     AVATAR_FILENAME,
     avatarCacheName,
+    avatarNameOf,
     avatarUrl,
     type EmbedFormat,
     stagedEmbedCandidates,
@@ -24,8 +25,7 @@ const AVATAR_STAGE_GRACE_MS = 60 * 60 * 1000;
 
 // Every contact-photo encode shares one preview shape: a 512px q80 square-cropped image. It defaults to webp
 // (the only format Eigen serves); the staged embed sibling spreads it with format:'jpeg'/'png'/'gif' for the
-// Apple-safe PHOTO bytes. App-authored cards with this shape naturally stay around 230 KiB; that is normal
-// behavior, not a resource limit or guarantee.
+// Apple-safe PHOTO bytes.
 const AVATAR_PREVIEW = { maxSize: 512, quality: 80, fit: 'cover' } as const;
 
 // A single animated GIF embedded in a card rides along in every device sync of that card. Past this ceiling the
@@ -43,7 +43,7 @@ export type StagedAvatarPair = { embed: { bytes: Uint8Array; mediaType: string }
 // webp to the cache, and the app/DAV both get generation one. Only the webp url is returned; the embed
 // sibling rides beside it under `<uuid>.embed.<ext>` for `resolveStagedAvatar` to pair up at save time.
 export async function uploadAvatar(contacts: Contacts, file: File): Promise<string> {
-    cleanupAvatarImages(contacts).catch(() => {});
+    cleanupAvatarImages(contacts).catch((e) => console.warn(`contacts: avatar sweep failed: ${e}`));
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const webp = await generateImagePreview(buffer, file.type, file.name, '', 'avatar', AVATAR_PREVIEW);
@@ -100,7 +100,7 @@ export async function resolveStagedAvatar(
     stagedUrl: string | undefined,
 ): Promise<StagedAvatarPair | null> {
     if (!stagedUrl) return null;
-    const webpName = stagedUrl.split('/').pop()!;
+    const webpName = avatarNameOf(stagedUrl);
     const webp = await downloadAvatar(contacts, webpName);
     let embed: { bytes: Uint8Array; mediaType: string } | null = null;
     if (webp) {
@@ -140,10 +140,9 @@ export async function promoteAvatarCache(
     return avatarUrl(contacts.home.user.id, name);
 }
 
-// The projection avatar URL for a card's PHOTO: the derived-cache URL, regenerating the webp only when its
-// hash-named file is missing. So an unchanged-photo re-PUT (any phone-side name edit re-sends the whole
-// card) or a reconcile keeps a promoted first-generation cache rather than overwriting it with a
-// second-generation encode. A uri-kind or absent photo caches nothing (returns '').
+// The projection avatar URL for a card's PHOTO, regenerating the webp only when its hash-named file is
+// missing: an unchanged-photo re-PUT (a phone-side name edit re-sends the whole card) or a reconcile keeps
+// the promoted first-generation cache instead of overwriting it with a second-generation encode.
 export async function deriveCardPhotoCache(
     contacts: Contacts,
     id: string,
@@ -157,13 +156,9 @@ export async function deriveCardPhotoCache(
     return cacheCardPhoto(contacts, id, photo);
 }
 
-// Derive the webp avatar cache from an inline PHOTO and return its projection URL — the regeneration path
-// (a reindex after avatars/ loss, an external DAV PUT), one generation older than a save's promoted webp.
-// The 512px webp target decodes every format: a JPEG/PNG embed becomes an opaque/alpha webp, an animated
-// GIF becomes an animated webp (the worker reads all pages for webp), each a full frame — never a filmstrip.
-// Naming by the embedded bytes' hash makes a superseded photo's file fall out of reference, so
-// cleanupAvatarImages sweeps it. A uri-kind or absent photo caches nothing — remote URIs are never fetched
-// (SSRF, spec Non-goals).
+// The regeneration path (a reindex after avatars/ loss, an external DAV PUT), one generation older than a
+// save's promoted webp. Naming by the embedded bytes' hash makes a superseded photo fall out of reference
+// for cleanupAvatarImages. A uri-kind photo caches nothing — remote URIs are never fetched (SSRF).
 export async function cacheCardPhoto(
     contacts: Contacts,
     contactId: string,
@@ -205,8 +200,9 @@ export function cleanupAvatarImages(contacts: Contacts): Promise<void> {
                 .select({ data: schema.contacts.data })
                 .from(schema.contacts)
                 .all()
-                .map((row) => row.data?.avatar?.split('/').pop())
-                .filter((name): name is string => !!name),
+                .map((row) => row.data?.avatar)
+                .filter((url): url is string => !!url)
+                .map(avatarNameOf),
         );
 
         const now = Date.now();

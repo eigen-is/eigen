@@ -4,6 +4,7 @@ import { existsSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, wr
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { createVCard } from '../../lib/carddav/vcard-serialize';
+import { cacheCardPhoto } from '../../lib/contacts/avatars';
 import { computeCardEtag } from '../../lib/contacts/card-store';
 import type { Contacts } from '../../lib/contacts/contacts';
 import * as contactsSchema from '../../lib/contacts/schema';
@@ -464,10 +465,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
 
     test('re-deriving the same photo replaces its cache file instead of double-counting it', async () => {
         const { contacts, dir } = await makeContacts();
-        const priv = contacts as unknown as {
-            cacheCardPhoto(contactId: string, photo: ParsedCardPhoto | null): Promise<string>;
-            cleanupAvatarImages(): Promise<void>;
-        };
+        const priv = contacts as unknown as { cleanupAvatarImages(): Promise<void> };
         // Settle init's detached sweep so the running total starts out equal to what is on disk.
         await priv.cleanupAvatarImages();
         const sharp = (await import('sharp')).default;
@@ -477,8 +475,8 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
         const photo = { kind: 'inline', bytes: new Uint8Array(jpeg), mediaType: 'image/jpeg' } as const;
         const contactId = randomUUID();
 
-        const first = await priv.cacheCardPhoto(contactId, photo);
-        const second = await priv.cacheCardPhoto(contactId, photo);
+        const first = await cacheCardPhoto(contacts, contactId, photo);
+        const second = await cacheCardPhoto(contacts, contactId, photo);
 
         // Same bytes, same hash, same file — the second write replaced the first one's bytes.
         expect(second).toBe(first);
@@ -548,12 +546,12 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
 
     test('cacheCardPhoto with a uri-kind photo returns empty and writes nothing', async () => {
         const { contacts, dir } = await makeContacts();
-        const priv = contacts as unknown as {
-            cacheCardPhoto(contactId: string, photo: ParsedCardPhoto | null): Promise<string>;
-        };
         const before = readdirSync(avatarsDirOf(dir)).length;
 
-        const url = await priv.cacheCardPhoto(randomUUID(), { kind: 'uri', uri: 'https://example.com/remote.jpg' });
+        const url = await cacheCardPhoto(contacts, randomUUID(), {
+            kind: 'uri',
+            uri: 'https://example.com/remote.jpg',
+        });
 
         expect(url).toBe('');
         expect(readdirSync(avatarsDirOf(dir)).length).toBe(before);

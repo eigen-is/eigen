@@ -1,5 +1,5 @@
 import type { CardBook, CardRow } from '../contacts/dav-store';
-import { encodePathSegment } from '../dav/href';
+import { addressbookHomeHref, encodePathSegment } from '../dav/href';
 import type { PropfindRequest } from '../dav/propfind';
 import {
     addressbookCollectionProps,
@@ -10,13 +10,13 @@ import {
     selectProps,
 } from './xml-builder';
 
-// The one fixed book: URL segment `contacts`, displayname `Contacts` (spec § 4, Non-goals — no MKADDRESSBOOK).
+// The one fixed book: URL segment `contacts`, displayname `Contacts` — no MKADDRESSBOOK.
 export const ADDRESSBOOK_ID = 'contacts';
 
-// The two href shapes every CardDAV surface emits (discovery, REPORT rows, the PUT Location header), so the
-// book segment and the escaping rule live in one place. Card names are client-chosen, so the resource segment
-// is minimally path-encoded via the shared dav/href encoder — the same one the CalDAV twin's eventHref uses.
-export const bookHref = (ownerId: string) => `/dav/addressbooks/${ownerId}/${ADDRESSBOOK_ID}/`;
+// The book and card hrefs every CardDAV surface emits (discovery, REPORT rows, the PUT Location header), on
+// top of the home href dav/href.ts owns. Card names are client-chosen, so the resource segment is minimally
+// path-encoded via the shared dav/href encoder — the same one the CalDAV twin's eventHref uses.
+export const bookHref = (ownerId: string) => `${addressbookHomeHref(ownerId)}${ADDRESSBOOK_ID}/`;
 export const cardHref = (ownerId: string, uri: string) => `${bookHref(ownerId)}${encodePathSegment(uri)}`;
 
 // PROPFIND /dav/addressbooks/{ownerId}/ — the home collection, plus the single book child at Depth:1.
@@ -28,7 +28,7 @@ export function handleAddressbookHomePropfind(
     brief: boolean,
 ): Response {
     const responses = [
-        response(`/dav/addressbooks/${ownerId}/`, selectProps(addressbookHomeProps(ownerId), request, brief)),
+        response(addressbookHomeHref(ownerId), selectProps(addressbookHomeProps(ownerId), request, brief)),
     ];
     if (depth === '1') {
         responses.push(

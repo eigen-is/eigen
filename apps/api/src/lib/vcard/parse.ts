@@ -2,29 +2,8 @@
 // layer diffs against. Only the properties Eigen owns are extracted; the untouched AST rides along in
 // `lines` so a write can merge edits back without disturbing properties we don't understand.
 import type { Address } from '@workspace/lib/types/contact';
-import { getVersion, parseVCardLines, splitDataUri, unescapeText } from './ast';
+import { getVersion, parseVCardLines, splitDataUri, splitValue, unescapeText } from './ast';
 import type { ParsedCard, ParsedCardPhoto, VCardLine } from './types';
-
-// Split a structured (';') or list (',') TEXT value on an unescaped delimiter, keeping the escape
-// sequences intact so each component can be unescaped afterward. A backslash escapes the next character.
-function splitValue(value: string, delim: string): string[] {
-    const parts: string[] = [];
-    let cur = '';
-    for (let i = 0; i < value.length; i++) {
-        const c = value[i];
-        if (c === '\\' && i + 1 < value.length) {
-            cur += c + value[i + 1];
-            i++;
-        } else if (c === delim) {
-            parts.push(cur);
-            cur = '';
-        } else {
-            cur += c;
-        }
-    }
-    parts.push(cur);
-    return parts;
-}
 
 function firstParam(line: VCardLine, name: string): string | null {
     return line.params.find(([n]) => n === name)?.[1] ?? null;
@@ -49,16 +28,13 @@ function decodeBase64(value: string): Uint8Array | null {
     return new Uint8Array(Buffer.from(cleaned, 'base64'));
 }
 
-// data:[<mediatype>];base64,<payload> — the 4.0 inline PHOTO form.
-function decodeDataUri(value: string): ParsedCardPhoto | null {
-    const split = splitDataUri(value);
-    if (!split) return null;
-    const bytes = decodeBase64(split.base64);
-    return bytes ? { kind: 'inline', bytes, mediaType: split.mediaType } : null;
-}
-
 function parsePhoto(line: VCardLine): ParsedCardPhoto | null {
-    if (line.value.startsWith('data:')) return decodeDataUri(line.value);
+    if (line.value.startsWith('data:')) {
+        const split = splitDataUri(line.value);
+        if (!split) return null;
+        const bytes = decodeBase64(split.base64);
+        return bytes ? { kind: 'inline', bytes, mediaType: split.mediaType } : null;
+    }
     if (firstParam(line, 'ENCODING')?.toLowerCase() === 'b') {
         const bytes = decodeBase64(line.value);
         return bytes ? { kind: 'inline', bytes, mediaType: photoMediaType(firstParam(line, 'TYPE')) } : null;
@@ -66,12 +42,15 @@ function parsePhoto(line: VCardLine): ParsedCardPhoto | null {
     return { kind: 'uri', uri: line.value };
 }
 
+// The only BDAY form Eigen stores: what normalizeBirthday produces, and the serializer's write guard.
+export const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 // BDAY normalized to YYYY-MM-DD; '' for the 4.0 year-less '--MMDD' form or anything unparseable. Also the
 // seam the Contacts writers run incoming birthdays through, so it accepts the app's ISO datetime
 // ('1990-01-01T00:00:00.000Z') and keeps just its date prefix when the whole value is a valid ISO datetime.
 export function normalizeBirthday(value: string): string {
     const v = value.trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+    if (ISO_DATE.test(v)) return v;
     const compact = v.match(/^(\d{4})(\d{2})(\d{2})$/);
     if (compact) return `${compact[1]}-${compact[2]}-${compact[3]}`;
     if (/^\d{4}-\d{2}-\d{2}T/.test(v) && !Number.isNaN(Date.parse(v))) return v.slice(0, 10);

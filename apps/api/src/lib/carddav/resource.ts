@@ -1,3 +1,4 @@
+import { VCARD_CONTENT_TYPE } from '@workspace/lib/constants/contact';
 import type { Contacts } from '../contacts/contacts';
 import { cardHref } from './discovery';
 import { davError } from './xml-builder';
@@ -12,7 +13,7 @@ export async function handleGetCard(contacts: Contacts, uri: string): Promise<Re
     return new Response(new Uint8Array(card.bytes), {
         status: 200,
         headers: {
-            'Content-Type': 'text/vcard; charset=utf-8',
+            'Content-Type': VCARD_CONTENT_TYPE,
             ETag: `"${card.etag}"`,
         },
     });
@@ -20,7 +21,7 @@ export async function handleGetCard(contacts: Contacts, uri: string): Promise<Re
 
 // PUT /dav/addressbooks/:ownerId/contacts/:uri — store the client's card and map the typed PutCardResult to its
 // HTTP status. Preconditions, UID rules, quota, transcode, and the self-link decision all live in putCard,
-// evaluated inside the mutation lock (spec § 3); this only translates the outcome. The etag hashes the stored bytes,
+// evaluated inside the mutation lock; this only translates the outcome. The etag hashes the stored bytes,
 // so a 4.0 client that PUT gets the 3.0 form's etag back and re-converges on its next fetch.
 export async function handlePutCard(
     contacts: Contacts,

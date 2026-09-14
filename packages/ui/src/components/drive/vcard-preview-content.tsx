@@ -6,10 +6,15 @@ import { useMailVCardPreview } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { MailPartRef } from '@workspace/lib/types/file-subject';
 import type { VCardPreview } from '@workspace/lib/types/preview';
+import { cn } from '@workspace/ui/lib/utils';
 import { EmptyState } from '../layout/app/empty-state';
 import { ErrorState } from '../layout/app/error-state';
 import { LoadingState } from '../layout/app/loading-state';
 import { ContactDetailCard } from '../user/contact-detail-card';
+
+// The box every non-image preview fills: the overlay's content area minus its header and footer. Lives
+// here rather than in file-preview.tsx because that shell already imports this module.
+export const PREVIEW_PANE_CLASS = 'w-[80vw] h-[calc(100vh-7rem)]';
 
 // The served cards, whichever route served them. Drive and mail each have their own component, so exactly
 // one query hook runs per render and the overlay picks by the subject it holds.
@@ -44,7 +49,7 @@ function VCardCards({
     ];
 
     return (
-        <div className="w-[80vw] h-[calc(100vh-7rem)] overflow-auto rounded bg-background">
+        <div className={cn(PREVIEW_PANE_CLASS, 'overflow-auto rounded bg-background')}>
             {oversize ? (
                 <EmptyState
                     message="File too large to preview"

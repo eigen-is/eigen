@@ -20,3 +20,6 @@ export const IMPORT_MAX_CARDS = 1000;
 
 // A quick look reads, it doesn't scroll a whole address book: past this the preview serves counts only.
 export const VCARD_PREVIEW_MAX_CARDS = 200;
+
+// The media type every vCard byte stream is served under (CardDAV GET, PROPFIND getcontenttype, export).
+export const VCARD_CONTENT_TYPE = 'text/vcard; charset=utf-8';

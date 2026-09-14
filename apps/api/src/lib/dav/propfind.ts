@@ -6,8 +6,9 @@ import { propstatNotFound, propstatOk } from './xml';
 // requested prop list, then select per-row propstats from an ordered name→fragment map. One implementation so
 // CalDAV and CardDAV can't drift — the twin rule the whole dav/ folder is built on.
 
-// A PROPFIND body is a small prop list; 1 MiB matches the REPORT cap so the routers share one ceiling.
-export const PROPFIND_BODY_MAX_BYTES = 1_048_576;
+// One ceiling for every XML request body both DAV surfaces read (PROPFIND, REPORT, MKCALENDAR, PROPPATCH):
+// each is a small prop list or href list, bounded before it reaches a parser.
+export const DAV_BODY_MAX_BYTES = 1_048_576;
 
 // A row's available properties: element local name → the full XML fragment, in emission order. Both the
 // allprop array and the requested-prop selector draw from this single map, so there's no parallel list to drift.

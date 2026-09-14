@@ -5,18 +5,17 @@ import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { CreateContactInput, UpdateContactInput } from '@workspace/lib/types/contact';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
-import { contactKeys, invalidateContactDeleted, invalidateContactList, invalidateContactUpdated } from './keys';
+import { contactKeys, invalidateContactList } from './keys';
 
-// A write echoes the etag its form loaded; a 412 means the card changed elsewhere first. Reload list + detail so
+// A write echoes the etag its form loaded; a 412 means the card changed elsewhere first. Reload the list so
 // the form shows current state, tell the user, and swallow it. All handling stays in the hook (NOTIFICATIONS.md).
 const STALE_WRITE_TOAST = 'This contact changed elsewhere. It has been reloaded — please redo your edit.';
 
-// Both the update and delete onError paths recover a 412 the same way — reload the contact as an update (a
-// refused delete leaves it present), toast, and swallow. Shared so the two callbacks can't drift; returns true
-// when it handled the 412 so the caller skips onMutationError.
-function handleStaleWrite(queryClient: QueryClient, ownerId: string, id: string, error: unknown): boolean {
+// Both the update and delete onError paths recover a 412 the same way — reload, toast, and swallow. Shared so
+// the two callbacks can't drift; returns true when it handled the 412 so the caller skips onMutationError.
+function handleStaleWrite(queryClient: QueryClient, ownerId: string, error: unknown): boolean {
     if (error instanceof AppError && error.status === 412) {
-        invalidateContactUpdated(queryClient, ownerId, id);
+        invalidateContactList(queryClient, ownerId);
         toast.error(STALE_WRITE_TOAST);
         return true;
     }
@@ -67,9 +66,9 @@ export function useUpdateContact() {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidateContactUpdated(queryClient, ownerId, variables.id),
-        onError: (error, variables) => {
-            if (handleStaleWrite(queryClient, ownerId, variables.id, error)) return;
+        onSuccess: () => invalidateContactList(queryClient, ownerId),
+        onError: (error) => {
+            if (handleStaleWrite(queryClient, ownerId, error)) return;
             onMutationError(error);
         },
     });
@@ -86,9 +85,9 @@ export function useDeleteContact() {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: (_data, { id }) => invalidateContactDeleted(queryClient, ownerId, id),
-        onError: (error, { id }) => {
-            if (handleStaleWrite(queryClient, ownerId, id, error)) return;
+        onSuccess: () => invalidateContactList(queryClient, ownerId),
+        onError: (error) => {
+            if (handleStaleWrite(queryClient, ownerId, error)) return;
             onMutationError(error);
         },
     });
