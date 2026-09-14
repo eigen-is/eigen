@@ -550,6 +550,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Contact` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `ContactSuggestion` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `ContactTransferSource` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
+| `ConvertTarget` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `CreateContactInput` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `CreateEventInput` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `DeepPartial` | `@workspace/lib/types` | packages/lib/src/types/util.ts |
@@ -765,7 +766,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SortHeaderProps` | `@workspace/ui` | packages/ui/src/components/sort-header.tsx |
 | `TooltipButtonProps` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/tooltip-button.tsx |
 | `AttachmentChipMenu` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/use-attachment-chip-menu.ts |
-| `ChipMenuHandlers` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/use-attachment-chip-menu.ts |
 | `ChatMessageInputHandle` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-message-input.tsx |
 | `SlashTargetContext` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-utils.ts |
 | `CursorPeerState` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/cursor-layer.tsx |

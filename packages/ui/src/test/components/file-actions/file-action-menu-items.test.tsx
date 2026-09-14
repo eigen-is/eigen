@@ -56,7 +56,6 @@ const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { DropdownMenu, DropdownMenuContent } = await import('../../../components/dropdown-menu');
 const { FileActionMenuItems } = await import('../../../components/file-actions/file-action-menu-items');
-const { FILE_ACTIONS } = await import('@workspace/lib/file-actions');
 
 const subject: FileSubject = {
     key: 'mail:owner-1:message-1:0',
@@ -105,7 +104,7 @@ async function openMenu(props: { subject: FileSubject | null; exclude?: readonly
 
 test('draws every row the registry allows, in its order', async () => {
     const { labels, cleanup } = await openMenu({ subject });
-    expect(labels).toEqual(FILE_ACTIONS.filter((action) => action.applies(subject)).map((action) => action.label));
+    expect(labels).toEqual(['Quick preview', 'Download', 'Save to Drive…', 'Import to Contacts']);
     await cleanup();
 });
 
