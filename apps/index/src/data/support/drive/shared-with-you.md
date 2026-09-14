@@ -44,8 +44,9 @@ change their access level.
 
 <div class="eigen-callout">
 
-In **Shared with me**, you can open and preview files, but you cannot rename them. Renaming belongs to
-the file's owner.
+In **Shared with me**, you can open, preview and download files, but you cannot rename or duplicate them. Those belong to the file's owner.
+
+When you open a folder that was shared with you for viewing only, Drive shows the same folder without the options you cannot use. There is no **New** button, and no **Rename**, **Duplicate** or **Move to trash**. You can still open files, preview them, download them, and copy them to a drive of your own.
 
 </div>
 

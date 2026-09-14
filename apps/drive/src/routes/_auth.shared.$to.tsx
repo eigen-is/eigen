@@ -3,7 +3,7 @@ import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, usePathInfo, useSharedPaths } from '@workspace/lib/drive';
 import type { DrivePath, DriveSearchParams } from '@workspace/lib/types/drive';
 import { EmptyState, LoadingState } from '@workspace/ui';
-import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
+import { DRIVE_CAPABILITIES, type DriveCapabilities } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
 import { useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';
 
@@ -31,9 +31,19 @@ function DriveRoute() {
         error: isFolderContentLoadingError,
     } = useSharedPaths(ownerId, to as 'by-me' | 'with-me');
 
+    // Shared-with-me rows are other people's files at mixed access levels, and the feed carries no
+    // per-row permission. Rename and the actions that write beside the source are offered only on
+    // the by-me side; delete stays on both — on with-me it is "leave the share", which a read-only
+    // recipient may always do.
+    const capabilities: DriveCapabilities = {
+        ...DRIVE_CAPABILITIES.listing,
+        canRename: to === 'by-me',
+        canWrite: to === 'by-me',
+    };
+
     const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
         items: folderContents,
-        capabilities: DRIVE_CAPABILITIES.listing,
+        capabilities,
         onOpenFolder: (path: DrivePath) =>
             navigate({
                 to: '/fs/$ownerId/$mountId/$pathId',
@@ -71,10 +81,7 @@ function DriveRoute() {
             onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
             onBackToList={handleBackToList}
-            capabilities={{
-                ...DRIVE_CAPABILITIES.listing,
-                canRename: to === 'by-me',
-            }}
+            capabilities={capabilities}
             title={to === 'by-me' ? 'Shared by me' : 'Shared with me'}
             onQuickLook={onQuickLook}
             emptyState={
