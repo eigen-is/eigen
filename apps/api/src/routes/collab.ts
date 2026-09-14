@@ -3,6 +3,7 @@ import {
     COLLAB_HOME_REPLACED_REASON,
     COLLAB_STORAGE_UNAVAILABLE_CLOSE,
 } from '@workspace/lib/constants/collab';
+import { commentAssignedTag } from '@workspace/lib/notification/tags';
 import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
 import { type EffectiveMember, stripEigenExtension } from '@workspace/lib/types/drive';
 import type { ServerWebSocket } from 'bun';
@@ -153,7 +154,12 @@ export const collabRouter = new Elysia({
                                 type: 'assigned',
                                 actorEmail: user.email,
                                 title: `${user.name} assigned you a comment on "${stripEigenExtension(path.name)}"`,
-                                tag: `assigned:${params.ownerId}:${params.mountId}:${params.pathId}:${params.chatName}`,
+                                tag: commentAssignedTag({
+                                    ownerId: params.ownerId,
+                                    mountId: params.mountId,
+                                    pathId: params.pathId,
+                                    chatName: params.chatName,
+                                }),
                                 details: { pathType: path.type },
                             },
                         });

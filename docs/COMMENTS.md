@@ -166,8 +166,10 @@ via `broadcastCommentIndexUpdated` (`lib/chat/sse-events.ts` — owner home + me
 **Activity + notifications**: `assignComment` records an `'assigned'` file event (details
 `{ assignee, card?, chatName? }` — `card` is the client-posted title, same trust model as the
 `sticky-*` events; the assignee is excluded from the watcher fan-out because the route already
-sends them a direct `'assigned'` notification, tag `assigned:owner:mount:path:chatName`, resolved
-client-side like `mention-comment`). `setCommentStatus` records `'resolved'`/`'reopened'` events.
+sends them a direct `'assigned'` notification, tag `assigned:owner:mount:path:chatName` built by
+`commentAssignedTag` (`core/notification/tags.ts`), resolved client-side like `mention-comment` and
+marked read by `useAutoMarkChatRead` when the assignee opens that card).
+`setCommentStatus` records `'resolved'`/`'reopened'` events.
 Unassign records nothing and notifies nobody; unregistered invitees can be assigned but get no
 notification (`getUserByEmail` guard, mirroring mentions).
 

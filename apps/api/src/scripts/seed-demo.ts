@@ -27,6 +27,7 @@ import { getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
 import { DOCX_MIME } from '@workspace/lib/constants/mime';
+import { commentAssignedTag } from '@workspace/lib/notification/tags';
 import type { Attendee, EventData } from '@workspace/lib/types/calendar';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import { DRIVE_MIME_FOLDER, DRIVE_TYPE_FOLDER, type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
@@ -479,7 +480,12 @@ async function main(): Promise<void> {
                     type: 'assigned',
                     actorEmail: commentAuthor.email,
                     title: `${commentAuthor.name} assigned you a comment on "${stripEigenExtension(docPath.name)}"`,
-                    tag: `assigned:team_${teamId}:${teamMountId}:${docPath.id}:${card.chatName}`,
+                    tag: commentAssignedTag({
+                        ownerId: `team_${teamId}`,
+                        mountId: teamMountId,
+                        pathId: docPath.id,
+                        chatName: card.chatName!,
+                    }),
                     details: { pathType: docPath.type },
                 },
             });
