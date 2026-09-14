@@ -1,11 +1,8 @@
 import { escapeXml } from '@workspace/lib/html';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { ApiError } from '../core/errors';
 import { computeEtag } from '../core/http';
-
-// Re-exported so this module's importers keep getting escapeXml from './xml'; the escape itself is
-// lib's, shared with the SVG the canvas kinds serialize.
-export { escapeXml };
+import { XML_CONTENT_TYPE } from '../dav/xml';
+import type { Lock } from '../drive/lock-manager';
 
 const XML_HEADER = '<?xml version="1.0" encoding="utf-8"?>';
 
@@ -17,14 +14,6 @@ export function response(href: string, propstats: string[]): string {
     return `<D:response>\n<D:href>${escapeXml(href)}</D:href>\n${propstats.join('\n')}\n</D:response>`;
 }
 
-export function propstatOk(props: string[]): string {
-    return `<D:propstat>\n<D:prop>\n${props.join('\n')}\n</D:prop>\n<D:status>HTTP/1.1 200 OK</D:status>\n</D:propstat>`;
-}
-
-export function propstatNotFound(props: string[]): string {
-    return `<D:propstat>\n<D:prop>\n${props.join('\n')}\n</D:prop>\n<D:status>HTTP/1.1 404 Not Found</D:status>\n</D:propstat>`;
-}
-
 export function propstatStatus(status: number, statusText: string, props: string[]): string {
     return `<D:propstat>\n<D:prop>\n${props.join('\n')}\n</D:prop>\n<D:status>HTTP/1.1 ${status} ${statusText}</D:status>\n</D:propstat>`;
 }
@@ -32,43 +21,11 @@ export function propstatStatus(status: number, statusText: string, props: string
 export function buildXmlResponse(body: string, status = 207): Response {
     return new Response(body, {
         status,
-        headers: { 'Content-Type': 'application/xml; charset=utf-8' },
+        headers: { 'Content-Type': XML_CONTENT_TYPE },
     });
 }
 
-// Finder sends NFD-decomposed UTF-8; encode each segment via encodeURIComponent
-// then rejoin with '/' so multi-byte chars round-trip while keeping path separators.
-export function encodeHref(path: string): string {
-    return path
-        .split('/')
-        .map((seg) => encodeURIComponent(seg))
-        .join('/');
-}
-
-// Inverse of encodeHref. Decodes per-segment so a literal %2F in a segment
-// (rare, but legal under RFC 3986) doesn't accidentally split into two
-// segments. Elysia's wildcard params and URL.pathname both preserve percent-
-// encoding, so every entry point that converts a URL path to a name needs this.
-export function decodeHref(path: string): string {
-    try {
-        return path
-            .split('/')
-            .map((seg) => decodeURIComponent(seg))
-            .join('/');
-    } catch {
-        throw new ApiError(400, 'Malformed percent-encoding in path');
-    }
-}
-
-export type LockProps = {
-    token: string;
-    ownerHref?: string;
-    depth: 0 | 'infinity';
-    scope: 'exclusive' | 'shared';
-    expiresAt: number;
-};
-
-export function lockdiscoveryProp(locks: LockProps[]): string {
+export function lockdiscoveryProp(locks: Lock[]): string {
     if (locks.length === 0) return '<D:lockdiscovery/>';
     const inner = locks
         .map((l) => {
@@ -82,7 +39,7 @@ export function lockdiscoveryProp(locks: LockProps[]): string {
     return `<D:lockdiscovery>${inner}</D:lockdiscovery>`;
 }
 
-export function supportedlockProp(): string {
+function supportedlockProp(): string {
     return '<D:supportedlock><D:lockentry><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockentry><D:lockentry><D:lockscope><D:shared/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockentry></D:supportedlock>';
 }
 
@@ -91,7 +48,7 @@ export function resourceProps(args: {
     isCollection: boolean;
     quotaUsed?: number;
     quotaAvailable?: number;
-    locks?: LockProps[];
+    locks?: Lock[];
 }): string[] {
     const { path, isCollection, quotaUsed, quotaAvailable, locks = [] } = args;
     const props: string[] = [

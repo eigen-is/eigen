@@ -1,11 +1,11 @@
 import { type DrivePath, isDocumentType } from '@workspace/lib/types/drive';
 
-// Returns the nearest enclosing Eigen document container (DOC, STICKIES,
-// SLIDES, SHEETS, CHAT) along the breadcrumb, or null. Plain folders never
-// match. Used by WebDAV to gate writes that would land inside a managed
-// container — those resources have app-managed internal state (data.db,
-// media/) that the drive layer owns, so client-driven PUT/MKCOL/DELETE there
-// would corrupt or orphan rows. Reads (PROPFIND, GET, COPY-out) stay open.
+// Returns the nearest enclosing Eigen document container (every collab type
+// plus chat) along the breadcrumb, or null. Plain folders never match. Used by
+// WebDAV to gate writes that would land inside a managed container — those
+// resources have app-managed internal state (data.db, media/) that the drive
+// layer owns, so client-driven PUT/MKCOL/DELETE there would corrupt or orphan
+// rows. Reads (PROPFIND, GET, COPY-out) stay open.
 //
 // includeSelf:
 //   false — "is this resource inside a container?" (DELETE, MOVE source,

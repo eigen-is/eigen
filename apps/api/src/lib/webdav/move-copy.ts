@@ -4,7 +4,7 @@ import { type DriveLike, getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
 import { enclosingDocumentContainer } from './container-guard';
 import { assertWritable } from './locks';
-import { decodeHref } from './xml';
+import { decodeHref, splitParentAndName } from './path';
 
 type DestParts = { ownerId: string; mountId: string; pathStr: string };
 
@@ -15,8 +15,6 @@ function parseDestination(destHeader: string, requestUrl: string): DestParts {
     } catch {
         throw new ApiError(400, 'Invalid Destination header');
     }
-    // url.pathname keeps percent-encoding ("/webdav/U/M/My%20Folder"); decode per segment
-    // so the result matches in-database names.
     const segments = decodeHref(url.pathname.replace(/^\/+webdav\/+/, '')).split('/');
     const [ownerId, mountId, ...rest] = segments;
     if (!ownerId || !mountId) throw new ApiError(400, 'Destination not under /webdav');
@@ -65,38 +63,28 @@ async function resolveMoveCopy(args: {
         assertWritable(drive.lockManager, srcBreadcrumb, ifHeader, user.id);
     }
 
-    const destPathStr = dest.pathStr || '/';
-    const destExisting = await drive.resolvePath(mountId, destPathStr);
+    const destExisting = await drive.resolvePath(mountId, dest.pathStr);
     // RFC 4918 §9.8.5 / §9.9.4: same source and destination is 403 — the overwrite path below would
     // trash the source before moving it.
     if (destExisting?.id === src.id) throw new ApiError(403, 'Source and destination are the same');
     if (destExisting && !overwrite) throw new ApiError(412, 'Destination exists, no overwrite');
 
-    const lastSlash = destPathStr.lastIndexOf('/');
-    const destParentStr = destPathStr.slice(0, lastSlash) || '/';
-    const newName = destPathStr.slice(lastSlash + 1).normalize('NFC');
+    const { parentStr: destParentStr, name: newName } = splitParentAndName(dest.pathStr);
     if (!newName) throw new ApiError(400, 'Destination name missing');
 
     const destParent = await drive.resolvePath(mountId, destParentStr);
     if (!destParent) throw new ApiError(409, 'Destination parent not found');
 
-    // One destination-side breadcrumb fetch. destExisting's full chain (if
-    // it exists) supplies destParent's chain via slice(0,-1); otherwise we
-    // fetch destParent directly. The container guard runs on this chain;
-    // the lock check runs on destExisting *and* destParent (overwrite
-    // touches destExisting; either case adds/replaces a child of destParent).
+    // One destination-side breadcrumb: destExisting's chain minus its last entry is destParent's.
+    // An overwrite touches destExisting and replaces a child of destParent, so both must be unlocked.
     const destBreadcrumb = destExisting
         ? await drive.breadCrumb(mountId, destExisting.id)
         : await drive.breadCrumb(mountId, destParent.id);
     if (enclosingDocumentContainer(destBreadcrumb, { includeSelf: !destExisting })) {
         throw new ApiError(423, 'Container internals are read-only');
     }
-    if (destExisting) {
-        assertWritable(drive.lockManager, destBreadcrumb, ifHeader, user.id);
-        assertWritable(drive.lockManager, destBreadcrumb.slice(0, -1), ifHeader, user.id);
-    } else {
-        assertWritable(drive.lockManager, destBreadcrumb, ifHeader, user.id);
-    }
+    assertWritable(drive.lockManager, destBreadcrumb, ifHeader, user.id);
+    if (destExisting) assertWritable(drive.lockManager, destBreadcrumb.slice(0, -1), ifHeader, user.id);
 
     return { drive, src, destParent, destExisting, newName };
 }

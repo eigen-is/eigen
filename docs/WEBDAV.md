@@ -2,7 +2,7 @@
 
 > **TLDR**: Each mount is exposed at `/webdav/<ownerId>/<mountId>/` over HTTP Basic auth. Class 1 +
 > Class 2 (RFC 4918) — `OPTIONS`, `PROPFIND`, `GET`, `HEAD`, `PUT`, `DELETE`, `MKCOL`, `MOVE`, `COPY`,
-> `PROPPATCH`, `LOCK`, `UNLOCK`. Eigen container files (`.eigendoc`, `.eigensheets`, ...) appear as
+> `PROPPATCH`, `LOCK`, `UNLOCK`. Eigen container files (`.eigendoc`, `.eigensheets`, `.eigenvector`, ...) appear as
 > plain folders containing `data.db` + `media/`; reads pass through, writes inside are blocked (423).
 > Locks are in-memory. Litmus 0.17 baseline: **101/105**. Verified against Windows Explorer (works
 > well), macOS Finder, Cyberduck, Mountain Duck.
@@ -21,7 +21,8 @@
 
 `<ownerId>` is a raw UUID for users, `team_<teamId>` for teams. Each mount becomes one network volume
 in the client. Sub-path mounts are not supported. Cross-mount / cross-owner `MOVE` and `COPY` are
-rejected with `502` — clients must download + re-upload to move bytes between mounts.
+rejected with `502` — clients must download + re-upload to move bytes between mounts. URL paths and the
+`Destination` header are percent-decoded per segment; a malformed escape (`bad%E0`) is `400`.
 
 ## Authentication
 
@@ -47,17 +48,18 @@ Every mutating method goes through `assertWritable()` (lock check) and the conta
 | `PUT` | 1 | `Drive.createFileFromData` (new) / `Drive.writeFileContent` (overwrite) | Both stage the body to a tmp file with hashing before the insert. Quota pre-check via `Content-Length`. Thumbnails regenerate on overwrite. |
 | `DELETE` | 1 | `Drive.deletePath` (soft) | Goes to trash. `resolvePath` skips trashed rows so subsequent `GET`/`PROPFIND` returns 404. |
 | `MKCOL` | 1 | `Drive.createFolder` | Bodied `MKCOL` returns `415` (RFC 4918 §9.3.1). |
-| `MOVE` | 1 | `Drive.movePath` + `renamePath` | Same-mount only. `Overwrite: F` → `412` if target exists. |
-| `COPY` | 1 | `Drive.copyPath` | Same-mount only. Server-side copy — does not round-trip bytes through HTTP. `Depth: 0` on a collection copies the folder without members (RFC 4918 §9.8.3). |
-| `PROPPATCH` | 1 | `Drive.updatePathDetails` | Live properties (`getcontentlength`, `getetag`, ...) return `403`. Unknown dead properties (e.g. `Z:Win32CreationTime`) persist in `DrivePath.details.webdavProps`. Always 207 multistatus. |
+| `MOVE` | 1 | `Drive.movePath` + `renamePath` | Same-mount only. `Overwrite: F` → `412` if target exists. Same source and destination URL → `403` (RFC 4918 §9.9.4), checked before anything is trashed. |
+| `COPY` | 1 | `Drive.copyPath` | Same-mount only. Server-side copy — does not round-trip bytes through HTTP. `Depth: 0` on a collection copies the folder without members (RFC 4918 §9.8.3). Same source and destination URL → `403`. |
+| `PROPPATCH` | 1 | `Drive.updatePathDetails` | Live properties (`getcontentlength`, `getetag`, ...) return `403`. Unknown dead properties (e.g. `Z:Win32CreationTime`) persist in `DrivePath.details.webdavProps`. 207 multistatus; a malformed body or a property name that is not an XML name is `400` before anything persists (the name is echoed as an element in every later PROPFIND). |
 | `LOCK` / `UNLOCK` | 2 | `Drive.lockManager` | In-memory tokens. Default TTL 600 s, capped at 24 h. Depth-infinity locks gate writes on descendants. Released on `DELETE`. |
 
 PROPFIND/PROPPATCH/LOCK request bodies are capped at 64 KB to keep `fast-xml-parser`'s synchronous
-path off the event loop.
+path off the event loop. PROPFIND and PROPPATCH validate with `XMLValidator` before parsing; LOCK reads
+its two elements (`owner`, `lockscope`) by regex because the owner is opaque client XML echoed back as-is.
 
 ## Container files (raw mode)
 
-Eigen container files (`.eigendoc`, `.eigensheets`, `.eigenstickies`, `.eigenslides`, `.eigenchat`)
+Eigen container files (`.eigendoc`, `.eigensheets`, `.eigenstickies`, `.eigenslides`, `.eigenvector`, `.eigenchat`)
 are drive folders containing `data.db` + optional `media/` (see [Eigen container pattern in Drive
 storage](STORAGE.md)). Over WebDAV they appear as folders with their real children. `GET
 Report.eigendoc/data.db` returns the SQLite blob byte-for-byte — backups via rclone / rsync /
@@ -84,14 +86,14 @@ through Office is currently a web-app workflow.
 | `getcontenttype` | `path.mimeType` (files only) |
 | `getetag` | `"<sha-256>"` of the file body. DQUOTE-wrapped, content-derived (RFC 7232 §2.1) — Finder enters re-download loops on unstable validators. Synthetic `id-mtime-size` fallback only for legacy rows missing a hash. |
 | `quota-used-bytes` / `quota-available-bytes` | Mount root only, via `getMountQuotaState()` |
-| `supportedlock` | Static `<lockentry>` with `<exclusive/>` + `<write/>` |
+| `supportedlock` | Static: an exclusive and a shared `<lockentry>`, both `<write/>` |
 | `lockdiscovery` | Live tokens from `LockManager.listForPath()` |
 | Dead properties | Persisted on `DrivePath.details.webdavProps` |
 
 ## Locks
 
-`LockManager` (`apps/api/src/lib/drive/lock-manager.ts`) keeps tokens in-memory keyed by `pathId`
-plus an `ancestor → descendants` index for depth-infinity locks. Each lock is owned by the
+`LockManager` (`apps/api/src/lib/drive/lock-manager.ts`) keeps tokens in-memory keyed by `pathId`;
+depth-infinity coverage is computed per write by walking the caller's breadcrumb (`coveringLocks`). Each lock is owned by the
 authenticated `userId`; another user's `If: (<token>)` on a write returns `423`.
 
 In-memory because: collab editing never relies on WebDAV locks, Office refreshes its locks every
@@ -111,8 +113,14 @@ apps/api/src/lib/webdav/
   locks.ts              # LOCK / UNLOCK handlers + assertWritable()
   container-guard.ts    # enclosingDocumentContainer() over breadcrumb
   container-overlay.ts  # AppleDouble + Office-tempfile filename filter
-  xml.ts                # multistatus / propstat / encodeHref, prop serialization
+  path.ts               # encodeHref / decodeHref / splitParentAndName — client path ↔ drive name
+  xml.ts                # multistatus / propstat / prop serialization
 ```
+
+Shared with CalDAV and CardDAV from `apps/api/src/lib/dav/`: `XML_CONTENT_TYPE` and `davError` (`xml.ts`),
+`isNcName` (`propfind.ts`) and the `fast-xml-parser` node narrowing `asNode`/`isXmlNode` (`xml-node.ts`).
+The multistatus builders are deliberately WebDAV's own: the dav ones declare the CalDAV/CardDAV
+namespaces and emit no newlines.
 
 `computeEtag` is not a WebDAV concern — it is imported from `lib/core/http` and shared with the REST routes,
 so the same file reports the same validator on both paths.
@@ -165,6 +173,8 @@ Two gaps are known and open:
    authenticated, so this is a noisy-user problem rather than an attack vector.
 2. **Litmus trips the rate cap.** Litmus fires requests back-to-back and hits the global 300 req/min limit, so
    a full conformance run needs the limiter relaxed first.
+3. **Dead properties and shared locks per path are unbounded** across requests for an authenticated user
+   (same noisy-user class as 1). Row in [ROADMAP.md](ROADMAP.md) § Cheap wins.
 
 ## File reference
 

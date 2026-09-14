@@ -1,17 +1,17 @@
 import { escapeXml } from '@workspace/lib/html';
 import { XMLParser } from 'fast-xml-parser';
 import { propstatNotFound, propstatOk } from './xml';
+import { asNode, isXmlNode, type XmlNode } from './xml-node';
 
 // The shared PROPFIND core both DAV surfaces sit on (RFC 4918 § 9.1): parse the request body into the
 // requested prop list, then select per-row propstats from an ordered name→fragment map. One implementation so
-// CalDAV and CardDAV can't drift — the twin rule the whole dav/ folder is built on.
+// CalDAV and CardDAV can't drift.
 
 // One ceiling for every XML request body both DAV surfaces read (PROPFIND, REPORT, MKCALENDAR, PROPPATCH):
 // each is a small prop list or href list, bounded before it reaches a parser.
 export const DAV_BODY_MAX_BYTES = 1_048_576;
 
-// A row's available properties: element local name → the full XML fragment, in emission order. Both the
-// allprop array and the requested-prop selector draw from this single map, so there's no parallel list to drift.
+// Element local name → XML fragment, in emission order; allprop and the selector share it, so no list can drift.
 export type PropMap = Map<string, string>;
 
 // One requested property. `name` is the local name (prefix stripped) used to match PropMap keys — the same
@@ -33,8 +33,7 @@ const localName = (key: string): string => (key.includes(':') ? key.slice(key.in
 const prefixOf = (key: string): string => (key.includes(':') ? key.slice(0, key.indexOf(':')) : '');
 const isElementKey = (key: string): boolean => !key.startsWith('@_') && key !== '#text';
 
-// The single element child of `obj` whose local name matches — used to find the propfind root then its <prop>.
-function findChild(obj: Record<string, unknown>, local: string): unknown {
+function findChild(obj: XmlNode, local: string): unknown {
     for (const key of Object.keys(obj)) {
         if (key !== '?xml' && isElementKey(key) && localName(key) === local) return obj[key];
     }
@@ -48,8 +47,8 @@ function collectNamespaces(nodes: unknown[]): { def: string | null; byPrefix: Ma
     const byPrefix = new Map<string, string>();
     let def: string | null = null;
     for (const node of nodes) {
-        if (!node || typeof node !== 'object') continue;
-        for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+        if (!isXmlNode(node)) continue;
+        for (const [k, v] of Object.entries(node)) {
             if (k === '@_xmlns') def = String(v);
             else if (k.startsWith('@_xmlns:')) byPrefix.set(k.slice('@_xmlns:'.length), String(v));
         }
@@ -62,29 +61,27 @@ export function parsePropfind(xml: string): PropfindRequest {
     // Absent/empty body → allprop (the compat path every bodyless PROPFIND test rides).
     if (body === '') return { allprop: true };
 
-    let parsed: Record<string, unknown>;
+    let parsed: XmlNode;
     try {
-        parsed = parser.parse(body) as Record<string, unknown>;
+        parsed = asNode(parser.parse(body));
     } catch {
         return { allprop: true };
     }
 
     const root = findChild(parsed, 'propfind');
-    if (!root || typeof root !== 'object') return { allprop: true };
-    const rootNode = root as Record<string, unknown>;
+    if (!isXmlNode(root)) return { allprop: true };
 
-    const propNode = findChild(rootNode, 'prop');
+    const propNode = findChild(root, 'prop');
     // <allprop/> and <propname/> both land here as "no <prop>" → allprop. Treating <propname/> as allprop is a
     // lenient v1: we serve the values, not the names-only variant.
-    if (!propNode || typeof propNode !== 'object') return { allprop: true };
-    const prop = propNode as Record<string, unknown>;
+    if (!isXmlNode(propNode)) return { allprop: true };
 
-    const ns = collectNamespaces([rootNode, prop]);
+    const ns = collectNamespaces([root, propNode]);
     const props: RequestedProp[] = [];
-    for (const key of Object.keys(prop)) {
+    for (const key of Object.keys(propNode)) {
         if (!isElementKey(key)) continue;
         const prefix = prefixOf(key);
-        const own = collectNamespaces([prop[key]]);
+        const own = collectNamespaces([propNode[key]]);
         const uri = prefix === '' ? (own.def ?? ns.def) : (own.byPrefix.get(prefix) ?? ns.byPrefix.get(prefix) ?? null);
         props.push({ name: localName(key), prefix, ns: uri });
     }
@@ -97,9 +94,12 @@ export function wantsBrief(request: Request): boolean {
     return /(^|[\s,])return=minimal([\s,;]|$)/i.test(request.headers.get('Prefer') ?? '');
 }
 
-// fxp accepts tag names XML forbids (`<`, `&`), which would make the echoed element non-well-formed.
-const NCNAME_ISH = /^[A-Za-z_][A-Za-z0-9._-]*$/;
-export const isNcName = (name: string): boolean => NCNAME_ISH.test(name);
+// fxp accepts tag names XML forbids (`<`, `&`), which would make the echoed element non-well-formed. Letters,
+// digits and marks in any script are XML NameChars; the rarer punctuation NameChars are left out.
+const NCNAME_ISH = /^[\p{L}_][\p{L}\p{N}\p{M}._-]*$/u;
+export function isNcName(name: string): boolean {
+    return NCNAME_ISH.test(name);
+}
 
 // An unknown prop echoed inside the 404 propstat, self-declaring its namespace (<x:name xmlns:x="uri"/>). A
 // default-namespace prop needs a synthetic prefix to be self-declared; an unresolvable namespace or a
