@@ -2,6 +2,7 @@ export * from './keys';
 export * from './reads';
 export * from './sharing';
 export * from './trash';
+export * from './use-attachment-subjects';
 export * from './use-convert-document';
 export * from './use-drive-access';
 export * from './use-drive-view-preferences';

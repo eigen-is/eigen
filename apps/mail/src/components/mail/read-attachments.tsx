@@ -31,10 +31,10 @@ export function ReadAttachments({ emailId, attachments }: ReadAttachmentsProps) 
         [attachments, emailId, ownerId],
     );
     const chipSubject = useCallback(
-        (_row: null, key: string | null): FileSubject | undefined => subjects.find((subject) => subject.key === key),
+        (key: string | null) => subjects.find((subject) => subject.key === key),
         [subjects],
     );
-    const { contextMenu, bind } = useAttachmentChipMenu<null, FileSubject>(chipSubject);
+    const { contextMenu, bind } = useAttachmentChipMenu<FileSubject>(chipSubject);
     // The message's own parts are the siblings, so a quick look from here pages through them and
     // keeps its "Save all" row.
     const runner = useFileActionRunner(contextMenu.item, subjects, { attachment: true });
@@ -42,7 +42,7 @@ export function ReadAttachments({ emailId, attachments }: ReadAttachmentsProps) 
     if (!user || subjects.length === 0) return null;
 
     return (
-        <div className="flex items-center gap-2 mb-4" {...bind(null)}>
+        <div className="flex items-center gap-2 mb-4" {...bind()}>
             <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
                 {subjects.map((subject) => (
                     <SimpleAttachmentChip

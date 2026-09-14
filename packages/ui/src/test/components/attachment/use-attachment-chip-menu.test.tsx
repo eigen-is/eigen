@@ -11,11 +11,11 @@ const { useAttachmentChipMenu } = await import('../../../components/attachment/u
 // The menu item is the chip key itself: what the wrapper owes a host is which chip the press landed
 // on, and nothing when the press landed on no chip.
 function Host({ onItem, onSave }: { onItem: (item: string | null) => void; onSave: () => void }) {
-    const { contextMenu, bind } = useAttachmentChipMenu<null, string>((_row, chipKey) => chipKey ?? undefined);
+    const { contextMenu, bind } = useAttachmentChipMenu<string>((chipKey) => chipKey ?? undefined);
     onItem(contextMenu.item);
     return createElement(
         'div',
-        bind(null),
+        bind(),
         createElement(SimpleAttachmentChip, {
             key: 'one',
             attachmentKey: 'part-0',

@@ -4,6 +4,7 @@ import { Database } from 'bun:sqlite';
 import { expect } from 'bun:test';
 import { treaty } from '@elysiajs/eden';
 import { type DrivePath, type MountInfo, type OrgTeam, teamOwnerId } from '@workspace/lib/types';
+import type { EmailDraft } from '@workspace/lib/types/mail';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { app } from '../app';
 import { auth } from '../lib/auth/auth';
@@ -382,3 +383,36 @@ export const TEST_PNG_BYTES = new Uint8Array([
 ]);
 
 export { app, TEST_DATA_DIR };
+
+// The draft attachment round-trip the mail tests share: upload a temp part, then put a draft that keeps it.
+export async function uploadDraftAttachment(
+    sessionToken: string,
+    ownerId: string,
+    file: File,
+): Promise<{ tempId: string; filename: string; size: number; contentType: string }> {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await authedRequest(sessionToken, `/mail/${ownerId}/message/draft/attachment`, {
+        method: 'POST',
+        body: form,
+    });
+    return assertJson(res);
+}
+
+export async function putDraft(
+    sessionToken: string,
+    ownerId: string,
+    mail: Partial<EmailDraft>,
+    options: { tempAttachmentIds?: string[]; keepAttachmentIndexes?: number[] } = {},
+): Promise<EmailDraft> {
+    const res = await authedRequest(sessionToken, `/mail/${ownerId}/message/draft`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            mail,
+            tempAttachmentIds: options.tempAttachmentIds,
+            keepAttachmentIndexes: options.keepAttachmentIndexes,
+        }),
+    });
+    return assertJson(res);
+}

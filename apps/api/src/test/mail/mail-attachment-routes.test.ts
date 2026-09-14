@@ -2,12 +2,12 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
 import type { Contact } from '@workspace/lib/types/contact';
-import type { EmailDraft, EmailSummary } from '@workspace/lib/types/mail';
+import type { EmailSummary } from '@workspace/lib/types/mail';
 import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getHome } from '../../lib/home';
-import { assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
+import { assertJson, authedRequest, findOrFail, getTestContext, putDraft, uploadDraftAttachment } from '../setup';
 
 type VCardPreviewBody = { cards: { contact: Contact }[]; dropped: number; total: number };
 
@@ -25,34 +25,6 @@ const VCARD_BODY = [
     'EMAIL:ada@example.com',
     'END:VCARD',
 ].join('\r\n');
-
-async function uploadDraftAttachment(sessionToken: string, ownerId: string, file: File): Promise<{ tempId: string }> {
-    const form = new FormData();
-    form.append('file', file);
-    const res = await authedRequest(sessionToken, `/mail/${ownerId}/message/draft/attachment`, {
-        method: 'POST',
-        body: form,
-    });
-    return assertJson(res);
-}
-
-async function putDraft(
-    sessionToken: string,
-    ownerId: string,
-    mail: Partial<EmailDraft>,
-    options: { tempAttachmentIds?: string[]; keepAttachmentIndexes?: number[] },
-): Promise<EmailDraft> {
-    const res = await authedRequest(sessionToken, `/mail/${ownerId}/message/draft`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            mail,
-            tempAttachmentIds: options.tempAttachmentIds,
-            keepAttachmentIndexes: options.keepAttachmentIndexes,
-        }),
-    });
-    return assertJson(res);
-}
 
 describe.skipIf(isWindows)('Mail attachment routes', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;

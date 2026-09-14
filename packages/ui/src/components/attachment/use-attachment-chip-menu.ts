@@ -4,12 +4,11 @@ import { useLongPress } from '../../hooks/use-long-press';
 import { useContextMenu } from '../context-menu/use-context-menu';
 import { attachmentKeyAt } from './simple-attachment-chip';
 
-// What a surface builds its menu target from: the row the press landed on (a chat message, or
-// nothing at all for a chip list) and the key of the chip under the pointer, if any. Returning
-// undefined opens no menu. Keep it in a useCallback — the handlers it feeds are memoised on it.
-type ToMenuItem<H, T> = (host: H, chipKey: string | null) => T | undefined;
+// The menu target from the chip under the pointer and, for a surface with rows (a chat message), the
+// row the press landed on. Undefined opens no menu. Keep it in a useCallback: the handlers memoise on it.
+type ToMenuItem<T, H> = (chipKey: string | null, host: H) => T | undefined;
 
-export type AttachmentChipMenu<H, T> = {
+export type AttachmentChipMenu<T, H> = {
     contextMenu: ReturnType<typeof useContextMenu<T>>;
     // Spread on the element holding the chips; `host` is the row the press belongs to.
     bind: (host: H) => ReturnType<ReturnType<typeof useLongPress<H>>['bind']> & {
@@ -21,14 +20,14 @@ export type AttachmentChipMenu<H, T> = {
 // The one wiring from an attachment chip to the singleton context menu, shared by the mail reader,
 // the chat message list and the card dialog. Right-click on a pointer device, long-press on touch,
 // and the chip under the finger read back from the DOM — a long-press only reports where it started.
-export function useAttachmentChipMenu<H, T>(toMenuItem: ToMenuItem<H, T>): AttachmentChipMenu<H, T> {
+export function useAttachmentChipMenu<T, H = void>(toMenuItem: ToMenuItem<T, H>): AttachmentChipMenu<T, H> {
     const contextMenu = useContextMenu<T>();
     const { openAt, handleContextMenu } = contextMenu;
     const pressedChip = useRef<string | null>(null);
 
     const handleLongPress = useCallback(
         (host: H, x: number, y: number) => {
-            const item = toMenuItem(host, pressedChip.current);
+            const item = toMenuItem(pressedChip.current, host);
             if (item === undefined) return false;
             openAt(item, x, y);
             return true;
@@ -53,7 +52,7 @@ export function useAttachmentChipMenu<H, T>(toMenuItem: ToMenuItem<H, T>): Attac
                     selection.containsNode(e.target, true)
                 )
                     return;
-                const item = toMenuItem(host, chipKey);
+                const item = toMenuItem(chipKey, host);
                 if (item !== undefined) handleContextMenu(e, item);
             },
             onPointerDownCapture: (e: React.PointerEvent) => {

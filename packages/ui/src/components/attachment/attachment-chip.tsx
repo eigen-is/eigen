@@ -1,7 +1,4 @@
-import { getDriveDownloadUrl, getDriveItemThumbnail } from '@workspace/lib/api';
-import { useFolderLookup } from '@workspace/lib/drive';
-import { subjectFromPath } from '@workspace/lib/file-subject';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { useAttachmentSubjects } from '@workspace/lib/drive';
 import { usePreview } from '../preview-provider';
 import { SimpleAttachmentChip } from './simple-attachment-chip';
 
@@ -24,30 +21,21 @@ export function AttachmentChip({
     siblingFileNames,
     onRemove,
 }: AttachmentChipProps) {
-    const { findByName } = useFolderLookup(ownerId, mountId, mediaFolderId);
-    const fileInfo = findByName(fileName);
+    const { subjectOf, subjectsOf } = useAttachmentSubjects(ownerId, mountId, mediaFolderId);
+    const subject = subjectOf(fileName);
     const { openPreview } = usePreview();
-
-    const name = fileInfo?.details?.originalName || fileInfo?.name || fileName;
-    const downloadUrl = fileInfo ? getDriveDownloadUrl(ownerId, mountId, fileInfo.id, fileInfo.updatedAt) : '#';
-    const thumbnailUrl = fileInfo?.mimeType?.startsWith('image/')
-        ? getDriveItemThumbnail(fileInfo).thumbnailUrl
-        : undefined;
 
     return (
         <SimpleAttachmentChip
-            filename={name}
+            filename={subject?.drive?.details?.originalName || subject?.name || fileName}
             attachmentKey={fileName}
-            downloadUrl={downloadUrl}
-            thumbnailUrl={thumbnailUrl}
+            downloadUrl={subject?.downloadUrl ?? '#'}
+            thumbnailUrl={subject?.thumbnailUrl}
             onRemove={onRemove}
             onClick={(e) => {
-                if (fileInfo) {
+                if (subject) {
                     e.preventDefault();
-                    const siblings = siblingFileNames
-                        ?.map((n) => findByName(n))
-                        .filter((p): p is DrivePath => p !== undefined);
-                    openPreview(subjectFromPath(fileInfo), siblings?.map(subjectFromPath), { attachment: true });
+                    openPreview(subject, subjectsOf(siblingFileNames), { attachment: true });
                 }
             }}
         />

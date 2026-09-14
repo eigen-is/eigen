@@ -14,12 +14,13 @@ type SaveToDrivePickerProps = {
     // What the save created: the runner converts what it just saved for a subject with no Drive path.
     onSaved?: (paths: DrivePath[]) => void;
     // For a caller whose save is a step in something larger (a convert).
-    labels?: { title: string; confirmLabel: string };
+    title?: string;
+    confirmLabel?: string;
 };
 
 // One "where does this go" dialog for every surface that puts a file into Drive, with the browser download
 // as the escape hatch. A Drive subject is copied server-side; a mail part is written from the stored message.
-export function SaveToDrivePicker({ subjects, open, onClose, onSaved, labels }: SaveToDrivePickerProps) {
+export function SaveToDrivePicker({ subjects, open, onClose, onSaved, title, confirmLabel }: SaveToDrivePickerProps) {
     const preview = useOptionalPreview();
     // Siblings come from one surface, so a batch is all Drive items or all mail parts: the first picks the branch.
     const source = subjects[0]?.drive;
@@ -53,8 +54,8 @@ export function SaveToDrivePicker({ subjects, open, onClose, onSaved, labels }: 
             // The picker opens over the preview overlay when one is showing, and has to outrank it.
             abovePreview={preview?.isPreviewOpen}
             mode="folder"
-            title={labels?.title ?? (subjects.length > 1 ? `Save ${subjects.length} files to Drive` : 'Save to Drive')}
-            confirmLabel={labels?.confirmLabel ?? 'Save here'}
+            title={title ?? (subjects.length > 1 ? `Save ${subjects.length} files to Drive` : 'Save to Drive')}
+            confirmLabel={confirmLabel ?? 'Save here'}
             defaultOwnerId={source?.ownerId}
             defaultMountId={source?.mountId}
             onConfirm={async (location) => {

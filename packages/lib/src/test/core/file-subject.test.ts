@@ -82,18 +82,6 @@ function mailSubject(name: string, mimeType: string): FileSubject {
     return subjectFromMailAttachment('owner-1', 'message-1', 0, { contentType: mimeType, filename: name, size: 1024 });
 }
 
-// A subject holding neither identity: there is no route to ask for a rendered preview.
-function bareSubject(name: string, mimeType: string): FileSubject {
-    return {
-        key: 'blob:1',
-        name,
-        mimeType,
-        size: 1024,
-        embedUrl: 'https://example.test/embed',
-        downloadUrl: 'https://example.test/download',
-    };
-}
-
 describe('getPreviewMode', () => {
     test('reads the mime the same way whatever holds the file', () => {
         for (const [name, mime, mode] of [
@@ -125,11 +113,6 @@ describe('getPreviewMode', () => {
             expect(getPreviewMode(subject('readme.md', 'text/markdown'))).toBe('text');
             expect(getPreviewMode(subject('team.vcf', 'text/vcard'))).toBe('vcard');
         }
-    });
-
-    test('a subject holding neither identity has nothing to render a preview from', () => {
-        expect(getPreviewMode(bareSubject('notes.txt', 'text/plain'))).toBe('fallback');
-        expect(getPreviewMode(bareSubject('team.vcf', 'text/vcard'))).toBe('fallback');
     });
 });
 
