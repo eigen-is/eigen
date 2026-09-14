@@ -472,7 +472,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 add: t.Optional(
                     t.Array(
                         t.Object({
-                            id: t.String(),
+                            id: t.String({ maxLength: MAX_EMAIL_LENGTH }),
                             read: t.Boolean(),
                             write: t.Boolean(),
                         }),
