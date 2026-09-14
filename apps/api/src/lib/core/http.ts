@@ -109,6 +109,38 @@ export function parseByteRange(
     return { start, end };
 }
 
+// The RFC 7233 response shape the three byte-range servers share (drive `serveFile`, the WebDAV GET,
+// the mail part routes): 416 with `bytes */size` for a parsed range the resource can't satisfy, 206 with
+// Content-Range + the slice length, the full body otherwise. Callers own their headers and their ETag/304
+// handling and pass only the byte source, whose `end` is exclusive because every reader here takes it that
+// way. Content-Length is set here on both bodies: a stream (S3) and an in-memory slice carry no length of
+// their own, and the resource size is the same number the range math above already trusts.
+export async function rangeResponse(
+    headers: Record<string, string>,
+    size: number,
+    range: string | null,
+    source: {
+        slice: (start: number, end: number) => BodyInit | Promise<BodyInit>;
+        full: () => BodyInit | Promise<BodyInit>;
+    },
+): Promise<Response> {
+    const parsed = parseByteRange(range, size);
+    if (parsed === 'unsatisfiable') {
+        return new Response(null, { status: 416, headers: { ...headers, 'Content-Range': `bytes */${size}` } });
+    }
+    if (parsed) {
+        return new Response(await source.slice(parsed.start, parsed.end + 1), {
+            status: 206,
+            headers: {
+                ...headers,
+                'Content-Length': String(parsed.end - parsed.start + 1),
+                'Content-Range': `bytes ${parsed.start}-${parsed.end}/${size}`,
+            },
+        });
+    }
+    return new Response(await source.full(), { status: 200, headers: { ...headers, 'Content-Length': String(size) } });
+}
+
 export function contentDisposition(type: 'attachment' | 'inline', fileName: string): string {
     const ascii = fileName.replace(/[^\x20-\x7E]/g, '_');
     const encoded = encodeURIComponent(fileName);

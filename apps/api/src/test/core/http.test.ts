@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parseByteRange, scriptableInlineHeaders } from '../../lib/core/http';
+import { parseByteRange, rangeResponse, scriptableInlineHeaders } from '../../lib/core/http';
 
 const SANDBOX_CSP = "sandbox; default-src 'none'";
 
@@ -50,5 +50,54 @@ describe('parseByteRange', () => {
         expect(parseByteRange('bytes=10-', 10)).toBe('unsatisfiable');
         expect(parseByteRange('bytes=5-2', 10)).toBe('unsatisfiable');
         expect(parseByteRange('bytes=0-0', 0)).toBe('unsatisfiable');
+    });
+});
+
+describe('rangeResponse', () => {
+    const BODY = new TextEncoder().encode('0123456789');
+    // The smallest source the three callers share: a slice reader (end exclusive) and a full-body reader.
+    const source = {
+        slice: (start: number, end: number) => BODY.slice(start, end),
+        full: () => BODY.slice(),
+    };
+    const headers = { 'Content-Type': 'text/plain', 'Accept-Ranges': 'bytes' };
+
+    test('serves the whole body as 200 with no Content-Range', async () => {
+        const res = await rangeResponse(headers, BODY.length, null, source);
+        expect(res.status).toBe(200);
+        expect(res.headers.get('Content-Type')).toBe('text/plain');
+        expect(res.headers.get('Content-Range')).toBeNull();
+        expect(res.headers.get('Content-Length')).toBe('10');
+        expect(await res.text()).toBe('0123456789');
+    });
+
+    test('serves a slice as 206 with Content-Range and the slice length', async () => {
+        const res = await rangeResponse(headers, BODY.length, 'bytes=2-5', source);
+        expect(res.status).toBe(206);
+        expect(res.headers.get('Content-Range')).toBe('bytes 2-5/10');
+        expect(res.headers.get('Content-Length')).toBe('4');
+        expect(res.headers.get('Accept-Ranges')).toBe('bytes');
+        expect(await res.text()).toBe('2345');
+    });
+
+    test('serves a suffix range as the last N bytes', async () => {
+        const res = await rangeResponse(headers, BODY.length, 'bytes=-3', source);
+        expect(res.status).toBe(206);
+        expect(res.headers.get('Content-Range')).toBe('bytes 7-9/10');
+        expect(await res.text()).toBe('789');
+    });
+
+    test('answers an unsatisfiable range with 416 and the resource size', async () => {
+        const res = await rangeResponse(headers, BODY.length, 'bytes=99-120', source);
+        expect(res.status).toBe(416);
+        expect(res.headers.get('Content-Range')).toBe('bytes */10');
+        expect(await res.text()).toBe('');
+    });
+
+    test('answers any range on a 0-byte resource with 416', async () => {
+        const empty = { slice: () => new Uint8Array(), full: () => new Uint8Array() };
+        const res = await rangeResponse(headers, 0, 'bytes=0-', empty);
+        expect(res.status).toBe(416);
+        expect(res.headers.get('Content-Range')).toBe('bytes */0');
     });
 });

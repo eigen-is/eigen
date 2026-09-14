@@ -43,7 +43,7 @@ Every mutating method goes through `assertWritable()` (lock check) and the conta
 |---|---|---|---|
 | `OPTIONS` | – | `apps/api/src/app.ts` | Advertises `DAV: 1, 2` and the `Allow` list. Handled before CORS. |
 | `PROPFIND` | 1 | `Drive.resolvePath`, `Drive.getFolderContents` | Depth 0/1 supported. Depth ∞ returns `403` with `<DAV:propfind-finite-depth>` (RFC 4918 §9.1). |
-| `GET` / `HEAD` | 1 | `Drive.readFile` (or `readRange` for `Range:`) | `bytes=N-M`, open-ended `bytes=N-`, suffix `bytes=-N` all supported. `If-Match` / `If-None-Match` honored in RFC 7232 §6 order. Bodies carry `X-Content-Type-Options: nosniff` (plus a sandbox CSP for html/xhtml/svg), matching REST `serveFile`. |
+| `GET` / `HEAD` | 1 | `Drive.readFile` (or `readRange` for `Range:`) | `bytes=N-M`, open-ended `bytes=N-`, suffix `bytes=-N` all supported — the 416/206/200 shape itself is the shared `rangeResponse` (`lib/core/http.ts`), which REST `serveFile` and the mail part routes answer with too. `If-Match` / `If-None-Match` honored in RFC 7232 §6 order. Bodies carry `X-Content-Type-Options: nosniff` (plus a sandbox CSP for html/xhtml/svg), matching REST `serveFile`. |
 | `PUT` | 1 | `Drive.createFileFromData` (new) / `Drive.writeFileContent` (overwrite) | Both stage the body to a tmp file with hashing before the insert. Quota pre-check via `Content-Length`. Thumbnails regenerate on overwrite. |
 | `DELETE` | 1 | `Drive.deletePath` (soft) | Goes to trash. `resolvePath` skips trashed rows so subsequent `GET`/`PROPFIND` returns 404. |
 | `MKCOL` | 1 | `Drive.createFolder` | Bodied `MKCOL` returns `415` (RFC 4918 §9.3.1). |
