@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { IMPORT_MAX_BYTES } from '../../constants/contact';
 import { DOCX_MIME, XLSX_MIME } from '../../constants/mime';
-import { fileActionsFor } from '../../core/file-actions';
+import { type FileActionId, fileActionsFor } from '../../core/file-actions';
 import { subjectFromPath } from '../../core/file-subject';
 import { type DrivePath, type DrivePathType, isFolderType, isVCardFile } from '../../types/drive';
 import type { FileSubject } from '../../types/file-subject';
@@ -45,19 +45,32 @@ function idsFor(item: DrivePath): string[] {
 }
 
 describe('fileActionsFor parity with the Drive item menu', () => {
-    const items = [
-        path({ name: 'Photos', type: 'folder', mimeType: 'folder' }),
-        path({ name: 'Notes.eigendoc', type: 'doc', mimeType: 'application/eigendoc' }),
-        path({ name: 'holiday.jpg', type: 'file', mimeType: 'image/jpeg' }),
-        path({ name: 'Budget.XLSX', type: 'file', mimeType: XLSX_MIME }),
-        path({ name: 'Report.docx', type: 'file', mimeType: DOCX_MIME }),
-        path({ name: 'team.vcf', type: 'file', mimeType: 'text/vcard' }),
+    // `answers` is where the registry deliberately answers differently from the menu's gates: every
+    // widening and narrowing is named here, so neither can happen by accident.
+    const items: { item: DrivePath; answers?: Partial<Record<FileActionId, boolean>> }[] = [
+        { item: path({ name: 'Photos', type: 'folder', mimeType: 'folder' }) },
+        { item: path({ name: 'Notes.eigendoc', type: 'doc', mimeType: 'application/eigendoc' }) },
+        { item: path({ name: 'holiday.jpg', type: 'file', mimeType: 'image/jpeg' }) },
+        { item: path({ name: 'Budget.XLSX', type: 'file', mimeType: XLSX_MIME }) },
+        { item: path({ name: 'Report.docx', type: 'file', mimeType: DOCX_MIME }) },
+        { item: path({ name: 'team.vcf', type: 'file', mimeType: 'text/vcard' }) },
+        // Wider than the menu, which reads the extension alone: an .xlsx that lost its name still
+        // converts, the way a mail part named `attachment` would.
+        {
+            item: path({ name: 'budget', type: 'file', mimeType: XLSX_MIME }),
+            answers: { 'convert-to-sheet': true },
+        },
+        // Narrower than the menu, which offers the row on a file the import answers with a 413.
+        {
+            item: path({ name: 'huge.vcf', type: 'file', mimeType: 'text/vcard', size: IMPORT_MAX_BYTES + 1 }),
+            answers: { 'import-contacts': false },
+        },
     ];
 
-    for (const item of items) {
+    for (const { item, answers } of items) {
         test(`${item.name} offers the menu's rows`, () => {
             const ids = idsFor(item);
-            for (const [id, expected] of Object.entries(menuGates(item))) {
+            for (const [id, expected] of Object.entries({ ...menuGates(item), ...answers })) {
                 expect({ name: item.name, id, applies: ids.includes(id) }).toEqual({
                     name: item.name,
                     id,
