@@ -59,8 +59,7 @@ export type TextPreviewMode = BytesTextPreviewMode | 'eigendoc' | 'eigenslides' 
 export const CANVAS_PREVIEW_WIDTH = 960;
 export const CANVAS_PREVIEW_HEIGHT = 540;
 
-// The ceiling a text preview is refused above, Drive and mail alike: the decode and the highlighter run on
-// the API event loop, per request. Over it the overlay shows the file card instead.
+// Above this a text preview is refused, Drive and mail alike: decode + highlight run on the API event loop per request.
 export const TEXT_PREVIEW_MAX_BYTES = 1024 * 1024;
 
 export function getExtension(fileName: string): string {

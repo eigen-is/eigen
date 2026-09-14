@@ -71,8 +71,7 @@ export function getPreviewMode(subject: FileSubject): PreviewMode {
     const container = subject.drive !== undefined && isCollabType(subject.drive.type);
     const textMode = container ? getTextPreviewMode(mime, subject.name) : getBytesTextPreviewMode(mime, subject.name);
     if (textMode === null) return 'fallback';
-    // Past the ceiling the text routes serve nothing, so the panel would only 404. A container's size is its
-    // databases, not the body it renders from them.
+    // Past the ceiling the text routes serve nothing; a container's size is its databases, not its body.
     if (!container && subject.size > TEXT_PREVIEW_MAX_BYTES) return 'fallback';
     return 'text';
 }
