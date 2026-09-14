@@ -137,10 +137,9 @@ export const app = new Elysia({
 
     .onError(({ error, set, code, request }) => {
         if (code === 'VALIDATION') return;
-        const err = error as Error;
-        if (err instanceof ApiError) {
-            set.status = err.status;
-            if (err.status === 401) {
+        if (error instanceof ApiError) {
+            set.status = error.status;
+            if (error.status === 401) {
                 const pathname = new URL(request.url).pathname;
                 if (pathname.startsWith('/dav')) {
                     set.headers['WWW-Authenticate'] = 'Basic realm="Eigen DAV"';
@@ -148,9 +147,9 @@ export const app = new Elysia({
                     set.headers['WWW-Authenticate'] = 'Basic realm="Eigen Drive"';
                 }
             }
-            return err.message;
+            return error.message;
         }
-        console.error('API Error:', err);
+        console.error('API Error:', error);
         set.status = 500;
         return 'Internal server error';
     })

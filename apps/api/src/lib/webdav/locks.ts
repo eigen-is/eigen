@@ -1,5 +1,6 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
+import { XML_CONTENT_TYPE } from '../dav/xml';
 import { getSharedDrive } from '../drive/get-drive';
 import type { Lock, LockManager, LockScope } from '../drive/lock-manager';
 import { LOCK_DEFAULT_TTL_MS, parseIfHeaderTokens } from '../drive/lock-manager';
@@ -34,8 +35,9 @@ export function assertWritable(
     }
 }
 
-// RFC 4918 §14.17 owner element. Accept both prefixed (<D:owner>) and default-namespace
-// (<owner xmlns="DAV:">) shapes — curl's example bodies use the latter.
+// Regex, not a parser: the owner element is opaque client XML we echo back verbatim (escaped), and a
+// structural parse would reshape it. RFC 4918 §14.17. Accept both prefixed (<D:owner>) and
+// default-namespace (<owner xmlns="DAV:">) shapes — curl's example bodies use the latter.
 function extractLockOwner(body: string): string | undefined {
     const match = body.match(/<(?:[A-Za-z][\w]*:)?owner(?:\s[^>]*)?>([\s\S]*?)<\/(?:[A-Za-z][\w]*:)?owner>/i);
     return match?.[1].trim() || undefined;
@@ -52,7 +54,7 @@ function buildLockResponse(lock: Lock): Response {
     return new Response(body, {
         status: 200,
         headers: {
-            'Content-Type': 'application/xml; charset=utf-8',
+            'Content-Type': XML_CONTENT_TYPE,
             'Lock-Token': `<${lock.token}>`,
         },
     });
@@ -74,7 +76,7 @@ export async function handleLock(args: {
     if (!path) throw new ApiError(404, 'Not found');
 
     const ttlMs = parseTimeoutHeader(timeoutHeader);
-    const depth: 0 | 'infinity' = depthHeader === '0' ? 0 : 'infinity';
+    const depth: Lock['depth'] = depthHeader === '0' ? 0 : 'infinity';
 
     // RFC 4918 §9.10.2: empty body + If header refreshes an existing lock token.
     if (!body.trim() && ifHeader) {

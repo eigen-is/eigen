@@ -1,14 +1,15 @@
+import { escapeXml } from '@workspace/lib/html';
 import { type DrivePath, isContainerType } from '@workspace/lib/types/drive';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { getMountQuotaState } from '../config/enforcement';
 import { ApiError } from '../core/errors';
+import { davError } from '../dav/xml';
+import { asNode } from '../dav/xml-node';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
 import { isHiddenName } from './container-overlay';
-import { buildXmlResponse, encodeHref, escapeXml, multistatus, propstatOk, resourceProps, response } from './xml';
-
-const FINITE_DEPTH_BODY = `<?xml version="1.0" encoding="utf-8"?>
-<D:error xmlns:D="DAV:"><D:propfind-finite-depth/></D:error>`;
+import { encodeHref } from './path';
+import { buildXmlResponse, multistatus, propstatStatus, resourceProps, response } from './xml';
 
 const propfindParser = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true });
 
@@ -21,8 +22,7 @@ function validatePropfindBody(body: string): void {
     if (validation !== true) {
         throw new ApiError(400, 'Malformed XML');
     }
-    const parsed = propfindParser.parse(trimmed) as Record<string, unknown>;
-    if (!('propfind' in parsed)) {
+    if (!('propfind' in asNode(propfindParser.parse(trimmed)))) {
         throw new ApiError(400, 'Expected <propfind> root element');
     }
 }
@@ -58,10 +58,7 @@ export async function handleResourcePropfind(args: {
     validatePropfindBody(body);
 
     if (depth === 'infinity') {
-        return new Response(FINITE_DEPTH_BODY, {
-            status: 403,
-            headers: { 'Content-Type': 'application/xml; charset=utf-8' },
-        });
+        return davError(403, '<D:propfind-finite-depth/>');
     }
 
     const drive = await getSharedDrive(ownerId, user);
@@ -70,37 +67,30 @@ export async function handleResourcePropfind(args: {
 
     const baseHref = `/webdav/${encodeHref(ownerId)}/${encodeHref(mountId)}`;
     const isCollection = isContainerType(path.type);
+
+    const rowResponse = (href: string, rowPath: DrivePath, quotaUsed?: number, quotaAvailable?: number): string =>
+        response(href, [
+            propstatStatus(200, 'OK', [
+                ...resourceProps({
+                    path: rowPath,
+                    isCollection: isContainerType(rowPath.type),
+                    quotaUsed,
+                    quotaAvailable,
+                    locks: drive.lockManager.listForPath(rowPath.id),
+                }),
+                ...deadPropsXml(rowPath),
+            ]),
+        ]);
+
     const responses: string[] = [];
 
     if (isCollection) {
         const { used, max } = await getMountQuotaState(ownerId, user.id, mountId);
         responses.push(
-            response(`${baseHref}${withTrailingSlash(encodeHref(pathStr))}`, [
-                propstatOk([
-                    ...resourceProps({
-                        path,
-                        isCollection: true,
-                        quotaUsed: used,
-                        quotaAvailable: Math.max(0, max - used),
-                        locks: drive.lockManager.listForPath(path.id),
-                    }),
-                    ...deadPropsXml(path),
-                ]),
-            ]),
+            rowResponse(`${baseHref}${encodeHref(withTrailingSlash(pathStr))}`, path, used, Math.max(0, max - used)),
         );
     } else {
-        responses.push(
-            response(`${baseHref}${encodeHref(pathStr)}`, [
-                propstatOk([
-                    ...resourceProps({
-                        path,
-                        isCollection: false,
-                        locks: drive.lockManager.listForPath(path.id),
-                    }),
-                    ...deadPropsXml(path),
-                ]),
-            ]),
-        );
+        responses.push(rowResponse(`${baseHref}${encodeHref(pathStr)}`, path));
     }
 
     if (isCollection && depth === '1') {
@@ -110,18 +100,7 @@ export async function handleResourcePropfind(args: {
             if (isHiddenName(child.name)) continue;
             const childIsCollection = isContainerType(child.type);
             const childPath = `${parentHref}${child.name}${childIsCollection ? '/' : ''}`;
-            responses.push(
-                response(`${baseHref}${encodeHref(childPath)}`, [
-                    propstatOk([
-                        ...resourceProps({
-                            path: child,
-                            isCollection: childIsCollection,
-                            locks: drive.lockManager.listForPath(child.id),
-                        }),
-                        ...deadPropsXml(child),
-                    ]),
-                ]),
-            );
+            responses.push(rowResponse(`${baseHref}${encodeHref(childPath)}`, child));
         }
     }
 

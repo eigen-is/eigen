@@ -1,10 +1,14 @@
-import { XMLParser } from 'fast-xml-parser';
+import { escapeXml } from '@workspace/lib/html';
+import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { ApiError } from '../core/errors';
+import { isNcName } from '../dav/propfind';
+import { asNode, isXmlNode } from '../dav/xml-node';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
 import { enclosingDocumentContainer } from './container-guard';
 import { assertWritable } from './locks';
-import { buildXmlResponse, encodeHref, escapeXml, multistatus, propstatOk, propstatStatus, response } from './xml';
+import { encodeHref } from './path';
+import { buildXmlResponse, multistatus, propstatStatus, response } from './xml';
 
 // RFC 4918 §15 classifies these as live properties: their values are derived from
 // the resource itself (size, mtime, etag, locks, quota) or controlled by the
@@ -62,7 +66,7 @@ function resolveNamespace(prefix: string, attrs: Record<string, string>, default
 function* iterPropChildren(
     propBlock: unknown,
 ): IterableIterator<{ tag: string; value: string; attrs: Record<string, string> }> {
-    if (!propBlock || typeof propBlock !== 'object') return;
+    if (!isXmlNode(propBlock)) return;
     for (const [tag, raw] of Object.entries(propBlock)) {
         if (tag.startsWith('@_') || tag === '#text') continue;
         const entries = Array.isArray(raw) ? raw : [raw];
@@ -71,27 +75,29 @@ function* iterPropChildren(
                 yield { tag, value: '', attrs: {} };
                 continue;
             }
-            if (typeof entry !== 'object') {
+            if (!isXmlNode(entry)) {
                 yield { tag, value: String(entry), attrs: {} };
                 continue;
             }
-            const obj = entry as Record<string, unknown>;
             const attrs: Record<string, string> = {};
-            for (const [k, v] of Object.entries(obj)) {
+            for (const [k, v] of Object.entries(entry)) {
                 if (k.startsWith('@_')) attrs[k] = String(v);
             }
-            const value = '#text' in obj ? String(obj['#text']) : '';
+            const value = '#text' in entry ? String(entry['#text']) : '';
             yield { tag, value, attrs };
         }
     }
 }
 
 function extractPropOps(body: string): PropOp[] {
-    if (!body?.trim()) return [];
-    const parsed = parser.parse(body) as Record<string, unknown>;
+    const trimmed = body.trim();
+    if (!trimmed) return [];
+    // fxp is lenient: a truncated body still yields ops. Validate first, like PROPFIND does.
+    if (XMLValidator.validate(trimmed) !== true) throw new ApiError(400, 'Malformed XML');
+    const parsed = asNode(parser.parse(trimmed));
     const rootKey = Object.keys(parsed).find((k) => stripPrefix(k).local === 'propertyupdate');
     if (!rootKey) return [];
-    const root = parsed[rootKey] as Record<string, unknown>;
+    const root = asNode(parsed[rootKey]);
 
     const docAttrs: Record<string, string> = {};
     for (const [k, v] of Object.entries(root)) {
@@ -109,23 +115,19 @@ function extractPropOps(body: string): PropOp[] {
         if (verb !== 'set' && verb !== 'remove') continue;
         const entries = Array.isArray(raw) ? raw : [raw];
         for (const entry of entries) {
-            if (!entry || typeof entry !== 'object') continue;
+            if (!isXmlNode(entry)) continue;
             const propKey = Object.keys(entry).find((pk) => stripPrefix(pk).local === 'prop');
             if (!propKey) continue;
-            for (const child of iterPropChildren((entry as Record<string, unknown>)[propKey])) {
+            for (const child of iterPropChildren(entry[propKey])) {
                 const { prefix, local } = stripPrefix(child.tag);
+                // The name is persisted and echoed as an element; fxp accepts names XML forbids.
+                if (!isNcName(local)) throw new ApiError(400, `Invalid property name: ${local}`);
                 const namespace = resolveNamespace(prefix, { ...docAttrs, ...child.attrs }, 'DAV:');
                 ops.push({ op: verb, namespace, name: local, value: child.value });
             }
         }
     }
     return ops;
-}
-
-function renderPropElement(op: PropOp): string {
-    const safe = escapeXml(op.name);
-    if (op.namespace === 'DAV:') return `<D:${safe}/>`;
-    return `<X:${safe} xmlns:X="${escapeXml(op.namespace)}"/>`;
 }
 
 export async function handleProppatch(args: {
@@ -155,7 +157,9 @@ export async function handleProppatch(args: {
     let mutated = false;
     const propstats: string[] = [];
     for (const op of ops) {
-        const propEl = renderPropElement(op);
+        const safeName = escapeXml(op.name);
+        const propEl =
+            op.namespace === 'DAV:' ? `<D:${safeName}/>` : `<X:${safeName} xmlns:X="${escapeXml(op.namespace)}"/>`;
         if (op.namespace === 'DAV:' && PROTECTED_PROPS.has(op.name)) {
             propstats.push(propstatStatus(403, 'Forbidden', [propEl]));
             continue;
@@ -170,7 +174,7 @@ export async function handleProppatch(args: {
             webdavProps = webdavProps.filter((_, i) => i !== idx);
             mutated = true;
         }
-        propstats.push(propstatOk([propEl]));
+        propstats.push(propstatStatus(200, 'OK', [propEl]));
     }
     if (mutated) {
         await drive.updatePathDetails(mountId, path.id, {

@@ -4,10 +4,10 @@ import { ApiError } from '../core/errors';
 import { readBoundedBody } from '../core/http';
 import { handleLock, handleUnlock } from './locks';
 import { handleCopy, handleMove } from './move-copy';
+import { decodeHref } from './path';
 import { handleResourcePropfind } from './propfind';
 import { handleProppatch } from './proppatch';
 import { handleDelete, handleGet, handleMkcol, handlePut } from './resource';
-import { decodeHref } from './xml';
 
 // Default-to-`infinity` matches RFC 4918: when Depth is omitted, it defaults to infinity.
 // handleResourcePropfind then returns 403 with propfind-finite-depth, which is correct.

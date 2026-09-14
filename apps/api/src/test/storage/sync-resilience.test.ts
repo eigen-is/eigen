@@ -188,6 +188,8 @@ describe('Phase 1b — write-behind upload pipeline', () => {
         await m1.mount.closeDatabase(dataDbId);
         await m1.mount.drainPendingUploads({ flushNow: true });
         expect(await countBackingRows(m1.mount, dataDbId, TEST_DIR)).toBeNull(); // not in "S3"
+        // The process the restart replaces is gone: its retry timer must not race mount 2's queue.
+        await m1.mount.closeAllDatabases();
 
         // Mount 2: a "restart" sharing the same baseDir + object store; outage still ongoing.
         const m2 = createS3Mount('crash-staging');
@@ -214,6 +216,9 @@ describe('Phase 1b — write-behind upload pipeline', () => {
         await m1.mount.closeDatabase(dataDbId);
         await m1.mount.drainPendingUploads({ flushNow: true });
         expect(m1.mount.pendingUploadCount).toBeGreaterThan(0);
+        // The dead process retries nothing. Left open, its jittered retry lands between m2's uploads
+        // and backs a row off into the future, so m2's drain ends with that row still pending.
+        await m1.mount.closeAllDatabases();
 
         // Restart with a healthy backend: init() reconciles + kicks the drain.
         const m2 = createS3Mount('reconcile');

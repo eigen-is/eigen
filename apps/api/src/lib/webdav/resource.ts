@@ -6,10 +6,7 @@ import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
 import { enclosingDocumentContainer } from './container-guard';
 import { assertWritable } from './locks';
-
-function mimeTypeFromName(name: string): string {
-    return Bun.file(name).type || 'application/octet-stream';
-}
+import { splitParentAndName } from './path';
 
 // If-Match only — RFC 7232 requires STRONG comparison here (no W/ strip); If-None-Match
 // uses the shared weak matcher etagMatches.
@@ -103,19 +100,13 @@ export async function handlePut(args: {
         throw new ApiError(409, 'Cannot PUT over a collection');
     }
 
-    const lastSlash = pathStr.lastIndexOf('/');
-    const parentStr = pathStr.slice(0, lastSlash) || '/';
-    const name = pathStr.slice(lastSlash + 1).normalize('NFC');
+    const { parentStr, name } = splitParentAndName(pathStr);
     if (!name) throw new ApiError(400, 'Missing file name');
 
     const parent = await drive.resolvePath(mountId, parentStr);
     if (!parent) throw new ApiError(409, 'Parent not found');
 
-    // One breadcrumb fetch covers both checks. For an existing PUT, "is the
-    // file inside a container?" — the file itself isn't, only its ancestors
-    // matter (includeSelf=false). For a new PUT, "are writes INTO parent
-    // blocked?" — parent itself counts (includeSelf=true). The lock check
-    // (RFC 4918 §6.2 depth-infinity) uses the same breadcrumb either way.
+    // One breadcrumb, for the guard and the RFC 4918 §6.2 lock check: parent counts on create, ancestors on overwrite.
     const breadcrumb = existing
         ? await drive.breadCrumb(mountId, existing.id)
         : await drive.breadCrumb(mountId, parent.id);
@@ -141,9 +132,10 @@ export async function handlePut(args: {
         await enforceMountQuota(ownerId, user.id, mountId, contentLength, existing?.size ?? 0);
     }
 
+    const mimeType = Bun.file(name).type || 'application/octet-stream';
     const path = existing
         ? await drive.writeFileContent(mountId, existing.id, data, user)
-        : await drive.createFileFromData(mountId, parent.id, name, mimeTypeFromName(name), data, user);
+        : await drive.createFileFromData(mountId, parent.id, name, mimeType, data, user);
 
     return new Response(null, {
         status: existing ? 204 : 201,
@@ -170,9 +162,7 @@ export async function handleMkcol(args: {
         return new Response(null, { status: 405 });
     }
 
-    const lastSlash = pathStr.lastIndexOf('/');
-    const parentStr = pathStr.slice(0, lastSlash) || '/';
-    const name = pathStr.slice(lastSlash + 1).normalize('NFC');
+    const { parentStr, name } = splitParentAndName(pathStr);
     if (!name) throw new ApiError(400, 'Missing folder name');
 
     const parent = await drive.resolvePath(mountId, parentStr);
