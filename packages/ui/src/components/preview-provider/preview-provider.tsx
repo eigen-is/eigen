@@ -2,26 +2,18 @@ import type { FileSubject } from '@workspace/lib/types/file-subject';
 import type React from 'react';
 import { useCallback, useState } from 'react';
 import { FilePreview } from '../drive/file-preview';
-import type { PreviewOptions } from './preview-context';
 import { PreviewContext, useOptionalPreview, usePreview } from './preview-context';
 
-// The context object and the usePreview/useOptionalPreview hooks live in the
-// feature-tree-free ./preview-context leaf so Dialog can read the preview flag
-// without importing this module. Re-exported here so existing consumers keep their
-// import path.
+// The hooks live in the feature-tree-free ./preview-context leaf so Dialog can read the preview flag.
 export { useOptionalPreview, usePreview };
 
-type PreviewState = {
-    subject: FileSubject;
-    siblings: FileSubject[];
-    attachment: boolean;
-};
+type PreviewState = { subject: FileSubject; siblings: FileSubject[] };
 
 export function PreviewProvider({ children }: { children: React.ReactNode }) {
     const [preview, setPreview] = useState<PreviewState | null>(null);
 
-    const openPreview = useCallback((subject: FileSubject, siblings?: FileSubject[], options?: PreviewOptions) => {
-        setPreview({ subject, siblings: siblings || [], attachment: options?.attachment ?? false });
+    const openPreview = useCallback((subject: FileSubject, siblings?: FileSubject[]) => {
+        setPreview({ subject, siblings: siblings || [] });
     }, []);
 
     const updatePreview = useCallback((subject: FileSubject) => {

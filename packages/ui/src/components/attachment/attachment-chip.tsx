@@ -35,7 +35,7 @@ export function AttachmentChip({
             onClick={(e) => {
                 if (subject) {
                     e.preventDefault();
-                    openPreview(subject, subjectsOf(siblingFileNames), { attachment: true });
+                    openPreview(subject, subjectsOf(siblingFileNames));
                 }
             }}
         />

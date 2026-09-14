@@ -65,7 +65,7 @@ export function CardDialog({
     const { contextMenu: chipMenu, bind } = useAttachmentChipMenu<FileSubject>(subjectOf);
     const attachmentSubjects = useMemo(() => subjectsOf(card?.attachments), [card?.attachments, subjectsOf]);
     // The card's own attachments are the siblings, so a quick look from here keeps its Save all row.
-    const runner = useFileActionRunner(chipMenu.item, attachmentSubjects, { attachment: true });
+    const runner = useFileActionRunner(chipMenu.item, attachmentSubjects);
 
     if (!card) return null;
 

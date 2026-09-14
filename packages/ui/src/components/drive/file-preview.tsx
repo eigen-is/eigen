@@ -16,15 +16,13 @@ import { MailVCardPreviewContent, VCardPreviewContent } from './vcard-preview-co
 type FilePreviewProps = {
     subject: FileSubject;
     siblings: FileSubject[];
-    // The siblings are one container's attachments: a set to save as a whole, not only a list to page through.
-    attachment: boolean;
     onClose: () => void;
     onPrev: () => void;
     onNext: () => void;
 };
 
-export function FilePreview({ subject, siblings, attachment, onClose, onPrev, onNext }: FilePreviewProps) {
-    const runner = useFileActionRunner(subject, siblings, { attachment });
+export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: FilePreviewProps) {
+    const runner = useFileActionRunner(subject, siblings);
     const { drive } = subject;
     const previewMode = getPreviewMode(subject);
     // The transcode route is a Drive item's alone; anything else previews the bytes it embeds.
@@ -175,7 +173,7 @@ export function FilePreview({ subject, siblings, attachment, onClose, onPrev, on
                         {action.label}
                     </FooterActionButton>
                 ))}
-                {attachment && downloadableSiblings.length >= 2 && (
+                {subject.attachment && downloadableSiblings.length >= 2 && (
                     <FooterActionButton
                         onClick={() => runner.openPicker(downloadableSiblings)}
                         disabled={runner.isPending}

@@ -1,6 +1,5 @@
 import { expect, test } from 'bun:test';
-import type { FileAction, FileActionId } from '@workspace/lib/file-actions';
-import type { FileSubject } from '@workspace/lib/types/file-subject';
+import type { FileAction, FileSubject } from '@workspace/lib/types/file-subject';
 import { installHappyDom } from '../../happy-dom';
 
 installHappyDom();
@@ -17,9 +16,11 @@ const subject: FileSubject = {
     size: 2048,
     embedUrl: 'https://example.test/embed',
     downloadUrl: 'https://example.test/download',
+    mail: { ownerId: 'owner-1', messageId: 'message-1', index: 0 },
+    attachment: true,
 };
 
-async function openMenu(props: { subject: FileSubject | null; exclude?: readonly FileActionId[] }) {
+async function openMenu(props: { subject: FileSubject | null }) {
     const ran: FileAction[] = [];
     const runner = {
         subject: props.subject,
@@ -37,11 +38,7 @@ async function openMenu(props: { subject: FileSubject | null; exclude?: readonly
             createElement(
                 DropdownMenu,
                 { open: true },
-                createElement(
-                    DropdownMenuContent,
-                    null,
-                    createElement(FileActionMenuItems, { runner, exclude: props.exclude }),
-                ),
+                createElement(DropdownMenuContent, null, createElement(FileActionMenuItems, { runner })),
             ),
         );
     });
@@ -58,13 +55,6 @@ async function openMenu(props: { subject: FileSubject | null; exclude?: readonly
 test('draws every row the registry allows, in its order', async () => {
     const { labels, cleanup } = await openMenu({ subject });
     expect(labels).toEqual(['Quick preview', 'Download', 'Save to Drive…', 'Import to Contacts']);
-    await cleanup();
-});
-
-test('exclude drops a row', async () => {
-    const { labels, cleanup } = await openMenu({ subject, exclude: ['save-to-drive'] });
-    expect(labels).not.toContain('Save to Drive…');
-    expect(labels).toContain('Download');
     await cleanup();
 });
 

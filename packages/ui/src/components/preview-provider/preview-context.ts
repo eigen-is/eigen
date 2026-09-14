@@ -6,14 +6,8 @@ import { createContext, useContext } from 'react';
 // whole Drive feature tree (FilePreview → DriveLocationPicker → Dialog) and closes
 // an import cycle back onto Dialog. This file must import nothing from that tree.
 
-export type PreviewOptions = { attachment?: boolean };
-
 export type PreviewContextValue = {
-    // `attachment` marks the subjects as one container's attachments rather than files at a Drive
-    // location: a set to act on as a whole, drawing "Save all (n)", and a set whose Drive copies sit
-    // in a hidden media folder, so a convert saves to a folder the user picks before it runs. A Drive
-    // listing handing over its whole folder for navigation passes nothing.
-    openPreview: (subject: FileSubject, siblings?: FileSubject[], options?: PreviewOptions) => void;
+    openPreview: (subject: FileSubject, siblings?: FileSubject[]) => void;
     updatePreview: (subject: FileSubject) => void;
     closePreview: () => void;
     isPreviewOpen: boolean;

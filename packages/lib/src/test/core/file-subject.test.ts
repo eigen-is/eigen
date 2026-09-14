@@ -130,6 +130,7 @@ describe('subjectFromMailAttachment', () => {
             embedUrl: getMailAttachmentEmbedUrl('owner-1', 'msg-1', 2, 'invoice.pdf'),
             downloadUrl: getMailAttachmentUrl('owner-1', 'msg-1', 2, 'invoice.pdf'),
             mail: { ownerId: 'owner-1', messageId: 'msg-1', index: 2 },
+            attachment: true,
         });
     });
 

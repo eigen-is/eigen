@@ -353,7 +353,6 @@ export const driveRouter = new Elysia({ name: 'drive' })
         async ({ params, user, set }) => {
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
-            // Refused before the bytes are read, not after: the gate is the mail preview's too.
             assertVCardPreviewable(path.name, path.mimeType || '', path.size);
 
             const result = await getVCardPreview(mount, path);

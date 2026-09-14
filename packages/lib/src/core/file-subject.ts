@@ -1,6 +1,6 @@
 import { BROWSER_IMAGE_MIMES, getTextPreviewMode, isExiftoolExtension } from '../constants/preview';
 import { type DrivePath, isVCardFile } from '../types/drive';
-import type { FileSubject } from '../types/file-subject';
+import type { FileSubject, PreviewMode } from '../types/file-subject';
 import { type Attachment, mailAttachmentName } from '../types/mail';
 import {
     getDriveDownloadUrl,
@@ -44,10 +44,9 @@ export function subjectFromMailAttachment(
         embedUrl: getMailAttachmentEmbedUrl(ownerId, messageId, index, name),
         downloadUrl: getMailAttachmentUrl(ownerId, messageId, index, name),
         mail: { ownerId, messageId, index },
+        attachment: true,
     };
 }
-
-export type PreviewMode = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'vcard' | 'fallback';
 
 // A Drive image is resized by /preview; any other <img> shows the original bytes, so only a browser-decodable
 // mime is an image. Text and vCard previews are served for Drive files and mail parts alike (PREVIEWS.md).

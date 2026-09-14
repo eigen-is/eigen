@@ -11,14 +11,14 @@ export function useAttachmentSubjects(
     mountId: string,
     mediaFolderId: string | null,
 ): {
-    subjectOf: (name: string | null | undefined) => FileSubject | undefined;
+    subjectOf: (name: string | null) => FileSubject | undefined;
     subjectsOf: (attachments: readonly ChatAttachment[] | null | undefined) => FileSubject[];
 } {
     const { findByName } = useFolderLookup(ownerId, mountId, mediaFolderId);
     const subjectOf = useCallback(
-        (name: string | null | undefined) => {
+        (name: string | null) => {
             const path = name ? findByName(name) : undefined;
-            return path && subjectFromPath(path);
+            return path && { ...subjectFromPath(path), attachment: true as const };
         },
         [findByName],
     );

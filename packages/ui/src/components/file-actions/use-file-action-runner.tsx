@@ -3,13 +3,12 @@ import { onMutationError } from '@workspace/lib/api-error';
 import { useImportContacts, useImportContactsFromDrive } from '@workspace/lib/contacts';
 import { triggerDownload } from '@workspace/lib/download';
 import { useConvertDocument } from '@workspace/lib/drive';
-import type { FileAction } from '@workspace/lib/file-actions';
 import type { ConvertTarget, DrivePath } from '@workspace/lib/types/drive';
-import type { FileSubject } from '@workspace/lib/types/file-subject';
+import type { FileAction, FileSubject } from '@workspace/lib/types/file-subject';
 import { type ReactNode, useState } from 'react';
 import { ProgressDialog } from '../drive/progress-dialog';
 import { SaveToDrivePicker } from '../drive/save-to-drive-picker';
-import { type PreviewOptions, usePreview } from '../preview-provider/preview-context';
+import { usePreview } from '../preview-provider/preview-context';
 
 export type FileActionRunner = {
     // The menu draws its rows from the subject the runner acts on, so a host can never pair two.
@@ -27,11 +26,7 @@ export type FileActionRunner = {
 type PickerState = { subjects: FileSubject[]; convert?: { targetType: ConvertTarget; label: string } };
 
 // A host whose subject is state (the right-clicked chip or row) passes null while there is none.
-export function useFileActionRunner(
-    subject: FileSubject | null,
-    siblings?: FileSubject[],
-    options?: PreviewOptions,
-): FileActionRunner {
+export function useFileActionRunner(subject: FileSubject | null, siblings?: FileSubject[]): FileActionRunner {
     const { openPreview } = usePreview();
     const convertDocument = useConvertDocument();
     const importContactsFromDrive = useImportContactsFromDrive();
@@ -56,8 +51,7 @@ export function useFileActionRunner(
 
     const convert = (targetType: ConvertTarget, label: string) => {
         if (!subject) return;
-        // An attachment's Drive path sits in a container's hidden media folder: save where the user picks, then convert that.
-        if (!subject.drive || options?.attachment) openPicker([subject], { targetType, label });
+        if (!subject.drive || subject.attachment) openPicker([subject], { targetType, label });
         else convertPath(subject.drive, targetType);
     };
 
@@ -87,7 +81,7 @@ export function useFileActionRunner(
         if (!subject) return;
         switch (action.id) {
             case 'quick-look':
-                openPreview(subject, siblings, options);
+                openPreview(subject, siblings);
                 return;
             case 'download':
                 if (subject.downloadUrl) triggerDownload(subject.downloadUrl);

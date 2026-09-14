@@ -37,7 +37,7 @@ export function ReadAttachments({ emailId, attachments }: ReadAttachmentsProps) 
     const { contextMenu, bind } = useAttachmentChipMenu<FileSubject>(chipSubject);
     // The message's own parts are the siblings, so a quick look from here pages through them and
     // keeps its "Save all" row.
-    const runner = useFileActionRunner(contextMenu.item, subjects, { attachment: true });
+    const runner = useFileActionRunner(contextMenu.item, subjects);
 
     if (!user || subjects.length === 0) return null;
 
@@ -52,7 +52,7 @@ export function ReadAttachments({ emailId, attachments }: ReadAttachmentsProps) 
                         downloadUrl={subject.downloadUrl}
                         onClick={(e) => {
                             e.preventDefault();
-                            openPreview(subject, subjects, { attachment: true });
+                            openPreview(subject, subjects);
                         }}
                     />
                 ))}
