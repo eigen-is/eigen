@@ -20,6 +20,9 @@ export function isReservedName(name: string): boolean {
 // biome-ignore lint/suspicious/noControlCharactersInRegex: matching control chars is the point
 export const CONTROL_CHARS = /[\x00-\x1f]/;
 
+// Filesystem ENAMETOOLONG is a byte limit, not a character limit.
+export const MAX_NAME_BYTES = 255;
+
 // One path segment and nothing else. Split out of validateName so an archived paths table can be
 // held to the same rule without throwing: a live row always passes (validateName wrote it), a row
 // that came in inside an uploaded archive has never been held to anything.
@@ -37,9 +40,8 @@ export function validateName(name: string): string {
     if (isReservedName(normalized)) {
         throw new ApiError(400, `"${name}" is a reserved name`);
     }
-    // Filesystem ENAMETOOLONG is a byte limit, not a character limit.
-    if (Buffer.byteLength(normalized, 'utf8') > 255) {
-        throw new ApiError(400, 'File or folder name too long (max 255 bytes)');
+    if (Buffer.byteLength(normalized, 'utf8') > MAX_NAME_BYTES) {
+        throw new ApiError(400, `File or folder name too long (max ${MAX_NAME_BYTES} bytes)`);
     }
     return normalized;
 }
