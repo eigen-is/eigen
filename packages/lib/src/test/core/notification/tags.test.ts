@@ -3,6 +3,7 @@ import {
     chatActivityTag,
     chatMentionTag,
     chatThreadKey,
+    commentAssignedTag,
     parseChatNotificationThread,
 } from '../../../core/notification/tags';
 
@@ -22,6 +23,11 @@ describe('chat notification tags', () => {
         );
     });
 
+    // Byte-identical to what the assignee PATCH route has always persisted, so existing rows still match.
+    test('an assignment is tagged with the card it points at', () => {
+        expect(commentAssignedTag(COMMENT)).toBe('assigned:owner-1:mount-1:doc-1:comment-123-abc.eigenchat');
+    });
+
     test('every tag parses back to the thread it was built from', () => {
         expect(parseChatNotificationThread('chat-message', chatActivityTag(CHAT))).toEqual({ ...CHAT });
         expect(parseChatNotificationThread('mention-chat', chatMentionTag(CHAT, 'bob@eigen.is'))).toEqual({ ...CHAT });
@@ -29,6 +35,7 @@ describe('chat notification tags', () => {
         expect(parseChatNotificationThread('mention-comment', chatMentionTag(COMMENT, 'bob@eigen.is'))).toEqual({
             ...COMMENT,
         });
+        expect(parseChatNotificationThread('assigned', commentAssignedTag(COMMENT))).toEqual({ ...COMMENT });
     });
 
     test('a tag of another kind is not a chat thread', () => {
@@ -42,6 +49,14 @@ describe('chat notification tags', () => {
         const other = { ...COMMENT, chatName: 'comment-456-def.eigenchat' };
         expect(chatThreadKey(COMMENT)).not.toBe(chatThreadKey(other));
         expect(chatThreadKey(COMMENT)).not.toBe(chatThreadKey({ pathId: COMMENT.pathId }));
+    });
+
+    // Opening the card clears the assignment: only the assignee is ever sent the row, so the reader
+    // that matches it is the assignee's own card.
+    test('an assignment shares the key of the card that clears it', () => {
+        const thread = parseChatNotificationThread('assigned', commentAssignedTag(COMMENT));
+        expect(thread && chatThreadKey(thread)).toBe(chatThreadKey(COMMENT));
+        expect(thread && chatThreadKey(thread)).not.toBe(chatThreadKey({ ...COMMENT, chatName: 'other.eigenchat' }));
     });
 
     // The bug this pins: the card passed the comment chat's own pathId, which no tag carries.
