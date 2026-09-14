@@ -1,5 +1,6 @@
 import { escapeXml } from '@workspace/lib/html';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { ApiError } from '../core/errors';
 import { computeEtag } from '../core/http';
 
 // Re-exported so this module's importers keep getting escapeXml from './xml'; the escape itself is
@@ -49,10 +50,14 @@ export function encodeHref(path: string): string {
 // segments. Elysia's wildcard params and URL.pathname both preserve percent-
 // encoding, so every entry point that converts a URL path to a name needs this.
 export function decodeHref(path: string): string {
-    return path
-        .split('/')
-        .map((seg) => decodeURIComponent(seg))
-        .join('/');
+    try {
+        return path
+            .split('/')
+            .map((seg) => decodeURIComponent(seg))
+            .join('/');
+    } catch {
+        throw new ApiError(400, 'Malformed percent-encoding in path');
+    }
 }
 
 export type LockProps = {

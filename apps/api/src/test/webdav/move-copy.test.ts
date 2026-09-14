@@ -125,4 +125,12 @@ describe('WebDAV MOVE/COPY', () => {
         expect(after.status).toBe(200);
         expect(await after.text()).toBe('keep');
     });
+
+    test('malformed percent-encoding in Destination → 400', async () => {
+        await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/move-badpct.txt`, { body: 'x' });
+        const res = await webdavRequest(ctx.alice.user.email, 'MOVE', `${baseHref}/move-badpct.txt`, {
+            headers: { Destination: `http://localhost${baseHref}/bad%E0.txt` },
+        });
+        expect(res.status).toBe(400);
+    });
 });
