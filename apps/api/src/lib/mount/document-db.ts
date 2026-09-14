@@ -169,17 +169,17 @@ async function buildDocumentDb<S extends SchemaType>(
                           // A VACUUM INTO copy of a managed database, so the queue holds it to the
                           // SQLite header check before the PUT (schema.ts, `isDatabase`).
                           mount.uploadQueue.enqueueStaged(currentKey, stagingPath, true);
+                          // The staged copy is the object ranges and HEAD are served against; the queue unlinks it only after its PUT.
+                          await syncDocumentDbSize(mount, pathId, stagingPath);
                       } else {
                           await mount.uploadFromTemp(currentKey, pathId);
+                          await syncDocumentDbSize(mount, pathId, localPath);
                       }
-                      await syncDocumentDbSize(mount, pathId, localPath);
                       await markContainerContentDirty(mount, pathId);
                   },
-                  // onClose runs after wal_checkpoint(TRUNCATE), so the final stat captures
-                  // any pages PASSIVE left in WAL. cleanupTemp is safe under async: the
-                  // staged copy (not the live temp) is the upload payload.
+                  // Re-stat only where the live file is the object; a queued row already matches its staged copy.
                   onClose: async (syncFailed) => {
-                      await syncDocumentDbSize(mount, pathId, localPath);
+                      if (!mount.uploadQueue) await syncDocumentDbSize(mount, pathId, localPath);
                       // A failed final sync means the temp is the only copy holding the tail —
                       // leave it as the Phase 1a unclean-shutdown marker (adopted + re-synced
                       // on the next open), never delete it.

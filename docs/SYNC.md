@@ -60,7 +60,9 @@ original design spec (`docs/PROPOSAL_SYNC_RESILIENCE.md`, removed once implement
 and is fixed; restated here in as-built terms so the references resolve:
 
 1. **The upload payload is a frozen `VACUUM INTO` staged copy**, captured at enqueue — never the live
-   temp DB.
+   temp DB. The db's `paths.size` is stat'd from that staged copy too (`syncDocumentDbSize`), so the row
+   matches the stored object that range requests and WebDAV HEAD are served against, not the larger live
+   file; on `local`/`local-key` the live file *is* the object and the row is stat'd from it.
 2. **Staged copies live in the dedicated per-mount `staging/` dir, which the `cleanupStaleFiles`
    startup sweep never touches**; a staged copy survives until its PUT acks, then it's deleted.
 3. **The sync watermark advances only on ack** — local bytes are never treated as synced (or
