@@ -316,7 +316,6 @@ function ProgressiveImage({
             )}
             {/* Full preview: loads in background, fades in on top when ready */}
             <img
-                key={previewUrl}
                 src={previewUrl}
                 alt={alt}
                 className="absolute inset-0 w-full h-full rounded object-contain transition-opacity duration-300"
