@@ -1,5 +1,6 @@
 import { triggerDownload } from '@workspace/lib/download';
 import { useCopyFiles } from '@workspace/lib/drive';
+import { subjectInfo } from '@workspace/lib/file-subject';
 import { useSaveMailAttachmentsToDrive } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
@@ -40,7 +41,8 @@ export function SaveToDrivePicker({ subjects, open, onClose, onSaved, title, con
         for (const timer of downloadTimers.current) clearTimeout(timer);
         downloadTimers.current = subjects.map((subject, i) =>
             setTimeout(() => {
-                if (subject.downloadUrl) triggerDownload(subject.downloadUrl);
+                const { downloadUrl } = subjectInfo(subject);
+                if (downloadUrl) triggerDownload(downloadUrl);
             }, i * 300),
         );
     };

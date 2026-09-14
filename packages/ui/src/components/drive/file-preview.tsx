@@ -2,7 +2,7 @@ import { useHotkey } from '@tanstack/react-hotkeys';
 import { getDriveItemUrl, getDrivePreviewUrl } from '@workspace/lib/api';
 import { useTextPreview } from '@workspace/lib/drive';
 import { fileActionsFor } from '@workspace/lib/file-actions';
-import { getPreviewMode } from '@workspace/lib/file-subject';
+import { getPreviewMode, subjectInfo } from '@workspace/lib/file-subject';
 import { useMailTextPreview } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileSubject, MailPartRef } from '@workspace/lib/types/file-subject';
@@ -25,14 +25,15 @@ type FilePreviewProps = {
 export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: FilePreviewProps) {
     const runner = useFileActionRunner(subject, siblings);
     const { drive } = subject;
+    const info = subjectInfo(subject);
     const previewMode = getPreviewMode(subject);
     // The transcode route is a Drive item's alone; anything else previews the bytes it embeds.
     const previewUrl = drive
         ? getDrivePreviewUrl(drive.ownerId, drive.mountId, drive.id, new Date(drive.updatedAt))
-        : subject.embedUrl;
+        : info.embedUrl;
     const aspectRatio =
         drive?.details?.width && drive.details.height ? drive.details.width / drive.details.height : undefined;
-    const index = siblings.findIndex((s) => s.key === subject.key);
+    const index = siblings.findIndex((sibling) => subjectInfo(sibling).key === info.key);
     const hasPrev = index > 0;
     const hasNext = index >= 0 && index < siblings.length - 1;
 
@@ -56,8 +57,8 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
     const overlayRef = useRef<HTMLDivElement>(null);
     useFocusTrap(overlayRef, !runner.isDialogOpen);
 
-    const openUrl = subject.drive ? getDriveItemUrl(subject.drive) : undefined;
-    const downloadableSiblings = siblings.filter((s) => !!s.downloadUrl);
+    const openUrl = drive ? getDriveItemUrl(drive) : undefined;
+    const downloadableSiblings = siblings.filter((sibling) => !!subjectInfo(sibling).downloadUrl);
 
     return (
         <div
@@ -65,7 +66,7 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
             data-preview-overlay
             role="dialog"
             aria-modal="true"
-            aria-label={subject.name}
+            aria-label={info.name}
             tabIndex={-1}
             className="fixed inset-0 z-[100] bg-black/80 flex flex-col animate-in fade-in outline-none"
             style={{ pointerEvents: 'auto' }}
@@ -80,7 +81,7 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex items-center gap-2 min-w-0">
-                    <span className="truncate text-sm font-medium">{subject.name}</span>
+                    <span className="truncate text-sm font-medium">{info.name}</span>
                 </div>
                 <div className="flex items-center gap-1">
                     <NavButton onClick={onPrev} disabled={!hasPrev} title="Previous (←)">
@@ -110,15 +111,15 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
                         // Keyed so a sibling never inherits the previous image's loaded flag or measured ratio.
                         <ProgressiveImage
                             key={previewUrl}
-                            thumbnailUrl={subject.thumbnailUrl}
+                            thumbnailUrl={info.thumbnailUrl}
                             previewUrl={previewUrl}
-                            alt={subject.name}
+                            alt={info.name}
                             aspectRatio={aspectRatio}
                         />
                     )}
                     {previewMode === 'video' && (
                         <video
-                            src={subject.embedUrl}
+                            src={info.embedUrl}
                             controls
                             autoPlay
                             className="max-w-full max-h-[calc(100vh-7rem)] rounded"
@@ -127,29 +128,26 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
                     )}
                     {previewMode === 'audio' && (
                         <div className="bg-background rounded-lg p-8 flex flex-col items-center gap-4">
-                            <span className="text-sm text-muted-foreground">{subject.name}</span>
-                            <audio src={subject.embedUrl} controls autoPlay className="w-80" />
+                            <span className="text-sm text-muted-foreground">{info.name}</span>
+                            <audio src={info.embedUrl} controls autoPlay className="w-80" />
                         </div>
                     )}
                     {previewMode === 'pdf' && (
-                        <iframe
-                            src={subject.embedUrl}
-                            className="w-[80vw] h-[calc(100vh-7rem)] rounded bg-background"
-                        />
+                        <iframe src={info.embedUrl} className="w-[80vw] h-[calc(100vh-7rem)] rounded bg-background" />
                     )}
                     {/* One shape from Drive and mail; the identity picks the query, one hook per component. */}
-                    {previewMode === 'text' && subject.drive && <TextPreviewContent path={subject.drive} />}
+                    {previewMode === 'text' && drive && <TextPreviewContent path={drive} />}
                     {previewMode === 'text' && subject.mail && <MailTextPreviewContent part={subject.mail} />}
-                    {previewMode === 'vcard' && subject.drive && <VCardPreviewContent path={subject.drive} />}
+                    {previewMode === 'vcard' && drive && <VCardPreviewContent path={drive} />}
                     {previewMode === 'vcard' && subject.mail && (
-                        <MailVCardPreviewContent part={subject.mail} size={subject.size} />
+                        <MailVCardPreviewContent part={subject.mail} size={info.size} />
                     )}
                     {previewMode === 'fallback' && (
                         <div className="flex flex-col items-center gap-4 text-white">
-                            {getFileIcon(subject.mimeType, subject.drive?.type ?? 'file', subject.name, {
+                            {getFileIcon(info.mimeType, drive?.type ?? 'file', info.name, {
                                 className: 'size-16 text-muted-foreground',
                             })}
-                            <span className="text-lg font-medium">{subject.name}</span>
+                            <span className="text-lg font-medium">{info.name}</span>
                             <span className="text-sm text-muted-foreground">No preview available</span>
                         </div>
                     )}

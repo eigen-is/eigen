@@ -7,7 +7,7 @@ import {
     getMailAttachmentEmbedUrl,
     getMailAttachmentUrl,
 } from '../../core/api';
-import { getPreviewMode, subjectFromMailAttachment, subjectFromPath } from '../../core/file-subject';
+import { getPreviewMode, subjectFromMailAttachment, subjectFromPath, subjectInfo } from '../../core/file-subject';
 import type { DrivePath, DrivePathType } from '../../types/drive';
 import type { FileSubject } from '../../types/file-subject';
 
@@ -32,12 +32,22 @@ function path(p: Partial<DrivePath> & { name: string; type: DrivePathType }): Dr
     };
 }
 
-describe('subjectFromPath', () => {
-    test('carries the item identity and the URLs the preview overlay requests', () => {
-        const item = path({ name: 'holiday.jpg', type: 'file', thumbnail: 'thumb-1.webp' });
-        const subject = subjectFromPath(item);
+function driveInfo(p: Partial<DrivePath> & { name: string; type: DrivePathType }) {
+    return subjectInfo(subjectFromPath(path(p)));
+}
 
-        expect(subject).toEqual({
+describe('subjectFromPath', () => {
+    test('stores the Drive path alone', () => {
+        const item = path({ name: 'holiday.jpg', type: 'file', thumbnail: 'thumb-1.webp' });
+        expect(subjectFromPath(item)).toEqual({ drive: item });
+    });
+});
+
+describe('subjectInfo on a Drive item', () => {
+    test('derives the item identity and the URLs the preview overlay requests', () => {
+        const item = path({ name: 'holiday.jpg', type: 'file', thumbnail: 'thumb-1.webp' });
+
+        expect(subjectInfo(subjectFromPath(item))).toEqual({
             key: 'drive:owner-1:mount-1:path-1',
             name: 'holiday.jpg',
             mimeType: 'image/jpeg',
@@ -45,33 +55,32 @@ describe('subjectFromPath', () => {
             embedUrl: getDriveEmbedUrl('owner-1', 'mount-1', 'path-1', 'holiday.jpg', item.updatedAt),
             downloadUrl: getDriveDownloadUrl('owner-1', 'mount-1', 'path-1', item.updatedAt),
             thumbnailUrl: getDriveThumbnailUrl('owner-1', 'mount-1', 'thumb-1.webp', item.updatedAt),
-            drive: item,
         });
     });
 
     test('keys siblings apart by id', () => {
-        const a = subjectFromPath(path({ name: 'a.jpg', type: 'file' }));
-        const b = subjectFromPath(path({ name: 'b.jpg', type: 'file', id: 'path-2' }));
+        const a = driveInfo({ name: 'a.jpg', type: 'file' });
+        const b = driveInfo({ name: 'b.jpg', type: 'file', id: 'path-2' });
         expect(a.key).not.toBe(b.key);
     });
 
     test('has no thumbnail URL when the item has no thumbnail', () => {
-        expect(subjectFromPath(path({ name: 'notes.txt', type: 'file' })).thumbnailUrl).toBeUndefined();
+        expect(driveInfo({ name: 'notes.txt', type: 'file' }).thumbnailUrl).toBeUndefined();
     });
 
     test('offers bytes for a plain file only', () => {
-        expect(subjectFromPath(path({ name: 'holiday.jpg', type: 'file' })).downloadUrl).toBeDefined();
-        expect(subjectFromPath(path({ name: 'Photos', type: 'folder' })).downloadUrl).toBeUndefined();
-        expect(subjectFromPath(path({ name: 'Notes.eigendoc', type: 'doc' })).downloadUrl).toBeUndefined();
+        expect(driveInfo({ name: 'holiday.jpg', type: 'file' }).downloadUrl).toBeDefined();
+        expect(driveInfo({ name: 'Photos', type: 'folder' }).downloadUrl).toBeUndefined();
+        expect(driveInfo({ name: 'Notes.eigendoc', type: 'doc' }).downloadUrl).toBeUndefined();
     });
 
     test('cache-busts every URL with the item version', () => {
         const item = path({ name: 'holiday.jpg', type: 'file', thumbnail: 'thumb-1.webp' });
         const version = `v=${item.updatedAt.getTime()}`;
-        const subject = subjectFromPath(item);
-        expect(subject.embedUrl).toContain(version);
-        expect(subject.downloadUrl).toContain(version);
-        expect(subject.thumbnailUrl).toContain(version);
+        const info = subjectInfo(subjectFromPath(item));
+        expect(info.embedUrl).toContain(version);
+        expect(info.downloadUrl).toContain(version);
+        expect(info.thumbnailUrl).toContain(version);
     });
 });
 
@@ -144,41 +153,47 @@ describe('getPreviewMode', () => {
     });
 });
 
+const part = { contentType: 'application/pdf', filename: 'invoice.pdf', size: 1234 };
+
 describe('subjectFromMailAttachment', () => {
-    const part = { contentType: 'application/pdf', filename: 'invoice.pdf', size: 1234 };
+    test('stores the part reference, the part itself and nothing else', () => {
+        expect(subjectFromMailAttachment('owner-1', 'msg-1', 2, part)).toEqual({
+            mail: { ownerId: 'owner-1', messageId: 'msg-1', index: 2 },
+            part,
+            attachment: true,
+        });
+    });
+});
 
-    test('carries the part identity and the URLs the two mail byte routes answer on', () => {
-        const subject = subjectFromMailAttachment('owner-1', 'msg-1', 2, part);
-
-        expect(subject).toEqual({
+describe('subjectInfo on a mail part', () => {
+    test('derives the part identity and the URLs the two mail byte routes answer on', () => {
+        expect(subjectInfo(subjectFromMailAttachment('owner-1', 'msg-1', 2, part))).toEqual({
             key: 'mail:owner-1:msg-1:2',
             name: 'invoice.pdf',
             mimeType: 'application/pdf',
             size: 1234,
             embedUrl: getMailAttachmentEmbedUrl('owner-1', 'msg-1', 2, 'invoice.pdf'),
             downloadUrl: getMailAttachmentUrl('owner-1', 'msg-1', 2, 'invoice.pdf'),
-            mail: { ownerId: 'owner-1', messageId: 'msg-1', index: 2 },
-            attachment: true,
         });
     });
 
     test('names a filename-less part the way the server does', () => {
-        const subject = subjectFromMailAttachment('owner-1', 'msg-1', 1, { contentType: 'image/png', size: 9 });
-        expect(subject.name).toBe('attachment-2');
-        expect(subject.downloadUrl).toContain('attachment-2');
+        const info = subjectInfo(
+            subjectFromMailAttachment('owner-1', 'msg-1', 1, { contentType: 'image/png', size: 9 }),
+        );
+        expect(info.name).toBe('attachment-2');
+        expect(info.downloadUrl).toContain('attachment-2');
     });
 
     // The reader hides calendar parts but still addresses the parts around them by their raw index.
     test('keys on the raw part index, gaps included', () => {
-        const first = subjectFromMailAttachment('owner-1', 'msg-1', 0, part);
-        const third = subjectFromMailAttachment('owner-1', 'msg-1', 2, part);
+        const first = subjectInfo(subjectFromMailAttachment('owner-1', 'msg-1', 0, part));
+        const third = subjectInfo(subjectFromMailAttachment('owner-1', 'msg-1', 2, part));
         expect(first.key).not.toBe(third.key);
-        expect(third.mail).toEqual({ ownerId: 'owner-1', messageId: 'msg-1', index: 2 });
+        expect(third.key).toBe('mail:owner-1:msg-1:2');
     });
 
-    test('has no Drive path and no thumbnail', () => {
-        const subject = subjectFromMailAttachment('owner-1', 'msg-1', 0, part);
-        expect(subject.drive).toBeUndefined();
-        expect(subject.thumbnailUrl).toBeUndefined();
+    test('has no thumbnail', () => {
+        expect(subjectInfo(subjectFromMailAttachment('owner-1', 'msg-1', 0, part)).thumbnailUrl).toBeUndefined();
     });
 });

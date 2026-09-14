@@ -1,6 +1,6 @@
 # Proposal: one preview and one action list for every file-ish thing
 
-> **TLDR**: Four surfaces hold files a user can act on: Drive items, mail attachments (MIME parts inside a Maildir `.eml`), chat attachments and comment-card attachments (both Drive files in a container's media folder). Three of the four are already `DrivePath`s, so quick-look works there. Mail attachments have no quick-look at all, because the only mail byte route forces `application/octet-stream` and an attachment disposition, and the preview overlay only accepts a `DrivePath`. Which actions a file offers is decided separately in every menu: Drive's menu gates "Convert to Sheet" on an `.xlsx` name, chat's chip menu has one row, mail's chip has none. This proposal adds three small seams and one route. A `FileSubject` (name, mime, size, URLs, optional `DrivePath`) that the overlay consumes instead of `DrivePath`. A `FILE_ACTIONS` registry in `packages/lib` that answers "what can be done with this file" once, rendered by one `FileActionMenuItems` in Drive's menu, the chat and mail chip menus, the card dialog and the overlay footer. One `SaveToDrivePicker` replacing three hand-wired ones. On the backend, one inline mail byte route that serves a part with its real content type. No route is removed, no hook changes shape, Drive-to-Drive copy is untouched. An action that needs bytes from a non-Drive source fetches them in the browser, because every byte-accepting route already exists. Contacts import, already two routes, becomes one registry entry that dispatches on the subject, so Drive, mail, chat and the cards all offer it.
+> **TLDR**: Four surfaces hold files a user can act on: Drive items, mail attachments (MIME parts inside a Maildir `.eml`), chat attachments and comment-card attachments (both Drive files in a container's media folder). Three of the four are already `DrivePath`s, so quick-look works there. Mail attachments have no quick-look at all, because the only mail byte route forces `application/octet-stream` and an attachment disposition, and the preview overlay only accepts a `DrivePath`. Which actions a file offers is decided separately in every menu: Drive's menu gates "Convert to Sheet" on an `.xlsx` name, chat's chip menu has one row, mail's chip has none. This proposal adds three small seams and one route. A `FileSubject` (a `DrivePath`, or a mail part reference and the part) that the overlay consumes instead of `DrivePath`, with `subjectInfo(subject)` deriving the name, the mime, the size and the URLs. A `FILE_ACTIONS` registry in `packages/lib` that answers "what can be done with this file" once, rendered by one `FileActionMenuItems` in Drive's menu, the chat and mail chip menus, the card dialog and the overlay footer. One `SaveToDrivePicker` replacing three hand-wired ones. On the backend, one inline mail byte route that serves a part with its real content type. No route is removed, no hook changes shape, Drive-to-Drive copy is untouched. An action that needs bytes from a non-Drive source fetches them in the browser, because every byte-accepting route already exists. Contacts import, already two routes, becomes one registry entry that dispatches on the subject, so Drive, mail, chat and the cards all offer it.
 
 **Status (2026-09-14): implemented on branch `file-subject`, in four units. This file is the record of what shipped; [Decisions](#decisions) carries every ruling — D1–D12 from the design, D13 onward from the build.**
 
@@ -53,7 +53,17 @@
 `packages/lib/src/types/file-subject.ts`:
 
 ```ts
-export type FileSubject = {
+export type FileSubject = (
+    // Present: Open, text preview, exiftool transcode, aspect ratio, eigendoc handling
+    | { drive: DrivePath; mail?: undefined }
+    // What a mail write route needs, and the part's own facts, so nothing is fetched to name it
+    | { drive?: undefined; mail: MailPartRef; part: Pick<Attachment, 'contentType' | 'filename' | 'size'> }
+) & {
+    attachment?: true;        // a container's or a message's attachment, not a file at a Drive location
+};
+
+// What subjectInfo(subject) derives, in the one module that knows the routes.
+export type SubjectInfo = {
     key: string;              // identity for sibling matching: drive:{ownerId}:{mountId}:{id} or mail:{ownerId}:{messageId}:{index}
     name: string;             // for a Drive subject, path.name, so the overlay header is unchanged
     mimeType: string;
@@ -61,12 +71,10 @@ export type FileSubject = {
     embedUrl: string;
     downloadUrl?: string;     // absent when there are no raw bytes: a folder, an Eigen container
     thumbnailUrl?: string;
-    drive?: DrivePath;        // present: Open, text preview, exiftool transcode, aspect ratio, eigendoc handling
-    mail?: { ownerId: string; messageId: string; index: number };  // what a mail write route needs
 };
 ```
 
-Two builders in `packages/lib/src/core/file-subject.ts`, beside `file-presentation.ts`; a third, `subjectFromBlob`, waits on D12 and is described under [Exports](#exports). `subjectFromPath(path)` builds exactly the URLs the provider's memo builds today, cache-busted by `updatedAt`, thumbnail from `getDriveItemThumbnail`; `subjectFromMailAttachment(ownerId, messageId, index, att)` uses the new embed URL for `embedUrl`, the existing download URL for `downloadUrl`, no thumbnail, and `mailAttachmentName(att, index)` for `name`. URLs are stored on the subject because only these two functions build them. Nothing else in the codebase constructs a subject by hand.
+Two builders in `packages/lib/src/core/file-subject.ts`, beside `file-presentation.ts`; a third, `subjectFromBlob`, waits on D12 and is described under [Exports](#exports). `subjectFromPath(path)` is `{ drive: path }` and `subjectFromMailAttachment(ownerId, messageId, index, att)` is the part reference, the part and `attachment: true`; they are the named entry points because they are what the two identities are called. `subjectInfo(subject)` beside them derives the rest: the key, `path.name` or `mailAttachmentName(att, index)`, the mime, the size, the embed URL, a download URL for a plain file and either mail route, and a thumbnail URL from `path.thumbnail` — every Drive URL cache-busted by `updatedAt`. Nothing else in the codebase builds a subject or composes one of those routes.
 
 `previewUrl` (the server transcode) is not on the subject: it is `getDrivePreviewUrl(subject.drive)` inside the provider, because only a Drive subject has it and only the exiftool branch reads it.
 
@@ -91,14 +99,14 @@ export type FileAction = {
     id: FileActionId;
     label: string;
     icon: LucideIcon;
-    applies: (subject: FileSubject) => boolean;
+    applies: (info: SubjectInfo, subject: FileSubject) => boolean;
 };
 
 export const FILE_ACTIONS: readonly FileAction[];
 export function fileActionsFor(subject: FileSubject, exclude?: readonly FileActionId[]): FileAction[];
 ```
 
-`lucide-react` is already imported in `packages/lib/src/core/eigendoc-icons.ts`, so an icon on the entry follows precedent. Predicates: Quick Look applies to any non-folder; Download and Save to Drive to anything with a `downloadUrl` (on a Drive subject Save to Drive says what Copy to… says, so Drive's menu excludes it); Convert to Sheet to a name ending in `.xlsx` and Convert to Document to one ending in `.docx`, extension only, the gate the server itself applies (D34); Import to Contacts on `isVCardFile(mime, name)` under `IMPORT_MAX_BYTES`.
+`lucide-react` is already imported in `packages/lib/src/core/eigendoc-icons.ts`, so an icon on the entry follows precedent. `fileActionsFor` derives the info once and hands it to every predicate, so a menu costs one derivation, not one per row; the derived facts come first because only Quick Look and Save to Drive look at what holds the file. Predicates: Quick Look applies to any non-folder; Download and Save to Drive to anything with a `downloadUrl` (on a Drive subject Save to Drive says what Copy to… says, so Drive's menu excludes it); Convert to Sheet to a name ending in `.xlsx` and Convert to Document to one ending in `.docx`, extension only, the gate the server itself applies (D34); Import to Contacts on `isVCardFile(mime, name)` under `IMPORT_MAX_BYTES`.
 
 Order is the registry's order. `exclude` lets a menu drop a row that would say what one of its own rows says; it does not let a menu add a row the registry did not approve.
 
@@ -138,7 +146,7 @@ Both routes stay. `POST /contacts/:ownerId/import` takes vCard text in the reque
 
 ### Exports
 
-Every export is a direct download: Docs, Sheets and Slides export to docx, xlsx and pdf through `useExportDocument`, Contacts exports vCards through `useExportContacts`, and both fetch the bytes with credentials and hand the blob to `downloadBlob` (`packages/lib/src/core/download.ts`). The user never gets to choose Drive. Giving an export the same choice is D12, and it is not part of this program (D20): it is one row in `ROADMAP.md`. The shape it takes when it lands — a third builder, `subjectFromBlob(blob, name)`, wraps the response in an object URL (`embedUrl` and `downloadUrl` both `blob:`), takes the mime from the response and the name from `Content-Disposition` through `filenameFromDisposition`, and has no `drive`. The export hooks then run the registry's `download` and `save-to-drive` through `useFileActionRunner` instead of calling `downloadBlob`, so every export menu offers Save to Drive… beside Download; the upload goes through the existing multipart route (`useUploadFile`), since the bytes are already in the browser. The object URL is revoked when the picker closes or the download starts.
+Every export is a direct download: Docs, Sheets and Slides export to docx, xlsx and pdf through `useExportDocument`, Contacts exports vCards through `useExportContacts`, and both fetch the bytes with credentials and hand the blob to `downloadBlob` (`packages/lib/src/core/download.ts`). The user never gets to choose Drive. Giving an export the same choice is D12, and it is not part of this program (D20): it is one row in `ROADMAP.md`. The shape it takes when it lands — a third identity, built by `subjectFromBlob(blob, name)`, holding the object URL, the mime from the response and the name from `Content-Disposition` through `filenameFromDisposition`; `subjectInfo` hands those back as `embedUrl` and `downloadUrl` (both `blob:`), because an object URL is its own identity. The export hooks then run the registry's `download` and `save-to-drive` through `useFileActionRunner` instead of calling `downloadBlob`, so every export menu offers Save to Drive… beside Download; the upload goes through the existing multipart route (`useUploadFile`), since the bytes are already in the browser. The object URL is revoked when the picker closes or the download starts.
 
 ## Performance invariants
 
@@ -165,7 +173,7 @@ Four unit branches onto one integration branch, merged `--no-ff` in order. No pi
 
 ## Open questions
 
-1. **`subject.name` for a Drive file with an `originalName`.** The chip shows `details.originalName || name`, the overlay header shows `name`. The subject keeps `name`, so the overlay header reads the same on every surface; unifying the two is a separate one-line decision.
+1. **`subject.name` for a Drive file with an `originalName`.** The chip shows `details.originalName || name`, the overlay header shows `name`. `subjectInfo` derives `name` from the path, so the overlay header reads the same on every surface; unifying the two is a separate one-line decision.
 2. **Quick Look siblings in Drive's menu.** Each host maps the visible listing into subjects to build its runner. Whether the row should instead read that list from context is a later question.
 
 ## Decisions
@@ -173,7 +181,7 @@ Four unit branches onto one integration branch, merged `--no-ff` in order. No pi
 | # | Ruling | Why |
 |---|---|---|
 | D1 | No route consolidation, no resolver, no `/copy` removal. Hooks keep their names, shapes and request patterns. | Orthogonal to both goals. `/copy` is exercised by eight test files, and a four-hook migration is the riskiest part of that design. |
-| D2 | `FileSubject` stores its URLs and has exactly three builders: a Drive path, a mail attachment, an export blob. | Only three functions build a subject, so "derived data at nine call sites" no longer applies. Nine consumers reading four fields beats nine consumers calling a helper. |
+| D2 | `FileSubject` stores its identity alone — a `DrivePath`, or a mail part reference plus the part — and `subjectInfo(subject)` derives the key, the name, the mime, the size and the URLs. Three builders name the three identities: a Drive path, a mail attachment, an export blob. | One fact lives in one place. Storing the derived fields made a Drive subject repeat three of its path's fields and three URLs built from it, so a subject could disagree with the path it carried. A consumer that needs several fields destructures one `subjectInfo` call. |
 | D3 | The registry lives in `packages/lib` and is declarative; handlers live in one `packages/ui` hook. | Predicates are React-free and unit-testable; running an action needs the preview context, picker state and mutations. |
 | D4 | Drive's menu consumes the registry instead of its own rules. | Goal 2. A menu picks and places rows; it cannot add one. Save to Drive on a Drive item is Copy to…, which stays Drive's row. |
 | D5 | Client re-post only where no route exists: a vCard with no Drive path going into contacts. Mail into Drive, and a mail part on its way to a convert, keep the server-side route. | The bytes are capped at `IMPORT_MAX_BYTES`, and the alternative is a new backend seam for one action. Mail's route keeps validate-before-write for free. |

@@ -1,3 +1,4 @@
+import { subjectInfo } from '@workspace/lib/file-subject';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import type React from 'react';
 import { useCallback, useState } from 'react';
@@ -30,7 +31,8 @@ export function PreviewProvider({ children }: { children: React.ReactNode }) {
     const navigatePreview = useCallback((direction: -1 | 1) => {
         setPreview((prev) => {
             if (!prev || prev.siblings.length === 0) return prev;
-            const currentIdx = prev.siblings.findIndex((s) => s.key === prev.subject.key);
+            const key = subjectInfo(prev.subject).key;
+            const currentIdx = prev.siblings.findIndex((sibling) => subjectInfo(sibling).key === key);
             if (currentIdx === -1) return prev;
             const nextIdx = currentIdx + direction;
             if (nextIdx < 0 || nextIdx >= prev.siblings.length) return prev;

@@ -1,5 +1,5 @@
 import { useAuth } from '@workspace/lib/auth';
-import { subjectFromMailAttachment } from '@workspace/lib/file-subject';
+import { subjectFromMailAttachment, subjectInfo } from '@workspace/lib/file-subject';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import type { Attachment } from '@workspace/lib/types/mail';
 import { TooltipButton } from '@workspace/ui';
@@ -30,9 +30,11 @@ export function ReadAttachments({ emailId, attachments }: ReadAttachmentsProps) 
                 .map(({ att, index }) => subjectFromMailAttachment(ownerId, emailId, index, att)),
         [attachments, emailId, ownerId],
     );
+    // Each chip's derived facts once: the key a press resolves through, the name and the byte URL.
+    const chips = useMemo(() => subjects.map((subject) => ({ subject, info: subjectInfo(subject) })), [subjects]);
     const chipSubject = useCallback(
-        (key: string | null) => subjects.find((subject) => subject.key === key),
-        [subjects],
+        (key: string | null) => chips.find((chip) => chip.info.key === key)?.subject,
+        [chips],
     );
     const { contextMenu, bind } = useAttachmentChipMenu<FileSubject>(chipSubject);
     // The message's own parts are the siblings, so a quick look from here pages through them and
@@ -44,12 +46,12 @@ export function ReadAttachments({ emailId, attachments }: ReadAttachmentsProps) 
     return (
         <div className="flex items-center gap-2 mb-4" {...bind()}>
             <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
-                {subjects.map((subject) => (
+                {chips.map(({ subject, info }) => (
                     <SimpleAttachmentChip
-                        key={subject.key}
-                        attachmentKey={subject.key}
-                        filename={subject.name}
-                        downloadUrl={subject.downloadUrl}
+                        key={info.key}
+                        attachmentKey={info.key}
+                        filename={info.name}
+                        downloadUrl={info.downloadUrl}
                         onClick={(e) => {
                             e.preventDefault();
                             openPreview(subject, subjects);

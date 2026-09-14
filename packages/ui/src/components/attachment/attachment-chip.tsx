@@ -1,4 +1,5 @@
 import { useAttachmentSubjects } from '@workspace/lib/drive';
+import { subjectInfo } from '@workspace/lib/file-subject';
 import { usePreview } from '../preview-provider';
 import { SimpleAttachmentChip } from './simple-attachment-chip';
 
@@ -23,14 +24,15 @@ export function AttachmentChip({
 }: AttachmentChipProps) {
     const { subjectOf, subjectsOf } = useAttachmentSubjects(ownerId, mountId, mediaFolderId);
     const subject = subjectOf(fileName);
+    const info = subject && subjectInfo(subject);
     const { openPreview } = usePreview();
 
     return (
         <SimpleAttachmentChip
-            filename={subject?.drive?.details?.originalName || subject?.name || fileName}
+            filename={subject?.drive?.details?.originalName || info?.name || fileName}
             attachmentKey={fileName}
-            downloadUrl={subject?.downloadUrl ?? '#'}
-            thumbnailUrl={subject?.thumbnailUrl}
+            downloadUrl={info?.downloadUrl ?? '#'}
+            thumbnailUrl={info?.thumbnailUrl}
             onRemove={onRemove}
             onClick={(e) => {
                 if (subject) {

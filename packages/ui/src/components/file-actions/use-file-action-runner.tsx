@@ -2,6 +2,7 @@ import { openDocument } from '@workspace/lib/api';
 import { useImportContactsFromDrive, useImportContactsFromUrl } from '@workspace/lib/contacts';
 import { triggerDownload } from '@workspace/lib/download';
 import { useConvertDocument } from '@workspace/lib/drive';
+import { subjectInfo } from '@workspace/lib/file-subject';
 import type { ConvertTarget, DrivePath } from '@workspace/lib/types/drive';
 import type { FileAction, FileSubject } from '@workspace/lib/types/file-subject';
 import { type ReactNode, useState } from 'react';
@@ -56,7 +57,7 @@ export function useFileActionRunner(subject: FileSubject | null, siblings?: File
 
     const runImportContacts = () => {
         if (!subject) return;
-        const { drive, downloadUrl } = subject;
+        const { drive } = subject;
         if (drive) {
             importContactsFromDrive.mutate({
                 sourceOwnerId: drive.ownerId,
@@ -65,6 +66,7 @@ export function useFileActionRunner(subject: FileSubject | null, siblings?: File
             });
             return;
         }
+        const { downloadUrl } = subjectInfo(subject);
         if (!downloadUrl) return;
         importContactsFromUrl.mutate({ url: downloadUrl });
     };
@@ -75,9 +77,11 @@ export function useFileActionRunner(subject: FileSubject | null, siblings?: File
             case 'quick-look':
                 openPreview(subject, siblings);
                 return;
-            case 'download':
-                if (subject.downloadUrl) triggerDownload(subject.downloadUrl);
+            case 'download': {
+                const { downloadUrl } = subjectInfo(subject);
+                if (downloadUrl) triggerDownload(downloadUrl);
                 return;
+            }
             case 'save-to-drive':
                 openPicker([subject]);
                 return;

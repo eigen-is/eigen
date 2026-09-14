@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { IMPORT_MAX_BYTES } from '../../constants/contact';
 import { DOCX_MIME, XLSX_MIME } from '../../constants/mime';
 import { fileActionsFor } from '../../core/file-actions';
-import { subjectFromPath } from '../../core/file-subject';
+import { subjectFromMailAttachment, subjectFromPath } from '../../core/file-subject';
 import type { DrivePath, DrivePathType } from '../../types/drive';
 import type { FileActionId, FileSubject } from '../../types/file-subject';
 
@@ -88,17 +88,12 @@ describe('fileActionsFor on a Drive item', () => {
     });
 });
 
-describe('fileActionsFor on a subject without a Drive path', () => {
-    const subject: FileSubject = {
-        key: 'mail:owner-1:message-1:2',
-        name: 'invoice.pdf',
-        mimeType: 'application/pdf',
-        size: 2048,
-        embedUrl: 'https://example.test/embed',
-        downloadUrl: 'https://example.test/download',
-        mail: { ownerId: 'owner-1', messageId: 'message-1', index: 2 },
-        attachment: true,
-    };
+describe('fileActionsFor on an attachment subject', () => {
+    function mailSubject(part: { contentType: string; filename?: string; size: number }): FileSubject {
+        return subjectFromMailAttachment('owner-1', 'message-1', 2, part);
+    }
+
+    const subject = mailSubject({ contentType: 'application/pdf', filename: 'invoice.pdf', size: 2048 });
 
     test('a chat attachment is a Drive path that still saves to Drive: its copy sits in a hidden media folder', () => {
         const attachment: FileSubject = {
@@ -116,13 +111,17 @@ describe('fileActionsFor on a subject without a Drive path', () => {
         expect(fileActionsFor(subject).map((action) => action.id)).toEqual(['quick-look', 'download', 'save-to-drive']);
     });
 
-    test('nothing that needs bytes applies without a download URL', () => {
-        const noBytes: FileSubject = { ...subject, downloadUrl: undefined };
+    // A container has no bytes to hand out, wherever its copy sits: it is a directory of databases.
+    test('nothing that needs bytes applies to an attached container', () => {
+        const noBytes: FileSubject = {
+            ...subjectFromPath(path({ name: 'Notes.eigendoc', type: 'doc', mimeType: 'application/eigendoc' })),
+            attachment: true,
+        };
         expect(fileActionsFor(noBytes).map((action) => action.id)).toEqual(['quick-look']);
     });
 
     test('a vCard part imports to contacts on its name alone', () => {
-        const vcard: FileSubject = { ...subject, name: 'team.vcf', mimeType: 'application/octet-stream' };
+        const vcard = mailSubject({ contentType: 'application/octet-stream', filename: 'team.vcf', size: 2048 });
         expect(fileActionsFor(vcard).map((action) => action.id)).toContain('import-contacts');
     });
 });
