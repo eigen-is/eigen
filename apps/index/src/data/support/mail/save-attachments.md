@@ -21,8 +21,9 @@ choosing.
 The file opens in a preview over the message. Use the arrows at the top to step through the other attachments on
 the message, and press **Escape** to close it.
 
-Pictures, PDFs, video and sound play in the preview. Text files, Markdown files and contact files are shown there
-too: a `.vcf` reads as the contact cards it holds, not as its raw text. Anything else shows its name and an icon,
+Pictures, PDFs, video and sound play in the preview. Text and code files (such as `.txt`, `.md`, `.json`,
+`.yaml`) and contact files are shown there too: a `.vcf` reads as the contact cards it holds, not as its raw
+text. Anything else shows its name and an icon,
 with the same buttons along the bottom.
 
 Along the bottom of the preview are the things you can do with the file: **Download**, **Save to Drive…**, and,

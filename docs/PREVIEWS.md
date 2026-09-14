@@ -58,7 +58,8 @@ stale content after an inline edit.
 ## Text Previews
 
 `text-preview.ts` returns `{ body: string, mode: TextPreviewMode }`. Modes (defined in
-`packages/lib/src/constants/preview.ts`):
+`packages/lib/src/constants/preview.ts`, where `BytesTextPreviewMode` is the first three — the ones a
+file's own bytes render as):
 
 | Mode           | Rendering                                       |
 |----------------|-------------------------------------------------|
@@ -84,7 +85,7 @@ used by both previews and the docs editor.
 
 ## Mail Parts
 
-A mail part previews through the same renderers on its own bytes: `GET /mail/:ownerId/message/:id/attachment/:index/text-preview` and `.../vcard-preview` (`routes/mail.ts`) answer with `{ body, mode }` and the `VCardPreview` cards, the shapes the Drive routes answer with, so the same components render both. Both end in the one bytes-in entry point beside the cached ones — `getBytesTextPreview` and `getBytesVCardPreview` (`preview-cache.ts`) — which own the mode gate, the decode and the Worker job; Drive reaches the same renderers through `getOrCacheText`, a part reaches them directly, because a part has no version stamp to key a cache on. `assertVCardPreviewable` is the one `.vcf` gate both routes run (400 for a file the mime and name don't call a vCard, 413 past `IMPORT_MAX_BYTES`); Drive runs it on the row before reading the bytes, mail on the parsed part, whose size is not known until then. The responses are `private, no-cache` with the ETag the byte routes serve, so a rewritten draft revalidates rather than serving what it had ([MAIL.md](MAIL.md)). `useMailTextPreview` / `useMailVCardPreview` (`packages/lib/src/core/mail/hooks/use-attachment-preview.ts`) read them, keyed per owner, message and part index; the cards ride the no-revival treaty (`mailVCardPreviewRoute`) for the same reason the Drive cards do — a bare `YYYY-MM-DD` birthday must not become a `Date`.
+A mail part previews through the same renderers on its own bytes: `GET /mail/:ownerId/message/:id/attachment/:index/text-preview` and `.../vcard-preview` (`routes/mail.ts`) answer with `{ body, mode }` and the `VCardPreview` cards, the shapes the Drive routes answer with, so the same components render both. Both end in the one bytes-in entry point beside the cached ones — `getBytesTextPreview` and `getBytesVCardPreview` (`preview-cache.ts`) — which own the decode and the Worker job; Drive reaches the same renderers through `getOrCacheText`, a part reaches them directly, because a part has no version stamp to key a cache on. `getBytesTextPreview` owns the text mode gate (`getBytesVCardPreview` has none — the routes run `assertVCardPreviewable` before it), and it gates on `getBytesTextPreviewMode`, never `getTextPreviewMode`: an eigen mime is the uploader's or the sender's word, so loose bytes render — and are labelled — as what their name says, rather than being drawn inside the A4, slide or canvas frame their mime claims. `assertVCardPreviewable` is the one `.vcf` gate both routes run (400 for a file the mime and name don't call a vCard, 413 past `IMPORT_MAX_BYTES`); Drive runs it on the row before reading the bytes, mail on the parsed part, whose size is not known until then. The responses are `private, no-cache` with the ETag the byte routes serve, so a rewritten draft revalidates rather than serving what it had ([MAIL.md](MAIL.md)). `useMailTextPreview` / `useMailVCardPreview` (`packages/lib/src/core/mail/hooks/use-attachment-preview.ts`) read them, keyed per owner, message and part index; the cards ride the no-revival treaty (`mailVCardPreviewRoute`) for the same reason the Drive cards do — a bare `YYYY-MM-DD` birthday must not become a `Date`.
 
 ## Compact Previews vs Full Export
 
