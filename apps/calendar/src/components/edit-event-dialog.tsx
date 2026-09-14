@@ -235,6 +235,12 @@ export function EditEventDialog({
                         </DialogDescription>
                     </DialogHeader>
 
+                    {isLinkedEvent && (
+                        <p className="text-xs text-muted-foreground">
+                            You were invited to this event. Only the organizer can change its details.
+                        </p>
+                    )}
+
                     <EventFormFields
                         titlePlaceholder="Event title"
                         locationPlaceholder="Location"
@@ -263,6 +269,7 @@ export function EditEventDialog({
                         recurrenceStartDate={new Date(`${startDate}T00:00:00`)}
                         timezone={event.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone}
                         allDayId="edit-all-day"
+                        detailsDisabled={isLinkedEvent}
                         attendeesSection={
                             isLinkedEvent ? (
                                 event.data?.attendees?.length ? (

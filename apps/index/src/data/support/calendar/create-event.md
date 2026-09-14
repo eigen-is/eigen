@@ -5,7 +5,7 @@ type: how-to
 tags: [calendar, events, recurring, attendees]
 related: [calendar/get-started, calendar/invite-people, calendar/recurring-events]
 order: 30
-updated: 2026-09-13
+updated: 2026-09-14
 ---
 
 You can create an event from the sidebar or by clicking any day in the calendar, then fill in the
@@ -47,6 +47,10 @@ The **New Event** form opens as a dialog. Fill in the fields you need:
 2. Click the pencil icon in the bottom-left corner of the panel. The **Edit Event** dialog opens
    with all the same fields.
 3. Make your changes, then click **Save**.
+
+On an event someone else invited you to, the details are greyed out, because only the organiser can
+change them. You can still move it to a different calendar, and you can
+[respond to the invitation](/support/calendar/respond-to-invitation).
 
 ### Editing a recurring event
 
