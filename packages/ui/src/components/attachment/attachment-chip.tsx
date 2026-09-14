@@ -1,6 +1,5 @@
-import { getDriveDownloadUrl, getDriveItemThumbnail } from '@workspace/lib/api';
-import { useFolderLookup } from '@workspace/lib/drive';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { useAttachmentSubjects } from '@workspace/lib/drive';
+import { subjectInfo } from '@workspace/lib/file-subject';
 import { usePreview } from '../preview-provider';
 import { SimpleAttachmentChip } from './simple-attachment-chip';
 
@@ -23,29 +22,22 @@ export function AttachmentChip({
     siblingFileNames,
     onRemove,
 }: AttachmentChipProps) {
-    const { findByName } = useFolderLookup(ownerId, mountId, mediaFolderId);
-    const fileInfo = findByName(fileName);
+    const { subjectOf, subjectsOf } = useAttachmentSubjects(ownerId, mountId, mediaFolderId);
+    const subject = subjectOf(fileName);
+    const info = subject && subjectInfo(subject);
     const { openPreview } = usePreview();
-
-    const name = fileInfo?.details?.originalName || fileInfo?.name || fileName;
-    const downloadUrl = fileInfo ? getDriveDownloadUrl(ownerId, mountId, fileInfo.id, fileInfo.updatedAt) : '#';
-    const thumbnailUrl = fileInfo?.mimeType?.startsWith('image/')
-        ? getDriveItemThumbnail(fileInfo).thumbnailUrl
-        : undefined;
 
     return (
         <SimpleAttachmentChip
-            filename={name}
-            downloadUrl={downloadUrl}
-            thumbnailUrl={thumbnailUrl}
+            filename={subject?.drive?.details?.originalName || info?.name || fileName}
+            attachmentKey={fileName}
+            downloadUrl={info?.downloadUrl ?? '#'}
+            thumbnailUrl={info?.thumbnailUrl}
             onRemove={onRemove}
             onClick={(e) => {
-                if (fileInfo) {
+                if (subject) {
                     e.preventDefault();
-                    const siblings = siblingFileNames
-                        ?.map((n) => findByName(n))
-                        .filter((p): p is DrivePath => p !== undefined);
-                    openPreview(fileInfo, siblings, { downloadMode: 'save-to-drive' });
+                    openPreview(subject, subjectsOf(siblingFileNames));
                 }
             }}
         />

@@ -1,5 +1,6 @@
 import { useNavigate } from '@tanstack/react-router';
 import { openDocument } from '@workspace/lib/api';
+import { subjectFromPath } from '@workspace/lib/file-subject';
 import { type DrivePath, isDocumentType, isFolderType, isInlineEditable } from '@workspace/lib/types/drive';
 import { useLayout } from '../layout/app/layout-context';
 import { usePreview } from '../preview-provider';
@@ -34,7 +35,7 @@ export function useDriveListRoute({
     const { openPreview, updatePreview, isPreviewOpen } = usePreview();
 
     const onQuickLook = (path: DrivePath, sortedSiblings: DrivePath[]) => {
-        openPreview(path, sortedSiblings);
+        openPreview(subjectFromPath(path), sortedSiblings.map(subjectFromPath));
     };
 
     const onRowActivate = (path: DrivePath) => {
@@ -48,13 +49,13 @@ export function useDriveListRoute({
                 params: { ownerId: path.ownerId, mountId: path.mountId, pathId: path.id },
             });
         } else {
-            openPreview(path, items);
+            openPreview(subjectFromPath(path), items.map(subjectFromPath));
         }
     };
 
     const onRowSelect = (path: DrivePath) => {
         if (isPreviewOpen) {
-            updatePreview(path);
+            updatePreview(subjectFromPath(path));
         }
 
         if (isMobile && (isFolderType(path.type) || isDocumentType(path.type))) {

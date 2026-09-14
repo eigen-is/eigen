@@ -9,6 +9,9 @@ import { type MimePart, splitMime } from './split';
 // Parts rendered into the message body when inline; everything else is an attachment.
 const TEXT_TYPES = new Set(['text/plain', 'text/html', 'message/delivery-status']);
 
+// RFC 2045 token: the sender writes the charset and it ends up in a Content-Type header.
+const CHARSET_TOKEN = /^[\w.:+-]+$/;
+
 export function parseMail(bytes: Buffer): ParsedMail {
     const root = splitMime(bytes);
     const attachments: Attachment[] = [];
@@ -33,6 +36,7 @@ export function parseMail(bytes: Buffer): ParsedMail {
                         headers.contentDisposition.params['filename'] || headers.contentType.params['name'] || '',
                     ) || undefined;
                 const content = decodeTransfer(part.body, headers.transferEncoding);
+                const charset = headers.contentType.params['charset'];
                 const attachment: Attachment = {
                     contentType:
                         contentType === 'application/octet-stream' && filename
@@ -41,6 +45,7 @@ export function parseMail(bytes: Buffer): ParsedMail {
                     filename,
                     content,
                     size: content.length,
+                    ...(charset && CHARSET_TOKEN.test(charset) && { charset }),
                 };
                 if (attachment.contentType.startsWith('text/calendar')) {
                     const method = headers.contentType.params['method']?.toUpperCase();

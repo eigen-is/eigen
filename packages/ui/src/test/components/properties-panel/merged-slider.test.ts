@@ -1,50 +1,8 @@
-import { afterAll, expect, test } from 'bun:test';
-import { Window } from 'happy-dom';
+import { expect, test } from 'bun:test';
 import * as Y from 'yjs';
+import { installHappyDom } from '../../happy-dom';
 
-// react-dom needs a DOM to render into, and Radix's Slider needs a ResizeObserver and an rAF. The
-// globals are removed again in afterAll so later test files see the plain bun environment. Recipe:
-// the use-viewport test next door.
-const window = new Window({ url: 'http://localhost:3000' });
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-g.window = window;
-g.document = window.document;
-g.navigator = window.navigator;
-g.DOMRect = window.DOMRect;
-g.KeyboardEvent = window.KeyboardEvent;
-g.Event = window.Event;
-g.Element = window.Element;
-g.HTMLElement = window.HTMLElement;
-g.HTMLFormElement = window.HTMLFormElement;
-g.IS_REACT_ACT_ENVIRONMENT = true;
-class FakeResizeObserver {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-}
-g.ResizeObserver = FakeResizeObserver;
-g.requestAnimationFrame = (callback: () => void) => {
-    callback();
-    return 0;
-};
-g.cancelAnimationFrame = () => {};
-
-afterAll(() => {
-    g.window = undefined;
-    g.document = undefined;
-    g.navigator = undefined;
-    g.DOMRect = undefined;
-    g.KeyboardEvent = undefined;
-    g.Event = undefined;
-    g.Element = undefined;
-    g.HTMLElement = undefined;
-    g.HTMLFormElement = undefined;
-    g.ResizeObserver = undefined;
-    g.requestAnimationFrame = undefined;
-    g.cancelAnimationFrame = undefined;
-    g.IS_REACT_ACT_ENVIRONMENT = undefined;
-});
+const window = installHappyDom();
 
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');

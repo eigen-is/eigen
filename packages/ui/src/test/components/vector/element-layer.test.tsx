@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import {
     DEFAULT_ELEMENT_PROPS,
     ELEMENT_KINDS,
@@ -10,55 +10,18 @@ import {
     type VectorRichTextElement,
     type VectorShapeElement,
 } from '@workspace/lib/vector';
-import { Window } from 'happy-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ElementLayer, sameLayerProps } from '../../../components/vector/element-layer';
+import { installHappyDom } from '../../happy-dom';
 
-// The rich-text sanitizer parses with DOMParser and builds through document.createElement, and the
-// auto-fit tests mount the layer for real, so this file borrows a whole happy-dom window the way the
-// text-overlay test next door does and puts every global back afterwards.
-const window = new Window({ url: 'http://localhost:3000' });
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-const borrowed: string[] = [];
-for (const key of Object.getOwnPropertyNames(window)) {
-    // biome-ignore lint/suspicious/noExplicitAny: reading the happy-dom window's own globals
-    const value = (window as any)[key];
-    if (g[key] === undefined && value !== undefined) {
-        g[key] = value;
-        borrowed.push(key);
-    }
-}
-for (const key of ['DOMParser', 'Event', 'Node', 'Element', 'HTMLElement']) {
-    // biome-ignore lint/suspicious/noExplicitAny: reading the happy-dom window's own globals
-    g[key] = (window as any)[key];
-    borrowed.push(key);
-}
-g.window = window;
-g.document = window.document;
-g.navigator = window.navigator;
-g.IS_REACT_ACT_ENVIRONMENT = true;
-
-// The auto-fit re-measures on its ResizeObserver; happy-dom has none, so the test drives the callback
-// itself — that is how a measured body reaches the hook after the offsets are defined on it.
+// The auto-fit re-measures on its ResizeObserver; happy-dom never lays anything out, so the test
+// drives the callback itself — that is how a measured body reaches the hook after the offsets are
+// defined on it.
 let remeasure: (() => void) | null = null;
-class FakeResizeObserver {
-    constructor(callback: () => void) {
+installHappyDom({
+    onResizeObserver: (callback) => {
         remeasure = callback;
-    }
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-}
-g.ResizeObserver = FakeResizeObserver;
-
-afterAll(() => {
-    for (const key of borrowed) g[key] = undefined;
-    g.window = undefined;
-    g.document = undefined;
-    g.navigator = undefined;
-    g.ResizeObserver = undefined;
-    g.IS_REACT_ACT_ENVIRONMENT = undefined;
+    },
 });
 
 const { act } = await import('react');

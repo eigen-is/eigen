@@ -31,6 +31,8 @@ const Toaster = ({ ...props }: ToasterProps) => {
                     '--normal-border': 'var(--border)',
                 } as React.CSSProperties
             }
+            // A modal Radix dialog parks pointer-events: none on <body>; a toast raised while one is open must opt out.
+            toastOptions={{ style: { pointerEvents: 'auto' } }}
             {...props}
         />
     );

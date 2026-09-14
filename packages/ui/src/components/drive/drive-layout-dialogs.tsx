@@ -1,8 +1,7 @@
-import { getDriveDownloadUrl, openDocument } from '@workspace/lib/api';
+import { getDriveDownloadUrl } from '@workspace/lib/api';
 import { usePaletteSelectionActions } from '@workspace/lib/command-palette';
-import { useImportContactsFromDrive } from '@workspace/lib/contacts';
+import { triggerDownload } from '@workspace/lib/download';
 import {
-    useConvertDocument,
     useCopyPath,
     useDeletePaths,
     useDuplicatePath,
@@ -22,7 +21,6 @@ import { DriveEmailCollaborators } from './drive-email-collaborators';
 import { DriveLocationPicker } from './drive-location-picker';
 import { DriveRenameItem } from './drive-rename-item';
 import { DriveUploadFiles } from './drive-upload-files';
-import { ProgressDialog } from './progress-dialog';
 import { ExportProgressDialog, useDocumentExport } from './use-document-export';
 import { useDriveDialogs } from './use-drive-dialogs';
 
@@ -51,8 +49,6 @@ export function useDriveLayoutDialogs({
     const copyPath = useCopyPath();
     const duplicatePath = useDuplicatePath();
     const deletePathsMutation = useDeletePaths();
-    const convertMutation = useConvertDocument(ownerId, mountId);
-    const importContactsMutation = useImportContactsFromDrive();
     const isCoarsePointer = useIsCoarsePointer();
     const isEffectiveOwnerOf = useIsEffectiveOwnerOf();
     const { exportPath, isExporting } = useDocumentExport();
@@ -143,42 +139,10 @@ export function useDriveLayoutDialogs({
     );
 
     const handleDownloadPath = useCallback((path: DrivePath) => {
-        if (path?.type === 'file' && path.id) {
-            const downloadUrl = getDriveDownloadUrl(path.ownerId, path.mountId, path.id, path.updatedAt);
-            const a = document.createElement('a');
-            a.href = downloadUrl;
-            a.download = path.name || 'download';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+        if (path.type === 'file') {
+            triggerDownload(getDriveDownloadUrl(path.ownerId, path.mountId, path.id, path.updatedAt));
         }
     }, []);
-
-    const handleConvertPath = useCallback(
-        (path: DrivePath, targetType: 'eigensheets' | 'eigendoc') => {
-            if (!path.parentId) return;
-            convertMutation.mutate(
-                { pathId: path.id, targetType, parentId: path.parentId },
-                {
-                    onSuccess: (newPath) => {
-                        openDocument(newPath);
-                    },
-                },
-            );
-        },
-        [convertMutation],
-    );
-
-    const handleImportContacts = useCallback(
-        (path: DrivePath) => {
-            importContactsMutation.mutate({
-                sourceOwnerId: path.ownerId,
-                sourceMountId: path.mountId,
-                sourcePathId: path.id,
-            });
-        },
-        [importContactsMutation],
-    );
 
     const onDelete = capabilities.canDelete ? handleDeletePaths : undefined;
     const onRename = capabilities.canRename ? dialogs.rename.openDialog : undefined;
@@ -230,8 +194,6 @@ export function useDriveLayoutDialogs({
         onEmailCollaborators,
         onDownload: handleDownloadPath,
         onExport: exportPath,
-        onConvert: handleConvertPath,
-        onImportContacts: handleImportContacts,
         // Wiring consumed by <DriveLayoutDialogs> below.
         ownerId,
         mountId,
@@ -248,8 +210,6 @@ export function useDriveLayoutDialogs({
         },
         onPickDestination: handlePickDestination,
         isExporting,
-        isConverting: convertMutation.isPending,
-        convertTargetType: convertMutation.variables?.targetType,
     };
 }
 
@@ -352,10 +312,6 @@ export function DriveLayoutDialogs({ actions }: DriveLayoutDialogsProps) {
             />
 
             <ExportProgressDialog open={actions.isExporting} />
-            <ProgressDialog
-                open={actions.isConverting}
-                title={actions.convertTargetType === 'eigendoc' ? 'Converting to document' : 'Converting to sheet'}
-            />
         </>
     );
 }

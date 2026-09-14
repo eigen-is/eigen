@@ -6,14 +6,14 @@ category: Basics
 tags: [mail, email, reply, forward]
 related: [mail/compose-and-send, mail/get-started]
 order: 20
-updated: 2026-06-08
+updated: 2026-09-14
 ---
 
 Once an email arrives, you can read it, write back to the sender, write back to everyone on the thread, or pass it along to someone new. This page covers all four.
 
 ## Open a message
 
-Click any message in the list to open it. It opens in the reading pane next to the list, showing the sender, the date, the subject, and the full message. Any attachments appear above the message text.
+Click any message in the list to open it. It opens in the reading pane next to the list, showing the sender, the date, the subject, and the full message. Any attachments appear above the message text. Click one to preview it, or right-click it for the rest of its actions. See [Save an attachment to Drive](/support/mail/save-attachments).
 
 Opening a message marks it as read.
 

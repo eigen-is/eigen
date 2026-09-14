@@ -1,18 +1,24 @@
 import { useResolveCardAttachments } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
-import { useMediaResolver } from '@workspace/lib/drive';
+import { useAttachmentSubjects, useMediaResolver } from '@workspace/lib/drive';
 import type { ChatAttachment, CommentEntry } from '@workspace/lib/types/chat';
 import { isAttachmentReference } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
+import type { FileSubject } from '@workspace/lib/types/file-subject';
 import { Check, RotateCcw } from 'lucide-react';
+import { useMemo } from 'react';
 import { AttachmentChip } from '../attachment/attachment-chip';
 import { ReferenceAttachmentChip } from '../attachment/reference-attachment-chip';
 import { SimpleAttachmentChip } from '../attachment/simple-attachment-chip';
+import { useAttachmentChipMenu } from '../attachment/use-attachment-chip-menu';
 import { AssigneeChip } from '../comments/assignee-chip';
 import { AssigneePicker } from '../comments/assignee-picker';
 import { CommentThread } from '../comments/comment-thread';
 import { CreatedByMeta } from '../comments/created-by-meta';
+import { ContextMenuAnchor } from '../context-menu';
+import { FileActionMenuItems } from '../file-actions/file-action-menu-items';
+import { useFileActionRunner } from '../file-actions/use-file-action-runner';
 import { NoteCardDialog } from '../notes/note-card-dialog';
 import { CardForm } from './card-form';
 
@@ -54,6 +60,12 @@ export function CardDialog({
 }: CardDialogProps) {
     const { mediaFolderId } = useMediaResolver();
     const resolveAttachments = useResolveCardAttachments(ownerId, mountId, mediaFolderId);
+    const { subjectOf, subjectsOf } = useAttachmentSubjects(ownerId, mountId, mediaFolderId);
+    // A chip's file actions open on right-click, and on touch through the long-press the chips share.
+    const { contextMenu: chipMenu, bind } = useAttachmentChipMenu<FileSubject>(subjectOf);
+    const attachmentSubjects = useMemo(() => subjectsOf(card?.attachments), [card?.attachments, subjectsOf]);
+    // The card's own attachments are the siblings, so a quick look from here keeps its Save all row.
+    const runner = useFileActionRunner(chipMenu.item, attachmentSubjects);
 
     if (!card) return null;
 
@@ -177,7 +189,7 @@ export function CardDialog({
             onDescriptionChange={onUpdate ? (html) => onUpdate({ description: html }) : undefined}
             attachments={
                 card.attachments && card.attachments.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2" {...bind()}>
                         {card.attachments.map((attachment) =>
                             isAttachmentReference(attachment) ? (
                                 <ReferenceAttachmentChip key={`ref-${attachment.id}`} reference={attachment} />
@@ -194,6 +206,10 @@ export function CardDialog({
                                 <SimpleAttachmentChip key={`name-${attachment}`} filename={attachment} />
                             ),
                         )}
+                        <ContextMenuAnchor contextMenu={chipMenu} className="min-w-48">
+                            <FileActionMenuItems runner={runner} />
+                        </ContextMenuAnchor>
+                        {runner.dialogs}
                     </div>
                 ) : undefined
             }

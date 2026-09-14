@@ -46,8 +46,8 @@ export const api = treaty<app>(API_HOST, {
 
 // The one treaty without date revival: Eden's reviver matches a bare "1990-01-01" too, and a date-only
 // string turned into a Date shifts the day by timezone. Every route serving one reads through here —
-// contact birthdays, and the same birthdays on the Drive vCard preview. Deliberate break from the Date
-// wire convention, pinned by api.test.ts.
+// contact birthdays, and the same birthdays on the Drive vCard preview and the mail part's. Deliberate
+// break from the Date wire convention, pinned by api.test.ts.
 const plainApi = treaty<app>(API_HOST, {
     fetch: {
         credentials: 'include',
@@ -60,6 +60,10 @@ export const contactsApi = plainApi.contacts;
 // through the no-revival treaty, and reaching it by hand keeps every other drive route on `driveApi`.
 export const vcardPreviewRoute = (ownerId: string, mountId: string, pathId: string) =>
     plainApi.drive({ ownerId })({ mountId }).file({ pathId })['vcard-preview'];
+// The mail part beside it serves the same cards with the same bare birthdays, so it reads through the
+// same no-revival treaty.
+export const mailVCardPreviewRoute = (ownerId: string, messageId: string, index: number) =>
+    plainApi.mail({ ownerId }).message({ id: messageId }).attachment({ index }).preview.vcard;
 export const mailApi = api.mail;
 export const publicApi = api.p;
 export const driveApi = api.drive;
@@ -217,6 +221,13 @@ export const getMailMessageDownloadUrl = (ownerId: string, messageId: string) =>
     `${API_HOST}/mail/${ownerId}/message/${messageId}/download`;
 export const getMailAttachmentUrl = (ownerId: string, messageId: string, attachmentIndex: number, fileName: string) =>
     `${API_HOST}/mail/${ownerId}/message/${messageId}/attachment/${attachmentIndex}/${encodeURIComponent(fileName)}`;
+export const getMailAttachmentEmbedUrl = (
+    ownerId: string,
+    messageId: string,
+    attachmentIndex: number,
+    fileName: string,
+) =>
+    `${API_HOST}/mail/${ownerId}/message/${messageId}/attachment/${attachmentIndex}/embed/${encodeURIComponent(fileName)}`;
 export const getCollabAccessUrl = (ownerId: string, mountId: string, pathId: string) =>
     `${API_HOST}/collab/${ownerId}/${mountId}/${pathId}/access`;
 

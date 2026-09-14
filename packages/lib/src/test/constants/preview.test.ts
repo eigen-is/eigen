@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { getTextPreviewMode, isSearchableTextFile } from '../../constants/preview';
+import { getBytesTextPreviewMode, getTextPreviewMode, isSearchableTextFile } from '../../constants/preview';
 
 describe('isSearchableTextFile', () => {
     test('plaintext + markdown + code are searchable', () => {
@@ -31,5 +31,20 @@ describe('getTextPreviewMode', () => {
         expect(getTextPreviewMode('text/vcard', 'team.vcf')).toBeNull();
         expect(getTextPreviewMode('text/x-vcard', 'team.vcf')).toBeNull();
         expect(getTextPreviewMode('application/octet-stream', 'team.vcf')).toBeNull();
+    });
+});
+
+describe('getBytesTextPreviewMode', () => {
+    // A mime is the uploader's or the sender's word, so bytes never claim a collab mode: they read as
+    // what their name says, and are labelled with it.
+    test('an eigen mime on loose bytes falls back to the name', () => {
+        expect(getBytesTextPreviewMode('application/eigendoc', 'spoof.txt')).toBe('plaintext');
+        expect(getBytesTextPreviewMode('application/eigensheets', 'spoof.md')).toBe('markdown');
+        expect(getBytesTextPreviewMode('application/eigenvector', 'plan.eigenvector')).toBeNull();
+    });
+    test('everything else matches getTextPreviewMode', () => {
+        expect(getBytesTextPreviewMode('text/plain', 'notes.txt')).toBe('plaintext');
+        expect(getBytesTextPreviewMode('application/json', 'data.json')).toBe('code');
+        expect(getBytesTextPreviewMode('text/vcard', 'team.vcf')).toBeNull();
     });
 });

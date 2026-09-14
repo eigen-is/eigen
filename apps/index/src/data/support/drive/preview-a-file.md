@@ -6,10 +6,10 @@ category: Files
 tags: [drive, preview, files]
 related: [drive/get-started, drive/download-files]
 order: 60
-updated: 2026-09-13
+updated: 2026-09-14
 ---
 
-Drive can show you the contents of a file without opening a separate app or tab. Images, PDFs, videos, audio, text files, and contact files all have a built-in preview.
+Drive can show you the contents of a file without opening a separate app or tab. Images, PDFs, videos, audio, text files, and contact files all have a built-in preview. Text files over 1 MB show the file card instead.
 
 ## Open a file in the preview
 
@@ -47,3 +47,8 @@ When the preview is open, you can move to the next or previous file without clos
 ## Download from the preview
 
 The bar at the bottom of the preview has a **Download** button that saves the file to your computer. For text and code files, there is also an **Open** button that opens the file in the editor in a new tab.
+
+Some files get extra buttons in the same bar:
+
+- **Convert to Sheet** for an Excel file (`.xlsx`), and **Convert to Document** for a Word file (`.docx`). Eigen makes a copy in its own format and opens it.
+- **Import to Contacts** for a contact file (`.vcf`). It adds the cards in the file to your contacts.

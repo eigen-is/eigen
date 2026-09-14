@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
 import { Mount } from '../../lib/mount/mount';
@@ -65,6 +65,63 @@ describe('Mount.copyPath', () => {
         expect(children[0]!.id).not.toBe(childId);
         const bytes = await (await mount.readFile(children[0]!.id))!.text();
         expect(bytes).toBe('abc');
+    });
+
+    test('copies the source thumbnail and its dimensions', async () => {
+        const data = Buffer.from('png-bytes');
+        const fileId = await mount.createFile(rootId, 'photo.png', 'image/png', data.length, data);
+        await Bun.write(join(mount.thumbsDir, `${fileId}.webp`), 'thumb-bytes');
+        await mount.updatePath(fileId, { thumbnail: `${fileId}.webp`, details: { width: 12, height: 8 } });
+
+        const copied = await mount.copyPath(fileId, rootId, 'photo-copy.png');
+        expect(copied.thumbnail).toBe(`${copied.id}.webp`);
+        expect(await Bun.file(join(mount.thumbsDir, `${copied.id}.webp`)).text()).toBe('thumb-bytes');
+        expect(copied.details?.width).toBe(12);
+        expect(copied.details?.height).toBe(8);
+    });
+
+    test('copies a file whose thumbnail file is gone, details and all', async () => {
+        const data = Buffer.from('png-bytes');
+        const fileId = await mount.createFile(rootId, 'stale.png', 'image/png', data.length, data);
+        await mount.updatePath(fileId, { thumbnail: `${fileId}.webp`, details: { width: 4, height: 2 } });
+
+        const copied = await mount.copyPath(fileId, rootId, 'stale-copy.png');
+        expect(copied.thumbnail).toBeNull();
+        expect(existsSync(join(mount.thumbsDir, `${copied.id}.webp`))).toBe(false);
+        expect(copied.details?.width).toBe(4);
+        expect(copied.details?.height).toBe(2);
+    });
+
+    test('copies the details of a file that never had a thumbnail', async () => {
+        const data = Buffer.from('mp3-bytes');
+        const fileId = await mount.createFile(rootId, 'song.mp3', 'audio/mpeg', data.length, data);
+        await mount.updatePath(fileId, { details: { duration: 42 } });
+
+        const copied = await mount.copyPath(fileId, rootId, 'song-copy.mp3');
+        expect(copied.details?.duration).toBe(42);
+    });
+
+    test('leaves the details that belong to the source row behind', async () => {
+        const data = Buffer.from('png-bytes');
+        const fileId = await mount.createFile(rootId, 'upload.png', 'image/png', data.length, data);
+        await mount.updatePath(fileId, { details: { originalName: 'holiday.png', width: 3 } });
+
+        const copied = await mount.copyPath(fileId, rootId, 'upload-copy.png');
+        expect(copied.details?.width).toBe(3);
+        expect(copied.details?.originalName).toBeUndefined();
+    });
+
+    test('copies a folder with a thumbnailed child', async () => {
+        const folderId = await mount.createFolder(rootId, 'album');
+        const data = Buffer.from('png-bytes');
+        const childId = await mount.createFile(folderId, 'inside.png', 'image/png', data.length, data);
+        await Bun.write(join(mount.thumbsDir, `${childId}.webp`), 'child-thumb');
+        await mount.updatePath(childId, { thumbnail: `${childId}.webp` });
+
+        const copied = await mount.copyPath(folderId, rootId, 'album-copy');
+        const child = (await mount.listFolder(copied.id))[0]!;
+        expect(child.thumbnail).toBe(`${child.id}.webp`);
+        expect(await Bun.file(join(mount.thumbsDir, `${child.id}.webp`)).text()).toBe('child-thumb');
     });
 
     test('isSelfOrDescendant detects self, descendants, and unrelated', async () => {

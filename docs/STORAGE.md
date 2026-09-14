@@ -52,7 +52,7 @@ without reading data into memory. Callers stream or buffer as needed (e.g., `fil
 | Method      | Returns             | Notes                                        |
 |-------------|---------------------|----------------------------------------------|
 | `read`      | `StorageFile`       | Lazy reference (BunFile or S3File)           |
-| `readRange?`| `StorageFile`       | Optional — byte range `[start, end)` for ranged serving |
+| `readRange?`| `StorageFile`       | Optional — byte range `[start, end)` for ranged serving; the 416/206/200 response around it is the shared `rangeResponse` (`lib/core/http.ts`) |
 | `write`     | `Promise<number>`   | Accepts Buffer, Uint8Array, ArrayBuffer, BunFile |
 | `delete`    | `Promise<boolean>`  |                                               |
 | `exists`    | `Promise<boolean>`  |                                               |
@@ -201,7 +201,7 @@ container-aware); cross-mount/owner uses the recursive bridge `copyPathAcross` (
 `createFileFromData` per node, `createFolder` typed for containers). Containers copy safely by
 design — eigen-doc containers reference internal children by NAME, not pathId, so a byte copy is a
 valid independent doc; copy flushes the live `data.db` first and skips the `versions/` snapshot
-folder. Route `POST /drive/:o/:m/path/:p/copy` (body `{targetOwnerId, targetMountId, targetParentId,
+folder. A copied file carries the source's media facts (`details.width/height/duration`) and, when its file still exists, its thumbnail, copied as `<thumbsDir>/<thumbnail>` under the new id; `originalName` and `webdavProps` stay with the source. The bridge re-uploads and gets a fresh thumbnail from the upload path. Route `POST /drive/:o/:m/path/:p/copy` (body `{targetOwnerId, targetMountId, targetParentId,
 name?}`) picks fast-path vs bridge, dedups the destination name at the route level (kept out of
 `Drive.copyPath` so WebDAV COPY keeps overwrite/409 semantics), and rejects copying/moving a folder
 into its own subtree via `Mount.isSelfOrDescendant`. Cross-mount MOVE is deferred — it would change

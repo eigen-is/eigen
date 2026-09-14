@@ -1,114 +1,64 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
-import { getDriveDownloadUrl, getDriveItemUrl } from '@workspace/lib/api';
-import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
-import { useImportContactsFromDrive } from '@workspace/lib/contacts';
-import { useCopyFiles, useTextPreview } from '@workspace/lib/drive';
+import { getDriveItemUrl, getDrivePreviewUrl } from '@workspace/lib/api';
+import { useTextPreview } from '@workspace/lib/drive';
+import { fileActionsFor } from '@workspace/lib/file-actions';
+import { getPreviewMode, subjectInfo } from '@workspace/lib/file-subject';
+import { useMailTextPreview } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { isDocumentType, isFolderType, isVCardFile } from '@workspace/lib/types/drive';
+import type { FileSubject, MailPartRef } from '@workspace/lib/types/file-subject';
+import type { TextPreviewResult } from '@workspace/lib/types/preview';
 import { useFocusTrap } from '@workspace/ui/hooks/use-focus-trap';
-import { BookUser, ChevronLeft, ChevronRight, Download, ExternalLink, FolderDown, Loader2, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import type { DownloadMode, PreviewMode } from '../preview-provider/preview-provider';
-import { DriveLocationPicker } from './drive-location-picker';
+import { ChevronLeft, ChevronRight, ExternalLink, FolderDown, Loader2, X } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { useFileActionRunner } from '../file-actions/use-file-action-runner';
 import { getFileIcon } from './file-presentation';
-import { VCardPreviewContent } from './vcard-preview-content';
+import { MailVCardPreviewContent, VCardPreviewContent } from './vcard-preview-content';
 
 type FilePreviewProps = {
-    previewMode: PreviewMode;
-    previewUrl: string;
-    thumbnailUrl?: string;
-    embedUrl: string;
-    downloadUrl?: string;
-    fileName: string;
-    aspectRatio?: number;
-    hasPrev: boolean;
-    hasNext: boolean;
-    path: DrivePath;
-    downloadMode: DownloadMode;
-    siblings: DrivePath[];
+    subject: FileSubject;
+    siblings: FileSubject[];
     onClose: () => void;
     onPrev: () => void;
     onNext: () => void;
 };
 
-export function FilePreview({
-    previewMode,
-    previewUrl,
-    thumbnailUrl,
-    embedUrl,
-    downloadUrl,
-    fileName,
-    aspectRatio,
-    hasPrev,
-    hasNext,
-    path,
-    downloadMode,
-    siblings,
-    onClose,
-    onPrev,
-    onNext,
-}: FilePreviewProps) {
-    useHotkey('Escape', () => onClose(), { enabled: true });
+export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: FilePreviewProps) {
+    const runner = useFileActionRunner(subject, siblings);
+    const { drive } = subject;
+    const info = subjectInfo(subject);
+    const previewMode = getPreviewMode(subject);
+    // The transcode route is a Drive item's alone; anything else previews the bytes it embeds.
+    const previewUrl = drive
+        ? getDrivePreviewUrl(drive.ownerId, drive.mountId, drive.id, new Date(drive.updatedAt))
+        : info.embedUrl;
+    const aspectRatio =
+        drive?.details?.width && drive.details.height ? drive.details.width / drive.details.height : undefined;
+    const index = siblings.findIndex((sibling) => subjectInfo(sibling).key === info.key);
+    const hasPrev = index > 0;
+    const hasNext = index >= 0 && index < siblings.length - 1;
+
+    // Both listen on document and Radix stops nothing: ungated, one Escape would close the dialog and the overlay.
+    const keysEnabled = !runner.isDialogOpen;
+    useHotkey('Escape', () => onClose(), { enabled: keysEnabled });
     // Space closes it again, the way it opened it (Finder's Quick Look).
-    useHotkey('Space', () => onClose(), { enabled: true, preventDefault: true });
-    // The siblings arrive in the list's own order, so up/down step exactly like the drive list
-    // does and left/right mean the same thing.
+    useHotkey('Space', () => onClose(), { enabled: keysEnabled, preventDefault: true });
     const goPrev = () => {
         if (hasPrev) onPrev();
     };
     const goNext = () => {
         if (hasNext) onNext();
     };
-    useHotkey('ArrowLeft', goPrev, { enabled: true });
-    useHotkey('ArrowUp', goPrev, { enabled: true });
-    useHotkey('ArrowRight', goNext, { enabled: true });
-    useHotkey('ArrowDown', goNext, { enabled: true });
+    useHotkey('ArrowLeft', goPrev, { enabled: keysEnabled });
+    useHotkey('ArrowUp', goPrev, { enabled: keysEnabled });
+    useHotkey('ArrowRight', goNext, { enabled: keysEnabled });
+    useHotkey('ArrowDown', goNext, { enabled: keysEnabled });
 
-    const [locationPickerOpen, setLocationPickerOpen] = useState(false);
-    const [locationPickerMode, setLocationPickerMode] = useState<'single' | 'all'>('single');
-    const copyFiles = useCopyFiles(path.ownerId, path.mountId);
-    const importContacts = useImportContactsFromDrive();
-    const downloadTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
-    useEffect(
-        () => () => {
-            for (const timer of downloadTimers.current) clearTimeout(timer);
-        },
-        [],
-    );
-
-    // Trap focus in the overlay, but hand it to the save-to-drive picker (a Radix dialog
-    // portaled to body) while that is open.
+    // Focus stays in the overlay except while a dialog, portaled to body, holds it.
     const overlayRef = useRef<HTMLDivElement>(null);
-    useFocusTrap(overlayRef, !locationPickerOpen);
+    useFocusTrap(overlayRef, !runner.isDialogOpen);
 
-    const openUrl = getDriveItemUrl(path);
-    // Eigendocs (doc/stickies/slides/sheets/chat) can't be downloaded as raw files — they're
-    // containers with internal dbs. The "Open" button takes the user to the app instead.
-    const canDownload = !isDocumentType(path.type);
-    const downloadableSiblings = siblings.filter((s) => !isFolderType(s.type) && !isDocumentType(s.type));
-
-    const triggerDownload = (url: string) => {
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = '';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-    };
-
-    const downloadAll = () => {
-        for (const timer of downloadTimers.current) clearTimeout(timer);
-        downloadTimers.current = [];
-        for (let i = 0; i < downloadableSiblings.length; i++) {
-            const s = downloadableSiblings[i];
-            downloadTimers.current.push(
-                setTimeout(
-                    () => triggerDownload(getDriveDownloadUrl(s.ownerId, s.mountId, s.id, s.updatedAt)),
-                    i * 300,
-                ),
-            );
-        }
-    };
+    const openUrl = drive ? getDriveItemUrl(drive) : undefined;
+    const downloadableSiblings = siblings.filter((sibling) => !!subjectInfo(sibling).downloadUrl);
 
     return (
         <div
@@ -116,13 +66,11 @@ export function FilePreview({
             data-preview-overlay
             role="dialog"
             aria-modal="true"
-            aria-label={fileName}
+            aria-label={info.name}
             tabIndex={-1}
             className="fixed inset-0 z-[100] bg-black/80 flex flex-col animate-in fade-in outline-none"
             style={{ pointerEvents: 'auto' }}
-            // React synthetic events bubble through the React tree across portals, so a
-            // click inside the save-to-drive picker (rendered as a JSX child below) would
-            // bubble here and dismiss the preview. Only close on direct overlay clicks.
+            // Synthetic events bubble across portals, so a click inside the picker would land here too.
             onClick={(e) => {
                 if (e.target === e.currentTarget) onClose();
             }}
@@ -133,25 +81,9 @@ export function FilePreview({
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex items-center gap-2 min-w-0">
-                    <span className="truncate text-sm font-medium">{fileName}</span>
+                    <span className="truncate text-sm font-medium">{info.name}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                    {/* Over the ceiling the import itself 413s, and the body says so — offer nothing to click. */}
-                    {isVCardFile(path.mimeType, path.name) && path.size <= IMPORT_MAX_BYTES && (
-                        <NavButton
-                            onClick={() =>
-                                importContacts.mutate({
-                                    sourceOwnerId: path.ownerId,
-                                    sourceMountId: path.mountId,
-                                    sourcePathId: path.id,
-                                })
-                            }
-                            disabled={importContacts.isPending}
-                            title="Import to Contacts"
-                        >
-                            <BookUser className="size-4" />
-                        </NavButton>
-                    )}
                     <NavButton onClick={onPrev} disabled={!hasPrev} title="Previous (←)">
                         <ChevronLeft className="size-4" />
                     </NavButton>
@@ -176,16 +108,18 @@ export function FilePreview({
                     style={{ cursor: 'default' }}
                 >
                     {previewMode === 'image' && (
+                        // Keyed so a sibling never inherits the previous image's loaded flag or measured ratio.
                         <ProgressiveImage
-                            thumbnailUrl={thumbnailUrl}
+                            key={previewUrl}
+                            thumbnailUrl={info.thumbnailUrl}
                             previewUrl={previewUrl}
-                            alt={fileName}
+                            alt={info.name}
                             aspectRatio={aspectRatio}
                         />
                     )}
                     {previewMode === 'video' && (
                         <video
-                            src={embedUrl}
+                            src={info.embedUrl}
                             controls
                             autoPlay
                             className="max-w-full max-h-[calc(100vh-7rem)] rounded"
@@ -194,21 +128,26 @@ export function FilePreview({
                     )}
                     {previewMode === 'audio' && (
                         <div className="bg-background rounded-lg p-8 flex flex-col items-center gap-4">
-                            <span className="text-sm text-muted-foreground">{fileName}</span>
-                            <audio src={embedUrl} controls autoPlay className="w-80" />
+                            <span className="text-sm text-muted-foreground">{info.name}</span>
+                            <audio src={info.embedUrl} controls autoPlay className="w-80" />
                         </div>
                     )}
                     {previewMode === 'pdf' && (
-                        <iframe src={embedUrl} className="w-[80vw] h-[calc(100vh-7rem)] rounded bg-background" />
+                        <iframe src={info.embedUrl} className="w-[80vw] h-[calc(100vh-7rem)] rounded bg-background" />
                     )}
-                    {previewMode === 'text' && <TextPreviewContent path={path} />}
-                    {previewMode === 'vcard' && <VCardPreviewContent path={path} />}
+                    {/* One shape from Drive and mail; the identity picks the query, one hook per component. */}
+                    {previewMode === 'text' && drive && <TextPreviewContent path={drive} />}
+                    {previewMode === 'text' && subject.mail && <MailTextPreviewContent part={subject.mail} />}
+                    {previewMode === 'vcard' && drive && <VCardPreviewContent path={drive} />}
+                    {previewMode === 'vcard' && subject.mail && (
+                        <MailVCardPreviewContent part={subject.mail} size={info.size} />
+                    )}
                     {previewMode === 'fallback' && (
                         <div className="flex flex-col items-center gap-4 text-white">
-                            {getFileIcon(path.mimeType, path.type, path.name, {
+                            {getFileIcon(info.mimeType, drive?.type ?? 'file', info.name, {
                                 className: 'size-16 text-muted-foreground',
                             })}
-                            <span className="text-lg font-medium">{fileName}</span>
+                            <span className="text-lg font-medium">{info.name}</span>
                             <span className="text-sm text-muted-foreground">No preview available</span>
                         </div>
                     )}
@@ -226,74 +165,39 @@ export function FilePreview({
                         Open
                     </FooterButton>
                 )}
-                {canDownload && downloadUrl && downloadMode === 'direct' && (
-                    <FooterButton href={downloadUrl} download>
-                        <Download className="size-3.5" />
-                        Download
-                    </FooterButton>
-                )}
-                {canDownload && downloadUrl && downloadMode === 'save-to-drive' && (
-                    <FooterActionButton
-                        onClick={() => {
-                            setLocationPickerMode('single');
-                            setLocationPickerOpen(true);
-                        }}
-                    >
-                        <Download className="size-3.5" />
-                        Download
+                {/* The overlay is Quick Look itself, so the registry's own row is the one it drops. */}
+                {fileActionsFor(subject, ['quick-look']).map((action) => (
+                    <FooterActionButton key={action.id} onClick={() => runner.run(action)} disabled={runner.isPending}>
+                        <action.icon className="size-3.5" />
+                        {action.label}
                     </FooterActionButton>
-                )}
-                {canDownload && downloadableSiblings.length >= 2 && downloadMode === 'save-to-drive' && (
+                ))}
+                {subject.attachment && downloadableSiblings.length >= 2 && (
                     <FooterActionButton
-                        onClick={() => {
-                            setLocationPickerMode('all');
-                            setLocationPickerOpen(true);
-                        }}
+                        onClick={() => runner.openPicker(downloadableSiblings)}
+                        disabled={runner.isPending}
                     >
                         <FolderDown className="size-3.5" />
-                        Download all ({downloadableSiblings.length})
+                        Save all ({downloadableSiblings.length})
                     </FooterActionButton>
                 )}
             </div>
-            {downloadMode === 'save-to-drive' && (
-                <DriveLocationPicker
-                    open={locationPickerOpen}
-                    onOpenChange={setLocationPickerOpen}
-                    abovePreview
-                    mode="folder"
-                    title={locationPickerMode === 'all' ? 'Download all' : 'Download'}
-                    confirmLabel="Save here"
-                    defaultOwnerId={path.ownerId}
-                    defaultMountId={path.mountId}
-                    onConfirm={async (location) => {
-                        const pathIds =
-                            locationPickerMode === 'all' ? downloadableSiblings.map((s) => s.id) : [path.id];
-                        // Await the copy so the picker closes on success and stays open (with the failure
-                        // toast) on error, instead of closing immediately.
-                        await copyFiles.mutateAsync({
-                            pathIds,
-                            targetOwnerId: location.ownerId,
-                            targetMountId: location.mountId,
-                            targetParentId: location.folderId,
-                        });
-                    }}
-                    onDownloadInstead={() => {
-                        setLocationPickerOpen(false);
-                        if (locationPickerMode === 'all') {
-                            downloadAll();
-                        } else if (downloadUrl) {
-                            triggerDownload(downloadUrl);
-                        }
-                    }}
-                />
-            )}
+            {runner.dialogs}
         </div>
     );
 }
 
 function TextPreviewContent({ path }: { path: DrivePath }) {
     const { data, isLoading } = useTextPreview(path.ownerId, path.mountId, path.id, path.updatedAt, true);
+    return <TextPreviewBody data={data} isLoading={isLoading} />;
+}
 
+function MailTextPreviewContent({ part }: { part: MailPartRef }) {
+    const { data, isLoading } = useMailTextPreview(part.ownerId, part.messageId, part.index, true);
+    return <TextPreviewBody data={data} isLoading={isLoading} />;
+}
+
+function TextPreviewBody({ data, isLoading }: { data: TextPreviewResult | undefined; isLoading: boolean }) {
     if (isLoading) {
         return (
             <div className="flex items-center justify-center w-[80vw] h-[calc(100vh-7rem)]">
@@ -332,7 +236,10 @@ function TextPreviewContent({ path }: { path: DrivePath }) {
                     <div className="w-full max-w-[960px]" dangerouslySetInnerHTML={{ __html: data.body }} />
                 </div>
             ) : (
-                <div className="eigen-prose p-8 max-w-4xl mx-auto" dangerouslySetInnerHTML={{ __html: data.body }} />
+                <div
+                    className="eigen-prose p-8 max-w-4xl mx-auto [&_pre]:whitespace-pre-wrap [&_pre]:break-words"
+                    dangerouslySetInnerHTML={{ __html: data.body }}
+                />
             )}
         </div>
     );
@@ -373,11 +280,14 @@ function ProgressiveImage({
     aspectRatio?: number;
 }) {
     const [previewReady, setPreviewReady] = useState(false);
+    // Without known dimensions the box hugs the image once loaded, so clicks beside it still reach the backdrop.
+    const [loadedRatio, setLoadedRatio] = useState<number>();
 
-    const style: React.CSSProperties = aspectRatio
+    const ratio = aspectRatio ?? loadedRatio;
+    const style: React.CSSProperties = ratio
         ? {
-              width: `min(90vw, calc((100vh - 7rem) * ${aspectRatio}))`,
-              height: `min(calc(100vh - 7rem), calc(90vw / ${aspectRatio}))`,
+              width: `min(90vw, calc((100vh - 7rem) * ${ratio}))`,
+              height: `min(calc(100vh - 7rem), calc(90vw / ${ratio}))`,
           }
         : { width: '90vw', height: 'calc(100vh - 7rem)' };
 
@@ -389,24 +299,25 @@ function ProgressiveImage({
             )}
             {/* Full preview: loads in background, fades in on top when ready */}
             <img
-                key={previewUrl}
                 src={previewUrl}
                 alt={alt}
                 className="absolute inset-0 w-full h-full rounded object-contain transition-opacity duration-300"
                 style={{ opacity: previewReady ? 1 : 0 }}
-                onLoad={() => setPreviewReady(true)}
+                onLoad={(e) => {
+                    setPreviewReady(true);
+                    setLoadedRatio(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight);
+                }}
             />
         </div>
     );
 }
 
-function FooterButton({ href, download, children }: { href: string; download?: boolean; children: React.ReactNode }) {
+function FooterButton({ href, children }: { href: string; children: React.ReactNode }) {
     return (
         <a
             href={href}
             target="_blank"
             rel="noopener noreferrer"
-            download={download || undefined}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white text-sm transition-colors"
         >
             {children}
@@ -414,11 +325,20 @@ function FooterButton({ href, download, children }: { href: string; download?: b
     );
 }
 
-function FooterActionButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+function FooterActionButton({
+    onClick,
+    disabled,
+    children,
+}: {
+    onClick: () => void;
+    disabled?: boolean;
+    children: React.ReactNode;
+}) {
     return (
         <button
             onClick={onClick}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white text-sm transition-colors"
+            disabled={disabled}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-default text-white text-sm transition-colors"
         >
             {children}
         </button>

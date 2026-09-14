@@ -1,13 +1,7 @@
 import { getDriveItemUrl, getDriveShareUrl, openMailComposeWith } from '@workspace/lib/api';
 import { copyToClipboard } from '@workspace/lib/clipboard';
-import {
-    type DrivePath,
-    type ExportFormat,
-    exportFormatsFor,
-    isFolderType,
-    isOpenable,
-    isVCardFile,
-} from '@workspace/lib/types';
+import { fileActionsFor } from '@workspace/lib/file-actions';
+import { type DrivePath, type ExportFormat, exportFormatsFor, isOpenable } from '@workspace/lib/types';
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
@@ -19,37 +13,34 @@ import {
     ArrowRight,
     Bell,
     BellRing,
-    BookUser,
     Copy,
     CopyPlus,
-    Download,
     ExternalLink,
-    Eye,
     FileDown,
-    FileText,
     FolderInput,
     Link,
     Mail,
     Pencil,
-    Sheet,
     Trash2,
     UserRoundPlus,
 } from 'lucide-react';
+import { FileActionMenuItems } from '../file-actions/file-action-menu-items';
+import type { FileActionRunner } from '../file-actions/use-file-action-runner';
 import { formatDownloadLabel } from '../layout/toolbar/file-menu';
 import { useWatchToggle } from '../layout/toolbar/watch-toggle-button';
 
+// Drive keeps its own "Copy to…" row, so the registry's save-to-drive would say the same thing twice.
+
 type DriveItemMenuItemsProps = {
     item: DrivePath;
+    // Built by the host on subjectFromPath(item) — the rows it draws come from the registry.
+    runner: FileActionRunner;
     // App-specific override for the "Open in new tab" URL. Defaults to the
     // canonical getDriveItemUrl. The drive-table accepts a getItemHref prop;
     // other callers can omit and inherit the default.
     href?: string;
     onClose?: () => void;
     onItemOpen?: (item: DrivePath) => void;
-    onQuickLook?: (item: DrivePath) => void;
-    onDownload?: (item: DrivePath) => void;
-    onConvert?: (item: DrivePath, target: 'eigensheets' | 'eigendoc') => void;
-    onImportContacts?: (item: DrivePath) => void;
     onExport?: (item: DrivePath, format: ExportFormat) => void;
     onRename?: (item: DrivePath) => void;
     onMoveTo?: (items: DrivePath[]) => void;
@@ -65,13 +56,10 @@ type DriveItemMenuItemsProps = {
 // model is table-specific. Caller wraps with ContextMenuAnchor or DropdownMenuContent.
 export function DriveItemMenuItems({
     item,
+    runner,
     href: hrefOverride,
     onClose,
     onItemOpen,
-    onQuickLook,
-    onDownload,
-    onConvert,
-    onImportContacts,
     onExport,
     onRename,
     onMoveTo,
@@ -83,17 +71,13 @@ export function DriveItemMenuItems({
     allowDelete,
 }: DriveItemMenuItemsProps) {
     const href = hrefOverride ?? getDriveItemUrl(item);
-    const nameLower = item.name.toLowerCase();
     const canOpen = isOpenable(item);
-    const canQuickLook = !isFolderType(item.type);
-    const canDownloadFile = item.type === 'file' && !!onDownload;
-    const canConvertXlsx = item.type === 'file' && nameLower.endsWith('.xlsx') && !!onConvert;
-    const canConvertDocx = item.type === 'file' && nameLower.endsWith('.docx') && !!onConvert;
     // Which formats a type offers is the registry's answer, so this menu and the editors' File menu
     // draw the same rows and the export route gates on the same list.
     const exportFormats = exportFormatsFor(item.type);
+    // Read here too, so the separator above the registry rows appears only when there are any.
+    const fileActions = runner.subject ? fileActionsFor(runner.subject) : [];
     const accessible = !!item.acl?.length || item.visibility !== 'private';
-    const canImportContacts = item.type === 'file' && isVCardFile(item.mimeType, item.name) && !!onImportContacts;
 
     const { direct, label, isPending, toggle } = useWatchToggle(item.ownerId, item.mountId, item.id);
 
@@ -116,46 +100,15 @@ export function DriveItemMenuItems({
                     Open in new tab
                 </DropdownMenuItem>
             )}
-            {canQuickLook && onQuickLook && (
-                <DropdownMenuItem onClick={run(() => onQuickLook(item))} className="flex items-center">
-                    <Eye className="h-4 w-4 mr-2" />
-                    Quick preview
-                </DropdownMenuItem>
-            )}
 
-            {(canDownloadFile ||
-                canConvertXlsx ||
-                canConvertDocx ||
-                canImportContacts ||
-                exportFormats.length > 0 ||
-                !!onRename ||
-                !!onMoveTo ||
-                !!onCopyTo ||
-                !!onDuplicate) && <DropdownMenuSeparator />}
-            {canDownloadFile && (
-                <DropdownMenuItem onClick={run(() => onDownload(item))} className="flex items-center">
-                    <Download className="h-4 w-4 mr-2" />
-                    Download
-                </DropdownMenuItem>
-            )}
-            {canConvertXlsx && onConvert && (
-                <DropdownMenuItem onClick={run(() => onConvert(item, 'eigensheets'))} className="flex items-center">
-                    <Sheet className="h-4 w-4 mr-2" />
-                    Convert to Sheet
-                </DropdownMenuItem>
-            )}
-            {canConvertDocx && onConvert && (
-                <DropdownMenuItem onClick={run(() => onConvert(item, 'eigendoc'))} className="flex items-center">
-                    <FileText className="h-4 w-4 mr-2" />
-                    Convert to Document
-                </DropdownMenuItem>
-            )}
-            {canImportContacts && onImportContacts && (
-                <DropdownMenuItem onClick={run(() => onImportContacts(item))} className="flex items-center">
-                    <BookUser className="h-4 w-4 mr-2" />
-                    Import to Contacts
-                </DropdownMenuItem>
-            )}
+            {((canOpen && onItemOpen) || href) &&
+                (fileActions.length > 0 ||
+                    exportFormats.length > 0 ||
+                    !!onRename ||
+                    !!onMoveTo ||
+                    !!onCopyTo ||
+                    !!onDuplicate) && <DropdownMenuSeparator />}
+            <FileActionMenuItems runner={runner} />
             {exportFormats.length > 0 && onExport && (
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>

@@ -1,12 +1,14 @@
-import { getMailAttachmentUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
-import { useSaveMailAttachmentsToDrive } from '@workspace/lib/mail';
+import { subjectFromMailAttachment, subjectInfo } from '@workspace/lib/file-subject';
+import type { FileSubject } from '@workspace/lib/types/file-subject';
 import type { Attachment } from '@workspace/lib/types/mail';
 import { TooltipButton } from '@workspace/ui';
-import { SimpleAttachmentChip } from '@workspace/ui/components/attachment';
-import { DriveLocationPicker } from '@workspace/ui/components/drive';
+import { SimpleAttachmentChip, useAttachmentChipMenu } from '@workspace/ui/components/attachment';
+import { ContextMenuAnchor } from '@workspace/ui/components/context-menu';
+import { FileActionMenuItems, useFileActionRunner } from '@workspace/ui/components/file-actions';
+import { usePreview } from '@workspace/ui/components/preview-provider';
 import { Download } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useMemo } from 'react';
 
 type ReadAttachmentsProps = {
     emailId: string;
@@ -15,83 +17,58 @@ type ReadAttachmentsProps = {
 
 export function ReadAttachments({ emailId, attachments }: ReadAttachmentsProps) {
     const { user } = useAuth();
-    const [savePickerOpen, setSavePickerOpen] = useState(false);
-    const [saveIndexes, setSaveIndexes] = useState<number[]>([]);
-    const saveMutation = useSaveMailAttachmentsToDrive();
+    const { openPreview } = usePreview();
+    const ownerId = user?.id ?? '';
 
-    if (!user || !attachments?.length) return null;
+    // Calendar parts belong to the invite widget, not to the chip row, but each subject keeps the raw
+    // part index the mail routes address — so hiding one never shifts the others.
+    const subjects = useMemo(
+        () =>
+            (attachments ?? [])
+                .map((att, index) => ({ att, index }))
+                .filter(({ att }) => !att.contentType.startsWith('text/calendar'))
+                .map(({ att, index }) => subjectFromMailAttachment(ownerId, emailId, index, att)),
+        [attachments, emailId, ownerId],
+    );
+    // Each chip's derived facts once: the key a press resolves through, the name and the byte URL.
+    const chips = useMemo(() => subjects.map((subject) => ({ subject, info: subjectInfo(subject) })), [subjects]);
+    const chipSubject = useCallback(
+        (key: string | null) => chips.find((chip) => chip.info.key === key)?.subject,
+        [chips],
+    );
+    const { contextMenu, bind } = useAttachmentChipMenu<FileSubject>(chipSubject);
+    // The message's own parts are the siblings, so a quick look from here pages through them and
+    // keeps its "Save all" row.
+    const runner = useFileActionRunner(contextMenu.item, subjects);
 
-    const visible = attachments
-        .map((att, index) => ({ att, index }))
-        .filter(({ att }) => !att.contentType.startsWith('text/calendar'));
-    if (visible.length === 0) return null;
-
-    const handleSaveToDrive = (indexes: number[]) => {
-        setSaveIndexes(indexes);
-        setSavePickerOpen(true);
-    };
-
-    const handleDownloadAll = (indexes?: number[]) => {
-        const toDownload = indexes ? visible.filter(({ index }) => indexes.includes(index)) : visible;
-        // Stagger clicks so the browser treats each as a separate download, not a popup.
-        toDownload.forEach(({ att, index }, i) => {
-            const filename = att.filename || `attachment-${index}`;
-            const url = getMailAttachmentUrl(user.id, emailId, index, filename);
-            setTimeout(() => {
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                a.click();
-            }, i * 300);
-        });
-    };
+    if (!user || subjects.length === 0) return null;
 
     return (
-        <>
-            <div className="flex items-center gap-2 mb-4">
-                <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
-                    {visible.map(({ att, index }) => {
-                        const filename = att.filename || `Attachment ${index + 1}`;
-                        return (
-                            <SimpleAttachmentChip
-                                key={index}
-                                filename={filename}
-                                downloadUrl={getMailAttachmentUrl(user.id, emailId, index, filename)}
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    handleSaveToDrive([index]);
-                                }}
-                            />
-                        );
-                    })}
-                </div>
-                <TooltipButton
-                    icon={Download}
-                    tooltipText={visible.length === 1 ? 'Save attachment' : 'Save attachments'}
-                    className="h-7 w-7 shrink-0"
-                    onClick={() => handleSaveToDrive(visible.map(({ index }) => index))}
-                />
+        <div className="flex items-center gap-2 mb-4" {...bind()}>
+            <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+                {chips.map(({ subject, info }) => (
+                    <SimpleAttachmentChip
+                        key={info.key}
+                        attachmentKey={info.key}
+                        filename={info.name}
+                        downloadUrl={info.downloadUrl}
+                        onClick={(e) => {
+                            e.preventDefault();
+                            openPreview(subject, subjects);
+                        }}
+                    />
+                ))}
             </div>
-            <DriveLocationPicker
-                open={savePickerOpen}
-                onOpenChange={setSavePickerOpen}
-                mode="folder"
-                title={saveIndexes.length === 1 ? 'Save attachment' : 'Save attachments'}
-                confirmLabel="Save here"
-                onConfirm={async ({ ownerId, mountId, folderId }) => {
-                    await saveMutation.mutateAsync({
-                        messageId: emailId,
-                        indexes: saveIndexes,
-                        targetOwnerId: ownerId,
-                        targetMountId: mountId,
-                        targetParentId: folderId,
-                    });
-                }}
-                onDownloadInstead={() => {
-                    setSavePickerOpen(false);
-                    handleDownloadAll(saveIndexes);
-                }}
+            <TooltipButton
+                icon={Download}
+                tooltipText={subjects.length === 1 ? 'Save attachment' : 'Save attachments'}
+                className="h-7 w-7 shrink-0"
+                onClick={() => runner.openPicker(subjects)}
             />
-        </>
+            <ContextMenuAnchor contextMenu={contextMenu} className="min-w-48">
+                <FileActionMenuItems runner={runner} />
+            </ContextMenuAnchor>
+            {runner.dialogs}
+        </div>
     );
 }

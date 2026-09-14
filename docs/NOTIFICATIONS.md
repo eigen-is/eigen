@@ -29,7 +29,11 @@ Current examples: `useSendDraft` ("Email sent" — the user left the drafts view
 — confirms an access change with no other visible effect), `useSaveVersion` ("Version saved"). About seventeen
 `toast.success` calls exist across `packages/lib/src/core` today; grep for them rather than trusting a list here.
 
-## 3. Persistent notifications
+## 3. Toast actions and modal dialogs
+
+A toast with an `action` (the "Open folder" row after a save to Drive) is often raised from inside a modal dialog: `SaveToDrivePicker` awaits its mutation, so the picker is still open when the hook toasts, and a convert stacks the progress dialog on top. A Radix modal parks `pointer-events: none` on `<body>` for as long as one is mounted, and the toaster lives under `<body>`, so `Toaster` gives every toast `pointer-events: auto` of its own (`packages/ui/src/components/sonner.tsx`). Without it the action draws and swallows every click.
+
+## 4. Persistent notifications
 
 Cross-user events (shares, invites, mentions, incoming mail, watched-file activity) do not use these toasts. They
 persist a row in the recipient's `NotificationCenter` and broadcast one `notification:created` SSE event; the

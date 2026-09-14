@@ -32,10 +32,18 @@ export type Attachment = {
     content: Uint8Array;
     // Byte length of content; the detail payload blanks content, so the compose UI reads this instead.
     size: number;
+    // The charset the part declares, kept for text parts: the bytes are not UTF-8 unless they say so.
+    charset?: string;
     calendarMethod?: ImipMethod;
     // Set on text/calendar attachments in the message-detail payload; null = unparseable ICS.
     calendarInvite?: CalendarInvite | null;
 };
+
+// The one name for a part (chip, Content-Disposition, saved file); sender-written, so basename only.
+export function mailAttachmentName(att: Pick<Attachment, 'filename'>, index: number): string {
+    const name = (att.filename ?? '').replace(/\p{Cc}/gu, '').replace(/^.*[/\\]/, '');
+    return name || `attachment-${index + 1}`;
+}
 
 export type ParsedMail = {
     attachments: Attachment[];

@@ -20,7 +20,7 @@ export function decodeText(body: Buffer, headers: PartHeaders): string {
     return decodeCharset(bytes, params['charset'] || 'utf-8').replace(/\r?\n/g, '\n');
 }
 
-function decodeCharset(bytes: Buffer, charset: string): string {
+export function decodeCharset(bytes: Buffer, charset: string): string {
     const label = charset.trim().toLowerCase();
     if (['ascii', 'usascii', 'utf8'].includes(label.replace(/[^a-z0-9]+/g, ''))) return bytes.toString();
     // iconv-lite lacks iso-2022-jp; Bun's TextDecoder covers it.

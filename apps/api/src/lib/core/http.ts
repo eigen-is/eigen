@@ -85,25 +85,58 @@ export async function readBoundedBody(request: Request, maxBytes: number): Promi
 }
 
 // RFC 7233 single byte-range. Returns the inclusive [start, end] when satisfiable,
-// 'unsatisfiable' when a range was requested but can't be served (caller responds 416),
-// or null when there's no Range header (caller serves the full 200 body).
+// 'unsatisfiable' when a parsed range lies outside the resource (caller responds 416),
+// or null when there is no range to serve (caller serves the full 200 body).
 // Single source for the byte math shared by serveFile (embed/download) and the WebDAV GET.
 export function parseByteRange(
     rangeHeader: string | null,
     size: number,
 ): { start: number; end: number } | 'unsatisfiable' | null {
     if (!rangeHeader) return null;
-    if (size === 0) return 'unsatisfiable';
     const match = rangeHeader.match(/^bytes=(\d*)-(\d*)$/);
-    if (!match) return 'unsatisfiable';
+    // §3.1: a Range we can't parse — a multi-range list, stray whitespace, another unit — is ignored,
+    // not rejected. Only a range we did parse and cannot serve is a 416.
+    if (!match) return null;
     const startStr = match[1];
     const endStr = match[2];
+    if (startStr === '' && endStr === '') return null;
+    if (size === 0) return 'unsatisfiable';
     // Suffix range "bytes=-N" means "last N bytes": start = size - N, end = size - 1.
     // Open-ended "bytes=N-" means "from N to EOF": end = size - 1.
     const start = startStr === '' ? Math.max(0, size - Number(endStr)) : Number(startStr);
     const end = endStr === '' || startStr === '' ? size - 1 : Math.min(Number(endStr), size - 1);
     if (start < 0 || start > end || start >= size) return 'unsatisfiable';
     return { start, end };
+}
+
+// The RFC 7233 response shape the three byte-range servers share (drive serveFile, the WebDAV GET, the mail
+// part routes). Callers own their headers and ETag/304 handling and pass only the byte source; `end` is
+// exclusive because every reader takes it that way. Content-Length only binds for an in-memory body: Bun
+// derives it from a BunFile and sends a stream chunked.
+export async function rangeResponse(
+    headers: Record<string, string>,
+    size: number,
+    range: string | null,
+    source: {
+        slice: (start: number, end: number) => BodyInit | Promise<BodyInit>;
+        full: () => BodyInit | Promise<BodyInit>;
+    },
+): Promise<Response> {
+    const parsed = parseByteRange(range, size);
+    if (parsed === 'unsatisfiable') {
+        return new Response(null, { status: 416, headers: { ...headers, 'Content-Range': `bytes */${size}` } });
+    }
+    if (parsed) {
+        return new Response(await source.slice(parsed.start, parsed.end + 1), {
+            status: 206,
+            headers: {
+                ...headers,
+                'Content-Length': String(parsed.end - parsed.start + 1),
+                'Content-Range': `bytes ${parsed.start}-${parsed.end}/${size}`,
+            },
+        });
+    }
+    return new Response(await source.full(), { status: 200, headers: { ...headers, 'Content-Length': String(size) } });
 }
 
 export function contentDisposition(type: 'attachment' | 'inline', fileName: string): string {
@@ -122,7 +155,10 @@ export function contentDisposition(type: 'attachment' | 'inline', fileName: stri
 // scriptable-type set and the CSP string (serve-file's /embed and the /preview route both consult it).
 export function scriptableInlineHeaders(mimeType: string): Record<string, string> {
     const baseMime = (mimeType.split(';')[0] ?? '').trim().toLowerCase();
-    if (baseMime === 'text/html' || baseMime === 'application/xhtml+xml' || baseMime === 'image/svg+xml') {
+    // Every XML flavour scripts too: an `<?xml-stylesheet?>` PI runs XSLT. The `+xml` suffix already
+    // covers image/svg+xml and application/xhtml+xml, so neither needs an entry of its own.
+    const isXml = baseMime === 'text/xml' || baseMime === 'application/xml' || baseMime.endsWith('+xml');
+    if (baseMime === 'text/html' || isXml) {
         return { 'Content-Security-Policy': "sandbox; default-src 'none'", 'X-Content-Type-Options': 'nosniff' };
     }
     return {};

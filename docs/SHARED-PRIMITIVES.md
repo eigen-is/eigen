@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1386 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1418 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (158)
+## Components (160)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -125,7 +125,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocSharedView` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-shared-view.tsx |
 | `ExportProgressDialog` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/use-document-export.tsx |
 | `FileImportPicker` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/file-import-picker.tsx |
+| `SaveToDrivePicker` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/save-to-drive-picker.tsx |
 | `LightEditor` | `@workspace/ui/components/editor` | packages/ui/src/components/editor/light-editor.tsx |
+| `FileActionMenuItems` | `@workspace/ui/components/file-actions` | packages/ui/src/components/file-actions/file-action-menu-items.tsx |
 | `StorageUsage` | `@workspace/ui/components/home` | packages/ui/src/components/home/usage.tsx |
 | `StorageUsageBars` | `@workspace/ui/components/home` | packages/ui/src/components/home/usage.tsx |
 | `LabelAssignSubMenu` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/label-assign-sub-menu.tsx |
@@ -199,7 +201,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (261)
+## Hooks (267)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -312,6 +314,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useExportContacts` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-transfer.ts |
 | `useImportContacts` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-transfer.ts |
 | `useImportContactsFromDrive` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-transfer.ts |
+| `useImportContactsFromUrl` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-transfer.ts |
 | `useLabels` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-labels.ts |
 | `useMeContact` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `useUpdateContact` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
@@ -319,6 +322,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useUploadContactAvatar` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `useAggregateMimeContent` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useAllWatches` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
+| `useAttachmentSubjects` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-attachment-subjects.ts |
 | `useBreadcrumb` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useCheckPermissions` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `useConvertDocument` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-convert-document.ts |
@@ -376,6 +380,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useEmailById` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-emails.ts |
 | `useEmails` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-emails.ts |
 | `useMailboxes` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-mailboxes.ts |
+| `useMailTextPreview` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-attachment-preview.ts |
+| `useMailVCardPreview` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-attachment-preview.ts |
 | `useMoveEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-emails.ts |
 | `useOpenWriteEmailTo` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-emails.ts |
 | `useSaveMailAttachmentsToDrive` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
@@ -426,6 +432,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useApp` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 | `useContactAvatarUpload` | `@workspace/ui` | packages/ui/src/components/use-contact-avatar-upload.ts |
 | `useLayout` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
+| `useAttachmentChipMenu` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/use-attachment-chip-menu.ts |
 | `useAttachmentMeta` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/use-attachment-meta.ts |
 | `useAwarenessIdentity` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/use-awareness-identity.ts |
 | `useAwarenessPeers` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/use-awareness-peers.ts |
@@ -435,6 +442,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useDocumentExport` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/use-document-export.tsx |
 | `useMountLabel` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-mount-list.tsx |
 | `useDriveListRoute` | `@workspace/ui/components/drive/use-drive-list-route` | packages/ui/src/components/drive/use-drive-list-route.ts |
+| `useFileActionRunner` | `@workspace/ui/components/file-actions` | packages/ui/src/components/file-actions/use-file-action-runner.tsx |
 | `useOptionalPreview` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-context.ts |
 | `usePreview` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-context.ts |
 | `useAspectLock` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/use-aspect-lock.ts |
@@ -465,7 +473,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (330)
+## Types (339)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -485,6 +493,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CommentAssigneeFilter` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
 | `CommentFilter` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
 | `CreateCommentCardInput` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
+| `BytesTextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `EigenColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EigenFont` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `TextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
@@ -543,6 +552,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Contact` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `ContactSuggestion` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `ContactTransferSource` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
+| `ConvertTarget` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `CreateContactInput` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `CreateEventInput` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `DeepPartial` | `@workspace/lib/types` | packages/lib/src/types/util.ts |
@@ -692,6 +702,14 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DocSearchOptions` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
 | `DocSearchSession` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
 | `AttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
+| `FileAction` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
+| `FileActionId` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
+| `FileSubject` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
+| `MailPartRef` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
+| `PreviewMode` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
+| `SubjectInfo` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
+| `TextPreviewResult` | `@workspace/lib/types/preview` | packages/lib/src/types/preview.ts |
+| `VCardPreview` | `@workspace/lib/types/preview` | packages/lib/src/types/preview.ts |
 | `Snapshot` | `@workspace/lib/types/versioning` | packages/lib/src/types/versioning.ts |
 | `CommandValidationResult` | `@workspace/lib/validation` | packages/lib/src/validation/command.ts |
 | `ParsedContactInput` | `@workspace/lib/validation` | packages/lib/src/validation/contact-input.ts |
@@ -756,6 +774,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SortDir` | `@workspace/ui` | packages/ui/src/components/sort-header.tsx |
 | `SortHeaderProps` | `@workspace/ui` | packages/ui/src/components/sort-header.tsx |
 | `TooltipButtonProps` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/tooltip-button.tsx |
+| `AttachmentChipMenu` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/use-attachment-chip-menu.ts |
 | `ChatMessageInputHandle` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-message-input.tsx |
 | `SlashTargetContext` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-utils.ts |
 | `CursorPeerState` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/cursor-layer.tsx |
@@ -770,15 +789,13 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocAppConfig` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
 | `CreateCallbacks` | `@workspace/ui/components/drive/create-menu` | packages/ui/src/components/drive/create-menu.ts |
 | `DriveCapabilities` | `@workspace/ui/components/drive/drive-capabilities` | packages/ui/src/components/drive/drive-capabilities.ts |
+| `FileActionRunner` | `@workspace/ui/components/file-actions` | packages/ui/src/components/file-actions/use-file-action-runner.tsx |
 | `StorageData` | `@workspace/ui/components/home` | packages/ui/src/components/home/usage.tsx |
 | `LabelFilterHeaderProps` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/label-filter-header.tsx |
 | `LabelManagerProps` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/types.ts |
 | `ColorPickerButtonProps` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker-button.tsx |
 | `ColorPickerProps` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker.tsx |
 | `MountFormValues` | `@workspace/ui/components/mount` | packages/ui/src/components/mount/mount-form.tsx |
-| `DownloadMode` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-context.ts |
-| `PreviewMode` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-provider.tsx |
-| `PreviewOptions` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-context.ts |
 | `MergedValue` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-value.ts |
 | `TransformFields` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/transform-section.tsx |
 | `ZOp` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/z-order.tsx |
@@ -800,7 +817,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (622)
+## Utilities & constants (637)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -850,6 +867,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getInlineEditUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getLicensesUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getMailAppUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `getMailAttachmentEmbedUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getMailAttachmentUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getMailComposeUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getMailDraftAttachmentUploadUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
@@ -869,6 +887,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `INDEX_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `MAIL_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `mailApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `mailVCardPreviewRoute` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `notificationApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `openDocument` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `openMailComposeWith` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
@@ -888,6 +907,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `waitlistApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getErrorMessage` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `onMutationError` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
+| `retryWhenTransformBusy` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `wasToasted` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `apps` | `@workspace/lib/apps` | packages/lib/src/core/apps.ts |
 | `authClient` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-auth-client.ts |
@@ -963,6 +983,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `writeCardToDoc` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
 | `BACKUP_UPLOAD_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/backup.ts |
 | `BACKUP_UPLOAD_MAX_LABEL` | `@workspace/lib/constants` | packages/lib/src/constants/backup.ts |
+| `BROWSER_IMAGE_MIMES` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `CANVAS_PREVIEW_HEIGHT` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `CANVAS_PREVIEW_WIDTH` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `CELL_INDICATOR_SIZE` | `@workspace/lib/constants` | packages/lib/src/constants/comment-indicator.ts |
@@ -986,6 +1007,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EIGEN_STICKIES_INDICATOR_ROW` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `emptyContact` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
 | `fontNameToCss` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
+| `getBytesTextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `getExtension` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `getFontFamily` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `getFontName` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
@@ -1007,6 +1029,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `S3_NONCURRENT_DAYS_MAX` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
 | `STALE_TIME` | `@workspace/lib/constants` | packages/lib/src/constants/stale-time.ts |
 | `STORAGE_TYPE_LABELS` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
+| `TEXT_PREVIEW_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `userColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `VCARD_PREVIEW_MAX_CARDS` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
 | `XLSX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
@@ -1035,6 +1058,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PAGE_MARGIN_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/index.ts |
 | `downloadBlob` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
 | `filenameFromDisposition` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
+| `triggerDownload` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
 | `checkPathAccess` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `createWithReconcile` | `@workspace/lib/drive` | packages/lib/src/core/drive/reconcile-create.ts |
 | `DEFAULT_MOUNT_ID` | `@workspace/lib/drive` | packages/lib/src/types/mount.ts |
@@ -1046,8 +1070,14 @@ rather than inlining `queryClient.invalidateQueries`.
 | `mountMimeContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `PENDING_PREFIX` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
 | `EIGEN_DOC_ICONS` | `@workspace/lib/eigendoc-icons` | packages/lib/src/core/eigendoc-icons.ts |
+| `FILE_ACTIONS` | `@workspace/lib/file-actions` | packages/lib/src/core/file-actions.ts |
+| `fileActionsFor` | `@workspace/lib/file-actions` | packages/lib/src/core/file-actions.ts |
 | `getFileIconComponent` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
 | `getFilePresentation` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
+| `getPreviewMode` | `@workspace/lib/file-subject` | packages/lib/src/core/file-subject.ts |
+| `subjectFromMailAttachment` | `@workspace/lib/file-subject` | packages/lib/src/core/file-subject.ts |
+| `subjectFromPath` | `@workspace/lib/file-subject` | packages/lib/src/core/file-subject.ts |
+| `subjectInfo` | `@workspace/lib/file-subject` | packages/lib/src/core/file-subject.ts |
 | `bytesToBase64` | `@workspace/lib/format` | packages/lib/src/core/format.ts |
 | `formatFileSize` | `@workspace/lib/format` | packages/lib/src/core/format.ts |
 | `escapeHtml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
@@ -1130,6 +1160,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isOpenable` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isS3ConfigValid` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `isVCardFile` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `mailAttachmentName` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `mapStorageType` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `mountStorageIdentity` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `orgOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
@@ -1386,6 +1417,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FILTER_LABELS` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
 | `formatDownloadLabel` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/file-menu.tsx |
 | `nextSortDir` | `@workspace/ui` | packages/ui/src/components/sort-header.tsx |
+| `attachmentKeyAt` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/simple-attachment-chip.tsx |
 | `getAtSuggestQuery` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-utils.ts |
 | `getSlashTargetQuery` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-utils.ts |
 | `renderPresenceCaret` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/presence-label.tsx |

@@ -1,6 +1,7 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
+import { TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants/preview';
 import { DRIVE_MIME_SLIDES } from '@workspace/lib/types/drive';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
 import { getHome } from '../../lib/home/get-home';
@@ -477,6 +478,27 @@ describe('getTextPreview (stale-while-revalidate)', () => {
         expect(served?.value.body).toContain('current content');
     });
 
+    test('a file past the preview ceiling has no preview, and its bytes are never read', async () => {
+        const { mkdirSync } = await import('node:fs');
+        const tmpDir = mkdtempSync('/tmp/eigen-oversize-text-test-');
+        mkdirSync(tmpDir, { recursive: true });
+
+        const config = createTestMountConfig('test-oversize-text', 'local-key');
+        const mount = new Mount('test-owner-id', tmpDir, config, createGetLocalDatabase(tmpDir));
+        await mount.init();
+        const rootId = (await mount.getRootFolder())!.id;
+
+        const bytes = Buffer.alloc(TEXT_PREVIEW_MAX_BYTES + 1, 'x');
+        const fileId = await mount.createFile(rootId, 'huge.txt', 'text/plain', bytes.length, bytes);
+        const path = await mount.getActivePath(fileId);
+
+        // The row's size decides, so the decode and the highlighter are spared the read as well.
+        const readFile = spyOn(mount, 'readFile');
+        expect(await getTextPreview(mount, path)).toBeNull();
+        expect(readFile).not.toHaveBeenCalled();
+        readFile.mockRestore();
+    });
+
     test('an uploaded file wearing a collab mime still previews as the file it is', async () => {
         // mimeType is caller-controlled on upload; only the CONTAINER type says a path is a collab
         // document. Dispatching on the mime alone sent a plain text file into the Yjs preview path,
@@ -496,6 +518,8 @@ describe('getTextPreview (stale-while-revalidate)', () => {
 
         const served = await getTextPreview(mount, { ...path, mimeType: DRIVE_MIME_SLIDES });
         expect(served?.value.body).toContain('plain text pretending to be a deck');
+        // And it is labelled as what it is: the deck mode would draw this body inside a slide frame.
+        expect(served?.value.mode).toBe('plaintext');
     });
 });
 

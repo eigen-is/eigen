@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { type MountInfo, type OrgTeam, teamOwnerId } from '@workspace/lib/types';
+import type { TextPreviewResult } from '@workspace/lib/types/preview';
 import { getServerConfig } from '../../lib/config/server-config';
-import type { TextPreviewResult } from '../../lib/preview/text-preview';
 import {
     assertJson,
     authedRequest,

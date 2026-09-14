@@ -3,6 +3,7 @@ import type { DriveContainerType, DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FOLDER, isContainerType } from '@workspace/lib/types/drive';
 import { ApiError } from '../core';
 import { writeTempWithHash } from '../drive/streaming';
+import { copyThumbnail } from '../shared/thumbnails';
 import { isVersionsFolder } from '../versioning/versions-folder';
 import type { Mount } from './mount';
 import { markContentDirty } from './search-index';
@@ -59,6 +60,19 @@ export async function copyPath(
     const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), srcFile);
     try {
         const newId = await mount.createFileFromTemp(destParentId, name, src.mimeType, size, hash, tempId);
+        // The media facts the upload path derives from the bytes travel with them, thumbnail or not.
+        // The rest of details stays behind: originalName names the source's own downloads and
+        // webdavProps are its client's dead properties.
+        const details = {
+            ...(src.details?.width !== undefined && { width: src.details.width }),
+            ...(src.details?.height !== undefined && { height: src.details.height }),
+            ...(src.details?.duration !== undefined && { duration: src.details.duration }),
+        };
+        const hasDetails = Object.keys(details).length > 0;
+        const thumbnail = src.thumbnail ? await copyThumbnail(mount.thumbsDir, src.thumbnail, newId) : null;
+        if (thumbnail || hasDetails) {
+            await mount.updatePath(newId, { ...(thumbnail && { thumbnail }), ...(hasDetails && { details }) });
+        }
         if (actor) {
             mount.history.record({ pathId: newId, eventType: 'copied', actor, details: copiedFrom });
         }

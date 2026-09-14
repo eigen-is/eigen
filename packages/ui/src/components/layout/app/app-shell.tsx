@@ -2,10 +2,11 @@ import { Outlet } from '@tanstack/react-router';
 import { openMailComposeWith } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { useCommandPalette, useOptionalCommandPalette } from '@workspace/lib/command-palette';
+import { subjectFromPath } from '@workspace/lib/file-subject';
 import { useIsMobile, useIsTablet } from '@workspace/lib/media';
 import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
 import type { CommandContext } from '@workspace/lib/types/command-palette';
-import type { EigenDocType } from '@workspace/lib/types/drive';
+import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
 import { cn } from '@workspace/ui/lib/utils';
 import { lazy, type ReactNode, Suspense, useCallback, useMemo, useState } from 'react';
 import { DriveCreateEigenDoc } from '../../drive/drive-create-eigendoc';
@@ -132,6 +133,10 @@ function PaletteRunnerInner() {
     const { openPreview } = usePreview();
     const [createDialog, setCreateDialog] = useState<CreateDialogKind>(null);
 
+    // The palette hands out DrivePaths; the overlay takes subjects. Memoized because ctx below
+    // republishes on every identity change.
+    const openPathPreview = useCallback((path: DrivePath) => openPreview(subjectFromPath(path)), [openPreview]);
+
     const toggleTheme = useCallback(() => {
         const next = settings?.theme === 'dark' ? 'light' : 'dark';
         updateSettings.mutate({ theme: next });
@@ -155,10 +160,19 @@ function PaletteRunnerInner() {
             // pick where to create.
             openDriveCreate: (kind) => setCreateDialog(kind),
             openMailComposeWith,
-            openPreview,
+            openPreview: openPathPreview,
             toggleTheme,
         }),
-        [ownerId, selection, selectionActions, docSearch, docSearchSession, docCommentSearch, openPreview, toggleTheme],
+        [
+            ownerId,
+            selection,
+            selectionActions,
+            docSearch,
+            docSearchSession,
+            docCommentSearch,
+            openPathPreview,
+            toggleTheme,
+        ],
     );
 
     const eigenDocKind = createDialog && createDialog !== 'folder' ? createDialog : null;

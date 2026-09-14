@@ -293,7 +293,8 @@ Messages use `useInfiniteQuery` with cursor-based pagination:
 - **URL rendering**: URLs auto-linked as clickable links
 - **Loading**: `EigenLoader` shown while fetching older messages, `LoadingState` for initial load
 - **Grouping**: Consecutive messages from the same author within 5 minutes are grouped (no repeated avatar/name)
-- **Attachments**: Shown as chips with thumbnail previews (images) or paperclip icon, clickable to open preview
+- **Attachments**: Shown as chips with thumbnail previews (images) or paperclip icon, clickable to open preview.
+  Right-click a chip — long-press on touch, the same press the message rows use — and the singleton context menu offers that file's `FILE_ACTIONS` rows (`FileActionMenuItems`) above the message's own. The wiring from a chip to that menu is `useAttachmentChipMenu` (`packages/ui/src/components/attachment/use-attachment-chip-menu.ts`), shared with the card dialog and the mail reader; the message's own rows stay here. "Save attachments", on the hover bar and in the menu, opens the shared `SaveToDrivePicker` on the message's attachments, which copies them server-side and keeps "Download instead" as the escape hatch. See [PREVIEWS.md](PREVIEWS.md)
 
 ## Where the code lives
 

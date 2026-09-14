@@ -13,6 +13,14 @@ export const emailKeys = {
         [...emailKeys.lists(ownerId), { mailbox: mailbox === '' ? 'inbox' : mailbox.toLowerCase() }] as const,
     details: (ownerId: string) => [...emailKeys.owner(ownerId), 'detail'] as const,
     detail: (ownerId: string, id: string) => [...emailKeys.details(ownerId), id] as const,
+    // One attachment's server-rendered preview: the part index identifies it inside the message. Under
+    // detail(), so a deleted message and a rewritten draft evict the previews of the parts they had.
+    previews: (ownerId: string, messageId: string) =>
+        [...emailKeys.detail(ownerId, messageId), 'attachment-preview'] as const,
+    textPreview: (ownerId: string, messageId: string, index: number) =>
+        [...emailKeys.previews(ownerId, messageId), 'text', index] as const,
+    vcardPreview: (ownerId: string, messageId: string, index: number) =>
+        [...emailKeys.previews(ownerId, messageId), 'vcard', index] as const,
 };
 
 export const mailboxKeys = {

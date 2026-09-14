@@ -45,10 +45,15 @@ mock.module('../../../../core/api', () => ({
     }),
 }));
 
-// The import POSTs a file and reads its three counts back as JSON.
+// The import POSTs a file and reads its three counts back as JSON; the from-url path fetches the file's
+// bytes through the same stub first, so the calls are recorded in order.
 const realFetch = g.fetch;
+const fetchCalls: { url: string; body: BodyInit | null | undefined }[] = [];
 let fileImportResult: ImportContactsResult = { imported: 0, skipped: 0, failed: 0 };
-g.fetch = async () => new Response(JSON.stringify(fileImportResult), { status: 200 });
+g.fetch = async (url: string, init?: RequestInit) => {
+    fetchCalls.push({ url, body: init?.body });
+    return new Response(JSON.stringify(fileImportResult), { status: 200 });
+};
 
 afterAll(() => {
     g.fetch = realFetch;
@@ -143,5 +148,26 @@ describe('useImportContactsFromDrive', () => {
         await act(() => unmount());
 
         expect(toasts.at(-1)).toBe('success: Imported 1 contact, skipped 1 duplicate, 1 unreadable');
+    });
+});
+
+describe('useImportContactsFromUrl', () => {
+    test('a subject with no Drive path behind it posts the bytes it fetched, named after the subject', async () => {
+        const { act } = await import('react');
+        const { useImportContactsFromUrl } = await import('../../../../core/contacts/hooks/use-transfer');
+        toasts.length = 0;
+        fetchCalls.length = 0;
+        fileImportResult = { imported: 2, skipped: 0, failed: 0 };
+        const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+        const { latest, unmount } = await renderHook(() => useImportContactsFromUrl(), queryClient);
+
+        await act(async () => {
+            await latest.mutateAsync({ url: '/mail/owner/message/m1/attachment/0' });
+        });
+        await act(() => unmount());
+
+        expect(fetchCalls[0]!.url).toBe('/mail/owner/message/m1/attachment/0');
+        expect(fetchCalls[1]!.body).toBeInstanceOf(Blob);
+        expect(toasts.at(-1)).toBe('success: Imported 2 contacts');
     });
 });

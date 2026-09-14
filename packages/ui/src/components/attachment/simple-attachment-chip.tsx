@@ -5,6 +5,9 @@ import { AttachmentChipRemoveButton, CHIP_BASE_CLASS } from './attachment-chip-s
 
 type SimpleAttachmentChipProps = {
     filename: string;
+    // What a host's context menu resolves back to the file it names — the stored file name for a
+    // chat or card attachment, where the label is the original name instead. Defaults to the label.
+    attachmentKey?: string;
     // Wraps the chip in an anchor with `download` pointing at this URL. Shows a Download icon.
     downloadUrl?: string;
     // Intercepts the anchor click — use when the chip should open a preview instead of downloading.
@@ -16,16 +19,26 @@ type SimpleAttachmentChipProps = {
     className?: string;
 };
 
+// Reads back the key of the chip under a pointer event, so a host that opens one menu for a whole
+// row (a chat message, a card) can offer that one file's actions when the press landed on a chip.
+export function attachmentKeyAt(target: EventTarget | null): string | null {
+    // Element, not HTMLElement: the chip's icons are <svg>, and a press lands on whatever it hits.
+    if (!(target instanceof Element)) return null;
+    return target.closest('[data-attachment-chip]')?.getAttribute('data-attachment-chip') ?? null;
+}
+
 // Shared compact chip for attachment UIs (mail compose, mail reader, chat).
 // One visual style, varying actions: remove (X), download (icon), or open-preview (onClick).
 export function SimpleAttachmentChip({
     filename,
+    attachmentKey,
     downloadUrl,
     onClick,
     thumbnailUrl,
     onRemove,
     className,
 }: SimpleAttachmentChipProps) {
+    const chipKey = attachmentKey ?? filename;
     const outerClass = cn(
         CHIP_BASE_CLASS,
         (downloadUrl || onClick) && 'hover:bg-muted/80 transition-colors',
@@ -59,11 +72,16 @@ export function SimpleAttachmentChip({
                 rel="noopener noreferrer"
                 className={outerClass}
                 onClick={onClick}
+                data-attachment-chip={chipKey}
             >
                 {content}
             </a>
         );
     }
 
-    return <div className={outerClass}>{content}</div>;
+    return (
+        <div className={outerClass} data-attachment-chip={chipKey}>
+            {content}
+        </div>
+    );
 }
