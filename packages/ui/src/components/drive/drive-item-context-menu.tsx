@@ -28,7 +28,28 @@ type DriveItemContextMenuProps = {
     renderItems?: (items: DrivePath[], close: () => void) => React.ReactNode;
 };
 
-export function DriveItemContextMenu({
+export function DriveItemContextMenu(props: DriveItemContextMenuProps) {
+    const { contextMenu, selection } = props.controller;
+
+    const contextItems = contextMenu.item
+        ? selection.selectedCount > 1
+            ? selection.selectedItems
+            : [contextMenu.item]
+        : [];
+
+    // Separate components: a listing with its own body (trash) draws no registry row, so it must not mount the runner.
+    if (props.renderItems) {
+        return (
+            <ContextMenuAnchor contextMenu={contextMenu} className="min-w-48">
+                {contextItems.length > 0 && props.renderItems(contextItems, contextMenu.close)}
+            </ContextMenuAnchor>
+        );
+    }
+
+    return <DriveItemActionsMenu {...props} contextItems={contextItems} />;
+}
+
+function DriveItemActionsMenu({
     controller,
     items,
     getItemHref,
@@ -42,30 +63,17 @@ export function DriveItemContextMenu({
     onEmailCollaborators,
     onDelete,
     allowDelete,
-    renderItems,
-}: DriveItemContextMenuProps) {
-    const { contextMenu, selection } = controller;
+    contextItems,
+}: DriveItemContextMenuProps & { contextItems: DrivePath[] }) {
+    const { contextMenu } = controller;
 
     const subject = useMemo(() => (contextMenu.item ? subjectFromPath(contextMenu.item) : null), [contextMenu.item]);
     // Mapped only while the menu is open: a folder listing can run to thousands of rows.
     const siblings = useMemo(() => (contextMenu.item ? items.map(subjectFromPath) : []), [contextMenu.item, items]);
     const runner = useFileActionRunner(subject, siblings);
 
-    const contextItems = contextMenu.item
-        ? selection.selectedCount > 1
-            ? selection.selectedItems
-            : [contextMenu.item]
-        : [];
     const isSingleSelect = contextItems.length === 1;
     const contextMenuItemHref = isSingleSelect && contextMenu.item ? getItemHref?.(contextMenu.item) : undefined;
-
-    if (renderItems) {
-        return (
-            <ContextMenuAnchor contextMenu={contextMenu} className="min-w-48">
-                {contextItems.length > 0 && renderItems(contextItems, contextMenu.close)}
-            </ContextMenuAnchor>
-        );
-    }
 
     return (
         <>
