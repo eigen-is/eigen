@@ -201,7 +201,7 @@ container-aware); cross-mount/owner uses the recursive bridge `copyPathAcross` (
 `createFileFromData` per node, `createFolder` typed for containers). Containers copy safely by
 design — eigen-doc containers reference internal children by NAME, not pathId, so a byte copy is a
 valid independent doc; copy flushes the live `data.db` first and skips the `versions/` snapshot
-folder. Route `POST /drive/:o/:m/path/:p/copy` (body `{targetOwnerId, targetMountId, targetParentId,
+folder. A copied file carries the source's thumbnail: the fast path copies `<thumbsDir>/<thumbnail>` to the new id and reuses the source's `details` (width/height/duration), so nothing is regenerated; the bridge re-uploads and gets one from the upload path. Route `POST /drive/:o/:m/path/:p/copy` (body `{targetOwnerId, targetMountId, targetParentId,
 name?}`) picks fast-path vs bridge, dedups the destination name at the route level (kept out of
 `Drive.copyPath` so WebDAV COPY keeps overwrite/409 semantics), and rejects copying/moving a folder
 into its own subtree via `Mount.isSelfOrDescendant`. Cross-mount MOVE is deferred — it would change

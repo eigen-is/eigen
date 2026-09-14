@@ -3,6 +3,7 @@ import type { DriveContainerType, DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FOLDER, isContainerType } from '@workspace/lib/types/drive';
 import { ApiError } from '../core';
 import { writeTempWithHash } from '../drive/streaming';
+import { copyThumbnail } from '../shared/thumbnails';
 import { isVersionsFolder } from '../versioning/versions-folder';
 import type { Mount } from './mount';
 import { markContentDirty } from './search-index';
@@ -59,6 +60,10 @@ export async function copyPath(
     const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), srcFile);
     try {
         const newId = await mount.createFileFromTemp(destParentId, name, src.mimeType, size, hash, tempId);
+        if (src.thumbnail) {
+            const thumbnail = await copyThumbnail(mount.thumbsDir, src.thumbnail, newId);
+            if (thumbnail) await mount.updatePath(newId, { thumbnail, details: src.details });
+        }
         if (actor) {
             mount.history.record({ pathId: newId, eventType: 'copied', actor, details: copiedFrom });
         }
