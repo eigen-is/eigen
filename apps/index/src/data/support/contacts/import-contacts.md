@@ -31,7 +31,7 @@ If the `.vcf` file is in Drive, you can import it without opening Contacts.
 2. Right-click the file, or click its **⋮** button.
 3. Click **Import to Contacts**.
 
-You can also look inside the file first. Select it and press **Space**, or choose **Quick preview** from the same menu. The preview shows each contact in the file as a card, with photo, addresses, and labels, up to the first 200. The bar at the bottom of the preview has an **Import to Contacts** button, next to **Download**, which imports the file you are looking at.
+You can also look inside the file first. Select it and press **Space**, or choose **Quick preview** from the same menu. The preview shows each contact in the file as a card, with photo, addresses, and labels, up to the first 200. The bar at the bottom of the preview has an **Import to Contacts** button, which imports the file you are looking at.
 
 ## What comes across
 

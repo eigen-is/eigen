@@ -22,13 +22,12 @@ export function filenameFromDisposition(header: string | null, fallback: string)
     return plain?.[1] || plain?.[2]?.trim() || fallback;
 }
 
-// Saving a URL the server already serves with a filename: `download = ''` leaves the name to
-// Content-Disposition (production is same-origin, where the attribute would otherwise win). Pass
-// `filename` only where the caller knows a better name than the server sends.
-export function triggerDownload(url: string, filename?: string): void {
+// `download = ''` leaves the name to Content-Disposition (production is same-origin, where the
+// attribute would otherwise win).
+export function triggerDownload(url: string): void {
     const a = document.createElement('a');
     a.href = url;
-    a.download = filename ?? '';
+    a.download = '';
     document.body.appendChild(a);
     a.click();
     a.remove();

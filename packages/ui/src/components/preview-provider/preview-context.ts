@@ -6,10 +6,12 @@ import { createContext, useContext } from 'react';
 // whole Drive feature tree (FilePreview → DriveLocationPicker → Dialog) and closes
 // an import cycle back onto Dialog. This file must import nothing from that tree.
 
+export type PreviewOptions = { batch?: boolean };
+
 export type PreviewContextValue = {
     // `batch` marks the siblings as a set the overlay may act on as a whole (an attachment list), so
-    // a Drive listing handing over its whole folder for navigation gets no "Download all" row.
-    openPreview: (subject: FileSubject, siblings?: FileSubject[], options?: { batch?: boolean }) => void;
+    // a Drive listing handing over its whole folder for navigation gets no "Save all" row.
+    openPreview: (subject: FileSubject, siblings?: FileSubject[], options?: PreviewOptions) => void;
     updatePreview: (subject: FileSubject) => void;
     closePreview: () => void;
     isPreviewOpen: boolean;

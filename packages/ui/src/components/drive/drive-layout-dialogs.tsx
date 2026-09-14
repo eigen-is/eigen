@@ -145,7 +145,7 @@ export function useDriveLayoutDialogs({
 
     const handleDownloadPath = useCallback((path: DrivePath) => {
         if (path?.type === 'file' && path.id) {
-            triggerDownload(getDriveDownloadUrl(path.ownerId, path.mountId, path.id, path.updatedAt), path.name);
+            triggerDownload(getDriveDownloadUrl(path.ownerId, path.mountId, path.id, path.updatedAt));
         }
     }, []);
 

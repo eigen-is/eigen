@@ -4,6 +4,7 @@ import type { FileSubject } from '@workspace/lib/types/file-subject';
 import type React from 'react';
 import { useCallback, useMemo, useState } from 'react';
 import { FilePreview } from '../drive/file-preview';
+import type { PreviewOptions } from './preview-context';
 import { PreviewContext, useOptionalPreview, usePreview } from './preview-context';
 
 // The context object and the usePreview/useOptionalPreview hooks live in the
@@ -21,7 +22,7 @@ type PreviewState = {
 export function PreviewProvider({ children }: { children: React.ReactNode }) {
     const [preview, setPreview] = useState<PreviewState | null>(null);
 
-    const openPreview = useCallback((subject: FileSubject, siblings?: FileSubject[], options?: { batch?: boolean }) => {
+    const openPreview = useCallback((subject: FileSubject, siblings?: FileSubject[], options?: PreviewOptions) => {
         setPreview({ subject, siblings: siblings || [], batch: options?.batch ?? false });
     }, []);
 

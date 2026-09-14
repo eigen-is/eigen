@@ -182,7 +182,7 @@ export function FilePreview({
                         disabled={runner.isPending}
                     >
                         <FolderDown className="size-3.5" />
-                        Download all ({downloadableSiblings.length})
+                        Save all ({downloadableSiblings.length})
                     </FooterActionButton>
                 )}
             </div>

@@ -11,7 +11,7 @@ import { usePreview } from '../preview-provider/preview-context';
 
 type FileActionRunner = {
     run: (action: FileAction) => void;
-    // For a host with a batch of its own to save — the overlay's "Download all" row.
+    // For a host with a batch of its own to save — the overlay's "Save all" row.
     openPicker: (subjects: FileSubject[]) => void;
     // Rendered once by the host, so a picker opened from any row lives outside the menu that closed.
     dialogs: ReactNode;
