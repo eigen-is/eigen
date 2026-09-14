@@ -1,10 +1,12 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getTextPreviewMode } from '@workspace/lib/constants';
-import { type DrivePath, isCollabType } from '@workspace/lib/types/drive';
+import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
+import { type DrivePath, isCollabType, isVCardFile } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
 import { COLLAB_DOCUMENT_TYPES } from '../document/collab-types';
-import { runFileTransformToText } from '../document/transform/run-transform';
+import type { VCardPreviewJob } from '../document/transform/protocol';
+import { runBytesTransformToText, runFileTransformToText } from '../document/transform/run-transform';
 import type { TransformPriority } from '../document/transform/runner';
 import type { Mount } from '../mount';
 import { generateImagePreview } from '../shared/thumbnails';
@@ -345,25 +347,39 @@ export async function getTextPreview(mount: Mount, drivePath: DrivePath): Promis
         (priority) =>
             documentType
                 ? generateDocumentPreview(documentType, mount, drivePath, priority)
-                : generateFileTextPreview(mount, drivePath, mode),
+                : generateFileTextPreview(mount, drivePath),
     );
     return cached && { value: { body: cached.value, mode }, stale: cached.stale };
 }
 
-async function generateFileTextPreview(
-    mount: Mount,
-    drivePath: DrivePath,
-    mode: TextPreviewResult['mode'],
-): Promise<string | null> {
+async function generateFileTextPreview(mount: Mount, drivePath: DrivePath): Promise<string | null> {
     const file = await mount.readFile(drivePath.id);
     if (!file) return null;
-    let content: string;
-    try {
-        content = await file.text();
-    } catch {
-        return null;
-    }
-    return (await generateTextPreview(content, mode, drivePath.name)).body;
+    const preview = await getBytesTextPreview(await file.arrayBuffer(), drivePath.name, drivePath.mimeType || '');
+    return preview?.body ?? null;
+}
+
+// A plain file's text preview from its own bytes: the mode gate, the decode and the renderer, with no
+// Mount and no cache behind them. Drive reaches it through the per-version cache above; a mail part,
+// which has no version to key a cache on, calls it directly. Null = nothing to preview.
+export async function getBytesTextPreview(
+    bytes: ArrayBuffer | Uint8Array,
+    fileName: string,
+    contentType: string,
+): Promise<TextPreviewResult | null> {
+    const mode = getTextPreviewMode(contentType, fileName);
+    if (mode === null) return null;
+    return generateTextPreview(new TextDecoder().decode(bytes), mode, fileName);
+}
+
+const VCARD_PREVIEW_JOB: VCardPreviewJob = { kind: 'preview', documentType: 'vcard' };
+
+// What a .vcf preview refuses before it runs, wherever the file comes from: a file the mime and name don't
+// call a vCard, and one past the import ceiling — the preview parses the file whole, exactly as an import
+// would. A caller that knows the size without reading the bytes (Drive) refuses before it reads them.
+export function assertVCardPreviewable(fileName: string, contentType: string, size: number): void {
+    if (!isVCardFile(contentType, fileName)) throw new ApiError(400, 'Not a vCard file');
+    if (size > IMPORT_MAX_BYTES) throw new ApiError(413, 'File too large to preview');
 }
 
 // A .vcf reads as contact cards, never as its raw text — which is why getTextPreviewMode declines it and
@@ -371,6 +387,11 @@ async function generateFileTextPreview(
 // per file version like every other preview; the caller admits the file's size before asking.
 export async function getVCardPreview(mount: Mount, drivePath: DrivePath): Promise<Served<VCardPreview> | null> {
     return getOrCacheText(mount.previewsDir, drivePath, VCARD_FORMAT, parseVCardPreview, (priority) =>
-        runFileTransformToText(mount, drivePath, { kind: 'preview', documentType: 'vcard' }, { priority }),
+        runFileTransformToText(mount, drivePath, VCARD_PREVIEW_JOB, { priority }),
     );
+}
+
+// The same cards from bytes the caller already holds — a mail part. Same Worker job, same parse, no cache.
+export async function getBytesVCardPreview(data: ArrayBuffer): Promise<VCardPreview> {
+    return parseVCardPreview(await runBytesTransformToText(VCARD_PREVIEW_JOB, data, {}));
 }

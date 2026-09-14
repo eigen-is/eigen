@@ -1,14 +1,42 @@
-import { type EmailSummary, mailAttachmentName } from '@workspace/lib/types/mail';
+import { type Attachment, type EmailSummary, mailAttachmentName } from '@workspace/lib/types/mail';
 import { ApiError, contentDisposition, etagMatches, parseByteRange, scriptableInlineHeaders } from '../core';
 import type { Mail } from './mail-domain';
 
 const MAIL_PART_CACHE_CONTROL = 'private, max-age=86400';
+
+// A preview URL carries no version stamp, so the previews revalidate on every use and pay a 304 rather
+// than serve a rewritten draft's old body for a day.
+const MAIL_PREVIEW_CACHE_CONTROL = 'private, no-cache';
 
 // The message id alone doesn't pin the bytes: a draft save rewrites the message under its existing id,
 // re-delivering it as a fresh `<id>,S=<size>:2,<flags>` Maildir file. Date + size are what that rewrite
 // changes, and unlike the filename they carry no comma — which etagMatches splits If-None-Match on.
 function mailPartEtag(summary: EmailSummary, index: number): string {
     return `"${summary.id}-${index}-${summary.date.getTime()}-${summary.size}"`;
+}
+
+function mailPartNotModified(request: Request, etag: string): boolean {
+    const ifNoneMatch = request.headers.get('if-none-match');
+    return !!ifNoneMatch && etagMatches(ifNoneMatch, etag);
+}
+
+// The bytes a preview route renders, or null when the client already has them: the same ETag the byte
+// routes serve, answered off the summary row before messageGetAttachment re-parses the whole .eml.
+export async function readMailPartForPreview(
+    mail: Mail,
+    messageId: string,
+    index: number,
+    request: Request,
+    set: { headers: Record<string, string | number> },
+): Promise<Attachment | null> {
+    const summary = mail.messageGetSummary(messageId);
+    if (!summary) throw new ApiError(404, `Message '${messageId}' not found`);
+
+    const etag = mailPartEtag(summary, index);
+    set.headers['Cache-Control'] = MAIL_PREVIEW_CACHE_CONTROL;
+    set.headers['ETag'] = etag;
+    if (mailPartNotModified(request, etag)) return null;
+    return mail.messageGetAttachment(messageId, index);
 }
 
 // Serves one parsed mail part, shared by the download and the embed route. The 304 is answered off the
@@ -25,8 +53,7 @@ export async function serveMailPart(
     if (!summary) throw new ApiError(404, `Message '${messageId}' not found`);
 
     const etag = mailPartEtag(summary, index);
-    const ifNoneMatch = request.headers.get('if-none-match');
-    if (ifNoneMatch && etagMatches(ifNoneMatch, etag)) {
+    if (mailPartNotModified(request, etag)) {
         return new Response(null, { status: 304, headers: { ETag: etag, 'Cache-Control': MAIL_PART_CACHE_CONTROL } });
     }
 

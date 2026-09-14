@@ -1,15 +1,29 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
+import type { Contact } from '@workspace/lib/types/contact';
 import type { EmailDraft, EmailSummary } from '@workspace/lib/types/mail';
 import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
 
+type VCardPreviewBody = { cards: { contact: Contact }[]; dropped: number; total: number };
+
 const isWindows = process.platform === 'win32';
 const SUBJECT = 'Attachment route fixture';
 const RANGED_BODY = '0123456789';
 const ODD_NAME = 'räp"ort.txt';
+const OVERSIZE_SUBJECT = 'Oversize vCard fixture';
+const NOTES_BODY = 'First line.\r\n\r\nSecond paragraph.';
+const VCARD_BODY = [
+    'BEGIN:VCARD',
+    'VERSION:3.0',
+    'FN:Ada Lovelace',
+    'N:Lovelace;Ada;;;',
+    'EMAIL:ada@example.com',
+    'END:VCARD',
+].join('\r\n');
 
 async function uploadDraftAttachment(sessionToken: string, ownerId: string, file: File): Promise<{ tempId: string }> {
     const form = new FormData();
@@ -49,6 +63,10 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
         `/mail/${ctx.alice.user.id}/message/${messageId}/attachment/${index}/${fileName}`;
     const embedUrl = (index: number, fileName: string): string =>
         `/mail/${ctx.alice.user.id}/message/${messageId}/attachment/${index}/embed/${fileName}`;
+    const textPreviewUrl = (index: number): string =>
+        `/mail/${ctx.alice.user.id}/message/${messageId}/attachment/${index}/text-preview`;
+    const vcardPreviewUrl = (index: number): string =>
+        `/mail/${ctx.alice.user.id}/message/${messageId}/attachment/${index}/vcard-preview`;
 
     beforeAll(async () => {
         ctx = await getTestContext();
@@ -90,6 +108,23 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
             `Content-Disposition: attachment; filename="=?UTF-8?B?${Buffer.from(ODD_NAME).toString('base64')}?="`,
             '',
             'odd name',
+            `--${boundary}`,
+            'Content-Type: text/plain; charset=utf-8',
+            'Content-Disposition: attachment; filename="notes.txt"',
+            '',
+            NOTES_BODY,
+            `--${boundary}`,
+            'Content-Type: text/markdown; charset=utf-8',
+            'Content-Disposition: attachment; filename="readme.md"',
+            '',
+            '# Title',
+            '',
+            'A paragraph.',
+            `--${boundary}`,
+            'Content-Type: text/vcard; charset=utf-8',
+            'Content-Disposition: attachment; filename="card.vcf"',
+            '',
+            VCARD_BODY,
             `--${boundary}--`,
         ].join('\r\n');
 
@@ -290,5 +325,105 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
         expect(download.status).toBe(422);
         const embed = await authedRequest(ctx.alice.user.sessionToken, embedUrl(-1, 'page.html'));
         expect(embed.status).toBe(422);
+    });
+    test('a text part previews as a plaintext body', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, textPreviewUrl(5));
+        const preview = await assertJson<{ body: string; mode: string }>(res);
+        expect(preview.mode).toBe('plaintext');
+        expect(preview.body).toContain('<p>First line.</p>');
+        expect(preview.body).toContain('Second paragraph.');
+    });
+
+    test('a markdown part previews as rendered markdown', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, textPreviewUrl(6));
+        const preview = await assertJson<{ body: string; mode: string }>(res);
+        expect(preview.mode).toBe('markdown');
+        expect(preview.body).toContain('<h1>Title</h1>');
+    });
+
+    test('a .vcf part previews as its cards', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, vcardPreviewUrl(7));
+        const preview = await assertJson<VCardPreviewBody>(res);
+        expect(preview.total).toBe(1);
+        expect(preview.dropped).toBe(0);
+        expect(preview.cards).toHaveLength(1);
+        expect(preview.cards[0].contact.firstName).toBe('Ada');
+        expect(preview.cards[0].contact.lastName).toBe('Lovelace');
+    });
+
+    test('a part no text mode covers has no text preview', async () => {
+        const pdf = await authedRequest(ctx.alice.user.sessionToken, textPreviewUrl(1));
+        expect(pdf.status).toBe(404);
+        // A .vcf reads as cards, never as raw text — the same gate the Drive route runs.
+        const vcf = await authedRequest(ctx.alice.user.sessionToken, textPreviewUrl(7));
+        expect(vcf.status).toBe(404);
+    });
+
+    test('a part that is not a vCard is refused by the vcard preview', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, vcardPreviewUrl(5));
+        expect(res.status).toBe(400);
+    });
+
+    test('the preview routes revalidate on every use and answer If-None-Match with 304', async () => {
+        const first = await authedRequest(ctx.alice.user.sessionToken, textPreviewUrl(5));
+        expect(first.headers.get('cache-control')).toBe('private, no-cache');
+        const etag = first.headers.get('etag') ?? '';
+        expect(etag).not.toBe('');
+
+        const revalidated = await authedRequest(ctx.alice.user.sessionToken, textPreviewUrl(5), {
+            headers: { 'if-none-match': etag },
+        });
+        expect(revalidated.status).toBe(304);
+        expect(revalidated.headers.get('etag')).toBe(etag);
+
+        const cards = await authedRequest(ctx.alice.user.sessionToken, vcardPreviewUrl(7));
+        const cardsEtag = cards.headers.get('etag') ?? '';
+        const cardsRevalidated = await authedRequest(ctx.alice.user.sessionToken, vcardPreviewUrl(7), {
+            headers: { 'if-none-match': cardsEtag },
+        });
+        expect(cardsRevalidated.status).toBe(304);
+    });
+
+    test("another user's message is refused with 403 on both preview routes", async () => {
+        const text = await authedRequest(ctx.bob.user.sessionToken, textPreviewUrl(5));
+        expect(text.status).toBe(403);
+        const vcard = await authedRequest(ctx.bob.user.sessionToken, vcardPreviewUrl(7));
+        expect(vcard.status).toBe(403);
+    });
+
+    test('a vCard part past the import ceiling is refused with 413', async () => {
+        const boundary = 'att-oversize';
+        const filler = 'NOTE:'.concat('x'.repeat(IMPORT_MAX_BYTES / 8), '\r\n');
+        const bigCard = ['BEGIN:VCARD', 'VERSION:3.0', 'FN:Too Big', filler.repeat(9), 'END:VCARD'].join('\r\n');
+        const eml = [
+            'From: sender@external.com',
+            `To: ${ctx.alice.user.email}`,
+            `Subject: ${OVERSIZE_SUBJECT}`,
+            'MIME-Version: 1.0',
+            `Content-Type: multipart/mixed; boundary="${boundary}"`,
+            '',
+            `--${boundary}`,
+            'Content-Type: text/vcard; charset=utf-8',
+            'Content-Disposition: attachment; filename="huge.vcf"',
+            '',
+            bigCard,
+            `--${boundary}--`,
+        ].join('\r\n');
+
+        const deliverRes = await authedRequest(ctx.alice.user.sessionToken, `/mail/deliver/${ctx.alice.user.email}`, {
+            method: 'POST',
+            body: new TextEncoder().encode(eml).buffer,
+        });
+        expect(deliverRes.status).toBe(200);
+
+        const listRes = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox/inbox`);
+        const list = await assertJson<EmailSummary[]>(listRes);
+        const bigId = findOrFail(list, (m) => m.subject === OVERSIZE_SUBJECT).id;
+
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/mail/${ctx.alice.user.id}/message/${bigId}/attachment/0/vcard-preview`,
+        );
+        expect(res.status).toBe(413);
     });
 });

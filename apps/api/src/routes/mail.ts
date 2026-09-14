@@ -1,7 +1,7 @@
 import { MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
-import type { NewDraft, SentMailResult } from '@workspace/lib/types/mail';
-import { Elysia, type Static, t } from 'elysia';
-import { contentDisposition, setCacheHeaders } from '../lib/core';
+import { mailAttachmentName, type NewDraft, type SentMailResult } from '@workspace/lib/types/mail';
+import { Elysia, type Static, status, t } from 'elysia';
+import { ApiError, contentDisposition, setCacheHeaders } from '../lib/core';
 import { requireLocalhost, requireNonGuest, requireSelf } from '../lib/core/access';
 import {
     attachFromDrive,
@@ -12,7 +12,8 @@ import {
     saveAttachmentsToDrive,
     uploadDraftAttachment,
 } from '../lib/mail/mail';
-import { serveMailPart } from '../lib/mail/serve-mail-part';
+import { readMailPartForPreview, serveMailPart } from '../lib/mail/serve-mail-part';
+import { assertVCardPreviewable, getBytesTextPreview, getBytesVCardPreview } from '../lib/preview/preview-cache';
 import { betterAuth } from './auth';
 import { attachmentReferenceSchema } from './shared-schemas';
 
@@ -55,6 +56,9 @@ const AttachmentParamsSchema = t.Object({
     index: t.Integer({ minimum: 0 }),
     fileName: t.String(),
 });
+
+// The preview routes address the same part, without that decoration.
+const AttachmentPreviewParamsSchema = t.Omit(AttachmentParamsSchema, ['fileName']);
 
 export const mailRouter = new Elysia({ name: 'mail' })
     .use(betterAuth)
@@ -317,4 +321,40 @@ export const mailRouter = new Elysia({ name: 'mail' })
             return serveMailPart(await getMailClient(user), params.id, params.index, 'inline', request);
         },
         { auth: true, params: AttachmentParamsSchema },
+    )
+    // A mail part previews through the renderers Drive's own preview routes end in, on the part's bytes
+    // instead of a file's (PREVIEWS.md). Same shapes, so the same components render both.
+    .get(
+        '/mail/:ownerId/message/:id/attachment/:index/text-preview',
+        async ({ params, request, user, set }) => {
+            requireNonGuest(user);
+            requireSelf(params.ownerId, user.id);
+            const att = await readMailPartForPreview(await getMailClient(user), params.id, params.index, request, set);
+            if (!att) return status(304);
+
+            const preview = await getBytesTextPreview(
+                att.content,
+                mailAttachmentName(att, params.index),
+                att.contentType,
+            );
+            if (!preview) throw new ApiError(404, 'No preview available');
+            return preview;
+        },
+        { auth: true, params: AttachmentPreviewParamsSchema },
+    )
+    .get(
+        '/mail/:ownerId/message/:id/attachment/:index/vcard-preview',
+        async ({ params, request, user, set }) => {
+            requireNonGuest(user);
+            requireSelf(params.ownerId, user.id);
+            const att = await readMailPartForPreview(await getMailClient(user), params.id, params.index, request, set);
+            if (!att) return status(304);
+
+            // A part carries no size until it is parsed, so the ceiling is checked on the bytes in hand.
+            assertVCardPreviewable(mailAttachmentName(att, params.index), att.contentType, att.size);
+            // A copy, not the part's own buffer: content is a Buffer view over the whole parsed message,
+            // and the Worker is handed (and detaches) the buffer, not the view.
+            return getBytesVCardPreview(new Uint8Array(att.content).buffer);
+        },
+        { auth: true, params: AttachmentPreviewParamsSchema },
     );

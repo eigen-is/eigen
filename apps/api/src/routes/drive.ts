@@ -1,7 +1,5 @@
-import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { MAX_SEND_RECIPIENTS } from '@workspace/lib/constants/mail';
 import type { DriveAccessCheckResult, DrivePath } from '@workspace/lib/types/drive';
-import { isVCardFile } from '@workspace/lib/types/drive';
 import type { FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
@@ -17,7 +15,12 @@ import { getUniqueFileName } from '../lib/drive/naming';
 import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
 import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
-import { getScreenPreview, getTextPreview, getVCardPreview } from '../lib/preview/preview-cache';
+import {
+    assertVCardPreviewable,
+    getScreenPreview,
+    getTextPreview,
+    getVCardPreview,
+} from '../lib/preview/preview-cache';
 import { getThumbnail } from '../lib/shared/thumbnails';
 import { SNAPSHOT_NAME_FORMAT } from '../lib/versioning/timestamp';
 import { betterAuth } from './auth';
@@ -350,10 +353,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
         async ({ params, user, set }) => {
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
-            if (!isVCardFile(path.mimeType || '', path.name)) throw new ApiError(400, 'Not a vCard file');
-            // The file is parsed whole, so the preview carries the import's ceiling — and refuses
-            // before the bytes are read, not after.
-            if (path.size > IMPORT_MAX_BYTES) throw new ApiError(413, 'File too large to preview');
+            // Refused before the bytes are read, not after: the gate is the mail preview's too.
+            assertVCardPreviewable(path.name, path.mimeType || '', path.size);
 
             const result = await getVCardPreview(mount, path);
             if (!result) throw new ApiError(404, 'No preview available');

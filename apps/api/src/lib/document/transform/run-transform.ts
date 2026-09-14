@@ -141,12 +141,22 @@ export async function runFileTransformToText(
     const captureStart = performance.now();
     const file = await mount.readFile(drivePath.id);
     if (!file) return null;
-    const data = await file.arrayBuffer();
 
-    const { body } = await runTransformRequest(
-        { ...job, data },
-        { ...opts, priority, captureMs: performance.now() - captureStart },
-    );
+    return runBytesTransformToText(job, await file.arrayBuffer(), {
+        ...opts,
+        priority,
+        captureMs: performance.now() - captureStart,
+    });
+}
+
+// The same job with the bytes already in hand — a mail part has no Mount to read them from. The buffer
+// is transferred to the Worker, so the caller must own it.
+export async function runBytesTransformToText(
+    job: VCardPreviewJob,
+    data: ArrayBuffer,
+    opts: TransformOptions & { captureMs?: number },
+): Promise<string> {
+    const { body } = await runTransformRequest({ ...job, data }, opts);
     return body;
 }
 
