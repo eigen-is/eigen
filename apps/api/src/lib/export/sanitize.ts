@@ -81,11 +81,9 @@ function restrictStyleTextToDataRefs(node: { textContent: string | null }, allow
 // synchronous call (add → sanitize → remove), so they never leak to other DOMPurify users.
 export function sanitizeExportHtml(html: string, options?: SanitizeOptions): string {
     const { allowedRefs = NO_REFS, ...config } = options ?? {};
-    DOMPurify.addHook('afterSanitizeAttributes', (node) =>
-        restrictToDataRefs(node as unknown as AttrNode, allowedRefs),
-    );
+    DOMPurify.addHook('afterSanitizeAttributes', (node) => restrictToDataRefs(node, allowedRefs));
     DOMPurify.addHook('uponSanitizeElement', (node, data) => {
-        if (data.tagName === 'style') restrictStyleTextToDataRefs(node as { textContent: string | null }, allowedRefs);
+        if (data.tagName === 'style') restrictStyleTextToDataRefs(node, allowedRefs);
     });
     try {
         return DOMPurify.sanitize(html, { FORCE_BODY: true, ...config }) as string;

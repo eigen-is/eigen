@@ -6,7 +6,7 @@
 import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Sheet } from '@workspace/lib/sheets';
+import type { Sheet, SheetConfig } from '@workspace/lib/sheets';
 import { update } from '@workspace/sheet/engine';
 import { $ } from 'bun';
 import ExcelJS from 'exceljs';
@@ -140,8 +140,8 @@ function probeWorksheet(ws: ExcelJS.Worksheet): ExceljsSheetFindings {
         },
         hiddenCols: (ws.columns ?? []).filter((c) => c?.hidden).length,
         hiddenRows: 0,
+        autoFilter: ws.autoFilter,
         // exceljs typings omit these two on Worksheet; they exist at runtime (v4).
-        autoFilter: (ws as unknown as { autoFilter?: unknown }).autoFilter,
         conditionalFormattings:
             (ws as unknown as { conditionalFormattings?: unknown[] }).conditionalFormattings?.length ?? 0,
         dataValidations: Object.keys(
@@ -172,13 +172,13 @@ function probeWorksheet(ws: ExcelJS.Worksheet): ExceljsSheetFindings {
 // ---------- Stage 3: xlsxToSheets output inspection ----------
 function inspectSheet(sheet: Sheet): string {
     const lines: string[] = [];
-    const config = sheet.config ?? {};
+    const config: SheetConfig = sheet.config ?? {};
     lines.push(`top-level keys: ${Object.keys(sheet).sort().join(', ')}`);
     lines.push(`config keys: ${Object.keys(config).sort().join(', ') || '(none)'}`);
     lines.push(`celldata: ${sheet.celldata?.length ?? 0} cells`);
     const counts: Record<string, number> = {};
     for (const key of ['rowhidden', 'colhidden', 'merge', 'columnlen', 'rowlen', 'borderInfo'] as const) {
-        const value = (config as Record<string, unknown>)[key];
+        const value = config[key];
         counts[key] = value && typeof value === 'object' ? Object.keys(value).length : 0;
     }
     lines.push(
@@ -241,7 +241,7 @@ console.log('```\n');
 console.log('## Stage 2 — exceljs object model\n');
 const workbook = new ExcelJS.Workbook();
 await workbook.xlsx.load(buffer);
-const definedNames = (workbook.definedNames as unknown as { model?: unknown[] }).model?.length ?? 0;
+const definedNames = workbook.definedNames.model.length;
 console.log(`workbook definedNames: ${definedNames}\n`);
 for (const ws of workbook.worksheets) {
     const f = probeWorksheet(ws);

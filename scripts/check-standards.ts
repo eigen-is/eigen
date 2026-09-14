@@ -4,6 +4,9 @@
 // scripts/standards-baseline.json. A count may never rise; `--update` rewrites the baseline down to
 // what the tree actually has. `--verbose` prints the per-file breakdown. See docs/CODE-STANDARDS.md.
 
+import { LanguageVariant, SyntaxKind } from 'typescript/unstable/ast';
+import { createScanner } from 'typescript/unstable/ast/scanner';
+
 const BASELINE_PATH = 'scripts/standards-baseline.json';
 
 const verbose = process.argv.includes('--verbose');
@@ -17,108 +20,167 @@ function inScope(path: string): boolean {
     return !(path.endsWith('.d.ts') || /\.test\.tsx?$/.test(path) || path.endsWith('routeTree.gen.ts'));
 }
 
-// A `<` opens a JSX element only where an expression may start — after an operator, an opener or a
-// keyword. After an expression (identifier, `)`, `]`, literal) it is a comparison or a generic argument
-// list instead. `<T,>` and `<T extends …>` are the two generic forms .tsx still allows in that position.
-const JSX_ELEMENT_START = /(?:[([{=,:?;!+&|]|=>|&&|\|\||\b(?:return|yield|await|case|in|of|else|do))\s*$/;
-const JSX_TAG_OPEN = /^<(?:>|[A-Za-z][\w.:-]*\s*(?!,|extends\b))/;
-// Children are blanked only while they read as prose. Anything code-shaped means the `<` was misread —
-// a regex body spells `<p>` too — and blanking on it would hide the very casts the gate counts.
-const JSX_TEXT = /^[^;=()[\]"`\\|]*$/;
+// The scanner is TypeScript's own (`typescript/unstable/ast`, the one parser-grade surface the 7.x
+// package exposes to JS), so escapes, template nesting and comment forms are tokenised, not guessed.
+// Two decisions the grammar makes and a lexer cannot: whether a `/` opens a regular expression and
+// whether a `<` opens a JSX element. Both hang on the same question — may an expression start here? —
+// which the previous token answers: after a closer (`)`, `]`, `}`,
+// `++`, `--`), an identifier or a literal an expression is already in hand, so the character divides
+// or compares instead. Every other punctuator, and the keywords that take an operand, leave one open.
+const CLOSERS = new Set<SyntaxKind>([
+    SyntaxKind.CloseParenToken,
+    SyntaxKind.CloseBracketToken,
+    SyntaxKind.CloseBraceToken,
+    SyntaxKind.PlusPlusToken,
+    SyntaxKind.MinusMinusToken,
+]);
+const OPERAND_KEYWORDS = new Set<SyntaxKind>([
+    SyntaxKind.AwaitKeyword,
+    SyntaxKind.CaseKeyword,
+    SyntaxKind.DeleteKeyword,
+    SyntaxKind.DoKeyword,
+    SyntaxKind.ElseKeyword,
+    SyntaxKind.InKeyword,
+    SyntaxKind.InstanceOfKeyword,
+    SyntaxKind.NewKeyword,
+    SyntaxKind.OfKeyword,
+    SyntaxKind.ReturnKeyword,
+    SyntaxKind.ThrowKeyword,
+    SyntaxKind.TypeOfKeyword,
+    SyntaxKind.VoidKeyword,
+    SyntaxKind.YieldKeyword,
+]);
+
+function expressionMayStart(previous: SyntaxKind): boolean {
+    if (previous === SyntaxKind.Unknown) return true;
+    if (previous >= SyntaxKind.FirstPunctuation && previous <= SyntaxKind.LastPunctuation) {
+        return !CLOSERS.has(previous);
+    }
+    return OPERAND_KEYWORDS.has(previous);
+}
+
+// Where the scanner sits: `code` is ordinary TypeScript, `template` a `${…}` substitution (its closing
+// brace resumes the literal), `tag` the inside of `<Foo …>`, and `jsx` an element's children.
+type Frame = { kind: 'code' | 'template' | 'tag' | 'closing-tag' | 'jsx'; depth: number };
 
 // Blanks out comment bodies, literal contents and JSX text so identifier-shaped metrics never fire on
-// prose ("treat it as a secret") or on a string that happens to spell a keyword. Line count is preserved.
-// JSX needs its own mode because a text child is neither a comment nor a literal: `mode` tracks whether
-// we sit in code, between a tag's angle brackets, or in element children, and `{…}` in the latter two
-// pushes code back on. Only .tsx is scanned that way — in .ts every `<` is a comparison or a generic.
+// prose ("treat it as a secret") or on a string that happens to spell a keyword. Every blanked range
+// keeps its length and its newlines, so offsets and line numbers still line up with the source.
 function stripNoise(source: string, tsx = false): string {
-    let out = '';
-    let index = 0;
-    const modes: ('code' | 'tag' | 'jsx')[] = ['code'];
-    const depths = [0];
-    while (index < source.length) {
-        const char = source[index];
-        const mode = modes[modes.length - 1];
-        if (mode === 'jsx') {
-            if (char === '{') {
-                modes.push('code');
-                depths.push(0);
-                out += char;
-                index++;
-            } else if (char === '<' && source[index + 1] === '/') {
-                const end = source.indexOf('>', index);
-                const stop = end < 0 ? source.length : end + 1;
-                out += source.slice(index, stop).replaceAll(/[^\n]/g, ' ');
-                index = stop;
-                modes.pop();
-                depths.pop();
-            } else if (char === '<' && JSX_TAG_OPEN.test(source.slice(index, index + 40))) {
-                modes.push('tag');
-                depths.push(0);
-                out += char;
-                index++;
-            } else {
-                let end = index + 1;
-                while (end < source.length && source[end] !== '{' && source[end] !== '<') end++;
-                const run = source.slice(index, end);
-                out += JSX_TEXT.test(run) ? run.replaceAll(/[^\n]/g, ' ') : run;
-                index = end;
+    const scanner = createScanner(false, tsx ? LanguageVariant.JSX : LanguageVariant.Standard, source);
+    const frames: Frame[] = [{ kind: 'code', depth: 0 }];
+    const ranges: [number, number][] = [];
+    const blank = (start: number, end: number) => {
+        if (end > start) ranges.push([start, end]);
+    };
+    // `scanJsxAttributeValue` reports the `=` before the value as the token's start while its full
+    // start is the opening quote, so a literal takes the later of the two; for every other token the
+    // full start only reaches back over trivia, which the token start already skips.
+    const tokenStart = () => Math.max(scanner.getTokenStart(), scanner.getTokenFullStart());
+    // A `<T,>` or `<T extends …>` in .tsx is a type parameter list, the one other thing that may open
+    // where an element may. The compiler's parser decides it by lookahead too.
+    const opensTypeParameters = () =>
+        scanner.lookAhead(() => {
+            let token = scanner.scan();
+            while (token >= SyntaxKind.FirstTriviaToken && token <= SyntaxKind.LastTriviaToken) token = scanner.scan();
+            if (token !== SyntaxKind.Identifier) return false;
+            token = scanner.scan();
+            while (token >= SyntaxKind.FirstTriviaToken && token <= SyntaxKind.LastTriviaToken) token = scanner.scan();
+            return token === SyntaxKind.CommaToken || token === SyntaxKind.ExtendsKeyword;
+        });
+
+    let previous = SyntaxKind.Unknown;
+    for (;;) {
+        const frame = frames[frames.length - 1];
+        let token: SyntaxKind;
+        if (frame.kind === 'jsx') token = scanner.scanJsxToken();
+        else if (frame.kind === 'tag' && previous === SyntaxKind.EqualsToken) token = scanner.scanJsxAttributeValue();
+        else token = scanner.scan();
+        if (token === SyntaxKind.EndOfFile) break;
+        if (token >= SyntaxKind.FirstTriviaToken && token <= SyntaxKind.LastTriviaToken) {
+            if (token === SyntaxKind.SingleLineCommentTrivia || token === SyntaxKind.MultiLineCommentTrivia) {
+                blank(tokenStart(), scanner.getTokenEnd());
             }
-        } else if (char === '/' && (source[index + 1] === '/' || source[index + 1] === '*')) {
-            const end = source[index + 1] === '/' ? source.indexOf('\n', index) : source.indexOf('*/', index + 2) + 2;
-            const stop = end <= index ? source.length : end;
-            out += source.slice(index, stop).replaceAll(/[^\n]/g, ' ');
-            index = stop;
-        } else if (char === "'" || char === '"' || char === '`') {
-            out += char;
-            index++;
-            while (index < source.length && source[index] !== char) {
-                if (source[index] === '\\') index++;
-                else if (source[index] === '\n') out += '\n';
-                index++;
-            }
-            out += char;
-            index++;
-        } else {
-            if (char === '{') {
-                if (mode === 'tag') {
-                    modes.push('code');
-                    depths.push(0);
-                } else depths[depths.length - 1]++;
-            } else if (char === '}' && mode === 'code') {
-                if (depths[depths.length - 1] > 0) depths[depths.length - 1]--;
-                else if (modes.length > 1) {
-                    modes.pop();
-                    depths.pop();
-                }
-            } else if (mode === 'tag' && char === '>') {
-                modes.pop();
-                depths.pop();
-                if (source[index - 1] !== '/') {
-                    modes.push('jsx');
-                    depths.push(0);
-                }
-            } else if (
-                tsx &&
-                mode === 'code' &&
-                char === '<' &&
-                JSX_TAG_OPEN.test(source.slice(index, index + 40)) &&
-                JSX_ELEMENT_START.test(out.slice(-24).trimEnd())
-            ) {
-                modes.push('tag');
-                depths.push(0);
-            }
-            out += char;
-            index++;
+            continue;
         }
+
+        // A slash the grammar reads as a regular expression: rescan it, unless the body runs off the
+        // end of the file, which means the guess was wrong and the slash really did divide.
+        if (
+            (token === SyntaxKind.SlashToken || token === SyntaxKind.SlashEqualsToken) &&
+            (frame.kind === 'code' || frame.kind === 'template') &&
+            expressionMayStart(previous) &&
+            scanner.lookAhead(
+                () => scanner.reScanSlashToken() === SyntaxKind.RegularExpressionLiteral && !scanner.isUnterminated(),
+            )
+        ) {
+            token = scanner.reScanSlashToken();
+        }
+
+        switch (token) {
+            case SyntaxKind.StringLiteral:
+            case SyntaxKind.NoSubstitutionTemplateLiteral:
+                blank(tokenStart() + 1, scanner.getTokenEnd() - 1);
+                break;
+            case SyntaxKind.RegularExpressionLiteral:
+            case SyntaxKind.JsxText:
+            case SyntaxKind.JsxTextAllWhiteSpaces:
+                blank(tokenStart(), scanner.getTokenEnd());
+                break;
+            // `` `head${ `` opens a substitution; the frame it pushes ends on the matching `}`.
+            case SyntaxKind.TemplateHead:
+                blank(tokenStart() + 1, scanner.getTokenEnd() - 2);
+                frames.push({ kind: 'template', depth: 0 });
+                break;
+            case SyntaxKind.OpenBraceToken:
+                if (frame.kind === 'tag' || frame.kind === 'jsx') frames.push({ kind: 'code', depth: 0 });
+                else frame.depth++;
+                break;
+            case SyntaxKind.CloseBraceToken:
+                if (frame.depth > 0) frame.depth--;
+                else if (frame.kind === 'template') {
+                    token = scanner.reScanTemplateToken(false);
+                    const tail = token === SyntaxKind.TemplateTail;
+                    blank(tokenStart() + 1, scanner.getTokenEnd() - (tail ? 1 : 2));
+                    if (tail) frames.pop();
+                } else if (frames.length > 1) frames.pop();
+                break;
+            case SyntaxKind.LessThanToken:
+                if (frame.kind === 'jsx') frames.push({ kind: 'tag', depth: 0 });
+                else if (tsx && frame.kind !== 'tag' && expressionMayStart(previous) && !opensTypeParameters()) {
+                    frames.push({ kind: 'tag', depth: 0 });
+                }
+                break;
+            case SyntaxKind.LessThanSlashToken:
+                frames.pop();
+                frames.push({ kind: 'closing-tag', depth: 0 });
+                break;
+            case SyntaxKind.GreaterThanToken:
+                if (frame.kind === 'closing-tag') frames.pop();
+                else if (frame.kind === 'tag') {
+                    frames.pop();
+                    // `/>` closes the element outright; a bare `>` opens its children.
+                    if (previous !== SyntaxKind.SlashToken) frames.push({ kind: 'jsx', depth: 0 });
+                }
+                break;
+        }
+        previous = token;
     }
-    return out;
+
+    let out = '';
+    let cursor = 0;
+    for (const [start, end] of ranges) {
+        out += source.slice(cursor, start) + source.slice(start, end).replaceAll(/[^\n]/g, ' ');
+        cursor = end;
+    }
+    return out + source.slice(cursor);
 }
 
 // `as` also renames in module statements, so drop those before counting casts.
-// Specifiers are already blanked to '' by stripNoise; a module statement holds no `;` or `=`.
+// stripNoise blanks a specifier's contents, so it reads as quotes around spaces; a module statement
+// holds no `;` or `=`.
 const MODULE_STATEMENT =
-    /(?:^|\n)[ \t]*(?:import|export)\b[^;=]*?from[ \t]*(?:''|"")|(?:^|\n)[ \t]*import[ \t]*(?:''|"")|(?:^|\n)[ \t]*export[ \t]*\{[^}=;]*\}/g;
+    /(?:^|\n)[ \t]*(?:import|export)\b[^;=]*?from[ \t]*(?:'[^'\n]*'|"[^"\n]*")|(?:^|\n)[ \t]*import[ \t]*(?:'[^'\n]*'|"[^"\n]*")|(?:^|\n)[ \t]*export[ \t]*\{[^}=;]*\}/g;
 const DEEP_IMPORT = /@workspace\/(?:lib\/core\/|lib\/src\/|ui\/src\/)|['"]@workspace\/[\w@./-]+\.tsx?['"]/g;
 // Tailwind's default palette — theme tokens replace every one of these (CODE-STANDARDS § Code Style).
 const PALETTE =
