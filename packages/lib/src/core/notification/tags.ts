@@ -29,10 +29,10 @@ export function chatMentionTag(thread: ChatNotificationThread, email: string): s
 
 // The type decides the shape: only a comment tag carries a chat name, and a mention's email follows it.
 export function parseChatNotificationThread(type: string, tag: string): ChatNotificationThread | null {
-    if (!CHAT_NOTIFICATION_TYPES.includes(type as NotificationType)) return null;
+    if (!CHAT_NOTIFICATION_TYPES.some((t) => t === type)) return null;
     const [, ownerId, mountId, pathId, fourth] = tag.split(':');
     if (!ownerId || !mountId || !pathId) return null;
-    const chatName = COMMENT_NOTIFICATION_TYPES.includes(type as NotificationType) ? fourth : undefined;
+    const chatName = COMMENT_NOTIFICATION_TYPES.some((t) => t === type) ? fourth : undefined;
     return { ownerId, mountId, pathId, chatName };
 }
 
