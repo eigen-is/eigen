@@ -14,7 +14,6 @@ const DEMO_BLOCKED_AUTH_PATHS = new Set([
     '/auth/revoke-other-sessions',
 ]);
 
-// user middleware (compute user and session and pass to routes)
 // This guard MUST be chained before `.mount(auth.handler)`: Elysia snapshots an instance's
 // lifecycle hooks at route registration, so a hook added after `.mount()` never runs for the
 // mounted handler.

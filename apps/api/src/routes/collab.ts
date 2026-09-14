@@ -6,8 +6,8 @@ import {
 import { commentAssignedTag } from '@workspace/lib/notification/tags';
 import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
 import { type EffectiveMember, stripEigenExtension } from '@workspace/lib/types/drive';
-import type { ServerWebSocket } from 'bun';
 import { Elysia, t } from 'elysia';
+import type { ServerWebSocket } from 'elysia/ws/bun';
 import { getCommentIndex } from '../lib/chat/comment-index';
 import { broadcastCommentIndexUpdated } from '../lib/chat/sse-events';
 import type CollabDocument from '../lib/collab/collabDocument';
@@ -18,37 +18,36 @@ import { getSharedDrive } from '../lib/drive';
 import type { DriveLike } from '../lib/drive/get-drive';
 import { HomeRestoringError, touchHomeIfLoaded } from '../lib/home';
 import { sendToHome } from '../lib/home/home-relay';
-import { getUserByEmail, type User } from '../lib/user';
+import { getUserByEmail } from '../lib/user';
 import { keepWebSocketAlive } from '../utils/websockets';
 import { betterAuth } from './auth';
 
-// Elysia allocates a fresh ElysiaWS per WS event; only its stable `.raw` socket keeps one identity across open/message/close, so the Yjs origin matches the subscribed connection.
-const toRawWs = (ws: unknown) => (ws as { raw: ServerWebSocket<undefined> }).raw;
-
-type CollabWsData = {
-    user?: User;
-    params: { ownerId: string; mountId: string; pathId: string };
+type CollabSession = {
+    opened: Promise<void>;
     drive?: DriveLike;
     collabDocument?: CollabDocument;
     pingInterval?: ReturnType<typeof setInterval>;
-    opened?: Promise<void>;
 };
 
-function cleanupSession(data: CollabWsData, ws: ServerWebSocket<undefined>) {
-    if (data.pingInterval) clearInterval(data.pingInterval);
-    data.pingInterval = undefined;
-    unregisterCollabConnection(data.params.ownerId, ws);
-    if (data.collabDocument) {
-        data.collabDocument.unsubscribe(ws);
+// Elysia allocates a fresh ElysiaWS per WS event; only its stable `.raw` socket keeps one identity
+// across open/message/close, and it has no typed slot for the route's own per-socket state.
+const sessions = new WeakMap<ServerWebSocket<unknown>, CollabSession>();
+
+function cleanupSession(session: CollabSession, ws: ServerWebSocket<unknown>, ownerId: string) {
+    if (session.pingInterval) clearInterval(session.pingInterval);
+    session.pingInterval = undefined;
+    unregisterCollabConnection(ownerId, ws);
+    if (session.collabDocument) {
+        session.collabDocument.unsubscribe(ws);
     }
-    data.collabDocument = undefined;
+    session.collabDocument = undefined;
 }
 
 // Collab routes allow cross-owner access (collaborative editing on shared/team drives).
 // Access control is enforced by getSharedDrive() → SharedDrive ACL checks.
 // WebSocket server options (perMessageDeflate, maxPayloadLength) can't live here —
 // Elysia only honors `websocket` config on the root app instance, so it's set in
-// app.ts. (The block previously here was a silent no-op.)
+// app.ts.
 export const collabRouter = new Elysia({
     name: 'collab',
 })
@@ -187,34 +186,30 @@ export const collabRouter = new Elysia({
         }),
 
         async open(ws) {
-            const data = ws.data as unknown as CollabWsData;
             const { promise, resolve } = Promise.withResolvers<void>();
-            data.opened = promise;
+            const session: CollabSession = { opened: promise };
+            sessions.set(ws.raw, session);
 
             let stopHeartbeat: (() => void) | undefined;
             try {
-                const user = data.user;
-                if (!user) {
-                    ws.close(1008, 'Authentication failed');
-                    return;
-                }
+                const user = ws.data.user;
 
                 // Speak before any await: y-websocket closes after 30s of silence and
                 // retries, re-paying a cold open per attempt (the reconnect spiral).
                 // Cold Home init inside getSharedDrive is the slowest phase, so the
                 // heartbeat must precede it; the frame is a constant empty awareness
                 // update, so nothing leaks before the ACL check.
-                const rawWs = toRawWs(ws);
+                const rawWs = ws.raw;
                 stopHeartbeat = startLoadingHeartbeat(rawWs);
                 const loadStart = performance.now();
 
-                const { ownerId, mountId, pathId } = data.params;
+                const { ownerId, mountId, pathId } = ws.data.params;
                 // Registered before the awaits below, not after them: a socket still resolving its
                 // document when a restore starts must be in the sweep too. cleanupSession drops it
                 // again on close, whichever way this open ends.
                 registerCollabConnection(ownerId, rawWs);
                 const drive = await getSharedDrive(ownerId, user);
-                if (!drive || !(await drive.canRead(mountId, pathId, user))) {
+                if (!(await drive.canRead(mountId, pathId, user))) {
                     ws.close(1008, 'Authentication failed');
                     return;
                 }
@@ -226,13 +221,13 @@ export const collabRouter = new Elysia({
                         `connections=${document.connectionCount}`,
                 );
 
-                data.drive = drive;
-                data.collabDocument = document;
+                session.drive = drive;
+                session.collabDocument = document;
                 // Pin the doc-owner's home on every keepalive tick, mirroring how SSE pins a user's own home.
-                data.pingInterval = keepWebSocketAlive(
+                session.pingInterval = keepWebSocketAlive(
                     user,
                     rawWs,
-                    () => cleanupSession(data, rawWs),
+                    () => cleanupSession(session, rawWs, ownerId),
                     () => touchHomeIfLoaded(ownerId),
                 );
             } catch (err) {
@@ -261,29 +256,33 @@ export const collabRouter = new Elysia({
                 return;
             }
 
-            const data = ws.data as unknown as CollabWsData;
-            if (data.opened) await data.opened;
+            // Bun delivers a binary frame as a Buffer, itself a Uint8Array; anything else is not an update.
+            if (!(message instanceof Uint8Array)) return;
 
-            const { user, drive, collabDocument } = data;
-            if (!user || !drive || !collabDocument) return;
+            const session = sessions.get(ws.raw);
+            if (!session) return;
+            await session.opened;
+
+            const { drive, collabDocument } = session;
+            if (!drive || !collabDocument) return;
 
             try {
-                const update = message instanceof Uint8Array ? message : new Uint8Array(message as Buffer);
-                const { mountId, pathId } = data.params;
-                const canWrite = await drive.canWrite(mountId, pathId, user);
-                collabDocument.handleMessage(toRawWs(ws), update, canWrite);
+                const { mountId, pathId } = ws.data.params;
+                const canWrite = await drive.canWrite(mountId, pathId, ws.data.user);
+                collabDocument.handleMessage(ws.raw, message, canWrite);
             } catch (err) {
                 console.error('Error processing collab message:', err);
             }
         },
 
         async close(ws, code) {
-            const data = ws.data as unknown as CollabWsData;
-            if (data.opened) await data.opened;
-            const remaining = data.collabDocument ? data.collabDocument.connectionCount - 1 : null;
-            cleanupSession(data, toRawWs(ws));
+            const session = sessions.get(ws.raw);
+            if (!session) return;
+            await session.opened;
+            const remaining = session.collabDocument ? session.collabDocument.connectionCount - 1 : null;
+            cleanupSession(session, ws.raw, ws.data.params.ownerId);
             if (remaining !== null) {
-                console.log(`[collab] close path=${data.params.pathId} code=${code} connections=${remaining}`);
+                console.log(`[collab] close path=${ws.data.params.pathId} code=${code} connections=${remaining}`);
             }
         },
     });

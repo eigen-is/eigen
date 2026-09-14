@@ -1,4 +1,4 @@
-import type { ServerWebSocket } from 'bun';
+import type { ServerWebSocket } from 'elysia/ws/bun';
 import * as encoding from 'lib0/encoding';
 import { MESSAGE_AWARENESS } from './collabDocument';
 
@@ -21,7 +21,7 @@ function encodeEmptyAwarenessMessage(): Uint8Array {
 
 const EMPTY_AWARENESS_MESSAGE = encodeEmptyAwarenessMessage();
 
-export function startLoadingHeartbeat(conn: ServerWebSocket<undefined>, intervalMs = LOADING_HEARTBEAT_MS): () => void {
+export function startLoadingHeartbeat(conn: ServerWebSocket<unknown>, intervalMs = LOADING_HEARTBEAT_MS): () => void {
     const send = () => {
         if (conn.readyState === WebSocket.OPEN) conn.send(Buffer.from(EMPTY_AWARENESS_MESSAGE));
     };

@@ -1,8 +1,8 @@
 import { restoreYjsDoc } from '@workspace/lib/collab/yjs-utils';
 import { DRIVE_TYPE_STICKIES, type DrivePath, EIGEN_DOC_TYPE_INFO, isCollabType } from '@workspace/lib/types/drive';
-import type { ServerWebSocket } from 'bun';
 import { desc, lt, lte } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
+import type { ServerWebSocket } from 'elysia/ws/bun';
 import * as decoding from 'lib0/decoding';
 import * as encoding from 'lib0/encoding';
 import * as awarenessProtocol from 'y-protocols/awareness';
@@ -147,7 +147,7 @@ class DbProvider {
 }
 
 // Yjs and awareness hand back whatever origin was passed in; ours is the socket, anything else is server-side.
-function isConnection(origin: unknown): origin is ServerWebSocket<undefined> {
+function isConnection(origin: unknown): origin is ServerWebSocket<unknown> {
     return origin !== null && typeof origin === 'object' && 'readyState' in origin;
 }
 
@@ -173,16 +173,16 @@ export default class CollabDocument {
     public doc!: Y.Doc;
     private provider!: DbProvider;
     private awareness!: awarenessProtocol.Awareness;
-    private connections: Map<ServerWebSocket<undefined>, User> = new Map();
+    private connections: Map<ServerWebSocket<unknown>, User> = new Map();
 
     public get connectionCount(): number {
         return this.connections.size;
     }
-    private connectionClientIds: Map<ServerWebSocket<undefined>, Set<number>> = new Map();
+    private connectionClientIds: Map<ServerWebSocket<unknown>, Set<number>> = new Map();
     // Reverse index of connectionClientIds: which connection currently owns each awareness client id.
     // An id may only be written or removed by the connection that first declared it, so a reader can't
     // evict or overwrite a peer's presence. Released on removal and on disconnect.
-    private clientIdOwners: Map<number, ServerWebSocket<undefined>> = new Map();
+    private clientIdOwners: Map<number, ServerWebSocket<unknown>> = new Map();
     private closed: boolean = false;
     private lastTouchedAt = 0;
     private lastEditRecordedAt: Map<string, number> = new Map(); // userId -> ts
@@ -321,7 +321,7 @@ export default class CollabDocument {
         restoreYjsDoc(this.doc, state, roots);
     }
 
-    public subscribe(user: User, conn: ServerWebSocket<undefined>) {
+    public subscribe(user: User, conn: ServerWebSocket<unknown>) {
         if (this.closed) {
             return;
         }
@@ -330,7 +330,7 @@ export default class CollabDocument {
         this.sendSyncStep1(conn);
     }
 
-    public unsubscribe(conn: ServerWebSocket<undefined>) {
+    public unsubscribe(conn: ServerWebSocket<unknown>) {
         if (this.closed) {
             return;
         }
@@ -346,7 +346,7 @@ export default class CollabDocument {
         }
     }
 
-    private dropConnection(conn: ServerWebSocket<undefined>): void {
+    private dropConnection(conn: ServerWebSocket<unknown>): void {
         this.connections.delete(conn);
         const clientIds = this.connectionClientIds.get(conn);
         if (clientIds) {
@@ -386,7 +386,7 @@ export default class CollabDocument {
         }
     }
 
-    public handleMessage(conn: ServerWebSocket<undefined>, update: Uint8Array, canWrite: boolean) {
+    public handleMessage(conn: ServerWebSocket<unknown>, update: Uint8Array, canWrite: boolean) {
         if (this.closed) {
             return;
         }
@@ -455,7 +455,7 @@ export default class CollabDocument {
         }
     }
 
-    private broadcastMessage(originConn: ServerWebSocket<undefined> | null, message: Uint8Array): void {
+    private broadcastMessage(originConn: ServerWebSocket<unknown> | null, message: Uint8Array): void {
         if (this.closed) {
             return;
         }
@@ -470,7 +470,7 @@ export default class CollabDocument {
         }
     }
 
-    private sendSyncStep1(conn: ServerWebSocket<undefined>): void {
+    private sendSyncStep1(conn: ServerWebSocket<unknown>): void {
         try {
             const encoder = encoding.createEncoder();
             encoding.writeVarUint(encoder, MESSAGE_SYNC);

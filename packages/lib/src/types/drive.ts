@@ -51,6 +51,19 @@ export type DriveVisibility = 'private' | 'public-read' | 'public-write';
 export const EIGEN_DOC_TYPES = ['doc', 'stickies', 'slides', 'sheets', 'chat', 'vector'] as const;
 export type EigenDocType = (typeof EIGEN_DOC_TYPES)[number];
 
+export type YjsRootKind = 'map' | 'array' | 'text' | 'xmlfragment';
+
+// Every download format the export route can produce. A type's own list is below.
+export type ExportFormat = 'docx' | 'xlsx' | 'pdf' | 'html' | 'svg';
+
+// What the convert route turns an office file into.
+export const CONVERT_TARGETS = ['eigensheets', 'eigendoc'] as const;
+export type ConvertTarget = (typeof CONVERT_TARGETS)[number];
+
+export function isConvertTarget(t: string): t is ConvertTarget {
+    return CONVERT_TARGETS.some((x) => x === t);
+}
+
 // `mime` is the real mime (`application/eigendoc`); `urlSlug` is the route-safe
 // form (`application-eigendoc`) used by `/drive/.../mime/:slug` — the server
 // route reverses dash→slash at handler time.
@@ -59,14 +72,6 @@ export type EigenDocType = (typeof EIGEN_DOC_TYPES)[number];
 // the version-restore walker to force-type both the live doc and the snapshot
 // doc before pair-walking them — needed because Y.applyUpdate hydrates as
 // AbstractType, so `instanceof` checks would otherwise fail. Omitted for chat.
-export type YjsRootKind = 'map' | 'array' | 'text' | 'xmlfragment';
-
-// Every download format the export route can produce. A type's own list is below.
-export type ExportFormat = 'docx' | 'xlsx' | 'pdf' | 'html' | 'svg';
-
-// What the convert route turns an office file into.
-export type ConvertTarget = 'eigensheets' | 'eigendoc';
-
 export type EigenDocTypeInfo = {
     type: EigenDocType;
     mime: string;
@@ -181,7 +186,7 @@ export function exportFormatsFor(type: DrivePathType): readonly ExportFormat[] {
 }
 
 export function getEigenDocInfoByType(type: DrivePathType): EigenDocTypeInfo | undefined {
-    return EIGEN_DOC_TYPES.includes(type as EigenDocType) ? EIGEN_DOC_TYPE_INFO[type as EigenDocType] : undefined;
+    return isDocumentType(type) ? EIGEN_DOC_TYPE_INFO[type] : undefined;
 }
 
 // Accepts both real mime (`application/eigendoc`) and route-safe url-slug
@@ -232,16 +237,10 @@ export function isContainerType(type: DrivePathType): type is DriveContainerType
     return isFolderType(type) || isCollabType(type) || isChatType(type);
 }
 
-export function isDocumentType(type: DrivePathType) {
-    return isCollabType(type) || isChatType(type);
+// Every Eigen container type except plain folders: the EIGEN_DOC_TYPES set as a predicate.
+export function isDocumentType(type: DrivePathType): type is EigenDocType {
+    return EIGEN_DOC_TYPES.some((t) => t === type);
 }
-
-// Every Eigen container type except plain folders. Single source of truth for
-// "is this an Eigen-managed document/chat" — used by WebDAV write-protect
-// (mount internals are read-only) and by the docContainerDescendantIds CTE in
-// mount/helpers.ts. Same set as isDocumentType; an alias of EIGEN_DOC_TYPES (kept under
-// this name for the SQL-IN call sites) so the two lists can't drift.
-export const EIGEN_DOCUMENT_TYPES = EIGEN_DOC_TYPES;
 
 const INLINE_EDITABLE_MIMES = new Set([
     'text/markdown',
@@ -441,13 +440,17 @@ export type FileEditorContent = {
     updatedAt: Date;
 };
 
-export type EditorSaveResult = {
-    conflict: boolean;
-    updatedAt?: Date;
-    currentUpdatedAt?: Date;
-};
+export type EditorSaveResult = { conflict: true; currentUpdatedAt: Date } | { conflict: false; updatedAt: Date };
 
 export type EffectiveMember = { email: string; read: boolean; write: boolean };
+
+// One row of the share dialog's access list. A direct entry is the path's own ACL plus the owner
+// row the dialog synthesizes; an inherited one comes from an ancestor folder and names it.
+export type DirectAccessItem = DriveACL & { owner: boolean };
+export type InheritedAccessItem = DriveACL & { sourceFolderName: string };
+export type DriveAccessItem =
+    | (DirectAccessItem & { inherited?: never; sourceFolderName?: never })
+    | (InheritedAccessItem & { owner?: never; inherited: true });
 
 export type DriveAccessRecipient = { email: string; hasReadAccess: boolean; needsGuestAdmission: boolean };
 export type DriveAccessCheckResult = { canShare: boolean; recipients: DriveAccessRecipient[] };

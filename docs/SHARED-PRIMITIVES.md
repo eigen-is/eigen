@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1448 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1449 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -473,7 +473,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (343)
+## Types (344)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -501,9 +501,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `TextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `FigureAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
 | `FigureLayout` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
-| `DirectAccessItem` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
-| `DriveAccessItem` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
-| `InheritedAccessItem` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
 | `FilePresentation` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
 | `CanonicalRecipient` | `@workspace/lib/mail` | packages/lib/src/core/mail/addresses.ts |
 | `RecipientField` | `@workspace/lib/mail` | packages/lib/src/core/mail/addresses.ts |
@@ -548,6 +545,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ChatMessage` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `ChatMessageType` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `ChatNotificationThread` | `@workspace/lib/types` | packages/lib/src/types/notification.ts |
+| `ClientFileEventInput` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `ClientFileEventRecord` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `ClientFileEventType` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `CollabDocumentInfo` | `@workspace/lib/types` | packages/lib/src/types/collab.ts |
@@ -559,10 +557,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CreateContactInput` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `CreateEventInput` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `DeepPartial` | `@workspace/lib/types` | packages/lib/src/types/util.ts |
+| `DirectAccessItem` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DraftAttachmentUpload` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `DraftInput` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `DraftUpdateOptions` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `DriveAccessCheckResult` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DriveAccessItem` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveAccessRecipient` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveACL` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveACLDelta` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -619,6 +619,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ImageDimensions` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `ImipMethod` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `ImportContactsResult` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
+| `InheritedAccessItem` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `InviteResult` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `Label` | `@workspace/lib/types` | packages/lib/src/types/label.ts |
 | `LandingLink` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
@@ -1087,7 +1088,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getDriveComparator` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-sort.ts |
 | `handleDriveSSEvent` | `@workspace/lib/drive` | packages/lib/src/core/drive/sse-handlers.ts |
 | `isPendingMediaName` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
-| `mimeContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `mountMimeContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `PENDING_PREFIX` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
 | `EIGEN_DOC_ICONS` | `@workspace/lib/eigendoc-icons` | packages/lib/src/core/eigendoc-icons.ts |
@@ -1150,6 +1150,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CHATS_FOLDER_NAME` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `CLIENT_FILE_EVENT_TYPES` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `CODE_EXTENSIONS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `CONVERT_TARGETS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `describeFileEvent` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `DRIVE_EXTENSIONS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_MIME_CHAT` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -1169,7 +1170,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DRIVE_TYPE_VECTOR` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EIGEN_DOC_TYPE_INFO` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EIGEN_DOC_TYPES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `EIGEN_DOCUMENT_TYPES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EMPTY_S3` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `exportFormatsFor` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `externalOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
@@ -1181,6 +1181,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isClientFileEventType` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `isCollabType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isContainerType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `isConvertTarget` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isDocumentType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isEmailDraft` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `isExternalOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |

@@ -55,9 +55,7 @@ export function useUploadFile(ownerId: string, mountId: string = DEFAULT_MOUNT_I
             });
             if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
             const data = (await res.json()) as DrivePath[];
-            // Raw fetch bypasses Eden's Date reviver, so the JSON dates arrive as strings.
-            // Revive them so the returned value honors its DrivePath type (callers like
-            // the media-resolver probe call updatedAt.getTime()).
+            // Raw fetch bypasses Eden's Date reviver, so the dates arrive as strings and are revived here.
             const path = data[0];
             return {
                 ...path,

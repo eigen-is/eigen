@@ -21,6 +21,10 @@ A read-only peer can send awareness, so `CollabDocument.handleMessage` validates
 
 y-websocket hard-closes a connection that stays silent for 30 s (a hardcoded client constant) and reconnects on a ~2.5 s backoff, and every retry re-pays the full load — a self-sustaining spiral that once degraded the whole server. So `apps/api/src/lib/collab/loading-heartbeat.ts` sends an empty awareness frame immediately and every 10 s until sync-step-1 takes over. Clients apply it as a no-op; it exists only to reset their silence timer.
 
+## The route refuses before it speaks
+
+An unauthenticated upgrade never reaches `open`: the `auth` macro answers the HTTP upgrade itself, so the handler's user is always a session user. A caller without read access gets exactly one frame, the constant empty awareness heartbeat above, then close 1008. Home-replaced (restore) and storage-unavailable opens close with their own codes (`packages/lib/src/constants/collab.ts`); every other failed open is 1008. Binary frames arrive as Bun `Buffer`s; a string frame is `ping`/`pong` or ignored. The route keeps its per-socket state (the `opened` gate, the drive, the document, the keepalive) in a `WeakMap` keyed by the raw Bun socket — the one identity that survives Elysia's fresh wrapper per event — and reads user and params from the typed `ws.data`.
+
 ## A document lingers after the last unsubscribe
 
 `CollabDocument.scheduleClose` waits `CLOSE_LINGER_MS` (60 s) after the last connection drops before tearing the document down, so a reload or a brief disconnect reattaches to the loaded document instead of re-paying the load. A new subscribe cancels the timer.

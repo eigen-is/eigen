@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { ServerWebSocket } from 'bun';
+import type { ServerWebSocket } from 'elysia/ws/bun';
 import * as decoding from 'lib0/decoding';
 import * as awarenessProtocol from 'y-protocols/awareness';
 import * as Y from 'yjs';

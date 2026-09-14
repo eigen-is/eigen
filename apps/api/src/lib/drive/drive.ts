@@ -20,6 +20,7 @@ import {
     type DriveVisibility,
     type EffectiveMember,
     type EigenDocType,
+    type InviteResult,
     isContainerType,
     withEigenExtension,
 } from '@workspace/lib/types/drive';
@@ -274,8 +275,8 @@ export default class Drive {
             throw new ApiError(404, 'Parent folder not found');
         }
 
-        // The stem gets the mount's name rule before the extension goes on: an empty or `..` stem would
-        // otherwise pass as a bare `.eigendoc` dotfile (the chat rooms route guards the same by hand).
+        // The stem gets the mount's name rule before the extension goes on, or an empty or `..` stem
+        // would pass as a bare `.eigendoc` dotfile.
         const safeName = withEigenExtension(validateName(name), type);
         const pathId = await mount.createFolder(parentId, safeName, type);
         // Roll the container back when provisioning fails, so a transient storage outage can't
@@ -960,10 +961,7 @@ export default class Drive {
         chatId: string,
         email: string,
         actor: User | null = null,
-    ): Promise<{
-        alreadyHasAccess: boolean;
-        targetPathId: string;
-    }> {
+    ): Promise<InviteResult> {
         if (!validateEmailAddress(email)) {
             throw new ApiError(400, 'Invalid email address');
         }

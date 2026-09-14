@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import type { MountConfig, MountSettings } from '@workspace/lib/types';
-import { EIGEN_DOCUMENT_TYPES } from '@workspace/lib/types/drive';
+import { EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
 import { type SQL, sql } from 'drizzle-orm';
 import { getS3Config } from '../config/server-settings';
 import { ApiError } from '../core';
@@ -46,7 +46,7 @@ export function validateName(name: string): string {
     return normalized;
 }
 
-// Subquery: ids of every eigendoc container (every EIGEN_DOCUMENT_TYPES row) and
+// Subquery: ids of every eigendoc container (every EIGEN_DOC_TYPES row) and
 // every path descended from one. Embedded as `parentId NOT IN (…)` to filter out
 // container internals (data.db, media, embedded chats) — file rows the user
 // never sees in the drive UI and shouldn't see in search.
@@ -54,7 +54,7 @@ export const docContainerDescendantIds = sql`
     WITH RECURSIVE doc_tree AS (
         SELECT id FROM paths
         WHERE type IN (${sql.join(
-            EIGEN_DOCUMENT_TYPES.map((t) => sql`${t}`),
+            EIGEN_DOC_TYPES.map((t) => sql`${t}`),
             sql`, `,
         )}) AND trashedAt IS NULL
         UNION ALL

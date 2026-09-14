@@ -1,9 +1,9 @@
-import type { ServerWebSocket } from 'bun';
+import type { ServerWebSocket } from 'elysia/ws/bun';
 import type { User } from '../lib/user';
 
 export function keepWebSocketAlive(
     user: User,
-    ws: ServerWebSocket,
+    ws: ServerWebSocket<unknown>,
     onClose: () => void,
     onTick?: () => void,
 ): ReturnType<typeof setInterval> {

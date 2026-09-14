@@ -3,7 +3,7 @@ import { DRIVE_MIME_CHAT } from '@workspace/lib/types/drive';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { invalidateChatMatches } from '../chat/hooks/keys';
-import { collabKeys } from '../collab/hooks/keys';
+import { invalidateCollabDocument } from '../collab/hooks/keys';
 import { invalidateSearchOwner } from '../search';
 import {
     driveKeys,
@@ -45,7 +45,7 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, use
             if (userId) invalidateAclSharedOrUnshared(queryClient, userId);
             invalidateAclUpdated(queryClient, path.ownerId, path.mountId, path.id, path.parentId, path.mimeType);
             invalidateEffectiveMembers(queryClient, path.ownerId);
-            queryClient.invalidateQueries({ queryKey: collabKeys.document(path.ownerId, path.mountId, path.id) });
+            invalidateCollabDocument(queryClient, path.ownerId, path.mountId, path.id);
             invalidateFileHistory(queryClient, path.ownerId);
             return true;
 
