@@ -109,12 +109,10 @@ export function parseByteRange(
     return { start, end };
 }
 
-// The RFC 7233 response shape the three byte-range servers share (drive `serveFile`, the WebDAV GET,
-// the mail part routes): 416 with `bytes */size` for a parsed range the resource can't satisfy, 206 with
-// Content-Range + the slice length, the full body otherwise. Callers own their headers and their ETag/304
-// handling and pass only the byte source, whose `end` is exclusive because every reader here takes it that
-// way. Content-Length is set here on both bodies: a stream (S3) and an in-memory slice carry no length of
-// their own, and the resource size is the same number the range math above already trusts.
+// The RFC 7233 response shape the three byte-range servers share (drive serveFile, the WebDAV GET, the mail
+// part routes). Callers own their headers and ETag/304 handling and pass only the byte source; `end` is
+// exclusive because every reader takes it that way. Content-Length only binds for an in-memory body: Bun
+// derives it from a BunFile and sends a stream chunked.
 export async function rangeResponse(
     headers: Record<string, string>,
     size: number,

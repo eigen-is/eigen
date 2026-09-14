@@ -62,6 +62,15 @@ describe('rangeResponse', () => {
     };
     const headers = { 'Content-Type': 'text/plain', 'Accept-Ranges': 'bytes' };
 
+    test('awaits an async source, as every real caller hands it one', async () => {
+        const asyncSource = {
+            slice: async (start: number, end: number) => BODY.slice(start, end),
+            full: async () => BODY.slice(),
+        };
+        expect(await (await rangeResponse(headers, BODY.length, 'bytes=2-5', asyncSource)).text()).toBe('2345');
+        expect(await (await rangeResponse(headers, BODY.length, null, asyncSource)).text()).toBe('0123456789');
+    });
+
     test('serves the whole body as 200 with no Content-Range', async () => {
         const res = await rangeResponse(headers, BODY.length, null, source);
         expect(res.status).toBe(200);
