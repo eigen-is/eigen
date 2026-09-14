@@ -52,7 +52,7 @@ without reading data into memory. Callers stream or buffer as needed (e.g., `fil
 | Method      | Returns             | Notes                                        |
 |-------------|---------------------|----------------------------------------------|
 | `read`      | `StorageFile`       | Lazy reference (BunFile or S3File)           |
-| `readRange?`| `StorageFile`       | Optional — byte range `[start, end)` for ranged serving |
+| `readRange?`| `StorageFile`       | Optional — byte range `[start, end)` for ranged serving; the 416/206/200 response around it is the shared `rangeResponse` (`lib/core/http.ts`) |
 | `write`     | `Promise<number>`   | Accepts Buffer, Uint8Array, ArrayBuffer, BunFile |
 | `delete`    | `Promise<boolean>`  |                                               |
 | `exists`    | `Promise<boolean>`  |                                               |
