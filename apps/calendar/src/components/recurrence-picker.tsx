@@ -7,6 +7,7 @@ type RecurrencePickerProps = {
     value: string | null;
     onChange: (rrule: string | null) => void;
     startDate: Date;
+    disabled?: boolean;
 };
 
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -28,7 +29,7 @@ function getOrdinal(n: number): string {
     return 'last';
 }
 
-export function RecurrencePicker({ value, onChange, startDate }: RecurrencePickerProps) {
+export function RecurrencePicker({ value, onChange, startDate, disabled }: RecurrencePickerProps) {
     const weekdayIdx = getWeekdayIndex(startDate);
     const weekOfMonth = getWeekOfMonth(startDate);
     const dayName = DAY_NAMES[weekdayIdx];
@@ -92,6 +93,7 @@ export function RecurrencePicker({ value, onChange, startDate }: RecurrencePicke
         <div className="flex items-center gap-3">
             <Select
                 value={selectValue}
+                disabled={disabled}
                 onValueChange={(v) => {
                     if (v === 'none') {
                         onChange(null);

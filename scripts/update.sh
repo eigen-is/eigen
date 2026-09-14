@@ -83,6 +83,12 @@ fi
 # The fail2ban jails watch the mail containers' logs by container ID; the rebuild changed the
 # IDs, so without a reload the jails keep watching deleted files (docker/fail2ban/README.md).
 if command -v fail2ban-client >/dev/null && fail2ban-client status 2>/dev/null | grep -q eigen-postfix-sasl; then
+    # The jails read the /etc copies the install made, so a filter fix in the repo only reaches the
+    # host if we re-copy it. Filters are ours to overwrite; jail.d is not — that is where admins tune
+    # ignoreip and the thresholds (docker/fail2ban/README.md).
+    echo "Refreshing fail2ban filters..."
+    cp docker/fail2ban/filter.d/*.conf /etc/fail2ban/filter.d/ ||
+        echo "  filter refresh failed — copy them by hand (docker/fail2ban/README.md)"
     echo "Reloading fail2ban jails..."
     fail2ban-client reload >/dev/null || echo "  fail2ban reload failed — run 'fail2ban-client reload' manually"
 fi

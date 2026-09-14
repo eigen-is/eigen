@@ -86,8 +86,8 @@ content JSON (title + description + tag-stripped body, with `section` as a filte
 `dist/index/pagefind/` and served as plain static files. No infrastructure, no API key.
 
 Two consumers share one loader (`packages/lib/src/core/search/pagefind.ts`, a lazy `@vite-ignore` import that
-degrades to no results when the bundle is absent): the search box on the `/support` landing
-(`components/support/support-search.tsx`), and the command palette's Help group
+degrades to no results when the bundle is absent, and skips the import in dev where only a 404 can come back):
+the search box on the `/support` landing (`components/support/support-search.tsx`), and the command palette's Help group
 (`command-palette/providers/help-search.ts`). The palette source only fires under the `?` scope or no scope, so
 the WASM index is never loaded while the user is narrowed to mail or files. In production every app is
 same-origin behind Caddy, so `/pagefind` is reachable from any app.

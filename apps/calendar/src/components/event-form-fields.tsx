@@ -39,6 +39,9 @@ type EventFormFieldsProps = {
     timezone: string;
     allDayId: string;
     attendeesSection: ReactNode;
+    // Title, time, recurrence, location and description of an invitation are the organizer's to change:
+    // updateEvent's linked event guard drops them (docs/CALENDAR.md). The calendar select stays live.
+    detailsDisabled?: boolean;
 };
 
 export function EventFormFields({
@@ -70,6 +73,7 @@ export function EventFormFields({
     timezone,
     allDayId,
     attendeesSection,
+    detailsDisabled,
 }: EventFormFieldsProps) {
     const handleStartTimeChange = (newStart: string) => {
         setStartTime(newStart);
@@ -102,6 +106,7 @@ export function EventFormFields({
                     placeholder={titlePlaceholder}
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
+                    disabled={detailsDisabled}
                     autoFocus
                     className="text-lg border-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-primary"
                 />
@@ -119,6 +124,7 @@ export function EventFormFields({
                                     setStartDate(e.target.value);
                                     if (endDate < e.target.value) setEndDate(e.target.value);
                                 }}
+                                disabled={detailsDisabled}
                                 className="flex-1 min-w-fit h-8 text-sm"
                             />
                             <span className="text-muted-foreground text-sm">to</span>
@@ -127,6 +133,7 @@ export function EventFormFields({
                                 value={endDate}
                                 min={startDate}
                                 onChange={(e) => setEndDate(e.target.value)}
+                                disabled={detailsDisabled}
                                 className="flex-1 min-w-fit h-8 text-sm"
                             />
                         </div>
@@ -139,15 +146,17 @@ export function EventFormFields({
                                     setStartDate(e.target.value);
                                     setEndDate(e.target.value);
                                 }}
+                                disabled={detailsDisabled}
                                 className="h-8 text-sm"
                             />
-                            <TimeSelect value={startTime} onChange={handleStartTimeChange} />
+                            <TimeSelect value={startTime} onChange={handleStartTimeChange} disabled={detailsDisabled} />
                             <span className="text-muted-foreground text-sm">–</span>
                             <TimeSelect
                                 value={endTime}
                                 onChange={handleEndTimeChange}
                                 referenceTime={startTime}
                                 minTime={addMinutes(startTime, 15)}
+                                disabled={detailsDisabled}
                             />
                         </div>
                     )}
@@ -157,6 +166,7 @@ export function EventFormFields({
                             <Checkbox
                                 id={allDayId}
                                 checked={allDay}
+                                disabled={detailsDisabled}
                                 onCheckedChange={(checked) => {
                                     const isAllDay = !!checked;
                                     setAllDay(isAllDay);
@@ -173,6 +183,7 @@ export function EventFormFields({
                             value={rruleString}
                             onChange={setRruleString}
                             startDate={recurrenceStartDate}
+                            disabled={detailsDisabled}
                         />
                         {!allDay && (
                             <span className="text-xs text-muted-foreground ml-auto">
@@ -191,6 +202,7 @@ export function EventFormFields({
                     placeholder={locationPlaceholder}
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
+                    disabled={detailsDisabled}
                     className="flex-1"
                 />
             </div>
@@ -201,6 +213,7 @@ export function EventFormFields({
                     placeholder={descriptionPlaceholder}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
+                    disabled={detailsDisabled}
                     rows={3}
                     className="flex-1"
                 />

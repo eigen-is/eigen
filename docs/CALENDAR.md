@@ -99,7 +99,9 @@ from being undone by an organizer edit.
 
 **Linked event guard**: Attendees can only change `data.reminders` and `data.color` on linked copies. Title, time,
 description, location, rrule changes are blocked by `updateEvent()`. Detection: `event.data.organizer` is present
-(not the DB column `organizerEventId`).
+(not the DB column `organizerEventId`). The edit dialog mirrors the guard on the same condition
+(`EventFormFields`' `detailsDisabled`) so those fields are disabled rather than silently dropped on save; the
+calendar select stays live, because moving a linked copy goes through `moveEvent()`.
 
 **SSE events**: `calendar:invite-received`, `calendar:invite-updated`, `calendar:invite-cancelled`, `calendar:invite-rsvp`.
 

@@ -47,9 +47,10 @@ type TimeSelectProps = {
     onChange: (value: string, dayOffset: number) => void;
     referenceTime?: string;
     minTime?: string;
+    disabled?: boolean;
 };
 
-export function TimeSelect({ value, onChange, referenceTime, minTime }: TimeSelectProps) {
+export function TimeSelect({ value, onChange, referenceTime, minTime, disabled }: TimeSelectProps) {
     const [open, setOpen] = useState(false);
     const [inputValue, setInputValue] = useState(value);
     const listRef = useRef<HTMLDivElement>(null);
@@ -131,7 +132,7 @@ export function TimeSelect({ value, onChange, referenceTime, minTime }: TimeSele
     };
 
     return (
-        <Popover open={open} onOpenChange={setOpen}>
+        <Popover open={open && !disabled} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
                 <div className="relative">
                     <Input
@@ -146,6 +147,7 @@ export function TimeSelect({ value, onChange, referenceTime, minTime }: TimeSele
                             }
                         }}
                         onClick={() => setOpen(true)}
+                        disabled={disabled}
                         className="w-[70px] h-8 text-sm tabular-nums px-2 text-center"
                     />
                 </div>
