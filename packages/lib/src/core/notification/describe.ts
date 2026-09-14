@@ -1,6 +1,7 @@
 import type { ActivityLines } from '@workspace/lib/types/file-history';
 import type { Notification } from '@workspace/lib/types/notification';
 import { formatChatPreview } from '../chat/format-preview';
+import { formatDayMonth } from '../date';
 import { CHAT_NOTIFICATION_TYPES } from './tags';
 
 // Notification types whose body is raw chat text (emote wire form + bare emails), so it must be
@@ -26,16 +27,12 @@ export function describeNotification(
                 break;
             case 'calendar-invite':
             case 'calendar-invite-updated':
-                // Formatted from the stored epoch (en-GB) so the viewer's timezone applies, not the
-                // server's — see docs/ACTIVITY-ROWS.md § Notification rows.
-                if ('startTime' in details)
-                    secondary = new Date(details.startTime).toLocaleString('en-GB', {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                    });
+                // Formatted from the stored epoch so the viewer's timezone applies, not the server's —
+                // see docs/ACTIVITY-ROWS.md § Notification rows.
+                if ('startTime' in details) {
+                    const at = new Date(details.startTime);
+                    secondary = `${formatDayMonth(at, { year: true })}, ${at.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+                }
                 break;
             case 'access-request':
                 if ('message' in details) secondary = details.message;

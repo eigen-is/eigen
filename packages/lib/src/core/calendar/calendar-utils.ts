@@ -1,6 +1,6 @@
 import { RRule } from 'rrule';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '../../types/calendar';
-import { formatTime } from '../date';
+import { formatDayMonth, formatTime } from '../date';
 
 export type ViewMode = 'month' | 'week';
 
@@ -104,15 +104,8 @@ function safeTimeZone(timezone?: string | null): string {
 
 export function formatEventWhen(start: Date, end: Date, allDay: boolean, timezone?: string | null): string {
     const tz = safeTimeZone(timezone);
-    const dateOpts: Intl.DateTimeFormatOptions = {
-        weekday: 'long',
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-        timeZone: tz,
-    };
-    // Dates render en-GB (day-month-year), times stay on 'en' — en-GB lowercases the meridiem and
-    // the rest of the app shows formatTime's "PM".
+    const date = (d: Date) => formatDayMonth(d, { weekday: 'long', year: true, timeZone: tz });
+    const dayKey = (d: Date) => d.toLocaleDateString('en', { timeZone: tz });
     const timeOpts: Intl.DateTimeFormatOptions = {
         hour: 'numeric',
         minute: '2-digit',
@@ -124,22 +117,14 @@ export function formatEventWhen(start: Date, end: Date, allDay: boolean, timezon
         // All-day endTime is exclusive (midnight after the last day), so the displayed
         // end date is one day earlier than the stored value.
         const displayEnd = new Date(end.getTime() - 86400_000);
-        const startStr = start.toLocaleDateString('en-GB', dateOpts);
-        if (
-            start.toLocaleDateString('en-GB', { timeZone: tz }) ===
-            displayEnd.toLocaleDateString('en-GB', { timeZone: tz })
-        ) {
-            return startStr;
-        }
-        return `${startStr} – ${displayEnd.toLocaleDateString('en-GB', dateOpts)}`;
+        if (dayKey(start) === dayKey(displayEnd)) return date(start);
+        return `${date(start)} – ${date(displayEnd)}`;
     }
 
-    const sameDay =
-        start.toLocaleDateString('en-GB', { timeZone: tz }) === end.toLocaleDateString('en-GB', { timeZone: tz });
-    if (sameDay) {
-        return `${start.toLocaleDateString('en-GB', dateOpts)} · ${start.toLocaleTimeString('en', timeOpts)} – ${end.toLocaleTimeString('en', timeOpts)}`;
+    if (dayKey(start) === dayKey(end)) {
+        return `${date(start)} · ${start.toLocaleTimeString('en', timeOpts)} – ${end.toLocaleTimeString('en', timeOpts)}`;
     }
-    const when = (d: Date) => `${d.toLocaleDateString('en-GB', dateOpts)}, ${d.toLocaleTimeString('en', timeOpts)}`;
+    const when = (d: Date) => `${date(d)}, ${d.toLocaleTimeString('en', timeOpts)}`;
     return `${when(start)} – ${when(end)}`;
 }
 

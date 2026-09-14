@@ -8,8 +8,26 @@ export function formatTime(date: Date | string | number): string {
     return `${hour}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
+// Day-month-year from the 'en' locale's parts: 'en-GB' would give the order for free, but its short
+// September is "Sept" under full ICU (browsers) and "Sep" under Bun's, so the order is assembled here.
+export function formatDayMonth(
+    date: Date,
+    options: { year?: boolean; weekday?: 'long' | 'short'; timeZone?: string } = {},
+): string {
+    const parts = new Intl.DateTimeFormat('en', {
+        weekday: options.weekday,
+        day: 'numeric',
+        month: 'short',
+        year: options.year ? 'numeric' : undefined,
+        timeZone: options.timeZone,
+    }).formatToParts(date);
+    const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? '';
+    const dayMonth = `${part('day')} ${part('month')}${options.year ? ` ${part('year')}` : ''}`;
+    return options.weekday ? `${part('weekday')}, ${dayMonth}` : dayMonth;
+}
+
 export function formatDate(date: Date | string | number): string {
-    return new Date(date).toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' });
+    return formatDayMonth(new Date(date), { year: true });
 }
 
 // "8 Jun 2026" for a bare YYYY-MM-DD calendar date. Parses the parts as a *local* date —
@@ -17,11 +35,7 @@ export function formatDate(date: Date | string | number): string {
 // viewers west of UTC and mismatches between prerender (build TZ) and hydration (viewer TZ).
 export function formatDateOnly(isoDate: string): string {
     const [year, month, day] = isoDate.split('-').map(Number);
-    return new Date(year, month - 1, day).toLocaleDateString('en-GB', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-    });
+    return formatDayMonth(new Date(year, month - 1, day), { year: true });
 }
 
 export function isSameDay(a: Date, b: Date): boolean {
@@ -40,7 +54,7 @@ export function formatDateTime(date: Date | string | number): string {
         return `Today, ${formatTime(d)}`;
     }
     if (isSameYear) {
-        return `${d.toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })}, ${formatTime(d)}`;
+        return `${formatDayMonth(d)}, ${formatTime(d)}`;
     }
 
     return `${formatDate(d)}, ${formatTime(d)}`;
@@ -63,7 +77,7 @@ export function formatFullDateTime(date: Date | string | number): string {
 }
 
 export function formatMonth(date: Date | string | number, style: 'long' | 'short' = 'long'): string {
-    return new Date(date).toLocaleDateString('en-GB', { month: style });
+    return new Date(date).toLocaleDateString('en', { month: style });
 }
 
 export function formatInputDate(date: Date | string | number): string {

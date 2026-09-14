@@ -121,8 +121,9 @@ export class Contacts {
     // Whether card writes are quota-metered — see the assignment in init() for what turns it on.
     private meteredIngest = false;
 
-    // Set while a bulk write runs; per-card events are held back and `withBatchedEvents` closes them.
-    private heldContactEvents: boolean | null = null;
+    // Bulk writes in flight; while any runs, per-card events are held and the last one out closes them.
+    private batchDepth = 0;
+    private heldContactEvents = false;
 
     constructor(home: Home) {
         this.home = home;
@@ -131,7 +132,7 @@ export class Contacts {
 
     // internal — used by contacts/*.ts
     emitContact(type: Parameters<typeof buildContactEvent>[0], contactId: string): void {
-        if (this.heldContactEvents !== null) {
+        if (this.batchDepth > 0) {
             this.heldContactEvents = true;
             return;
         }
@@ -143,13 +144,15 @@ export class Contacts {
     // even when `fn` throws: the cards that landed before the throw still have to reach the tabs. A card
     // written by something else in the window loses nothing — its invalidation is owner-wide too.
     async withBatchedEvents<T>(fn: () => Promise<T>): Promise<T> {
-        this.heldContactEvents = false;
+        this.batchDepth++;
         try {
             return await fn();
         } finally {
-            const held = this.heldContactEvents;
-            this.heldContactEvents = null;
-            if (held) this.home.broadcast(buildContactsChangedEvent());
+            this.batchDepth--;
+            if (this.batchDepth === 0 && this.heldContactEvents) {
+                this.heldContactEvents = false;
+                this.home.broadcast(buildContactsChangedEvent());
+            }
         }
     }
 

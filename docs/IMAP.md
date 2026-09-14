@@ -33,7 +33,7 @@ Everything lives in `apps/api/src/lib/mail/`. The storage half:
 | `mailutils.ts` | Filename generation, flag parsing, flag rebuild helpers |
 | `schema.ts`, `db-config.ts` | Drizzle schema + versioned migrations for `mail.db` |
 
-`STANDARD_MAILBOXES` and `PATHS.MAIL` come from `lib/core/constants.ts`. The app half on top of the store
+`STANDARD_MAILBOXES` comes from `packages/lib/src/constants/mailboxes.ts` ([MAIL.md](MAIL.md)), `PATHS.MAIL` from `lib/core/constants.ts`. The app half on top of the store
 (`mail-domain.ts`, `mail.ts`, `sender.ts`, `welcome.ts`, `sse-events.ts`) is mapped in
 [MAIL.md § Architecture](MAIL.md#architecture).
 
