@@ -1,7 +1,14 @@
 import { type AuthUser, useAuth } from '@workspace/lib/auth';
 import { flattenAddresses } from '@workspace/lib/mail';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
-import type { AddressObject, Attachment, AttachmentMeta, EmailDraft, NewDraft } from '@workspace/lib/types/mail';
+import {
+    type AddressObject,
+    type Attachment,
+    type AttachmentMeta,
+    type EmailDraft,
+    mailAttachmentName,
+    type NewDraft,
+} from '@workspace/lib/types/mail';
 import { useEffect, useReducer, useRef } from 'react';
 
 const AUTO_SAVE_DEBOUNCE_MS = 2500;
@@ -128,7 +135,7 @@ function initFields(
             bodyText: email.text || '',
             attachments: (email.attachments || []).map((a, i) => ({
                 key: `saved-${i}-${a.filename ?? ''}-${a.size}`,
-                filename: a.filename || `Attachment ${i + 1}`,
+                filename: mailAttachmentName(a, i),
                 size: a.size,
                 contentType: a.contentType,
                 index: i,
@@ -227,9 +234,8 @@ export function mergeServerAttachments(
     const indexed = parsed
         .map((a, index) => ({ a, index }))
         .filter(({ a }) => !a.contentType.startsWith('text/calendar'));
-    const visible = indexed.map(({ a }) => a);
     const serverActual = indexed.map(({ a, index }) => {
-        const filename = a.filename || `Attachment ${index + 1}`;
+        const filename = mailAttachmentName(a, index);
         const prevMatch = local.find((p) => p.filename === filename && p.size === a.size);
         return {
             key: prevMatch?.key ?? `server-${index}-${filename}-${a.size}`,
@@ -246,7 +252,9 @@ export function mergeServerAttachments(
         (a) => !removedDuringSave.some((r) => r.filename === a.filename && r.size === a.size),
     );
     const inFlightAdditions = local.filter(
-        (l) => !!l.tempId && !visible.some((a) => (a.filename ?? '') === l.filename && a.size === l.size),
+        (l) =>
+            !!l.tempId &&
+            !indexed.some(({ a, index }) => mailAttachmentName(a, index) === l.filename && a.size === l.size),
     );
 
     return { serverActual, localNext: [...withoutRemoved, ...inFlightAdditions] };
