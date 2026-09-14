@@ -4,18 +4,21 @@ import { useImportContacts, useImportContactsFromDrive } from '@workspace/lib/co
 import { triggerDownload } from '@workspace/lib/download';
 import { useConvertDocument } from '@workspace/lib/drive';
 import type { FileAction } from '@workspace/lib/file-actions';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
 import { ProgressDialog } from '../drive/progress-dialog';
 import { SaveToDrivePicker } from '../drive/save-to-drive-picker';
 import { type PreviewOptions, usePreview } from '../preview-provider/preview-context';
+
+type ConvertTarget = 'eigensheets' | 'eigendoc';
 
 export type FileActionRunner = {
     // The menu component draws the rows from the same subject the runner acts on, so a host can
     // never pair one with another's.
     subject: FileSubject | null;
     run: (action: FileAction) => void;
-    // For a host with a batch of its own to save — the overlay's "Save all" row.
+    // For a host with a set of its own to save — the overlay's "Save all" row.
     openPicker: (subjects: FileSubject[]) => void;
     // Rendered once by the host, so a picker opened from any row lives outside the menu that closed.
     dialogs: ReactNode;
@@ -34,21 +37,39 @@ export function useFileActionRunner(
     const importContactsFromDrive = useImportContactsFromDrive();
     const importContacts = useImportContacts();
     const [pickerSubjects, setPickerSubjects] = useState<FileSubject[] | null>(null);
+    // Set while the picker is open for a convert: a subject with no Drive path has to land in Drive
+    // first, and only the picker knows where it landed.
+    const pendingConvert = useRef<ConvertTarget | null>(null);
 
-    const convert = (targetType: 'eigensheets' | 'eigendoc') => {
-        const drive = subject?.drive;
-        // A later unit saves a non-Drive subject to Drive first, then converts what it saved.
-        if (!drive?.parentId) return;
+    const openPicker = (subjects: FileSubject[]) => {
+        pendingConvert.current = null;
+        setPickerSubjects(subjects);
+    };
+
+    const convertPath = (path: DrivePath, targetType: ConvertTarget) => {
+        if (!path.parentId) return;
         convertDocument.mutate(
             {
-                ownerId: drive.ownerId,
-                mountId: drive.mountId,
-                pathId: drive.id,
-                parentId: drive.parentId,
+                ownerId: path.ownerId,
+                mountId: path.mountId,
+                pathId: path.id,
+                parentId: path.parentId,
                 targetType,
             },
             { onSuccess: (newPath) => openDocument(newPath) },
         );
+    };
+
+    const convert = (targetType: ConvertTarget) => {
+        if (!subject) return;
+        // Nothing in Drive to convert yet, or only a copy in a container's hidden media folder: save
+        // it where the user picks first, then convert what the save created.
+        if (!subject.drive || options?.attachment) {
+            pendingConvert.current = targetType;
+            setPickerSubjects([subject]);
+            return;
+        }
+        convertPath(subject.drive, targetType);
     };
 
     const runImportContacts = () => {
@@ -83,7 +104,7 @@ export function useFileActionRunner(
                 if (subject.downloadUrl) triggerDownload(subject.downloadUrl);
                 return;
             case 'save-to-drive':
-                setPickerSubjects([subject]);
+                openPicker([subject]);
                 return;
             case 'convert-to-sheet':
                 convert('eigensheets');
@@ -100,7 +121,7 @@ export function useFileActionRunner(
     return {
         subject,
         run,
-        openPicker: setPickerSubjects,
+        openPicker,
         // Mounted while closed: the picker's "Download instead" fires staggered downloads from timers
         // it clears when it unmounts.
         dialogs: (
@@ -108,7 +129,15 @@ export function useFileActionRunner(
                 <SaveToDrivePicker
                     subjects={pickerSubjects ?? []}
                     open={pickerSubjects !== null}
-                    onClose={() => setPickerSubjects(null)}
+                    onClose={() => {
+                        pendingConvert.current = null;
+                        setPickerSubjects(null);
+                    }}
+                    onSaved={(paths) => {
+                        const targetType = pendingConvert.current;
+                        pendingConvert.current = null;
+                        if (targetType) for (const path of paths) convertPath(path, targetType);
+                    }}
                 />
                 <ProgressDialog
                     open={convertDocument.isPending}
