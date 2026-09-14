@@ -7,6 +7,7 @@ import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table
 import Typography from '@tiptap/extension-typography';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
+import { downloadBlob } from '@workspace/lib/download';
 import { Column, ConfirmDialog } from '@workspace/ui';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { useProseMirrorSearchController } from '@workspace/ui/components/search/prosemirror-search-controller';
@@ -159,12 +160,7 @@ export function MarkdownEditor({
     }, [sourceMode, sourceContent, editor]);
 
     const handleDownload = () => {
-        const blob = new Blob([getContent()], { type: 'text/markdown' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = fileName;
-        a.click();
-        URL.revokeObjectURL(a.href);
+        downloadBlob(new Blob([getContent()], { type: 'text/markdown' }), fileName);
         setShowConflict(false);
         onReload();
     };

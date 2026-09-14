@@ -21,6 +21,7 @@ import {
     keymap,
     lineNumbers,
 } from '@codemirror/view';
+import { downloadBlob } from '@workspace/lib/download';
 import { Column, ConfirmDialog, TooltipButton } from '@workspace/ui';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { Redo, Undo } from 'lucide-react';
@@ -264,12 +265,7 @@ export function CodeEditor({
     );
 
     const handleDownload = () => {
-        const blob = new Blob([contentRef.current], { type: 'text/plain' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = fileName;
-        a.click();
-        URL.revokeObjectURL(a.href);
+        downloadBlob(new Blob([contentRef.current], { type: 'text/plain' }), fileName);
         setShowConflict(false);
         onReload();
     };
