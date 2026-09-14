@@ -173,7 +173,7 @@ Four unit branches onto one integration branch, merged `--no-ff` in order. No pi
 
 ## Open questions
 
-1. **`subject.name` for a Drive file with an `originalName`.** The chip shows `details.originalName || name`, the overlay header shows `name`. The subject keeps `name`, so the overlay header reads the same on every surface; unifying the two is a separate one-line decision.
+1. **`subject.name` for a Drive file with an `originalName`.** The chip shows `details.originalName || name`, the overlay header shows `name`. `subjectInfo` derives `name` from the path, so the overlay header reads the same on every surface; unifying the two is a separate one-line decision.
 2. **Quick Look siblings in Drive's menu.** Each host maps the visible listing into subjects to build its runner. Whether the row should instead read that list from context is a later question.
 
 ## Decisions

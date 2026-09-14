@@ -88,7 +88,7 @@ describe('fileActionsFor on a Drive item', () => {
     });
 });
 
-describe('fileActionsFor on a subject without a Drive path', () => {
+describe('fileActionsFor on an attachment subject', () => {
     function mailSubject(part: { contentType: string; filename?: string; size: number }): FileSubject {
         return subjectFromMailAttachment('owner-1', 'message-1', 2, part);
     }
