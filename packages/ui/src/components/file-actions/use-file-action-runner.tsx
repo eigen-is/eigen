@@ -1,6 +1,5 @@
 import { openDocument } from '@workspace/lib/api';
-import { onMutationError } from '@workspace/lib/api-error';
-import { useImportContacts, useImportContactsFromDrive } from '@workspace/lib/contacts';
+import { useImportContactsFromDrive, useImportContactsFromUrl } from '@workspace/lib/contacts';
 import { triggerDownload } from '@workspace/lib/download';
 import { useConvertDocument } from '@workspace/lib/drive';
 import type { ConvertTarget, DrivePath } from '@workspace/lib/types/drive';
@@ -30,7 +29,7 @@ export function useFileActionRunner(subject: FileSubject | null, siblings?: File
     const { openPreview } = usePreview();
     const convertDocument = useConvertDocument();
     const importContactsFromDrive = useImportContactsFromDrive();
-    const importContacts = useImportContacts();
+    const importContactsFromUrl = useImportContactsFromUrl();
     // Open is its own flag: the closed picker keeps its subjects so its title holds through the exit animation.
     const [picker, setPicker] = useState<PickerState>({ subjects: [] });
     const [pickerOpen, setPickerOpen] = useState(false);
@@ -67,14 +66,7 @@ export function useFileActionRunner(subject: FileSubject | null, siblings?: File
             return;
         }
         if (!downloadUrl) return;
-        // No Drive path to read server-side: a vCard is kilobytes, so the browser carries the bytes.
-        fetch(downloadUrl, { credentials: 'include' })
-            .then(async (response) => {
-                if (!response.ok) throw new Error(await response.text());
-                return new File([await response.blob()], subject.name, { type: subject.mimeType });
-            })
-            .then((file) => importContacts.mutate(file))
-            .catch(onMutationError);
+        importContactsFromUrl.mutate({ url: downloadUrl, name: subject.name, mimeType: subject.mimeType });
     };
 
     const run = (action: FileAction) => {
@@ -129,6 +121,6 @@ export function useFileActionRunner(subject: FileSubject | null, siblings?: File
             </>
         ),
         isDialogOpen: pickerOpen || convertDocument.isPending,
-        isPending: convertDocument.isPending || importContactsFromDrive.isPending || importContacts.isPending,
+        isPending: convertDocument.isPending || importContactsFromDrive.isPending || importContactsFromUrl.isPending,
     };
 }
