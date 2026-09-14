@@ -100,7 +100,8 @@ POST   /mail/:ownerId/message/send                        send draft (→ Sent, 
 PUT    /mail/:ownerId/message/:id/read                    set read/unread (→ MAIL_READ_CHANGED)
 PUT    /mail/:ownerId/message/:id/flagged                 set star (→ MAIL_FLAGS_CHANGED)
 POST   /mail/:ownerId/message/:id/attachments/save-to-drive   save received attachments into Drive
-GET    /mail/:ownerId/message/:id/attachment/:index/:fileName download one attachment
+GET    /mail/:ownerId/message/:id/attachment/:index/:fileName       download one attachment
+GET    /mail/:ownerId/message/:id/attachment/:index/embed/:fileName serve the same part inline
 ```
 
 ## Reading and the list (FE)
@@ -206,6 +207,10 @@ as reference-pill `<a>` links at save/send (`renderAttachmentPills`, `mail-templ
 [MEDIA-REFERENCES.md](MEDIA-REFERENCES.md). Received attachments re-parse from the `.eml` on read and can be
 copied into Drive (`saveAttachmentsToDrive`); `text/calendar` parts are additionally summarized into a typed
 `Attachment.calendarInvite` for the invite widget — see [CALENDAR.md § iMIP](CALENDAR.md#imip-email-based-calendar-invitations).
+
+**Serving one part.** Both byte routes call `serveMailPart` (`lib/mail/serve-mail-part.ts`) with the mail client, the message id, the part index, the disposition and the request (for `If-None-Match` and `Range`): `Content-Type` from the part, `Content-Disposition` from `mailAttachmentName(att, index)`, `X-Content-Type-Options: nosniff` always, `scriptableInlineHeaders` spread in on the `/embed/` route so a scriptable part renders under the sandbox CSP, `private, max-age=86400`, and `Accept-Ranges: bytes` with a 206 over `att.content.slice` (a mail `video/mp4` or `audio/mpeg` part reaches a media element whose seeking needs ranges, and Safari refuses a source that advertises none). The ETag is the message id, the part index and the summary row's date and size; a draft rewrite updates both, so two full saves within one second that keep the byte count identical would share it. The `:fileName` segment is decoration: the served name comes from the part. `mailAttachmentName` (`packages/lib/src/types/mail.ts`) is the one fallback name — a part with no filename is `attachment-<n>`, 1-based — shared by the reader chip label, the disposition and the file `saveAttachmentsToDrive` writes.
+
+**ETag and re-parsing.** The ETag is the message id, the part index and the summary row's date + size: a draft save rewrites the message under its existing id, re-delivering it as a fresh `<id>,S=<size>:2,<flags>` Maildir file, so the id alone would pin stale bytes (the filename itself carries commas, which `etagMatches` splits `If-None-Match` on). A matching `If-None-Match` is answered with a 304 off that summary row *before* `messageGetAttachment`, because reading a part re-parses and decodes the whole `.eml`: without that check every range request of a seeked video would pay one full parse. A cache miss still does — each range request re-parses the message.
 
 ## Delivery and inbound
 

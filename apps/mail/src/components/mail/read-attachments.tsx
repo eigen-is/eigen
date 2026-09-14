@@ -1,7 +1,7 @@
 import { getMailAttachmentUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { useSaveMailAttachmentsToDrive } from '@workspace/lib/mail';
-import type { Attachment } from '@workspace/lib/types/mail';
+import { type Attachment, mailAttachmentName } from '@workspace/lib/types/mail';
 import { TooltipButton } from '@workspace/ui';
 import { SimpleAttachmentChip } from '@workspace/ui/components/attachment';
 import { DriveLocationPicker } from '@workspace/ui/components/drive';
@@ -35,7 +35,7 @@ export function ReadAttachments({ emailId, attachments }: ReadAttachmentsProps) 
         const toDownload = indexes ? visible.filter(({ index }) => indexes.includes(index)) : visible;
         // Stagger clicks so the browser treats each as a separate download, not a popup.
         toDownload.forEach(({ att, index }, i) => {
-            const filename = att.filename || `attachment-${index}`;
+            const filename = mailAttachmentName(att, index);
             const url = getMailAttachmentUrl(user.id, emailId, index, filename);
             setTimeout(() => {
                 const a = document.createElement('a');
@@ -51,7 +51,7 @@ export function ReadAttachments({ emailId, attachments }: ReadAttachmentsProps) 
             <div className="flex items-center gap-2 mb-4">
                 <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
                     {visible.map(({ att, index }) => {
-                        const filename = att.filename || `Attachment ${index + 1}`;
+                        const filename = mailAttachmentName(att, index);
                         return (
                             <SimpleAttachmentChip
                                 key={index}

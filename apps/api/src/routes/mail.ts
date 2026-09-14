@@ -12,6 +12,7 @@ import {
     saveAttachmentsToDrive,
     uploadDraftAttachment,
 } from '../lib/mail/mail';
+import { serveMailPart } from '../lib/mail/serve-mail-part';
 import { betterAuth } from './auth';
 import { attachmentReferenceSchema } from './shared-schemas';
 
@@ -46,6 +47,14 @@ type _MailDraftSchemaCoversNewDraft =
     Exclude<keyof NewDraft, keyof Static<typeof MailDraftSchema>> extends never ? true : never;
 const _mailDraftSchemaCheck: _MailDraftSchemaCoversNewDraft = true;
 void _mailDraftSchemaCheck;
+
+// The :fileName segment is decoration: both byte routes take the served name from the part itself.
+const AttachmentParamsSchema = t.Object({
+    ownerId: t.String(),
+    id: t.String(),
+    index: t.Integer({ minimum: 0 }),
+    fileName: t.String(),
+});
 
 export const mailRouter = new Elysia({ name: 'mail' })
     .use(betterAuth)
@@ -293,22 +302,19 @@ export const mailRouter = new Elysia({ name: 'mail' })
     )
     .get(
         '/mail/:ownerId/message/:id/attachment/:index/:fileName',
-        async ({ params, user, set }) => {
+        async ({ params, request, user }): Promise<Response> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            setCacheHeaders(set, 86400);
-            set.headers['Content-Type'] = 'application/octet-stream';
-            set.headers['Content-Disposition'] = contentDisposition('attachment', params.fileName);
-            const attachment = await (await getMailClient(user)).messageGetAttachment(params.id, params.index);
-            return attachment.content;
+            return serveMailPart(await getMailClient(user), params.id, params.index, 'attachment', request);
         },
-        {
-            auth: true,
-            params: t.Object({
-                ownerId: t.String(),
-                id: t.String(),
-                index: t.Integer(),
-                fileName: t.String(),
-            }),
+        { auth: true, params: AttachmentParamsSchema },
+    )
+    .get(
+        '/mail/:ownerId/message/:id/attachment/:index/embed/:fileName',
+        async ({ params, request, user }): Promise<Response> => {
+            requireNonGuest(user);
+            requireSelf(params.ownerId, user.id);
+            return serveMailPart(await getMailClient(user), params.id, params.index, 'inline', request);
         },
+        { auth: true, params: AttachmentParamsSchema },
     );

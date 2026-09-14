@@ -217,6 +217,13 @@ export const getMailMessageDownloadUrl = (ownerId: string, messageId: string) =>
     `${API_HOST}/mail/${ownerId}/message/${messageId}/download`;
 export const getMailAttachmentUrl = (ownerId: string, messageId: string, attachmentIndex: number, fileName: string) =>
     `${API_HOST}/mail/${ownerId}/message/${messageId}/attachment/${attachmentIndex}/${encodeURIComponent(fileName)}`;
+export const getMailAttachmentEmbedUrl = (
+    ownerId: string,
+    messageId: string,
+    attachmentIndex: number,
+    fileName: string,
+) =>
+    `${API_HOST}/mail/${ownerId}/message/${messageId}/attachment/${attachmentIndex}/embed/${encodeURIComponent(fileName)}`;
 export const getCollabAccessUrl = (ownerId: string, mountId: string, pathId: string) =>
     `${API_HOST}/collab/${ownerId}/${mountId}/${pathId}/access`;
 

@@ -1,5 +1,5 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
-import type { DraftAttachmentUpload, Email } from '@workspace/lib/types/mail';
+import { type DraftAttachmentUpload, type Email, mailAttachmentName } from '@workspace/lib/types/mail';
 import { getMailUploadMaxSize, getUploadMaxSize } from '../config/enforcement';
 import { isRoleAddress } from '../config/server-config';
 import { ApiError } from '../core/errors';
@@ -104,7 +104,7 @@ export async function saveAttachmentsToDrive(
     // oversized attachment can't leave earlier files persisted (a retry would then duplicate them).
     const prepared = indexes.map((index) => {
         const att = attachments[index];
-        const filename = att.filename || `attachment-${index}`;
+        const filename = mailAttachmentName(att, index);
         const content = Buffer.from(att.content);
         if (content.byteLength > maxSize) {
             const limitMB = Math.floor(maxSize / (1024 * 1024));

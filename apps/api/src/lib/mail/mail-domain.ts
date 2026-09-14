@@ -181,9 +181,14 @@ export class Mail {
         return this.store.getRawMessage(messageId);
     }
 
+    // The index row, which serveMailPart validates its ETag against before it parses anything.
+    messageGetSummary(messageId: string): EmailSummary | undefined {
+        return this.store.getSummary(messageId);
+    }
+
     async messageGetAttachment(messageId: string, index: number): Promise<Attachment> {
         const attachments = await this.store.getAttachments(messageId);
-        if (index < 0 || index >= attachments.length) {
+        if (index >= attachments.length) {
             throw new ApiError(404, `Attachment ${index} not found for message '${messageId}'`);
         }
         return attachments[index];

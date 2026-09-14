@@ -37,6 +37,12 @@ export type Attachment = {
     calendarInvite?: CalendarInvite | null;
 };
 
+// The chip label, the Content-Disposition filename and the saved file all read this, so a
+// filename-less part (outbound inline cid parts carry none) shows one name everywhere.
+export function mailAttachmentName(att: Pick<Attachment, 'filename'>, index: number): string {
+    return att.filename || `attachment-${index + 1}`;
+}
+
 export type ParsedMail = {
     attachments: Attachment[];
     html: string | null;
