@@ -151,7 +151,7 @@ export function useCopyFiles(ownerId: string, mountId: string = DEFAULT_MOUNT_ID
             targetMountId: string;
             targetParentId: string;
         }) => {
-            const results = [];
+            const results: DrivePath[] = [];
             for (const pathId of pathIds) {
                 const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).copy.post({
                     targetOwnerId,
