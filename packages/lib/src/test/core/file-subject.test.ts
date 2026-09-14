@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { getDriveDownloadUrl, getDriveEmbedUrl, getDriveThumbnailUrl } from '../../core/api';
-import { getPreviewMode, subjectFromPath } from '../../core/file-subject';
+import {
+    getDriveDownloadUrl,
+    getDriveEmbedUrl,
+    getDriveThumbnailUrl,
+    getMailAttachmentEmbedUrl,
+    getMailAttachmentUrl,
+} from '../../core/api';
+import { getPreviewMode, subjectFromMailAttachment, subjectFromPath } from '../../core/file-subject';
 import type { DrivePath, DrivePathType } from '../../types/drive';
 import type { FileSubject } from '../../types/file-subject';
 
@@ -114,5 +120,43 @@ describe('getPreviewMode', () => {
         expect(getPreviewMode(partSubject('notes.txt', 'text/plain'))).toBe('fallback');
         expect(getPreviewMode(driveSubject('team.vcf', 'text/vcard'))).toBe('vcard');
         expect(getPreviewMode(partSubject('team.vcf', 'text/vcard'))).toBe('fallback');
+    });
+});
+
+describe('subjectFromMailAttachment', () => {
+    const part = { contentType: 'application/pdf', filename: 'invoice.pdf', size: 1234 };
+
+    test('carries the part identity and the URLs the two mail byte routes answer on', () => {
+        const subject = subjectFromMailAttachment('owner-1', 'msg-1', 2, part);
+
+        expect(subject).toEqual({
+            key: 'mail:owner-1:msg-1:2',
+            name: 'invoice.pdf',
+            mimeType: 'application/pdf',
+            size: 1234,
+            embedUrl: getMailAttachmentEmbedUrl('owner-1', 'msg-1', 2, 'invoice.pdf'),
+            downloadUrl: getMailAttachmentUrl('owner-1', 'msg-1', 2, 'invoice.pdf'),
+            mail: { ownerId: 'owner-1', messageId: 'msg-1', index: 2 },
+        });
+    });
+
+    test('names a filename-less part the way the server does', () => {
+        const subject = subjectFromMailAttachment('owner-1', 'msg-1', 1, { contentType: 'image/png', size: 9 });
+        expect(subject.name).toBe('attachment-2');
+        expect(subject.downloadUrl).toContain('attachment-2');
+    });
+
+    // The reader hides calendar parts but still addresses the parts around them by their raw index.
+    test('keys on the raw part index, gaps included', () => {
+        const first = subjectFromMailAttachment('owner-1', 'msg-1', 0, part);
+        const third = subjectFromMailAttachment('owner-1', 'msg-1', 2, part);
+        expect(first.key).not.toBe(third.key);
+        expect(third.mail).toEqual({ ownerId: 'owner-1', messageId: 'msg-1', index: 2 });
+    });
+
+    test('has no Drive path and no thumbnail', () => {
+        const subject = subjectFromMailAttachment('owner-1', 'msg-1', 0, part);
+        expect(subject.drive).toBeUndefined();
+        expect(subject.thumbnailUrl).toBeUndefined();
     });
 });

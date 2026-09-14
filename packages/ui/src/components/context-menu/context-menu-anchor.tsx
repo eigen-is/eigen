@@ -1,5 +1,6 @@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@workspace/ui/components/dropdown-menu';
 import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 type ContextMenuAnchorProps = {
     contextMenu: {
@@ -19,18 +20,22 @@ type ContextMenuAnchorProps = {
 export function ContextMenuAnchor({ contextMenu, children, className, onCloseAutoFocus }: ContextMenuAnchorProps) {
     return (
         <DropdownMenu open={contextMenu.isOpen} onOpenChange={(open) => !open && contextMenu.close()}>
-            <DropdownMenuTrigger asChild>
-                <div
-                    style={{
-                        position: 'fixed',
-                        left: contextMenu.position.x,
-                        top: contextMenu.position.y,
-                        width: 0,
-                        height: 0,
-                        pointerEvents: 'none',
-                    }}
-                />
-            </DropdownMenuTrigger>
+            {/* In document.body: a transformed ancestor (a dialog's translate) would otherwise become the containing block of these fixed coordinates. */}
+            {createPortal(
+                <DropdownMenuTrigger asChild>
+                    <div
+                        style={{
+                            position: 'fixed',
+                            left: contextMenu.position.x,
+                            top: contextMenu.position.y,
+                            width: 0,
+                            height: 0,
+                            pointerEvents: 'none',
+                        }}
+                    />
+                </DropdownMenuTrigger>,
+                document.body,
+            )}
             <DropdownMenuContent
                 side="bottom"
                 align="start"

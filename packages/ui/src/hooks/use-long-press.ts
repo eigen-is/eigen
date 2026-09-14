@@ -15,7 +15,11 @@ import { useCallback, useEffect, useRef } from 'react';
 const LONG_PRESS_MS = 500;
 const MOVE_CANCEL_PX = 10;
 
-export function useLongPress<T>(onLongPress: (item: T, x: number, y: number) => void, opts?: { disabled?: boolean }) {
+// A callback that returns false opened nothing, so its press leaves the click that follows alone.
+export function useLongPress<T>(
+    onLongPress: (item: T, x: number, y: number) => unknown,
+    opts?: { disabled?: boolean },
+) {
     const disabled = opts?.disabled ?? false;
     const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const start = useRef<{ x: number; y: number } | null>(null);
@@ -60,10 +64,9 @@ export function useLongPress<T>(onLongPress: (item: T, x: number, y: number) => 
                 pressed.current = { item };
                 timer.current = setTimeout(() => {
                     timer.current = null;
-                    fired.current = true;
                     // Fire at the press-start coords: a move past MOVE_CANCEL_PX has already cancelled,
                     // so the drift from finger jitter is sub-threshold and imperceptible.
-                    onLongPress(pressed.current!.item, x, y);
+                    fired.current = onLongPress(pressed.current!.item, x, y) !== false;
                 }, LONG_PRESS_MS);
             },
             onPointerMove: (e: React.PointerEvent) => {

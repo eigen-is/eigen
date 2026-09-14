@@ -32,15 +32,12 @@ export type DriveViewProps = {
     isItemDisabled?: (item: DrivePath) => boolean;
     getItemHref?: (item: DrivePath) => string | undefined;
     onShareClick?: (item: DrivePath) => void;
-    onDownload?: (item: DrivePath) => void;
     onDelete?: (items: DrivePath[]) => void;
     onRename?: (item: DrivePath) => void;
     onMove?: (item: DrivePath, targetItemId: string) => void;
     onMoveTo?: (items: DrivePath[]) => void;
     onCopyTo?: (items: DrivePath[]) => void;
     onDuplicate?: (items: DrivePath[]) => void;
-    onConvert?: (item: DrivePath, targetType: 'eigensheets' | 'eigendoc') => void;
-    onImportContacts?: (item: DrivePath) => void;
     onExport?: (item: DrivePath, format: string) => void;
     onQuickLook?: (item: DrivePath) => void;
     onEmailCollaborators?: (item: DrivePath) => void;
@@ -109,15 +106,12 @@ export function DriveTable({
     isItemDisabled,
     getItemHref,
     onShareClick,
-    onDownload,
     onDelete,
     onRename,
     onMove,
     onMoveTo,
     onCopyTo,
     onDuplicate,
-    onConvert,
-    onImportContacts,
     onExport,
     onQuickLook,
     onEmailCollaborators,
@@ -297,12 +291,9 @@ export function DriveTable({
             {!hideActions && (
                 <DriveItemContextMenu
                     controller={controller}
+                    items={items}
                     getItemHref={getItemHref}
                     onItemOpen={onItemOpen}
-                    onQuickLook={onQuickLook}
-                    onDownload={onDownload}
-                    onConvert={onConvert}
-                    onImportContacts={onImportContacts}
                     onExport={onExport}
                     onRename={onRename}
                     onMoveTo={onMoveTo}

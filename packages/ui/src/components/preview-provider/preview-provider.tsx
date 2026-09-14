@@ -16,14 +16,14 @@ export { useOptionalPreview, usePreview };
 type PreviewState = {
     subject: FileSubject;
     siblings: FileSubject[];
-    batch: boolean;
+    attachment: boolean;
 };
 
 export function PreviewProvider({ children }: { children: React.ReactNode }) {
     const [preview, setPreview] = useState<PreviewState | null>(null);
 
     const openPreview = useCallback((subject: FileSubject, siblings?: FileSubject[], options?: PreviewOptions) => {
-        setPreview({ subject, siblings: siblings || [], batch: options?.batch ?? false });
+        setPreview({ subject, siblings: siblings || [], attachment: options?.attachment ?? false });
     }, []);
 
     const updatePreview = useCallback((subject: FileSubject) => {
@@ -72,7 +72,7 @@ export function PreviewProvider({ children }: { children: React.ReactNode }) {
             hasNext,
             subject,
             siblings: preview.siblings,
-            batch: preview.batch,
+            attachment: preview.attachment,
         };
     }, [preview]);
 

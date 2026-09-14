@@ -20,8 +20,9 @@ type FilePreviewProps = {
     hasNext: boolean;
     subject: FileSubject;
     siblings: FileSubject[];
-    // The siblings are a set to act on as a whole, not just a list to page through.
-    batch: boolean;
+    // The siblings are one container's attachments: a set to act on as a whole, not just a list to
+    // page through.
+    attachment: boolean;
     onClose: () => void;
     onPrev: () => void;
     onNext: () => void;
@@ -35,7 +36,7 @@ export function FilePreview({
     hasNext,
     subject,
     siblings,
-    batch,
+    attachment,
     onClose,
     onPrev,
     onNext,
@@ -56,7 +57,7 @@ export function FilePreview({
     useHotkey('ArrowRight', goNext, { enabled: true });
     useHotkey('ArrowDown', goNext, { enabled: true });
 
-    const runner = useFileActionRunner(subject, siblings);
+    const runner = useFileActionRunner(subject, siblings, { attachment });
 
     // Trap focus in the overlay, but hand it to a picker (a Radix dialog portaled to body)
     // while one is open.
@@ -176,7 +177,7 @@ export function FilePreview({
                         {action.label}
                     </FooterActionButton>
                 ))}
-                {batch && downloadableSiblings.length >= 2 && (
+                {attachment && downloadableSiblings.length >= 2 && (
                     <FooterActionButton
                         onClick={() => runner.openPicker(downloadableSiblings)}
                         disabled={runner.isPending}

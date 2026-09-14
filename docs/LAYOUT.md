@@ -164,6 +164,8 @@ DriveLayout (list/detail columns; every action gated by one required `capabiliti
 └── DriveDetail (preview, metadata, access list — 400px column, hidden on mobile until opened)
 ```
 
+`DriveItemMenuItems` (`drive-item-menu.tsx`) is the item menu both the row context menu (`DriveItemContextMenu`, on the singleton `useContextMenu`) and the detail column's kebab draw. Open and Open in new tab are its own rows, and so are the download-formats submenu, Rename, Move to…, Copy to…, Duplicate, Watch, Share and Delete; between the Open group and the download-formats submenu sit the file actions, drawn from the shared registry through `FileActionMenuItems`, minus `save-to-drive` — Drive's "Copy to…" already is that. Each host builds the runner from `subjectFromPath(item)` plus the sorted listing as siblings, so Quick preview pages through the folder the way the Space key does ([PREVIEWS.md](PREVIEWS.md)).
+
 Render sites declare their whole surface as one `DriveCapabilities` value (`drive-capabilities.ts`):
 the fs browser passes `DRIVE_CAPABILITIES.browse`, watched passes `.readOnly`, and the flat views
 (mime filters, per-app doc lists, shared-by/with-me) spread `.listing` with their own overrides.
@@ -259,6 +261,8 @@ const contextItems = contextMenu.item
     ? (selection.selectedCount > 1 ? selection.selectedItems : [contextMenu.item])
     : [];
 ```
+
+`ContextMenuAnchor` portals its zero-size trigger into `document.body`: the trigger is positioned in viewport coordinates, and a transformed ancestor (a dialog's centring translate) would otherwise become its containing block and open the menu somewhere else.
 
 #### 4. Drag-and-Drop
 

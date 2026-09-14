@@ -209,9 +209,6 @@ type DriveListProps = CreateCallbacks & {
     onDelete?: (paths: DrivePath[]) => void;
     onShareClick?: (item: DrivePath) => void;
     onEmailCollaborators?: (item: DrivePath) => void;
-    onConvert?: (item: DrivePath, targetType: 'eigensheets' | 'eigendoc') => void;
-    onImportContacts?: (item: DrivePath) => void;
-    onDownload?: (path: DrivePath) => void;
     onExport?: (item: DrivePath, format: string) => void;
     getItemHref?: (item: DrivePath) => string | undefined;
     ownerId: string;
@@ -248,9 +245,6 @@ export function DriveList({
     onShareClick,
     onEmailCollaborators,
     onCreateEigenDoc,
-    onConvert,
-    onImportContacts,
-    onDownload,
     onExport,
     getItemHref,
     ownerId,
@@ -325,9 +319,6 @@ export function DriveList({
         onShareClick,
         onEmailCollaborators,
         getItemHref,
-        onConvert,
-        onImportContacts,
-        onDownload,
         onExport,
         onDelete,
         allowDelete,

@@ -1,21 +1,22 @@
-import { getDriveDownloadUrl } from '@workspace/lib/api';
 import { formatDateTime } from '@workspace/lib/date';
-import { triggerDownload } from '@workspace/lib/download';
-import { useCopyFiles, useFolderLookup } from '@workspace/lib/drive';
+import { useFolderLookup } from '@workspace/lib/drive';
+import { subjectFromPath } from '@workspace/lib/file-subject';
 import type { ChatMessage } from '@workspace/lib/types/chat';
 import { isAttachmentReference } from '@workspace/lib/types/chat';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { FileSubject } from '@workspace/lib/types/file-subject';
 import { UserNameCard } from '@workspace/ui/components/user/user-name-card';
 import { Download, Pencil, Trash2 } from 'lucide-react';
-import type React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useLongPress } from '../../hooks/use-long-press';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { cn } from '../../lib/utils';
 import { AttachmentChip } from '../attachment/attachment-chip';
 import { ReferenceAttachmentChip } from '../attachment/reference-attachment-chip';
+import { useAttachmentChipMenu } from '../attachment/use-attachment-chip-menu';
 import { EigenLoader } from '../braket/eigen-loader';
-import { ContextMenuAnchor, useContextMenu } from '../context-menu';
-import { DriveLocationPicker } from '../drive/drive-location-picker';
-import { DropdownMenuItem } from '../dropdown-menu';
+import { ContextMenuAnchor } from '../context-menu';
+import { DropdownMenuItem, DropdownMenuSeparator } from '../dropdown-menu';
+import { FileActionMenuItems } from '../file-actions/file-action-menu-items';
+import { useFileActionRunner } from '../file-actions/use-file-action-runner';
 import { LoadingState } from '../layout/app/loading-state';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { UserAvatar } from '../user/user-avatar';
@@ -41,6 +42,9 @@ type ChatMessageListProps = {
     onSaveEdit?: (messageId: string, content: string) => void;
     onCancelEdit?: () => void;
 };
+
+// The menu opens on a message, and on the attachment chip under the pointer when there is one.
+type ChatMenuTarget = { message: ChatMessage; attachment?: FileSubject };
 
 function isSameAuthorAndClose(prev: ChatMessage, curr: ChatMessage): boolean {
     if (prev.authorEmail !== curr.authorEmail) return false;
@@ -70,20 +74,41 @@ export function ChatMessageList({
     const lastMessageIdRef = useRef('');
     const isInitialLoadRef = useRef(true);
     const { findByName } = useFolderLookup(ownerId ?? '', mountId ?? '', mediaFolderId ?? '');
-    const copyFiles = useCopyFiles(ownerId ?? '', mountId ?? '');
 
-    const [saveAttachmentsMsg, setSaveAttachmentsMsg] = useState<ChatMessage | null>(null);
-
-    // Message actions (Save attachments / Edit / Delete) reach the singleton context menu via right-click and touch long-press.
-    const contextMenu = useContextMenu<ChatMessage>();
-    const openMenuAt = contextMenu.openAt;
-    const handleLongPress = useCallback(
-        (message: ChatMessage, x: number, y: number) => {
-            openMenuAt(message, x, y);
-        },
-        [openMenuAt],
+    const subjectsOf = useCallback(
+        (message: ChatMessage | undefined): FileSubject[] =>
+            (message?.attachments ?? [])
+                .filter((attachment): attachment is string => typeof attachment === 'string')
+                .map((name) => findByName(name))
+                .filter((path): path is DrivePath => path !== undefined)
+                .map(subjectFromPath),
+        [findByName],
     );
-    const longPress = useLongPress(handleLongPress);
+
+    const subjectOfChip = useCallback(
+        (name: string | null): FileSubject | undefined => {
+            const path = name ? findByName(name) : undefined;
+            return path ? subjectFromPath(path) : undefined;
+        },
+        [findByName],
+    );
+
+    // Message actions (Save attachments / Edit / Delete) and a chip's file actions reach the
+    // singleton context menu via right-click and touch long-press, through the wiring the card
+    // dialog and the mail reader share.
+    const toMenuTarget = useCallback(
+        (message: ChatMessage, chipKey: string | null): ChatMenuTarget => ({
+            message,
+            attachment: subjectOfChip(chipKey),
+        }),
+        [subjectOfChip],
+    );
+    const { contextMenu, bind } = useAttachmentChipMenu<ChatMessage, ChatMenuTarget>(toMenuTarget);
+
+    const menuTarget = contextMenu.item;
+    const menuSubjects = useMemo(() => subjectsOf(menuTarget?.message), [subjectsOf, menuTarget?.message]);
+    // The chip's siblings are its own message's attachments, so a quick look from here keeps Save all.
+    const runner = useFileActionRunner(menuTarget?.attachment ?? null, menuSubjects, { attachment: true });
 
     // One gating source shared by the hover bar and the context menu so the two action sets never drift.
     const getMessageActions = useCallback(
@@ -98,27 +123,6 @@ export function ChatMessageList({
         },
         [currentUserEmail, ownerId, mountId, onEditMessage, onDeleteMessage],
     );
-
-    const downloadTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
-    useEffect(() => () => downloadTimers.current.forEach(clearTimeout), []);
-
-    const handleDownloadLocally = useCallback(() => {
-        if (!saveAttachmentsMsg?.attachments || !ownerId || !mountId) return;
-        downloadTimers.current.forEach(clearTimeout);
-        downloadTimers.current = [];
-        const names = saveAttachmentsMsg.attachments.filter((a): a is string => typeof a === 'string');
-        for (const [i, name] of names.entries()) {
-            const fileInfo = findByName(name);
-            if (!fileInfo) continue;
-            downloadTimers.current.push(
-                setTimeout(
-                    () => triggerDownload(getDriveDownloadUrl(ownerId, mountId, fileInfo.id, fileInfo.updatedAt)),
-                    i * 300,
-                ),
-            );
-        }
-        setSaveAttachmentsMsg(null);
-    }, [saveAttachmentsMsg, ownerId, mountId, findByName]);
 
     const scrollToBottom = useCallback(() => {
         requestAnimationFrame(() => {
@@ -215,7 +219,7 @@ export function ChatMessageList({
         );
     }
 
-    const menuMessage = contextMenu.item;
+    const menuMessage = menuTarget?.message;
     const menuActions = menuMessage ? getMessageActions(menuMessage) : null;
 
     return (
@@ -261,18 +265,7 @@ export function ChatMessageList({
 
                 const actions = getMessageActions(message);
                 const hasActions = actions.canSaveAttachments || actions.canEdit || actions.canDelete;
-                const actionProps = hasActions
-                    ? {
-                          onContextMenu: (e: React.MouseEvent) => {
-                              // Leave links and selected text to the browser's native copy menu.
-                              const selection = window.getSelection();
-                              if ((e.target as HTMLElement).closest('a') || (selection && !selection.isCollapsed))
-                                  return;
-                              contextMenu.handleContextMenu(e, message);
-                          },
-                          ...longPress.bind(message),
-                      }
-                    : {};
+                const actionProps = hasActions ? bind(message) : {};
                 // Desktop-only hover affordance (fine pointer); touch has none — long-press opens the same menu.
                 const hoverActions = hasActions ? (
                     <div className="absolute right-2 top-1 z-10 flex items-center rounded-md border bg-background shadow-sm invisible pointer-fine:group-hover:visible">
@@ -282,7 +275,7 @@ export function ChatMessageList({
                                 tooltipText="Save attachments"
                                 className="h-7 w-7"
                                 preventFocusLoss
-                                onClick={() => setSaveAttachmentsMsg(message)}
+                                onClick={() => runner.openPicker(subjectsOf(message))}
                             />
                         )}
                         {actions.canEdit && onEditMessage && (
@@ -455,10 +448,16 @@ export function ChatMessageList({
             <ContextMenuAnchor contextMenu={contextMenu} className="min-w-[180px]">
                 {menuMessage && (
                     <>
+                        {runner.subject && (
+                            <>
+                                <FileActionMenuItems runner={runner} />
+                                <DropdownMenuSeparator />
+                            </>
+                        )}
                         {menuActions?.canSaveAttachments && (
                             <DropdownMenuItem
                                 onClick={() => {
-                                    setSaveAttachmentsMsg(menuMessage);
+                                    runner.openPicker(menuSubjects);
                                     contextMenu.close();
                                 }}
                             >
@@ -489,34 +488,7 @@ export function ChatMessageList({
                     </>
                 )}
             </ContextMenuAnchor>
-            {ownerId && (
-                <DriveLocationPicker
-                    open={!!saveAttachmentsMsg}
-                    onOpenChange={(open) => {
-                        if (!open) setSaveAttachmentsMsg(null);
-                    }}
-                    mode="folder"
-                    title="Save attachments"
-                    confirmLabel="Save here"
-                    defaultOwnerId={ownerId}
-                    defaultMountId={mountId}
-                    onConfirm={async (location) => {
-                        if (!saveAttachmentsMsg?.attachments) return;
-                        const pathIds = saveAttachmentsMsg.attachments
-                            .filter((a): a is string => typeof a === 'string')
-                            .map((name) => findByName(name)?.id)
-                            .filter((id): id is string => !!id);
-                        if (pathIds.length === 0) return;
-                        await copyFiles.mutateAsync({
-                            pathIds,
-                            targetOwnerId: location.ownerId,
-                            targetMountId: location.mountId,
-                            targetParentId: location.folderId,
-                        });
-                    }}
-                    onDownloadInstead={handleDownloadLocally}
-                />
-            )}
+            {runner.dialogs}
         </div>
     );
 }

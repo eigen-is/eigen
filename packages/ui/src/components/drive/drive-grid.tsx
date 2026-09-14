@@ -21,15 +21,12 @@ export function DriveGrid({
     isItemDisabled,
     getItemHref,
     onShareClick,
-    onDownload,
     onDelete,
     onRename,
     onMove,
     onMoveTo,
     onCopyTo,
     onDuplicate,
-    onConvert,
-    onImportContacts,
     onExport,
     onQuickLook,
     onEmailCollaborators,
@@ -130,12 +127,9 @@ export function DriveGrid({
 
             <DriveItemContextMenu
                 controller={controller}
+                items={items}
                 getItemHref={getItemHref}
                 onItemOpen={onItemOpen}
-                onQuickLook={onQuickLook}
-                onDownload={onDownload}
-                onConvert={onConvert}
-                onImportContacts={onImportContacts}
                 onExport={onExport}
                 onRename={onRename}
                 onMoveTo={onMoveTo}

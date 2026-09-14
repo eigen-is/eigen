@@ -14,4 +14,6 @@ export type FileSubject = {
     thumbnailUrl?: string;
     // Present: Open, the server-rendered previews, and every Drive-side action.
     drive?: DrivePath;
+    // Present on a mail part: what a write route needs to name it. Never parse the key for it.
+    mail?: { ownerId: string; messageId: string; index: number };
 };

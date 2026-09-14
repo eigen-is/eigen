@@ -64,6 +64,9 @@ export type YjsRootKind = 'map' | 'array' | 'text' | 'xmlfragment';
 // Every download format the export route can produce. A type's own list is below.
 export type ExportFormat = 'docx' | 'xlsx' | 'pdf' | 'html' | 'svg';
 
+// What the convert route turns an office file into.
+export type ConvertTarget = 'eigensheets' | 'eigendoc';
+
 export type EigenDocTypeInfo = {
     type: EigenDocType;
     mime: string;
