@@ -44,6 +44,7 @@ import { composeCollaboratorsEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import { createDefaultMountConfig, createMountConfig, Mount } from '../mount';
+import { validateName } from '../mount/helpers';
 import { extractText } from '../search/extract-text';
 import { getEntriesForTarget } from '../share';
 import type { StorageFile } from '../storage';
@@ -273,7 +274,9 @@ export default class Drive {
             throw new ApiError(404, 'Parent folder not found');
         }
 
-        const safeName = withEigenExtension(name, type);
+        // The stem gets the mount's name rule before the extension goes on: an empty or `..` stem would
+        // otherwise pass as a bare `.eigendoc` dotfile (the chat rooms route guards the same by hand).
+        const safeName = withEigenExtension(validateName(name), type);
         const pathId = await mount.createFolder(parentId, safeName, type);
         // Roll the container back when provisioning fails, so a transient storage outage can't
         // leave a never-announced row that occupies the name and 503s on every open. mount.deletePath
