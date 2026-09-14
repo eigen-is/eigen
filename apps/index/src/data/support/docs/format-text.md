@@ -1,16 +1,16 @@
 ---
 title: "Format text"
-description: "Apply bold, headings, lists, alignment, colours, and fonts to text in a Docs document using the toolbar."
+description: "Apply bold, headings, lists, alignment, colors, and fonts to text in a Docs document using the toolbar."
 type: how-to
 category: Editing
-tags: [docs, formatting, fonts, headings, lists, colour, alignment]
+tags: [docs, formatting, fonts, headings, lists, color, alignment]
 related: [docs/clear-formatting, docs/create-and-edit]
 order: 30
 updated: 2026-06-08
 ---
 
 Docs has a full formatting toolbar above the editor. You can change the font, set headings, make text bold or
-italic, pick a colour, align paragraphs, and build lists, all without leaving the page.
+italic, pick a color, align paragraphs, and build lists, all without leaving the page.
 
 The toolbar is visible whenever you have write access to the document. If you can only view, the toolbar is hidden.
 
@@ -51,24 +51,24 @@ Select the text you want to change, then click the button in the toolbar:
 Each button is a toggle. Click it again on the same selection to remove the style. When the cursor is inside
 styled text, the button appears highlighted, so you can see what is active.
 
-## Set a text colour
+## Set a text color
 
-The text colour button shows a letter A with a coloured underline reflecting the current colour.
+The text color button shows a letter A with a colored underline reflecting the current color.
 
-1. Select the text you want to colour.
+1. Select the text you want to color.
 2. Click the **Text color** button in the toolbar.
-3. A colour grid opens. Click the colour you want.
+3. A color grid opens. Click the color you want.
 
-To go back to the default colour, click **Default** at the top of the grid.
+To go back to the default color, click **Default** at the top of the grid.
 
 ## Highlight text
 
-The **Highlight** button (the highlighter pen icon) works the same way as text colour, but paints the background
+The **Highlight** button (the highlighter pen icon) works the same way as text color, but paints the background
 behind the selected text.
 
 1. Select the text.
 2. Click the **Highlight** button.
-3. Pick a colour from the grid.
+3. Pick a color from the grid.
 
 To remove the highlight, open the grid and click **None**.
 
@@ -96,6 +96,6 @@ button again on a selected list to turn it back into regular paragraphs.
 
 ## Remove all formatting
 
-To strip every style from selected text in one step, click the **Clear formatting** button in the toolbar. This removes bold, italic, colour, font changes, and any other marks, leaving plain text.
+To strip every style from selected text in one step, click the **Clear formatting** button in the toolbar. This removes bold, italic, color, font changes, and any other marks, leaving plain text.
 
 See [Clear formatting](/support/docs/clear-formatting) for more detail on what gets removed and when to use it.

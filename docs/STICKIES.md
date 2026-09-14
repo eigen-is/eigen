@@ -49,7 +49,7 @@ Most of `board.tsx` is wiring the shared comment modules rather than board-speci
   only on desktop; the toolbar hides the toggle on mobile, where the panel has nowhere to render
 - **Comment filters** — `useCommentFilter` + `matchesCommentFilter` drive column contents. The board
   defaults to `status: 'all'` (resolved cards stay visible); the toolbar adds `CommentFilterMenuItems`,
-  a colour-swatch row and a `FilterSummary` chip
+  a color-swatch row and a `FilterSummary` chip
 - **Card context menu** — one `useContextMenu` instance, opened by right-click and by long-press on touch
   (cards are `touch-none`, so there is no native context menu)
 - **In-board doc search** — `DocSearchProvider` + `useStickiesDocSearch` highlight matching cards and

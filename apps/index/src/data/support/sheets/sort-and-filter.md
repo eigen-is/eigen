@@ -66,13 +66,13 @@ You can also right-click a cell and choose **Filter** to create a filter in one 
 
 Rows hidden by the filter are still in your sheet. They come back the moment you change or remove the filter.
 
-### Filter by cell colour or font colour
+### Filter by cell color or font color
 
-If your cells have different background or font colours, you can filter by colour instead of value.
+If your cells have different background or font colors, you can filter by color instead of value.
 
 1. Click the dropdown arrow on the column.
 2. Hover over **Filter by color**.
-3. A sub-panel shows the colours used in that column. Untick any colour to hide rows with that colour.
+3. A sub-panel shows the colors used in that column. Untick any color to hide rows with that color.
 4. Click **Confirm**.
 
 ### Sort from the filter dropdown

@@ -63,7 +63,7 @@ Three things make this a sensible option to evaluate, not a vanity feature:
    exist in the current stack. See [stalwartlabs/stalwart](https://github.com/stalwartlabs/stalwart).
 3. **Our seams are clean.** `../../apps/api/src/lib/mail/mail.ts` is already a thin facade
    (`getMailClient(user)` → `home.mail`); the routes in `../../apps/api/src/routes/mail.ts` never
-   touch the Maildir filesystem directly. Swapping the implementation is a localised change.
+   touch the Maildir filesystem directly. Swapping the implementation is a localized change.
 
 This is exploratory. The goal of this proposal is to decide whether to **prototype** a Stalwart
 backend, not to commit to shipping one.
@@ -229,7 +229,7 @@ export interface MailBackend {
 ```
 
 The `Maildir` class already implements every one of these methods — that's the existing surface
-of `apps/api/src/lib/mail/maildir.ts:68-808`. Lift the interface from the class, no behaviour
+of `apps/api/src/lib/mail/maildir.ts:68-808`. Lift the interface from the class, no behavior
 change.
 
 Selection happens once, in `UserHome.init()`:
@@ -274,7 +274,7 @@ the co-deployed Stalwart instance. Dependencies and shape:
 | `MailBackend` method | JMAP call(s) | Notes |
 |---|---|---|
 | `mailboxesList()` | `Mailbox/get` then map by `role`: `inbox`→`''`, `sent`→`'Sent'`, `drafts`→`'Drafts'`, `trash`→`'Trash'`, `junk`→`'Junk'`, `archive`→`'Archive'` | Cache mailbox-id ↔ name map per session; `Mailbox/changes` invalidates |
-| `mailboxCreate(name)` | `Mailbox/set { create }` | Honours `STANDARD_MAILBOXES` |
+| `mailboxCreate(name)` | `Mailbox/set { create }` | Honors `STANDARD_MAILBOXES` |
 | `mailboxExists(name)` | look up cached mailbox map | No round-trip |
 | `mailboxGet(name)` | `Email/query { filter: { inMailbox } } + Email/get` (chained via JMAP `#ids` back-reference) | Single HTTP request via batching |
 | `mailboxDeliver(message)` | `Email/import` (RFC 8621 §2.5) — accepts raw RFC 822 blob, returns server-assigned id | The Postfix path goes away in Stalwart mode (see *§ Inbound mail*); this method exists for legacy callers like `welcome.ts` |
@@ -335,7 +335,7 @@ Verify the hash format. better-auth's default is `scrypt` per its source; Stalwa
 backend supports `bcrypt`, `argon2`, `scrypt`, `pbkdf2`, plain. If the formats match
 out-of-the-box, this is the cleanest path: zero new infrastructure, single password of truth,
 2FA automatically *bypassed* for protocol auth (matching the current
-`verifyProtocolAuth` behaviour for non-2FA users — we'd need to handle 2FA users separately by
+`verifyProtocolAuth` behavior for non-2FA users — we'd need to handle 2FA users separately by
 forcing them onto app-passwords).
 
 If hash formats *don't* match: write a tiny `bridge.db` view computed from better-auth's table
@@ -412,7 +412,7 @@ One EventSource per `UserHome` (cheap), shut down in `destruct()`. This replaces
 **iMIP latency**: previously synchronous to delivery; now event-driven (sub-second under normal
 operation). For most flows this is fine. The one place it isn't is *concurrent* request
 ordering: if the user opens calendar at the same moment delivery completes, the calendar query
-may briefly precede iMIP processing. Mitigation: serialise via `Promise.all`-style barrier
+may briefly precede iMIP processing. Mitigation: serialize via `Promise.all`-style barrier
 during the EventSource handler. Acceptable for v1.
 
 ## Outbound mail
@@ -532,7 +532,7 @@ Each phase is independently shippable / abandonable.
 | Phase | Scope | Why this order |
 |---|---|---|
 | **0 — Spike** | Stand up Stalwart in a throwaway Docker, point `jmap-jam` at it, write 200-line manual JMAP exerciser hitting `Email/import` + `Email/query` + `Email/get`. Verify SQL backend reads `auth.db`. | Find showstoppers before writing the adapter |
-| **1 — `MailBackend` interface** | Refactor `Maildir` to implement an explicit interface. No behaviour change. | Lock in the seam before building the second implementation |
+| **1 — `MailBackend` interface** | Refactor `Maildir` to implement an explicit interface. No behavior change. | Lock in the seam before building the second implementation |
 | **2 — `StalwartMail` adapter** | Build the new class implementing read-only: `mailboxesList`, `mailboxGet`, `messageGet`, `messageGetFile`, `messageGetAttachment`. SSE bridge for `MAIL_RECEIVED`. Behind a hidden flag. | Smallest useful slice — read your mail. |
 | **3 — Mutations** | `messageDelete`, `messageMove`, `messageCopy`, `messageSetRead`, `messageSetFlagged`, `mailboxCreate`. | Mutable mail. |
 | **4 — Drafts + send** | `messageHandleDraft`, `uploadDraftAttachment`, `stageDriveAttachment`, `messageSend` (via JMAP `EmailSubmission/set`). | Compose. |
@@ -639,7 +639,7 @@ Cost: ~1 day to wire up. One new container. No code changes in `../../apps/api`.
 
 **The two paths are not mutually exclusive.** Adding rspamd now does not preclude adding the
 Stalwart backend later. If the question is *"how do we make Eigen mail better in 2026Q3"*,
-rspamd is the answer. If the question is *"how do we modernise the mail stack on a 12-month
+rspamd is the answer. If the question is *"how do we modernize the mail stack on a 12-month
 horizon"*, the Stalwart adapter is. Pick based on which question you're actually asking.
 
 ## Decision
@@ -654,7 +654,7 @@ Recommendation, in order:
 1. **Land the `rspamd` sidecar** (1–2 days). Standalone proposal, no dependency on this one.
    Fixes the actual mail pain.
 2. **Land Phase 1 — `MailBackend` interface refactor** (half a day). Pure cleanup, no
-   behaviour change, lets the existing `Maildir` class implement an explicit contract. Buys
+   behavior change, lets the existing `Maildir` class implement an explicit contract. Buys
    optionality for any future backend (Stalwart, JMAP-only Cyrus, future Stalwart fork).
 3. **Defer Phases 2–6** (the actual Stalwart adapter) until either (a) a concrete user asks
    for JMAP, or (b) we hit an operational ceiling with the Postfix+Dovecot+rspamd stack that

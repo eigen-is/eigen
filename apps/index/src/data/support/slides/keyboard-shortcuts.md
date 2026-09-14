@@ -15,7 +15,7 @@ Shortcuts are written for macOS and for Windows and Linux. On a Mac, **⌘** is 
 
 ## Find text in a presentation
 
-Press **⌘F** (or **Ctrl+F**) to open the find bar. It searches the text in every object on every slide, not just the one you're looking at, so a term on slide 7 still turns up while you're editing slide 1. Each result is labelled by slide, for example **Slide 3**, and every slide that holds a match is ringed in the rail so you can see where the hits are at a glance. Press **⌘G** for the next match and **⌘⇧G** for the previous one, and Slides jumps to that slide and selects the object. Press **Esc** to close the bar. The bar in Slides finds text only. To replace text as well, see [Find and replace text](/support/docs/find-and-replace), which covers Docs and Sheets.
+Press **⌘F** (or **Ctrl+F**) to open the find bar. It searches the text in every object on every slide, not just the one you're looking at, so a term on slide 7 still turns up while you're editing slide 1. Each result is labeled by slide, for example **Slide 3**, and every slide that holds a match is ringed in the rail so you can see where the hits are at a glance. Press **⌘G** for the next match and **⌘⇧G** for the previous one, and Slides jumps to that slide and selects the object. Press **Esc** to close the bar. The bar in Slides finds text only. To replace text as well, see [Find and replace text](/support/docs/find-and-replace), which covers Docs and Sheets.
 
 ## Keyboard shortcuts
 

@@ -3,7 +3,7 @@ title: "Style shapes, lines, text, and images"
 description: "A reference for every section of the properties panel in Vector: transform, text, image, fill, stroke, shape, sketch, and appearance."
 type: reference
 category: Editing
-tags: [vector, styling, fill, stroke, colours, text]
+tags: [vector, styling, fill, stroke, colors, text]
 related: [vector/draw-shapes-and-text, vector/connect-with-arrows, vector/arrange-and-align]
 order: 50
 updated: 2026-09-11
@@ -32,9 +32,9 @@ Shown only for text objects. It styles the text itself. The box behind the text 
 |---|---|
 | **Font** | The typeface |
 | **Size** | Text size, from 8 to 200 |
-| **Color** | Text colour |
+| **Color** | Text color |
 | **Style** | **Bold**, **Italic**, **Underline**, and **Strikethrough** toggles |
-| **Align** | Horizontal alignment: left, centre, right, or justify |
+| **Align** | Horizontal alignment: left, center, right, or justify |
 | **Vertical** | Vertical alignment: top, middle, or bottom |
 
 ## Spacing
@@ -57,11 +57,11 @@ Shown only for image objects.
 
 ## Fill
 
-The colour inside a shape. Shown for shapes and text, and for a line or drawing whose path is closed. Arrows, images, and open lines have no fill.
+The color inside a shape. Shown for shapes and text, and for a line or drawing whose path is closed. Arrows, images, and open lines have no fill.
 
 | Control | What it does |
 |---|---|
-| Colour swatch | Fills the object with a solid colour or a two-stop gradient. Choose **None** for no fill. |
+| Color swatch | Fills the object with a solid color or a two-stop gradient. Choose **None** for no fill. |
 | **Style** | How the fill is drawn: **Solid**, **Hachure**, **Cross-hatch**, or **Zigzag** |
 
 ## Stroke
@@ -70,7 +70,7 @@ The object's outline. Shown for any selection, because every object is drawn wit
 
 | Control | What it does |
 |---|---|
-| **Color** | Outline colour. On shapes, text, and images you can set it to **None**. A line or arrow is its stroke, so it always keeps a colour. |
+| **Color** | Outline color. On shapes, text, and images you can set it to **None**. A line or arrow is its stroke, so it always keeps a color. |
 | **Width** | **Thin**, **Medium**, or **Bold** |
 | **Style** | **Solid**, **Dashed**, or **Dotted**. Not shown for freehand drawings. |
 
@@ -116,4 +116,4 @@ Sections show only where they mean something for the object you picked.
 
 ## Nothing selected
 
-With nothing selected, the panel is titled **Canvas** and shows a single **Background** section. Its **Color** row sets the drawing's background colour, or **None** for a transparent canvas.
+With nothing selected, the panel is titled **Canvas** and shows a single **Background** section. Its **Color** row sets the drawing's background color, or **None** for a transparent canvas.

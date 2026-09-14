@@ -1,6 +1,6 @@
 ---
 title: "Get started with Stickies"
-description: "Organise your work on a kanban board: columns hold cards, cards hold notes and discussion."
+description: "Organize your work on a kanban board: columns hold cards, cards hold notes and discussion."
 type: overview
 category: Basics
 tags: [stickies, kanban, cards, columns, getting-started]
@@ -10,8 +10,8 @@ order: 10
 updated: 2026-09-13
 ---
 
-Stickies is a kanban board. You organise work into columns, and each column holds cards. A card has a title,
-an optional description, a colour, and its own comment thread where you can discuss it with the people you
+Stickies is a kanban board. You organize work into columns, and each column holds cards. A card has a title,
+an optional description, a color, and its own comment thread where you can discuss it with the people you
 share the board with. This page is a quick tour of what you can do.
 
 ## The board
@@ -23,7 +23,7 @@ Each card shows its title, a preview of its description, and a reply count if th
 To open a card and read its full content, click it.
 
 You can see who else is on the board. When someone has a card open or is dragging it, their name appears on
-that card and it gets an outline in their colour.
+that card and it gets an outline in their color.
 
 ## Columns
 
@@ -37,14 +37,14 @@ You can reorder columns by dragging their header left or right.
 ## Cards
 
 To add a card to a column, click **Add a sticky** at the bottom of that column (or the plus icon in the column
-header). The **Add Sticky** dialog opens, where you fill in a title, an optional description, and pick a colour.
+header). The **Add Sticky** dialog opens, where you fill in a title, an optional description, and pick a color.
 Click **Add Sticky** to save it.
 
 To edit a card you have already added, open it by clicking on it, then click the pencil icon in the card detail
 view.
 
-Cards have a colour to help you group related work at a glance. You can change a card's colour while you
-edit it, or right-click a card and choose a colour from the context menu.
+Cards have a color to help you group related work at a glance. You can change a card's color while you
+edit it, or right-click a card and choose a color from the context menu.
 
 ## Moving cards
 
@@ -59,9 +59,9 @@ at a glance which cards have active discussion.
 
 See [Discuss a card with comments](/support/stickies/card-comments) for more detail.
 
-## Filtering by colour
+## Filtering by color
 
-The toolbar shows a row of colour swatches. Click one to show only the cards with that colour. Click it again,
+The toolbar shows a row of color swatches. Click one to show only the cards with that color. Click it again,
 or click **Clear**, to clear the filter.
 
 ## Undo and redo

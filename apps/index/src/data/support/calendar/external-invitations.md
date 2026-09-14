@@ -38,26 +38,26 @@ the reply and updates the attendee's status on your event.
 
 When an invitation email arrives in your Eigen mailbox, Mail shows a calendar card inside the message
 instead of a bare attachment. The card displays the event title, date and time, location, and the
-organiser's name. Click **View in Calendar** to open Calendar on that event.
+organizer's name. Click **View in Calendar** to open Calendar on that event.
 
 Eigen adds the event to your default calendar automatically, as long as your server can verify the sender
 of the email. If it cannot, the card still appears in Mail but nothing is added to your calendar.
 
-## How do I respond to an externally-organised event?
+## How do I respond to an externally-organized event?
 
-Open the event in Calendar. Because you are an attendee and not the organiser, the event shows an
+Open the event in Calendar. Because you are an attendee and not the organizer, the event shows an
 **RSVP** section at the bottom of the event detail. Click **Accept**, **Maybe**, or **Decline**.
 
-Eigen sends a reply email to the organiser so their calendar app can update their attendee list.
+Eigen sends a reply email to the organizer so their calendar app can update their attendee list.
 
-## Can I edit an event that someone outside Eigen organised?
+## Can I edit an event that someone outside Eigen organized?
 
-No. On events organised by someone else, the title, time, location, and description are read-only.
-To suggest a different time, contact the organiser directly.
+No. On events organized by someone else, the title, time, location, and description are read-only.
+To suggest a different time, contact the organizer directly.
 
 ## What if I receive a cancellation email?
 
-When the organiser cancels the event, a new email arrives in Mail. The calendar card in that email shows
+When the organizer cancels the event, a new email arrives in Mail. The calendar card in that email shows
 "This event has been cancelled". Eigen removes the event from your calendar automatically.
 
 ## Why did my invited guest not receive anything?

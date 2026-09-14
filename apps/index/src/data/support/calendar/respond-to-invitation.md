@@ -1,6 +1,6 @@
 ---
 title: "Respond to an invitation"
-description: "Accept, decline, or mark yourself as maybe on an event someone else organised."
+description: "Accept, decline, or mark yourself as maybe on an event someone else organized."
 type: how-to
 tags: [calendar, rsvp, invitations, attendees]
 related: [calendar/invite-people, calendar/external-invitations, calendar/create-event]
@@ -19,7 +19,7 @@ decline, or say maybe from the event detail in Calendar.
 3. Scroll down to the **RSVP** section, which appears near the bottom of the dialog. You will see
    three buttons: **Accept**, **Maybe**, and **Decline**.
 4. Click the button that reflects your answer. The button fills in to show your current response.
-   The dialog closes, and the organiser's attendee list updates to match.
+   The dialog closes, and the organizer's attendee list updates to match.
 
 <div class="eigen-callout">
 
@@ -53,13 +53,13 @@ events, Calendar asks whether to remove this occurrence, this and following, or 
 ## Respond to an invitation from outside Eigen
 
 When someone who uses a different calendar app invites you, the invitation email arrives in Mail.
-Mail shows a calendar card inside the message with the event title, date, and organiser's name.
+Mail shows a calendar card inside the message with the event title, date, and organizer's name.
 Click **View in Calendar** on that card to open Calendar on the event.
 
 Eigen adds the event to your default calendar automatically when the email arrives, as long as your
 server can verify the sender. From there,
 respond the same way: click the event, find the **RSVP** section, and choose **Accept**,
-**Maybe**, or **Decline**. Eigen sends a reply email to the organiser so their calendar app can
+**Maybe**, or **Decline**. Eigen sends a reply email to the organizer so their calendar app can
 update its attendee list.
 
 See [How invitations work with people outside Eigen](/support/calendar/external-invitations) for

@@ -16,7 +16,7 @@ choose how much they can see or do, and share with a whole team at once.
 1. In the sidebar on the left, find the calendar you want to share under **My Calendars**.
 2. Hover over its name to reveal the pencil icon on the right, then click it. The **Edit Calendar** dialog opens.
 
-The **Sharing** section is below the calendar name and colour.
+The **Sharing** section is below the calendar name and color.
 
 ## Add a person
 

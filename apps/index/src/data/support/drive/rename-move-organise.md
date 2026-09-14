@@ -1,9 +1,9 @@
 ---
-title: "Rename, move, and organise files"
+title: "Rename, move, and organize files"
 description: "Change the name of a file or folder, and move items into folders to keep your Drive tidy."
 type: how-to
 category: Basics
-tags: [drive, files, folders, organise, rename, move]
+tags: [drive, files, folders, organize, rename, move]
 related: [drive/get-started, drive/create-folders-and-documents]
 order: 70
 updated: 2026-06-08

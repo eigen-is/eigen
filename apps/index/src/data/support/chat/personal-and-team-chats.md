@@ -26,7 +26,7 @@ Personal rooms appear at the top of the sidebar, without a section heading.
 ## Team chat rooms
 
 A team room belongs to a team. Any team member can see every room the team has, without needing to be added
-individually. If your organisation has several teams, you can be in rooms for each of them.
+individually. If your organization has several teams, you can be in rooms for each of them.
 
 When you open a team room, the toolbar shows the team's avatar rather than a list of individuals. You cannot
 change the access list for a team room the same way you can for a personal room: access follows team

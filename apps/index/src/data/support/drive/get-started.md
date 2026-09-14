@@ -11,7 +11,7 @@ updated: 2026-09-13
 ---
 
 Drive is where your files live in Eigen. You can upload files from your computer, create documents and
-spreadsheets without leaving the browser, organise everything into folders, and share any of it with other
+spreadsheets without leaving the browser, organize everything into folders, and share any of it with other
 people. This page is a quick tour of what you can do.
 
 ## Add your files
@@ -19,7 +19,7 @@ people. This page is a quick tour of what you can do.
 Click the **New** button at the top of the sidebar. From there you can:
 
 - **Upload** files from your computer.
-- Create a **folder** to organise things.
+- Create a **folder** to organize things.
 - Start a new document, spreadsheet, presentation, drawing, board, or chat. These open straight away in the browser.
 
 You can also drag files from your desktop and drop them into Drive.
@@ -32,7 +32,7 @@ images and PDFs, open in a preview.
 To look at a file without leaving the list, open its menu (right-click, or the **⋮** button) and choose
 **Quick preview**. The same menu has **Open in new tab**, **Rename**, and **Download**.
 
-## Keep things organised
+## Keep things organized
 
 - Move files by dragging them onto a folder.
 - **Rename** a file or folder from its menu.

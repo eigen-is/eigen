@@ -30,14 +30,14 @@ You can use these in both **Subject** and **Body**. Eigen fills them in for each
 | Placeholder | Filled in with |
 |---|---|
 | `{name}` | The new user's name |
-| `{orgName}` | Your organisation's name |
+| `{orgName}` | Your organization's name |
 | `{domain}` | Your server's domain |
 
 The same list is shown under the **Body** box, so you do not have to remember it.
 
 ## When the message arrives
 
-Eigen writes the message straight into the new user's Inbox as their mailbox is created. It does not travel over your mail server, so it still works if outgoing email is not configured yet. It shows as coming from your organisation's name.
+Eigen writes the message straight into the new user's Inbox as their mailbox is created. It does not travel over your mail server, so it still works if outgoing email is not configured yet. It shows as coming from your organization's name.
 
 Only new accounts get it. Editing the subject or the body later changes what the next person receives, and does not resend anything to people who already have an account.
 

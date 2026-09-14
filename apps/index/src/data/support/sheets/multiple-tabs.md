@@ -1,6 +1,6 @@
 ---
 title: "Work with multiple sheet tabs"
-description: "Add, rename, reorder, and switch between sheet tabs to organise your spreadsheet into separate sections."
+description: "Add, rename, reorder, and switch between sheet tabs to organize your spreadsheet into separate sections."
 type: how-to
 tags: [sheets, tabs, sheets-tabs, rename, reorder]
 related: [sheets/create-and-edit]
@@ -9,7 +9,7 @@ updated: 2026-06-08
 ---
 
 A spreadsheet can contain as many sheets as you need. Each sheet has its own tab along the bottom of the editor.
-You can add, rename, reorder, and colour-code them to keep your data organised.
+You can add, rename, reorder, and color-code them to keep your data organized.
 
 ## Add a sheet
 
@@ -44,12 +44,12 @@ a time.
 
 Click the **⌄** arrow on a tab and choose **Copy**. A duplicate of the sheet appears next to the original.
 
-## Add a colour to a tab
+## Add a color to a tab
 
-Click the **⌄** arrow on a tab and choose **Change color**. Pick a colour from the palette. A thin stripe of
-that colour appears along the bottom of the tab.
+Click the **⌄** arrow on a tab and choose **Change color**. Pick a color from the palette. A thin stripe of
+that color appears along the bottom of the tab.
 
-To clear the colour, open the same menu, choose **Change color** again, and click **Reset color**.
+To clear the color, open the same menu, choose **Change color** again, and click **Reset color**.
 
 ## Hide and show a sheet
 

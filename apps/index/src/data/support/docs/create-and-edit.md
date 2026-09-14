@@ -54,6 +54,6 @@ Open the **Edit** menu in the toolbar and choose **Undo** or **Redo**, or use th
 
 ## Next steps
 
-- [Format text](/support/docs/format-text): apply headings, bold, lists, colours, and more.
+- [Format text](/support/docs/format-text): apply headings, bold, lists, colors, and more.
 - [Add and edit links](/support/docs/add-links): turn text into clickable links.
 - [Share a document](/support/docs/share-a-document): give other people access.

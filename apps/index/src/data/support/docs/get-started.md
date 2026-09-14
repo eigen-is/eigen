@@ -31,9 +31,9 @@ The toolbar has three areas:
 - **File** menu, on the left. Opens a dropdown with options to create another doc, open an existing
   one, import a Word file, download, rename, share, print, view version history, and move the document
   to the trash.
-- **Formatting controls**, in the centre. Change the font, heading level (Normal text, Heading 1
+- **Formatting controls**, in the center. Change the font, heading level (Normal text, Heading 1
   through Heading 4), and character formatting: **Bold**, **Italic**, **Underline**, **Strikethrough**,
-  and more. You can also set text colour, highlight colour, alignment, and list style (bulleted,
+  and more. You can also set text color, highlight color, alignment, and list style (bulleted,
   numbered, or checklist) here.
 - **Share** and **Comments** buttons, on the right.
 
@@ -49,7 +49,7 @@ tab at any time without losing work.
 
 Docs supports real-time editing. Share the document with other people (see
 [Share a document and set access](/support/docs/share-a-document)), and anyone with **Editor** access
-can work on it at the same time as you. Their cursor appears in the document labelled with their name.
+can work on it at the same time as you. Their cursor appears in the document labeled with their name.
 
 If you have **Viewer** access to a document, the toolbar shows an eye icon in place of the **Share**
 button and the text is not editable.

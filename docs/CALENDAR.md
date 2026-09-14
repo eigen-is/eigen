@@ -84,7 +84,7 @@ attendees RSVP → status propagates back to organizer. All server-side, no emai
 
 - `scope='all'` (default): updates attendee status on the linked event + propagates to organizer
 - `scope='this'` + `recurrenceDate`: creates a recurrence exception with per-occurrence attendee status + propagates
-  to organizer (who also gets an exception). With `remove: true`, creates a cancelled exception instead (hides
+  to organizer (who also gets an exception). With `remove: true`, creates a canceled exception instead (hides
   occurrence) and propagates decline
 - `scope='this-and-following'` + `recurrenceDate` + `remove: true`: truncates the linked event's rrule + propagates
   series-wide decline
@@ -121,7 +121,7 @@ Full list of calendar SSE events (defined in `packages/lib/src/types/sse.ts`):
 | `calendar:unshared`         | Calendar share removed            |
 | `calendar:invite-received`  | Invitation received by attendee   |
 | `calendar:invite-updated`   | Invitation updated by organizer   |
-| `calendar:invite-cancelled` | Invitation cancelled by organizer |
+| `calendar:invite-cancelled` | Invitation canceled by organizer |
 | `calendar:invite-rsvp`      | Attendee RSVP propagated to organizer |
 
 Shared calendar users are also notified via `notifySharedCalendarUsers()` when events are created/updated/deleted.
@@ -148,7 +148,7 @@ occurrence-by-occurrence from dtstart to the query window on the single shared e
   mainstream client emits sub-daily recurrence.
 - **Recurring dtstart must fall in 1900–2200.** Same two seams, same reasoning: a pathological dtstart stalls
   the walk even at `DAILY`. Worst case inside the range is ~110k steps.
-- **Materialised occurrences cap** at `MAX_OCCURRENCES` (10 000) per expansion.
+- **Materialized occurrences cap** at `MAX_OCCURRENCES` (10 000) per expansion.
 - **Query windows are clamped**, not rejected, to a 5-year span — wide enough for any real view, and it stops
   a year-9999 range request.
 
@@ -265,7 +265,7 @@ iMIP enables calendar invitations between Eigen users and external parties via e
 - **Mail delivery hook**: inside `Mail.mailboxDeliver` (`apps/api/src/lib/mail/mail-domain.ts`). Once the raw bytes are appended to INBOX, the message is parsed and scanned for a `text/calendar` attachment; if there is one, `processInboundImip(home, parsedMail)` runs. This is **blocking on purpose** — "blocking so event exists before client queries" — so a client that reacts to the new-mail SSE already finds the event in its calendar. The surrounding `try`/`catch` only logs: a malformed invite never fails the delivery.
 - **Sender authentication**: every mutation below binds to the message `From:` address, so `processInboundImip` acts automatically only when that sender is authenticated. "Authenticated" means the message carries an `Authentication-Results` header written by our own verifying MTA — authserv-id equal to `getMailDomain()` — recording a `dkim=pass` whose `header.d` (or `header.i`) domain is aligned with the `From:` domain (exact match or a subdomain either way, DMARC-style relaxed alignment). The check (`verifyImipSender` in `apps/api/src/lib/mail/imip-auth.ts`) reads only the topmost header stamped with our authserv-id: OpenDKIM prepends its result and strips pre-existing ones with our authserv-id (`AuthservID` + `RemoveARFrom` in `docker/postfix/entrypoint.sh`), so a header beneath it is a stale hop or a forgery, never authoritative. Any other case — no header, a fail, an unaligned domain, or a forged header from outside — fails closed: the iMIP part is not processed, one info line is logged with the reason, and the invite stays visible as a normal calendar attachment. When inbound mail does not pass through the bundled Postfix/OpenDKIM — an operator fronting Eigen with their own MTA that writes no `Authentication-Results` header with our authserv-id — automatic iMIP processing is off by design and every invite arrives as a plain attachment for the user to add manually. Internal Eigen↔Eigen invitations never take this path (`invite-propagation.ts` delivers them in-app via `sendToHome`, dropping the iMIP attachment on the courtesy email), so they are unaffected.
 - **`METHOD:REQUEST`**: creates a linked event in the recipient's calendar via `calendar.receiveInvitation()`. If a linked event with the same `uid` already exists, updates it via `calendar.receiveInvitationUpdate()`. A single-occurrence REQUEST (one carrying a `RECURRENCE-ID`) instead attaches/updates an exception on the linked series via `calendar.receiveInvitationException()`, so a rescheduled instance doesn't collapse the whole series.
-- **`METHOD:CANCEL`**: removes the linked event via `calendar.removeInvitation()`. A single-occurrence CANCEL (carrying a `RECURRENCE-ID`) instead cancels just that instance via `calendar.cancelInvitationOccurrence()`, which applies the same RFC 5546 SEQUENCE replay guard as the REQUEST path (strictly-older CANCELs are dropped; the cancelled exception records the CANCEL's SEQUENCE).
+- **`METHOD:CANCEL`**: removes the linked event via `calendar.removeInvitation()`. A single-occurrence CANCEL (carrying a `RECURRENCE-ID`) instead cancels just that instance via `calendar.cancelInvitationOccurrence()`, which applies the same RFC 5546 SEQUENCE replay guard as the REQUEST path (strictly-older CANCELs are dropped; the canceled exception records the CANCEL's SEQUENCE).
 - **`METHOD:REPLY`**: updates attendee status on the organizer's event via `calendar.updateAttendeeStatus()`. A single-occurrence REPLY (carrying a `RECURRENCE-ID`) instead lands the sender's PARTSTAT on that instance's exception via `calendar.rsvpForOccurrence()`, so declining one occurrence doesn't mark the whole series. Only invited attendees are processed (exception-aware: an occurrence-only invitee lives on the exception's attendee list), and a REPLY never resurrects an occurrence the organizer deleted — it moves PARTSTAT only.
 
 ### `external_` prefix convention
@@ -328,11 +328,11 @@ how Apple models "undo delete occurrence". The prune is quiet: ctag bump + maste
 tombstone, no cancellation fan-out. The PUT response ETag is re-read after the exception sync so it
 always matches storage.
 
-**Cancelled exceptions serve as EXDATE, never as override VEVENTs**: `eventsToIcs` emits a deleted
+**Canceled exceptions serve as EXDATE, never as override VEVENTs**: `eventsToIcs` emits a deleted
 occurrence as an `EXDATE` line on the master (master-TZID form; `VALUE=DATE` for all-day) and skips
-the cancelled row's VEVENT. Clients round-trip EXDATE natively; a `STATUS:CANCELLED` override VEVENT
+the canceled row's VEVENT. Clients round-trip EXDATE natively; a `STATUS:CANCELLED` override VEVENT
 is dropped by Thunderbird's next PUT, which the full-replace prune would read as "client removed the
-exception" and resurrect the occurrence. The parser maps EXDATE back to cancelled exception rows, so
+exception" and resurrect the occurrence. The parser maps EXDATE back to canceled exception rows, so
 the round-trip is symmetric.
 
 Regression nets: `caldav.test.ts` (protocol), `caldav-roundtrip.test.ts` (serialization/parse

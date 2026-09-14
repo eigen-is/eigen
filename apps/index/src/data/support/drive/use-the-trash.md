@@ -58,6 +58,6 @@ Items in the Trash are automatically removed after 30 days. Your administrator c
 
 <div class="eigen-callout">
 
-Files in the Trash still count towards your storage. Empty the Trash if you need to free up space.
+Files in the Trash still count toward your storage. Empty the Trash if you need to free up space.
 
 </div>

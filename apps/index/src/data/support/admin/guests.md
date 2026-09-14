@@ -8,7 +8,7 @@ order: 50
 updated: 2026-06-08
 ---
 
-Guest access lets people outside your organisation view files you have shared with them. Guests sign in
+Guest access lets people outside your organization view files you have shared with them. Guests sign in
 with a one-time code sent to their email address, not a password, so they do not need a full account on
 your server.
 

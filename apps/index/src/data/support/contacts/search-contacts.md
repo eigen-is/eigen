@@ -35,6 +35,6 @@ If you belong to a team, click the team name in the sidebar. The same search bar
 
 ## Narrow the list with labels
 
-If you use labels to organise your contacts, click a label in the sidebar first. The list already shows only the contacts in that label, and the search bar then filters within that subset.
+If you use labels to organize your contacts, click a label in the sidebar first. The list already shows only the contacts in that label, and the search bar then filters within that subset.
 
-See [Organise contacts with labels and groups](/support/contacts/labels-and-groups) for more on setting up labels.
+See [Organize contacts with labels and groups](/support/contacts/labels-and-groups) for more on setting up labels.

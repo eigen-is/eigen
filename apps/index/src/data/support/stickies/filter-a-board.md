@@ -1,6 +1,6 @@
 ---
 title: "Filter the cards on a board"
-description: "Narrow a Stickies board down to the cards you care about, by assignee, by colour, or by status."
+description: "Narrow a Stickies board down to the cards you care about, by assignee, by color, or by status."
 type: how-to
 tags: [stickies, kanban, cards, filter, assignee]
 related: [stickies/get-started, stickies/assign-and-resolve-cards]
@@ -9,7 +9,7 @@ updated: 2026-09-13
 ---
 
 A busy board is hard to read. The **Filter** menu in the toolbar narrows it down to the cards you care about:
-the ones assigned to a particular person, the ones in a certain colour, or the ones that are still open.
+the ones assigned to a particular person, the ones in a certain color, or the ones that are still open.
 Filtering changes what you see, not the board itself, so nobody else's view changes.
 
 ## Filter by assignee
@@ -22,13 +22,13 @@ The list holds everyone the board is shared with. See
 [Assign and resolve cards](/support/stickies/assign-and-resolve-cards) for how a card gets an assignee in the
 first place.
 
-## Filter by colour
+## Filter by color
 
-The **Filter** menu has a **Color** submenu listing every sticky colour. Click a colour to switch it on, and a
-tick appears beside it. Click more colours to add them, and the board shows cards in any of the colours you have
+The **Filter** menu has a **Color** submenu listing every sticky color. Click a color to switch it on, and a
+tick appears beside it. Click more colors to add them, and the board shows cards in any of the colors you have
 ticked. The menu stays open while you pick, so you can choose several in one go.
 
-The middle of the toolbar shows the same colours as a row of swatches. Click a swatch to switch that colour on
+The middle of the toolbar shows the same colors as a row of swatches. Click a swatch to switch that color on
 or off. The row needs a wide window, so on a narrow one use the **Filter** menu instead.
 
 ## Filter by status
@@ -42,7 +42,7 @@ A board starts on **All**, so resolved cards sit on the board alongside the rest
 
 ## See what the filter is doing, and clear it
 
-While a filter is on, a short summary sits next to the colour swatches, for example "All · assigned to me · 2
+While a filter is on, a short summary sits next to the color swatches, for example "All · assigned to me · 2
 colors". Click **Clear** beside it to drop every filter at once and go back to the whole board.
 
 The menu carries the same escape: **Clear filters** appears at the bottom of the **Filter** menu while a filter

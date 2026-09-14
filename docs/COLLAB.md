@@ -13,7 +13,7 @@ Reads are backward compatible with **no schema migration**: `decompressBlob` sni
 A read-only peer can send awareness, so `CollabDocument.handleMessage` validates an update before `applyAwarenessUpdate` rather than after — otherwise one peer could flood or hijack the shared awareness map:
 
 - at most `MAX_AWARENESS_CLIENT_IDS` (8) client ids per connection — a real y-websocket client owns one per doc
-- at most `MAX_AWARENESS_STATE_BYTES` (16 KiB) per state — a legitimate state is name + colour + userId + a cursor
+- at most `MAX_AWARENESS_STATE_BYTES` (16 KiB) per state — a legitimate state is name + color + userId + a cursor
 - the state's `user.userId` must be the session user: a client may publish presence for itself only
 - a client id belongs to the connection that declared it (`clientIdOwners`), so no peer can evict or overwrite another's cursor
 

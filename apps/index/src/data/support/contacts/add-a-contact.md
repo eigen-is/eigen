@@ -18,7 +18,7 @@ The form is divided into three sections.
 
 - **First name** and **Last name**: at least one of the two is required before you can save.
 - **Company** and **Job title**: optional fields for workplace details.
-- **Labels**: pick from any labels you have set up to organise this contact from the start. Choose from the dropdown under the field.
+- **Labels**: pick from any labels you have set up to organize this contact from the start. Choose from the dropdown under the field.
 
 **Contact Information**
 

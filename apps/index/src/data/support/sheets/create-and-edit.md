@@ -78,15 +78,15 @@ The **Format** menu covers all formatting options:
 
 - **Text**: bold (**Ctrl+B**), italic (**Ctrl+I**), underline, and strikethrough.
 - **Number**: choose a format such as currency, percentage, or date from the submenu.
-- **Alignment**: left, centre, or right horizontally; top, middle, or bottom vertically.
+- **Alignment**: left, center, or right horizontally; top, middle, or bottom vertically.
 - **Wrapping**: overflow (default), wrap, or clip long text.
 - **Font size**: pick from the list.
-- **Fill color** and **Borders**: set a background colour or draw borders around cells.
+- **Fill color** and **Borders**: set a background color or draw borders around cells.
 - **Merge cells**: combine a selection into one cell.
 - **Clear formatting**: remove all formatting from the selected cells without deleting their values.
 
 On wider screens, quick buttons for **Text color**, **Fill color**, and horizontal alignment also appear in
-the centre of the menu bar.
+the center of the menu bar.
 
 ## Find and replace
 

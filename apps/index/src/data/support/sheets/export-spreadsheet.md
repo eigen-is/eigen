@@ -34,7 +34,7 @@ When you download as **Microsoft Excel (.xlsx)**, the following are preserved:
 - Merged cells
 - Column widths and row heights
 - Cell borders
-- Text formatting: bold, italic, underline, strikethrough, font size, text colour, and fill colour
+- Text formatting: bold, italic, underline, strikethrough, font size, text color, and fill color
 - Text alignment, text wrapping, and text rotation
 - The sheet tab names and their order
 - Hidden gridlines (if you hid them)

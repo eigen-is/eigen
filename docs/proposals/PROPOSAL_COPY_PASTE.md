@@ -44,13 +44,13 @@ The four arguments the v2 shape rests on:
   `cells` content type carries display values, formatting, merge info and dimensions -- not the
   internal `Cell` state (calculation results, dependency graphs), which is neither serializable nor
   meaningful in another sheet. Formulas travel as strings, with references that will be wrong in a
-  different sheet context. Undo behaviour after a paste into Sheets depends on whether the engine's
+  different sheet context. Undo behavior after a paste into Sheets depends on whether the engine's
   paste handler wraps the operation in a single `setContextWithProduce` update -- verify during
   implementation, not design.
 - **Sheets-to-Docs table paste is lossy.** Tiptap has `@tiptap/extension-table` configured with
   `resizable: true`, so a pasted sheet table does become a Tiptap table node. But the engine emits
   `<table data-type="sheet-copy-action-table">` with pixel-valued inline styles, which Tiptap's
-  resizable column model may not respect; background colours, borders and font formatting survive
+  resizable column model may not respect; background colors, borders and font formatting survive
   only partially through `transformPastedHTML`; and formula content flattens to display values.
   Acceptable for Phase 2, but document it as lossy rather than promising fidelity.
 - **Clipboard permission modes differ per browser.** `navigator.clipboard.write()` may need a
@@ -84,7 +84,7 @@ What is left is the mirror-image residual on the **async** path (the ROADMAP P2 
 The async path is used by Slides' context-menu / button copy
 (`../../apps/slides/src/components/slides/editor.tsx`). Without the custom MIME, a same-tab paste has to
 fall back to parsing the HTML marker, which is the lossy route -- adding the MIME makes Slides
-button-copy lossless. One caveat to check while implementing: browsers reject unrecognised MIME types
+button-copy lossless. One caveat to check while implementing: browsers reject unrecognized MIME types
 in `ClipboardItem` on the async API, so if `application/eigen-clipboard` is refused, keep the write in
 a `try`/`catch` and let the existing HTML marker carry the payload.
 

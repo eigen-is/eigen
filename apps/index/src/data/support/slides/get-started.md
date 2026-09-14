@@ -23,7 +23,7 @@ You can also create a presentation from Drive, or from any other Eigen app that 
 When you open a presentation, the editor has three areas:
 
 - **Slide panel** on the left: thumbnails of every slide in order. Click a thumbnail to make that slide active.
-- **Canvas** in the centre: the editing surface for the active slide, at 1920×1080 pixels.
+- **Canvas** in the center: the editing surface for the active slide, at 1920×1080 pixels.
 - **Properties panel** on the right: changes to reflect whatever you have selected. With nothing selected, it shows the slide background options. With an object selected, it shows that object's properties.
 
 ## Add content to a slide
@@ -54,7 +54,7 @@ Right-click any object for a context menu with **Bring to front**, **Bring forwa
 
 ## Change the slide background
 
-With no object selected, the properties panel shows background options for the active slide. You can set a solid colour, a gradient, or an image from your computer or from Drive. The **Apply to** dropdown lets you apply the background to just this slide, to this slide and all following ones, or to all slides at once.
+With no object selected, the properties panel shows background options for the active slide. You can set a solid color, a gradient, or an image from your computer or from Drive. The **Apply to** dropdown lets you apply the background to just this slide, to this slide and all following ones, or to all slides at once.
 
 ## Manage slides
 

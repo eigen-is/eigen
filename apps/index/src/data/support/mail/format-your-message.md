@@ -69,7 +69,7 @@ To remove a link, select the linked text, then click **Link** in the toolbar.
 ## What you can't change
 
 The message box keeps formatting simple on purpose, so your email reads the same wherever it lands. There are no
-headings, font choices, colours, or text sizes. You have bold, italic, lists, quotes, and links, and that's the
+headings, font choices, colors, or text sizes. You have bold, italic, lists, quotes, and links, and that's the
 set.
 
 To add a fixed block of text to the bottom of every message, such as your name and contact details, set up a

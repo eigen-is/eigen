@@ -1,6 +1,6 @@
 # Fail2ban for the bundled mail containers (opt-in)
 
-Bans IP addresses that flood Eigen's mail ports with failed logins — Postfix's submission ports and Dovecot's IMAPS. It is the outermost layer of the login-flood defence, after the API's per-IP failure limiter and Postfix's anvil rate limits, and the only one that stops the traffic before it reaches the container.
+Bans IP addresses that flood Eigen's mail ports with failed logins — Postfix's submission ports and Dovecot's IMAPS. It is the outermost layer of the login-flood defense, after the API's per-IP failure limiter and Postfix's anvil rate limits, and the only one that stops the traffic before it reaches the container.
 
 This ships as host config, not as a container. Fail2ban writes host firewall rules, and reading the container log through the journald driver would break the dev stack on Docker Desktop, so wiring it into `docker-compose.yml` would cost every local setup something to help one production host.
 

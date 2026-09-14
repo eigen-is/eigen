@@ -27,7 +27,7 @@ The formula bar and the cell always show the same content.
 ### Click cells to add references
 
 While you are typing a formula, click any cell to insert its reference at the cursor position. Sheets
-highlights the referenced cells in colour so you can see what the formula covers. You can also click and
+highlights the referenced cells in color so you can see what the formula covers. You can also click and
 drag to select a range.
 
 Put the cursor on a reference and press **F4** to cycle it through `A1`, `$A$1`, `A$1`, and `$A1`. A `$`

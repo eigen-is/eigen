@@ -10,7 +10,7 @@ order: 10
 updated: 2026-09-13
 ---
 
-Chat lets you send messages to other people in Eigen, organise conversations into named rooms, and share files
+Chat lets you send messages to other people in Eigen, organize conversations into named rooms, and share files
 without leaving the browser. This page is a quick tour of what you can do.
 
 ## Your chat rooms
@@ -29,7 +29,7 @@ The sidebar is split into two areas:
 Click **New chat** at the top of the sidebar. Add the people you want to chat with, then confirm the name and
 the location. The new room opens straight away.
 
-If you have no rooms yet, Chat shows a **Create your first chat** button in the centre of the screen.
+If you have no rooms yet, Chat shows a **Create your first chat** button in the center of the screen.
 
 ## Send a message
 

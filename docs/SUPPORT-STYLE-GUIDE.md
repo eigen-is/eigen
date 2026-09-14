@@ -1,7 +1,7 @@
 # Eigen Support Writing Style Guide
 
 > **TLDR**: House rules for the help-center articles in `apps/index/src/data/support/` — voice, structure,
-> frontmatter, en-GB, no em-dashes. Read this before writing or reviewing any support article.
+> frontmatter, en-US, no em-dashes. Read this before writing or reviewing any support article.
 
 The single source of truth for **how** Eigen Support articles are written. The goal: every article reads as if
 one calm, friendly person wrote the whole help center.
@@ -53,7 +53,7 @@ Concretely:
 
 - **Second person, present tense, active voice.** "You" is the reader. "Drive keeps a copy", not "a copy is kept".
 - **Short sentences. One idea each. Paragraphs of two to four sentences.** Momentum over density.
-- **Plain words.** Prefer the common word ("use", "turn off", "open") over the fancy one ("utilise", "disable",
+- **Plain words.** Prefer the common word ("use", "turn off", "open") over the fancy one ("utilize", "disable",
   "navigate to").
 - **A little warmth, no chattiness.** A friendly aside is welcome. Jokes, emoji, and exclamation marks are not.
   That's the blog voice, not the docs voice.
@@ -64,7 +64,7 @@ Concretely:
 ### Banned filler words
 
 Cut these on sight. They add nothing and quietly overpromise: **simply, just, easily, quickly, of course,
-obviously, seamless, powerful, robust, leverage, utilise**.
+obviously, seamless, powerful, robust, leverage, utilize**.
 
 ### Avoid the em dash
 
@@ -146,15 +146,17 @@ a step-by-step how-to with a long conceptual explanation. Split them.
 
 ## 6. Mechanics
 
-- **British English** (en-GB), matching the product UI ("Organisations", "colour", "organise"). Keep proper nouns
-  and protocol or error names as they are (`401 Unauthorized`, `WebClient`).
-- **Product names are capitalised**: Eigen, and the apps (Drive, Mail, Docs, Sheets, Slides, Calendar, Contacts,
+- **American English** (en-US): "color", "organize", "center", "canceled". Keep proper nouns, protocol names,
+  HTTP reason phrases and third-party quotes verbatim (`401 Unauthorized`, WebDAV, Google Workspace).
+- **Three deliberate exceptions to en-US**: dates in prose are day-month-year ("5 January 2026", never
+  "January 5, 2026"), units are metric, currency is the euro.
+- **Product names are capitalized**: Eigen, and the apps (Drive, Mail, Docs, Sheets, Slides, Calendar, Contacts,
   Chat, Stickies, Space). Generic nouns stay lowercase ("your files", "a folder", "the document").
 - Refer to the product as **Eigen** and the apps by name ("in Drive", "open Mail"). "Your Eigen Drive" is fine
   occasionally; usually just "Drive".
 - **Oxford comma.** Numbers one to nine are spelled out in prose; use digits for 10 and up, and always for UI
   values and sizes.
-- **Dates** (frontmatter `updated`) are `YYYY-MM-DD`.
+- **Dates** are day-month-year in prose ("5 January 2026"); the frontmatter `updated` field stays `YYYY-MM-DD`.
 
 ## 7. Frontmatter
 
@@ -197,7 +199,7 @@ Run through this for every article. It mirrors the rules above:
 - [ ] UI labels are **bold and exact**.
 - [ ] The intro states the goal in one or two sentences, with no "Welcome to…".
 - [ ] Links are descriptive, and in-product routes are correct.
-- [ ] British English, with product names capitalised.
+- [ ] American English, with product names capitalized. Dates in prose are day-month-year.
 - [ ] Frontmatter is complete and valid (`type` in the enum, `updated` as `YYYY-MM-DD`).
 - [ ] It reads like the three exemplars.
 

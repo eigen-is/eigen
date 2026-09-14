@@ -83,7 +83,7 @@ You need write access to add comments. If you only have view access, the option 
 2. Right-click and choose **Add comment** from the context menu. You can also open the **Insert**
    menu and choose **Comment**.
 3. In the **New comment** dialog, the **Title** is pre-filled with the cell address (for example,
-   "Cell B3"). Edit it if you like, and add a longer note in the **Description** field. Pick a colour
+   "Cell B3"). Edit it if you like, and add a longer note in the **Description** field. Pick a color
    for the comment marker.
 4. Click **Add comment**.
 
@@ -101,7 +101,7 @@ The panel slides open on the right and lists every comment. Click a comment to o
 Click the filter button (the funnel icon) at the top of the panel to narrow the list:
 
 - **Assigned to**: show comments assigned to **Anyone**, to **Me**, to **Unassigned**, or to one particular person.
-- **Color**: show only comments with the colours you tick.
+- **Color**: show only comments with the colors you tick.
 - **Status**: show **Open**, **Resolved**, or **All** comments. The default is **Open**.
 
 ## Resolve or reopen a comment
@@ -115,12 +115,12 @@ Resolved comments stay in the spreadsheet. Switch the panel filter to **Resolved
 see them. To reopen one, right-click the cell and choose **Reopen comment**, or open the thread and
 click the circular-arrow icon (**Re-open**).
 
-## Edit, change colour, or delete a comment
+## Edit, change color, or delete a comment
 
 Right-click a cell that has a comment to see its options:
 
 - **View comment**: opens the comment thread.
-- **Comment color**: change the colour of the cell marker.
+- **Comment color**: change the color of the cell marker.
 - **Resolve comment** / **Reopen comment**: toggle the status.
 - **Delete comment**: removes the comment from the cell. This cannot be undone.
 

@@ -31,7 +31,7 @@ report it as a problem with the recipient's address. The address at fault is you
 2. Copy your address from the **Username** field.
 3. In your mail client, open the settings for the Eigen account and find the address it sends from. Clients
    call this the identity, the sender address, or the email address of the account.
-4. Paste your address in, so the sending address and the sign-in username are the same string. Capitalisation
+4. Paste your address in, so the sending address and the sign-in username are the same string. Capitalization
    does not matter, spelling does.
 5. Send a test message to yourself.
 

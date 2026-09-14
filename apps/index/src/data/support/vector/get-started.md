@@ -23,8 +23,8 @@ You can also start one from Drive, or from any other Eigen app that shows the **
 When you open a drawing, the editor has three areas:
 
 - **Toolbar** across the top: the **File**, **Edit**, and **Insert** menus on the left, then the drawing tools in the middle, and the share and comment buttons on the right.
-- **Canvas** in the centre: the surface you draw on. It has no fixed size.
-- **Properties panel** on the right: it changes to reflect whatever you have selected. With an object selected, it shows that object's properties, such as its position, size, and colour.
+- **Canvas** in the center: the surface you draw on. It has no fixed size.
+- **Properties panel** on the right: it changes to reflect whatever you have selected. With an object selected, it shows that object's properties, such as its position, size, and color.
 
 On a narrow window the tool buttons fold into the **Insert** and **Edit** menus, so you can still reach every tool.
 
@@ -51,7 +51,7 @@ Hold **Shift** and click more objects to select several at once, or drag a box a
 
 ## Zoom and move around the canvas
 
-Because the canvas is infinite, you spend a lot of time moving around it. Scroll the wheel to pan, hold **Ctrl** or **Cmd** and scroll (or pinch on a trackpad) to zoom towards the pointer, and hold **Space** and drag to pan with the mouse. The zoom pill in the bottom-right corner shows the current zoom; click it to snap back to 100%. See [Zoom, pan, and keyboard shortcuts](/support/vector/zoom-pan-and-shortcuts).
+Because the canvas is infinite, you spend a lot of time moving around it. Scroll the wheel to pan, hold **Ctrl** or **Cmd** and scroll (or pinch on a trackpad) to zoom toward the pointer, and hold **Space** and drag to pan with the mouse. The zoom pill in the bottom-right corner shows the current zoom; click it to snap back to 100%. See [Zoom, pan, and keyboard shortcuts](/support/vector/zoom-pan-and-shortcuts).
 
 ## On a phone
 

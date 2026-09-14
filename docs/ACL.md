@@ -53,7 +53,7 @@ Strips entries already granted by ancestors or by ownership.
 - **No deny**: No `{read: false}` mechanism
 - **External emails**: Any valid email can be in ACLs
 - **Team ACL**: Additive with user ACL
-- **No org-level ACL**: `parseOwnerId` recognises the `org_` prefix but `matchesACL` only checks `user` and `team`
+- **No org-level ACL**: `parseOwnerId` recognizes the `org_` prefix but `matchesACL` only checks `user` and `team`
   entries. Org-wide sharing is not implemented; use teams instead
 
 ## Visibility
@@ -204,7 +204,7 @@ to the endpoint and invalidates `driveKeys.path()` on success. Command handling 
 ## Re-Share Prevention
 
 Per-path `sharingRestricted` flag: only the owner — or a team member on a team-owned path — may change ACL or
-visibility. Editors keep full read/write on content. Default `false`, matching pre-flag behaviour.
+visibility. Editors keep full read/write on content. Default `false`, matching pre-flag behavior.
 
 The ACL model treats "can edit content" and "can manage access" as one permission. Without the flag, sharing a
 document with a contractor hands them full sharing power: add anyone, change permissions, flip to public, remove

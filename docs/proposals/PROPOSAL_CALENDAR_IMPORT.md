@@ -1,9 +1,9 @@
 # Proposal: Importing External Calendars
 
-> **TLDR**: Let users add external calendars in two flavours — a one-time `.ics` file import and a
+> **TLDR**: Let users add external calendars in two flavors — a one-time `.ics` file import and a
 > live URL subscription (Google public calendars, holiday feeds, conference schedules, sports
-> calendars, etc.). Treat a subscription as a flavour of `Calendar`, not a separate entity: a row in
-> the `calendars` table is either *owned* (writable, current behaviour) or *subscribed* (read-only,
+> calendars, etc.). Treat a subscription as a flavor of `Calendar`, not a separate entity: a row in
+> the `calendars` table is either *owned* (writable, current behavior) or *subscribed* (read-only,
 > refreshed from a URL) based on a nullable `subscription` JSON column. Reuse `parseIcs()`
 > (`../../apps/api/src/lib/caldav/ical-parse.ts`, already running for iMIP and CalDAV PUT) and the
 > calendar DB's existing etag/ctag/tombstone conventions — but apply feed snapshots through one new
@@ -27,11 +27,11 @@ anywhere in `../../apps/api/src/lib/calendar` or `../../apps/api/src/routes/cale
 2. Users can upload an `.ics` file as a one-time import, either into an existing calendar or into a
    new one seeded from the file.
 3. Subscribed calendars are presented as first-class items in the existing calendar sidebar — same
-   colour, visibility, sharing, and CalDAV exposure as any other calendar.
+   color, visibility, sharing, and CalDAV exposure as any other calendar.
 4. CalDAV clients (Apple Calendar, Thunderbird, etc.) see subscribed calendars and their events,
    marked read-only.
 5. Reuse the existing iCal pipeline where reuse is *safe*: `parseIcs()` (parsing, RRULE DoS guards,
-   TZID normalisation, EXDATE synthesis), `computeEtag` (`../../apps/api/src/lib/calendar/mappers.ts`),
+   TZID normalization, EXDATE synthesis), `computeEtag` (`../../apps/api/src/lib/calendar/mappers.ts`),
    the ctag/eventCtag/tombstone sync conventions, and the existing SSE event types. Do not
    introduce a parallel "imported event" *data model* — imported events are ordinary `events` rows.
 
@@ -56,8 +56,8 @@ anywhere in `../../apps/api/src/lib/calendar` or `../../apps/api/src/routes/cale
 
 Calendar already has a strong foundation: `parseIcs()` driven by `ical.js` handles VEVENT, VALARM
 (→ `data.reminders`), RRULE (including the sub-daily / out-of-range DoS guards from
-`recurrence-limits.ts`), attendees, organizer, EXDATE (synthesised as cancelled exception rows),
-RECURRENCE-ID (→ `recurrenceDate`), TZID normalisation, SEQUENCE coercion, and METHOD. iMIP routes
+`recurrence-limits.ts`), attendees, organizer, EXDATE (synthesized as canceled exception rows),
+RECURRENCE-ID (→ `recurrenceDate`), TZID normalization, SEQUENCE coercion, and METHOD. iMIP routes
 inbound `text/calendar` attachments through this same parser. Recurrence expansion
 (`recurrence.ts`) recently gained correct DST fall-back handling. The hard work — RFC 5545
 compliance, recurrence, timezone-aware DTSTART — is done. Importing a feed is roughly *the same
@@ -70,7 +70,7 @@ feed event.
 
 ## Architecture
 
-A subscription is **a flavour of calendar, not a separate entity**. The `calendars` table
+A subscription is **a flavor of calendar, not a separate entity**. The `calendars` table
 (`../../apps/api/src/lib/calendar/schema.ts`) gains one nullable JSON column:
 
 ```typescript
@@ -86,7 +86,7 @@ subscription: {
 } | null
 ```
 
-`subscription === null` → owned calendar, current behaviour, fully writable. `subscription !== null`
+`subscription === null` → owned calendar, current behavior, fully writable. `subscription !== null`
 → subscribed calendar, read-only, events refreshed from `url`. The row *is* the calendar; the
 subscription metadata is part of it. No `calendar_subscriptions` join table.
 
@@ -118,7 +118,7 @@ column or value changes meaning.
 
 ## Refresh mechanism
 
-Refresh is **on-access only**. Three triggers, all funnelling into one
+Refresh is **on-access only**. Three triggers, all funneling into one
 `refreshDueSubscriptions()` method that selects calendars where
 `subscription IS NOT NULL AND lastFetchedAt + refreshIntervalMs < now`:
 
@@ -191,7 +191,7 @@ mirror what `deleteEvent` writes).
 
 Diff identity is **`(uid, recurrenceDate ?? null)`** — *not* `uid` alone. A recurring feed event is
 several `ParsedEvent`s sharing one UID: the master (`recurrenceDate: null`) plus one row per
-RECURRENCE-ID exception and per EXDATE-synthesised cancellation. Keying by bare UID would collapse
+RECURRENCE-ID exception and per EXDATE-synthesized cancellation. Keying by bare UID would collapse
 them. Per key:
 
 - **In remote, not local** → insert. Masters first; then exception rows (non-null
@@ -207,7 +207,7 @@ them. Per key:
   incremental iMIP messaging (`receiveInvitationUpdate`), which this path never touches.
 - **In local, not remote** → delete the row + write the tombstone. Deleting a master cascades its
   exceptions (`events.parentEventId` FK is `ON DELETE CASCADE`).
-- Events with `STATUS:CANCELLED` in the feed are stored as-is (`parseIcs` maps status); cancelled
+- Events with `STATUS:CANCELLED` in the feed are stored as-is (`parseIcs` maps status); canceled
   exception rows already suppress their occurrence in `getEventsInRange`. Upstream deletions
   normally just vanish from the feed and hit the delete branch.
 
@@ -230,7 +230,7 @@ previous blanket SSRF guard broke MinIO-on-LAN for self-hosters and had to be re
 block is wrong here; a silent allow is also wrong. The decision:
 
 - **Always enforced, no toggle**: scheme must be `http:` or `https:` after webcal
-  canonicalisation; URL userinfo (`user:pass@host`) is stripped/rejected (Basic auth is a
+  canonicalization; URL userinfo (`user:pass@host`) is stripped/rejected (Basic auth is a
   non-goal); the link-local range `169.254.0.0/16` and its IPv6 equivalent are always blocked
   (cloud metadata endpoints — never a calendar feed); redirects are re-validated per hop; the
   fetch sends no cookies or Eigen credentials.
@@ -256,12 +256,12 @@ Reuse `parseIcs()`. The `POST /calendar/:ownerId/imports` route:
 1. Accepts a multipart upload with the `.ics` file plus fields specifying the target: either
    `{ mode: 'new', name?: string, color?: string }` or `{ mode: 'existing', calendarId: string }`.
 2. Parses, then either creates a new owned calendar (default name from `X-WR-CALNAME` or the
-   filename minus extension; default colour from `X-APPLE-CALENDAR-COLOR` if present) or resolves
+   filename minus extension; default color from `X-APPLE-CALENDAR-COLOR` if present) or resolves
    the existing calendar — rejecting subscribed targets via the read-only guard.
 3. Bulk-inserts through the same snapshot primitive's insert path (single transaction, one ctag
    bump, one SSE broadcast), with two import-specific rules: `data.organizer` is **stripped**
    (otherwise `updateEvent`'s linked-event guard would treat the imported copy as an attendee's
-   linked event and lock its fields to reminders/colour), and no invitation propagation runs
+   linked event and lock its fields to reminders/color), and no invitation propagation runs
    (attendee lists are kept as display data only).
 4. Returns the calendar plus inserted-event count.
 
@@ -282,7 +282,7 @@ The "+" button in `../../apps/calendar/src/components/calendar-sidebar.tsx` beco
 - **Preview** button → `POST /calendar/:ownerId/subscriptions/preview` with `{ url }` → server
   fetches once (same fetch policy) and returns `{ name, eventCount, dateRange, suggestedColor }`
   from `X-WR-CALNAME` / `X-APPLE-CALENDAR-COLOR` / the parsed events.
-- Editable name (defaults from preview), colour swatch picker, refresh interval radio (15 min /
+- Editable name (defaults from preview), color swatch picker, refresh interval radio (15 min /
   1 hour / 1 day).
 - Submit → `POST /calendar/:ownerId/subscriptions` creates the calendar row with `subscription`
   populated, runs the initial sync inline, returns the calendar. The sidebar updates via the
@@ -316,7 +316,7 @@ the message in a tooltip.
 
 When an event in a subscribed calendar is opened
 (`../../apps/calendar/src/components/event-detail-dialog.tsx` / `edit-event-dialog.tsx`), render title,
-time, location, attendees, recurrence as read-only text. Colour and reminder fields stay editable —
+time, location, attendees, recurrence as read-only text. Color and reminder fields stay editable —
 the local overrides that survive refresh.
 
 ## Read-only enforcement
@@ -347,7 +347,7 @@ Internal writers bypass the guard by construction: `applyFeedSnapshot` and the i
 write through their own transaction, not through `createEvent`.
 
 A `SharedDrive`-style wrapper class would be over-engineering: the gradient is binary
-(writable / not), there is no permission tier per method, and no method needs different behaviour
+(writable / not), there is no permission tier per method, and no method needs different behavior
 beyond raising `ApiError`. The Drive system uses the wrapper because permissions are graded; this
 isn't.
 
@@ -378,15 +378,15 @@ Two pieces:
    guarded domain methods and gets `403 Forbidden` regardless of what the client believes.
 2. **Advertisement**: emit `DAV:current-user-privilege-set` with `<read/>` only (no
    `<write/>`/`<write-content/>`) in calendar-collection PROPFIND responses for subscribed
-   calendars, so Apple Calendar / Thunderbird grey out editing. Note this property is **not
+   calendars, so Apple Calendar / Thunderbird gray out editing. Note this property is **not
    emitted at all today** — this is a new property in the PROPFIND generation for calendar
    collections (`../../apps/api/src/lib/caldav/caldav-router.ts` + the props builders it uses), added
-   only for subscribed collections (owned collections keep today's behaviour; clients assume
+   only for subscribed collections (owned collections keep today's behavior; clients assume
    writable in the property's absence).
 
 ## Edge cases
 
-- **`webcal://`** → canonicalise to `https://` before storing and fetching.
+- **`webcal://`** → canonicalize to `https://` before storing and fetching.
 - **HTTP redirects** → manual loop, max 5 hops, each hop re-validated against the fetch policy
   (`redirect: 'manual'`; Bun's fetch doesn't expose a hop limit directly).
 - **Malformed iCal** → `parseIcs` throws; caught in `refreshSubscription`, stored as
@@ -413,7 +413,7 @@ Two pieces:
 There are three reasonable points on the edit-subscribed-calendar spectrum, and the case for "ship
 read-only" is strong.
 
-| Tier | Behaviour | Effort | Verdict |
+| Tier | Behavior | Effort | Verdict |
 |---|---|---|---|
 | **A** | Strict read-only. `color` / `reminders` are local overrides. | (this proposal) | Ship. |
 | **B** | Local-override editing extended to `title` / `notes` / `location`. New events allowed locally alongside imported ones. Deletes hide locally. | 2–3 days | **Reject.** Creates lies in the data — an overridden title silently diverges from an upstream rename. UX confusion outweighs usefulness. |
@@ -437,8 +437,8 @@ Thunderbird. Users coming from any of those products will have correct expectati
 | Hooks | `../../packages/lib/src/core/calendar/hooks/use-calendar.ts` | `useCreateSubscription`, `usePreviewSubscription`, `useRefreshSubscription`, `useImportIcs`; errors via `onMutationError`. |
 | SSE | — | **No new event type**; existing `CALENDAR_*` events + handlers suffice. |
 | Sidebar UI | `../../apps/calendar/src/components/calendar-sidebar.tsx` | "+" dropdown; Globe icon + error dot; context-menu items. |
-| Dialogs | `apps/calendar/src/components/subscribe-dialog.tsx`, `import-dialog.tsx` *(new)* | Shared Dialog system, modelled on `calendar-config-dialog.tsx`. |
-| Event detail | `../../apps/calendar/src/components/event-detail-dialog.tsx`, `edit-event-dialog.tsx` | Read-only rendering for subscribed events; colour/reminders stay editable. |
+| Dialogs | `apps/calendar/src/components/subscribe-dialog.tsx`, `import-dialog.tsx` *(new)* | Shared Dialog system, modeled on `calendar-config-dialog.tsx`. |
+| Event detail | `../../apps/calendar/src/components/event-detail-dialog.tsx`, `edit-event-dialog.tsx` | Read-only rendering for subscribed events; color/reminders stay editable. |
 
 ## What's deferred
 
@@ -469,5 +469,5 @@ Extend `../../apps/api/src/test/calendar/calendar.test.ts` using `getTestContext
   subscribed calendar → 403.
 - Share a subscribed calendar with `write` → recipient's resolved permission is `read`; recipient
   event mutation → 403.
-- Fetch policy: `webcal://` canonicalised; userinfo URL rejected; with `allowPrivateFeedUrls =
+- Fetch policy: `webcal://` canonicalized; userinfo URL rejected; with `allowPrivateFeedUrls =
   false`, loopback/RFC 1918 feed URL rejected (and on a redirect hop); link-local always rejected.

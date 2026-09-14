@@ -24,7 +24,7 @@ Click the bell to open the **Notifications** list. When there is nothing waiting
 
 Each row in the list shows four things:
 
-- The picture of the person who did it, with a small coloured badge for the app it came from.
+- The picture of the person who did it, with a small colored badge for the app it came from.
 - A line saying what happened, such as "New mail from Hanne Oberman" or "Hanne requested access".
 - The thing itself below that: the subject of the email, the name of the file, the text of the message.
 - How long ago it arrived.

@@ -1,6 +1,6 @@
 ---
 title: "Create a board and add columns"
-description: "Create a new Stickies board and set up the columns you need to organise your work."
+description: "Create a new Stickies board and set up the columns you need to organize your work."
 type: how-to
 tags: [stickies, kanban, columns, board, getting-started]
 related: [stickies/get-started, stickies/add-and-edit-cards]

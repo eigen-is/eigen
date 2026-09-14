@@ -125,7 +125,7 @@ cards, and the drive list.
 
 ## 5. Smart-parser growth
 
-The shipped parser recognises exactly two shapes — an email address and a URL — deliberately.
+The shipped parser recognizes exactly two shapes — an email address and a URL — deliberately.
 Every added pattern carries risk-of-wrong-suggestion that erodes trust faster than its
 convenience pays back, so growth is gated on telemetry showing demand. Candidates, roughly in
 order:
@@ -137,7 +137,7 @@ order:
 
 ## 6. Pinned commands, per-command hotkeys, aliases
 
-Raycast-style personalisation: pin favourite commands, bind per-command hotkeys, define
+Raycast-style personalization: pin favourite commands, bind per-command hotkeys, define
 aliases. The `Command` type gains the corresponding fields; `Mod+K` stays hard-coded until
 this lands (per-user rebinding is part of it). Depends on the same telemetry as smart-parser
 growth — usage data should drive what's worth pinning surface for.

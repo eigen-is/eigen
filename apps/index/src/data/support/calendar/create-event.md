@@ -71,8 +71,8 @@ Choose the option that matches what you want, then click **OK**.
 
 <div class="eigen-callout">
 
-Deleting an event you organised removes it for you. If you invited other people, they will see their
-copy of the event cancelled. To remove only your copy of a shared event you were invited to, decline
+Deleting an event you organized removes it for you. If you invited other people, they will see their
+copy of the event canceled. To remove only your copy of a shared event you were invited to, decline
 it from the [Respond to an invitation](/support/calendar/respond-to-invitation) flow instead.
 
 </div>

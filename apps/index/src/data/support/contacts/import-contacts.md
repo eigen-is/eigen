@@ -37,10 +37,10 @@ You can also look inside the file first. Select it and press **Space**, or choos
 
 - Names, email addresses, phone numbers, postal addresses, company and job title, birthday, and notes.
 - The photo, when the file has the image stored inside it. A photo the card only links to by web address is left as a link and not fetched.
-- Categories become labels. A label that does not exist yet is created for you, with a colour chosen from the Eigen palette.
+- Categories become labels. A label that does not exist yet is created for you, with a color chosen from the Eigen palette.
 - Everything else the card holds is kept as it is, including fields Contacts does not show you. It comes back out when you [export the contact](/support/contacts/export-contacts).
 
-Contact groups, the kind Apple Contacts creates, are skipped. Contacts organises people with labels instead.
+Contact groups, the kind Apple Contacts creates, are skipped. Contacts organizes people with labels instead.
 
 ## Duplicates are skipped, never merged
 

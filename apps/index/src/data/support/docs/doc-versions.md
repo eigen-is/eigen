@@ -17,13 +17,13 @@ browse the list and roll back to an earlier state whenever you need to.
 2. Click **File** in the toolbar.
 3. Click **Save version now**.
 
-A toast confirms "Version saved". The version is added to the list and labelled with the date and time it was
+A toast confirms "Version saved". The version is added to the list and labeled with the date and time it was
 saved.
 
 ## View and restore a version
 
 1. Click **File** in the toolbar.
-2. Click **Version history**. A submenu opens showing all saved versions, each labelled with its date and time.
+2. Click **Version history**. A submenu opens showing all saved versions, each labeled with its date and time.
 3. If the list is empty, **No versions yet** appears. Save a version first if you want a restore point.
 4. Click the version you want to go back to. A confirmation dialog opens.
 5. Click **Restore** to confirm.

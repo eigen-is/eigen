@@ -29,15 +29,15 @@ Drawing, contacts sync, and hardening release. Eigen gains a new app, eigen|vect
 - **Mail parser** — the ported nodemailer parser is replaced by our own, pinned by a golden corpus of real-world emails, and three dependencies are gone. Address groups are flattened in reply-all and in the header rows, and the message body reads left-aligned at one unified width
 - **Mail** — an empty message is refused instead of going out as "(No subject)", cleared recipients stay cleared when a draft is reopened, and the send button shows busy during the access probe
 - **Sheets** — conditional-format rules have human names and dialog titles, row and column resize is exact, the range picker sits under its cell at its old width, the dropdown chevron is always painted, the selection's move band and fill handle are easier to grab, and the sheet no longer carries a locale layer
-- **Calendar (CalDAV)** — clients see write privileges and ownership on the calendar home, so Apple clients edit events in place instead of creating duplicates; MKCALENDAR honours the client-chosen URL; a sync token ahead of the calendar is refused; the well-known DAV redirects actually fire
+- **Calendar (CalDAV)** — clients see write privileges and ownership on the calendar home, so Apple clients edit events in place instead of creating duplicates; MKCALENDAR honors the client-chosen URL; a sync token ahead of the calendar is refused; the well-known DAV redirects actually fire
 - **Thumbnails** — animated images take their first frame, oversized images are skipped instead of exhausting the worker, and scratch files are isolated per job
 - **Docs** — pasted prose keeps its alignment, and the toolbar menus share one shell with slides and vector
 - **Server** — a database newer than the running binary's schema is refused instead of opened, and a wrong data-dir argument fails with a clear error
 
 ### Fixed
 
-- **Sheets** — cell text, rich-text runs, formula tokens, and referenced sheet names no longer reach the grid unescaped; `IFERROR` traps errors raised by our own operators; `TRUE`/`FALSE`/`NULL` resolve case-insensitively; `F4` keeps cycling on absolute whole-row ranges; `Ctrl+Shift+F` stays on the workbook that owns the keypress; hidden columns no longer get filter buttons; formula conditional-format rules stop at the last row; a tick box no longer hides values it does not recognise or toggles while a formula is being composed; an invalid data-validation rule is rejected instead of applied; a failed snapshot load is shown instead of a blank grid
-- **Mail** — `&amp;` is decoded last when stripping tags; space freed by deleting mail reaches the quota check immediately; the draft stays editable when share-and-send is cancelled; the email header stays full width on wide screens
+- **Sheets** — cell text, rich-text runs, formula tokens, and referenced sheet names no longer reach the grid unescaped; `IFERROR` traps errors raised by our own operators; `TRUE`/`FALSE`/`NULL` resolve case-insensitively; `F4` keeps cycling on absolute whole-row ranges; `Ctrl+Shift+F` stays on the workbook that owns the keypress; hidden columns no longer get filter buttons; formula conditional-format rules stop at the last row; a tick box no longer hides values it does not recognize or toggles while a formula is being composed; an invalid data-validation rule is rejected instead of applied; a failed snapshot load is shown instead of a blank grid
+- **Mail** — `&amp;` is decoded last when stripping tags; space freed by deleting mail reaches the quota check immediately; the draft stays editable when share-and-send is canceled; the email header stays full width on wide screens
 - **Calendar** — a recreated event syncs once instead of staying tombstoned, re-received invitations and moved-back events clear their stale tombstones, receiving an invitation bumps the ctag atomically, and a single-event PROPFIND answers on the event's own href
 - **Contacts** — birthdays keep the picked date in every timezone, the edit form submits the etag it loaded so a stale form gets a 412 instead of clobbering, a duplicate label name returns 409, a lost staged avatar fails the save instead of clearing the photo, and the fallback avatar is served for an empty id
 - **Drive** — copying to a media folder keeps its partial successes, and a missing app URL no longer white-screens the app
@@ -48,7 +48,7 @@ Drawing, contacts sync, and hardening release. Eigen gains a new app, eigen|vect
 
 ### Security
 
-- **Outbound mail relay** — hardened after the 2026-08-31 abuse incident: an authenticated sender may only send as its own identity, failed logins count towards the per-IP limiter and exit as auth failures for fail2ban, a fail2ban filter and jail ship with the docker stack and `update.sh` re-arms them after a rebuild, and a queue-size monitor notifies the org owner of a backlog
+- **Outbound mail relay** — hardened after the 2026-08-31 abuse incident: an authenticated sender may only send as its own identity, failed logins count toward the per-IP limiter and exit as auth failures for fail2ban, a fail2ban filter and jail ship with the docker stack and `update.sh` re-arms them after a rebuild, and a queue-size monitor notifies the org owner of a backlog
 - **Input bounds** — CalDAV and CardDAV request bodies are bounded before buffering with a 5 MiB card ceiling, the last unbounded email inputs are capped, reference ids on send are capped and deduped, and C0 control bytes are rejected at the vCard and DAV seams
 - **SVG serving** — container SVGs are served with their media inlined, the inliner is hardened, and name-referenced media only resolves for the document that owns it
 - **Access checks** — the per-email access check for shared links skips addresses that cannot hold an ACL and signals guest admission, and self-link claims are ranked so a user's own record cannot be stolen by an email twin
@@ -93,7 +93,7 @@ slow-loading documents no longer spiral into reconnect loops.
   snapshot format that opens faster over a remote connection; and large-sheet editing
   operations (inserting rows and columns, filtering, copying) got a hot-path performance pass
 - **Opening documents** — a document that takes long to load (a huge spreadsheet on a cold
-  server) shows progress instead of spiralling into a connect/disconnect loop, and a
+  server) shows progress instead of spiraling into a connect/disconnect loop, and a
   just-closed document stays warm on the server for a minute so reopening is instant
 - **Drive** — converting an `.xlsx` or `.docx` into an Eigen document shows a progress
   dialog, and the conversion finishes on the server even if you navigate away
@@ -202,7 +202,7 @@ demo, a monochrome dark theme, and the fixes from two security audits.
 - **Dark mode** — a monochrome dark theme with layered surfaces: cards, popovers, and dialogs sit
   visibly above the background, native scrollbars follow the theme, and note cards match the mail
   list's dark treatment; the spreadsheet canvas deliberately stays white so sheets read as sheets.
-  The app-coloured topbar option is gone
+  The app-colored topbar option is gone
 - **Mail** — big-mailbox performance: the message list is virtualized and loads in pages, actions
   (move, read, flag, delete) apply instantly and sync in the background, mailbox sync no longer
   blocks the list, and search runs on the server; unread rows are marked with a dot instead of a
@@ -318,10 +318,10 @@ pass, a filled-out help center, and a visual refresh, plus data-loss hardening f
 
 ### Changed
 
-- **Visual refresh** — a redesigned app switcher (a grid of large, app-coloured icons with names), a
+- **Visual refresh** — a redesigned app switcher (a grid of large, app-colored icons with names), a
   lighter font-weight scale across the apps, Drive file icons tinted by app, an animated
   `eigen|app>` wordmark on the landing page and Space home, and a topbar that can switch between
-  app-coloured and neutral chrome; toolbar titles are lighter, toolbar borders fade in on scroll,
+  app-colored and neutral chrome; toolbar titles are lighter, toolbar borders fade in on scroll,
   and the Drive, Trash, and Calendar layouts were tidied up
 - **Landing page** — the marketing landing page is prerendered, so it paints instantly and is
   friendlier to search engines; signed-in visitors are sent straight into the app
@@ -357,7 +357,7 @@ pass, a filled-out help center, and a visual refresh, plus data-loss hardening f
   sign-in and 2FA are rate-limited to 10 per minute per IP
 - **Abuse** — rate limiting is keyed on the real client IP behind the reverse proxy (with avatar
   fetches exempt), fixing a server-wide lockout
-- **Calendar** — cancelled events are excluded from free/busy, and replayed iMIP invitations (a
+- **Calendar** — canceled events are excluded from free/busy, and replayed iMIP invitations (a
   stale sequence number) are ignored
 - **Sheets** — hyperlink navigation is hardened with an allowed-scheme list, `noopener`, and
   ReDoS-safe parsing
@@ -392,7 +392,7 @@ spreadsheet visual refresh, and storage, preview, and kanban-board performance w
 - **Sheets** — visual refresh of the formula bar, column/row headers, the area around the grid,
   and the bottom bar: theme colors throughout, an accent-tinted header highlight, and a single
   compact bar combining the sheet tabs with the Count/Sum/Average selection stats. The all-sheets
-  switcher now shows a clear colour dot for colour-tagged sheets
+  switcher now shows a clear color dot for color-tagged sheets
 - **Slides, Stickies, Sheets** — canvas and toolbar styling aligned with Docs (rounded canvas
   corners, consistent toolbar height)
 - **Stickies** — large boards stay smooth: cards are memoized and reused across updates, so
@@ -476,7 +476,7 @@ deep refactor of the sheets engine.
   instantly from a local blob URL and swap to the server URL once upload settles; zombie
   pending cleanup on tab crash
 - **Slides** — direction-based marquee selection (contain when dragged right, intersect when
-  dragged left), matching standard design-tool behaviour
+  dragged left), matching standard design-tool behavior
 - **Slides** — hold Alt to scale objects from center; Shift to constrain aspect ratio during
   resize
 - **Slides** — unified `BackgroundFill` type covers solid colors and gradients for slide and

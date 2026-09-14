@@ -1,5 +1,5 @@
 ---
-title: "Customise columns"
+title: "Customize columns"
 description: "Rename a column on a Stickies board or delete it along with all its cards."
 type: how-to
 tags: [stickies, kanban, columns]

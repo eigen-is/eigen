@@ -70,7 +70,7 @@ The order is what makes it safe. Nothing is deleted at any point, and nothing is
 
 1. The home is marked as restoring, which is also the lock against a second restore.
 2. The artifact is extracted into the job's staging folder and fully verified. A failure ends the job here, with nothing on the home touched.
-3. The home is evicted (every database closed, every timer cancelled) and its collab sockets are closed.
+3. The home is evicted (every database closed, every timer canceled) and its collab sockets are closed.
 4. The home folder is renamed aside as `{id}.pre-restore-{timestamp}`. If the user was deleted there is no folder to move.
 5. The archive's home folder is installed in its place. A `local` mount's files go in as they are, a `local-key` mount's are written to their flat keys, and an `s3` mount's are staged with a pending-upload row each, so the existing upload queue drains them to the bucket with its normal retry and backoff. The user can work at once, and a flaky bucket makes the restore resumable by construction.
 6. Every restored database is checked in place: `quick_check`, plus its schema stamp against what this server supports.
@@ -84,8 +84,8 @@ If anything fails after step 4, the half-written folder keeps a name of its own 
 `auth.json` is the one part of an archive that writes to `users3.db`, and an archive is a file somebody uploaded, so a restore takes only what is unmistakably this home's:
 
 - **Only this owner's rows.** Every row names its owner, and one that names anybody else is dropped and logged. An archive carrying a second `user` row is refused outright: it holds exactly one, with this home's id and the email the manifest was written with, or nothing is inserted.
-- **No privilege.** The restored user comes back as a plain user of this server's own organisation, whatever the archive says: `user.role` is set to the default a new account gets, the organisation is this server's, and the membership role is `member`. An admin who was one before their home was restored is made one again by hand, in Admin → Users.
-- **No teams that are not here.** A team membership whose team this server does not have is dropped, the same as an organisation that is gone.
+- **No privilege.** The restored user comes back as a plain user of this server's own organization, whatever the archive says: `user.role` is set to the default a new account gets, the organization is this server's, and the membership role is `member`. An admin who was one before their home was restored is made one again by hand, in Admin → Users.
+- **No teams that are not here.** A team membership whose team this server does not have is dropped, the same as an organization that is gone.
 
 ## What the user experiences during a restore
 

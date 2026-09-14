@@ -9,7 +9,7 @@ order: 40
 updated: 2026-09-13
 ---
 
-The **New** menu in Drive lets you create a folder to organise your files, or start a fresh document, spreadsheet, presentation, drawing, board, or chat without leaving the browser.
+The **New** menu in Drive lets you create a folder to organize your files, or start a fresh document, spreadsheet, presentation, drawing, board, or chat without leaving the browser.
 
 ## Create a folder
 
@@ -51,4 +51,4 @@ If you want to put the file in a specific folder, navigate into that folder firs
 
 ## What to do next
 
-Once a file exists, you can rename it, move it, or share it with other people. See [Rename, move, and organise files](/support/drive/rename-move-organise) and [Share a file or folder](/support/drive/share-a-file).
+Once a file exists, you can rename it, move it, or share it with other people. See [Rename, move, and organize files](/support/drive/rename-move-organise) and [Share a file or folder](/support/drive/share-a-file).

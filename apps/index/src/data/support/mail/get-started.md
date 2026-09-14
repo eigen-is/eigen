@@ -10,7 +10,7 @@ order: 10
 updated: 2026-06-08
 ---
 
-Mail is your email in Eigen. You read, write, and organise messages without leaving the browser. This page is a
+Mail is your email in Eigen. You read, write, and organize messages without leaving the browser. This page is a
 quick tour of the layout, so you know where everything is.
 
 The screen has three parts: the list of mailboxes on the left, the message list in the middle, and the reading

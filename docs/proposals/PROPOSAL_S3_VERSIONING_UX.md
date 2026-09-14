@@ -35,7 +35,7 @@ warning at all today.
 - When an admin configures S3, **make the safe configuration the easy default** — enable versioning +
   a noncurrent-version expiration rule in **one in-app action**, with the cost/retention trade-off
   explicit, and **verify it took** by reading the bucket state back.
-- Keep the existing **detect → warn** behaviour as the honest fallback when the app *can't* fix it
+- Keep the existing **detect → warn** behavior as the honest fallback when the app *can't* fix it
   (insufficient key permissions, backend without the APIs, a foreign lifecycle config we must not touch).
 - Land in the **shared `S3ConfigCard`**, so it covers the server-default bucket, team mounts, and the
   setup wizard uniformly.
@@ -69,9 +69,9 @@ warning at all today.
   (`../../apps/api/src/lib/storage/s3-storage.ts`, module-private, called by `checkS3Connection`) hand-rolls
   an **AWS SigV4-signed GET** to `?versioning` (path-style, 5 s timeout; any non-2xx or thrown error →
   `'unknown'`, so `'unknown'` conflates "no permission to read" with "API not implemented"). The signing
-  machinery (canonical request, `kSigning`, endpoint normalisation) already exists — *writing* config is
+  machinery (canonical request, `kSigning`, endpoint normalization) already exists — *writing* config is
   the same signing with `PUT` + an XML body + the body's payload hash, and *reading lifecycle* is the
-  same GET with `?lifecycle`. No new infrastructure, just a generalisation of code that already ships.
+  same GET with `?lifecycle`. No new infrastructure, just a generalization of code that already ships.
 - **Lifecycle state is not detected.** `S3CheckResult` has no lifecycle field; the card never warns
   about unbounded version growth. Detection of the cleanup half is **new work in this proposal**.
 - **The manual rule is documented.** [SYNC.md](../SYNC.md) § Ops has the exact `aws s3api` lifecycle
@@ -134,7 +134,7 @@ Make this bucket safe for Eigen
 The in-app action requires the configured key to have **bucket-admin** permissions
 (`s3:PutBucketVersioning`, `s3:PutLifecycleConfiguration`), and a provider that implements both APIs.
 Least-privilege deployments scope the key to objects only; some providers don't implement the APIs at
-all (see Provider behaviour). So:
+all (see Provider behavior). So:
 
 - On `AccessDenied` / `NotImplemented` / any non-2xx, **don't fail silently** — show which half failed
   and why, with **the exact manual steps** ("your access key can't change bucket settings; enable
@@ -150,7 +150,7 @@ Small, reuses the existing signing. All in `../../apps/api/src/lib/storage/s3-st
 `checkS3Versioning`:
 
 1. **Extract `signedS3Request(config, { method, query, body? })`** from `checkS3Versioning` —
-   generalise `GET` → any method and the hardcoded empty-body hash → `sha256(body)` (the body hash goes
+   generalize `GET` → any method and the hardcoded empty-body hash → `sha256(body)` (the body hash goes
    into both the `x-amz-content-sha256` header and the canonical request; `PUT ?lifecycle` additionally
    requires a `Content-MD5` header on AWS — include it always, it's ignored where optional).
    `checkS3Versioning` becomes a thin caller; net code shrinks.
@@ -202,7 +202,7 @@ these same two gates — team mounts have no team-scoped check route today, so t
 invent one. If a team-owner-facing mount UI ever appears outside the admin app, it adds a
 `requireTeamAdmin` twin then.
 
-## Provider behaviour (what "honest degradation" must cover)
+## Provider behavior (what "honest degradation" must cover)
 
 - **AWS S3 / Hetzner Object Storage (Ceph RGW) / other Ceph-based**: both APIs supported;
   versioning can be enabled on an existing bucket. This is the eigen-drive prod case (nbg1).

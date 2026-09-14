@@ -36,7 +36,7 @@ the date range of the week in the week view.
 
 ## Your calendars
 
-The sidebar lists the calendars you own under **My Calendars**. Each calendar has a colour-coded checkbox next to its
+The sidebar lists the calendars you own under **My Calendars**. Each calendar has a color-coded checkbox next to its
 name. Tick or untick the checkbox to show or hide that calendar's events in the grid.
 
 If someone has shared a calendar with you, it appears under **Shared with me**. Team calendars show up under

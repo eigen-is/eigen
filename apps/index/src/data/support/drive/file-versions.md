@@ -28,7 +28,7 @@ manual ones, so the two are listed together in the history.
 
 1. Open the file in its editor.
 2. Click **File** in the toolbar, then point at **Version history**.
-3. A list of saved states appears, each labelled with the date and time it was saved. The most recent is at the
+3. A list of saved states appears, each labeled with the date and time it was saved. The most recent is at the
    top.
 4. Click the entry you want to go back to. A confirmation dialog opens.
 5. Click **Restore**.

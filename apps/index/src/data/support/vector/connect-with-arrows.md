@@ -63,7 +63,7 @@ With **Elbow** chosen, an **Edges** row appears. Set it to **Sharp** for square 
 
 Select the arrow. In the properties panel, open the **Arrowheads** section. Set the **Start** and **End** ends on their own. Each offers **None**, **Arrow**, **Triangle**, **Bar**, and **Circle**.
 
-To change the colour, width, or dash style of the shaft, use the stroke controls covered in [Style objects](/support/vector/style-objects).
+To change the color, width, or dash style of the shaft, use the stroke controls covered in [Style objects](/support/vector/style-objects).
 
 ## Add a label to an arrow
 

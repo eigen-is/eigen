@@ -8,9 +8,9 @@ order: 60
 updated: 2026-06-08
 ---
 
-Sheets lets you change how cells look without changing the values inside them. You can apply text styles, number formats, colours, borders, and alignment from the **Format** menu in the toolbar.
+Sheets lets you change how cells look without changing the values inside them. You can apply text styles, number formats, colors, borders, and alignment from the **Format** menu in the toolbar.
 
-All formatting requires edit access to the spreadsheet. The quick-format buttons in the centre of the toolbar are hidden when the spreadsheet is read-only.
+All formatting requires edit access to the spreadsheet. The quick-format buttons in the center of the toolbar are hidden when the spreadsheet is read-only.
 
 ## Text style
 
@@ -24,7 +24,7 @@ To change how text looks in one or more cells:
    - **Underline**: adds a line under the text.
    - **Strikethrough (Alt+Shift+5)**: draws a line through the text.
 4. To change the font family, open **Format → Text → Font** and pick a font from the list.
-5. To change the text colour, open **Format → Text → Font color** and pick a colour from the picker.
+5. To change the text color, open **Format → Text → Font color** and pick a color from the picker.
 
 ## Font size
 
@@ -54,21 +54,21 @@ Number formatting controls how a value is displayed. The stored value does not c
 
 3. To choose from a wider list of currency, number, or date formats, point to **Custom formats** and then open **More currency formats**, **More number formats**, or **More date and time formats**.
 
-## Cell colour
+## Cell color
 
-### Fill colour
-
-1. Select the cells.
-2. Open **Format → Fill color** and pick a colour from the picker.
-
-You can also use the fill colour button (the highlighter icon) in the quick-format bar in the centre of the toolbar.
-
-### Text colour
+### Fill color
 
 1. Select the cells.
-2. Open **Format → Text → Font color** and pick a colour.
+2. Open **Format → Fill color** and pick a color from the picker.
 
-The text colour button (a letter icon with a colour stripe beneath it) is also in the quick-format bar.
+You can also use the fill color button (the highlighter icon) in the quick-format bar in the center of the toolbar.
+
+### Text color
+
+1. Select the cells.
+2. Open **Format → Text → Font color** and pick a color.
+
+The text color button (a letter icon with a color stripe beneath it) is also in the quick-format bar.
 
 ## Alignment
 
@@ -77,7 +77,7 @@ The text colour button (a letter icon with a colour stripe beneath it) is also i
 1. Select the cells.
 2. Open **Format → Alignment** and choose **Left**, **Center**, or **Right**.
 
-The three alignment buttons in the quick-format bar in the centre of the toolbar do the same thing.
+The three alignment buttons in the quick-format bar in the center of the toolbar do the same thing.
 
 ### Vertical alignment
 
@@ -90,7 +90,7 @@ By default, text that is wider than a cell overflows into the next empty cell. Y
 
 1. Select the cells.
 2. Open **Format → Wrapping** and choose an option:
-   - **Overflow**: text spills into the next empty cell (the default behaviour).
+   - **Overflow**: text spills into the next empty cell (the default behavior).
    - **Wrap**: the row grows taller to show all the text inside the cell.
    - **Clip**: text is cut off at the cell edge.
 
@@ -115,7 +115,7 @@ To add or remove borders around cells:
    - **Horizontal borders** or **Vertical borders**: adds borders in one direction only.
    - **Slash border**: draws a diagonal line across each cell.
 
-To set a custom border colour or line style, point to **Custom border…** at the bottom of the **Borders** submenu and pick a colour and a style. The settings apply the next time you click a border type.
+To set a custom border color or line style, point to **Custom border…** at the bottom of the **Borders** submenu and pick a color and a style. The settings apply the next time you click a border type.
 
 ## Merge cells
 
@@ -142,4 +142,4 @@ To remove all formatting from a selection without changing the values:
 1. Select the cells.
 2. Open **Format → Clear formatting**.
 
-Clearing formatting removes text styles, colours, alignment settings, borders, and number formats. It keeps the cell values.
+Clearing formatting removes text styles, colors, alignment settings, borders, and number formats. It keeps the cell values.

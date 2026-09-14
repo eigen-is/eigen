@@ -19,10 +19,10 @@ You need write access to add comments. If you only have view access, the option 
 1. Select the text you want to comment on.
 2. Right-click the selection and choose **Add comment** from the menu.
 3. In the **New comment** dialog, the **Title** is pre-filled with your selected text. You can edit it, or
-   add a longer note in the **Description** field. Pick a colour if you like.
+   add a longer note in the **Description** field. Pick a color if you like.
 4. Click **Add comment**.
 
-The selected text is highlighted in the document with the comment's colour, so it's easy to see at a glance
+The selected text is highlighted in the document with the comment's color, so it's easy to see at a glance
 which passages have comments.
 
 You can also use the keyboard shortcut Cmd+Option+M (Mac) or Ctrl+Alt+M (Windows) when you have text
@@ -41,7 +41,7 @@ the text and open the thread.
 Click the filter button (the funnel icon) at the top of the sidebar to narrow the list:
 
 - **Assigned to**: show comments assigned to **Anyone**, to **Me**, to **Unassigned**, or to one particular person.
-- **Color**: show only comments with the colours you tick.
+- **Color**: show only comments with the colors you tick.
 - **Status**: show **Open**, **Resolved**, or **All** comments. The default is **Open**.
 
 ## Reply to a comment
@@ -67,7 +67,7 @@ circular-arrow icon (**Re-open**).
 Right-click a comment highlight in the document to open its context menu:
 
 - **View comment**: opens the thread.
-- **Comment color**: change the highlight colour.
+- **Comment color**: change the highlight color.
 - **Resolve comment** / **Reopen comment**: toggle the status.
 - **Delete comment**: removes the comment and its highlight. The thread history is preserved but the
   comment no longer appears in the document or sidebar.

@@ -25,7 +25,7 @@ Open [**Mail**](/space/email) in Space. You land on the **Signature** section.
 1. Click in the box under **Signature** and type your signature.
 2. Select text to reveal the formatting toolbar, then use it to add **Bold** or **Italic** text, a **Bullet list**, a
    **Numbered list**, a **Quote**, or a **Link**.
-3. Click **Save**. The button stays greyed out until you have made a change, and shows **Saving...** while it
+3. Click **Save**. The button stays grayed out until you have made a change, and shows **Saving...** while it
    saves.
 
 That is it. Your signature is ready, and Mail uses it from now on.

@@ -34,7 +34,7 @@ Attachments appear as chips above the message box. Click the **X** on any chip t
 ## Eigen documents as links
 
 When you select a document, spreadsheet, presentation, or other Eigen file type from the **Attach file** dialog,
-it is shared as a link rather than a copy. The recipient sees a chip labelled **Open [filename]** and can click
+it is shared as a link rather than a copy. The recipient sees a chip labeled **Open [filename]** and can click
 it to open the file in a new tab. They need access to that file to open it.
 
 <div class="eigen-callout">
