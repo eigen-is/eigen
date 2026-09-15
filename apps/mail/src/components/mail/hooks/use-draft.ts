@@ -217,7 +217,7 @@ function fieldsToDraft(f: DraftFields, user: AuthUser | null | undefined): NewDr
     };
 }
 
-function buildSaveOptions(fields: DraftFields, forceFullSave: boolean): SaveOptions {
+export function buildSaveOptions(fields: DraftFields, forceFullSave: boolean): SaveOptions {
     const tempIds = fields.attachments.map((a) => a.tempId).filter((id): id is string => !!id);
     const keepIdx = fields.attachments.map((a) => a.index).filter((i): i is number => typeof i === 'number');
     return {

@@ -1,9 +1,34 @@
 import { describe, expect, test } from 'bun:test';
 import type { Attachment, AttachmentMeta, EmailDraft } from '@workspace/lib/types/mail';
-import { initFields, mergeServerAttachments } from '../../../../components/mail/hooks/use-draft';
+import { buildSaveOptions, initFields, mergeServerAttachments } from '../../../../components/mail/hooks/use-draft';
 
 function att(filename: string | undefined, contentType: string, index: number, size = 10): Attachment {
     return { filename, contentType, index, size, content: new Uint8Array(size) };
+}
+
+function savedDraft(attachments: Attachment[]): EmailDraft {
+    return {
+        id: 'draft-1',
+        filename: 'draft-1.eml',
+        subject: 'Lunch',
+        fromShort: 'Alice',
+        fromAddress: 'alice@test.eigen.is',
+        toShort: 'Bob',
+        toAddress: 'bob@test.eigen.is',
+        recipientsAll: 'bob@test.eigen.is',
+        textShort: 'see you',
+        date: new Date('2026-09-15T10:00:00Z'),
+        isRead: true,
+        isFlagged: false,
+        isDraft: true,
+        isReplied: false,
+        hasAttachments: true,
+        mailbox: 'Drafts',
+        size: 100,
+        attachments,
+        html: '<p>see you</p>',
+        text: 'see you',
+    };
 }
 
 describe('mergeServerAttachments', () => {
@@ -59,31 +84,6 @@ describe('mergeServerAttachments', () => {
 });
 
 describe('initFields', () => {
-    function savedDraft(attachments: Attachment[]): EmailDraft {
-        return {
-            id: 'draft-1',
-            filename: 'draft-1.eml',
-            subject: 'Lunch',
-            fromShort: 'Alice',
-            fromAddress: 'alice@test.eigen.is',
-            toShort: 'Bob',
-            toAddress: 'bob@test.eigen.is',
-            recipientsAll: 'bob@test.eigen.is',
-            textShort: 'see you',
-            date: new Date('2026-09-15T10:00:00Z'),
-            isRead: true,
-            isFlagged: false,
-            isDraft: true,
-            isReplied: false,
-            hasAttachments: true,
-            mailbox: 'Drafts',
-            size: 100,
-            attachments,
-            html: '<p>see you</p>',
-            text: 'see you',
-        };
-    }
-
     test('an invite an IMAP client left on the draft is no compose chip', () => {
         const fields = initFields(
             savedDraft([att('invite.ics', 'text/calendar', 0), att('menu.pdf', 'application/pdf', 1)]),
@@ -96,5 +96,36 @@ describe('initFields', () => {
     test('a draft without an invite keeps every part', () => {
         const fields = initFields(savedDraft([att('a.pdf', 'application/pdf', 0), att('b.pdf', 'application/pdf', 1)]));
         expect(fields.attachments.map((a) => a.index)).toEqual([0, 1]);
+    });
+});
+
+describe('buildSaveOptions', () => {
+    test('the keep list names the surviving chips by the index the server gave them', () => {
+        const fields = initFields(
+            savedDraft([
+                att('a.pdf', 'application/pdf', 0),
+                att('b.pdf', 'application/pdf', 1),
+                att('c.pdf', 'application/pdf', 2),
+            ]),
+        );
+        // The user removes the middle chip: the two survivors keep 0 and 2, never 0 and 1.
+        const afterRemove = { ...fields, attachments: fields.attachments.filter((a) => a.filename !== 'b.pdf') };
+        const options = buildSaveOptions(afterRemove, false);
+        expect(options.keepAttachmentIndexes).toEqual([0, 2]);
+        expect(options.tempAttachmentIds).toBeUndefined();
+    });
+
+    test('a chip still uploading goes to the temp list, not the keep list', () => {
+        const fields = initFields(savedDraft([att('a.pdf', 'application/pdf', 0)]));
+        const uploading: AttachmentMeta = {
+            key: 'local-0',
+            tempId: 't1',
+            filename: 'new.pdf',
+            size: 10,
+            contentType: 'application/pdf',
+        };
+        const options = buildSaveOptions({ ...fields, attachments: [...fields.attachments, uploading] }, false);
+        expect(options.tempAttachmentIds).toEqual(['t1']);
+        expect(options.keepAttachmentIndexes).toEqual([0]);
     });
 });
