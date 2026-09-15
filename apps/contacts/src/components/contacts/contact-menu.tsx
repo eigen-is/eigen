@@ -43,7 +43,7 @@ export type ContactMenuActions = {
 // the menu content.
 export function useContactMenu() {
     const openWriteEmailTo = useOpenWriteEmailTo();
-    const mailEnabled = useMailEnabled();
+    const mailEnabled = useMailEnabled() !== false;
     const startChatWith = useStartChatWith();
     const { exportContacts, isExporting } = useExportContacts();
     const { user } = useAuth();
