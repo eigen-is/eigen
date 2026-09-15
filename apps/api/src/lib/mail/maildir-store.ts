@@ -28,6 +28,7 @@ import {
     buildMaildirFilename,
     createUniqueMessageId,
     getMailIDfromFileName,
+    maildirSize,
     parseFlagsFromFilename,
     rebuildFlagsSuffix,
 } from './mailutils';
@@ -94,7 +95,7 @@ export class MaildirStore implements MailStore {
     }
 
     async size(): Promise<number> {
-        return (await this.dirSize()) || this.db.size();
+        return maildirSize(this.home.fs);
     }
 
     search(opts: MailSearchOptions): EmailSummary[] {
@@ -609,10 +610,6 @@ export class MaildirStore implements MailStore {
         if (await this.storage.exists(filePath)) {
             await this.storage.unlink(filePath);
         }
-    }
-
-    private async dirSize(): Promise<number> {
-        return (await this.storage.dirSize(PATHS.MAIL.ROOT)) || 0;
     }
 
     private mailboxDir(mailbox: string): string {

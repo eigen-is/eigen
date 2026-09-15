@@ -230,11 +230,11 @@ raw body before any parse and re-checked on the stored bytes (413 / `max-resourc
 share the **mail + contacts** storage budget: `enforceCardBudget` runs `enforceContactsIngest`, crediting the
 size of the card being replaced, and a projection over budget → 507. `Contacts.size()` answers from in-memory
 byte counters (`cardsBytes + avatarsBytes`), so contact growth is always exact. The mail half of the budget is
-`SUM(emails.size)` over the message index, not a maildir walk, and is still **memoized per user for 15 s**
+a walk of the home's Maildir tree (`maildirSize`, `lib/mail/mailutils.ts`), so a message the index never saw
+and Dovecot's own per-folder index files count too, and it is **memoized per user for 15 s**
 (`mailSizeCache`, `config/enforcement.ts`): an initial device sync that PUTs hundreds of cards reads it once,
 and the contacts half stays live. REST avatar upload shares the one cache (accepted drift — only
-recently-delivered mail can read stale, bounded by the same window). What the index does not carry is a known
-gap ([ROADMAP.md](ROADMAP.md) § Cheap wins, "Mail usage counts only the indexed messages").
+recently-delivered mail can read stale, bounded by the same window).
 
 ## vCard import / export
 
