@@ -64,6 +64,11 @@ current sheet's config with `getSheetConfig(ctx, id?)` (`state/context.ts`, besi
   than silently reopening the hole. This mirrors the row/column grid materialization in `engine/defaults.ts`, and for
   the same reason: **a base that is less materialized than the writer makes granular patches fail to resolve**, and
   `replaySheetsOps` then rolls back the whole batch — the edit is lost, not degraded.
+  **`calcChain` is the same kind of collection outside `config`**: the Workbook seeds it on every sheet at mount
+  (`seedCalcChain`), so the first formula a user types emits `add ['calcChain', 0]` in the same batch as the computed
+  cell. `withNormalizedSheet` (`engine/replay-ops.ts`) therefore materializes it on every replay base alongside
+  `images` — without it a fresh doc's formula cell exported blank, its value rolled back with the batch. An empty
+  chain still reads as "not computed", so the § Server-side recalc gate is unchanged.
 - a write on a path that then rejects the operation still costs the user an undo entry and ships an op. Because the
   collections already exist, no writer needs to create one, so this cannot happen by accident; `src/test/state/rejected-writes.test.ts`
   is the table-driven gate that keeps it that way. Add a row to it when you add a writer.
