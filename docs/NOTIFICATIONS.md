@@ -11,6 +11,8 @@ Every `useMutation` in `packages/lib/src/core/[domain]/hooks/` has `onError: onM
 `toast.error(getErrorMessage(error))`. The `AppError` class preserves the HTTP status code from Eden Treaty
 responses, so errors show as e.g. "Insufficient Storage (507)".
 
+The message itself comes from the response body: a plain string (what every `ApiError` returns), else its `message`, else a validation body's `summary` or first `errors` entry. A body with none of those falls back to a phrase for the status — "Invalid request (422)", "Not found (404)" — because Elysia strips a validation error down to `{ type, on, found }` in production, and `String()` on that reads as `[object Object]`.
+
 Apps must NOT add their own `try/catch` + `toast.error()` around mutations — the hook already does it.
 Apps only need `try/catch` when they must do extra work on failure (e.g., reset UI state), and in that case
 they must NOT show a toast.

@@ -1,27 +1,53 @@
 import { toast } from 'sonner';
 
+const STATUS_MESSAGES: Record<number, string> = {
+    400: 'Invalid request',
+    401: 'Not signed in',
+    403: 'No access',
+    404: 'Not found',
+    409: 'Conflict',
+    413: 'Too large',
+    422: 'Invalid request',
+    429: 'Too many requests',
+    500: 'Server error',
+    503: 'Service unavailable',
+    507: 'Insufficient storage',
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === 'object';
+}
+
+function readString(source: Record<string, unknown>, key: string): string | undefined {
+    const field = source[key];
+    return typeof field === 'string' && field.trim() !== '' ? field.trim() : undefined;
+}
+
+// Elysia keeps a validation error's `message` and `summary` out of production bodies — a rejected schema
+// arrives as `{ type, on, found }`, with nothing to read — so the status has to carry the meaning there.
+function messageFromBody(value: unknown, status: number): string {
+    const fallback = STATUS_MESSAGES[status] ?? 'Request failed';
+    if (typeof value === 'string') return value.trim() || fallback;
+    if (isRecord(value)) {
+        const first = Array.isArray(value.errors) ? value.errors[0] : null;
+        const firstDetail = isRecord(first)
+            ? (readString(first, 'summary') ?? readString(first, 'message'))
+            : undefined;
+        return readString(value, 'message') ?? readString(value, 'summary') ?? firstDetail ?? fallback;
+    }
+    return value === null || value === undefined ? fallback : String(value);
+}
+
 export class AppError extends Error {
     status: number;
 
     // error.status is `unknown`, not `number`: the untyped-error GET routes (/p/config, /settings/server,
     // /settings/s3config) declare no response schema, so Eden can't enumerate their codes. Coerced below.
     constructor(response: { error: { status: unknown; value: unknown } | null; status: number }) {
-        const value = response.error?.value;
-        const message =
-            typeof value === 'string'
-                ? value
-                : value && typeof value === 'object' && 'message' in value
-                  ? String(
-                        (
-                            value as {
-                                message: unknown;
-                            }
-                        ).message,
-                    )
-                  : String(value ?? 'Unknown error');
-        super(message);
         const errorStatus = response.error?.status;
-        this.status = typeof errorStatus === 'number' ? errorStatus : response.status;
+        const status = typeof errorStatus === 'number' ? errorStatus : response.status;
+        super(messageFromBody(response.error?.value, status));
+        this.status = status;
     }
 }
 
