@@ -16,33 +16,32 @@ const g = globalThis as any;
 // Taken from the window even where bun already has one: happy-dom rejects a foreign Event instance.
 const OVERRIDDEN = ['Event', 'CustomEvent', 'MouseEvent', 'KeyboardEvent', 'Node', 'Element', 'HTMLElement'];
 
-const OWN = ['window', 'document', 'navigator', 'getComputedStyle', 'IS_REACT_ACT_ENVIRONMENT'];
-
 export function installHappyDom(): Window {
     const window = new Window({ url: 'http://localhost:3000' });
-    const borrowed: string[] = [];
+    // Every borrowed global is remembered as it was and PUT BACK in afterAll, never cleared: bun has
+    // an Event and a CustomEvent of its own, and anything running after this teardown would find
+    // `undefined` where its native constructor used to be.
+    const previous = new Map<string, unknown>();
+    const borrow = (key: string, value: unknown) => {
+        if (!previous.has(key)) previous.set(key, g[key]);
+        g[key] = value;
+    };
+
     for (const key of Object.getOwnPropertyNames(window)) {
         // biome-ignore lint/suspicious/noExplicitAny: reading the happy-dom window's own globals
         const value = (window as any)[key];
-        if (g[key] === undefined && value !== undefined) {
-            g[key] = value;
-            borrowed.push(key);
-        }
+        if (g[key] === undefined && value !== undefined) borrow(key, value);
     }
-    for (const key of OVERRIDDEN) {
-        // biome-ignore lint/suspicious/noExplicitAny: reading the happy-dom window's own globals
-        g[key] = (window as any)[key];
-        borrowed.push(key);
-    }
-    g.window = window;
-    g.document = window.document;
-    g.navigator = window.navigator;
-    g.getComputedStyle = window.getComputedStyle.bind(window);
-    g.IS_REACT_ACT_ENVIRONMENT = true;
+    // biome-ignore lint/suspicious/noExplicitAny: reading the happy-dom window's own globals
+    for (const key of OVERRIDDEN) borrow(key, (window as any)[key]);
+    borrow('window', window);
+    borrow('document', window.document);
+    borrow('navigator', window.navigator);
+    borrow('getComputedStyle', window.getComputedStyle.bind(window));
+    borrow('IS_REACT_ACT_ENVIRONMENT', true);
 
     afterAll(() => {
-        for (const key of borrowed) g[key] = undefined;
-        for (const key of OWN) g[key] = undefined;
+        for (const [key, value] of previous) g[key] = value;
     });
 
     return window;
