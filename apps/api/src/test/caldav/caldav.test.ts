@@ -1,7 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { handleDeleteCalendar } from '../../lib/caldav/proppatch';
 import { EVENT_MAX_BYTES } from '../../lib/caldav/resource';
-import type { Calendar } from '../../lib/calendar/calendar';
 import { ApiError } from '../../lib/core';
 import { app, getTestContext } from '../setup';
 
@@ -1478,9 +1477,7 @@ describe('CalDAV', () => {
     test('a delete failure that is not the default-calendar refusal keeps its own status', async () => {
         // The relay leg of deleteCalendar (a shared calendar's un-share) can fail with any status;
         // renaming those to 403 would tell the client the calendar is protected.
-        const failing = {
-            deleteCalendar: () => Promise.reject(new ApiError(502, 'Home unreachable')),
-        } as unknown as Calendar;
+        const failing = { deleteCalendar: () => Promise.reject(new ApiError(502, 'Home unreachable')) };
         await expect(handleDeleteCalendar(failing, 'shared-cal')).rejects.toMatchObject({
             status: 502,
             message: 'Home unreachable',

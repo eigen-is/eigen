@@ -11,7 +11,7 @@ type SpaceSidebarProps = {
 
 export function SpaceSidebar({ condensed = false }: SpaceSidebarProps) {
     const isAdmin = useIsAdmin();
-    const mailEnabled = useMailEnabled();
+    const mailEnabled = useMailEnabled() !== false;
 
     return (
         <SidebarBody>

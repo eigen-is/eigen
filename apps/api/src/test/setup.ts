@@ -378,6 +378,9 @@ export const TEST_PNG_BYTES = new Uint8Array([
     174, 66, 96, 130,
 ]);
 
+// Nothing to resolve: a document with no media, a workbook with no floating images.
+export const NO_MEDIA = new Map<string, string>();
+
 export { app, TEST_DATA_DIR };
 
 // The draft attachment round-trip the mail tests share: upload a temp part, then put a draft that keeps it.

@@ -21,11 +21,12 @@ export function usePublicConfig() {
 }
 
 // The one read of the server's hosted-mail flag: every Mail entry point gates on this, and a
-// server that runs without the mail containers hides them all. Assume on until the config lands,
-// so the common deployment never flashes a missing Mail app.
-export function useMailEnabled(): boolean {
+// server that runs without the mail containers hides them all. Undefined until the config lands —
+// entry points read that as on (`!== false`) so the common deployment never flashes a missing Mail
+// app, while a fetch gate reads it as off (`=== true`).
+export function useMailEnabled(): boolean | undefined {
     const { data } = usePublicConfig();
-    return data?.mailEnabled !== false;
+    return data?.mailEnabled;
 }
 
 export function useJoinWaitlist() {

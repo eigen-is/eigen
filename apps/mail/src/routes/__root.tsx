@@ -9,7 +9,7 @@ import { EmailSidebar } from '../components/mail/email-sidebar';
 
 function MailRoot() {
     const { user } = useAuth();
-    const mailEnabled = useMailEnabled();
+    const mailEnabled = useMailEnabled() !== false;
     const { data: mailboxes = [], isLoading, error } = useMailboxes();
     const moveMail = useMoveEmail();
     const getEmailById = useEmailById();

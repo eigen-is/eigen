@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { DEFAULT_ELEMENT_PROPS, type VectorArrowElement, type VectorElement } from '@workspace/lib/vector';
+import { DEFAULT_ELEMENT_PROPS, type VectorElement } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import { installHappyDom } from '../../../happy-dom';
 
@@ -26,7 +26,7 @@ const { ArrowPanelSection } = await import('../../../../components/vector/kinds/
 // React tracks an input's value on the instance, so assigning `input.value` looks like no change to it.
 const nativeValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
 
-const arrow: VectorArrowElement = {
+const arrow: VectorElement = {
     ...DEFAULT_ELEMENT_PROPS,
     id: 'a1',
     type: 'arrow',
@@ -66,7 +66,7 @@ test('a label size typed against a cold font face is one undo step', async () =>
                 PropertyGestureContext.Provider,
                 { value: () => holdCapture(undoManager) },
                 createElement(ArrowPanelSection, {
-                    elements: [arrow] as VectorElement[],
+                    elements: [arrow],
                     scene: new Map<string, VectorElement>([[arrow.id, arrow]]),
                     onChange: () => {},
                     onChangeEach: (patch: (el: VectorElement) => Record<string, unknown>) =>
@@ -80,11 +80,11 @@ test('a label size typed against a cold font face is one undo step', async () =>
         );
     });
 
-    const input = container.querySelector('input[type="number"]');
+    const input = container.querySelector<HTMLInputElement>('input[type="number"]');
     if (!input) throw new Error('the arrow section did not render its Size field');
     for (const typed of ['1', '12']) {
         await act(async () => {
-            (input as HTMLElement).focus();
+            input.focus();
             nativeValueSetter?.call(input, typed);
             input.dispatchEvent(new Event('input', { bubbles: true }));
         });

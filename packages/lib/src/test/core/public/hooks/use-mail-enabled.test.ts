@@ -1,32 +1,17 @@
-// The one read of the server's hosted-mail flag. Every Mail entry point hangs off it, so the
-// optimistic default (mail is on until the config lands) is pinned here.
-import { afterAll, describe, expect, test } from 'bun:test';
+// The one read of the server's hosted-mail flag. Every Mail entry point hangs off it, so what it
+// reports before the config lands — nothing, which entry points read as on — is pinned here.
+import { describe, expect, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import { publicKeys } from '../../../../core/public/hooks/keys';
 import { useMailEnabled } from '../../../../core/public/hooks/use-public';
+import { installHappyDom } from '../../../happy-dom';
 
-// react-dom needs a DOM to render the hook into; the globals are removed again in afterAll so later
-// test files see the plain bun environment. Recipe: the use-backup test.
-const { Window } = await import('happy-dom');
-const window = new Window({ url: 'http://localhost:3000' });
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-g.window = window;
-g.document = window.document;
-g.navigator = window.navigator;
-g.IS_REACT_ACT_ENVIRONMENT = true;
-
-afterAll(() => {
-    g.window = undefined;
-    g.document = undefined;
-    g.navigator = undefined;
-    g.IS_REACT_ACT_ENVIRONMENT = undefined;
-});
+installHappyDom();
 
 describe('useMailEnabled', () => {
-    test('assumes mail is on until the server config lands', async () => {
+    test('reports nothing until the server config lands', async () => {
         const { latest, unmount } = await renderHook(() => useMailEnabled(), new QueryClient());
-        expect(latest).toBe(true);
+        expect(latest).toBeUndefined();
         await unmount();
     });
 
@@ -45,7 +30,7 @@ describe('useMailEnabled', () => {
 async function renderHook<T>(
     use: () => T,
     queryClient: QueryClient,
-): Promise<{ latest: T; unmount: () => Promise<void> }> {
+): Promise<{ latest: T | null; unmount: () => Promise<void> }> {
     const { act, createElement } = await import('react');
     const { createRoot } = await import('react-dom/client');
     const { QueryClientProvider } = await import('@tanstack/react-query');
@@ -55,8 +40,7 @@ async function renderHook<T>(
         seen.latest = use();
         return null;
     }
-    const container = window.document.createElement('div');
-    const root = createRoot(container as unknown as Element);
+    const root = createRoot(document.createElement('div'));
     await act(async () => {
         root.render(createElement(QueryClientProvider, { client: queryClient }, createElement(Harness, null)));
     });
@@ -67,5 +51,5 @@ async function renderHook<T>(
             root.unmount();
         });
     };
-    return { latest: seen.latest as T, unmount };
+    return { latest: seen.latest, unmount };
 }

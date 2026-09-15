@@ -21,25 +21,17 @@ export type ExportResult = {
 };
 
 // One envelope per download format: the document the Worker renders, the headers the
-// route serves, the filename extension (always over the stripped container name), and
-// whether the render inlines media bytes. `pdf` is the only format with a main-thread
-// stage left; `xlsx` is the only one whose writer carries cells alone.
+// route serves, and the filename extension (always over the stripped container name).
+// `pdf` is the only format with a main-thread stage left.
 const EXPORT_ENVELOPES = {
-    html: { workerFormat: 'html', contentType: 'text/html; charset=utf-8', extension: 'html', embedsMedia: true },
-    pdf: { workerFormat: 'pdf-html', contentType: 'application/pdf', extension: 'pdf', embedsMedia: true },
-    svg: { workerFormat: 'svg', contentType: 'image/svg+xml', extension: 'svg', embedsMedia: true },
-    xlsx: { workerFormat: 'xlsx', contentType: XLSX_MIME, extension: 'xlsx', embedsMedia: false },
-    docx: { workerFormat: 'docx', contentType: DOCX_MIME, extension: 'docx', embedsMedia: true },
+    html: { workerFormat: 'html', contentType: 'text/html; charset=utf-8', extension: 'html' },
+    pdf: { workerFormat: 'pdf-html', contentType: 'application/pdf', extension: 'pdf' },
+    svg: { workerFormat: 'svg', contentType: 'image/svg+xml', extension: 'svg' },
+    xlsx: { workerFormat: 'xlsx', contentType: XLSX_MIME, extension: 'xlsx' },
+    docx: { workerFormat: 'docx', contentType: DOCX_MIME, extension: 'docx' },
 } as const;
 
 type ExportEnvelope = (typeof EXPORT_ENVELOPES)[keyof typeof EXPORT_ENVELOPES];
-
-// Keyed by what the Worker is asked to render, which is what runDocumentExport holds.
-const MEDIA_EMBEDDING_FORMATS: ReadonlySet<ExportJob['format']> = new Set(
-    Object.values(EXPORT_ENVELOPES)
-        .filter((envelope) => envelope.embedsMedia)
-        .map((envelope) => envelope.workerFormat),
-);
 
 // What the Worker is asked to render. One arm per document type, so a format its route
 // rejects — a docx from a deck, an xlsx from a document — does not compile.
@@ -134,10 +126,10 @@ export async function runDocumentExport(
     // authoritatively — this is only the early exit.
     documentTransformRunner.assertAdmissible('foreground');
 
-    // A format that inlines nothing skips the prep entirely: the xlsx writer would drop every
-    // byte of it.
+    // The prep is skipped for the one format that inlines nothing: the xlsx writer carries
+    // cells alone.
     const prepStart = performance.now();
-    const media = MEDIA_EMBEDDING_FORMATS.has(job.format) ? await collectExportMedia(mount, path) : [];
+    const media = job.format === 'xlsx' ? [] : await collectExportMedia(mount, path);
     const prepMs = performance.now() - prepStart;
     // The eigendoc <title> keeps the UNstripped container name (frozen output); the
     // docx document property carries the stripped one, applied in the Worker.

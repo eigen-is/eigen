@@ -73,7 +73,7 @@ export function DriveItemMenuItems({
 }: DriveItemMenuItemsProps) {
     const href = hrefOverride ?? getDriveItemUrl(item);
     const canOpen = isOpenable(item);
-    const mailEnabled = useMailEnabled();
+    const mailEnabled = useMailEnabled() !== false;
     // Which formats a type offers is the registry's answer, so this menu and the editors' File menu
     // draw the same rows and the export route gates on the same list.
     const exportFormats = exportFormatsFor(item.type);

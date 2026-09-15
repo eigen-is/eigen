@@ -132,7 +132,7 @@ function PaletteRunnerInner() {
     const { data: settings } = useSpaceSettings();
     const updateSettings = useUpdateSpaceSettings();
     const { openPreview } = usePreview();
-    const mailEnabled = useMailEnabled();
+    const mailEnabled = useMailEnabled() !== false;
     const [createDialog, setCreateDialog] = useState<CreateDialogKind>(null);
 
     // The palette hands out DrivePaths; the overlay takes subjects. Memoized because ctx below

@@ -72,11 +72,9 @@ import {
     drivePost,
     driveUpload,
     getTestContext,
+    NO_MEDIA,
     TEST_PNG_BYTES,
 } from '../setup';
-
-// A document without media resolves nothing.
-const NO_MEDIA = new Map<string, string>();
 
 // End-to-end validation of the off-thread eigensheets preview and exports: Worker
 // output must equal the same pipeline executed on the main thread, corruption and

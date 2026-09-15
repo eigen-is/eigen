@@ -12,17 +12,13 @@ export const NO_GESTURE: BeginGesture = () => () => {};
 
 export const PropertyGestureContext = createContext<BeginGesture>(NO_GESTURE);
 
-export function usePropertyGesture(): BeginGesture {
-    return useContext(PropertyGestureContext);
-}
-
 // The hold every panel control that writes as the user goes runs on: `hold` opens the gesture on the
 // first write and is idempotent, `end` releases it on a commit or a blur and may be called again.
 // Released on unmount too — a gesture the control never sees end (Escape mid-edit deselects and
 // unmounts the section, and so does a peer deleting the element) would leave the hold open, and every
 // later edit would merge into that one undo step.
 export function useHeldGesture(): { hold: () => void; end: () => void } {
-    const beginGesture = usePropertyGesture();
+    const beginGesture = useContext(PropertyGestureContext);
     const release = useRef<(() => void) | null>(null);
 
     const hold = useCallback(() => {
