@@ -86,7 +86,7 @@ function useLogout(rootRoute: TopbarProps['rootRoute']) {
 function AppSwitcher({ isGuest }: { isGuest: boolean }) {
     const { appName } = useLayout();
     const isAdmin = useIsAdmin();
-    const mailEnabled = useMailEnabled() !== false;
+    const mailEnabled = useMailEnabled();
     const appList = apps.filter((app) => (!isGuest || GUEST_APPS.has(app.name)) && (mailEnabled || !isMailApp(app)));
 
     return (

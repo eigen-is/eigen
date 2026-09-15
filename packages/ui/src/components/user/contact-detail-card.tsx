@@ -19,7 +19,7 @@ function formatAddress(address: Address) {
 
 export function ContactDetailCard({ contact, labels, className }: ContactDetailCardProps) {
     const addresses = contact.address ?? [];
-    const mailEnabled = useMailEnabled() !== false;
+    const mailEnabled = useMailEnabled();
 
     return (
         <div className={cn('flex flex-col md:flex-row gap-8', className)}>

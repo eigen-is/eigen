@@ -1,5 +1,5 @@
 // The one read of the server's hosted-mail flag. Every Mail entry point hangs off it, so what it
-// reports before the config lands — nothing, which entry points read as on — is pinned here.
+// reports before the config lands — on — is pinned here.
 import { describe, expect, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import { publicKeys } from '../../../../core/public/hooks/keys';
@@ -9,9 +9,9 @@ import { installHappyDom } from '../../../happy-dom';
 installHappyDom();
 
 describe('useMailEnabled', () => {
-    test('reports nothing until the server config lands', async () => {
+    test('reports mail on until the server config lands', async () => {
         const { latest, unmount } = await renderHook(() => useMailEnabled(), new QueryClient());
-        expect(latest).toBeUndefined();
+        expect(latest).toBe(true);
         await unmount();
     });
 
