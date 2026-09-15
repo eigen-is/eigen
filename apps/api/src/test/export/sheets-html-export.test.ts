@@ -718,6 +718,25 @@ describe('Sheets export — content size (@page)', () => {
         // Bad column → DEFAULT_COL_WIDTH (73), bad row → DEFAULT_ROW_HEIGHT (19).
         expect(getSheetContentSize(sheet)).toEqual({ width: 73 + 100, height: 25 + 19 });
     });
+
+    test('an image parked past the used range is measured too', () => {
+        const sheet: Sheet = {
+            ...makeSheet([{ r: 0, c: 0, v: { v: 'grid' } }]),
+            images: [{ id: 'img_1', mediaName: 'chart.png', x: 400, y: 200, width: 100, height: 50 }],
+        };
+        // The overlay draws at the absolute grid coordinate, so the page has to reach the
+        // image's far edge — the one default cell (73 × 19) is not what bounds this sheet.
+        expect(getSheetContentSize(sheet)).toEqual({ width: 500, height: 250 });
+    });
+
+    test('image extents are measured in the same offset space as the grid', () => {
+        const sheet: Sheet = {
+            ...makeSheet([{ r: 2, c: 1, v: { v: 'grid' } }]),
+            images: [{ id: 'img_1', mediaName: 'chart.png', x: 300, y: 100, width: 10, height: 10 }],
+        };
+        // Two default rows (19px) and one default column (73px) sit above/left of the table.
+        expect(getSheetContentSize(sheet)).toEqual({ width: 300 + 10 - 73, height: 100 + 10 - 2 * 19 });
+    });
 });
 
 // A floating image is a media reference (docs/MEDIA-REFERENCES.md): the stored name is
@@ -791,6 +810,26 @@ describe('Sheets HTML export — floating images', () => {
             MEDIA,
         );
         expect(doc).toContain(`src="${PIXEL}"`);
+    });
+
+    test('the preview drops an image parked outside the window it renders', () => {
+        const sheet: Sheet = {
+            ...makeSheet([{ r: 0, c: 0, v: { v: 'grid' } }]),
+            images: [{ id: 'img_1', mediaName: 'chart.png', x: 5000, y: 0, width: 100, height: 100 }],
+        };
+        // The preview box is the clipped grid; an image far right of it would stretch the
+        // fragment's scroll width and collapse the thumbnail that scales by it.
+        expect(renderSheetsPreviewHtml([sheet], MEDIA).html).not.toContain('<img');
+        // The full export still draws it — getSheetContentSize sizes the page to reach it.
+        expect(renderSheetsHtml([sheet], MEDIA).html).toContain('<img');
+    });
+
+    test('the preview keeps an image that only overhangs its window', () => {
+        const sheet: Sheet = {
+            ...makeSheet([{ r: 0, c: 0, v: { v: 'grid' } }]),
+            images: [{ id: 'img_1', mediaName: 'chart.png', x: 50, y: 0, width: 400, height: 10 }],
+        };
+        expect(renderSheetsPreviewHtml([sheet], MEDIA).html).toContain('<img');
     });
 
     test('a preview URL survives only while it is the resolved one', () => {
