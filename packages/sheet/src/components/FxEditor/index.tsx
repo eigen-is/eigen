@@ -2,7 +2,6 @@ import { escapeHtml } from '@workspace/lib/html';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useFormulaAutocomplete } from '../../hooks/useFormulaAutocomplete';
-import { usePrevious } from '../../hooks/usePrevious';
 import {
     cancelNormalSelected,
     getFlowdata,
@@ -29,21 +28,15 @@ export function FxEditor() {
     const lastKeyDownEventRef = useRef<KeyboardEvent>(null);
     const [isHidenRC, setIsHidenRC] = useState<boolean>(false);
     const firstSelection = context.selections?.[0];
-    const prevFirstSelection = usePrevious(firstSelection);
-    const prevSheetId = usePrevious(context.currentSheetId);
     const recentText = useRef('');
 
-    // biome-ignore lint/correctness/useExhaustiveDependencies: re-renders fx box only on real cell/sheet/selection changes; prev-selection comparison avoids collaborative-update echo
+    // biome-ignore lint/correctness/useExhaustiveDependencies: re-renders fx box only on real cell/sheet/selection changes — derived helpers are read fresh from `context`
     useEffect(() => {
         // If selected row/column is in hidden state, don't allow editing
         setIsHidenRC(isShowHidenCR(context));
-        if (
-            JSON.stringify(prevFirstSelection) === JSON.stringify(firstSelection) &&
-            context.currentSheetId === prevSheetId
-        ) {
-            // data change by a collabrative update should not trigger this effect
-            return;
-        }
+        // An open edit owns the box: the text in it is the user's, and a collaborative update
+        // landing mid-keystroke must not overwrite it with the cell's stored content.
+        if (context.editingCellPosition.length > 0) return;
         const d = getFlowdata(context);
         let value = '';
         if (firstSelection) {
@@ -69,7 +62,7 @@ export function FxEditor() {
         } else {
             refs.fxInput.current!.innerHTML = '';
         }
-    }, [context.sheets, context.currentSheetId, context.selections]);
+    }, [context.sheets, context.currentSheetId, context.selections, context.editingCellPosition]);
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: callback only refreshed when sheet/selection-shape changes — derived helpers (allowEdit, etc.) are read fresh from `context`
     const onFocus = useCallback(() => {
