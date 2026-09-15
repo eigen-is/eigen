@@ -83,6 +83,8 @@ One ceiling bounds every text preview, Drive and mail alike: `TEXT_PREVIEW_MAX_B
 
 Body is consumed via the `useTextPreview()` hook (TanStack Query) and rendered with `dangerouslySetInnerHTML` inside a `.eigen-prose` container. No iframe, no shadow DOM. Its `staleTime` is deliberately short — **30 s** — so that when the server hands back a stale-while-revalidate body, the next refetch trigger (window focus or remount) picks up the fresh one. The `eigenvector` body is the exception on both counts: it is a self-contained page div carrying its own box, background and absolutely-positioned layers, so the lightbox only centers it and the drive hero scales it from its known intrinsic width (`CANVAS_PREVIEW_WIDTH` — `eigenslides` composes at the same width, `eigendoc` at `A4_WIDTH_PX`) with no wrapper class at all rather than a prose one. `eigenslides` is the same shape — a column of self-contained `.canvas-page` divs — scaled from the same known width, so the drive hero shows the first slide.
 
+The `eigensheets` body is the other shape with a wrapper rule of its own: a bare grid fragment whose floating-image overlay positions each image in declared grid pixels, embedded in app CSS that moves the grid under it. `.eigensheets-preview` (`packages/ui/src/styles/globals.css`) restores what the export document's `SHEET_CSS_BASE` gives the same markup — `line-height: normal`, so a row keeps the height its `<tr>` declares instead of stretching half a pixel per row under the app line-height, and `img { max-width: none }`, so preflight's image cap cannot shrink a floating image to the table's width.
+
 Shared `eigen-prose.css` in `packages/ui/src/styles/` provides prose typography + Catppuccin code highlighting,
 used by both previews and the docs editor.
 
