@@ -12,8 +12,8 @@ import { backupKeys, invalidateBackup } from './keys';
 // Admin-only hooks over /admin/backup. The backups folder on the server is the durable record: the
 // SSE poke and the polling below only decide when to ask it again.
 
-// While a job of this home runs the job list polls: the SSE poke goes to the admin's own home, which
-// an admin restoring their OWN home stops receiving for the length of the restore. One mechanism
+// While a job of this home runs the job list polls: the SSE poke reaches every admin's home, and an
+// admin restoring their OWN home stops receiving it for the length of the restore. One mechanism
 // carries that to the artifact list — the effect below, when the job stops running — rather than a
 // second poll reading the job cache from the other query.
 const JOB_POLL_MS = 2000;

@@ -4,6 +4,7 @@ import type { BackupJob } from '@workspace/lib/types/backup';
 import { ApiError } from '../core';
 import type { Home } from '../home';
 import { sendToHome } from '../home/home-relay';
+import { getOrgAdmins } from '../user';
 import { extractArtifact, packFolder, readUnpackedHome, writeSidecar } from './archive';
 import { describeError } from './errors';
 import {
@@ -41,8 +42,14 @@ function dropExpiredJobs(): void {
     }
 }
 
+// Every admin sees the same pane, so the poke goes to all of them and not only to the one who
+// pressed the button. sendToHome drops the ones with no home loaded, which is every admin who has
+// nothing open. The event carries no state, so one that lands out of order costs nothing.
 function poke(job: BackupJob): void {
-    sendToHome(job.startedBy, { type: 'broadcast', event: buildBackupJobEvent(job.id, job.ownerId) }).catch(() => {});
+    const event = buildBackupJobEvent(job.id, job.ownerId);
+    getOrgAdmins()
+        .then((admins) => Promise.all(admins.map((admin) => sendToHome(admin.id, { type: 'broadcast', event }))))
+        .catch(() => {});
 }
 
 // One piece of work per home at a time — a second backup while one is running would read a folder
