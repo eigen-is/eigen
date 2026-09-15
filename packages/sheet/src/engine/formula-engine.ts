@@ -1,6 +1,6 @@
 import { DependencyIndex } from './dependency-index';
 import { ERROR_REF, Parser } from './parser';
-import { toNumber } from './parser/helper/number';
+import { dateToSerial } from './parser/helper/number';
 import type {
     Cell,
     CellInfo,
@@ -132,7 +132,7 @@ export class FormulaEngine {
                 // A Date result stores as its Excel serial — the same convention the
                 // parser's operators apply to Date operands. Stringifying it would
                 // turn a DATE/EOMONTH/NOW cell into text on the xlsx round trip.
-                const serial = toNumber(result)!;
+                const serial = dateToSerial(result);
                 return { value: serial, display: String(serial), type: 'date' };
             }
 

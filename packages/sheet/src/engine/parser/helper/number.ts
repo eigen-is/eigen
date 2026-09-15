@@ -16,10 +16,14 @@ const DAY_MS = 86_400_000;
 // callers can propagate #VALUE! errors via `Number.isNaN(result)` checks. Arrays
 // produce undefined because scalar operators coerce them to their `?? 0` fallback,
 // matching the runtime path formulajs already handles internally.
+export function dateToSerial(value: Date): number {
+    return (value.getTime() - EXCEL_EPOCH_MS) / DAY_MS;
+}
+
 export function toNumber(value: FormulaArg | Date): number | undefined {
     if (typeof value === 'number') return value;
     if (typeof value === 'boolean') return value ? 1 : 0;
-    if (value instanceof Date) return (value.getTime() - EXCEL_EPOCH_MS) / DAY_MS;
+    if (value instanceof Date) return dateToSerial(value);
     if (typeof value !== 'string') return undefined;
     // Empty/whitespace stays NaN (not Number's 0) so `""+1` propagates #VALUE!.
     return value.trim() === '' ? Number.NaN : Number(value);
