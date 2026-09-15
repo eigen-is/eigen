@@ -39,6 +39,6 @@ void _allCollectionsListed;
 
 export function normalizeSheetConfig(sheet: Sheet) {
     // `Sheet.config` is lib's wire shape; the editor extras ride along on the same object.
-    const cfg = (sheet.config ??= {}) as ExtendedSheetConfig;
+    const cfg: ExtendedSheetConfig = (sheet.config ??= {});
     for (const key of SHEET_CONFIG_COLLECTIONS) cfg[key] ??= {};
 }

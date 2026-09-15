@@ -18,7 +18,7 @@ import {
     zip,
 } from 'es-toolkit/compat';
 import { cfSplitRange } from '../../engine/conditional-format';
-import { genarate, update } from '../../engine/format';
+import { parseCellInput, update } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
 import type { Cell, CellMatrix, InlineStringSegment, SingleRange } from '../../engine/types';
 import { setRowHeight } from '../api';
@@ -316,8 +316,7 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
                     }
                 } else {
                     const cell: Cell = {};
-                    const mask = genarate(value);
-                    [cell.m, cell.ct, cell.v] = mask!;
+                    [cell.m, cell.ct, cell.v] = parseCellInput(value);
 
                     x[c + curC] = cell;
                 }
@@ -1197,7 +1196,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                                 cell.v = undefined;
                                 cell.m = '';
                             } else {
-                                const mask = genarate(txt);
+                                const mask = parseCellInput(txt);
                                 [cell.m, cell.ct, cell.v] = mask;
                             }
                             const styleString =

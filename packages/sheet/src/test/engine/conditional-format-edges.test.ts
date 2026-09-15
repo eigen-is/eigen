@@ -4,11 +4,12 @@ import type { Cell, CellMatrix, ConditionalFormatRule } from '../../engine/types
 
 // Pinning tests for evaluateConditionalFormat behaviors the base
 // conditional-format.test.ts does not cover — especially the loop/guard quirks
-// that a scan refactor could disturb: duplicateValue and formula visit every
-// coordinate with NO nil guard (missing cells become String(null) === 'null' /
-// get evaluated), top10/average aggregate per-range over ct.t==='n' cells but
-// apply via Number(cellValueAt(...)) coercion to ANY non-nil cell, and
-// dataBar/colorGradation aggregate min/max across ALL ranges of a rule.
+// that a scan refactor could disturb: the scan clamps every range to the
+// materialized matrix but still visits the holes inside it (formula rules are
+// evaluated there; duplicateValue skips them as blanks), top10/average aggregate
+// per-range over ct.t==='n' cells but apply via Number(cellValueAt(...)) coercion
+// to ANY non-nil cell, and dataBar/colorGradation aggregate min/max across ALL
+// ranges of a rule.
 
 function numCell(v: number): Cell {
     return { v, ct: { t: 'n', fa: 'General' } };
@@ -104,6 +105,46 @@ describe('engine/conditional-format edges — remaining comparison ops', () => {
         expect(two['0_2']).toBeUndefined();
     });
 
+    test('textContains ignores case in both directions (Excel parity)', () => {
+        // Excel's "Text that contains" is case-insensitive, and the xlsx importer maps
+        // containsText onto this rule.
+        const data: CellMatrix = [[textCell('abc'), textCell('ABC'), textCell('xbx'), textCell('zzz')]];
+        const apply = (needle: string) =>
+            evaluateConditionalFormat(
+                [
+                    {
+                        type: 'default',
+                        cellrange: [{ row: [0, 0], column: [0, 3] }],
+                        format: RED,
+                        conditionName: 'textContains',
+                        conditionRange: [],
+                        conditionValue: [needle],
+                    },
+                ],
+                data,
+            );
+        expect(apply('b')).toEqual({ '0_0': RED, '0_1': RED, '0_2': RED });
+        expect(apply('B')).toEqual({ '0_0': RED, '0_1': RED, '0_2': RED });
+    });
+
+    test('textContains still matches a digit against numeric and text cells', () => {
+        const data: CellMatrix = [[numCell(5), textCell('5'), textCell('six')]];
+        const styles = evaluateConditionalFormat(
+            [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 0], column: [0, 2] }],
+                    format: RED,
+                    conditionName: 'textContains',
+                    conditionRange: [],
+                    conditionValue: ['5'],
+                },
+            ],
+            data,
+        );
+        expect(styles).toEqual({ '0_0': RED, '0_1': RED });
+    });
+
     test('comparison rules skip missing rows in the apply range without throwing', () => {
         const data: CellMatrix = [[numCell(5)]];
         const styles = evaluateConditionalFormat(
@@ -124,7 +165,7 @@ describe('engine/conditional-format edges — remaining comparison ops', () => {
 });
 
 describe('engine/conditional-format edges — occurrenceDate', () => {
-    // genarate('2024/1/15')[2] === 45306 (date serial); slash form has no '-'
+    // parseCellInput('2024/1/15')[2] === 45306 (date serial); slash form has no '-'
     // so it takes the single-date path, 'a - b' takes the split path.
     test('single date matches only date-typed cells with that serial', () => {
         const data: CellMatrix = [[dateCell(45306), dateCell(45307), numCell(45306)]];
@@ -191,15 +232,15 @@ describe('engine/conditional-format edges — duplicateValue', () => {
         expect(styles).toEqual({ '0_0': RED, '0_2': RED });
     });
 
-    test("'0' visits missing cells too — two empty coordinates count as duplicates of 'null'", () => {
-        // duplicateValue has no nil guard: String(cellValueAt) of a missing cell
-        // is 'null', so two holes in the range duplicate each other.
-        const data: CellMatrix = [[numCell(5)]];
+    test("'0' never counts blank cells as duplicates of each other", () => {
+        // Excel's Duplicate Values rule ignores blanks, and a "highlight duplicates" rule
+        // is normally drawn over a whole column of mostly empty cells.
+        const data: CellMatrix = [[numCell(5), null, null, textCell(''), textCell('')]];
         const styles = evaluateConditionalFormat(
             [
                 {
                     type: 'default',
-                    cellrange: [{ row: [0, 0], column: [0, 2] }],
+                    cellrange: [{ row: [0, 0], column: [0, 4] }],
                     format: RED,
                     conditionName: 'duplicateValue',
                     conditionRange: [],
@@ -208,11 +249,11 @@ describe('engine/conditional-format edges — duplicateValue', () => {
             ],
             data,
         );
-        expect(styles).toEqual({ '0_1': RED, '0_2': RED });
+        expect(styles).toEqual({});
     });
 
-    test("'1' styles unique values, including a single missing coordinate", () => {
-        const data: CellMatrix = [[numCell(7), numCell(8), numCell(7)]];
+    test("'1' styles unique values but never a blank cell", () => {
+        const data: CellMatrix = [[numCell(7), numCell(8), numCell(7), null]];
         const styles = evaluateConditionalFormat(
             [
                 {
@@ -226,8 +267,8 @@ describe('engine/conditional-format edges — duplicateValue', () => {
             ],
             data,
         );
-        // 8 is unique; the lone hole at 0_3 is a unique 'null' entry.
-        expect(styles).toEqual({ '0_1': RED, '0_3': RED });
+        // 8 is the only unique value; the hole at 0_3 is not a value at all.
+        expect(styles).toEqual({ '0_1': RED });
     });
 
     test('the duplicate map is per-range: the same value once in each range stays unique', () => {
@@ -436,10 +477,99 @@ describe('engine/conditional-format edges — cross-range aggregation', () => {
     });
 });
 
+describe('engine/conditional-format edges — apply-range clamping', () => {
+    // Excel writes a whole-column rule as A1:A1048576 and the xlsx importer passes the
+    // sqref through; every branch has to stop at the last materialized row/column or a
+    // three-row sheet builds a million-entry map.
+    test('the column bound is the widest row, so a matrix whose first rows are holes still scans', () => {
+        const data = [undefined, undefined, [numCell(7), numCell(9)]] as unknown as CellMatrix;
+        const styles = evaluateConditionalFormat(
+            [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 10], column: [0, 5] }],
+                    format: RED,
+                    conditionName: 'greaterThan',
+                    conditionValue: [8],
+                },
+            ],
+            data,
+        );
+        expect(Object.keys(styles)).toEqual(['2_1']);
+    });
+
+    test('a whole-column duplicateValue rule only reaches the rows the matrix holds', () => {
+        const data: CellMatrix = [[numCell(7)], [numCell(8)], [numCell(7)]];
+        const styles = evaluateConditionalFormat(
+            [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 1048575], column: [0, 0] }],
+                    format: RED,
+                    conditionName: 'duplicateValue',
+                    conditionRange: [],
+                    conditionValue: ['0'],
+                },
+            ],
+            data,
+        );
+        expect(styles).toEqual({ '0_0': RED, '2_0': RED });
+    });
+
+    test('a whole-sheet comparison rule stops at the last row and column', () => {
+        const data: CellMatrix = [
+            [numCell(1), numCell(2)],
+            [numCell(3), null],
+        ];
+        const styles = evaluateConditionalFormat(
+            [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 1048575], column: [0, 16383] }],
+                    format: RED,
+                    conditionName: 'greaterThan',
+                    conditionRange: [],
+                    conditionValue: ['0'],
+                },
+            ],
+            data,
+        );
+        expect(styles).toEqual({ '0_0': RED, '0_1': RED, '1_0': RED });
+    });
+
+    test('a whole-column formula rule is evaluated per materialized row only', () => {
+        const data: CellMatrix = [[numCell(1)], [numCell(2)], [numCell(3)]];
+        const seen: string[] = [];
+        evaluateConditionalFormat(
+            [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 1048575], column: [0, 0] }],
+                    format: RED,
+                    conditionName: 'formula',
+                    conditionRange: [],
+                    conditionValue: ['=A1>0'],
+                },
+            ],
+            data,
+            {
+                evaluateFormula: (_f, _sr, _sc, r, c) => {
+                    seen.push(`${r}_${c}`);
+                    return false;
+                },
+            },
+        );
+        expect(seen).toEqual(['0_0', '1_0', '2_0']);
+    });
+});
+
 describe('engine/conditional-format edges — formula scan', () => {
     test('evaluator runs per coordinate with a per-range anchor, missing cells included, and "=" is prefixed', () => {
-        // data[0][1] does not exist — the formula branch has no nil guard.
-        const data: CellMatrix = [[numCell(1)], [numCell(2)]];
+        // data[0][1] is a hole inside the matrix — the formula branch has no nil guard.
+        const data: CellMatrix = [
+            [numCell(1), null],
+            [numCell(2), null],
+        ];
         const calls: [string, number, number, number, number][] = [];
         const styles = evaluateConditionalFormat(
             [

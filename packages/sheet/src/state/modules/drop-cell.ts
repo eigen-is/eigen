@@ -1,7 +1,7 @@
 import dayjs from 'dayjs';
 import { cloneDeep, pick } from 'es-toolkit/compat';
 import { cfSplitRange } from '../../engine/conditional-format';
-import { genarate, update } from '../../engine/format';
+import { parseCellInput, update } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
 import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
@@ -597,8 +597,7 @@ function fillDays(data: (Cell | null | undefined)[], len: number, step: number) 
                 .add(step * i, 'days')
                 .format('YYYY-MM-DD');
 
-            // TODO: is this genarate() call handled correctly?
-            d.v = genarate(date)[2];
+            d.v = parseCellInput(date)[2];
             if (d.ct != null && d.ct.fa != null) {
                 d.m = update(d.ct.fa, d.v);
             }
@@ -621,7 +620,7 @@ function fillMonths(data: (Cell | null | undefined)[], len: number, step: number
                 .add(step * i, 'months')
                 .format('YYYY-MM-DD');
 
-            d.v = genarate(date)[2];
+            d.v = parseCellInput(date)[2];
             if (d.ct != null && d.ct.fa != null) {
                 d.m = update(d.ct.fa, d.v);
             }
@@ -644,7 +643,7 @@ function fillYears(data: (Cell | null | undefined)[], len: number, step: number)
                 .add(step * i, 'years')
                 .format('YYYY-MM-DD');
 
-            d.v = genarate(date)[2];
+            d.v = parseCellInput(date)[2];
             if (d.ct != null && d.ct.fa != null) {
                 d.m = update(d.ct.fa, d.v);
             }
@@ -878,7 +877,7 @@ function fillDateSeries(
                 ? rollToWeekday(d.m, step!, 'days')
                 : dayjs(d.m).add(step!, 'days').format('YYYY-MM-DD');
             d.m = date;
-            d.v = genarate(date)[2];
+            d.v = parseCellInput(date)[2];
             applyData.push(d);
         }
     }
@@ -1211,7 +1210,7 @@ function getDataByType(
                     if (d != null && last != null) {
                         const date = rollToWeekday(last, step * i, 'months');
                         d.m = date;
-                        d.v = genarate(date)[2];
+                        d.v = parseCellInput(date)[2];
                         applyData.push(d);
                     }
                 }
@@ -1252,7 +1251,7 @@ function getDataByType(
                     if (d != null) {
                         const date = rollToWeekday(last, step * i, 'months');
                         d.m = date;
-                        d.v = genarate(date)[2];
+                        d.v = parseCellInput(date)[2];
                         applyData.push(d);
                     }
                 }
@@ -1989,12 +1988,12 @@ export function updateDropCell(ctx: Context) {
                             cell.m =
                                 cell.ct?.fa != null && cell.ct.fa !== 'General'
                                     ? update(cell.ct.fa, rounded)
-                                    : genarate(rounded)[0].toString();
+                                    : parseCellInput(rounded)[0].toString();
                         }
 
                         cell.ct = cell.ct || { fa: 'General', t: 'n' };
                     } else {
-                        const mask = genarate(cell.v);
+                        const mask = parseCellInput(cell.v);
                         cell.m = mask[0].toString();
                         [, cell.ct] = mask;
                     }

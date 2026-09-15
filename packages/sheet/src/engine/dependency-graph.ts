@@ -1,8 +1,8 @@
 import type { FormulaCellInfo, FormulaCellInfoMap } from './types';
 
 // Topological sort: returns formula cells in evaluation order (dependencies before dependents).
-// Uses a stack-based DFS with two-color marking: gray (in-progress) → black (done).
-// Cells that have already been added to the run list are tracked in existsKeys.
+// The DFS pushes a node before its parents, so the run list comes out dependents-first and is
+// reversed at the end.
 export function getCalculationOrder(
     updateValueArray: FormulaCellInfo[],
     formulaCellInfoMap: FormulaCellInfoMap,
@@ -38,8 +38,8 @@ export function getCalculationOrder(
             formulaRunList.push(formulaObject);
             existsKeys[formulaObject.key] = 1;
         } else {
-            // Mark gray: push self back, then push parents so they resolve first.
-            // In-place pushes, not concat — rebuilding the stack per visit is O(V·E)
+            // Push self back, then the parents so they resolve first. In-place
+            // pushes, not concat — rebuilding the stack per visit is O(V·E)
             // and cost 17s of a 21s import on a 125k-formula workbook.
             formulaObject.color = 'b';
             stack.push(formulaObject);

@@ -206,6 +206,15 @@ export type DefaultConditionalFormatRule = CFRuleBase & {
 
 export type ConditionalFormatRule = DataBarRule | ColorGradationRule | IconsRule | DefaultConditionalFormatRule;
 
+// Dependency-graph node for a formula cell. The engine stamps `r`/`c`/`id`; the editor's
+// ordering layer adds `index`. Never persisted (snapshot-codec regenerates the chain on decode).
+export type CalcChainEntry = {
+    r: number;
+    c: number;
+    id: string;
+    index?: number;
+};
+
 export type Sheet = {
     name: string;
     id?: string;
@@ -240,3 +249,6 @@ export type Sheet = {
     // ∈ webpage | sheet | cellrange (state/modules/hyperlink.ts).
     hyperlink?: Record<string, { linkType: string; linkAddress: string }>;
 };
+
+// The editor-runtime Sheet: the wire shape plus the calc chain the reader gate keys off.
+export type SheetWithCalcChain = Sheet & { calcChain?: CalcChainEntry[] };

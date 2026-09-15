@@ -5,6 +5,7 @@ import { FormulaEngine, isFormula } from '../../engine/formula-engine';
 import { iscelldata } from '../../engine/formula-utils';
 import type {
     CalcChainEntry,
+    Cell,
     CellMatrix,
     CellResolver,
     FormulaCellInfo,
@@ -89,12 +90,12 @@ export function createContextResolver(source: Context): CellResolver {
 // FormulaCache is defined as class to avoid being frozen by immer
 export class FormulaCache {
     // Shared state — delegated to engine so both FE and BE use the same cache
-    get execFunctionGlobalData(): Record<string, unknown> {
+    get execFunctionGlobalData(): Record<string, Cell> {
         return this.engine.state.execFunctionGlobalData;
     }
 
-    set execFunctionGlobalData(v: Record<string, unknown> | null | undefined) {
-        this.engine.state.execFunctionGlobalData = (v as Record<string, unknown>) ?? {};
+    set execFunctionGlobalData(v: Record<string, Cell> | null | undefined) {
+        this.engine.state.execFunctionGlobalData = v ?? {};
     }
 
     get formulaCellInfoMap(): FormulaCellInfoMap | null {
@@ -331,7 +332,7 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
         c: formulaCell.c,
         id: formulaCell.id,
         parents: {},
-        chidren: {},
+        children: {},
         color: 'w',
     };
 

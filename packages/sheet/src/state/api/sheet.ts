@@ -1,6 +1,6 @@
 import { cloneDeep, isUndefined } from 'es-toolkit/compat';
 import { v4 as uuidv4 } from 'uuid';
-import { normalizeSheetConfig } from '../../engine/replay-ops';
+import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { CellMatrix } from '../../engine/types';
 import { api, createContextResolver, execfunction, setCellValue as setCellValueInternal } from '..';
 import type { Context } from '../context';

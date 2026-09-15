@@ -1,4 +1,4 @@
-// Server-side full recalc of a workbook's formula cells (Option R).
+// Server-side full recalc of a workbook's formula cells.
 //
 // Turns a persisted `Sheet[]` (snapshot + replayed ops) into a `Sheet[]` whose
 // formula cells carry engine-computed `v` and `m`. The single target population
@@ -12,23 +12,30 @@
 // formula-cache.ts + formula-exec.ts). The engine has zero state imports (hard
 // boundary), so the logic is duplicated here over a plain `Sheet[]` instead of
 // a `Context`. The INDIRECT/OFFSET/INDEX special-casing is preserved — a
-// from-scratch extractor would mis-order those (audit Risk 8).
+// from-scratch extractor would mis-order those.
 
 import type { Cell, CellMatrix, Sheet } from '@workspace/lib/sheets';
 import { createArrayResolver } from './cell-resolver';
 import { celldataToData, dataToCelldata } from './celldata';
-import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from './defaults';
+import { gridSize } from './defaults';
 import { getCalculationOrder } from './dependency-graph';
 import { DependencyIndex } from './dependency-index';
 import { booleanDisplay, update } from './format';
 import { FormulaEngine, isFormula } from './formula-engine';
 import { calPostfixExpression, iscelldata, operatorjson, operatorPriority } from './formula-utils';
-import type { CalcChainEntry, EvaluationResult, FormulaCellInfoMap, FormulaDependency } from './types';
+import { SHEET_NAME_PREFIX } from './parser/helper/cell';
+import type {
+    CalcChainEntry,
+    EvaluationResult,
+    FormulaCellInfoMap,
+    FormulaDependency,
+    SheetWithCalcChain,
+} from './types';
 
 // A formula that reads the wall clock / RNG. Frozen during server recalc so
 // passive exports/search stay deterministic (neither Excel nor Sheets recompute
-// a closed-file read — audit Q5/DP7b). Detected on the formula text with a
-// word boundary + call paren: `MYRAND(` misses (no `\b` between the two word
+// a closed-file read). Detected on the formula text with a word boundary +
+// call paren: `MYRAND(` misses (no `\b` between the two word
 // chars `Y` and `R`), while a literal `"NOW()"` string arg still MATCHES — `\b`
 // fires at the quote→`N` transition — so such a formula is frozen too. That
 // over-match is harmless: freezing is the safe direction, keeping the last
@@ -74,18 +81,10 @@ type GraphCtx = {
     cellTextToIndexList: Record<string, FormulaDependency>;
 };
 
-function dataById(g: GraphCtx, id: string): CellMatrix | null {
-    const idx = g.indexById.get(id);
-    return idx == null ? null : g.sheets[idx].data;
-}
-
 // ── Ported dependency extraction (state/modules/formula-exec.ts) ───────────────
 
-const simpleSheetName = '[A-Za-z0-9_À-ʯ]+';
-const quotedSheetName = "'(?:(?!').|'')*'";
-const sheetNameRegexp = `(${simpleSheetName}|${quotedSheetName})!`;
-const rowColumnRegexp = `[$]?[A-Za-z]+[$]?[0-9]+`;
-const rowColumnWithSheetName = `(?:${sheetNameRegexp})?(${rowColumnRegexp})`;
+const rowColumnRegexp = '[$]?[A-Za-z]+[$]?[0-9]+';
+const rowColumnWithSheetName = `(?:${SHEET_NAME_PREFIX})?(${rowColumnRegexp})`;
 const LABEL_EXTRACT_REGEXP = new RegExp(`^${rowColumnWithSheetName}(?:[:]${rowColumnWithSheetName})?$`);
 
 function addToCellIndexList(g: GraphCtx, txt: string, infoObj: FormulaDependency | null): void {
@@ -105,11 +104,10 @@ function addToCellIndexList(g: GraphCtx, txt: string, infoObj: FormulaDependency
 // passes formulaCell.id in every call), so the ctx.currentSheetId fallback is
 // dropped. `data` is that sheet's matrix, consulted for same-sheet whole-range
 // bounds.
-function getcellrange(g: GraphCtx, txt: string, formulaId: string, data: CellMatrix | null): FormulaDependency | null {
+function getcellrange(g: GraphCtx, txt: string, formulaId: string, data: CellMatrix): FormulaDependency | null {
     if (txt == null || txt.length === 0) {
         return null;
     }
-    const flowdata = data ?? dataById(g, formulaId);
 
     let rangetxt = '';
     let sheetId: string | undefined;
@@ -147,7 +145,7 @@ function getcellrange(g: GraphCtx, txt: string, formulaId: string, data: CellMat
             return null;
         }
         sheetId = g.sheets[index].id;
-        sheetdata = flowdata;
+        sheetdata = data;
         rangetxt = txt;
     }
 
@@ -570,14 +568,14 @@ function extractDependencies(
     return formulaDependency;
 }
 
-// ── Write-back (DP6a) ──────────────────────────────────────────────────────────
+// ── Write-back ─────────────────────────────────────────────────────────────────
 
 // Derive `m` (display) + `v` from an evaluation result, mirroring the client's
 // setCellValue where it is cheap to: error sentinels become `v = m = '#…'` with
 // `ct.t = 'e'`; booleans render TRUE/FALSE; a cell carrying a usable format mask
 // gets `m = update(ct.fa, v)`; everything else falls back to `String(v)`. The
-// mask-less numeric/date inference the client does via `genarate` is accepted
-// as small drift (audit DP6a) rather than re-coupling the format decision tree.
+// mask-less numeric/date inference the client does via `parseCellInput` is accepted
+// as small drift rather than re-coupling the format decision tree.
 function writeCellValue(cell: Cell, result: EvaluationResult): void {
     if (result.type === 'error') {
         const sentinel = String(result.value);
@@ -590,8 +588,6 @@ function writeCellValue(cell: Cell, result: EvaluationResult): void {
     cell.v = result.value;
 
     if (result.type === 'boolean') {
-        // `result.type` does not narrow `value`; the previous inline ternary read it
-        // for truth the same way.
         cell.m = booleanDisplay(Boolean(result.value));
         return;
     }
@@ -625,10 +621,13 @@ function hasNonErrorCachedValue(cell: Cell): boolean {
 // A doc needs server recalc when a sheet carries formula cells but no populated
 // calcChain — true exactly for imported-never-opened / crash-diverged docs.
 // Editor-flushed snapshots (and docs recalc'd at import) carry calcChain, so the
-// gate stays off and the read path pays nothing (audit DP1b/DP4b).
-export function sheetsNeedRecalc(sheets: Sheet[]): boolean {
+// gate stays off and the read path pays nothing.
+export function sheetsNeedRecalc(sheets: SheetWithCalcChain[]): boolean {
     for (const sheet of sheets) {
-        const calcChain = (sheet as SheetWithCalcChain).calcChain;
+        // recalcSheets skips id-less sheets, so arming on one re-fires the pass on
+        // every read for nothing.
+        if (!sheet.id) continue;
+        const { calcChain } = sheet;
         if (Array.isArray(calcChain) && calcChain.length > 0) {
             continue;
         }
@@ -659,22 +658,17 @@ function sheetHasFormula(sheet: Sheet): boolean {
     return false;
 }
 
-// calcChain is an editor-only excess field the wire Sheet type omits; recalc
-// writes it so the read gate recognizes a computed doc (audit DP4).
-type SheetWithCalcChain = Sheet & { calcChain?: CalcChainEntry[] };
-
 // ── Orchestration ──────────────────────────────────────────────────────────────
 
 // Materialize a sheet's dense `data` from `celldata` when missing, mirroring the
 // editor's initSheetData / replay's withMaterializedData (a resolver over null
-// `data` recomputes everything to blanks — audit Risk 2). Rows are freshly
+// `data` recomputes everything to blanks). Rows are freshly
 // sliced so writeback never mutates a frozen (immer) input matrix.
 function ensureWorkingData(sheet: Sheet): CellMatrix {
     if (sheet.data) {
         return sheet.data.map((row) => (row ? row.slice() : row));
     }
-    const row = sheet.row != null && sheet.row > 0 ? sheet.row : DEFAULT_SHEET_ROW_COUNT;
-    const column = sheet.column != null && sheet.column > 0 ? sheet.column : DEFAULT_SHEET_COLUMN_COUNT;
+    const { row, column } = gridSize(sheet);
     return celldataToData(sheet.celldata ?? [], row, column);
 }
 
@@ -690,7 +684,7 @@ export function recalcSheets(sheets: Sheet[]): Sheet[] {
 
     const g: GraphCtx = { sheets: working, indexById, cellTextToIndexList: {} };
 
-    // 2. Discover formula cells by scanning data (never trust calcChain — DP4b)
+    // 2. Discover formula cells by scanning data (never trust calcChain)
     //    and build each cell's dependency ranges via the ported graph builder.
     const infoMap: FormulaCellInfoMap = {};
     const depIndex = new DependencyIndex();
@@ -722,7 +716,7 @@ export function recalcSheets(sheets: Sheet[]): Sheet[] {
                     c,
                     id: w.id,
                     parents: {},
-                    chidren: {},
+                    children: {},
                     color: 'w',
                 };
                 depIndex.set(key, deps);
@@ -762,7 +756,7 @@ export function recalcSheets(sheets: Sheet[]): Sheet[] {
     for (const info of order) {
         if (isVolatileFormula(info.calc_funcStr)) continue;
         try {
-            const result = engine.evaluate(info.calc_funcStr, info.id, info.r, info.c, resolver);
+            const result = engine.evaluate(info.calc_funcStr, info.id, resolver);
             const idx = indexById.get(info.id);
             if (idx == null) continue;
             const rowArr = working[idx].data[info.r];

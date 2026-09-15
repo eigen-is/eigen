@@ -34,10 +34,6 @@ export class RowColError extends Error {
     }
 }
 
-// lib's `SheetConfig` types only the fields the BE serializes. The engine's
-// row/col shifter also touches editor-runtime fields that live alongside but
-// aren't lib-typed — see `EditorSheetConfigExtras` in `./types`.
-
 // Generic over S so the state-side state.Sheet[] passes through with its extras
 // (filter / frozen / dataVerification / ...) typed end-to-end. The engine only
 // reads lib.Sheet-typed fields; shallow copies preserve the wider input shape.
@@ -212,33 +208,68 @@ export function shiftCellKeyedForDelete<T>(
     return shifted;
 }
 
+// An op on one sheet only moves the refs that resolve to that sheet: unqualified ones in
+// formulas on it, and `Sheet!`-qualified ones anywhere. A CF `formula` rule reads its cells
+// through its own text, so it shifts by the same rules as a cell formula on its sheet.
 function shiftFormulasAcrossSheets<S extends Sheet>(
     sheets: S[],
+    targetIndex: number,
     type: 'row' | 'column',
     direction: 'lefttop' | 'rightbottom' | null,
     index: number,
     count: number,
     op: 'add' | 'del',
 ): S[] {
-    return sheets.map((sheet) => {
-        if (!sheet.data) return sheet;
-        let newData: typeof sheet.data | null = null;
-        for (let r = 0; r < sheet.data.length; r += 1) {
-            const row = sheet.data[r];
-            if (!row) continue;
-            for (let c = 0; c < row.length; c += 1) {
-                const cell = row[c];
-                if (!cell?.f) continue;
-                const txt = cell.f.startsWith('=') ? cell.f.slice(1) : cell.f;
-                const shifted = functionStrChange(txt, op, type === 'row' ? 'row' : 'col', direction, index, count);
-                const newF = `=${shifted}`;
-                if (newF === cell.f) continue;
-                if (!newData) newData = [...sheet.data];
-                if (newData[r] === row) newData[r] = [...row];
-                newData[r][c] = { ...cell, f: newF };
+    const targetName = sheets[targetIndex].name;
+    return sheets.map((sheet, sheetIndex) => {
+        const shift = (txt: string) =>
+            functionStrChange(
+                txt,
+                op,
+                type === 'row' ? 'row' : 'col',
+                direction,
+                index,
+                count,
+                targetName,
+                sheetIndex === targetIndex,
+            );
+
+        let newSheet = sheet;
+
+        if (sheet.data) {
+            let newData: typeof sheet.data | null = null;
+            for (let r = 0; r < sheet.data.length; r += 1) {
+                const row = sheet.data[r];
+                if (!row) continue;
+                for (let c = 0; c < row.length; c += 1) {
+                    const cell = row[c];
+                    if (!cell?.f) continue;
+                    const newF = `=${shift(cell.f.startsWith('=') ? cell.f.slice(1) : cell.f)}`;
+                    if (newF === cell.f) continue;
+                    if (!newData) newData = [...sheet.data];
+                    if (newData[r] === row) newData[r] = [...row];
+                    newData[r][c] = { ...cell, f: newF };
+                }
             }
+            if (newData) newSheet = { ...newSheet, data: newData };
         }
-        return newData ? { ...sheet, data: newData } : sheet;
+
+        const rules = sheet.conditionalFormatRules;
+        if (rules) {
+            let newRules: typeof rules | null = null;
+            for (let i = 0; i < rules.length; i += 1) {
+                const cf = rules[i];
+                if (cf.type !== 'default' || cf.conditionName !== 'formula') continue;
+                const txt = String(cf.conditionValue[0]);
+                const shifted = txt.startsWith('=') ? `=${shift(txt.slice(1))}` : shift(txt);
+                if (shifted === txt) continue;
+                if (!newRules) newRules = [...rules];
+                newRules[i] = { ...cf, conditionValue: [shifted] };
+            }
+            if (newRules) newSheet = { ...newSheet, conditionalFormatRules: newRules };
+        }
+
+        return newSheet;
     });
 }
 
@@ -272,7 +303,7 @@ function shiftKeyedMapForDelete(map: Record<string, number>, start: number, end:
 
 function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: InsertRowColOp): S[] {
     const target = sheets[targetIndex];
-    const cfg = (target.config ?? {}) as ExtendedSheetConfig;
+    const cfg: ExtendedSheetConfig = target.config ?? {};
     const data = target.data;
     if (!data) return sheets;
 
@@ -284,7 +315,7 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
 
     const { count } = op;
     const newTarget = { ...target };
-    const newCfg = { ...(target.config ?? {}) } as ExtendedSheetConfig;
+    const newCfg: ExtendedSheetConfig = { ...target.config };
     const newData = op.type === 'row' ? [...data] : data.map((row) => [...row]);
     newTarget.data = newData;
     const insertAt = op.direction === 'lefttop' ? op.index : op.index + 1;
@@ -371,9 +402,15 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
         });
     }
 
-    let result: S[] = [...sheets.slice(0, targetIndex), newTarget, ...sheets.slice(targetIndex + 1)];
-    result = shiftFormulasAcrossSheets(result, op.type, op.direction, op.index, count, 'add');
-    return result;
+    return shiftFormulasAcrossSheets(
+        [...sheets.slice(0, targetIndex), newTarget, ...sheets.slice(targetIndex + 1)],
+        targetIndex,
+        op.type,
+        op.direction,
+        op.index,
+        count,
+        'add',
+    );
 }
 
 function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: DeleteRowColOp): S[] {
@@ -381,7 +418,7 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
     const data = target.data;
     if (!data) return sheets;
 
-    const cfg = (target.config ?? {}) as ExtendedSheetConfig;
+    const cfg: ExtendedSheetConfig = target.config ?? {};
 
     if (op.type === 'row' && cfg.rowReadOnly) {
         for (let i = op.start; i <= op.end; i += 1) {
@@ -395,7 +432,7 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
     }
 
     const newTarget = { ...target };
-    const newCfg = { ...(target.config ?? {}) } as ExtendedSheetConfig;
+    const newCfg: ExtendedSheetConfig = { ...target.config };
     const newData = op.type === 'row' ? [...data] : data.map((row) => [...row]);
     newTarget.data = newData;
     const removeCount = op.end - op.start + 1;
@@ -475,7 +512,13 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
         newTarget.conditionalFormatRules = newCFarr;
     }
 
-    let result: S[] = [...sheets.slice(0, targetIndex), newTarget, ...sheets.slice(targetIndex + 1)];
-    result = shiftFormulasAcrossSheets(result, op.type, null, op.start, removeCount, 'del');
-    return result;
+    return shiftFormulasAcrossSheets(
+        [...sheets.slice(0, targetIndex), newTarget, ...sheets.slice(targetIndex + 1)],
+        targetIndex,
+        op.type,
+        null,
+        op.start,
+        removeCount,
+        'del',
+    );
 }

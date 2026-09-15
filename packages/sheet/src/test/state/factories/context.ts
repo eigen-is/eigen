@@ -1,3 +1,4 @@
+import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../../../engine/defaults';
 import { type Context, FormulaCache, type SheetConfig } from '../../../state/index';
 
 export function selectionFactory(row: number[], column: number[], row_focus: number, column_focus: number) {
@@ -59,6 +60,8 @@ export function contextFactory({
         scrollTop: 0,
         shiftKeyDown: false,
         groupValuesRefreshData: [],
+        defaultrowNum: DEFAULT_SHEET_ROW_COUNT,
+        defaultcolumnNum: DEFAULT_SHEET_COLUMN_COUNT,
         formulaCache: new FormulaCache(),
         defaultCell: {},
         hooks: {},

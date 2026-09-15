@@ -7,6 +7,7 @@ import type { CellCoordinate } from './parser/helper/cell';
 // not vice versa). Re-exported here so engine code keeps importing from `./types`
 // without churning every file.
 export type {
+    CalcChainEntry,
     Cell,
     CellMatrix,
     CellStyle,
@@ -20,11 +21,12 @@ export type {
     IconsRule,
     InlineStringSegment,
     Range,
+    SheetWithCalcChain,
     SingleRange,
 } from '@workspace/lib/sheets';
 export type { CellCoordinate };
 
-import type { Cell, CellMatrix } from '@workspace/lib/sheets';
+import type { CalcChainEntry, Cell, CellMatrix } from '@workspace/lib/sheets';
 
 // Editor-only SheetConfig overlay: structural per-row/col flags the state layer
 // reads/writes and the engine's row/col shifter shifts, but the BE/wire-shape
@@ -67,7 +69,7 @@ export type FormulaDependency = {
 
 // Dependency-graph adjacency: maps the `${r}_${c}_${index}` key of each
 // adjacent formula cell to a refcount. Used as both the `parents` and
-// `chidren` field type on FormulaCellInfo (engine) and FormulaCell (state).
+// `children` field type on FormulaCellInfo (engine) and FormulaCell (state).
 export type AncestorFormulaCell = {
     [rxcxix: string]: number;
 };
@@ -80,8 +82,8 @@ export type FormulaCellInfo = {
     c: number;
     id: string;
     parents: AncestorFormulaCell;
-    chidren: AncestorFormulaCell;
-    color: string;
+    children: AncestorFormulaCell;
+    color: 'w' | 'b';
 };
 
 export type FormulaCellInfoMap = {
@@ -102,16 +104,6 @@ export type SheetInfo = {
     dynamicArrayCompute: unknown[];
 };
 
-// Calc-chain entry: dependency-graph node for a formula cell. Engine producers
-// always stamp `r`/`c`/`id`; state's UI ordering layer adds an optional
-// `index` used by formula-cache.execFunctionExist consumers.
-export type CalcChainEntry = {
-    r: number;
-    c: number;
-    id: string;
-    index?: number;
-};
-
 export type EvaluationResult = {
     value: Cell['v'];
     display: string;
@@ -119,7 +111,7 @@ export type EvaluationResult = {
 };
 
 export type FormulaEngineState = {
-    execFunctionGlobalData: Record<string, unknown>;
+    execFunctionGlobalData: Record<string, Cell>;
     formulaCellInfoMap: FormulaCellInfoMap | null;
     // Reverse lookup cell → formulas reading it; mirrors formulaCellInfoMap
     // and must reset with it.
@@ -146,10 +138,6 @@ export type FormulaArg = FormulaValue | FormulaValue[] | FormulaValue[][] | Erro
 // keep reducing (an untaken IF branch may discard the Error). The top-level
 // `parse()` unwraps any Error result into a `{error}` field for callers.
 export type FormulaOutput = FormulaValue | FormulaValue[] | FormulaValue[][] | Error;
-
-// User-registered formula function. The parser passes all evaluated arguments
-// as a single `params` array (not spread), matching the parser convention.
-export type FormulaFunction = (params: FormulaArg[]) => FormulaOutput;
 
 // Acknowledgment callback the parser passes to `callCellValue` / `callRangeValue` /
 // `callFunction` / `callVariable` listeners so they can supply the resolved value.

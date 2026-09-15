@@ -1,5 +1,5 @@
 import { cloneDeep, find, flatten, reduce, size } from 'es-toolkit/compat';
-import { genarate, update } from '../../engine/format';
+import { parseCellInput, update } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
 import type { FilterCondition, FilterConditionName, Selection } from '../types';
@@ -351,7 +351,7 @@ function compareFilterValues(cellValue: string, input: string): number {
 
 // Condition input → canonical YYYY-MM-DD, or null when it doesn't parse as a date.
 function toIsoDay(input: string): string | null {
-    const [, ct, v] = genarate(input);
+    const [, ct, v] = parseCellInput(input);
     if (ct.t !== 'd') return null;
     return update('YYYY-MM-DD', v);
 }

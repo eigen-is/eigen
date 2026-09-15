@@ -8,7 +8,7 @@
 import { describe, expect, test } from 'bun:test';
 import { applyPatches, enablePatches, produceWithPatches } from 'immer';
 import { replaySheetsOps } from '../../../engine';
-import { normalizeSheetConfig } from '../../../engine/replay-ops';
+import { normalizeSheetConfig } from '../../../engine/sheet-config';
 import type { Context } from '../../../state/context';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import type { Op, Sheet } from '../../../state/types';

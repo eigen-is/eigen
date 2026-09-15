@@ -2,15 +2,13 @@ import { TinyEmitter } from 'tiny-emitter';
 import type {
     CellInfo,
     FormulaArg,
-    FormulaFunction,
-    FormulaOutput,
     FormulaValue,
     ParseResult,
     ParserEventListener,
     ParserOptions,
     RangeCell,
 } from '../types';
-import errorParser, { ERROR, ERROR_NAME, ERROR_VALUE, isValidStrict as isErrorValid } from './error';
+import errorParser, { ERROR, ERROR_NAME, ERROR_VALUE, valueIsError } from './error';
 import evaluateByOperator from './evaluate-by-operator/evaluate-by-operator';
 import { Parser as GrammarParser } from './grammar-parser/grammar-parser';
 import { extractLabel, toLabel } from './helper/cell';
@@ -21,8 +19,7 @@ type GrammarParserInstance = { parse: (expression: string) => unknown; yy: Recor
 
 class Parser {
     private parser: GrammarParserInstance;
-    private variables: Record<string, unknown>;
-    private functions: Record<string, FormulaFunction>;
+    private variables: Record<string, FormulaArg>;
     private options: ParserOptions;
     private emitter: TinyEmitter;
 
@@ -36,12 +33,11 @@ class Parser {
             throwError: (errorName: string) => this._throwError(errorName),
             callVariable: (variable: string) => this._callVariable(variable),
             evaluateByOperator,
-            callFunction: (name: string, params: FormulaArg[]) => this._callFunction(name, params),
+            callFunction: evaluateByOperator,
             cellValue: (value: string) => this._callCellValue(value),
             rangeValue: (start: string, end: string) => this._callRangeValue(start, end),
         };
         this.variables = Object.create(null);
-        this.functions = Object.create(null);
         this.options = Object.create(null);
 
         this.setVariable('TRUE', true).setVariable('FALSE', false).setVariable('NULL', null);
@@ -49,10 +45,6 @@ class Parser {
 
     on(event: string, listener: ParserEventListener): void {
         this.emitter.on(event, listener);
-    }
-
-    off(event: string, listener: ParserEventListener): void {
-        this.emitter.off(event, listener);
     }
 
     parse(expression: string, options: ParserOptions = {}): ParseResult {
@@ -68,11 +60,11 @@ class Parser {
             }
         } catch (ex) {
             const message = ex instanceof Error ? errorParser(ex.message) : null;
-            error = message ?? errorParser(ERROR)!;
+            error = message ?? errorParser(ERROR);
         }
 
         if (result instanceof Error) {
-            error = errorParser(result.message) || errorParser(ERROR);
+            error = errorParser(result.message) ?? errorParser(ERROR);
             result = null;
         }
 
@@ -82,81 +74,51 @@ class Parser {
     // Folded like function names (evaluate-by-operator) and cell labels (helper/cell):
     // Excel writes bare TRUE/FALSE/NULL lower-cased into xlsx formula text, and both Excel
     // and Sheets resolve them case-insensitively.
-    setVariable(name: string, value: unknown): Parser {
+    setVariable(name: string, value: FormulaArg): Parser {
         this.variables[name.toUpperCase()] = value;
         return this;
     }
 
-    getVariable(name: string): unknown {
+    // `FormulaArg` because variables feed directly into the grammar's arithmetic/comparison
+    // pipelines, which expect scalars or arrays (e.g. `setVariable('range', [1, 2, 3])` for
+    // CORREL-style formulas).
+    getVariable(name: string): FormulaArg {
         return this.variables[name.toUpperCase()];
-    }
-
-    setFunction(name: string, fn: FormulaFunction): Parser {
-        this.functions[name] = fn;
-        return this;
-    }
-
-    getFunction(name: string): FormulaFunction | undefined {
-        return this.functions[name];
     }
 
     private emit(event: string, ...args: unknown[]): void {
         this.emitter.emit(event, ...args);
     }
 
-    // Returns `FormulaArg` because variables registered via `setVariable` feed directly
-    // into the grammar's arithmetic/comparison pipelines, which expect scalars or arrays
-    // (e.g. `setVariable('range', [1, 2, 3])` for CORREL-style formulas).
     private _callVariable(name: string): FormulaArg {
-        let value = this.getVariable(name);
-
-        this.emit('callVariable', name, (newValue: unknown) => {
-            if (newValue !== undefined) {
-                value = newValue;
-            }
-        });
-
+        const value = this.getVariable(name);
         if (value === undefined) {
             throw Error(ERROR_NAME);
         }
 
-        return value as FormulaArg;
+        return value;
     }
 
-    private _callFunction(name: string, params: FormulaArg[] = []): FormulaOutput {
-        const fn = this.getFunction(name);
-        let value: FormulaOutput | undefined;
-
-        if (fn) {
-            value = fn(params);
+    // Retrieve value by its label (`B3`, `B$3`, `$B$3`).
+    private _callCellValue(label: string): FormulaArg {
+        const parsed = extractLabel(label);
+        if (!parsed) {
+            throw Error(ERROR);
         }
 
-        this.emit('callFunction', name, params, (newValue: FormulaOutput) => {
-            if (newValue !== undefined) {
-                value = newValue;
-            }
-        });
-
-        return value === undefined ? evaluateByOperator(name, params) : value;
-    }
-
-    // Retrieve value by its label (`B3`, `B$3`, `B$3`, `$B$3`). Returns `FormulaArg`
-    // because a user-defined variable (set via `setVariable`) may hold an array for
-    // array-aware formulas like CORREL / LINEST.
-    private _callCellValue(label: string): FormulaArg {
-        const [row, column, sheetName] = extractLabel(label);
-        if (column?.index === -1) {
-            if (row?.isAbsolute || column?.isAbsolute) {
+        const [row, column, sheetName] = parsed;
+        if (column.index === -1) {
+            if (row.isAbsolute || column.isAbsolute) {
                 throw Error(ERROR_NAME);
             }
-            return (row?.index ?? 0) + 1;
+            return row.index + 1;
         }
-        if (row?.index === -1) {
+        if (row.index === -1) {
             return this._callVariable(label);
         }
 
         let value: FormulaValue;
-        const cell: CellInfo = { label: toLabel(row!, column!), row: row!, column: column!, sheetName };
+        const cell: CellInfo = { label: toLabel(row, column), row, column, sheetName };
         this.emit('callCellValue', cell, this.options, (_value: FormulaValue) => {
             value = _value;
         });
@@ -166,15 +128,21 @@ class Parser {
 
     // Retrieve values by range label (`B3:A1`, `B$3:A1`, `B$3:$A1`, `$B$3:A$1`).
     private _callRangeValue(startLabel: string, endLabel: string): FormulaValue[] | FormulaValue[][] {
-        const [startRow, startColumn, startSheetName] = extractLabel(startLabel);
-        const [endRow, endColumn, endSheetName] = extractLabel(endLabel);
+        const start = extractLabel(startLabel);
+        const end = extractLabel(endLabel);
+        if (!start || !end) {
+            throw Error(ERROR);
+        }
+
+        const [startRow, startColumn, startSheetName] = start;
+        const [endRow, endColumn, endSheetName] = end;
         if (endSheetName != null && startSheetName !== endSheetName) {
             throw Error(ERROR_VALUE);
         }
 
-        const [rowStart, rowEnd] = startRow!.index <= endRow!.index ? [startRow!, endRow!] : [endRow!, startRow!];
+        const [rowStart, rowEnd] = startRow.index <= endRow.index ? [startRow, endRow] : [endRow, startRow];
         const [colStart, colEnd] =
-            startColumn!.index <= endColumn!.index ? [startColumn!, endColumn!] : [endColumn!, startColumn!];
+            startColumn.index <= endColumn.index ? [startColumn, endColumn] : [endColumn, startColumn];
 
         const startCell: RangeCell = {
             row: rowStart,
@@ -200,7 +168,7 @@ class Parser {
     }
 
     private _throwError(errorName: string): never {
-        if (isErrorValid(errorName)) {
+        if (valueIsError(errorName)) {
             throw Error(errorName);
         }
 

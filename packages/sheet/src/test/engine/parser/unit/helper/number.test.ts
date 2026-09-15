@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { invertNumber, toNumber } from '../../../../../engine/parser/helper/number';
+import { dateToSerial, invertNumber, toNumber } from '../../../../../engine/parser/helper/number';
 
 describe('.toNumber()', () => {
     test('should correctly convert passed value into number', () => {
@@ -21,16 +21,34 @@ describe('.toNumber()', () => {
     // — those return JS Dates, but Excel returns serials. Coercing here is what
     // makes `EOMONTH(d,0) - EOMONTH(d,-1)` produce a day count instead of either
     // milliseconds (via .valueOf()) or NaN.
-    test('should convert Date to Excel serial (days since 1899-12-30)', () => {
-        // 1900-01-01 → serial 2 (Lotus 1900-leap-year bug means day 1 == 1899-12-31).
-        expect(toNumber(new Date(Date.UTC(1900, 0, 1)))).toBe(2);
+    test('should convert Date to Excel serial', () => {
+        // Excel's serial 1 is 1900-01-01; the Lotus leap-year bug puts 1900-03-01 at 61.
+        expect(toNumber(new Date(1900, 0, 1))).toBe(1);
+        expect(toNumber(new Date(1900, 1, 28))).toBe(59);
+        expect(toNumber(new Date(1900, 2, 1))).toBe(61);
+        expect(toNumber(new Date(2026, 0, 5))).toBe(46027);
         // 2027-01-01 - 2026-12-31 should be exactly 1 day.
-        const a = toNumber(new Date(Date.UTC(2027, 0, 1)))!;
-        const b = toNumber(new Date(Date.UTC(2026, 11, 31)))!;
+        const a = toNumber(new Date(2027, 0, 1))!;
+        const b = toNumber(new Date(2026, 11, 31))!;
         expect(a - b).toBe(1);
         // 31 days in Jan 2027.
-        const jan31 = toNumber(new Date(Date.UTC(2027, 0, 31)))!;
+        const jan31 = toNumber(new Date(2027, 0, 31))!;
         expect(jan31 - a).toBe(30);
+    });
+
+    test('a local-midnight Date keeps its calendar day in every timezone', () => {
+        // formulajs builds DATE(2026,1,5) as local midnight; west of Greenwich that instant
+        // is still 4 January in UTC, and the serial must not follow it there.
+        const tz = process.env.TZ;
+        try {
+            for (const zone of ['Europe/Amsterdam', 'America/Los_Angeles', 'Pacific/Auckland']) {
+                process.env.TZ = zone;
+                expect(dateToSerial(new Date(2026, 0, 5))).toBe(46027);
+                expect(dateToSerial(new Date(2026, 0, 5, 12))).toBe(46027.5);
+            }
+        } finally {
+            process.env.TZ = tz;
+        }
     });
 });
 

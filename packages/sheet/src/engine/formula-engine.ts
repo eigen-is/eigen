@@ -1,5 +1,6 @@
 import { DependencyIndex } from './dependency-index';
 import { ERROR_REF, Parser } from './parser';
+import { dateToSerial } from './parser/helper/number';
 import type {
     Cell,
     CellInfo,
@@ -27,7 +28,6 @@ function getCellValue(cell: Cell | null | undefined): unknown {
 function inferType(value: unknown): EvaluationResult['type'] {
     if (typeof value === 'number') return 'number';
     if (typeof value === 'boolean') return 'boolean';
-    if (value instanceof Date) return 'date';
     if (typeof value === 'string' && value.startsWith('#')) return 'error';
     return 'string';
 }
@@ -56,7 +56,7 @@ export class FormulaEngine {
             const cacheKey = `${cellCoord.row.index}_${cellCoord.column.index}_${sheetId}`;
             const cached = this.state.execFunctionGlobalData[cacheKey];
             if (cached !== undefined) {
-                done(getCellValue(cached as Cell));
+                done(getCellValue(cached));
                 return;
             }
 
@@ -82,18 +82,19 @@ export class FormulaEngine {
                 // Handle whole-row / whole-column references
                 const emptyRow = startRow === -1 || endRow === -1;
                 const emptyCol = startCol === -1 || endCol === -1;
-
-                if (emptyRow) {
-                    startRow = 0;
-                    const sheetData = resolver.getSheetData(sheetId);
-                    endRow = sheetData?.length ?? 0;
-                }
-                if (emptyCol) {
-                    startCol = 0;
-                    const sheetData = resolver.getSheetData(sheetId);
-                    endCol = sheetData?.[0]?.length ?? 0;
-                }
                 if (emptyRow && emptyCol) throw Error(ERROR_REF);
+
+                // The grid bounds every range, explicit endpoints included: an
+                // unclamped `A1:XFD1048576` (a shape real xlsx files carry) is 17
+                // billion cells. So `ROWS(A1:A100)` answers the grid row count, the
+                // convention `ROWS(A:A)` already follows.
+                const sheetData = resolver.getSheetData(sheetId);
+                const lastRow = (sheetData?.length ?? 0) - 1;
+                const lastCol = (sheetData?.[0]?.length ?? 0) - 1;
+                if (emptyRow) startRow = 0;
+                if (emptyCol) startCol = 0;
+                endRow = emptyRow ? lastRow : Math.min(endRow, lastRow);
+                endCol = emptyCol ? lastCol : Math.min(endCol, lastCol);
 
                 const fragment: unknown[][] = [];
                 for (let row = startRow; row <= endRow; row++) {
@@ -102,7 +103,7 @@ export class FormulaEngine {
                         const cacheKey = `${row}_${col}_${sheetId}`;
                         const cached = this.state.execFunctionGlobalData[cacheKey];
                         if (cached !== undefined) {
-                            colFragment.push(getCellValue(cached as Cell));
+                            colFragment.push(getCellValue(cached));
                         } else {
                             const cell = resolver.getCell(sheetId, row, col);
                             colFragment.push(getCellValue(cell));
@@ -116,7 +117,7 @@ export class FormulaEngine {
         );
     }
 
-    evaluate(formula: string, sheetId: string, _row: number, _col: number, resolver: CellResolver): EvaluationResult {
+    evaluate(formula: string, sheetId: string, resolver: CellResolver): EvaluationResult {
         this.currentResolver = resolver;
         try {
             const expression = formula.substring(1);
@@ -126,16 +127,23 @@ export class FormulaEngine {
                 return { value: error, display: error, type: 'error' };
             }
 
-            const raw = result instanceof Date ? result.toString() : result;
+            if (result instanceof Date) {
+                // A Date result stores as its Excel serial — the same convention the
+                // parser's operators apply to Date operands. Stringifying it would
+                // turn a DATE/EOMONTH/NOW cell into text on the xlsx round trip.
+                const serial = dateToSerial(result);
+                return { value: serial, display: String(serial), type: 'date' };
+            }
+
             // Cell-scoped formulas produce scalars. Range references can
             // surface arrays if a formula evaluates to a bare range — coerce
             // those (and any other non-primitive) to a string for storage.
             const value: Cell['v'] =
-                typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean'
-                    ? raw
-                    : raw == null
+                typeof result === 'string' || typeof result === 'number' || typeof result === 'boolean'
+                    ? result
+                    : result == null
                       ? undefined
-                      : String(raw);
+                      : String(result);
             const type = inferType(value);
             const display = value == null ? '' : String(value);
 

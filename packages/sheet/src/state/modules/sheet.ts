@@ -1,7 +1,7 @@
 import { cloneDeep, isNil, sortBy, times } from 'es-toolkit/compat';
 import { v4 as uuidv4 } from 'uuid';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
-import { normalizeSheetConfig } from '../../engine/replay-ops';
+import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { CellMatrix } from '../../engine/types';
 import { initSheetData } from '../api/sheet';
 import type { Context } from '../context';

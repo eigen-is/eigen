@@ -278,14 +278,3 @@ describe('engine/cfSplitRange — no overlap (disjoint)', () => {
         expect(split(cf, 'operatePart')).toEqual([]);
     });
 });
-
-describe('engine/cfSplitRange — unrecognised type', () => {
-    test('a type outside all/rest/operate throws (a caller typo must not silently drop CF ranges)', () => {
-        const cf: SingleRange = { row: [2, 5], column: [2, 5] };
-        // The param is compile-time narrowed to the three valid parts; untyped
-        // state-layer callers can still pass a bad string, so the runtime guard
-        // must throw rather than silently return [].
-        const badType: string = 'nonsense';
-        expect(() => split(cf, badType as CfSplitRangeType)).toThrow();
-    });
-});

@@ -52,6 +52,13 @@ describe('engine/dependency-index — DependencyIndex', () => {
         expect(index.dependentsOf('s1', 0, 0)).toEqual(['f1']);
     });
 
+    test('a cell referenced twice by one formula is listed once', () => {
+        const index = new DependencyIndex();
+        // `=A1+A1` extracts the same point dependency twice.
+        index.set('f1', [dep(0, 0, 0, 0), dep(0, 0, 0, 0)]);
+        expect(index.dependentsOf('s1', 0, 0)).toEqual(['f1']);
+    });
+
     test('set replaces earlier dependencies for the same key', () => {
         const index = new DependencyIndex();
         index.set('f1', [dep(0, 0, 0, 0)]);

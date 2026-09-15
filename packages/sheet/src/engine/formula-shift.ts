@@ -1,4 +1,4 @@
-import { columnIndexToLabel, columnLabelToIndex } from './a1-notation';
+import { columnIndexToLabel, columnLabelToIndex, unquoteSheetName } from './a1-notation';
 import { iscelldata, operatorjson } from './formula-utils';
 import { error } from './validation';
 
@@ -16,19 +16,16 @@ export function detectAbsolute(txt: string): [boolean, boolean] {
 
 // Shift a single cell or range ref by `step` in `orient` direction
 // ('d'/'u' = ±row, 'r'/'l' = ±col). $-prefixed parts stay put. Returns
-// the original text if it isn't a recognizable ref, '#REF!' if a range
-// endpoint shifts negative.
+// the original text if it isn't a recognizable ref, '#REF!' if a ref (or a
+// range endpoint) shifts off the sheet.
 //
 // NOTE: this and `functionStrChange_range` parse+reformat refs with the same
-// per-leg idiom (split on '!', split on ':', digits→row / letters→col,
-// detectAbsolute, missing/frozen flags), but they are deliberately NOT merged
-// into a shared parseRef/formatRef. They differ in row convention (this keeps
-// rows 1-based throughout; `functionStrChange_range` works 0-based internally
-// and +1s on output) and, more importantly, in their single-cell fallback: this
-// branches on post-shift `rowValid`/`colValid`, while the other collapses via
-// `r1===r2 && c1===c2` off explicit missing flags. A forced merge would have to
-// rewrite one function's shift math onto the other's convention — high risk on
-// the package's most formula-corruption-sensitive code for a few lines saved.
+// per-leg idiom but are deliberately NOT merged. They differ in row convention
+// (this keeps rows 1-based; the other works 0-based and +1s on output) and in
+// their single-cell fallback (post-shift `rowValid`/`colValid` here, explicit
+// missing flags there), so a merge means rewriting one's shift math onto the
+// other's convention — high risk on the package's most formula-corruption-
+// sensitive code for a few lines saved.
 function shiftRef(orient: 'd' | 'u' | 'l' | 'r', txt: string, step: number): string {
     const sheetSplit = txt.split('!');
     let rangetxt: string;
@@ -41,6 +38,8 @@ function shiftRef(orient: 'd' | 'u' | 'l' | 'r', txt: string, step: number): str
     }
 
     if (!rangetxt.includes(':')) {
+        // A single ref always carries both axes: walkFormulaRefs only hands over tokens
+        // `iscelldata` accepts, and its single-ref regex demands a column and a row.
         let row = parseInt(rangetxt.replace(/[^0-9]/g, ''), 10);
         let col = columnLabelToIndex(rangetxt.replace(/[^A-Za-z]/g, ''));
         const [rowFrozen, colFrozen] = detectAbsolute(rangetxt);
@@ -52,12 +51,8 @@ function shiftRef(orient: 'd' | 'u' | 'l' | 'r', txt: string, step: number): str
         else if (orient === 'l' && !colFrozen) col -= step;
         else if (orient === 'd' && !rowFrozen) row += step;
 
-        const rowValid = !Number.isNaN(row);
-        const colValid = col >= 0;
-        if (rowValid && colValid) return prefix + $col + columnIndexToLabel(col) + $row + row;
-        if (rowValid) return prefix + $row + row;
-        if (colValid) return prefix + $col + columnIndexToLabel(col);
-        return txt;
+        if (row < 1 || col < 0) return error['r'];
+        return prefix + $col + columnIndexToLabel(col) + $row + row;
     }
 
     const [startTxt, endTxt] = rangetxt.split(':');
@@ -100,8 +95,10 @@ function shiftRef(orient: 'd' | 'u' | 'l' | 'r', txt: string, step: number): str
     }
 
     // For col-only ranges (`A:C`), col[0] starts at a valid 0+ index — only flag #REF!
-    // when the axis was actually present and shifted negative.
-    if ((!rowsMissing && row[0] < 0) || (!colsMissing && col[0] < 0)) return error['r'];
+    // when the axis was actually present and shifted off the sheet. Rows are 1-based
+    // here, columns 0-based. Both legs are checked: a frozen leg holds while the other
+    // one walks off the edge.
+    if ((!rowsMissing && (row[0] < 1 || row[1] < 1)) || (!colsMissing && (col[0] < 0 || col[1] < 0))) return error['r'];
 
     if (colsMissing) return `${prefix + $row0 + row[0]}:${$row1}${row[1]}`;
     if (rowsMissing) return `${prefix + $col0 + columnIndexToLabel(col[0])}:${$col1}${columnIndexToLabel(col[1])}`;
@@ -124,11 +121,9 @@ function shiftRef(orient: 'd' | 'u' | 'l' | 'r', txt: string, step: number): str
 //
 // A leading `-` is classified as a unary sign (glued to the following number literal) rather
 // than a binary operator when the nearest non-space char before it is one of the unary-trigger
-// chars (opening paren, comma, another operator) or the start of the segment. That predecessor
-// is found by reading i-1 first, then scanning back over spaces — the char immediately before
-// the `-`. (functionStrChange historically decremented before reading, skipping i-1 and starting
-// at i-2; that misclassified e.g. the `-` in `CONCAT(-1:3)` as binary and shifted the trailing
-// range. Both consumers now share this single read-i-1 scan.)
+// chars (opening paren, comma, another operator) or the start of the segment. The scan reads
+// i-1 first, then walks back over spaces: start at i-2 and the `-` in `CONCAT(-1:3)` reads as
+// binary, shifting the trailing range.
 function walkFormulaRefs(txt: string, onRef: (ref: string) => string): string {
     let stripped = txt;
     if (stripped.startsWith('=')) stripped = stripped.slice(1);
@@ -216,11 +211,7 @@ function walkFormulaRefs(txt: string, onRef: (ref: string) => string): string {
 // Walks a formula string, finding cell-data refs and shifting them in the given
 // direction. A leading `=` is stripped before processing; the returned text never
 // carries one. Pure — no Context, no DOM. Negative `step` is allowed and reverses
-// the direction. Used by:
-//   - state/modules/condition-format.ts (CF formula rules)
-//   - state/events/paste.ts (formula paste with relative refs)
-//   - state/modules/sort.ts (sort moves formulas around)
-//   - apps/api/src/lib/export/sheets/render.ts (server-side CF rule evaluation)
+// the direction.
 export function functionCopy(txt: string, mode: FormulaShiftMode = 'down', step = 1): string {
     const orient = mode[0] as 'd' | 'u' | 'l' | 'r';
     return walkFormulaRefs(txt, (ref) => shiftRef(orient, ref, step));
@@ -229,20 +220,26 @@ export function functionCopy(txt: string, mode: FormulaShiftMode = 'down', step 
 // Shifts formula-text refs in response to an insert ('add') or delete ('del') row/col
 // op. `stindex` is the zero-based row/col index where the op starts; `step` is the
 // count. `orient` ('lefttop' / 'rightbottom') controls whether the boundary row is
-// included in the shift for insert ops. Used by state/modules/rowcol.ts and (via
+// included in the shift for insert ops. `targetSheet` names the sheet the op runs on
+// and `onTargetSheet` says whether `txt` itself lives on that sheet — only refs that
+// resolve to the target sheet move. Used by state/modules/rowcol.ts and (via
 // engine/rowcol.ts) by the context-free replay path.
 export function functionStrChange(
     txt: string,
-    type: string,
+    type: 'add' | 'del',
     rc: 'row' | 'col',
-    orient: string | null,
+    orient: 'lefttop' | 'rightbottom' | null,
     stindex: number,
     step: number,
+    targetSheet: string,
+    onTargetSheet: boolean,
 ): string {
     if (!txt) {
         return '';
     }
-    return walkFormulaRefs(txt, (ref) => functionStrChange_range(ref, type, rc, orient, stindex, step));
+    return walkFormulaRefs(txt, (ref) =>
+        functionStrChange_range(ref, type, rc, orient, stindex, step, targetSheet, onTargetSheet),
+    );
 }
 
 // Shifts a single cell or range ref string in response to an insert/delete row/col op.
@@ -250,11 +247,13 @@ export function functionStrChange(
 // See shiftRef's NOTE for why the two ref-parsers are not merged.
 function functionStrChange_range(
     txt: string,
-    type: string,
+    type: 'add' | 'del',
     rc: 'row' | 'col',
-    orient: string | null,
+    orient: 'lefttop' | 'rightbottom' | null,
     stindex: number,
     step: number,
+    targetSheet: string,
+    onTargetSheet: boolean,
 ): string {
     const sheetSplit = txt.split('!');
     let rangetxt: string;
@@ -262,11 +261,14 @@ function functionStrChange_range(
     if (sheetSplit.length > 1) {
         [, rangetxt] = sheetSplit;
         prefix = `${sheetSplit[0]}!`;
+        if (unquoteSheetName(sheetSplit[0]) !== targetSheet) return txt;
     } else {
         [rangetxt] = sheetSplit;
+        if (!onTargetSheet) return txt;
     }
 
     const parts = rangetxt.split(':');
+    const isRange = parts.length > 1;
 
     let r1: number;
     let r2: number;
@@ -279,17 +281,18 @@ function functionStrChange_range(
     let rowsMissing: boolean;
     let colsMissing: boolean;
 
-    if (parts.length === 1) {
+    if (!isRange) {
         const rowPart = parts[0].replace(/[^0-9]/g, '');
         const colPart = parts[0].replace(/[^A-Za-z]/g, '');
 
-        rowsMissing = rowPart.length === 0;
-        colsMissing = colPart.length === 0;
+        // Both axes are always present here — see shiftRef's single-ref note.
+        rowsMissing = false;
+        colsMissing = false;
 
-        r1 = rowsMissing ? -1 : Number.parseInt(rowPart, 10) - 1;
+        r1 = Number.parseInt(rowPart, 10) - 1;
         r2 = r1;
 
-        c1 = colsMissing ? -1 : columnLabelToIndex(colPart);
+        c1 = columnLabelToIndex(colPart);
         c2 = c1;
 
         const freezonFuc = detectAbsolute(parts[0]);
@@ -328,17 +331,11 @@ function functionStrChange_range(
     }
 
     const formatRange = () => {
-        if (r1 === r2 && c1 === c2) {
-            if (!rowsMissing && !colsMissing) {
-                return prefix + $col0 + columnIndexToLabel(c1) + $row0 + (r1 + 1);
-            }
-            if (!rowsMissing) {
-                return prefix + $row0 + (r1 + 1);
-            }
-            if (!colsMissing) {
-                return prefix + $col0 + columnIndexToLabel(c1);
-            }
-            return txt;
+        // A range collapses to a single label only when both axes were present in the
+        // source text: a whole-column (`A:A`) or whole-row (`1:1`) range also satisfies
+        // r1 === r2 && c1 === c2 through its -1 sentinels, and must keep both legs.
+        if (!rowsMissing && !colsMissing && r1 === r2 && c1 === c2) {
+            return prefix + $col0 + columnIndexToLabel(c1) + $row0 + (r1 + 1);
         }
         if (colsMissing) {
             return `${prefix + $row0 + (r1 + 1)}:${$row1}${r2 + 1}`;
@@ -394,26 +391,22 @@ function functionStrChange_range(
         return formatRange();
     }
 
-    if (type === 'add') {
-        if (rc === 'row' && !rowsMissing) {
-            if (orient === 'lefttop') {
-                if (r1 >= stindex) r1 += step;
-                if (r2 >= stindex) r2 += step;
-            } else if (orient === 'rightbottom') {
-                if (r1 > stindex) r1 += step;
-                if (r2 > stindex) r2 += step;
-            }
-        } else if (rc === 'col' && !colsMissing) {
-            if (orient === 'lefttop') {
-                if (c1 >= stindex) c1 += step;
-                if (c2 >= stindex) c2 += step;
-            } else if (orient === 'rightbottom') {
-                if (c1 > stindex) c1 += step;
-                if (c2 > stindex) c2 += step;
-            }
+    if (rc === 'row' && !rowsMissing) {
+        if (orient === 'lefttop') {
+            if (r1 >= stindex) r1 += step;
+            if (r2 >= stindex) r2 += step;
+        } else if (orient === 'rightbottom') {
+            if (r1 > stindex) r1 += step;
+            if (r2 > stindex) r2 += step;
         }
-        return formatRange();
+    } else if (rc === 'col' && !colsMissing) {
+        if (orient === 'lefttop') {
+            if (c1 >= stindex) c1 += step;
+            if (c2 >= stindex) c2 += step;
+        } else if (orient === 'rightbottom') {
+            if (c1 > stindex) c1 += step;
+            if (c2 > stindex) c2 += step;
+        }
     }
-
-    return '';
+    return formatRange();
 }

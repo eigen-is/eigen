@@ -58,7 +58,7 @@ current sheet's config with `getSheetConfig(ctx, id?)` (`state/context.ts`, besi
 
 - immer records the **creation** of a key as one `add` carrying the whole new value, so a write to a config
   collection that does not exist yet ships the entire collection and last-writer-wins over a peer. Every collection is
-  therefore materialized by `normalizeSheetConfig` (`engine/replay-ops.ts`) wherever a sheet enters any consumer —
+  therefore materialized by `normalizeSheetConfig` (`engine/sheet-config.ts`) wherever a sheet enters any consumer —
   `initSheetData`, the replay base, `addSheet` ops, `createDefaultSheets`, and the Workbook seeding effect. Its
   `SHEET_CONFIG_COLLECTIONS` list `satisfies keyof ExtendedSheetConfig` for membership, and a companion exhaustiveness assert (`Exclude<collection keys, listed> extends never`) makes a new collection fail the build rather
   than silently reopening the hole. This mirrors the row/column grid materialization in `engine/defaults.ts`, and for
@@ -297,7 +297,7 @@ engine/
 ├── replay-ops.ts           # replaySheetsOps (snapshot + ops → Sheet[]; shared by BE + FE initial-load)
 ├── rowcol.ts               # applySheetsInsertRowCol / applySheetsDeleteRowCol (pure row/col data shifts)
 ├── celldata.ts             # Sparse `celldata` ↔ dense `data` matrix conversions
-└── conditional-format.ts   # Pure CF evaluator (evaluateConditionalFormat, cfSplitRange, getColorGradation)
+└── conditional-format.ts   # Pure CF evaluator (evaluateConditionalFormat, cfSplitRange)
 ```
 
 Smaller pure helpers sit next to them: `a1-notation.ts`, `format.ts`, `validation.ts`, `defaults.ts`
@@ -306,7 +306,15 @@ and `formula-utils.ts`. `types.ts` holds the engine types plus re-exports of the
 `@workspace/lib/sheets`; `index.ts` is the barrel.
 
 **Key capabilities:**
-- `evaluate(formula, sheetId, row, col, resolver)` — single formula evaluation
+- `evaluate(formula, sheetId, resolver)` — single formula evaluation. A Date result (`DATE`, `EOMONTH`,
+  `NOW`, …) is stored as its Excel serial, taken from the Date's LOCAL calendar fields because formulajs
+  builds its Dates at local midnight (`dateToSerial` in `parser/helper/number.ts` is the one conversion;
+  1900-01-01 is serial 1 with the Lotus leap day applied from 1900-03-01); the cell keeps whatever format
+  mask it has, so a mask-less cell shows the serial. Every range, explicit or whole-row/column, is bounded by
+  the sheet grid: `ROWS(A1:A100)` on an 84-row grid answers 84, the convention `ROWS(A:A)` follows, because
+  an unclamped `A1:XFD1048576` (a shape real xlsx files carry) is 17 billion cells.
+  A range lying entirely past the grid is empty (`ROWS(A5:A10)` on a three-row grid is 0) and an `INDEX` past the grid is `#REF!`.
+  `TEXT` formats through the same numfmt masks the grid renders with (formulajs ships it unimplemented).
 - `replaySheetsOps(sheets, opBatches)` — pure snapshot + ops → `Sheet[]`. Handles `add`/`remove`/`replace`
   patches via `opToPatchOnSheets`, `addSheet`/`deleteSheet` inline, and `insertRowCol`/`deleteRowCol` via
   the typed shape-adapter + `applySheetsInsertRowCol`/`applySheetsDeleteRowCol`. Used by the BE document
@@ -318,7 +326,10 @@ and `formula-utils.ts`. `types.ts` holds the engine types plus re-exports of the
   canonical no-snapshot base for the FE hook and `readSheetsFromDoc`.
 - `applySheetsInsertRowCol<S extends Sheet>(sheets, op)` / `applySheetsDeleteRowCol<S extends Sheet>(sheets, op)`
   — pure data shifts for row/col ops over lib.Sheet-typed fields (`data`, `config.merge`, `config.rowhidden`,
-  `conditionalFormatRules`, cross-sheet formula refs). Generic over `S` so the editor's wider
+  `conditionalFormatRules` including a `formula` rule's text, and formula text in every sheet — only the
+  references that resolve to the changed sheet move: unqualified ones in formulas on it, `Sheet!`-qualified
+  ones anywhere; a reference shifted off the sheet becomes `#REF!`, and a whole-column or whole-row range
+  keeps both legs). Generic over `S` so the editor's wider
   `state.Sheet[]` flows through with its extras unchanged. Editor-managed fields (filter /
   filterRange / frozen / dataVerification / hyperlink / calcChain / selections) are shifted by the
   state wrapper in `state/modules/rowcol.ts` after the engine call.
@@ -389,6 +400,11 @@ remaining rule types — `dataBar`, `colorGradation`, the comparison set
 (`greaterThan`/`lessThan` and their `OrEqual` variants, `equal`/`notEqual`, `between`/`notBetween`),
 `textContains`, `occurrenceDate`, `duplicateValue`, `top10`, `aboveAverage`, etc. — evaluate without
 any context.
+
+Every rule scans only the materialized matrix (Excel writes a whole-column rule as `A1:A1048576`; holes
+inside the matrix are still visited). Overlapping rules layer per style property in rule order, so a later
+rule's fill never erases an earlier rule's text colour. `textContains` ignores case, and `duplicateValue`
+never counts or styles a blank cell, both as in Excel.
 
 The callback shifts the rule's formula by `(targetRow - anchorRow, targetCol - anchorCol)` via the
 shared `functionCopy` ref shifter (in `engine/formula-shift.ts`), then evaluates against a
@@ -488,6 +504,10 @@ DOM-free subset that satisfies stricter compiler options (`verbatimModuleSyntax`
   cycle — its visited-set breaks the walk, so cyclic cells evaluate in visit order.
 - **INDIRECT/OFFSET/INDEX** produce dynamic references the dependency graph can't analyze statically;
   `isFunctionRange()` handles these specially — preserve that logic when touching the graph.
+- **formulajs parses ISO date strings as UTC** (`DATEVALUE("2026-01-05")`, and the serial-to-Date step
+  inside `DAY`/`MONTH`/`YEAR`), so those are off by the zone offset in a browser west or east of Greenwich;
+  `DATE(...)` itself is built in local time and is right everywhere ([SHEETS-TODO.md](SHEETS-TODO.md) §
+  Formula engine).
 
 ### Not in scope
 
