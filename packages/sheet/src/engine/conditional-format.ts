@@ -51,16 +51,15 @@ function applyCellStyle(map: ComputeMap, r: number, c: number, style: CellFormat
     if (style.dataBar != null) entry.dataBar = style.dataBar;
 }
 
-// Shared scan scaffolding for the CF evaluator: visits every coordinate of every
-// range in order (range, then row, then column, ascending), clamped to the
-// materialized matrix. Holes INSIDE it are still visited — duplicateValue and
-// formula rules rely on that — but an xlsx sqref routinely runs far past the used
-// range (Excel writes a whole-column rule as A1:A1048576), and unclamped that costs
-// a million evaluations and map entries per rule on a three-row sheet. No cell
-// filtering beyond the bounds: each branch keeps its own guards.
+// Clamped to the matrix because an xlsx sqref runs to row 1048576 (Excel writes a whole-column
+// rule as A1:A1048576) and every visit costs a map entry; holes inside the matrix are still visited.
 function forEachCellInRanges(data: CellMatrix, ranges: SingleRange[], cb: (r: number, c: number) => void) {
     const lastRow = data.length - 1;
-    const lastColumn = (data[0]?.length ?? 0) - 1;
+    // The widest row, not row 0: the preview hands over a matrix whose leading rows are holes.
+    let lastColumn = -1;
+    for (const row of data) {
+        if (row && row.length - 1 > lastColumn) lastColumn = row.length - 1;
+    }
     for (const range of ranges) {
         const rowEnd = Math.min(range.row[1], lastRow);
         const columnEnd = Math.min(range.column[1], lastColumn);

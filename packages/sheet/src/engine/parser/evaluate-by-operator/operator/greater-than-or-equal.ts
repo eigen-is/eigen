@@ -1,5 +1,5 @@
 import type { FormulaArg } from '../../../types';
-import { comparisonOperand } from './equal';
+import { comparisonOperand } from '../../helper/number';
 
 export const SYMBOL = '>=';
 

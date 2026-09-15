@@ -38,12 +38,10 @@ function shiftRef(orient: 'd' | 'u' | 'l' | 'r', txt: string, step: number): str
     }
 
     if (!rangetxt.includes(':')) {
-        const rowStr = rangetxt.replace(/[^0-9]/g, '');
-        const colStr = rangetxt.replace(/[^A-Za-z]/g, '');
-        const rowMissing = rowStr.length === 0;
-        const colMissing = colStr.length === 0;
-        let row = parseInt(rowStr, 10);
-        let col = columnLabelToIndex(colStr);
+        // A single ref always carries both axes: walkFormulaRefs only hands over tokens
+        // `iscelldata` accepts, and its single-ref regex demands a column and a row.
+        let row = parseInt(rangetxt.replace(/[^0-9]/g, ''), 10);
+        let col = columnLabelToIndex(rangetxt.replace(/[^A-Za-z]/g, ''));
         const [rowFrozen, colFrozen] = detectAbsolute(rangetxt);
         const $row = rowFrozen ? '$' : '';
         const $col = colFrozen ? '$' : '';
@@ -53,11 +51,8 @@ function shiftRef(orient: 'd' | 'u' | 'l' | 'r', txt: string, step: number): str
         else if (orient === 'l' && !colFrozen) col -= step;
         else if (orient === 'd' && !rowFrozen) row += step;
 
-        if ((!rowMissing && row < 1) || (!colMissing && col < 0)) return error['r'];
-        if (!rowMissing && !colMissing) return prefix + $col + columnIndexToLabel(col) + $row + row;
-        if (!rowMissing) return prefix + $row + row;
-        if (!colMissing) return prefix + $col + columnIndexToLabel(col);
-        return txt;
+        if (row < 1 || col < 0) return error['r'];
+        return prefix + $col + columnIndexToLabel(col) + $row + row;
     }
 
     const [startTxt, endTxt] = rangetxt.split(':');
@@ -290,13 +285,14 @@ function functionStrChange_range(
         const rowPart = parts[0].replace(/[^0-9]/g, '');
         const colPart = parts[0].replace(/[^A-Za-z]/g, '');
 
-        rowsMissing = rowPart.length === 0;
-        colsMissing = colPart.length === 0;
+        // Both axes are always present here — see shiftRef's single-ref note.
+        rowsMissing = false;
+        colsMissing = false;
 
-        r1 = rowsMissing ? -1 : Number.parseInt(rowPart, 10) - 1;
+        r1 = Number.parseInt(rowPart, 10) - 1;
         r2 = r1;
 
-        c1 = colsMissing ? -1 : columnLabelToIndex(colPart);
+        c1 = columnLabelToIndex(colPart);
         c2 = c1;
 
         const freezonFuc = detectAbsolute(parts[0]);
@@ -335,9 +331,6 @@ function functionStrChange_range(
     }
 
     const formatRange = () => {
-        if (rowsMissing && colsMissing) {
-            return txt;
-        }
         // A range collapses to a single label only when both axes were present in the
         // source text: a whole-column (`A:A`) or whole-row (`1:1`) range also satisfies
         // r1 === r2 && c1 === c2 through its -1 sentinels, and must keep both legs.
@@ -345,12 +338,10 @@ function functionStrChange_range(
             return prefix + $col0 + columnIndexToLabel(c1) + $row0 + (r1 + 1);
         }
         if (colsMissing) {
-            return isRange ? `${prefix + $row0 + (r1 + 1)}:${$row1}${r2 + 1}` : prefix + $row0 + (r1 + 1);
+            return `${prefix + $row0 + (r1 + 1)}:${$row1}${r2 + 1}`;
         }
         if (rowsMissing) {
-            return isRange
-                ? `${prefix + $col0 + columnIndexToLabel(c1)}:${$col1}${columnIndexToLabel(c2)}`
-                : prefix + $col0 + columnIndexToLabel(c1);
+            return `${prefix + $col0 + columnIndexToLabel(c1)}:${$col1}${columnIndexToLabel(c2)}`;
         }
         return `${prefix + $col0 + columnIndexToLabel(c1) + $row0 + (r1 + 1)}:${$col1}${columnIndexToLabel(c2)}${$row1}${r2 + 1}`;
     };

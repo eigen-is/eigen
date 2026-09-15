@@ -316,8 +316,7 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
                     }
                 } else {
                     const cell: Cell = {};
-                    const mask = parseCellInput(value);
-                    [cell.m, cell.ct, cell.v] = mask!;
+                    [cell.m, cell.ct, cell.v] = parseCellInput(value);
 
                     x[c + curC] = cell;
                 }

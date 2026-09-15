@@ -423,6 +423,10 @@ describe('.parse() text formulas', () => {
         expect(parser!.parse('TEXT("abc", "0")')).toMatchObject({ error: null, result: 'abc' });
         expect(parser!.parse('TEXT(A1, "0.00")')).toMatchObject({ error: null, result: '0.00' });
         expect(parser!.parse('TEXT(1 / 0, "0")')).toMatchObject({ error: '#DIV/0!', result: null });
+        expect(parser!.parse('TEXT(1, NA())')).toMatchObject({ error: '#N/A', result: null });
+        // Excel passes a boolean through as its text, whatever the mask.
+        expect(parser!.parse('TEXT(TRUE, "0")')).toMatchObject({ error: null, result: 'TRUE' });
+        expect(parser!.parse('TEXT(FALSE, "0")')).toMatchObject({ error: null, result: 'FALSE' });
     });
 
     it('TEXT formats date serials and Date results', () => {

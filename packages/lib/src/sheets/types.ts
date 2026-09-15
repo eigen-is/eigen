@@ -60,9 +60,6 @@ export type CellWithRowAndCol = {
 // `value` stays `any` because the legacy state/ utils (patch.ts, Workbook/api.ts)
 // pass it as Cell, Sheet, RowColOp, calcChain, … without a discriminator; tightening
 // is part of TODO #1 (enable biome on state/).
-// The editor-runtime Sheet: the wire shape plus the calc chain the reader gate keys off.
-export type SheetWithCalcChain = Sheet & { calcChain?: CalcChainEntry[] };
-
 export type Op = {
     op: 'replace' | 'remove' | 'add' | 'insertRowCol' | 'deleteRowCol' | 'addSheet' | 'deleteSheet';
     id?: string;
@@ -252,3 +249,6 @@ export type Sheet = {
     // ∈ webpage | sheet | cellrange (state/modules/hyperlink.ts).
     hyperlink?: Record<string, { linkType: string; linkAddress: string }>;
 };
+
+// The editor-runtime Sheet: the wire shape plus the calc chain the reader gate keys off.
+export type SheetWithCalcChain = Sheet & { calcChain?: CalcChainEntry[] };

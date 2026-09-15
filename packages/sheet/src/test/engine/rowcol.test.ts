@@ -346,6 +346,33 @@ describe('applySheetsInsertRowCol/Delete — conditional-format formula rules', 
         expect(cf).toMatchObject({ conditionValue: ['=B1>0'] });
     });
 
+    test('shifts a qualified ref in a rule on another sheet', () => {
+        const sheets: Sheet[] = [
+            makeSheet('s1', 'Sheet1', [[cell('a')], [cell('b')], [cell('c')]], {
+                conditionalFormatRules: [
+                    {
+                        type: 'default',
+                        conditionName: 'formula',
+                        cellrange: [{ row: [1, 2], column: [0, 0] }],
+                        conditionValue: ['=Sheet2!A2>0'],
+                        format: { textColor: '#ff0000' },
+                    },
+                ],
+            }),
+            makeSheet('s2', 'Sheet2', [[cell('x')], [cell('y')]]),
+        ];
+        const result = applySheetsInsertRowCol(sheets, {
+            type: 'row',
+            index: 0,
+            count: 1,
+            direction: 'lefttop',
+            id: 's2',
+        });
+        const cf = result[0].conditionalFormatRules![0];
+        expect(cf).toMatchObject({ conditionValue: ['=Sheet2!A3>0'] });
+        expect(cf.cellrange[0].row).toEqual([1, 2]);
+    });
+
     test('leaves a non-formula rule conditionValue alone', () => {
         const sheets: Sheet[] = [
             makeSheet('s1', 'Sheet1', [[cell('a')], [cell('b')], [cell('c')]], {

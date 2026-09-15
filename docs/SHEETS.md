@@ -312,8 +312,9 @@ and `formula-utils.ts`. `types.ts` holds the engine types plus re-exports of the
   1900-01-01 is serial 1 with the Lotus leap day applied from 1900-03-01); the cell keeps whatever format
   mask it has, so a mask-less cell shows the serial. Every range, explicit or whole-row/column, is bounded by
   the sheet grid: `ROWS(A1:A100)` on an 84-row grid answers 84, the convention `ROWS(A:A)` follows, because
-  an unclamped `A1:XFD1048576` (a shape real xlsx files carry) is 17 billion cells. `TEXT` formats through
-  the same numfmt masks the grid renders with (formulajs ships it unimplemented).
+  an unclamped `A1:XFD1048576` (a shape real xlsx files carry) is 17 billion cells.
+  A range lying entirely past the grid is empty (`ROWS(A5:A10)` on a three-row grid is 0) and an `INDEX` past the grid is `#REF!`.
+  `TEXT` formats through the same numfmt masks the grid renders with (formulajs ships it unimplemented).
 - `replaySheetsOps(sheets, opBatches)` — pure snapshot + ops → `Sheet[]`. Handles `add`/`remove`/`replace`
   patches via `opToPatchOnSheets`, `addSheet`/`deleteSheet` inline, and `insertRowCol`/`deleteRowCol` via
   the typed shape-adapter + `applySheetsInsertRowCol`/`applySheetsDeleteRowCol`. Used by the BE document

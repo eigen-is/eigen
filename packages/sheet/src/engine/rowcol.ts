@@ -209,7 +209,8 @@ export function shiftCellKeyedForDelete<T>(
 }
 
 // An op on one sheet only moves the refs that resolve to that sheet: unqualified ones in
-// formulas on it, and `Sheet!`-qualified ones anywhere.
+// formulas on it, and `Sheet!`-qualified ones anywhere. A CF `formula` rule reads its cells
+// through its own text, so it shifts by the same rules as a cell formula on its sheet.
 function shiftFormulasAcrossSheets<S extends Sheet>(
     sheets: S[],
     targetIndex: number,
@@ -221,59 +222,55 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
 ): S[] {
     const targetName = sheets[targetIndex].name;
     return sheets.map((sheet, sheetIndex) => {
-        if (!sheet.data) return sheet;
-        let newData: typeof sheet.data | null = null;
-        for (let r = 0; r < sheet.data.length; r += 1) {
-            const row = sheet.data[r];
-            if (!row) continue;
-            for (let c = 0; c < row.length; c += 1) {
-                const cell = row[c];
-                if (!cell?.f) continue;
-                const txt = cell.f.startsWith('=') ? cell.f.slice(1) : cell.f;
-                const shifted = functionStrChange(
-                    txt,
-                    op,
-                    type === 'row' ? 'row' : 'col',
-                    direction,
-                    index,
-                    count,
-                    targetName,
-                    sheetIndex === targetIndex,
-                );
-                const newF = `=${shifted}`;
-                if (newF === cell.f) continue;
-                if (!newData) newData = [...sheet.data];
-                if (newData[r] === row) newData[r] = [...row];
-                newData[r][c] = { ...cell, f: newF };
-            }
-        }
-        return newData ? { ...sheet, data: newData } : sheet;
-    });
-}
+        const shift = (txt: string) =>
+            functionStrChange(
+                txt,
+                op,
+                type === 'row' ? 'row' : 'col',
+                direction,
+                index,
+                count,
+                targetName,
+                sheetIndex === targetIndex,
+            );
 
-// A CF `formula` rule reads its cells through its own formula text, so the text has to
-// move with the rule's range. The rule lives on the sheet the op targets.
-function shiftCfFormula(
-    txt: string,
-    sheetName: string,
-    type: 'row' | 'column',
-    direction: 'lefttop' | 'rightbottom' | null,
-    index: number,
-    count: number,
-    op: 'add' | 'del',
-): string {
-    const stripped = txt.startsWith('=') ? txt.slice(1) : txt;
-    const shifted = functionStrChange(
-        stripped,
-        op,
-        type === 'row' ? 'row' : 'col',
-        direction,
-        index,
-        count,
-        sheetName,
-        true,
-    );
-    return txt.startsWith('=') ? `=${shifted}` : shifted;
+        let newSheet = sheet;
+
+        if (sheet.data) {
+            let newData: typeof sheet.data | null = null;
+            for (let r = 0; r < sheet.data.length; r += 1) {
+                const row = sheet.data[r];
+                if (!row) continue;
+                for (let c = 0; c < row.length; c += 1) {
+                    const cell = row[c];
+                    if (!cell?.f) continue;
+                    const newF = `=${shift(cell.f.startsWith('=') ? cell.f.slice(1) : cell.f)}`;
+                    if (newF === cell.f) continue;
+                    if (!newData) newData = [...sheet.data];
+                    if (newData[r] === row) newData[r] = [...row];
+                    newData[r][c] = { ...cell, f: newF };
+                }
+            }
+            if (newData) newSheet = { ...newSheet, data: newData };
+        }
+
+        const rules = sheet.conditionalFormatRules;
+        if (rules) {
+            let newRules: typeof rules | null = null;
+            for (let i = 0; i < rules.length; i += 1) {
+                const cf = rules[i];
+                if (cf.type !== 'default' || cf.conditionName !== 'formula') continue;
+                const txt = String(cf.conditionValue[0]);
+                const shifted = txt.startsWith('=') ? `=${shift(txt.slice(1))}` : shift(txt);
+                if (shifted === txt) continue;
+                if (!newRules) newRules = [...rules];
+                newRules[i] = { ...cf, conditionValue: [shifted] };
+            }
+            if (newRules) newSheet = { ...newSheet, conditionalFormatRules: newRules };
+        }
+
+        return newSheet;
+    });
 }
 
 // config carries several index-keyed maps (rowlen, rowhidden, customHeight and
@@ -401,18 +398,6 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
                 }
                 return { row: [r1, r2], column: [c1, c2] };
             });
-            if (cf.type === 'default' && cf.conditionName === 'formula') {
-                const formula = shiftCfFormula(
-                    String(cf.conditionValue[0]),
-                    target.name,
-                    op.type,
-                    op.direction,
-                    op.index,
-                    count,
-                    'add',
-                );
-                return { ...cf, cellrange: newRanges, conditionValue: [formula] };
-            }
             return { ...cf, cellrange: newRanges };
         });
     }
@@ -521,20 +506,7 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
                 }
             }
             if (cf_new_range.length > 0) {
-                if (cf.type === 'default' && cf.conditionName === 'formula') {
-                    const formula = shiftCfFormula(
-                        String(cf.conditionValue[0]),
-                        target.name,
-                        op.type,
-                        null,
-                        op.start,
-                        removeCount,
-                        'del',
-                    );
-                    newCFarr.push({ ...cf, cellrange: cf_new_range, conditionValue: [formula] });
-                } else {
-                    newCFarr.push({ ...cf, cellrange: cf_new_range });
-                }
+                newCFarr.push({ ...cf, cellrange: cf_new_range });
             }
         }
         newTarget.conditionalFormatRules = newCFarr;

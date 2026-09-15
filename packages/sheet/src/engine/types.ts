@@ -7,6 +7,7 @@ import type { CellCoordinate } from './parser/helper/cell';
 // not vice versa). Re-exported here so engine code keeps importing from `./types`
 // without churning every file.
 export type {
+    CalcChainEntry,
     Cell,
     CellMatrix,
     CellStyle,
@@ -20,6 +21,7 @@ export type {
     IconsRule,
     InlineStringSegment,
     Range,
+    SheetWithCalcChain,
     SingleRange,
 } from '@workspace/lib/sheets';
 export type { CellCoordinate };
@@ -102,8 +104,6 @@ export type SheetInfo = {
     dynamicArrayCompute: unknown[];
 };
 
-export type { CalcChainEntry, SheetWithCalcChain } from '@workspace/lib/sheets';
-
 export type EvaluationResult = {
     value: Cell['v'];
     display: string;
@@ -138,10 +138,6 @@ export type FormulaArg = FormulaValue | FormulaValue[] | FormulaValue[][] | Erro
 // keep reducing (an untaken IF branch may discard the Error). The top-level
 // `parse()` unwraps any Error result into a `{error}` field for callers.
 export type FormulaOutput = FormulaValue | FormulaValue[] | FormulaValue[][] | Error;
-
-// User-registered formula function. The parser passes all evaluated arguments
-// as a single `params` array (not spread), matching the parser convention.
-export type FormulaFunction = (params: FormulaArg[]) => FormulaOutput;
 
 // Acknowledgment callback the parser passes to `callCellValue` / `callRangeValue` /
 // `callFunction` / `callVariable` listeners so they can supply the resolved value.

@@ -67,6 +67,9 @@ describe('.parse() math', () => {
             error: '#VALUE!',
             result: null,
         });
+        // A blank operand is 0, as everywhere else: as a divisor that is #DIV/0!, as a dividend 0.
+        expect(parser!.parse('1 / A1')).toMatchObject({ error: '#DIV/0!', result: null });
+        expect(parser!.parse('A1 / 2')).toMatchObject({ error: null, result: 0 });
     });
 
     test('operator: *', () => {
@@ -110,6 +113,8 @@ describe('.parse() math', () => {
         });
         expect(parser!.parse('TRUE & "x"')).toMatchObject({ error: null, result: 'TRUEx' });
         expect(parser!.parse('"a" & FALSE')).toMatchObject({ error: null, result: 'aFALSE' });
+        // A formulajs Date concatenates as its serial, not as Date.toString().
+        expect(parser!.parse('DATE(2026, 1, 5) & "x"')).toMatchObject({ error: null, result: '46027x' });
     });
 
     test('unary sign', () => {
@@ -120,6 +125,10 @@ describe('.parse() math', () => {
         expect(parser!.parse('-A1')).toMatchObject({ error: null, result: 0 });
         expect(parser!.parse('-"a"')).toMatchObject({ error: '#VALUE!', result: null });
         expect(parser!.parse('+"a"')).toMatchObject({ error: '#VALUE!', result: null });
+        // An Error operand propagates like it does through the binary operators.
+        expect(parser!.parse('-(1/0)')).toMatchObject({ error: '#DIV/0!', result: null });
+        expect(parser!.parse('-NA()')).toMatchObject({ error: '#N/A', result: null });
+        expect(parser!.parse('+NA()')).toMatchObject({ error: '#N/A', result: null });
     });
 
     test('mixed operators', () => {

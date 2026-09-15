@@ -5,7 +5,7 @@ import { toNumber } from '../../helper/number';
 export const SYMBOL = '/';
 
 function func(first: FormulaArg, ...rest: FormulaArg[]): number {
-    const dividend = toNumber(first) ?? Number.NaN;
+    const dividend = toNumber(first) ?? 0;
 
     if (Number.isNaN(dividend)) {
         throw Error(ERROR_VALUE);
@@ -13,7 +13,7 @@ function func(first: FormulaArg, ...rest: FormulaArg[]): number {
 
     // The divisor decides, not the result: `0/0` is NaN but Excel calls it #DIV/0!.
     return rest.reduce<number>((acc, value) => {
-        const divisor = toNumber(value) ?? Number.NaN;
+        const divisor = toNumber(value) ?? 0;
 
         if (Number.isNaN(divisor)) {
             throw Error(ERROR_VALUE);

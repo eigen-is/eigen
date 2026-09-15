@@ -37,3 +37,13 @@ export function invertNumber(value: FormulaArg): number | undefined {
     const num = toNumber(value);
     return num !== undefined ? -1 * num : undefined;
 }
+
+// Operand of an ordering comparison (`<`, `>`, `<=`, `>=`); Excel's real ordering rules (SHEETS-TODO Q2) land here.
+export function comparisonOperand(value: FormulaArg): number | string {
+    const operand = value ?? 0;
+    if (typeof operand === 'boolean') return operand ? 1 : 0;
+    if (typeof operand !== 'object') return operand;
+
+    const primitive = operand.valueOf();
+    return typeof primitive === 'number' ? primitive : String(operand);
+}

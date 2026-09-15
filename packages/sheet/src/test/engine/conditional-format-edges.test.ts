@@ -481,6 +481,23 @@ describe('engine/conditional-format edges — apply-range clamping', () => {
     // Excel writes a whole-column rule as A1:A1048576 and the xlsx importer passes the
     // sqref through; every branch has to stop at the last materialized row/column or a
     // three-row sheet builds a million-entry map.
+    test('the column bound is the widest row, so a matrix whose first rows are holes still scans', () => {
+        const data = [undefined, undefined, [numCell(7), numCell(9)]] as unknown as CellMatrix;
+        const styles = evaluateConditionalFormat(
+            [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 10], column: [0, 5] }],
+                    format: RED,
+                    conditionName: 'greaterThan',
+                    conditionValue: [8],
+                },
+            ],
+            data,
+        );
+        expect(Object.keys(styles)).toEqual(['2_1']);
+    });
+
     test('a whole-column duplicateValue rule only reaches the rows the matrix holds', () => {
         const data: CellMatrix = [[numCell(7)], [numCell(8)], [numCell(7)]];
         const styles = evaluateConditionalFormat(

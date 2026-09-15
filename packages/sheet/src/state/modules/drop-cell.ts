@@ -597,7 +597,6 @@ function fillDays(data: (Cell | null | undefined)[], len: number, step: number) 
                 .add(step * i, 'days')
                 .format('YYYY-MM-DD');
 
-            // TODO: is this parseCellInput() call handled correctly?
             d.v = parseCellInput(date)[2];
             if (d.ct != null && d.ct.fa != null) {
                 d.m = update(d.ct.fa, d.v);

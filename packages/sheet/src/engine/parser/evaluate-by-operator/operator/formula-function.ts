@@ -1,6 +1,6 @@
 // @ts-expect-error - No types available for @formulajs/formulajs
 import * as formulajs from '@formulajs/formulajs';
-import { update } from '../../../format';
+import { booleanDisplay, update } from '../../../format';
 import type { FormulaArg, FormulaOutput } from '../../../types';
 import { ERROR_NAME, ERROR_VALUE } from '../../error';
 import { toNumber } from '../../helper/number';
@@ -52,7 +52,10 @@ const OVERRIDES: Record<string, (params: FormulaArg[]) => FormulaOutput | undefi
     TEXT(params) {
         const [value, mask] = params;
         if (value instanceof Error) return value;
+        if (mask instanceof Error) return mask;
         if (mask === undefined || mask === null || mask === '') throw Error(ERROR_VALUE);
+        // Excel hands a boolean through as its text, whatever the mask: TEXT(TRUE,"0") = "TRUE".
+        if (typeof value === 'boolean') return update(String(mask), booleanDisplay(value));
         // A blank argument is 0, as in Excel.
         const num = toNumber(value ?? 0);
         // Non-numeric text keeps its text, formatted by the mask's text section: TEXT("abc","0") = "abc".
