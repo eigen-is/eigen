@@ -438,10 +438,10 @@ describe('document transform (eigensheets preview)', () => {
 
 // Pinned bytes of the golden fixture's export documents (the html download and the
 // wrapped document fed to htmlToPdf). Regenerate only for an intentional renderer
-// change — last moved by the class-based export styles (2026-08-05), which replaced
-// every inline style attribute with interned classes in a body <style> element.
-const GOLDEN_EXPORT_HTML_SHA256 = 'f5d528de407c003abef49b98ce37a24c8aea7f7a1f366e46118535680d6512fe';
-const GOLDEN_EXPORT_PDF_HTML_SHA256 = '5cc180f8ccf3b9f2864b9226c9323810a8ba780c0ed6ad94b754ec43dc22c2bd';
+// change — last moved by the default cell size becoming the editor's 100 × 20 (2026-09-15),
+// one constant shared by the grid, the importer and this renderer.
+const GOLDEN_EXPORT_HTML_SHA256 = 'f2f65cfdbfd0af4556382d43010db959fa9c940d3aca9e0f1725b3fd2e6713d4';
+const GOLDEN_EXPORT_PDF_HTML_SHA256 = 'ef17ebd0f2cc893d7e8329a68e5fd6b87b500cffdff738af4297a50c34788f0f';
 
 describe('document transform (eigensheets export)', () => {
     let golden: { mount: Mount; path: DrivePath };
