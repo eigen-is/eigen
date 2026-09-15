@@ -2,6 +2,7 @@ import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar/toolbar-ti
 import { ScrollArea } from '@workspace/ui/components/scroll-area';
 import { cn } from '@workspace/ui/lib/utils';
 import type { ReactNode } from 'react';
+import { type BeginGesture, PropertyGestureContext } from './property-gesture';
 
 // The w-64 below, for hosts that have to lay out around this panel.
 export const PROPERTIES_PANEL_WIDTH_PX = 256;
@@ -24,11 +25,14 @@ type PropertiesPanelProps = {
     children: ReactNode;
     // Fixed title bar, pixel-matched to the comments/activity Column toolbar (h-12 + ToolbarTitle).
     title?: ReactNode;
+    // One undo step per edit, for every control in the panel that writes as the user goes (the number
+    // fields, the opacity slider). Omit it and each write stands alone. See property-gesture.ts.
+    beginGesture?: BeginGesture;
     className?: string;
 };
 
-export function PropertiesPanel({ title, children, className }: PropertiesPanelProps) {
-    return (
+export function PropertiesPanel({ title, children, beginGesture, className }: PropertiesPanelProps) {
+    const panel = (
         <div className={cn('w-64 border-l bg-background shrink-0 h-full flex flex-col overflow-hidden', className)}>
             {title && (
                 <div className="h-12 flex items-center app-gutter-x shrink-0 border-b">
@@ -41,6 +45,11 @@ export function PropertiesPanel({ title, children, className }: PropertiesPanelP
                 {children}
             </ScrollArea>
         </div>
+    );
+    return beginGesture ? (
+        <PropertyGestureContext.Provider value={beginGesture}>{panel}</PropertyGestureContext.Provider>
+    ) : (
+        panel
     );
 }
 

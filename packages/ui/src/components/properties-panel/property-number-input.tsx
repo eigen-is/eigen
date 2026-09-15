@@ -1,6 +1,7 @@
 import { Input } from '@workspace/ui/components/input';
 import { cn } from '@workspace/ui/lib/utils';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { usePropertyGesture } from './property-gesture';
 
 type PropertyNumberInputProps = {
     value: number | undefined;
@@ -13,6 +14,9 @@ type PropertyNumberInputProps = {
     className?: string;
 };
 
+// The panel's number field. It writes on EVERY change — a keystroke, a spinner click, an arrow-key
+// step — so the edit is wrapped in one gesture from the first of them until the field is left or
+// committed: typing "250" is one undo step, not the three ⌘Z would otherwise walk back through.
 export function PropertyNumberInput({
     value,
     onChange,
@@ -25,6 +29,16 @@ export function PropertyNumberInput({
 }: PropertyNumberInputProps) {
     const [localValue, setLocalValue] = useState(() => String(value ?? ''));
     const [focused, setFocused] = useState(false);
+    const beginGesture = usePropertyGesture();
+    const release = useRef<(() => void) | null>(null);
+
+    const endGesture = useCallback(() => {
+        release.current?.();
+        release.current = null;
+    }, []);
+    // A gesture the field never sees end: Escape mid-edit deselects and unmounts the section, and so
+    // does a peer deleting the element. An unreleased hold would merge every later edit into one step.
+    useEffect(() => endGesture, [endGesture]);
 
     const externalStr = String(value ?? '');
     if (!focused && localValue !== externalStr) {
@@ -47,11 +61,20 @@ export function PropertyNumberInput({
                     // absent bound is no bound; a row wanting out-of-range entry (Angle) passes neither.
                     const lo = min ?? Number.NEGATIVE_INFINITY;
                     const hi = max ?? Number.POSITIVE_INFINITY;
-                    if (!Number.isNaN(v)) onChange(Math.min(hi, Math.max(lo, v)));
+                    if (!Number.isNaN(v)) {
+                        release.current ??= beginGesture();
+                        onChange(Math.min(hi, Math.max(lo, v)));
+                    }
                 }
+            }}
+            // Enter and Escape end the edit where the caret stays in the field, so the next one is a
+            // step of its own; every other way out is a blur.
+            onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === 'Escape') endGesture();
             }}
             onFocus={() => setFocused(true)}
             onBlur={() => {
+                endGesture();
                 setFocused(false);
                 if (localValue === '' || localValue === '-') {
                     setLocalValue(externalStr);

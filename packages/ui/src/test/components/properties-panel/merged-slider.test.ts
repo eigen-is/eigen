@@ -8,6 +8,7 @@ const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { holdCapture } = await import('../../../components/vector/hooks/use-canvas-doc');
 const { MergedSlider } = await import('../../../components/properties-panel/merged-slider');
+const { PropertyGestureContext } = await import('../../../components/properties-panel/property-gesture');
 
 // Escape mid-drag deselects and unmounts the panel section, and so does a peer deleting the element.
 // The hold must not outlive the component: an unreleased one leaves captureTimeout at Infinity, and
@@ -22,14 +23,17 @@ test('a gesture cut short by unmount still releases the capture hold', () => {
     const root = createRoot(container);
     act(() =>
         root.render(
-            createElement(MergedSlider, {
-                value: 50,
-                onChange: () => {},
-                beginGesture: () => holdCapture(undoManager),
-                min: 0,
-                max: 100,
-                'aria-label': 'Opacity',
-            }),
+            createElement(
+                PropertyGestureContext.Provider,
+                { value: () => holdCapture(undoManager) },
+                createElement(MergedSlider, {
+                    value: 50,
+                    onChange: () => {},
+                    min: 0,
+                    max: 100,
+                    'aria-label': 'Opacity',
+                }),
+            ),
         ),
     );
 
@@ -58,17 +62,22 @@ test('typing in the number field holds ONE undo gesture until the field is left'
     const root = createRoot(container);
     act(() =>
         root.render(
-            createElement(MergedSlider, {
-                value: 0,
-                onChange: () => {},
-                beginGesture: () => {
-                    gestures += 1;
-                    return holdCapture(undoManager);
+            createElement(
+                PropertyGestureContext.Provider,
+                {
+                    value: () => {
+                        gestures += 1;
+                        return holdCapture(undoManager);
+                    },
                 },
-                min: 0,
-                max: 100,
-                'aria-label': 'Opacity',
-            }),
+                createElement(MergedSlider, {
+                    value: 0,
+                    onChange: () => {},
+                    min: 0,
+                    max: 100,
+                    'aria-label': 'Opacity',
+                }),
+            ),
         ),
     );
 
