@@ -17,31 +17,24 @@ export function computeEtag(path: Pick<DrivePath, 'hash' | 'id' | 'updatedAt' | 
     return `"${value}"`;
 }
 
-// If-None-Match matcher: weak comparison (W/ stripped) is correct for GET/304 per RFC 7232 §3.2.
-export function etagMatches(header: string, etag: string): boolean {
-    if (header.trim() === '*') return true;
-    return header
-        .split(',')
-        .map((s) => s.trim().replace(/^W\//, ''))
-        .includes(etag);
-}
+// The two RFC 7232 comparisons every conditional surface shares. Both take the etag in its quoted wire form
+// (`computeEtag` already returns one; the DAV twins quote their stored bare hash at the call), and null for a
+// resource that does not exist, which only `*` reads — it means "the resource exists".
 
-// RFC 7232 If-Match matcher for DAV write seams (CalDAV/CardDAV) whose stored etag is a bare content
-// hash the handler quotes only in the response. `*` means "the resource exists", so null never matches;
-// §3.1 mandates STRONG comparison, so a member of the comma-list matches only after its quotes are
-// stripped — a weak `W/` validator never matches. Callers 412 when If-Match is present and this is false.
+// §3.1 mandates STRONG comparison: the quotes are part of the tag and a weak `W/` validator never matches.
+// Callers 412 when If-Match is present and this is false.
 export function matchesIfMatch(header: string, etag: string | null): boolean {
-    if (header === '*') return etag !== null;
+    if (header.trim() === '*') return etag !== null;
     if (etag === null) return false;
-    return header.split(',').some((raw) => raw.trim().replace(/^"|"$/g, '') === etag);
+    return header.split(',').some((raw) => raw.trim() === etag);
 }
 
-// The If-None-Match counterpart: §3.2 weak comparison strips each member's `W/` prefix before the quote
-// strip. `*` still means "the resource exists". Callers 412 when If-None-Match is present and this is true.
+// §3.2 compares weakly, so each member's `W/` prefix comes off first. Callers 304 a GET and 412 a write when
+// If-None-Match is present and this is true.
 export function matchesIfNoneMatch(header: string, etag: string | null): boolean {
-    if (header === '*') return etag !== null;
+    if (header.trim() === '*') return etag !== null;
     if (etag === null) return false;
-    return header.split(',').some((raw) => raw.trim().replace(/^W\//, '').replace(/^"|"$/g, '') === etag);
+    return header.split(',').some((raw) => raw.trim().replace(/^W\//, '') === etag);
 }
 
 // The bounded request-body reader every DAV router's XML/body seam sits on. The Content-Length pre-check only

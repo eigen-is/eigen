@@ -41,7 +41,7 @@ export async function handlePut(
     if (uri.length > MAX_URI_LENGTH) return new Response('Bad Request', { status: 400 });
 
     const existingEvent = calendar.getEventByUri(calendarId, uri);
-    const currentEtag = existingEvent?.etag ?? null;
+    const currentEtag = existingEvent ? `"${existingEvent.etag}"` : null;
 
     // RFC 7232 preconditions against the state the write overwrites (mirrors CardDAV's putCard): If-None-Match
     // fails when the header matches (e.g. `*` on an existing event), If-Match when it doesn't (a stale token,
@@ -127,7 +127,7 @@ export function handleDelete(calendar: Calendar, calendarId: string, uri: string
         return new Response('Not Found', { status: 404 });
     }
 
-    if (ifMatch !== null && !matchesIfMatch(ifMatch, event.etag)) {
+    if (ifMatch !== null && !matchesIfMatch(ifMatch, `"${event.etag}"`)) {
         return new Response('Precondition Failed', { status: 412 });
     }
 

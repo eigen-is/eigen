@@ -169,7 +169,7 @@ export async function putCard(
             .from(schema.contacts)
             .where(eq(schema.contacts.uriKey, uriKeyOf(uri)))
             .get();
-        const currentEtag = existing?.etag ?? null;
+        const currentEtag = existing ? `"${existing.etag}"` : null;
         if (pre.ifNoneMatch !== null && matchesIfNoneMatch(pre.ifNoneMatch, currentEtag)) {
             return { ok: false, error: 'precondition' };
         }
@@ -301,7 +301,7 @@ export async function deleteCard(
             });
             return { ok: false, error: 'self-delete' };
         }
-        if (pre.ifMatch !== null && !matchesIfMatch(pre.ifMatch, row.etag)) {
+        if (pre.ifMatch !== null && !matchesIfMatch(pre.ifMatch, `"${row.etag}"`)) {
             return { ok: false, error: 'precondition' };
         }
         await contacts.purgeCard(row);
