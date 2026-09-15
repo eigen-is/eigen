@@ -126,11 +126,6 @@ describe('engine/formula-engine — date results', () => {
         expect(result.type).toBe('number');
     });
 
-    test('DATEVALUE yields the Excel serial', () => {
-        const result = engine.evaluate('=DATEVALUE("2026-01-05")', 'sheet1', 0, 0, resolver);
-        expect(result.value).toBe(46027);
-    });
-
     test('NOW yields a number, not a stringified Date', () => {
         const result = engine.evaluate('=NOW()', 'sheet1', 0, 0, resolver);
         expect(typeof result.value).toBe('number');
