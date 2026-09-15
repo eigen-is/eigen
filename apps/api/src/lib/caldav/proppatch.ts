@@ -51,14 +51,16 @@ export function handleMkcalendar(calendar: Calendar, ownerId: string, calendarId
 }
 
 // DELETE /dav/calendars/:ownerId/:calendarId/ — the MKCALENDAR twin. deleteCalendar owns which calendars may go
-// (and the SSE broadcast), so only its statuses are translated: 404 stays 404, its refusal is DAV's 403.
+// (and the SSE broadcast), and DAV renames exactly one of its statuses: the default calendar's 400 refusal is
+// WebDAV's 403 on a protected collection. Every other failure travels on with its own status.
 export async function handleDeleteCalendar(calendar: Calendar, calendarId: string): Promise<Response> {
     try {
         await calendar.deleteCalendar(calendarId);
     } catch (error) {
         if (!(error instanceof ApiError)) throw error;
         if (error.status === 404) return new Response('Not Found', { status: 404 });
-        return new Response('Forbidden', { status: 403 });
+        if (error.status === 400) return new Response('Forbidden', { status: 403 });
+        throw error;
     }
     return new Response(null, { status: 204 });
 }
