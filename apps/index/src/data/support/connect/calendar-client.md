@@ -7,7 +7,7 @@ tags: [calendar, caldav, sync, integrations, app-passwords, thunderbird, apple-c
 related: [connect/app-passwords, connect/overview]
 crossSections: [calendar]
 order: 40
-updated: 2026-09-13
+updated: 2026-09-15
 ---
 
 Eigen Calendar syncs over CalDAV, so you can keep your events in step with Apple Calendar, Thunderbird, or any
@@ -81,8 +81,7 @@ CalDAV gives access to the calendars you own. Calendars that other people have s
 calendars, do not appear in an external client. You can see those by opening [Calendar](/calendar) in the
 browser.
 
-You can create a new calendar from your client and it appears in Eigen straight away. Deleting a calendar has
-to be done in Eigen: a client that tries to delete a whole calendar is refused.
+You can create a new calendar from your client and it appears in Eigen straight away. Deleting a calendar in your client removes it from Eigen too. Your default calendar is the exception: it stays, and the client is told the delete was refused.
 
 <div class="eigen-callout">
 

@@ -1,5 +1,6 @@
 import { XMLParser } from 'fast-xml-parser';
 import type { Calendar } from '../calendar/calendar';
+import { ApiError } from '../core';
 import { isXmlNode, type XmlNode } from '../dav/xml-node';
 import { calendarHref, sanitizeCalendarId } from './discovery';
 import { multistatusResponse, propstatOk, response } from './xml-builder';
@@ -47,6 +48,19 @@ export function handleMkcalendar(calendar: Calendar, ownerId: string, calendarId
 
     calendar.createCalendar({ id, name: props.name ?? id, color: props.color ?? '#4285f4' });
     return new Response(null, { status: 201, headers: { Location: calendarHref(ownerId, id) } });
+}
+
+// DELETE /dav/calendars/:ownerId/:calendarId/ — the MKCALENDAR twin. deleteCalendar owns which calendars may go
+// (and the SSE broadcast), so only its statuses are translated: 404 stays 404, its refusal is DAV's 403.
+export async function handleDeleteCalendar(calendar: Calendar, calendarId: string): Promise<Response> {
+    try {
+        await calendar.deleteCalendar(calendarId);
+    } catch (error) {
+        if (!(error instanceof ApiError)) throw error;
+        if (error.status === 404) return new Response('Not Found', { status: 404 });
+        return new Response('Forbidden', { status: 403 });
+    }
+    return new Response(null, { status: 204 });
 }
 
 // PROPPATCH /dav/calendars/:ownerId/:calendarId/
