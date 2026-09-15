@@ -14,7 +14,7 @@ import type {
     SheetConfig,
     SingleRange,
 } from '@workspace/lib/sheets';
-import { BORDER_STYLES } from '@workspace/lib/sheets';
+import { BORDER_STYLES, SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import {
     booleanDisplay,
     functionCopy,
@@ -35,7 +35,6 @@ const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
 const DAY_MS = 86_400_000;
 
 const DEFAULT_ROW_HEIGHT_PT = 15.75;
-const DEFAULT_ROW_HEIGHT_PX = 20;
 
 const HORIZONTAL_MAP: Record<NonNullable<Alignment['horizontal']>, 0 | 1 | 2> = {
     left: 1,
@@ -219,7 +218,7 @@ function worksheetToSheet(
         const isDefaultHeight = row.height === DEFAULT_ROW_HEIGHT_PT;
         if (!isDefaultHeight && typeof row.height === 'number' && row.height > 0) {
             rowlen[String(r)] = Math.round(row.height * (4 / 3));
-        } else if (maxCellHeight > DEFAULT_ROW_HEIGHT_PX) {
+        } else if (maxCellHeight > SHEET_DEFAULT_ROW_HEIGHT) {
             rowlen[String(r)] = Math.round(maxCellHeight);
         }
     });
@@ -759,7 +758,6 @@ function buildMergeStructures(merges: string[]): {
 }
 
 const DEFAULT_FONT_SIZE = 11;
-const DEFAULT_COL_WIDTH_PX = 100;
 const PT_TO_PX = 4 / 3;
 const LINE_HEIGHT_FACTOR = 1.35;
 
@@ -781,13 +779,13 @@ function estimateCellHeight(
     const text = getCellTextContent(cell);
     if (!text) return lineHeightPx + 6;
 
-    let cellWidth = colWidthPx[c] ?? DEFAULT_COL_WIDTH_PX;
+    let cellWidth = colWidthPx[c] ?? SHEET_DEFAULT_COL_WIDTH;
     const mergeKey = `${r}_${c}`;
     const mergeInfo = merge[mergeKey];
     if (mergeInfo?.cs && mergeInfo.cs > 1) {
         cellWidth = 0;
         for (let ci = mergeInfo.c; ci < mergeInfo.c + mergeInfo.cs; ci++) {
-            cellWidth += colWidthPx[ci] ?? DEFAULT_COL_WIDTH_PX;
+            cellWidth += colWidthPx[ci] ?? SHEET_DEFAULT_COL_WIDTH;
         }
     }
 
