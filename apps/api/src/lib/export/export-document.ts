@@ -121,13 +121,6 @@ export async function runDocumentExport(
     path: DrivePath,
     signal?: AbortSignal,
 ): Promise<Buffer> {
-    // Sheets embed no media. Doc and slides do, and the Mount I/O plus the screen
-    // previews behind it stay on this thread.
-    if (job.documentType === 'eigensheets') {
-        const title = stripEigenExtension(path.name);
-        return runTransformToBytes(mount, path, { kind: 'export', ...job, title }, { signal });
-    }
-
     // Refuse before the prep: media collection is Mount I/O plus a screen preview per
     // image, and a job the runner will not admit must not pay for it. run() rechecks
     // authoritatively — this is only the early exit.

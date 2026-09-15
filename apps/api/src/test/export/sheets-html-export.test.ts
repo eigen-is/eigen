@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import type { Cell, ConditionalFormatRule, Sheet } from '@workspace/lib/sheets';
+import type { Cell, ConditionalFormatRule, Sheet, SheetImage } from '@workspace/lib/sheets';
+import { sanitizeExportHtml } from '../../lib/export/sanitize';
 import {
     getSheetContentSize,
     renderSheetsExportDocument,
@@ -25,6 +26,9 @@ function makeSheet(cells: { r: number; c: number; v: Cell }[], rules?: Condition
         ...(rules ? { conditionalFormatRules: rules } : {}),
     };
 }
+
+// A workbook without floating images resolves nothing.
+const NO_MEDIA = new Map<string, string>();
 
 type RenderOut = { html: string; css: string };
 
@@ -141,7 +145,7 @@ describe('Sheets HTML export — class-based styles', () => {
     });
 
     test('the export document embeds the class rules in a body style element', () => {
-        const doc = renderSheetsExportDocument([makeSheet([{ r: 0, c: 0, v: { v: 'x' } }])], 'T');
+        const doc = renderSheetsExportDocument([makeSheet([{ r: 0, c: 0, v: { v: 'x' } }])], 'T', NO_MEDIA);
         // The generated rules survive sanitization into the final document.
         expect(doc).toContain('border:1px solid #d4d4d4');
         expect(doc).toMatch(/<style>[^<]*td\{overflow:hidden/);
@@ -152,6 +156,7 @@ describe('Sheets HTML export — class-based styles', () => {
         const doc = renderSheetsExportDocument(
             [makeSheet([{ r: 0, c: 0, v: { v: 'x', bg: 'url(http://evil.test/ssrf)' } }])],
             'T',
+            NO_MEDIA,
         );
         expect(doc).not.toMatch(/url\(\s*['"]?https?:/i);
     });
@@ -180,7 +185,7 @@ describe('Sheets HTML export — class-based styles', () => {
             { v: 'x', ff: BREAKOUT },
             { v: 'x', fc: BREAKOUT },
         ]) {
-            expectNoBreakout(renderSheetsExportDocument([makeSheet([{ r: 0, c: 0, v: cell }])], 'T'));
+            expectNoBreakout(renderSheetsExportDocument([makeSheet([{ r: 0, c: 0, v: cell }])], 'T', NO_MEDIA));
         }
     });
 
@@ -190,7 +195,7 @@ describe('Sheets HTML export — class-based styles', () => {
             columnlen: { 0: BREAKOUT as unknown as number },
             rowlen: { 0: BREAKOUT as unknown as number },
         };
-        const doc = renderSheetsExportDocument([sheet], 'T');
+        const doc = renderSheetsExportDocument([sheet], 'T', NO_MEDIA);
         expectNoBreakout(doc);
         // Non-numeric dimensions fall back to the defaults rather than concatenating —
         // the same coercion getSheetContentSize applies for the @page rule.
@@ -712,5 +717,92 @@ describe('Sheets export — content size (@page)', () => {
         // Pre-coercion this summed to the string "050;}@page{100", headed for the <head> @page CSS.
         // Bad column → DEFAULT_COL_WIDTH (73), bad row → DEFAULT_ROW_HEIGHT (19).
         expect(getSheetContentSize(sheet)).toEqual({ width: 73 + 100, height: 25 + 19 });
+    });
+});
+
+// A floating image is a media reference (docs/MEDIA-REFERENCES.md): the stored name is
+// resolved to a src by the caller — a data: URI for an export, a preview URL for a preview.
+describe('Sheets HTML export — floating images', () => {
+    const PIXEL =
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    const MEDIA = new Map([['chart.png', PIXEL]]);
+
+    function withImages(images: SheetImage[]): Sheet {
+        return { ...makeSheet([{ r: 0, c: 0, v: { v: 'grid' } }]), images };
+    }
+
+    test('renders each image absolutely positioned over the grid at its stored geometry', () => {
+        const out = renderSheetsHtml(
+            [withImages([{ id: 'img_1', mediaName: 'chart.png', x: 120, y: 40, width: 200, height: 150 }])],
+            MEDIA,
+        );
+        const [wrapper] = classesFor(out, 'position:relative;width:');
+        expect(useCount(out, wrapper)).toBe(1);
+        const [image] = classesFor(out, 'left:120px;top:40px;width:200px;height:150px');
+        expect(image).toBeDefined();
+        expect(out.html).toContain(`<img class="${image}" src="${PIXEL}" alt="">`);
+    });
+
+    test('a rotated image carries the same center-origin rotation the editor paints', () => {
+        const out = renderSheetsHtml(
+            [withImages([{ id: 'img_1', mediaName: 'chart.png', x: 0, y: 0, width: 10, height: 10, angle: 30 }])],
+            MEDIA,
+        );
+        expect(classesFor(out, 'transform:rotate(30deg);transform-origin:center center')).toHaveLength(1);
+    });
+
+    test('an image whose name resolves to nothing renders nothing', () => {
+        const out = renderSheetsHtml(
+            [withImages([{ id: 'img_1', mediaName: 'pending:abc', x: 0, y: 0, width: 10, height: 10 }])],
+            MEDIA,
+        );
+        expect(out.html).not.toContain('<img');
+        expect(classesFor(out, 'position:relative;width:')).toHaveLength(0);
+    });
+
+    test('an image on an otherwise blank sheet still renders', () => {
+        const sheet: Sheet = {
+            name: 'Blank',
+            images: [{ id: 'img_1', mediaName: 'chart.png', x: 5, y: 5, width: 10, height: 10 }],
+        };
+        expect(renderSheetsHtml([sheet], MEDIA).html).toContain('<img');
+    });
+
+    test('the overlay is offset by the rows and columns before the used range', () => {
+        const sheet: Sheet = {
+            ...makeSheet([{ r: 2, c: 1, v: { v: 'grid' } }]),
+            images: [{ id: 'img_1', mediaName: 'chart.png', x: 100, y: 60, width: 10, height: 10 }],
+        };
+        // Two default rows (19px) and one default column (73px) sit above/left of the table.
+        const out = renderSheetsHtml([sheet], MEDIA);
+        expect(classesFor(out, `left:${100 - 73}px;top:${60 - 2 * 19}px`)).toHaveLength(1);
+    });
+
+    test('a workbook without floating images emits the bare table it always did', () => {
+        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'grid' } }])], MEDIA);
+        expect(out.html).not.toContain('position:relative;width:');
+        expect(out.html).toMatch(/<div class="sheet">\n<table /);
+    });
+
+    test('the embedded data: URI survives the document sanitizer', () => {
+        const doc = renderSheetsExportDocument(
+            [withImages([{ id: 'img_1', mediaName: 'chart.png', x: 0, y: 0, width: 10, height: 10 }])],
+            'T',
+            MEDIA,
+        );
+        expect(doc).toContain(`src="${PIXEL}"`);
+    });
+
+    test('a preview URL survives only while it is the resolved one', () => {
+        // The preview arm embeds http(s) URLs, which the sanitizer strips unless the caller
+        // allow-lists them — renderEigensheetsPreviewBody passes exactly the prepared map.
+        const url = 'http://api.test/drive/o/m/file/f1/preview';
+        const { html } = renderSheetsPreviewHtml(
+            [withImages([{ id: 'img_1', mediaName: 'chart.png', x: 0, y: 0, width: 10, height: 10 }])],
+            new Map([['chart.png', url]]),
+        );
+        expect(html).toContain(`src="${url}"`);
+        expect(sanitizeExportHtml(html, { allowedRefs: new Set([url]) })).toContain(url);
+        expect(sanitizeExportHtml(html)).not.toContain(url);
     });
 });

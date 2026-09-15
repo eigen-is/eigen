@@ -75,6 +75,9 @@ import {
     TEST_PNG_BYTES,
 } from '../setup';
 
+// A document without media resolves nothing.
+const NO_MEDIA = new Map<string, string>();
+
 // End-to-end validation of the off-thread eigensheets preview and exports: Worker
 // output must equal the same pipeline executed on the main thread, corruption and
 // recalc failures surface as warnings (never as a failed preview/export), and the
@@ -192,12 +195,13 @@ describe('document transform (eigensheets preview)', () => {
 
         // Main-thread execution of the exact Worker pipeline (capture → materialize
         // → render/sanitize), against the Worker execution via the real runner.
+        const mediaUrls = await buildPreviewUrlMap(mount, path);
         const persisted = await readPersistedDoc(mount, path);
-        const direct = renderEigensheetsPreviewBody(persisted);
+        const direct = renderEigensheetsPreviewBody(persisted, mediaUrls);
         persisted.destroy();
 
         const response = await documentTransformRunner.run(
-            { kind: 'preview', documentType: 'eigensheets', source: await captureCollabSource(mount, path) },
+            { kind: 'preview', documentType: 'eigensheets', mediaUrls, source: await captureCollabSource(mount, path) },
             PREVIEW_OPTIONS,
         );
         expect(previewBody(response)).toBe(direct.body);
@@ -216,7 +220,12 @@ describe('document transform (eigensheets preview)', () => {
         const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
         try {
             const response = await documentTransformRunner.run(
-                { kind: 'preview', documentType: 'eigensheets', source: await captureCollabSource(mount, path) },
+                {
+                    kind: 'preview',
+                    documentType: 'eigensheets',
+                    mediaUrls: NO_MEDIA,
+                    source: await captureCollabSource(mount, path),
+                },
                 PREVIEW_OPTIONS,
             );
             expect(response.ok && response.warnings).toContainEqual({ code: 'corrupt-blobs-skipped', count: 1 });
@@ -255,12 +264,12 @@ describe('document transform (eigensheets preview)', () => {
             expect(fromDoc.recalcError).toBe('forced recalc failure');
             expect(fromDoc.sheets[0].celldata?.[0]?.v?.v).toBe('replayed-value');
 
-            const exported = await renderEigensheetsExport(doc, 'html', 'Warned');
+            const exported = await renderEigensheetsExport(doc, 'html', 'Warned', []);
             expect(exported.warnings).toContainEqual({ code: 'recalc-failed', message: 'forced recalc failure' });
             expect(new TextDecoder().decode(exported.data)).toContain('replayed-value');
 
             // The preview read never invokes recalc, so the forced failure is unreachable.
-            const { body, warnings } = renderEigensheetsPreviewBody(doc);
+            const { body, warnings } = renderEigensheetsPreviewBody(doc, NO_MEDIA);
             expect(warnings).toEqual([]);
             expect(body).toContain('replayed-value');
         } finally {
@@ -284,7 +293,7 @@ describe('document transform (eigensheets preview)', () => {
         ];
         doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
 
-        const { body, warnings } = renderEigensheetsPreviewBody(doc);
+        const { body, warnings } = renderEigensheetsPreviewBody(doc, NO_MEDIA);
         expect(warnings.some((warning) => warning.code === 'byte-guard-truncated')).toBe(true);
         expect(body).toContain('Preview truncated');
         expect(body.length).toBeLessThan(1000);
@@ -459,7 +468,7 @@ describe('document transform (eigensheets export)', () => {
             format: 'pdf-html',
             title: 'golden-export',
         } as const;
-        const html = await runTransformToBytes(golden.mount, golden.path, job, {});
+        const html = await runTransformToBytes(golden.mount, golden.path, { ...job, media: [] }, {});
         expect(sha256(html)).toBe(GOLDEN_EXPORT_PDF_HTML_SHA256);
     }, 120_000);
 

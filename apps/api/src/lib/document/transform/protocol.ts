@@ -16,18 +16,20 @@ export type EigendocExportFormat = DocumentExportFormat | 'docx';
 // Vector exports the drawing's own SVG, or that SVG on a page WeasyPrint renders to PDF.
 export type VectorExportFormat = 'svg' | 'pdf-html';
 
-// Doc/slides media crossing the boundary: prepared on the main thread for an export
+// Document media crossing the boundary: prepared on the main thread for an export
 // (Mount I/O + screen previews), extracted from the upload by a docx import. The
 // bytes always ride as transferred buffers.
 export type TransformMedia = { name: string; contentType: string; data: ArrayBuffer };
 
 // A job is everything a caller decides; the shared main-thread orchestration
 // (run-transform.ts) captures the Yjs source and completes it into a request.
-// Doc/slides/vector previews reference media by URL, so no bytes cross for a preview.
-// (Vector renders to an SVG served as-is; the URL map resolves its <image> hrefs.)
-export type CollabPreviewJob =
-    | { kind: 'preview'; documentType: 'eigensheets' }
-    | { kind: 'preview'; documentType: 'eigendoc' | 'eigenslides' | 'eigenvector'; mediaUrls: Map<string, string> };
+// Previews reference media by URL, so no bytes cross for a preview. (Vector renders to
+// an SVG served as-is; the URL map resolves its <image> hrefs.)
+export type CollabPreviewJob = {
+    kind: 'preview';
+    documentType: 'eigensheets' | 'eigendoc' | 'eigenslides' | 'eigenvector';
+    mediaUrls: Map<string, string>;
+};
 
 // A .vcf holds no collaborative document: it previews from its own bytes, which ride as a
 // transferred buffer the way an upload does.
@@ -37,7 +39,13 @@ export type VCardPreviewJob = { kind: 'preview'; documentType: 'vcard' };
 // (Sheets and slides strip the eigen extension; eigendoc's <title> keeps the full
 // container name, frozen output.)
 export type ExportTransformJob =
-    | { kind: 'export'; documentType: 'eigensheets'; format: SheetExportFormat; title: string }
+    | {
+          kind: 'export';
+          documentType: 'eigensheets';
+          format: SheetExportFormat;
+          title: string;
+          media: TransformMedia[];
+      }
     | { kind: 'export'; documentType: 'eigendoc'; format: EigendocExportFormat; title: string; media: TransformMedia[] }
     | {
           kind: 'export';
@@ -142,7 +150,7 @@ export function transferListOf(request: DocumentTransformRequest): ArrayBuffer[]
     const buffers: ArrayBuffer[] = [];
     if (request.source.snapshot) buffers.push(request.source.snapshot.data);
     for (const update of request.source.updates) buffers.push(update.data);
-    if (request.kind === 'export' && 'media' in request) {
+    if (request.kind === 'export') {
         for (const item of request.media) buffers.push(item.data);
     }
     return buffers;

@@ -1,6 +1,7 @@
 import type {
     ConditionalFormatRule,
     DataVerificationRule,
+    SheetImage as Image,
     Sheet as LibSheet,
     SheetConfig as LibSheetConfig,
     MergeCell,
@@ -22,11 +23,12 @@ import type { PatchOptions } from './utils';
 // Types surfaced here so state-side consumers don't have to know the canonical
 // home. Sheet data shapes (Cell, CellMatrix, CellWithRowAndCol, SingleRange,
 // Range) live in @workspace/lib/sheets and re-export through ../engine/types;
-// Op / ConditionalFormatRule / DataVerificationRule live in lib directly (the
-// BE document reader replays ops without the engine, the HTML export reads
-// CF rules, and data-validation rules are touched
-// by the editor + canvas painter — none is engine-conceptual). AncestorFormulaCell
-// and CalcChainEntry are engine-only (formula dep graph + calc-chain node).
+// Op / ConditionalFormatRule / DataVerificationRule / Image (lib's SheetImage)
+// live in lib directly (the BE document reader replays ops without the engine, the
+// HTML export reads CF rules and paints floating images, and data-validation rules
+// are touched by the editor + canvas painter — none is engine-conceptual).
+// AncestorFormulaCell and CalcChainEntry are engine-only (formula dep graph +
+// calc-chain node).
 export type {
     AncestorFormulaCell,
     CalcChainEntry,
@@ -35,6 +37,7 @@ export type {
     CellWithRowAndCol,
     ConditionalFormatRule,
     DataVerificationRule,
+    Image,
     MergeCell,
     Op,
     Range,
@@ -113,19 +116,6 @@ export type SheetConfig = LibSheetConfig &
         authority?: SheetAuthority;
     };
 
-export type Image = {
-    id: string;
-    width: number;
-    height: number;
-    x: number;
-    y: number;
-    // Rotation in degrees, center origin. Added with ObjectTransform adoption (U4h). Clean break:
-    // images stored before this field read `undefined` and are treated as 0 at the render/commit
-    // sites (`img.angle ?? 0`) — value-defaulting, not a BC shim.
-    angle?: number;
-    mediaName: string;
-};
-
 // Filter-by-condition rule names. The names overlapping conditional formatting
 // reuse the CF conditionNames (greaterThan, lessThan, equal, between, …); each
 // maps 1:1 onto a label in `FILTER_CONDITION_ITEMS` (`state/modules/filter.ts`).
@@ -181,12 +171,11 @@ export type AlternateFormatEntry = {
 // Editor-runtime Sheet: lib's canonical fields plus state-only extras (selection
 // state, calc chain, filter criteria, dynamic-array spill ranges, …) that never
 // reach the wire shape. `config` is widened to state's SheetConfig. Frozen panes,
-// the autofilter range, data-validation rules and hyperlinks live on the lib
-// Sheet — they persist and the xlsx importer emits them.
+// the autofilter range, data-validation rules, hyperlinks and floating images live
+// on the lib Sheet — they persist, and preview and export render them.
 export type Sheet = Omit<LibSheet, 'config'> & {
     config?: SheetConfig;
     color?: string;
-    images?: Image[];
     addRows?: number;
     status?: number;
     hide?: number;

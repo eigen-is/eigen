@@ -105,6 +105,7 @@ the op format and `replaySheetsOps` are untouched.
   `data` over stale `celldata`) and is never persisted; `selections` never persists either.
 - `config.borderInfo`'s `"r_c"` entries become `[r, c, borderIdx]` tuples over an interned
   `borders` dictionary (order carries nothing; the map is rebuilt on decode).
+- `images` — the sheet's floating images (`SheetImage[]` in `packages/lib/src/sheets/types.ts`, which `packages/sheet` re-exports as `Image`) — ride verbatim: a handful of small records per sheet, nothing to intern. The key is omitted when the sheet has none, and decode materializes the list on every sheet, the way `normalizeSheetConfig` materializes a config collection.
 - `calcChain` is never persisted. `computed: true` (importer post-recalc, every editor
   flush) makes the decoder seed it from the `f` cells — which is exactly the signal
   `sheetsNeedRecalc` keys off, so the § Server-side recalc gate is unchanged: an
@@ -454,6 +455,8 @@ threads them to `renderSheet`, and the per-sheet `buildCfFormulaEvaluator` produ
 formulas, only the CF rule's formula against existing values. The cell values it reads are already
 engine-fresh, though: `readSheetsFromDoc` runs the gated `recalcSheets` (see § Server-side recalc)
 before the sheets reach any exporter.
+
+**Floating images paint over the grid.** A sheet with `images` wraps its table in a `position:relative` box and emits one absolutely-positioned `<img>` per image at the stored `x`/`y`/`width`/`height`, rotated about its center by `angle` — the same box the editor's `ImgBoxs` lays out, because both read the same fields. The coordinates are unzoomed grid pixels from A1's top-left while the table starts at the used range, so the overlay subtracts the widths and heights of the rows and columns above and left of the window. The name is a media reference ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)): the main thread resolves it — a base64 `data:` URI for an export (`collectExportMedia`), the `/file/<id>/preview` URL for a preview (`buildPreviewUrlMap`) — and a name that resolves to nothing (a `pending:` upload that never settled, a deleted file) renders nothing. A sheet whose only content is an image still renders it. Native xlsx export drops them: ExcelJS has no floating-picture writer this exporter uses.
 
 Webpage hyperlinks render as `target="_blank" rel="noopener noreferrer"` anchors, scheme-gated
 through the same `resolveWebLink` (`@workspace/lib/sheets/web-link`) the editor's link navigation

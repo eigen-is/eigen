@@ -28,6 +28,9 @@ import { authedRequest, driveGet, drivePost, getTestContext } from '../setup';
 
 type TextPreview = { body: string; mode: string };
 
+// A workbook without floating images resolves nothing.
+const NO_MEDIA = new Map<string, string>();
+
 describe('eigensheets preview (golden)', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     let mountId: string;
@@ -105,7 +108,7 @@ describe('eigensheets preview (read policy)', () => {
         const doc = new Y.Doc();
         seedSheetsDoc(doc, buildGoldenSheets(), []);
 
-        const { body: rendered, warnings } = renderEigensheetsPreviewBody(doc);
+        const { body: rendered, warnings } = renderEigensheetsPreviewBody(doc, NO_MEDIA);
         expect(rendered).toContain('Region 1');
         expect(rendered).not.toContain(`>${GOLDEN_ROW1_TOTAL}</td>`);
         expect(warnings).toEqual([]);
@@ -133,10 +136,48 @@ describe('eigensheets preview (read policy)', () => {
         const doc = new Y.Doc();
         seedSheetsDoc(doc, [sheet], []);
 
-        const { body } = renderEigensheetsPreviewBody(doc);
+        const { body } = renderEigensheetsPreviewBody(doc, NO_MEDIA);
         expect(body).toContain('Beacon');
         expect(body).not.toContain('http://evil.example');
         expect(body).not.toMatch(/url\(http/i);
+        doc.destroy();
+    });
+});
+
+// Floating images are a media reference: the main thread resolves the name to a
+// /file/<id>/preview URL, and the preview body embeds it. A separate fixture — the golden
+// one above pins bytes that must not move for this.
+describe('eigensheets preview (floating images)', () => {
+    const IMAGE_URL = 'http://api.test/drive/owner/default/file/media-1/preview';
+
+    function seedImageSheet(): Y.Doc {
+        const cell = { v: 'Grid', m: 'Grid', ct: { fa: 'General', t: 'g' } };
+        const sheet: Sheet = {
+            id: 'images',
+            name: 'Images',
+            celldata: [{ r: 0, c: 0, v: cell }],
+            data: [[cell]],
+            config: {},
+            images: [{ id: 'img_1', mediaName: 'chart.png', x: 90, y: 30, width: 160, height: 120 }],
+        };
+        const doc = new Y.Doc();
+        seedSheetsDoc(doc, [sheet], []);
+        return doc;
+    }
+
+    test('the image reaches the body at its stored geometry', () => {
+        const doc = seedImageSheet();
+        const { body } = renderEigensheetsPreviewBody(doc, new Map([['chart.png', IMAGE_URL]]));
+        expect(body).toContain(`src="${IMAGE_URL}"`);
+        expect(body).toContain('left:90px;top:30px;width:160px;height:120px');
+        doc.destroy();
+    });
+
+    test('a name the main thread could not resolve renders no img at all', () => {
+        const doc = seedImageSheet();
+        const { body } = renderEigensheetsPreviewBody(doc, NO_MEDIA);
+        expect(body).toContain('Grid');
+        expect(body).not.toContain('<img');
         doc.destroy();
     });
 });
