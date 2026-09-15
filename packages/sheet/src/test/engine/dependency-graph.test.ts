@@ -12,7 +12,7 @@ function makeCell(key: string, parents: Record<string, number> = {}): FormulaCel
         calc_funcStr: '=A1',
         formulaDependency: [],
         parents,
-        chidren: {},
+        children: {},
         color: 'w',
     };
 }

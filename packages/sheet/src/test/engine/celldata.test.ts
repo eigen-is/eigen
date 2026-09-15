@@ -36,7 +36,7 @@ describe('celldataToData', () => {
         // Matches legacy behavior from state/api/common.ts: maxBy returns
         // undefined → bbox is 1x1, populated with null. Engine consumers
         // (rowcol, replay) expect a non-null matrix even for empty sheets.
-        expect(celldataToData([])).toEqual([[null]]);
+        expect(celldataToData([], 1, 1)).toEqual([[null]]);
     });
 
     test('expands sparse celldata to bounding box', () => {
@@ -44,7 +44,7 @@ describe('celldataToData', () => {
             { r: 0, c: 0, v: cell('a') },
             { r: 2, c: 1, v: cell('b') },
         ];
-        const data = celldataToData(cells)!;
+        const data = celldataToData(cells, 1, 1)!;
         expect(data.length).toBe(3);
         expect(data[0]?.length).toBe(2);
         expect(data[0]?.[0]?.v).toBe('a');
@@ -75,7 +75,7 @@ describe('round-trip', () => {
             { r: 0, c: 0, v: cell('a') },
             { r: 5, c: 7, v: cell('b') },
         ];
-        const data = celldataToData(original)!;
+        const data = celldataToData(original, 1, 1)!;
         const back = dataToCelldata(data);
         expect(back).toEqual(original);
     });
@@ -86,7 +86,7 @@ describe('round-trip', () => {
             [null, null, cell('b')],
         ];
         const cells = dataToCelldata(data);
-        const rebuilt = celldataToData(cells)!;
+        const rebuilt = celldataToData(cells, 1, 1)!;
         expect(rebuilt[0]?.[0]?.v).toBe('a');
         expect(rebuilt[1]?.[2]?.v).toBe('b');
         expect(rebuilt[0]?.[2]).toBeNull();

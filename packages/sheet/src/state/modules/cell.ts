@@ -2,7 +2,7 @@ import { escapeHtml } from '@workspace/lib/html';
 import type { BorderSide, MergeCell } from '@workspace/lib/sheets';
 import { cloneDeep, every, indexOf, isEmpty, isNil, isNumber, isPlainObject, isString } from 'es-toolkit/compat';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
-import { booleanDisplay, genarate, update } from '../../engine/format';
+import { booleanDisplay, parseCellInput, update } from '../../engine/format';
 import { isFormula } from '../../engine/formula-engine';
 import { iscelldata } from '../../engine/formula-utils';
 import type { Cell, CellMatrix, CellType, FormulaDependency } from '../../engine/types';
@@ -246,7 +246,7 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
                 } else {
                     const v_p = Math.round(cell.v * 1000000000) / 1000000000;
                     if (isNil(cell.ct) || isNil(cell.ct.fa)) {
-                        const mask = genarate(v_p);
+                        const mask = parseCellInput(v_p);
                         if (mask != null) {
                             cell.m = mask[0].toString();
                         }
@@ -260,7 +260,7 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
             cell.m = vupdateStr;
             cell.v = vupdate;
         } else if (cell.ct != null && cell.ct.t === 'd' && isString(vupdate)) {
-            const mask = genarate(vupdate);
+            const mask = parseCellInput(vupdate);
             if (mask[1].t !== 'd' || mask[1].fa === cell.ct.fa) {
                 [cell.m, cell.ct, cell.v] = mask;
             } else {
@@ -276,7 +276,7 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
 
             if (mask === vupdate) {
                 // If the original cell format cannot be applied to the updated value, get the format of the updated value
-                const newMask = genarate(vupdate);
+                const newMask = parseCellInput(vupdate);
                 mask = newMask || mask;
 
                 cell.m = typeof mask !== 'string' && mask[0] ? mask[0].toString() : '';
@@ -305,13 +305,13 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
                 if (cell.v === Infinity || cell.v === -Infinity) {
                     cell.m = cell.v.toString();
                 } else if (cell.v != null) {
-                    const mask = genarate(cell.v as string);
+                    const mask = parseCellInput(cell.v as string);
                     if (mask) {
                         cell.m = mask[0].toString();
                     }
                 }
             } else {
-                const mask = genarate(vupdate);
+                const mask = parseCellInput(vupdate);
                 if (mask) {
                     cell.m = mask[0].toString();
                     [, cell.ct, cell.v] = mask;

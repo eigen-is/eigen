@@ -30,8 +30,8 @@ export { FormulaEngine } from './formula-engine';
 export { type FormulaShiftMode, functionCopy } from './formula-shift';
 export { iscelldata } from './formula-utils';
 export { recalcSheets, sheetsNeedRecalc } from './recalc';
-export { normalizeSheetConfig, replaySheetsOps, withMaterializedData } from './replay-ops';
-export type { DeleteRowColOp, InsertRowColOp, RowColErrorCode } from './rowcol';
+export { replaySheetsOps, withMaterializedData } from './replay-ops';
+export { normalizeSheetConfig } from './sheet-config';
 export type {
     CalcChainEntry,
     CellResolver,

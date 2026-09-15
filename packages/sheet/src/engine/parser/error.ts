@@ -10,6 +10,7 @@ export const ERROR_NOT_AVAILABLE = 'N/A';
 export const ERROR_NULL = 'NULL';
 export const ERROR_NUM = 'NUM';
 export const ERROR_REF = 'REF';
+export const ERROR_SPILL = 'SPILL';
 export const ERROR_VALUE = 'VALUE';
 
 export type ErrorType =
@@ -20,8 +21,11 @@ export type ErrorType =
     | typeof ERROR_NULL
     | typeof ERROR_NUM
     | typeof ERROR_REF
+    | typeof ERROR_SPILL
     | typeof ERROR_VALUE;
 
+// The engine's one error table: id → user-facing string. Every other list of error
+// literals derives from it (engine/validation.ts included).
 const errors: Record<string, string> = {
     [ERROR]: '#ERROR!',
     [ERROR_DIV_ZERO]: '#DIV/0!',
@@ -30,19 +34,24 @@ const errors: Record<string, string> = {
     [ERROR_NULL]: '#NULL!',
     [ERROR_NUM]: '#NUM!',
     [ERROR_REF]: '#REF!',
+    [ERROR_SPILL]: '#SPILL!',
     [ERROR_VALUE]: '#VALUE!',
 };
 
-// Look up the user-facing error string (e.g. "#VALUE!") for an error id.
-// Accepts ids with or without surrounding `#!?` so it works both as a lookup
-// and as a normalizer for already-formatted error strings.
+const errorValues = Object.values(errors);
+
+// Look up the user-facing error string (e.g. "#VALUE!") for an error id. Accepts ids with
+// or without surrounding `#!?` so it works both as a lookup and as a normalizer for
+// already-formatted error strings; a known `ErrorType` always resolves.
+export default function error(type: ErrorType): string;
+export default function error(type: string): string | null;
 export default function error(type: string): string | null {
     const cleanType = `${type}`.replace(/#|!|\?/g, '');
     return errors[cleanType] ?? null;
 }
 
-export function isValidStrict(type: string): boolean {
-    return Object.values(errors).includes(type);
+export function valueIsError(value: string): boolean {
+    return errorValues.includes(value);
 }
 
 // formulajs's trapping functions (IFERROR, IFNA, ISERROR, ISERR, ISNA) recognize an error

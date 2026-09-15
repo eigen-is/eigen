@@ -6,14 +6,14 @@
 // only reads correctly in Chinese. Excel's convention is 2024 > August > 5.
 
 import { describe, expect, test } from 'bun:test';
-import { genarate } from '../../../engine/format';
+import { parseCellInput } from '../../../engine/format';
 import type { Context } from '../../../state/context';
 import { type FilterDate, getFilterColumnValues } from '../../../state/modules/filter';
 import type { Cell } from '../../../state/types';
 import { contextFactory } from '../factories/context';
 
 function date(iso: string): Cell {
-    const [m, ct, v] = genarate(iso);
+    const [m, ct, v] = parseCellInput(iso);
     expect(ct.t).toBe('d');
     return { v, m: `${m}`, ct };
 }

@@ -165,7 +165,7 @@ describe('engine/conditional-format edges — remaining comparison ops', () => {
 });
 
 describe('engine/conditional-format edges — occurrenceDate', () => {
-    // genarate('2024/1/15')[2] === 45306 (date serial); slash form has no '-'
+    // parseCellInput('2024/1/15')[2] === 45306 (date serial); slash form has no '-'
     // so it takes the single-date path, 'a - b' takes the split path.
     test('single date matches only date-typed cells with that serial', () => {
         const data: CellMatrix = [[dateCell(45306), dateCell(45307), numCell(45306)]];

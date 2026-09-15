@@ -3,6 +3,19 @@ import { toNumber } from '../../helper/number';
 
 export const SYMBOL = '=';
 
+// Operand of an ordering comparison (`<`, `>`, `<=`, `>=`), reduced to what JS relational
+// operators would coerce it to anyway: blanks read as 0 like the rest of the engine,
+// booleans as 1/0, and the object shapes that can slip through (ranges, Errors, formulajs
+// Dates) through their own primitive. Excel's real ordering rules (SHEETS-TODO Q2) land here.
+export function comparisonOperand(value: FormulaArg): number | string {
+    const operand = value ?? 0;
+    if (typeof operand === 'boolean') return operand ? 1 : 0;
+    if (typeof operand !== 'object') return operand;
+
+    const primitive = operand.valueOf();
+    return typeof primitive === 'number' ? primitive : String(operand);
+}
+
 // Coercing, case-insensitive equality: numbers and numeric strings compare by
 // value (`1 = "1"` → TRUE — the Google Sheets convention; Excel keeps them
 // unequal), text compares case-insensitively (`"A" = "a"` → TRUE, as in both

@@ -16,7 +16,7 @@ import { applyPatches, enablePatches, type Patch, produce, produceWithPatches } 
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { type RefValues, type SetContextOptions, WorkbookContext } from '../../context';
 import { ModalProvider } from '../../context/modal';
-import { normalizeSheetConfig } from '../../engine/replay-ops';
+import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { CellMatrix } from '../../engine/types';
 import {
     api,

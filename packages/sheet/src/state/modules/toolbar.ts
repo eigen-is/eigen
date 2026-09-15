@@ -1,6 +1,6 @@
 import type { BorderType } from '@workspace/lib/sheets';
 import { forEach, isNil, isPlainObject, pick, round } from 'es-toolkit/compat';
-import { genarate, is_date, update } from '../../engine/format';
+import { is_date, parseCellInput, update } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
 import type { GlobalCache } from '../types';
@@ -734,7 +734,7 @@ export function handleNumberDecrease(ctx: Context, cellInput: HTMLDivElement) {
     if (foucsStatus.fa === 'General') {
         if (!cell?.v) return;
 
-        [, foucsStatus] = genarate(cell.v);
+        [, foucsStatus] = parseCellInput(cell.v);
     }
 
     // Wan/Yi (10,000/100,000,000) number format
@@ -808,7 +808,7 @@ export function handleNumberIncrease(ctx: Context, cellInput: HTMLDivElement) {
 
     if (foucsStatus.fa === 'General') {
         if (!cell?.v) return;
-        [, foucsStatus] = genarate(cell.v);
+        [, foucsStatus] = parseCellInput(cell.v);
     }
 
     if (foucsStatus.fa === 'General') {

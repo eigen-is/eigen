@@ -59,8 +59,10 @@ export class DependencyIndex {
                     this.points.set(sheetId, sheetPoints);
                 }
                 const keys = sheetPoints.get(point);
+                // One entry per formula: `delete` splices a single occurrence, so a
+                // formula reading the same cell twice (`=A1+A1`) must not be listed twice.
                 if (keys == null) sheetPoints.set(point, [key]);
-                else keys.push(key);
+                else if (!keys.includes(key)) keys.push(key);
                 stored.push({ sheetId, point });
             } else {
                 const entry: RangeEntry = { r0, r1, c0, c1, key };

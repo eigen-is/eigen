@@ -28,7 +28,6 @@ function getCellValue(cell: Cell | null | undefined): unknown {
 function inferType(value: unknown): EvaluationResult['type'] {
     if (typeof value === 'number') return 'number';
     if (typeof value === 'boolean') return 'boolean';
-    if (value instanceof Date) return 'date';
     if (typeof value === 'string' && value.startsWith('#')) return 'error';
     return 'string';
 }
@@ -57,7 +56,7 @@ export class FormulaEngine {
             const cacheKey = `${cellCoord.row.index}_${cellCoord.column.index}_${sheetId}`;
             const cached = this.state.execFunctionGlobalData[cacheKey];
             if (cached !== undefined) {
-                done(getCellValue(cached as Cell));
+                done(getCellValue(cached));
                 return;
             }
 
@@ -104,7 +103,7 @@ export class FormulaEngine {
                         const cacheKey = `${row}_${col}_${sheetId}`;
                         const cached = this.state.execFunctionGlobalData[cacheKey];
                         if (cached !== undefined) {
-                            colFragment.push(getCellValue(cached as Cell));
+                            colFragment.push(getCellValue(cached));
                         } else {
                             const cell = resolver.getCell(sheetId, row, col);
                             colFragment.push(getCellValue(cell));
@@ -118,7 +117,7 @@ export class FormulaEngine {
         );
     }
 
-    evaluate(formula: string, sheetId: string, _row: number, _col: number, resolver: CellResolver): EvaluationResult {
+    evaluate(formula: string, sheetId: string, resolver: CellResolver): EvaluationResult {
         this.currentResolver = resolver;
         try {
             const expression = formula.substring(1);

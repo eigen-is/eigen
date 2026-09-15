@@ -2,12 +2,21 @@ export {
     columnIndexToLabel,
     columnLabelToIndex,
     extractLabel,
+    quoteSheetName,
     rowIndexToLabel,
     rowLabelToIndex,
     toLabel,
+    unquoteSheetName,
 } from './parser/helper/cell';
 
-import { columnIndexToLabel, columnLabelToIndex, rowIndexToLabel, rowLabelToIndex } from './parser/helper/cell';
+import {
+    columnIndexToLabel,
+    columnLabelToIndex,
+    rowIndexToLabel,
+    rowLabelToIndex,
+    SHEET_NAME_PREFIX,
+    unquoteSheetName,
+} from './parser/helper/cell';
 
 export type CellRef = { col: number; row: number };
 
@@ -17,21 +26,9 @@ export type A1Range = {
     end: CellRef;
 };
 
-const simpleSheetName = '[A-Za-z0-9_\\u00C0-\\u02AF]+';
-const quotedSheetName = "'(?:(?!').|'')*'";
-const sheetNamePattern = `(?:(${simpleSheetName}|${quotedSheetName})!)`;
 const RANGE_REGEXP = new RegExp(
-    `^${sheetNamePattern}?([$])?([A-Za-z]+)([$])?([0-9]+)(?::([$])?([A-Za-z]+)([$])?([0-9]+))?$`,
+    `^(?:${SHEET_NAME_PREFIX})?([$])?([A-Za-z]+)([$])?([0-9]+)(?::([$])?([A-Za-z]+)([$])?([0-9]+))?$`,
 );
-
-export function unquoteSheetName(raw: string): string {
-    return raw.replace(/^'|'$/g, '').replace(/''/g, "'");
-}
-
-// Inverse of unquoteSheetName: single-quote wrap with embedded quotes doubled.
-export function quoteSheetName(name: string): string {
-    return `'${name.replace(/'/g, "''")}'`;
-}
 
 export function parseA1Range(range: string): A1Range | null {
     const match = range.match(RANGE_REGEXP);

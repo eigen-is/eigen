@@ -196,7 +196,7 @@ function buildCfFormulaEvaluator(
         let shifted = formula;
         if (offsetRow > 0) shifted = `=${functionCopy(shifted, 'down', offsetRow)}`;
         if (offsetCol > 0) shifted = `=${functionCopy(shifted, 'right', offsetCol)}`;
-        return engine.evaluate(shifted, sheetId, anchorRow, anchorCol, resolver).value;
+        return engine.evaluate(shifted, sheetId, resolver).value;
     };
 }
 

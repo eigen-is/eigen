@@ -16,19 +16,6 @@ import power from './operator/power';
 
 type OperatorCallable = (...args: FormulaArg[]) => FormulaOutput;
 
-// Direct operator: the function itself handles the call.
-export type DirectOperator = OperatorCallable & {
-    SYMBOL: string | string[];
-    isFactory?: false;
-};
-
-// Factory operator: receives the symbol at registration time and returns the
-// callable (used by formulaFunction to close over SUPPORTED_FORMULAS names).
-export type FactoryOperator = ((symbol: string) => OperatorCallable) & {
-    SYMBOL: string | string[];
-    isFactory: true;
-};
-
 const availableOperators: Record<string, OperatorCallable> = Object.create(null);
 
 // Arithmetic operators coerce operands via `toNumber(x) ?? 0`, which silently
@@ -72,22 +59,8 @@ export default function evaluateByOperator(operator: string, params: FormulaArg[
     }
 }
 
-// Register operator. Overloaded so direct operators and factories are type-checked
-// separately — a factory's call returns the callable, a direct operator's IS the
-// callable, and TS can't express both under one union without either variance
-// issues or casts at call sites.
-export function registerOperation(symbol: string | string[], func: DirectOperator): void;
-export function registerOperation(symbol: string | string[], func: FactoryOperator): void;
-export function registerOperation(symbol: string | string[], func: DirectOperator | FactoryOperator): void {
-    const symbols = Array.isArray(symbol) ? symbol.map((s) => s.toUpperCase()) : [symbol.toUpperCase()];
-
-    for (const s of symbols) {
-        if (func.isFactory === true) {
-            availableOperators[s] = func(s);
-        } else {
-            availableOperators[s] = func;
-        }
-    }
+function registerOperation(symbol: string, func: OperatorCallable): void {
+    availableOperators[symbol.toUpperCase()] = func;
 }
 
 registerOperation(add.SYMBOL, add);
@@ -95,7 +68,6 @@ registerOperation(ampersand.SYMBOL, ampersand);
 registerOperation(divide.SYMBOL, divide);
 registerOperation(equal.SYMBOL, equal);
 registerOperation(power.SYMBOL, power);
-registerOperation(formulaFunction.SYMBOL, formulaFunction);
 registerOperation(greaterThan.SYMBOL, greaterThan);
 registerOperation(greaterThanOrEqual.SYMBOL, greaterThanOrEqual);
 registerOperation(lessThan.SYMBOL, lessThan);
@@ -103,3 +75,9 @@ registerOperation(lessThanOrEqual.SYMBOL, lessThanOrEqual);
 registerOperation(multiply.SYMBOL, multiply);
 registerOperation(notEqual.SYMBOL, notEqual);
 registerOperation(minus.SYMBOL, minus);
+
+// The formula functions share one operator: each formulajs name gets the callable that
+// closes over it (`formulaFunction.SYMBOL` is SUPPORTED_FORMULAS).
+for (const name of formulaFunction.SYMBOL) {
+    registerOperation(name, formulaFunction(name.toUpperCase()));
+}

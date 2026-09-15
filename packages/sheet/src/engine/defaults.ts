@@ -14,6 +14,16 @@ export const DEFAULT_SHEET_COLUMN_COUNT = 26;
 export const MAX_SHEET_ROW_COUNT = 10000;
 export const MAX_SHEET_COLUMN_COUNT = 1000;
 
+// The grid a sheet materializes into: its own row/column when it carries a usable pair,
+// else the default grid. One spelling, so replay and recalc always materialize the same
+// base — a smaller one makes ops recorded against the editor's grid fail to resolve.
+export function gridSize(sheet: Pick<Sheet, 'row' | 'column'>): { row: number; column: number } {
+    return {
+        row: sheet.row != null && sheet.row > 0 ? sheet.row : DEFAULT_SHEET_ROW_COUNT,
+        column: sheet.column != null && sheet.column > 0 ? sheet.column : DEFAULT_SHEET_COLUMN_COUNT,
+    };
+}
+
 // A factory rather than a shared constant: Workbook's initSheetData mutates the
 // sheets handed to it (writes `data`, deletes `celldata`), so a module-level
 // constant would be aliased and mutated across mounts. The id must stay

@@ -580,7 +580,7 @@ export function execfunction(
     ctx.calculateSheetId = id;
 
     resolver ??= createContextResolver(snapshotContext(ctx));
-    const evalResult = ctx.formulaCache.engine.evaluate(txt, id!, r ?? 0, c ?? 0, resolver);
+    const evalResult = ctx.formulaCache.engine.evaluate(txt, id!, resolver);
     const result = evalResult.value;
 
     if (r != null && c != null) {

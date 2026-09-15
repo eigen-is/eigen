@@ -7,7 +7,7 @@
 // incomplete input is a no-op (never "hide everything").
 
 import { describe, expect, test } from 'bun:test';
-import { genarate } from '../../../engine/format';
+import { parseCellInput } from '../../../engine/format';
 import type { Context } from '../../../state/context';
 import {
     buildFilterConditionMatcher,
@@ -28,7 +28,7 @@ function num(v: number): Cell {
 }
 
 function date(iso: string): Cell {
-    const [m, ct, v] = genarate(iso);
+    const [m, ct, v] = parseCellInput(iso);
     expect(ct.t).toBe('d');
     return { v, m: `${m}`, ct };
 }

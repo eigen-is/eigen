@@ -67,7 +67,7 @@ export type FormulaDependency = {
 
 // Dependency-graph adjacency: maps the `${r}_${c}_${index}` key of each
 // adjacent formula cell to a refcount. Used as both the `parents` and
-// `chidren` field type on FormulaCellInfo (engine) and FormulaCell (state).
+// `children` field type on FormulaCellInfo (engine) and FormulaCell (state).
 export type AncestorFormulaCell = {
     [rxcxix: string]: number;
 };
@@ -80,8 +80,8 @@ export type FormulaCellInfo = {
     c: number;
     id: string;
     parents: AncestorFormulaCell;
-    chidren: AncestorFormulaCell;
-    color: string;
+    children: AncestorFormulaCell;
+    color: 'w' | 'b';
 };
 
 export type FormulaCellInfoMap = {
@@ -111,7 +111,7 @@ export type EvaluationResult = {
 };
 
 export type FormulaEngineState = {
-    execFunctionGlobalData: Record<string, unknown>;
+    execFunctionGlobalData: Record<string, Cell>;
     formulaCellInfoMap: FormulaCellInfoMap | null;
     // Reverse lookup cell → formulas reading it; mirrors formulaCellInfoMap
     // and must reset with it.

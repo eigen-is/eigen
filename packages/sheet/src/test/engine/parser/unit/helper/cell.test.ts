@@ -12,9 +12,9 @@ describe('sheet/formula-parser/helper/cell', () => {
     describe('.extractLabel()', () => {
         test('should correctly extract coordinates', () => {
             const result = extractLabel('A1');
-            expect(result).toBeDefined();
+            expect(result).not.toBeNull();
             expect(Array.isArray(result)).toBe(true);
-            expect(result.length).toBeGreaterThan(0);
+            expect(result!.length).toBeGreaterThan(0);
         });
     });
 

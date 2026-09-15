@@ -34,10 +34,6 @@ export class RowColError extends Error {
     }
 }
 
-// lib's `SheetConfig` types only the fields the BE serializes. The engine's
-// row/col shifter also touches editor-runtime fields that live alongside but
-// aren't lib-typed — see `EditorSheetConfigExtras` in `./types`.
-
 // Generic over S so the state-side state.Sheet[] passes through with its extras
 // (filter / frozen / dataVerification / ...) typed end-to-end. The engine only
 // reads lib.Sheet-typed fields; shallow copies preserve the wider input shape.
@@ -310,7 +306,7 @@ function shiftKeyedMapForDelete(map: Record<string, number>, start: number, end:
 
 function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: InsertRowColOp): S[] {
     const target = sheets[targetIndex];
-    const cfg = (target.config ?? {}) as ExtendedSheetConfig;
+    const cfg: ExtendedSheetConfig = target.config ?? {};
     const data = target.data;
     if (!data) return sheets;
 
@@ -322,7 +318,7 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
 
     const { count } = op;
     const newTarget = { ...target };
-    const newCfg = { ...(target.config ?? {}) } as ExtendedSheetConfig;
+    const newCfg: ExtendedSheetConfig = { ...target.config };
     const newData = op.type === 'row' ? [...data] : data.map((row) => [...row]);
     newTarget.data = newData;
     const insertAt = op.direction === 'lefttop' ? op.index : op.index + 1;
@@ -421,9 +417,15 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
         });
     }
 
-    let result: S[] = [...sheets.slice(0, targetIndex), newTarget, ...sheets.slice(targetIndex + 1)];
-    result = shiftFormulasAcrossSheets(result, targetIndex, op.type, op.direction, op.index, count, 'add');
-    return result;
+    return shiftFormulasAcrossSheets(
+        [...sheets.slice(0, targetIndex), newTarget, ...sheets.slice(targetIndex + 1)],
+        targetIndex,
+        op.type,
+        op.direction,
+        op.index,
+        count,
+        'add',
+    );
 }
 
 function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: DeleteRowColOp): S[] {
@@ -431,7 +433,7 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
     const data = target.data;
     if (!data) return sheets;
 
-    const cfg = (target.config ?? {}) as ExtendedSheetConfig;
+    const cfg: ExtendedSheetConfig = target.config ?? {};
 
     if (op.type === 'row' && cfg.rowReadOnly) {
         for (let i = op.start; i <= op.end; i += 1) {
@@ -445,7 +447,7 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
     }
 
     const newTarget = { ...target };
-    const newCfg = { ...(target.config ?? {}) } as ExtendedSheetConfig;
+    const newCfg: ExtendedSheetConfig = { ...target.config };
     const newData = op.type === 'row' ? [...data] : data.map((row) => [...row]);
     newTarget.data = newData;
     const removeCount = op.end - op.start + 1;
@@ -538,7 +540,13 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
         newTarget.conditionalFormatRules = newCFarr;
     }
 
-    let result: S[] = [...sheets.slice(0, targetIndex), newTarget, ...sheets.slice(targetIndex + 1)];
-    result = shiftFormulasAcrossSheets(result, targetIndex, op.type, null, op.start, removeCount, 'del');
-    return result;
+    return shiftFormulasAcrossSheets(
+        [...sheets.slice(0, targetIndex), newTarget, ...sheets.slice(targetIndex + 1)],
+        targetIndex,
+        op.type,
+        null,
+        op.start,
+        removeCount,
+        'del',
+    );
 }

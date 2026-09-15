@@ -261,7 +261,7 @@ export function getComputeMap(ctx: Context): ComputeMap | null {
             if (offsetCol > 0) {
                 shifted = `=${functionCopy(shifted, 'right', offsetCol)}`;
             }
-            return ctx.formulaCache.engine.evaluate(shifted, ctx.currentSheetId, targetRow, targetCol, resolver).value;
+            return ctx.formulaCache.engine.evaluate(shifted, ctx.currentSheetId, resolver).value;
         },
     });
     _cfCache.set(ctx.currentSheetId, { rules: ruleArr, data, result: computeMap });

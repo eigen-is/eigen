@@ -20,15 +20,12 @@ export function detectAbsolute(txt: string): [boolean, boolean] {
 // range endpoint) shifts off the sheet.
 //
 // NOTE: this and `functionStrChange_range` parse+reformat refs with the same
-// per-leg idiom (split on '!', split on ':', digits→row / letters→col,
-// detectAbsolute, missing/frozen flags), but they are deliberately NOT merged
-// into a shared parseRef/formatRef. They differ in row convention (this keeps
-// rows 1-based throughout; `functionStrChange_range` works 0-based internally
-// and +1s on output) and, more importantly, in their single-cell fallback: this
-// branches on post-shift `rowValid`/`colValid`, while the other collapses via
-// `r1===r2 && c1===c2` off explicit missing flags. A forced merge would have to
-// rewrite one function's shift math onto the other's convention — high risk on
-// the package's most formula-corruption-sensitive code for a few lines saved.
+// per-leg idiom but are deliberately NOT merged. They differ in row convention
+// (this keeps rows 1-based; the other works 0-based and +1s on output) and in
+// their single-cell fallback (post-shift `rowValid`/`colValid` here, explicit
+// missing flags there), so a merge means rewriting one's shift math onto the
+// other's convention — high risk on the package's most formula-corruption-
+// sensitive code for a few lines saved.
 function shiftRef(orient: 'd' | 'u' | 'l' | 'r', txt: string, step: number): string {
     const sheetSplit = txt.split('!');
     let rangetxt: string;
@@ -129,11 +126,9 @@ function shiftRef(orient: 'd' | 'u' | 'l' | 'r', txt: string, step: number): str
 //
 // A leading `-` is classified as a unary sign (glued to the following number literal) rather
 // than a binary operator when the nearest non-space char before it is one of the unary-trigger
-// chars (opening paren, comma, another operator) or the start of the segment. That predecessor
-// is found by reading i-1 first, then scanning back over spaces — the char immediately before
-// the `-`. (functionStrChange historically decremented before reading, skipping i-1 and starting
-// at i-2; that misclassified e.g. the `-` in `CONCAT(-1:3)` as binary and shifted the trailing
-// range. Both consumers now share this single read-i-1 scan.)
+// chars (opening paren, comma, another operator) or the start of the segment. The scan reads
+// i-1 first, then walks back over spaces: start at i-2 and the `-` in `CONCAT(-1:3)` reads as
+// binary, shifting the trailing range.
 function walkFormulaRefs(txt: string, onRef: (ref: string) => string): string {
     let stripped = txt;
     if (stripped.startsWith('=')) stripped = stripped.slice(1);
@@ -221,11 +216,7 @@ function walkFormulaRefs(txt: string, onRef: (ref: string) => string): string {
 // Walks a formula string, finding cell-data refs and shifting them in the given
 // direction. A leading `=` is stripped before processing; the returned text never
 // carries one. Pure — no Context, no DOM. Negative `step` is allowed and reverses
-// the direction. Used by:
-//   - state/modules/condition-format.ts (CF formula rules)
-//   - state/events/paste.ts (formula paste with relative refs)
-//   - state/modules/sort.ts (sort moves formulas around)
-//   - apps/api/src/lib/export/sheets/render.ts (server-side CF rule evaluation)
+// the direction.
 export function functionCopy(txt: string, mode: FormulaShiftMode = 'down', step = 1): string {
     const orient = mode[0] as 'd' | 'u' | 'l' | 'r';
     return walkFormulaRefs(txt, (ref) => shiftRef(orient, ref, step));

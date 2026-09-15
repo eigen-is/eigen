@@ -18,18 +18,14 @@ export function dataToCelldata(data: CellMatrix | undefined): CellWithRowAndCol[
     return celldata;
 }
 
-export function celldataToData(celldata: CellWithRowAndCol[], rowCount?: number, colCount?: number): CellMatrix {
+export function celldataToData(celldata: CellWithRowAndCol[], rowCount: number, colCount: number): CellMatrix {
     const lastRow = maxBy<CellWithRowAndCol>(celldata, 'r');
     const lastCol = maxBy<CellWithRowAndCol>(celldata, 'c');
-    let lastRowNum = (lastRow?.r ?? 0) + 1;
-    let lastColNum = (lastCol?.c ?? 0) + 1;
-    if (rowCount != null && colCount != null && rowCount > 0 && colCount > 0) {
-        lastRowNum = Math.max(lastRowNum, rowCount);
-        lastColNum = Math.max(lastColNum, colCount);
-    }
+    const lastRowNum = Math.max((lastRow?.r ?? 0) + 1, rowCount);
+    const lastColNum = Math.max((lastCol?.c ?? 0) + 1, colCount);
     const expandedData: CellMatrix = times(lastRowNum, () => times(lastColNum, () => null));
     for (const d of celldata) {
-        if (d.r < lastRowNum && d.c < lastColNum) expandedData[d.r][d.c] = d.v;
+        expandedData[d.r][d.c] = d.v;
     }
     return expandedData;
 }

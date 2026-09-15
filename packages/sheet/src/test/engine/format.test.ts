@@ -1,36 +1,25 @@
 import { describe, expect, test } from 'bun:test';
-import { datenum_local, genarate, is_date, update, valueShowEs } from '../../engine/format';
+import { is_date, parseCellInput, update, valueShowEs } from '../../engine/format';
 import type { CellMatrix } from '../../engine/types';
 
-describe('engine/format — datenum_local', () => {
-    test('converts a date to an Excel serial number', () => {
-        // 2023-01-01 in UTC should produce serial 44927
-        const d = new Date(2023, 0, 1, 0, 0, 0);
-        const serial = datenum_local(d);
-        expect(typeof serial).toBe('number');
-        expect(serial).toBeGreaterThan(0);
+describe('engine/format — date serials', () => {
+    test('converts a date string to an Excel serial number', () => {
+        const [m, ct, v] = parseCellInput('2023-01-01');
+        expect(m).toBe('2023-01-01');
+        expect(ct.t).toBe('d');
+        expect(v).toBe(44927);
     });
 
-    test('serial for 1900-01-01 is near 1', () => {
-        const d = new Date(1900, 0, 1, 0, 0, 0);
-        const serial = datenum_local(d);
-        // Should be 1 or 2 depending on the 1904 offset
-        expect(serial).toBeGreaterThanOrEqual(1);
-        expect(serial).toBeLessThan(5);
-    });
-
-    test('date1904 flag shifts the serial by 4 years', () => {
-        const d = new Date(2023, 0, 1, 0, 0, 0);
-        const without1904 = datenum_local(d);
-        const with1904 = datenum_local(d, 1);
-        // The 1904 epoch removes exactly 1461 days (4 years) from the formula
-        expect(Math.abs(without1904 - with1904)).toBe(1462);
+    test('serial for 1900-01-01 is 1', () => {
+        const [, ct, v] = parseCellInput('1900-01-01');
+        expect(ct.t).toBe('d');
+        expect(v).toBe(1);
     });
 });
 
-describe('engine/format — genarate', () => {
+describe('engine/format — parseCellInput', () => {
     test('infers plain integer as numeric General format', () => {
-        const result = genarate(42);
+        const result = parseCellInput(42);
         expect(result).not.toBeNull();
         const [m, ct, v] = result!;
         expect(m).toBe('42');
@@ -40,7 +29,7 @@ describe('engine/format — genarate', () => {
     });
 
     test('infers decimal number with correct fixed-point format', () => {
-        const result = genarate(3.14);
+        const result = parseCellInput(3.14);
         expect(result).not.toBeNull();
         const [, ct, v] = result!;
         expect(ct.fa).toBe('0.00');
@@ -49,7 +38,7 @@ describe('engine/format — genarate', () => {
     });
 
     test('infers monetary string (comma-formatted) as numeric', () => {
-        const result = genarate('1,234.56');
+        const result = parseCellInput('1,234.56');
         expect(result).not.toBeNull();
         const [m, ct, v] = result!;
         expect(m).toBe('1,234.56');
@@ -59,22 +48,22 @@ describe('engine/format — genarate', () => {
     });
 
     test('keeps the decimals of a one-group monetary string', () => {
-        expect(genarate('1,000.50')).toEqual(['1,000.50', { fa: '#,##0.00', t: 'n' }, 1000.5]);
-        expect(genarate('-1,000.50')).toEqual(['-1,000.50', { fa: '#,##0.00', t: 'n' }, -1000.5]);
-        expect(genarate('1,000.5')).toEqual(['1,000.5', { fa: '#,##0.0', t: 'n' }, 1000.5]);
+        expect(parseCellInput('1,000.50')).toEqual(['1,000.50', { fa: '#,##0.00', t: 'n' }, 1000.5]);
+        expect(parseCellInput('-1,000.50')).toEqual(['-1,000.50', { fa: '#,##0.00', t: 'n' }, -1000.5]);
+        expect(parseCellInput('1,000.5')).toEqual(['1,000.5', { fa: '#,##0.0', t: 'n' }, 1000.5]);
     });
 
     test('two-group monetary strings keep their decimals as well', () => {
-        expect(genarate('1,000,000.50')).toEqual(['1,000,000.50', { fa: '#,##0.00', t: 'n' }, 1000000.5]);
+        expect(parseCellInput('1,000,000.50')).toEqual(['1,000,000.50', { fa: '#,##0.00', t: 'n' }, 1000000.5]);
     });
 
     test('monetary string without decimals stays an integer', () => {
-        expect(genarate('1,000')).toEqual(['1,000', { fa: '#,##0', t: 'n' }, 1000]);
-        expect(genarate('12,345')).toEqual(['12,345', { fa: '#,##0', t: 'n' }, 12345]);
+        expect(parseCellInput('1,000')).toEqual(['1,000', { fa: '#,##0', t: 'n' }, 1000]);
+        expect(parseCellInput('12,345')).toEqual(['12,345', { fa: '#,##0', t: 'n' }, 12345]);
     });
 
     test('a thousands group followed by junk stays text', () => {
-        const result = genarate('1,000x50');
+        const result = parseCellInput('1,000x50');
         expect(result).not.toBeNull();
         const [m, ct, v] = result!;
         expect(m).toBe('1,000x50');
@@ -83,7 +72,7 @@ describe('engine/format — genarate', () => {
     });
 
     test('Infinity stays text — Excel has no infinite number literal', () => {
-        const result = genarate('Infinity');
+        const result = parseCellInput('Infinity');
         expect(result).not.toBeNull();
         const [m, ct, v] = result!;
         expect(m).toBe('Infinity');
@@ -92,7 +81,7 @@ describe('engine/format — genarate', () => {
     });
 
     test('a hex literal stays text instead of being parsed down to its prefix', () => {
-        const result = genarate('0x10');
+        const result = parseCellInput('0x10');
         expect(result).not.toBeNull();
         const [m, ct, v] = result!;
         expect(m).toBe('0x10');
@@ -101,7 +90,7 @@ describe('engine/format — genarate', () => {
     });
 
     test('infers TRUE boolean string', () => {
-        const result = genarate('TRUE');
+        const result = parseCellInput('TRUE');
         expect(result).not.toBeNull();
         const [m, ct, v] = result!;
         expect(m).toBe('TRUE');
@@ -110,7 +99,7 @@ describe('engine/format — genarate', () => {
     });
 
     test('infers FALSE boolean string', () => {
-        const result = genarate('FALSE');
+        const result = parseCellInput('FALSE');
         expect(result).not.toBeNull();
         const [m, ct, v] = result!;
         expect(m).toBe('FALSE');
@@ -119,7 +108,7 @@ describe('engine/format — genarate', () => {
     });
 
     test('infers string prefixed with apostrophe as text', () => {
-        const result = genarate("'hello");
+        const result = parseCellInput("'hello");
         expect(result).not.toBeNull();
         const [m, ct] = result!;
         expect(m).toBe('hello');
@@ -128,7 +117,7 @@ describe('engine/format — genarate', () => {
     });
 
     test('infers percentage string', () => {
-        const result = genarate('25%');
+        const result = parseCellInput('25%');
         expect(result).not.toBeNull();
         const [, ct] = result!;
         expect(ct.t).toBe('n');
@@ -136,7 +125,7 @@ describe('engine/format — genarate', () => {
     });
 
     test('infers error value as error type', () => {
-        const result = genarate('#DIV/0!');
+        const result = parseCellInput('#DIV/0!');
         expect(result).not.toBeNull();
         const [m, ct] = result!;
         expect(m).toBe('#DIV/0!');
@@ -144,7 +133,7 @@ describe('engine/format — genarate', () => {
     });
 
     test('plain text string becomes general/string type', () => {
-        const result = genarate('hello world');
+        const result = parseCellInput('hello world');
         expect(result).not.toBeNull();
         const [m, ct] = result!;
         expect(m).toBe('hello world');

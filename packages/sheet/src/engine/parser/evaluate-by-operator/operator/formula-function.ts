@@ -77,7 +77,6 @@ function func(symbol: string): FormulajsMethod {
     };
 }
 
-func.isFactory = true as const;
 func.SYMBOL = SYMBOL;
 
 export default func;

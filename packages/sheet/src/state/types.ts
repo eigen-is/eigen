@@ -349,6 +349,6 @@ export type FormulaCell = {
     parent?: AncestorFormulaCell;
     func?: [boolean, number, string];
     color?: string;
-    chidren?: AncestorFormulaCell;
+    children?: AncestorFormulaCell;
     times?: number;
 };

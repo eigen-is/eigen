@@ -11,7 +11,6 @@ export function rowLabelToIndex(label: string): number {
     return Math.max(result - 1, -1);
 }
 
-// Empty string for negative indices.
 export function rowIndexToLabel(row: number): string {
     return row >= 0 ? `${row + 1}` : '';
 }
@@ -21,7 +20,6 @@ const COLUMN_LABEL_BASE_LENGTH = COLUMN_LABEL_BASE.length;
 
 // Base-26 decode, e.g. "A" → 0, "Z" → 25, "AA" → 26.
 export function columnLabelToIndex(label: string): number {
-    if (typeof label !== 'string') return -1;
     const upperLabel = label.toUpperCase();
     let result = 0;
     for (let i = 0, j = upperLabel.length - 1; i < upperLabel.length; i += 1, j -= 1) {
@@ -30,15 +28,14 @@ export function columnLabelToIndex(label: string): number {
     return result - 1;
 }
 
-// Base-26 encode, inverse of columnLabelToIndex.
 export function columnIndexToLabel(column: number): string {
     let result = '';
     let n = column;
     while (n >= 0) {
-        result = String.fromCharCode((n % COLUMN_LABEL_BASE_LENGTH) + 97) + result;
+        result = COLUMN_LABEL_BASE[n % COLUMN_LABEL_BASE_LENGTH] + result;
         n = Math.floor(n / COLUMN_LABEL_BASE_LENGTH) - 1;
     }
-    return result.toUpperCase();
+    return result;
 }
 
 // The two sheet-name spellings a reference may carry (`Sheet1!A1`, `'My Sheet'!A1`); every
@@ -48,18 +45,23 @@ export const QUOTED_SHEET_NAME = "'(?:(?!').|'')*'";
 export const SHEET_NAME_PREFIX = `(${SIMPLE_SHEET_NAME}|${QUOTED_SHEET_NAME})!`;
 const LABEL_EXTRACT_REGEXP = new RegExp(`^(?:${SHEET_NAME_PREFIX})?([$])?([A-Za-z]*)([$])?([0-9]*)$`);
 
-// Split a cell label like `Sheet1!$A$1` into [row, column, sheetName]. Returns
-// [null, null, null] when unparseable. Used by the parser to build cell refs.
-export function extractLabel(label: string): [CellCoordinate | null, CellCoordinate | null, string | null] {
-    if (typeof label !== 'string' || !LABEL_EXTRACT_REGEXP.test(label)) {
-        return [null, null, null];
-    }
+export function unquoteSheetName(raw: string): string {
+    return raw.replace(/^'|'$/g, '').replace(/''/g, "'");
+}
+
+// Inverse of unquoteSheetName: single-quote wrap with embedded quotes doubled.
+export function quoteSheetName(name: string): string {
+    return `'${name.replace(/'/g, "''")}'`;
+}
+
+// Split a cell label like `Sheet1!$A$1` into [row, column, sheetName], null when
+// unparseable. Used by the parser to build cell refs.
+export function extractLabel(label: string): [CellCoordinate, CellCoordinate, string | null] | null {
     const match = label.toUpperCase().match(LABEL_EXTRACT_REGEXP);
-    if (!match) return [null, null, null];
+    if (!match) return null;
+
     const [, sheetNameStr, columnAbs, column, rowAbs, row] = match;
-    if (column == null && row == null) return [null, null, null];
-    const sheetName =
-        sheetNameStr == null ? null : label.slice(0, sheetNameStr.length).replace(/^'|'$/g, '').replace(/''/g, "'");
+    const sheetName = sheetNameStr == null ? null : unquoteSheetName(label.slice(0, sheetNameStr.length));
 
     return [
         { index: rowLabelToIndex(row), label: row, isAbsolute: rowAbs === '$' },

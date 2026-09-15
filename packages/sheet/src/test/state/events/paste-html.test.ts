@@ -101,7 +101,7 @@ describe('HTML-table paste — values and selection', () => {
         pasteHtml(ctx, pastedHtmlFactory('Excel'));
 
         const d = ctx.sheets[0].data!;
-        // genarate() masks the plain integers to numeric cells (ct.t === 'n')
+        // parseCellInput() masks the plain integers to numeric cells (ct.t === 'n')
         expect(d[0][0]?.v).toBe(1);
         expect(d[0][0]?.ct?.t).toBe('n');
         expect(d[0][1]?.v).toBe(2);

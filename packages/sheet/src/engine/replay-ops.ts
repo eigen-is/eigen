@@ -2,13 +2,9 @@ import type { Op, Sheet } from '@workspace/lib/sheets';
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
 import { applyPatches, enablePatches } from 'immer';
 import { celldataToData, dataToCelldata } from './celldata';
-import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from './defaults';
+import { gridSize } from './defaults';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol, RowColError } from './rowcol';
 import { normalizeSheetConfig } from './sheet-config';
-
-// normalizeSheetConfig lives in the sheet-config leaf so defaults.ts can use it without cycling;
-// re-exported here because most callers reach it through the replay module.
-export { normalizeSheetConfig };
 
 // immer's patch plugin is a global, idempotent enable. Calling here means any
 // consumer of replaySheetsOps gets it transitively without a separate bootstrap.
@@ -45,24 +41,19 @@ function asSheet(v: unknown): Sheet | null {
     return sheet;
 }
 
-// Persisted snapshots carry `celldata` only; ops reference `data[r][c]`. When a
-// batch targets `data`, materialize that sheet on the way in and resync its
-// `celldata` on the way out. Sheets touched only via `celldata` paths pass
-// through unchanged. The editor (initSheetData) expands sheets without a
-// usable row/column to the default grid, so replay must materialize the same
-// grid — ops were recorded against it, and a smaller base makes patches
-// beyond the celldata extent fail to resolve. The config-collection normalization
-// that the same reasoning demands lives in `./sheet-config` (normalizeSheetConfig).
 function withNormalizedConfig(s: Sheet): Sheet {
     const next = { ...s, config: { ...s.config } };
     normalizeSheetConfig(next);
     return next;
 }
 
+// Persisted snapshots carry `celldata` only; ops reference `data[r][c]`. When a
+// batch targets `data`, materialize that sheet on the way in and resync its
+// `celldata` on the way out. Sheets touched only via `celldata` paths pass
+// through unchanged.
 export function withMaterializedData(s: Sheet): Sheet {
     if (s.data) return s;
-    const row = s.row != null && s.row > 0 ? s.row : DEFAULT_SHEET_ROW_COUNT;
-    const column = s.column != null && s.column > 0 ? s.column : DEFAULT_SHEET_COLUMN_COUNT;
+    const { row, column } = gridSize(s);
     return { ...s, data: celldataToData(s.celldata ?? [], row, column) };
 }
 
