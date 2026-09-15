@@ -7,6 +7,7 @@ import {
     renderSheetsHtml,
     renderSheetsPreviewHtml,
 } from '../../lib/export/sheets/render';
+import { NO_MEDIA } from '../setup';
 
 // Build a Sheet with both `data` (matrix form, required by the CF engine) and `celldata`
 // (sparse form, what the renderer iterates). The sheet Workbook keeps both
@@ -26,9 +27,6 @@ function makeSheet(cells: { r: number; c: number; v: Cell }[], rules?: Condition
         ...(rules ? { conditionalFormatRules: rules } : {}),
     };
 }
-
-// A workbook without floating images resolves nothing.
-const NO_MEDIA = new Map<string, string>();
 
 type RenderOut = { html: string; css: string };
 
@@ -60,20 +58,23 @@ describe('Sheets HTML export — class-based styles', () => {
             ),
             hyperlink: { '0_0': { linkType: 'webpage', linkAddress: 'https://example.com' } },
         };
-        const out = renderSheetsHtml([sheet]);
+        const out = renderSheetsHtml([sheet], NO_MEDIA);
         expect(out.html).not.toContain('style="');
         // The moved base td style lives in the stylesheet exactly once.
         expect(out.css).toContain('td{overflow:hidden;white-space:nowrap;padding:1px 2px}');
     });
 
     test('identical cell styles dedupe into one class referenced by every cell', () => {
-        const out = renderSheetsHtml([
-            makeSheet([
-                { r: 0, c: 0, v: { v: 'a', fc: '#ff0000' } },
-                { r: 0, c: 1, v: { v: 'b', fc: '#ff0000' } },
-                { r: 1, c: 0, v: { v: 'c', fc: '#00ff00' } },
-            ]),
-        ]);
+        const out = renderSheetsHtml(
+            [
+                makeSheet([
+                    { r: 0, c: 0, v: { v: 'a', fc: '#ff0000' } },
+                    { r: 0, c: 1, v: { v: 'b', fc: '#ff0000' } },
+                    { r: 1, c: 0, v: { v: 'c', fc: '#00ff00' } },
+                ]),
+            ],
+            NO_MEDIA,
+        );
         const red = classesFor(out, 'color:#ff0000');
         const green = classesFor(out, 'color:#00ff00');
         expect(red.length).toBe(1);
@@ -91,17 +92,20 @@ describe('Sheets HTML export — class-based styles', () => {
             { r: 0, c: 2, v: { v: 'b' } },
         ]);
         sheet.showGridLines = false;
-        const out = renderSheetsHtml([sheet]);
+        const out = renderSheetsHtml([sheet], NO_MEDIA);
         expect(out.html).toContain('<td></td>');
     });
 
     test('grid borders intern as a shared class when showGridLines is on', () => {
-        const out = renderSheetsHtml([
-            makeSheet([
-                { r: 0, c: 0, v: { v: 'a' } },
-                { r: 0, c: 1, v: { v: 'b' } },
-            ]),
-        ]);
+        const out = renderSheetsHtml(
+            [
+                makeSheet([
+                    { r: 0, c: 0, v: { v: 'a' } },
+                    { r: 0, c: 1, v: { v: 'b' } },
+                ]),
+            ],
+            NO_MEDIA,
+        );
         const grid = classesFor(out, 'border:1px solid #d4d4d4');
         expect(grid.length).toBe(1);
         expect(useCount(out, grid[0])).toBe(2);
@@ -115,7 +119,7 @@ describe('Sheets HTML export — class-based styles', () => {
             { r: 1, c: 1, v: { v: 'b' } },
         ]);
         sheet.config = { rowlen: { 0: 30, 1: 30 }, columnlen: { 0: 120 } };
-        const out = renderSheetsHtml([sheet]);
+        const out = renderSheetsHtml([sheet], NO_MEDIA);
         const height = classesFor(out, 'height:30px');
         expect(height.length).toBe(1);
         expect(out.html.match(new RegExp(`<tr class="${height[0]}">`, 'g'))?.length).toBe(2);
@@ -125,7 +129,7 @@ describe('Sheets HTML export — class-based styles', () => {
     });
 
     test('the table style interns with real quotes around the font family', () => {
-        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'x' } }])]);
+        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'x' } }])], NO_MEDIA);
         const table = classesFor(out, 'border-collapse:collapse');
         expect(table.length).toBe(1);
         expect(out.css).toContain('font-family:"Inter",system-ui,sans-serif');
@@ -133,10 +137,10 @@ describe('Sheets HTML export — class-based styles', () => {
     });
 
     test('non-last sheets carry the page-break class next to .sheet', () => {
-        const out = renderSheetsHtml([
-            makeSheet([{ r: 0, c: 0, v: { v: 'one' } }]),
-            makeSheet([{ r: 0, c: 0, v: { v: 'two' } }]),
-        ]);
+        const out = renderSheetsHtml(
+            [makeSheet([{ r: 0, c: 0, v: { v: 'one' } }]), makeSheet([{ r: 0, c: 0, v: { v: 'two' } }])],
+            NO_MEDIA,
+        );
         const brk = classesFor(out, 'page-break-after:always');
         expect(brk.length).toBe(1);
         expect(out.html).toContain(`<div class="sheet ${brk[0]}">`);
@@ -209,12 +213,15 @@ describe('Sheets HTML export — class-based styles', () => {
         // in one shared stylesheet either would eat every later rule, so one odd cell
         // would strip the styling off the rest of the workbook.
         for (const bad of ['Foo\\', 'Foo/*']) {
-            const out = renderSheetsHtml([
-                makeSheet([
-                    { r: 0, c: 0, v: { v: 'a', ff: bad } },
-                    { r: 0, c: 1, v: { v: 'b', bg: '#654321' } },
-                ]),
-            ]);
+            const out = renderSheetsHtml(
+                [
+                    makeSheet([
+                        { r: 0, c: 0, v: { v: 'a', ff: bad } },
+                        { r: 0, c: 1, v: { v: 'b', bg: '#654321' } },
+                    ]),
+                ],
+                NO_MEDIA,
+            );
             expect(out.css).not.toContain('\\');
             expect(out.css).not.toContain('/*');
             // The later cell's rule is still its own reachable rule.
@@ -226,7 +233,7 @@ describe('Sheets HTML export — class-based styles', () => {
 describe('Sheets HTML export — preview stays inline', () => {
     test('preview emits inline styles and no generated classes', () => {
         const sheet = makeSheet([{ r: 0, c: 0, v: { v: 'p', fc: '#ff0000', ff: 'Georgia' } }]);
-        const { html } = renderSheetsPreviewHtml([sheet]);
+        const { html } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
         expect(html).toContain('style="');
         expect(html).toContain('color:#ff0000');
         // Attribute context keeps the encoded font-family quotes.
@@ -237,12 +244,15 @@ describe('Sheets HTML export — preview stays inline', () => {
 
 describe('Sheets HTML export — conditional formatting', () => {
     test('sheet with no CF rules renders no position overlays', () => {
-        const out = renderSheetsHtml([
-            makeSheet([
-                { r: 0, c: 0, v: { v: 'Hello', ct: { t: 's', fa: 'General' } } },
-                { r: 0, c: 1, v: { v: 42, ct: { t: 'n', fa: 'General' } } },
-            ]),
-        ]);
+        const out = renderSheetsHtml(
+            [
+                makeSheet([
+                    { r: 0, c: 0, v: { v: 'Hello', ct: { t: 's', fa: 'General' } } },
+                    { r: 0, c: 1, v: { v: 42, ct: { t: 'n', fa: 'General' } } },
+                ]),
+            ],
+            NO_MEDIA,
+        );
         expect(out.html).toContain('Hello');
         expect(out.html).toContain('42');
         // No conditional formatting → no CF-injected dataBar anchors.
@@ -251,24 +261,27 @@ describe('Sheets HTML export — conditional formatting', () => {
     });
 
     test('greaterThan rule applies cellColor as background on matching cells', () => {
-        const out = renderSheetsHtml([
-            makeSheet(
-                [
-                    { r: 0, c: 0, v: { v: 5, ct: { t: 'n', fa: 'General' } } },
-                    { r: 0, c: 1, v: { v: 50, ct: { t: 'n', fa: 'General' } } },
-                ],
-                [
-                    {
-                        type: 'default',
-                        cellrange: [{ row: [0, 0], column: [0, 1] }],
-                        format: { textColor: '#ffffff', cellColor: '#ff8888' },
-                        conditionName: 'greaterThan',
-                        conditionRange: [],
-                        conditionValue: [10],
-                    },
-                ],
-            ),
-        ]);
+        const out = renderSheetsHtml(
+            [
+                makeSheet(
+                    [
+                        { r: 0, c: 0, v: { v: 5, ct: { t: 'n', fa: 'General' } } },
+                        { r: 0, c: 1, v: { v: 50, ct: { t: 'n', fa: 'General' } } },
+                    ],
+                    [
+                        {
+                            type: 'default',
+                            cellrange: [{ row: [0, 0], column: [0, 1] }],
+                            format: { textColor: '#ffffff', cellColor: '#ff8888' },
+                            conditionName: 'greaterThan',
+                            conditionRange: [],
+                            conditionValue: [10],
+                        },
+                    ],
+                ),
+            ],
+            NO_MEDIA,
+        );
         // Second cell (value 50, > 10) gets the CF colors.
         const cls = classesFor(out, 'background:#ff8888');
         expect(cls.length).toBe(1);
@@ -277,22 +290,25 @@ describe('Sheets HTML export — conditional formatting', () => {
     });
 
     test('dataBar rule renders an absolutely-positioned bar div', () => {
-        const out = renderSheetsHtml([
-            makeSheet(
-                [
-                    { r: 0, c: 0, v: { v: 10, ct: { t: 'n', fa: 'General' } } },
-                    { r: 1, c: 0, v: { v: 20, ct: { t: 'n', fa: 'General' } } },
-                    { r: 2, c: 0, v: { v: 30, ct: { t: 'n', fa: 'General' } } },
-                ],
-                [
-                    {
-                        type: 'dataBar',
-                        cellrange: [{ row: [0, 2], column: [0, 0] }],
-                        format: ['#638ec6'],
-                    },
-                ],
-            ),
-        ]);
+        const out = renderSheetsHtml(
+            [
+                makeSheet(
+                    [
+                        { r: 0, c: 0, v: { v: 10, ct: { t: 'n', fa: 'General' } } },
+                        { r: 1, c: 0, v: { v: 20, ct: { t: 'n', fa: 'General' } } },
+                        { r: 2, c: 0, v: { v: 30, ct: { t: 'n', fa: 'General' } } },
+                    ],
+                    [
+                        {
+                            type: 'dataBar',
+                            cellrange: [{ row: [0, 2], column: [0, 0] }],
+                            format: ['#638ec6'],
+                        },
+                    ],
+                ),
+            ],
+            NO_MEDIA,
+        );
         // Bar divs are positioned absolutely inside position:relative <td>s; each width is
         // proportional to the value, so the three bars produce three distinct classes.
         expect(classesFor(out, 'position:absolute').length).toBe(3);
@@ -305,21 +321,24 @@ describe('Sheets HTML export — conditional formatting', () => {
     });
 
     test('colorGradation 2-color rule paints min/max cells with the configured stops', () => {
-        const out = renderSheetsHtml([
-            makeSheet(
-                [
-                    { r: 0, c: 0, v: { v: 1, ct: { t: 'n', fa: 'General' } } },
-                    { r: 1, c: 0, v: { v: 10, ct: { t: 'n', fa: 'General' } } },
-                ],
-                [
-                    {
-                        type: 'colorGradation',
-                        cellrange: [{ row: [0, 1], column: [0, 0] }],
-                        format: ['#00ff00', '#ff0000'],
-                    },
-                ],
-            ),
-        ]);
+        const out = renderSheetsHtml(
+            [
+                makeSheet(
+                    [
+                        { r: 0, c: 0, v: { v: 1, ct: { t: 'n', fa: 'General' } } },
+                        { r: 1, c: 0, v: { v: 10, ct: { t: 'n', fa: 'General' } } },
+                    ],
+                    [
+                        {
+                            type: 'colorGradation',
+                            cellrange: [{ row: [0, 1], column: [0, 0] }],
+                            format: ['#00ff00', '#ff0000'],
+                        },
+                    ],
+                ),
+            ],
+            NO_MEDIA,
+        );
         expect(out.css).toContain('background:#ff0000');
         expect(out.css).toContain('background:#00ff00');
     });
@@ -330,46 +349,52 @@ describe('Sheets HTML export — conditional formatting', () => {
         // populated computeMap[`${r}_${c}`]. Two overlapping rules force that path —
         // greaterThan seeds the entry, then colorGradation must overwrite it with the
         // 2-color min stop (format[1]).
-        const out = renderSheetsHtml([
-            makeSheet(
-                [{ r: 0, c: 0, v: { v: 1, ct: { t: 'n', fa: 'General' } } }],
-                [
-                    {
-                        type: 'default',
-                        cellrange: [{ row: [0, 0], column: [0, 0] }],
-                        format: { cellColor: '#888888' },
-                        conditionName: 'greaterThan',
-                        conditionRange: [],
-                        conditionValue: [0],
-                    },
-                    {
-                        type: 'colorGradation',
-                        cellrange: [{ row: [0, 0], column: [0, 0] }],
-                        format: ['#00ff00', '#0000ff'],
-                    },
-                ],
-            ),
-        ]);
+        const out = renderSheetsHtml(
+            [
+                makeSheet(
+                    [{ r: 0, c: 0, v: { v: 1, ct: { t: 'n', fa: 'General' } } }],
+                    [
+                        {
+                            type: 'default',
+                            cellrange: [{ row: [0, 0], column: [0, 0] }],
+                            format: { cellColor: '#888888' },
+                            conditionName: 'greaterThan',
+                            conditionRange: [],
+                            conditionValue: [0],
+                        },
+                        {
+                            type: 'colorGradation',
+                            cellrange: [{ row: [0, 0], column: [0, 0] }],
+                            format: ['#00ff00', '#0000ff'],
+                        },
+                    ],
+                ),
+            ],
+            NO_MEDIA,
+        );
         expect(out.css).toContain('background:#0000ff');
         expect(out.css).not.toContain('background:#888888');
     });
 
     test('dataBar with mixed positive/negative values uses red for the negative bar', () => {
-        const out = renderSheetsHtml([
-            makeSheet(
-                [
-                    { r: 0, c: 0, v: { v: -5, ct: { t: 'n', fa: 'General' } } },
-                    { r: 1, c: 0, v: { v: 10, ct: { t: 'n', fa: 'General' } } },
-                ],
-                [
-                    {
-                        type: 'dataBar',
-                        cellrange: [{ row: [0, 1], column: [0, 0] }],
-                        format: ['#638ec6'],
-                    },
-                ],
-            ),
-        ]);
+        const out = renderSheetsHtml(
+            [
+                makeSheet(
+                    [
+                        { r: 0, c: 0, v: { v: -5, ct: { t: 'n', fa: 'General' } } },
+                        { r: 1, c: 0, v: { v: 10, ct: { t: 'n', fa: 'General' } } },
+                    ],
+                    [
+                        {
+                            type: 'dataBar',
+                            cellrange: [{ row: [0, 1], column: [0, 0] }],
+                            format: ['#638ec6'],
+                        },
+                    ],
+                ),
+            ],
+            NO_MEDIA,
+        );
         // Negative bar is hardcoded red — matches canvas painter (canvas.ts ~line 1683).
         // Positive bar still uses the user-configured color.
         expect(out.css).toContain('#ff0000');
@@ -380,26 +405,29 @@ describe('Sheets HTML export — conditional formatting', () => {
         // 2x2 grid; CF formula `A1>10` is anchor-relative — each target cell evaluates the
         // formula with refs shifted from the anchor (0,0). Cells (0,1) and (1,0) hold values
         // > 10 so the rule fires; (0,0) and (1,1) hold ≤ 10 so it does not.
-        const out = renderSheetsHtml([
-            makeSheet(
-                [
-                    { r: 0, c: 0, v: { v: 5, ct: { t: 'n', fa: 'General' } } },
-                    { r: 0, c: 1, v: { v: 50, ct: { t: 'n', fa: 'General' } } },
-                    { r: 1, c: 0, v: { v: 25, ct: { t: 'n', fa: 'General' } } },
-                    { r: 1, c: 1, v: { v: 3, ct: { t: 'n', fa: 'General' } } },
-                ],
-                [
-                    {
-                        type: 'default',
-                        cellrange: [{ row: [0, 1], column: [0, 1] }],
-                        format: { textColor: '#ffffff', cellColor: '#00aa00' },
-                        conditionName: 'formula',
-                        conditionRange: [],
-                        conditionValue: ['A1>10'],
-                    },
-                ],
-            ),
-        ]);
+        const out = renderSheetsHtml(
+            [
+                makeSheet(
+                    [
+                        { r: 0, c: 0, v: { v: 5, ct: { t: 'n', fa: 'General' } } },
+                        { r: 0, c: 1, v: { v: 50, ct: { t: 'n', fa: 'General' } } },
+                        { r: 1, c: 0, v: { v: 25, ct: { t: 'n', fa: 'General' } } },
+                        { r: 1, c: 1, v: { v: 3, ct: { t: 'n', fa: 'General' } } },
+                    ],
+                    [
+                        {
+                            type: 'default',
+                            cellrange: [{ row: [0, 1], column: [0, 1] }],
+                            format: { textColor: '#ffffff', cellColor: '#00aa00' },
+                            conditionName: 'formula',
+                            conditionRange: [],
+                            conditionValue: ['A1>10'],
+                        },
+                    ],
+                ),
+            ],
+            NO_MEDIA,
+        );
         // Two cells fire — both share one interned class, referenced twice.
         const cls = classesFor(out, 'background:#00aa00');
         expect(cls.length).toBe(1);
@@ -410,26 +438,29 @@ describe('Sheets HTML export — conditional formatting', () => {
     test('formula rule with absolute refs uses the anchor value for every target cell', () => {
         // `$A$1>10` — A1 is frozen, so all four cells in the range evaluate the same
         // condition (A1=15 > 10 → true → all four cells get the style).
-        const out = renderSheetsHtml([
-            makeSheet(
-                [
-                    { r: 0, c: 0, v: { v: 15, ct: { t: 'n', fa: 'General' } } },
-                    { r: 0, c: 1, v: { v: 1, ct: { t: 'n', fa: 'General' } } },
-                    { r: 1, c: 0, v: { v: 1, ct: { t: 'n', fa: 'General' } } },
-                    { r: 1, c: 1, v: { v: 1, ct: { t: 'n', fa: 'General' } } },
-                ],
-                [
-                    {
-                        type: 'default',
-                        cellrange: [{ row: [0, 1], column: [0, 1] }],
-                        format: { textColor: '#000000', cellColor: '#ffaa00' },
-                        conditionName: 'formula',
-                        conditionRange: [],
-                        conditionValue: ['$A$1>10'],
-                    },
-                ],
-            ),
-        ]);
+        const out = renderSheetsHtml(
+            [
+                makeSheet(
+                    [
+                        { r: 0, c: 0, v: { v: 15, ct: { t: 'n', fa: 'General' } } },
+                        { r: 0, c: 1, v: { v: 1, ct: { t: 'n', fa: 'General' } } },
+                        { r: 1, c: 0, v: { v: 1, ct: { t: 'n', fa: 'General' } } },
+                        { r: 1, c: 1, v: { v: 1, ct: { t: 'n', fa: 'General' } } },
+                    ],
+                    [
+                        {
+                            type: 'default',
+                            cellrange: [{ row: [0, 1], column: [0, 1] }],
+                            format: { textColor: '#000000', cellColor: '#ffaa00' },
+                            conditionName: 'formula',
+                            conditionRange: [],
+                            conditionValue: ['$A$1>10'],
+                        },
+                    ],
+                ),
+            ],
+            NO_MEDIA,
+        );
         const cls = classesFor(out, 'background:#ffaa00');
         expect(cls.length).toBe(1);
         expect(useCount(out, cls[0])).toBe(4);
@@ -438,26 +469,29 @@ describe('Sheets HTML export — conditional formatting', () => {
     test('formula rule using AND() across two columns shifts both refs together', () => {
         // Verifies the token-aware shift inside function calls — `=AND(A1>0, B1>0)` on a 2-row
         // range becomes `=AND(A2>0, B2>0)` for row 1. Only row 0 has both columns > 0.
-        const out = renderSheetsHtml([
-            makeSheet(
-                [
-                    { r: 0, c: 0, v: { v: 5, ct: { t: 'n', fa: 'General' } } },
-                    { r: 0, c: 1, v: { v: 5, ct: { t: 'n', fa: 'General' } } },
-                    { r: 1, c: 0, v: { v: 5, ct: { t: 'n', fa: 'General' } } },
-                    { r: 1, c: 1, v: { v: -5, ct: { t: 'n', fa: 'General' } } },
-                ],
-                [
-                    {
-                        type: 'default',
-                        cellrange: [{ row: [0, 1], column: [0, 0] }],
-                        format: { textColor: '#000000', cellColor: '#88ccff' },
-                        conditionName: 'formula',
-                        conditionRange: [],
-                        conditionValue: ['AND(A1>0, B1>0)'],
-                    },
-                ],
-            ),
-        ]);
+        const out = renderSheetsHtml(
+            [
+                makeSheet(
+                    [
+                        { r: 0, c: 0, v: { v: 5, ct: { t: 'n', fa: 'General' } } },
+                        { r: 0, c: 1, v: { v: 5, ct: { t: 'n', fa: 'General' } } },
+                        { r: 1, c: 0, v: { v: 5, ct: { t: 'n', fa: 'General' } } },
+                        { r: 1, c: 1, v: { v: -5, ct: { t: 'n', fa: 'General' } } },
+                    ],
+                    [
+                        {
+                            type: 'default',
+                            cellrange: [{ row: [0, 1], column: [0, 0] }],
+                            format: { textColor: '#000000', cellColor: '#88ccff' },
+                            conditionName: 'formula',
+                            conditionRange: [],
+                            conditionValue: ['AND(A1>0, B1>0)'],
+                        },
+                    ],
+                ),
+            ],
+            NO_MEDIA,
+        );
         // Only the (0,0) cell satisfies; (1,0) reads A2/B2 where B2=-5 fails.
         const cls = classesFor(out, 'background:#88ccff');
         expect(cls.length).toBe(1);
@@ -467,9 +501,10 @@ describe('Sheets HTML export — conditional formatting', () => {
 
 describe('Sheets HTML export — cell styling', () => {
     test('ff (font family) uses real quotes in the stylesheet and keeps later declarations', () => {
-        const out = renderSheetsHtml([
-            makeSheet([{ r: 0, c: 0, v: { v: 'styled', ff: 'Georgia', fc: '#ff0000', bg: '#0000ff' } }]),
-        ]);
+        const out = renderSheetsHtml(
+            [makeSheet([{ r: 0, c: 0, v: { v: 'styled', ff: 'Georgia', fc: '#ff0000', bg: '#0000ff' } }])],
+            NO_MEDIA,
+        );
         const cls = classesFor(out, 'font-family:"Georgia",sans-serif');
         expect(cls.length).toBe(1);
         // Declarations after font-family must survive in the same rule.
@@ -481,14 +516,14 @@ describe('Sheets HTML export — cell styling', () => {
     test('a font name containing & or an apostrophe survives into the stylesheet intact', () => {
         // CSS text never decodes entities, so HTML-escaping the name here would ask
         // WeasyPrint for a font called "Bell MT &amp; O'Neill".
-        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'x', ff: "Bell MT & O'Neill" } }])]);
+        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'x', ff: "Bell MT & O'Neill" } }])], NO_MEDIA);
         expect(out.css).toContain('font-family:"Bell MT & ONeill",sans-serif');
         expect(out.css).not.toContain('&amp;');
         expect(out.css).not.toContain('&#39;');
     });
 
     test('rt as a positive angle produces a CSS rotate anchored at bottom-left', () => {
-        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'up', rt: 45 } }])]);
+        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'up', rt: 45 } }])], NO_MEDIA);
         // rt is CCW-positive (matches Excel/OOXML); CSS rotate is CW-positive — so the
         // emitted angle is the negation. Positive rt anchors at the cell's bottom-left;
         // the td gets `position:relative` so the span absolute-positions to that corner.
@@ -501,7 +536,7 @@ describe('Sheets HTML export — cell styling', () => {
     });
 
     test('rt as a negative angle anchors the rotation at top-left', () => {
-        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'down', rt: -90 } }])]);
+        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'down', rt: -90 } }])], NO_MEDIA);
         expect(out.css).toContain('position:relative');
         expect(out.css).toContain('position:absolute;left:0;top:0');
         expect(out.css).toContain('transform-origin:left top');
@@ -513,7 +548,10 @@ describe('Sheets HTML export — cell styling', () => {
         // The rotated span is absolutely-positioned in the cell, so emitting text-align
         // or vertical-align on the td has nothing to act on. Confirms we don't drag the
         // user's ht=center / vt=middle into a now-meaningless td-level declaration.
-        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'centered', rt: 45, ht: 0, vt: 0 } }])]);
+        const out = renderSheetsHtml(
+            [makeSheet([{ r: 0, c: 0, v: { v: 'centered', rt: 45, ht: 0, vt: 0 } }])],
+            NO_MEDIA,
+        );
         expect(out.css).toContain('position:relative');
         expect(out.css).not.toContain('text-align:center');
         expect(out.css).not.toContain('vertical-align:middle');
@@ -521,18 +559,21 @@ describe('Sheets HTML export — cell styling', () => {
     });
 
     test('rt = "vertical" produces vertical writing-mode', () => {
-        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'stacked', rt: 'vertical' } }])]);
+        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'stacked', rt: 'vertical' } }])], NO_MEDIA);
         expect(out.css).toContain('writing-mode:vertical-rl');
         expect(out.css).toContain('text-orientation:upright');
     });
 
     test('rt = 0 or unset emits no rotation wrapper', () => {
-        const out = renderSheetsHtml([
-            makeSheet([
-                { r: 0, c: 0, v: { v: 'plain' } },
-                { r: 1, c: 0, v: { v: 'zero', rt: 0 } },
-            ]),
-        ]);
+        const out = renderSheetsHtml(
+            [
+                makeSheet([
+                    { r: 0, c: 0, v: { v: 'plain' } },
+                    { r: 1, c: 0, v: { v: 'zero', rt: 0 } },
+                ]),
+            ],
+            NO_MEDIA,
+        );
         expect(out.css).not.toContain('transform:');
         expect(out.css).not.toContain('writing-mode:vertical');
     });
@@ -550,7 +591,7 @@ describe('Sheets HTML export — hyperlinks', () => {
                 '0_1': { linkType: 'webpage', linkAddress: 'example.com' },
             },
         };
-        const out = renderSheetsHtml([sheet]);
+        const out = renderSheetsHtml([sheet], NO_MEDIA);
         expect(out.html).toContain(
             '<a href="https://example.com/browse?a=1&amp;b=2" target="_blank" rel="noopener noreferrer">Jira ticket</a>',
         );
@@ -574,7 +615,7 @@ describe('Sheets HTML export — hyperlinks', () => {
                 '0_2': { linkType: 'cellrange', linkAddress: 'Sheet2!B2' },
             },
         };
-        const out = renderSheetsHtml([sheet]);
+        const out = renderSheetsHtml([sheet], NO_MEDIA);
         expect(out.html).not.toContain('<a ');
         expect(out.html).not.toContain('javascript:');
         expect(out.html).toContain('click me');
@@ -587,16 +628,17 @@ describe('Sheets HTML export — hyperlinks', () => {
 // or break out of their declaration block.
 describe('Sheets HTML export — hostile values in CSS', () => {
     test('escapes fc and bg so they cannot inject markup through the stylesheet', () => {
-        const out = renderSheetsHtml([
-            makeSheet([{ r: 0, c: 0, v: { v: 'x', fc: 'red;"><script>alert(1)</script>', bg: 'blue">' } }]),
-        ]);
+        const out = renderSheetsHtml(
+            [makeSheet([{ r: 0, c: 0, v: { v: 'x', fc: 'red;"><script>alert(1)</script>', bg: 'blue">' } }])],
+            NO_MEDIA,
+        );
         expect(out.css).not.toMatch(/<script/i);
         expect(out.css).toContain('&lt;script');
         expect(out.html).not.toMatch(/<script/i);
     });
 
     test('braces in a hostile value cannot open or close CSS rule blocks', () => {
-        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'x', bg: 'red}td{display:none' } }])]);
+        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'x', bg: 'red}td{display:none' } }])], NO_MEDIA);
         expect(out.css).not.toContain('{display:none');
         expect(out.css).not.toContain('td{display');
         // Every rule stays balanced: strip the well-formed rules and nothing may remain.
@@ -604,21 +646,24 @@ describe('Sheets HTML export — hostile values in CSS', () => {
     });
 
     test('escapes conditional-format colors', () => {
-        const out = renderSheetsHtml([
-            makeSheet(
-                [{ r: 0, c: 0, v: { v: 50, ct: { t: 'n', fa: 'General' } } }],
-                [
-                    {
-                        type: 'default',
-                        cellrange: [{ row: [0, 0], column: [0, 0] }],
-                        format: { textColor: '#ffffff', cellColor: 'red;"><script>alert(1)</script>' },
-                        conditionName: 'greaterThan',
-                        conditionRange: [],
-                        conditionValue: [10],
-                    },
-                ],
-            ),
-        ]);
+        const out = renderSheetsHtml(
+            [
+                makeSheet(
+                    [{ r: 0, c: 0, v: { v: 50, ct: { t: 'n', fa: 'General' } } }],
+                    [
+                        {
+                            type: 'default',
+                            cellrange: [{ row: [0, 0], column: [0, 0] }],
+                            format: { textColor: '#ffffff', cellColor: 'red;"><script>alert(1)</script>' },
+                            conditionName: 'greaterThan',
+                            conditionRange: [],
+                            conditionValue: [10],
+                        },
+                    ],
+                ),
+            ],
+            NO_MEDIA,
+        );
         expect(out.css).not.toMatch(/<script/i);
         expect(out.html).not.toMatch(/<script/i);
     });
@@ -628,7 +673,7 @@ describe('Sheets HTML export — hostile values in CSS', () => {
             ...makeSheet([{ r: 0, c: 0, v: { v: 'x' } }]),
             config: { borderInfo: { '0_0': { b: { style: 1, color: 'red;"><script>x</script>' } } } },
         };
-        const out = renderSheetsHtml([sheet]);
+        const out = renderSheetsHtml([sheet], NO_MEDIA);
         expect(out.css).not.toMatch(/<script/i);
         expect(out.html).not.toMatch(/<script/i);
     });
@@ -638,7 +683,7 @@ describe('Sheets HTML export — hostile values in CSS', () => {
             ...makeSheet([{ r: 0, c: 0, v: { v: 'x' } }]),
             config: { borderInfo: { '0_0': { l: { style: 8, color: '#1a5fb4' }, b: { style: 1, color: '#ff0000' } } } },
         };
-        const out = renderSheetsHtml([sheet]);
+        const out = renderSheetsHtml([sheet], NO_MEDIA);
         const [cls] = classesFor(out, 'border-left:2px solid #1a5fb4');
         expect(cls).toBeDefined();
         expect(classesFor(out, 'border-bottom:1px solid #ff0000')).toEqual([cls]);
@@ -673,7 +718,7 @@ describe('Sheets HTML export — hostile values in CSS', () => {
                 },
             },
         };
-        const out = renderSheetsHtml([sheet]);
+        const out = renderSheetsHtml([sheet], NO_MEDIA);
         const [cls] = classesFor(out, 'border-top:1px solid #ff0000');
         expect(cls).toBeDefined();
         for (const edge of ['left', 'right', 'bottom']) {
@@ -683,21 +728,24 @@ describe('Sheets HTML export — hostile values in CSS', () => {
     });
 
     test('escapes dataBar colors', () => {
-        const out = renderSheetsHtml([
-            makeSheet(
-                [
-                    { r: 0, c: 0, v: { v: 10, ct: { t: 'n', fa: 'General' } } },
-                    { r: 1, c: 0, v: { v: 20, ct: { t: 'n', fa: 'General' } } },
-                ],
-                [
-                    {
-                        type: 'dataBar',
-                        cellrange: [{ row: [0, 1], column: [0, 0] }],
-                        format: ['red;"><script>x</script>'],
-                    },
-                ],
-            ),
-        ]);
+        const out = renderSheetsHtml(
+            [
+                makeSheet(
+                    [
+                        { r: 0, c: 0, v: { v: 10, ct: { t: 'n', fa: 'General' } } },
+                        { r: 1, c: 0, v: { v: 20, ct: { t: 'n', fa: 'General' } } },
+                    ],
+                    [
+                        {
+                            type: 'dataBar',
+                            cellrange: [{ row: [0, 1], column: [0, 0] }],
+                            format: ['red;"><script>x</script>'],
+                        },
+                    ],
+                ),
+            ],
+            NO_MEDIA,
+        );
         expect(out.css).not.toMatch(/<script/i);
         expect(out.html).not.toMatch(/<script/i);
     });

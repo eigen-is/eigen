@@ -18,7 +18,7 @@ import {
     HEAVY_FAR_CORNER,
     seedSheetsDoc,
 } from '../fixtures/heavy-sheets';
-import { authedRequest, driveGet, drivePost, getTestContext } from '../setup';
+import { authedRequest, driveGet, drivePost, getTestContext, NO_MEDIA } from '../setup';
 
 // Golden output assertions for the eigensheets preview pipeline (proposal Phase 0:
 // pin the rendered contract BEFORE the Yjs loader / renderer refactor). The hash at
@@ -27,9 +27,6 @@ import { authedRequest, driveGet, drivePost, getTestContext } from '../setup';
 // fallout.
 
 type TextPreview = { body: string; mode: string };
-
-// A workbook without floating images resolves nothing.
-const NO_MEDIA = new Map<string, string>();
 
 describe('eigensheets preview (golden)', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -298,7 +295,7 @@ describe('eigensheets preview (declared spans beyond the window)', () => {
             config: { merge: { '0_0': { r: 0, c: 0, rs: 5000, cs: 1000 } } },
         };
 
-        const { html, truncated } = renderSheetsPreviewHtml([sheet]);
+        const { html, truncated } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
         expect(truncated).toBe(true);
         expect(html).toContain(`colspan="${PREVIEW_SHEET_BUDGET.maxCols}"`);
         expect(html).toContain(`rowspan="${PREVIEW_SHEET_BUDGET.maxRows}"`);
@@ -324,7 +321,7 @@ describe('eigensheets preview (declared spans beyond the window)', () => {
         };
 
         const evaluate = spyOn(FormulaEngine.prototype, 'evaluate');
-        const { html } = renderSheetsPreviewHtml([sheet]);
+        const { html } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
         const evaluated = evaluate.mock.calls.length;
         evaluate.mockRestore();
 
@@ -355,7 +352,7 @@ describe('eigensheets preview (declared spans beyond the window)', () => {
             ],
         };
 
-        const { html } = renderSheetsPreviewHtml([sheet]);
+        const { html } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
         expect(html).toContain('background:#d1f0d1');
     });
 
@@ -381,7 +378,7 @@ describe('eigensheets preview (declared spans beyond the window)', () => {
         };
 
         const evaluate = spyOn(FormulaEngine.prototype, 'evaluate');
-        const { html } = renderSheetsPreviewHtml([sheet]);
+        const { html } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
         const evaluated = evaluate.mock.calls.length;
         evaluate.mockRestore();
 

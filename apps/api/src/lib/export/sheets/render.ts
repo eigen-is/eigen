@@ -50,8 +50,8 @@ const PAGE_MARGIN = 40;
 const PAGE_SLACK = 20;
 
 // Floating-image sources by media name: data: URIs for an export, the prepared
-// /file/<id>/preview URLs for a preview. A caller with nothing to resolve passes none
-// and the grid renders alone — a workbook without floating images needs no media.
+// /file/<id>/preview URLs for a preview. A workbook without floating images resolves
+// nothing and the grid renders alone.
 type MediaUrls = Map<string, string>;
 
 // Full exports intern every emitted style into a class ("s0", "s1", …) declared in a
@@ -167,7 +167,7 @@ function createRenderContext(sheets: Sheet[]): { engine: FormulaEngine; resolver
     return { engine, resolver };
 }
 
-export function renderSheetsHtml(sheets: Sheet[], mediaUrls?: MediaUrls): { html: string; css: string } {
+export function renderSheetsHtml(sheets: Sheet[], mediaUrls: MediaUrls): { html: string; css: string } {
     const { engine, resolver } = createRenderContext(sheets);
     const styles: StyleRegistry = new Map();
     const html = sheets
@@ -181,7 +181,7 @@ export function renderSheetsHtml(sheets: Sheet[], mediaUrls?: MediaUrls): { html
 // still spans every sheet so cross-sheet CF formula refs resolve correctly.
 // `truncated` is true whenever rows, columns, cells, or additional sheets were
 // omitted — the caller appends the shared truncated marker.
-export function renderSheetsPreviewHtml(sheets: Sheet[], mediaUrls?: MediaUrls): { html: string; truncated: boolean } {
+export function renderSheetsPreviewHtml(sheets: Sheet[], mediaUrls: MediaUrls): { html: string; truncated: boolean } {
     if (sheets.length === 0) return { html: '', truncated: false };
     const { engine, resolver } = createRenderContext(sheets);
     const first = renderSheet(sheets[0], true, engine, resolver, { budget: PREVIEW_SHEET_BUDGET, mediaUrls });
@@ -293,32 +293,39 @@ function renderSheet(
     isLast: boolean,
     engine: FormulaEngine,
     resolver: CellResolver,
-    { budget, styles, mediaUrls }: { budget?: SheetPreviewBudget; styles?: StyleRegistry; mediaUrls?: MediaUrls } = {},
+    { budget, styles, mediaUrls }: { budget?: SheetPreviewBudget; styles?: StyleRegistry; mediaUrls: MediaUrls },
 ): { html: string; truncated: boolean } {
     const forStylesheet = styles !== undefined;
     const config = sheet.config ?? {};
     const showGrid = sheet.showGridLines !== false && sheet.showGridLines !== 0;
 
+    // Guarded on the images: the offset walks every row above the window, and a lone cell
+    // far down the grid makes that walk a million iterations for nothing. The preview clips
+    // the overlay to the budget window rather than to the table — a chart sitting right of a
+    // small grid belongs in the thumbnail, while an image parked far outside the window would
+    // stretch the fragment's scroll width and collapse the thumbnail scaled by it. The full
+    // export keeps every image and getSheetContentSize sizes the page to reach it.
+    const overlayFor = (minRow: number, minCol: number): string =>
+        sheet.images?.length
+            ? renderFloatingImages(
+                  sheet.images,
+                  mediaUrls,
+                  gridOffset(config, minRow, minCol),
+                  styles,
+                  budget
+                      ? {
+                            width: colSpan(config, minCol, minCol + budget.maxCols - 1),
+                            height: rowSpan(config, minRow, minRow + budget.maxRows - 1),
+                        }
+                      : undefined,
+              )
+            : '';
+
     const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, config.borderInfo ?? {});
     if (maxRow < 0 || maxCol < 0) {
         // An image pasted onto an otherwise blank sheet is all there is to render, clipped to the
         // same budget window as the grid path below.
-        const overlay =
-            sheet.images?.length && mediaUrls
-                ? renderFloatingImages(
-                      sheet.images,
-                      mediaUrls,
-                      { left: 0, top: 0 },
-                      styles,
-                      budget
-                          ? {
-                                width: colSpan(config, 0, budget.maxCols - 1),
-                                height: rowSpan(config, 0, budget.maxRows - 1),
-                            }
-                          : undefined,
-                  )
-                : '';
-        return { html: `<div class="sheet">${overlayBox('', overlay, 0, styles)}</div>`, truncated: false };
+        return { html: `<div class="sheet">${overlayBox('', overlayFor(0, 0), 0, styles)}</div>`, truncated: false };
     }
 
     // The render window comes first: everything below is bounded by what is actually
@@ -445,28 +452,6 @@ function renderSheet(
         rows.push(`<tr ${styleAttr(styles, `height:${h}px`)}>${cells.join('')}</tr>`);
     }
 
-    // Guarded on the images: the offset walks every row above the window, and a lone cell
-    // far down the grid makes that walk a million iterations for nothing. The preview clips
-    // the overlay to the budget window rather than to the table — a chart sitting right of a
-    // small grid belongs in the thumbnail, while an image parked far outside the window would
-    // stretch the fragment's scroll width and collapse the thumbnail scaled by it. The full
-    // export keeps every image and getSheetContentSize sizes the page to reach it.
-    const overlay =
-        sheet.images?.length && mediaUrls
-            ? renderFloatingImages(
-                  sheet.images,
-                  mediaUrls,
-                  gridOffset(config, minRow, minCol),
-                  styles,
-                  budget
-                      ? {
-                            width: colSpan(config, minCol, minCol + budget.maxCols - 1),
-                            height: rowSpan(config, minRow, minRow + budget.maxRows - 1),
-                        }
-                      : undefined,
-              )
-            : '';
-
     // The .sheet div already carries a class, so in stylesheet mode the page-break style
     // joins it as a second class token rather than going through styleAttr.
     const divClass = isLast || !forStylesheet ? 'sheet' : `sheet ${internStyle(styles, 'page-break-after:always')}`;
@@ -475,7 +460,7 @@ function renderSheet(
     const tableStyle = `border-collapse:collapse;table-layout:fixed;font-family:${q}Inter${q},system-ui,sans-serif;font-size:11px;color:#1a1a2e;background:#fff;width:${tableWidth}px`;
     const table = `<table ${styleAttr(styles, tableStyle)}>${colgroup}<tbody>${rows.join('')}</tbody></table>`;
     const html = `<div class="${divClass}"${pageBreak}>
-${overlayBox(table, overlay, tableWidth, styles)}
+${overlayBox(table, overlayFor(minRow, minCol), tableWidth, styles)}
 </div>`;
     return { html, truncated };
 }
