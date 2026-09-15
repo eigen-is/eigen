@@ -68,6 +68,7 @@ import {
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { useProseMirrorSearchController } from '@workspace/ui/components/search/prosemirror-search-controller';
 import { SearchHighlight } from '@workspace/ui/components/search/prosemirror-search-highlight';
+import { useElementSize } from '@workspace/ui/hooks/use-element-size';
 import { cn } from '@workspace/ui/lib/utils';
 import { common, createLowlight } from 'lowlight';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -284,7 +285,6 @@ const TiptapEditor = ({
         closePanels,
         onSearchOpenChange,
     } = useDocumentPanels(isMobile);
-    const [containerWidth, setContainerWidth] = useState(0);
     const [docHeight, setDocHeight] = useState(0);
     const needsScaleRef = useRef(false);
     const documentRef = useRef<HTMLDivElement | null>(null);
@@ -303,22 +303,11 @@ const TiptapEditor = ({
         return el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
     }, []);
 
-    // Callback refs so each observer dies with its node; the 0×0 guard keeps the last good width when a
-    // hidden surface (the mobile pane) measures zero, so the page doesn't flip layout on the way back.
-    const setScrollContainer = useCallback((el: HTMLDivElement | null) => {
-        scrollContainerRef.current = el;
-        if (!el) return;
-        const ro = new ResizeObserver(([entry]) => {
-            if (entry.contentRect.width === 0) return;
-            setContainerWidth(Math.min(entry.contentRect.width, A4_WIDTH_PX));
-        });
-        ro.observe(el);
-        return () => {
-            scrollContainerRef.current = null;
-            ro.disconnect();
-        };
-    }, []);
+    const [setScrollContainer, scrollSize] = useElementSize(scrollContainerRef);
+    const containerWidth = Math.min(scrollSize.width, A4_WIDTH_PX);
 
+    // Hand-rolled rather than useElementSize: this measures the BORDER box, and stays quiet while
+    // unscaled so a doc that needs no scaling never re-renders on its own growth.
     const setDocumentEl = useCallback((el: HTMLDivElement | null) => {
         documentRef.current = el;
         if (!el) return;
