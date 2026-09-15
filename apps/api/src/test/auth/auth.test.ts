@@ -1,8 +1,10 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { DrivePath } from '@workspace/lib/types';
-import { auth } from '../../lib/auth/auth';
-import { getUserByEmail } from '../../lib/user';
+import { eq } from 'drizzle-orm';
+import { member as memberSchema } from '../../../auth-schema';
+import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
+import { getOrgRole, getUserByEmail } from '../../lib/user';
 import { assertJson, authedRequest, getTestContext } from '../setup';
 
 describe('Auth', () => {
@@ -142,5 +144,46 @@ describe('user create hook', () => {
         const sharedRes = await authedRequest(sessionToken, `/drive/${created!.id}/shared/with-me`);
         const shared = await assertJson<DrivePath[]>(sharedRes);
         expect(shared.some((p) => p.id === folder.id)).toBe(true);
+    });
+});
+
+describe('sign-in org join', () => {
+    beforeAll(async () => {
+        await getTestContext();
+    });
+
+    test('a sign-in joins the default org when the sign-up hook never did', async () => {
+        const email = `signin-org-retry-${randomUUID()}@test.eigen.is`;
+        // Sign up with every join attempt failing: the account lands outside the org, the state
+        // (invisible in Admin -> Users, no other repair path) the sign-in join has to heal.
+        const spy = spyOn(auth.api, 'addMember').mockRejectedValue(new Error('boom'));
+        try {
+            await auth.api.signUpEmail({ body: { email, password: 'testpassword123', name: 'Retry Join' } });
+        } finally {
+            spy.mockRestore();
+        }
+        const created = await getUserByEmail(email);
+        expect(created).not.toBeNull();
+        expect(await getOrgRole(created!.id)).toBeNull();
+
+        await auth.api.signInEmail({ body: { email, password: 'testpassword123' } });
+
+        expect(await getOrgRole(created!.id)).toBe('member');
+    });
+
+    test('a sign-in by an existing member adds no second membership', async () => {
+        const email = `signin-org-once-${randomUUID()}@test.eigen.is`;
+        await auth.api.signUpEmail({ body: { email, password: 'testpassword123', name: 'Join Once' } });
+        const created = await getUserByEmail(email);
+        expect(created).not.toBeNull();
+
+        await auth.api.signInEmail({ body: { email, password: 'testpassword123' } });
+
+        const rows = await getAuthDrizzleDb()
+            .select()
+            .from(memberSchema)
+            .where(eq(memberSchema.userId, created!.id))
+            .all();
+        expect(rows.length).toBe(1);
     });
 });

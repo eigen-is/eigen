@@ -7,6 +7,7 @@ import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { _resetOtpRateLimitForTests } from '../../lib/auth/otp-rate-limit';
 import { updateServerConfig } from '../../lib/config/server-config';
 import { updateServerSettings } from '../../lib/config/server-settings';
+import { getOrgRole } from '../../lib/user';
 import { assertJson, authedRequest, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -358,6 +359,9 @@ describe('Guest Auth', () => {
 
             // Regression test for the parseOwnerId bug — guest ids must be 32-char alphanumeric.
             expect(guestId).toMatch(/^[0-9A-Za-z]{32}$/);
+
+            // The sign-in org join must skip guests: a member row would put them in Admin → Users.
+            expect(await getOrgRole(guestId)).toBeNull();
 
             const guestToken = extractSessionTokenFromResponse(verifyRes);
 

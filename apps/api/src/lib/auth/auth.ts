@@ -4,7 +4,7 @@ import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { APIError } from 'better-auth/api';
 import { admin, organization, twoFactor } from 'better-auth/plugins';
-import { eq, notInArray, or } from 'drizzle-orm';
+import { and, eq, notInArray, or } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import {
     account as accountScheme,
@@ -127,6 +127,12 @@ export const auth = betterAuth({
                         .update(userScheme)
                         .set({ lastLoginAt: new Date() })
                         .where(eq(userScheme.id, session.userId));
+                    // Sign-up's join only logs on failure, so sign-in is the repair path for it.
+                    try {
+                        await authEnsureDefaultOrgMembership(session.userId);
+                    } catch (error) {
+                        console.warn(`Failed to auto-join user ${session.userId} to default org on sign-in:`, error);
+                    }
                 },
             },
         },
@@ -145,7 +151,7 @@ export const auth = betterAuth({
                     // The row is committed; a failure here must not turn a created account into a 500.
                     // Guard the two steps independently so an org-join failure still runs the reconcile.
                     try {
-                        await authAddUserToDefaultOrg(user);
+                        await authEnsureDefaultOrgMembership(user.id);
                     } catch (error) {
                         console.error(`Failed to auto-join new user ${user.id} to default org:`, error);
                     }
@@ -259,16 +265,29 @@ export const auth = betterAuth({
     secret: getServerConfig()?.secret || crypto.randomUUID(),
 });
 
-export async function authAddUserToDefaultOrg(user: User): Promise<void> {
-    const db = getAuthDrizzleDb();
-    const org = await db.select().from(organizationScheme).get();
+// Joins the default org (config.orgId, pinned at setup — not "the first org row", whose order is
+// unspecified). Both the sign-up hook and every sign-in call this, so an account whose sign-up join
+// failed still reaches Admin → Users instead of staying outside the org with no repair path.
+export async function authEnsureDefaultOrgMembership(userId: string): Promise<void> {
+    const orgId = getServerConfig()?.orgId;
+    if (!orgId) return;
 
-    if (!org) return;
+    const db = getAuthDrizzleDb();
+    const membership = await db
+        .select({ id: memberScheme.id })
+        .from(memberScheme)
+        .where(and(eq(memberScheme.userId, userId), eq(memberScheme.organizationId, orgId)))
+        .get();
+    if (membership) return;
+
+    // Guests hold accounts and sign in, but never join the org.
+    const row = await db.select({ role: userScheme.role }).from(userScheme).where(eq(userScheme.id, userId)).get();
+    if (row?.role === 'guest') return;
 
     await auth.api.addMember({
         body: {
-            userId: user.id,
-            organizationId: org.id,
+            userId,
+            organizationId: orgId,
             role: 'member',
         },
     });
