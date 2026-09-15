@@ -1,4 +1,4 @@
-import { columnIndexToLabel, columnLabelToIndex } from './a1-notation';
+import { columnIndexToLabel, columnLabelToIndex, unquoteSheetName } from './a1-notation';
 import { iscelldata, operatorjson } from './formula-utils';
 import { error } from './validation';
 
@@ -16,8 +16,8 @@ export function detectAbsolute(txt: string): [boolean, boolean] {
 
 // Shift a single cell or range ref by `step` in `orient` direction
 // ('d'/'u' = ±row, 'r'/'l' = ±col). $-prefixed parts stay put. Returns
-// the original text if it isn't a recognizable ref, '#REF!' if a range
-// endpoint shifts negative.
+// the original text if it isn't a recognizable ref, '#REF!' if a ref (or a
+// range endpoint) shifts off the sheet.
 //
 // NOTE: this and `functionStrChange_range` parse+reformat refs with the same
 // per-leg idiom (split on '!', split on ':', digits→row / letters→col,
@@ -41,8 +41,12 @@ function shiftRef(orient: 'd' | 'u' | 'l' | 'r', txt: string, step: number): str
     }
 
     if (!rangetxt.includes(':')) {
-        let row = parseInt(rangetxt.replace(/[^0-9]/g, ''), 10);
-        let col = columnLabelToIndex(rangetxt.replace(/[^A-Za-z]/g, ''));
+        const rowStr = rangetxt.replace(/[^0-9]/g, '');
+        const colStr = rangetxt.replace(/[^A-Za-z]/g, '');
+        const rowMissing = rowStr.length === 0;
+        const colMissing = colStr.length === 0;
+        let row = parseInt(rowStr, 10);
+        let col = columnLabelToIndex(colStr);
         const [rowFrozen, colFrozen] = detectAbsolute(rangetxt);
         const $row = rowFrozen ? '$' : '';
         const $col = colFrozen ? '$' : '';
@@ -52,11 +56,10 @@ function shiftRef(orient: 'd' | 'u' | 'l' | 'r', txt: string, step: number): str
         else if (orient === 'l' && !colFrozen) col -= step;
         else if (orient === 'd' && !rowFrozen) row += step;
 
-        const rowValid = !Number.isNaN(row);
-        const colValid = col >= 0;
-        if (rowValid && colValid) return prefix + $col + columnIndexToLabel(col) + $row + row;
-        if (rowValid) return prefix + $row + row;
-        if (colValid) return prefix + $col + columnIndexToLabel(col);
+        if ((!rowMissing && row < 1) || (!colMissing && col < 0)) return error['r'];
+        if (!rowMissing && !colMissing) return prefix + $col + columnIndexToLabel(col) + $row + row;
+        if (!rowMissing) return prefix + $row + row;
+        if (!colMissing) return prefix + $col + columnIndexToLabel(col);
         return txt;
     }
 
@@ -100,8 +103,10 @@ function shiftRef(orient: 'd' | 'u' | 'l' | 'r', txt: string, step: number): str
     }
 
     // For col-only ranges (`A:C`), col[0] starts at a valid 0+ index — only flag #REF!
-    // when the axis was actually present and shifted negative.
-    if ((!rowsMissing && row[0] < 0) || (!colsMissing && col[0] < 0)) return error['r'];
+    // when the axis was actually present and shifted off the sheet. Rows are 1-based
+    // here, columns 0-based. Both legs are checked: a frozen leg holds while the other
+    // one walks off the edge.
+    if ((!rowsMissing && (row[0] < 1 || row[1] < 1)) || (!colsMissing && (col[0] < 0 || col[1] < 0))) return error['r'];
 
     if (colsMissing) return `${prefix + $row0 + row[0]}:${$row1}${row[1]}`;
     if (rowsMissing) return `${prefix + $col0 + columnIndexToLabel(col[0])}:${$col1}${columnIndexToLabel(col[1])}`;
@@ -229,20 +234,26 @@ export function functionCopy(txt: string, mode: FormulaShiftMode = 'down', step 
 // Shifts formula-text refs in response to an insert ('add') or delete ('del') row/col
 // op. `stindex` is the zero-based row/col index where the op starts; `step` is the
 // count. `orient` ('lefttop' / 'rightbottom') controls whether the boundary row is
-// included in the shift for insert ops. Used by state/modules/rowcol.ts and (via
+// included in the shift for insert ops. `targetSheet` names the sheet the op runs on
+// and `onTargetSheet` says whether `txt` itself lives on that sheet — only refs that
+// resolve to the target sheet move. Used by state/modules/rowcol.ts and (via
 // engine/rowcol.ts) by the context-free replay path.
 export function functionStrChange(
     txt: string,
-    type: string,
+    type: 'add' | 'del',
     rc: 'row' | 'col',
-    orient: string | null,
+    orient: 'lefttop' | 'rightbottom' | null,
     stindex: number,
     step: number,
+    targetSheet: string,
+    onTargetSheet: boolean,
 ): string {
     if (!txt) {
         return '';
     }
-    return walkFormulaRefs(txt, (ref) => functionStrChange_range(ref, type, rc, orient, stindex, step));
+    return walkFormulaRefs(txt, (ref) =>
+        functionStrChange_range(ref, type, rc, orient, stindex, step, targetSheet, onTargetSheet),
+    );
 }
 
 // Shifts a single cell or range ref string in response to an insert/delete row/col op.
@@ -250,11 +261,13 @@ export function functionStrChange(
 // See shiftRef's NOTE for why the two ref-parsers are not merged.
 function functionStrChange_range(
     txt: string,
-    type: string,
+    type: 'add' | 'del',
     rc: 'row' | 'col',
-    orient: string | null,
+    orient: 'lefttop' | 'rightbottom' | null,
     stindex: number,
     step: number,
+    targetSheet: string,
+    onTargetSheet: boolean,
 ): string {
     const sheetSplit = txt.split('!');
     let rangetxt: string;
@@ -262,11 +275,14 @@ function functionStrChange_range(
     if (sheetSplit.length > 1) {
         [, rangetxt] = sheetSplit;
         prefix = `${sheetSplit[0]}!`;
+        if (unquoteSheetName(sheetSplit[0]) !== targetSheet) return txt;
     } else {
         [rangetxt] = sheetSplit;
+        if (!onTargetSheet) return txt;
     }
 
     const parts = rangetxt.split(':');
+    const isRange = parts.length > 1;
 
     let r1: number;
     let r2: number;
@@ -279,7 +295,7 @@ function functionStrChange_range(
     let rowsMissing: boolean;
     let colsMissing: boolean;
 
-    if (parts.length === 1) {
+    if (!isRange) {
         const rowPart = parts[0].replace(/[^0-9]/g, '');
         const colPart = parts[0].replace(/[^A-Za-z]/g, '');
 
@@ -328,23 +344,22 @@ function functionStrChange_range(
     }
 
     const formatRange = () => {
-        if (r1 === r2 && c1 === c2) {
-            if (!rowsMissing && !colsMissing) {
-                return prefix + $col0 + columnIndexToLabel(c1) + $row0 + (r1 + 1);
-            }
-            if (!rowsMissing) {
-                return prefix + $row0 + (r1 + 1);
-            }
-            if (!colsMissing) {
-                return prefix + $col0 + columnIndexToLabel(c1);
-            }
+        if (rowsMissing && colsMissing) {
             return txt;
         }
+        // A range collapses to a single label only when both axes were present in the
+        // source text: a whole-column (`A:A`) or whole-row (`1:1`) range also satisfies
+        // r1 === r2 && c1 === c2 through its -1 sentinels, and must keep both legs.
+        if (!rowsMissing && !colsMissing && r1 === r2 && c1 === c2) {
+            return prefix + $col0 + columnIndexToLabel(c1) + $row0 + (r1 + 1);
+        }
         if (colsMissing) {
-            return `${prefix + $row0 + (r1 + 1)}:${$row1}${r2 + 1}`;
+            return isRange ? `${prefix + $row0 + (r1 + 1)}:${$row1}${r2 + 1}` : prefix + $row0 + (r1 + 1);
         }
         if (rowsMissing) {
-            return `${prefix + $col0 + columnIndexToLabel(c1)}:${$col1}${columnIndexToLabel(c2)}`;
+            return isRange
+                ? `${prefix + $col0 + columnIndexToLabel(c1)}:${$col1}${columnIndexToLabel(c2)}`
+                : prefix + $col0 + columnIndexToLabel(c1);
         }
         return `${prefix + $col0 + columnIndexToLabel(c1) + $row0 + (r1 + 1)}:${$col1}${columnIndexToLabel(c2)}${$row1}${r2 + 1}`;
     };
@@ -394,26 +409,22 @@ function functionStrChange_range(
         return formatRange();
     }
 
-    if (type === 'add') {
-        if (rc === 'row' && !rowsMissing) {
-            if (orient === 'lefttop') {
-                if (r1 >= stindex) r1 += step;
-                if (r2 >= stindex) r2 += step;
-            } else if (orient === 'rightbottom') {
-                if (r1 > stindex) r1 += step;
-                if (r2 > stindex) r2 += step;
-            }
-        } else if (rc === 'col' && !colsMissing) {
-            if (orient === 'lefttop') {
-                if (c1 >= stindex) c1 += step;
-                if (c2 >= stindex) c2 += step;
-            } else if (orient === 'rightbottom') {
-                if (c1 > stindex) c1 += step;
-                if (c2 > stindex) c2 += step;
-            }
+    if (rc === 'row' && !rowsMissing) {
+        if (orient === 'lefttop') {
+            if (r1 >= stindex) r1 += step;
+            if (r2 >= stindex) r2 += step;
+        } else if (orient === 'rightbottom') {
+            if (r1 > stindex) r1 += step;
+            if (r2 > stindex) r2 += step;
         }
-        return formatRange();
+    } else if (rc === 'col' && !colsMissing) {
+        if (orient === 'lefttop') {
+            if (c1 >= stindex) c1 += step;
+            if (c2 >= stindex) c2 += step;
+        } else if (orient === 'rightbottom') {
+            if (c1 > stindex) c1 += step;
+            if (c2 > stindex) c2 += step;
+        }
     }
-
-    return '';
+    return formatRange();
 }

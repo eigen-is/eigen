@@ -212,15 +212,19 @@ export function shiftCellKeyedForDelete<T>(
     return shifted;
 }
 
+// An op on one sheet only moves the refs that resolve to that sheet: unqualified ones in
+// formulas on it, and `Sheet!`-qualified ones anywhere.
 function shiftFormulasAcrossSheets<S extends Sheet>(
     sheets: S[],
+    targetIndex: number,
     type: 'row' | 'column',
     direction: 'lefttop' | 'rightbottom' | null,
     index: number,
     count: number,
     op: 'add' | 'del',
 ): S[] {
-    return sheets.map((sheet) => {
+    const targetName = sheets[targetIndex].name;
+    return sheets.map((sheet, sheetIndex) => {
         if (!sheet.data) return sheet;
         let newData: typeof sheet.data | null = null;
         for (let r = 0; r < sheet.data.length; r += 1) {
@@ -230,7 +234,16 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
                 const cell = row[c];
                 if (!cell?.f) continue;
                 const txt = cell.f.startsWith('=') ? cell.f.slice(1) : cell.f;
-                const shifted = functionStrChange(txt, op, type === 'row' ? 'row' : 'col', direction, index, count);
+                const shifted = functionStrChange(
+                    txt,
+                    op,
+                    type === 'row' ? 'row' : 'col',
+                    direction,
+                    index,
+                    count,
+                    targetName,
+                    sheetIndex === targetIndex,
+                );
                 const newF = `=${shifted}`;
                 if (newF === cell.f) continue;
                 if (!newData) newData = [...sheet.data];
@@ -240,6 +253,31 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
         }
         return newData ? { ...sheet, data: newData } : sheet;
     });
+}
+
+// A CF `formula` rule reads its cells through its own formula text, so the text has to
+// move with the rule's range. The rule lives on the sheet the op targets.
+function shiftCfFormula(
+    txt: string,
+    sheetName: string,
+    type: 'row' | 'column',
+    direction: 'lefttop' | 'rightbottom' | null,
+    index: number,
+    count: number,
+    op: 'add' | 'del',
+): string {
+    const stripped = txt.startsWith('=') ? txt.slice(1) : txt;
+    const shifted = functionStrChange(
+        stripped,
+        op,
+        type === 'row' ? 'row' : 'col',
+        direction,
+        index,
+        count,
+        sheetName,
+        true,
+    );
+    return txt.startsWith('=') ? `=${shifted}` : shifted;
 }
 
 // config carries several index-keyed maps (rowlen, rowhidden, customHeight and
@@ -367,12 +405,24 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
                 }
                 return { row: [r1, r2], column: [c1, c2] };
             });
+            if (cf.type === 'default' && cf.conditionName === 'formula') {
+                const formula = shiftCfFormula(
+                    String(cf.conditionValue[0]),
+                    target.name,
+                    op.type,
+                    op.direction,
+                    op.index,
+                    count,
+                    'add',
+                );
+                return { ...cf, cellrange: newRanges, conditionValue: [formula] };
+            }
             return { ...cf, cellrange: newRanges };
         });
     }
 
     let result: S[] = [...sheets.slice(0, targetIndex), newTarget, ...sheets.slice(targetIndex + 1)];
-    result = shiftFormulasAcrossSheets(result, op.type, op.direction, op.index, count, 'add');
+    result = shiftFormulasAcrossSheets(result, targetIndex, op.type, op.direction, op.index, count, 'add');
     return result;
 }
 
@@ -469,13 +519,26 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
                 }
             }
             if (cf_new_range.length > 0) {
-                newCFarr.push({ ...cf, cellrange: cf_new_range });
+                if (cf.type === 'default' && cf.conditionName === 'formula') {
+                    const formula = shiftCfFormula(
+                        String(cf.conditionValue[0]),
+                        target.name,
+                        op.type,
+                        null,
+                        op.start,
+                        removeCount,
+                        'del',
+                    );
+                    newCFarr.push({ ...cf, cellrange: cf_new_range, conditionValue: [formula] });
+                } else {
+                    newCFarr.push({ ...cf, cellrange: cf_new_range });
+                }
             }
         }
         newTarget.conditionalFormatRules = newCFarr;
     }
 
     let result: S[] = [...sheets.slice(0, targetIndex), newTarget, ...sheets.slice(targetIndex + 1)];
-    result = shiftFormulasAcrossSheets(result, op.type, null, op.start, removeCount, 'del');
+    result = shiftFormulasAcrossSheets(result, targetIndex, op.type, null, op.start, removeCount, 'del');
     return result;
 }

@@ -255,6 +255,42 @@ describe('applySheetsInsertRowCol/Delete — cross-sheet formula refs', () => {
         expect(result[0].data![3][0]?.f).toBe('=A2+A3');
     });
 
+    test('row insert in Sheet2 leaves an unqualified Sheet1 formula alone', () => {
+        const s1: Sheet = {
+            id: 's1',
+            name: 'Sheet1',
+            order: 0,
+            data: [[{ v: 0, m: '0', ct: { fa: 'General', t: 'n' }, f: '=A3' }]],
+            config: {},
+        };
+        const s2: Sheet = { id: 's2', name: 'Sheet2', order: 1, data: [[cell('x')]], config: {} };
+        const result = applySheetsInsertRowCol([s1, s2], {
+            type: 'row',
+            index: 0,
+            count: 1,
+            direction: 'lefttop',
+            id: 's2',
+        });
+        expect(result[0].data![0][0]?.f).toBe('=A3');
+    });
+
+    test('row delete in Sheet1 leaves Sheet2 refs to its own rows alone', () => {
+        const s1: Sheet = { id: 's1', name: 'Sheet1', order: 0, data: [[cell('x')], [cell('y')]], config: {} };
+        const s2: Sheet = {
+            id: 's2',
+            name: 'Sheet2',
+            order: 1,
+            data: [
+                [{ v: 0, m: '0', ct: { fa: 'General', t: 'n' }, f: '=A2' }],
+                [{ v: 0, m: '0', ct: { fa: 'General', t: 'n' }, f: "='Sheet2'!A2" }],
+            ],
+            config: {},
+        };
+        const result = applySheetsDeleteRowCol([s1, s2], { type: 'row', start: 0, end: 0, id: 's1' });
+        expect(result[1].data![0][0]?.f).toBe('=A2');
+        expect(result[1].data![1][0]?.f).toBe("='Sheet2'!A2");
+    });
+
     test('out-of-bounds delete yields #REF!', () => {
         const s1: Sheet = {
             id: 's1',
@@ -266,6 +302,72 @@ describe('applySheetsInsertRowCol/Delete — cross-sheet formula refs', () => {
         const result = applySheetsDeleteRowCol([s1], { type: 'row', start: 0, end: 2, id: 's1' });
         // Row 3 (the formula) is now row 0 after deleting rows 0-2; formula references rows that no longer exist.
         expect(result[0].data![0][0]?.f).toBe('=#REF!');
+    });
+});
+
+describe('applySheetsInsertRowCol/Delete — conditional-format formula rules', () => {
+    const formulaRule = (): Sheet['conditionalFormatRules'] => [
+        {
+            type: 'default',
+            conditionName: 'formula',
+            cellrange: [{ row: [1, 2], column: [0, 0] }],
+            conditionValue: ['=B2>0'],
+            format: { textColor: '#ff0000' },
+        },
+    ];
+
+    test('insert shifts the rule formula along with its range', () => {
+        const sheets: Sheet[] = [
+            makeSheet('s1', 'Sheet1', [[cell('a')], [cell('b')], [cell('c')]], {
+                conditionalFormatRules: formulaRule(),
+            }),
+        ];
+        const result = applySheetsInsertRowCol(sheets, {
+            type: 'row',
+            index: 0,
+            count: 1,
+            direction: 'lefttop',
+            id: 's1',
+        });
+        const cf = result[0].conditionalFormatRules![0];
+        expect(cf.cellrange[0].row).toEqual([2, 3]);
+        expect(cf).toMatchObject({ conditionValue: ['=B3>0'] });
+    });
+
+    test('delete shifts the rule formula along with its range', () => {
+        const sheets: Sheet[] = [
+            makeSheet('s1', 'Sheet1', [[cell('a')], [cell('b')], [cell('c')]], {
+                conditionalFormatRules: formulaRule(),
+            }),
+        ];
+        const result = applySheetsDeleteRowCol(sheets, { type: 'row', start: 0, end: 0, id: 's1' });
+        const cf = result[0].conditionalFormatRules![0];
+        expect(cf.cellrange[0].row).toEqual([0, 1]);
+        expect(cf).toMatchObject({ conditionValue: ['=B1>0'] });
+    });
+
+    test('leaves a non-formula rule conditionValue alone', () => {
+        const sheets: Sheet[] = [
+            makeSheet('s1', 'Sheet1', [[cell('a')], [cell('b')], [cell('c')]], {
+                conditionalFormatRules: [
+                    {
+                        type: 'default',
+                        conditionName: 'greaterThan',
+                        cellrange: [{ row: [1, 2], column: [0, 0] }],
+                        conditionValue: [2],
+                        format: { textColor: '#ff0000' },
+                    },
+                ],
+            }),
+        ];
+        const result = applySheetsInsertRowCol(sheets, {
+            type: 'row',
+            index: 0,
+            count: 1,
+            direction: 'lefttop',
+            id: 's1',
+        });
+        expect(result[0].conditionalFormatRules![0]).toMatchObject({ conditionValue: [2] });
     });
 });
 
