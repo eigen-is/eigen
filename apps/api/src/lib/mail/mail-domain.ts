@@ -15,6 +15,7 @@ import {
     type Email,
     type EmailDraft,
     type EmailSummary,
+    isCalendarPart,
     isEmailDraft,
     type MaildirMailbox,
     type NewDraft,
@@ -32,7 +33,7 @@ import { MaxFileSizeExceededError, parseMultipartRequest } from '../multipart';
 import type { StorageFile } from '../storage';
 import { grantAccessForReferences } from './access-grants';
 import { parseMail } from './mail-parser';
-import type { DraftMeta, MailSearchOptions, MailStore } from './mail-store';
+import type { DraftMeta, DraftMetaAttachment, MailSearchOptions, MailStore } from './mail-store';
 import { createEmlContent, type EmlAttachment } from './mailfile';
 import { buildRecipientSummary, createUniqueMessageId } from './mailutils';
 import { MAX_PERSONALISED_SEND_BYTES } from './recipients';
@@ -126,7 +127,7 @@ export class Mail {
         // Process iMIP calendar attachments (blocking so event exists before client queries)
         try {
             const parsed = parseMail(message);
-            const hasCalendar = parsed.attachments.some((a) => a.contentType.startsWith('text/calendar'));
+            const hasCalendar = parsed.attachments.some(isCalendarPart);
             if (hasCalendar) {
                 processInboundImip(this.home, parsed);
             }
@@ -159,7 +160,7 @@ export class Mail {
 
         // Summarize invite parts while the parsed content is still in memory, then blank it.
         for (const a of message.attachments) {
-            if (a.contentType.startsWith('text/calendar')) {
+            if (isCalendarPart(a)) {
                 a.calendarInvite = summarizeCalendarInvite(a);
             }
             a.content = Buffer.alloc(0);
@@ -271,14 +272,21 @@ export class Mail {
             if (dbRecord) {
                 const meta = await this.store.readDraftMeta(existingId);
                 if (meta && meta.attachments.length > 0) {
+                    // The keep list names raw EML parts, so the fast path only holds when the kept
+                    // set is exactly the set the sidecar lists: anything else adds or drops a part
+                    // and needs the EML rebuilt. The sidecar is unvalidated JSON on disk, so a part
+                    // whose index is not a number can't answer that and takes the full save.
+                    const parts = meta.attachments.flatMap((a) =>
+                        typeof a.index !== 'number' ? [] : [{ ...a, index: a.index }],
+                    );
+                    const kept = options.keepAttachmentIndexes ? new Set(options.keepAttachmentIndexes) : null;
                     const keepAll =
-                        !options.keepAttachmentIndexes ||
-                        (options.keepAttachmentIndexes.length === meta.attachments.length &&
-                            options.keepAttachmentIndexes.every((v, i) => v === i));
+                        parts.length === meta.attachments.length &&
+                        (!kept || (kept.size === parts.length && parts.every((a) => kept.has(a.index))));
 
                     const stale = meta.lastFullSaveAt && Date.now() - meta.lastFullSaveAt > FULL_SAVE_INTERVAL_MS;
                     if (keepAll && !stale) {
-                        return this.draftFastSave(email, existingId, meta, dbRecord);
+                        return this.draftFastSave(email, existingId, meta, parts, dbRecord);
                     }
                 }
             }
@@ -291,6 +299,7 @@ export class Mail {
         email: NewDraft | EmailDraft,
         existingId: string,
         prevMeta: DraftMeta,
+        parts: Array<Required<DraftMetaAttachment>>,
         dbRecord: EmailSummary,
     ): Promise<EmailDraft> {
         const driveReferences = email.driveReferences ?? prevMeta.driveReferences;
@@ -301,7 +310,7 @@ export class Mail {
             bcc: email.bcc,
             text: email.text || '',
             html: email.html || '',
-            attachments: prevMeta.attachments,
+            attachments: parts,
             driveReferences,
             inReplyTo: email.inReplyTo,
             references: email.references,
@@ -316,11 +325,12 @@ export class Mail {
         this.emit(SSEventType.MAIL_DRAFT_UPDATED, { messageId: existingId, mailbox: MAILBOX_DRAFTS });
 
         const user = this.home.user;
-        const attachments = meta.attachments.map((a) => ({
+        const attachments = parts.map((a) => ({
             contentType: a.contentType,
             filename: a.filename,
             content: Buffer.alloc(0),
             size: a.size,
+            index: a.index,
         }));
 
         return {
@@ -380,10 +390,11 @@ export class Mail {
         if (existingId && this.store.getSummary(existingId)) {
             const attachments = await this.store.getAttachments(existingId);
             const keepSet = options.keepAttachmentIndexes ? new Set(options.keepAttachmentIndexes) : null;
-            for (let i = 0; i < attachments.length; i++) {
-                const a = attachments[i];
-                if (!a.filename || a.contentType.startsWith('text/calendar')) continue;
-                if (keepSet && !keepSet.has(i)) continue;
+            for (const a of attachments) {
+                if (!a.filename) continue;
+                // A keep list names the composer's chips, and a calendar part never gets one, so its
+                // absence can't mean the user removed it — carry it through every rebuild.
+                if (!isCalendarPart(a) && keepSet && !keepSet.has(a.index)) continue;
                 existingAttachments.push({
                     filename: a.filename,
                     content: Buffer.from(a.content),
@@ -448,8 +459,8 @@ export class Mail {
             text: email.text || '',
             html: cleanHtml,
             attachments: saved.attachments.flatMap((a) =>
-                a.filename && !a.contentType.startsWith('text/calendar')
-                    ? [{ filename: a.filename, contentType: a.contentType, size: a.size }]
+                a.filename && !isCalendarPart(a)
+                    ? [{ filename: a.filename, contentType: a.contentType, size: a.size, index: a.index }]
                     : [],
             ),
             driveReferences,

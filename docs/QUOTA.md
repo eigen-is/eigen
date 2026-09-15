@@ -88,6 +88,8 @@ saving a document does not double-count its current bytes.
 The attachment ceiling: `min(maxUploadSize, 25 MB)` intersected with what is left of the mail + contacts
 quota. Throws 507 when that bucket is already full.
 
+The mail half of that bucket is the index sum: `SUM(emails.size)` over the message index (`MaildirStore.size` → `MailDB.size`), one query rather than a walk of the Maildir tree. Bytes no sync ever indexed therefore do not count — the welcome mail, appended with `skipSync`, and Dovecot's own per-folder index files. It is memoized per user for 15 s (`mailSizeCache` in `enforcement.ts`, invalidated when a message is deleted); the contacts half stays live. The admin Users page reads the same sum from the home's own `mail.db` through `pullHomeSize` (`readMailTotalSize`), so both surfaces report the same number.
+
 ### `enforceAvatarUpload(userId, fileSize)`
 
 Runs `enforceMaxUploadSize` (413 on an oversized file), then checks combined mail + contacts usage against

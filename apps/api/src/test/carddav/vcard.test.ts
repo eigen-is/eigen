@@ -69,6 +69,17 @@ const TWO_CATEGORY_LINES = vcard([
     'END:VCARD',
 ]);
 
+// Two same-typed EMAIL lines: retyping one of them is the single-change edit the merge must recognize as an
+// edit rather than a delete plus a bare append.
+const TWO_WORK_EMAILS = vcard([
+    'BEGIN:VCARD',
+    'VERSION:3.0',
+    'FN:Two Mails',
+    'EMAIL;TYPE=WORK:old@example.com',
+    'EMAIL;TYPE=WORK:other@example.com',
+    'END:VCARD',
+]);
+
 describe('vCard merge + builder', () => {
     test('a name-only edit leaves every typed TEL/EMAIL/ADR/X- line byte-identical', () => {
         const out = mergeVCard(parseVCard(APPLE_FIXTURE), { firstName: 'Bob' });
@@ -175,6 +186,58 @@ describe('vCard merge + builder', () => {
         expect(out).toContain('item1.EMAIL;type=INTERNET;type=pref:john.quinlan.doe@example.com');
         expect(out).toContain('\r\nEMAIL:bob@example.com\r\n');
         expect(out.indexOf('EMAIL:bob@example.com')).toBeLessThan(out.indexOf('END:VCARD'));
+    });
+
+    test('retyping one of two work emails keeps that line TYPE=WORK', () => {
+        const out = mergeVCard(parseVCard(TWO_WORK_EMAILS), { email: ['new@example.com', 'other@example.com'] });
+        expect(out).toContain('EMAIL;TYPE=WORK:new@example.com');
+        expect(out).toContain('EMAIL;TYPE=WORK:other@example.com');
+        expect(out).not.toContain('old@example.com');
+    });
+
+    test('editing a grouped email value keeps its group and its X-ABLabel', () => {
+        const out = mergeVCard(parseVCard(APPLE_FIXTURE), { email: ['jane@example.com'] });
+        expect(out).toContain('item1.EMAIL;TYPE=INTERNET;TYPE=pref:jane@example.com');
+        expect(out).toContain('item1.X-ABLabel:_$!<Work>!$_');
+        expect(out).not.toContain('john.quinlan.doe@example.com');
+    });
+
+    test('editing one of two addresses keeps that ADR line typed', () => {
+        const out = mergeVCard(parseVCard(APPLE_FIXTURE), {
+            address: [
+                { street: '123 Main St', city: 'Springfield', state: 'IL', zipCode: '62704', country: 'USA' },
+                { street: '2 Market Sq', city: 'Utrecht', state: '', zipCode: '3500', country: 'Netherlands' },
+            ],
+        });
+        expect(out).toContain('ADR;type=HOME:;;123 Main St;Springfield;IL;62704;USA');
+        expect(out).toContain('ADR;TYPE=WORK:;;2 Market Sq;Utrecht;;3500;Netherlands');
+        expect(out).not.toContain('1 Market Sq');
+    });
+
+    test('removing one value while adding two is ambiguous, so both new lines are bare', () => {
+        const out = mergeVCard(parseVCard(TWO_WORK_EMAILS), {
+            email: ['other@example.com', 'a@example.com', 'b@example.com'],
+        });
+        expect(out).toContain('\r\nEMAIL:a@example.com\r\n');
+        expect(out).toContain('\r\nEMAIL:b@example.com\r\n');
+        expect(out).toContain('EMAIL;TYPE=WORK:other@example.com');
+        expect(out).not.toContain('old@example.com');
+    });
+
+    test('a pure removal drops its line and appends nothing', () => {
+        const out = mergeVCard(parseVCard(TWO_WORK_EMAILS), { email: ['other@example.com'] });
+        expect(parseVCardLines(out).filter((l) => l.name === 'EMAIL')).toHaveLength(1);
+        expect(out).toContain('EMAIL;TYPE=WORK:other@example.com');
+        expect(out).not.toContain('old@example.com');
+    });
+
+    test('a pure addition leaves every stored line byte-identical and appends a bare one', () => {
+        const out = mergeVCard(parseVCard(TWO_WORK_EMAILS), {
+            email: ['old@example.com', 'other@example.com', 'third@example.com'],
+        });
+        expect(out).toContain('EMAIL;TYPE=WORK:old@example.com');
+        expect(out).toContain('EMAIL;TYPE=WORK:other@example.com');
+        expect(out).toContain('\r\nEMAIL:third@example.com\r\n');
     });
 
     test('a categories edit writes an RFC-escaped CATEGORIES line', () => {

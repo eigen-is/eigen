@@ -1,6 +1,6 @@
 import { escapeHtml } from '@workspace/lib/html';
 import { IMIP_METHODS } from '@workspace/lib/types/calendar';
-import type { AddressObject, Attachment, ParsedMail } from '@workspace/lib/types/mail';
+import { type AddressObject, type Attachment, isCalendarPart, type ParsedMail } from '@workspace/lib/types/mail';
 import libmime from 'libmime';
 import { decodeText, decodeTransfer } from './decode';
 import { addressesHtml, type CidImage, htmlToText, inlineCidImages, textToHtml } from './html';
@@ -43,11 +43,12 @@ export function parseMail(bytes: Buffer): ParsedMail {
                             ? libmime.detectMimeType(filename)
                             : contentType,
                     filename,
+                    index: attachments.length,
                     content,
                     size: content.length,
                     ...(charset && CHARSET_TOKEN.test(charset) && { charset }),
                 };
-                if (attachment.contentType.startsWith('text/calendar')) {
+                if (isCalendarPart(attachment)) {
                     const method = headers.contentType.params['method']?.toUpperCase();
                     const calendarMethod = IMIP_METHODS.find((known) => known === method);
                     if (calendarMethod) attachment.calendarMethod = calendarMethod;

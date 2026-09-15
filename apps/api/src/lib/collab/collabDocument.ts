@@ -1,4 +1,5 @@
 import { restoreYjsDoc } from '@workspace/lib/collab/yjs-utils';
+import { isRecord } from '@workspace/lib/guards';
 import { DRIVE_TYPE_STICKIES, type DrivePath, EIGEN_DOC_TYPE_INFO, isCollabType } from '@workspace/lib/types/drive';
 import { desc, lt, lte } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
@@ -149,10 +150,6 @@ class DbProvider {
 // Yjs and awareness hand back whatever origin was passed in; ours is the socket, anything else is server-side.
 function isConnection(origin: unknown): origin is ServerWebSocket<unknown> {
     return origin !== null && typeof origin === 'object' && 'readyState' in origin;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === 'object' && value !== null;
 }
 
 // A client may publish presence for itself only: an awareness `user` field must carry the session

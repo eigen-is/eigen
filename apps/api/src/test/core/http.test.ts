@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { parseByteRange, rangeResponse, scriptableInlineHeaders } from '../../lib/core/http';
+import {
+    matchesIfMatch,
+    matchesIfNoneMatch,
+    parseByteRange,
+    rangeResponse,
+    scriptableInlineHeaders,
+} from '../../lib/core/http';
 
 const SANDBOX_CSP = "sandbox; default-src 'none'";
 
@@ -24,6 +30,57 @@ describe('scriptableInlineHeaders', () => {
         for (const type of ['image/png', 'application/pdf', 'video/mp4', 'text/plain', 'application/xml-dtd']) {
             expect(scriptableInlineHeaders(type)).toEqual({});
         }
+    });
+});
+
+// Every conditional surface (WebDAV, CalDAV, CardDAV, drive, mail) compares the quoted wire form,
+// so the DAV twins quote their stored bare hash before asking.
+const ETAG = '"sha-256-hash"';
+
+describe('matchesIfMatch', () => {
+    test('* means "the resource exists", never a literal tag', () => {
+        expect(matchesIfMatch('*', ETAG)).toBe(true);
+        expect(matchesIfMatch('*', null)).toBe(false);
+    });
+
+    test('matches the current quoted tag and nothing else', () => {
+        expect(matchesIfMatch(ETAG, ETAG)).toBe(true);
+        expect(matchesIfMatch('"deadbeef"', ETAG)).toBe(false);
+        expect(matchesIfMatch(ETAG, null)).toBe(false);
+    });
+
+    test('matches any member of a comma list, whitespace included', () => {
+        expect(matchesIfMatch(`"deadbeef", ${ETAG}`, ETAG)).toBe(true);
+        expect(matchesIfMatch(`  ${ETAG}  `, ETAG)).toBe(true);
+        expect(matchesIfMatch('"deadbeef", "cafe"', ETAG)).toBe(false);
+    });
+
+    test('compares strongly (RFC 7232 §3.1), so a W/ validator never matches', () => {
+        expect(matchesIfMatch(`W/${ETAG}`, ETAG)).toBe(false);
+    });
+});
+
+describe('matchesIfNoneMatch', () => {
+    test('* means "the resource exists", never a literal tag', () => {
+        expect(matchesIfNoneMatch('*', ETAG)).toBe(true);
+        expect(matchesIfNoneMatch('*', null)).toBe(false);
+    });
+
+    test('matches the current quoted tag and nothing else', () => {
+        expect(matchesIfNoneMatch(ETAG, ETAG)).toBe(true);
+        expect(matchesIfNoneMatch('"deadbeef"', ETAG)).toBe(false);
+        expect(matchesIfNoneMatch(ETAG, null)).toBe(false);
+    });
+
+    test('matches any member of a comma list, whitespace included', () => {
+        expect(matchesIfNoneMatch(`"deadbeef", ${ETAG}`, ETAG)).toBe(true);
+        expect(matchesIfNoneMatch(`  ${ETAG}  `, ETAG)).toBe(true);
+        expect(matchesIfNoneMatch('"deadbeef", "cafe"', ETAG)).toBe(false);
+    });
+
+    test('compares weakly (RFC 7232 §3.2), so a W/ validator matches', () => {
+        expect(matchesIfNoneMatch(`W/${ETAG}`, ETAG)).toBe(true);
+        expect(matchesIfNoneMatch(`"deadbeef", W/${ETAG}`, ETAG)).toBe(true);
     });
 });
 

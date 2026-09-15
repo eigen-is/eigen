@@ -8,6 +8,7 @@ export { MergedSelect, numToStr } from './merged-select';
 export { MergedSlider } from './merged-slider';
 export { getMergedValue, isMixed, type MergedValue, MIXED } from './merged-value';
 export { PROPERTIES_PANEL_WIDTH_PX, PropertiesPanel, PropertyRow, PropertySection } from './properties-panel';
+export { type BeginGesture, PropertyGestureContext, useHeldGesture } from './property-gesture';
 export { PropertyToggle } from './property-toggle';
 export { type TransformFields, TransformSection } from './transform-section';
 export { useAspectLock } from './use-aspect-lock';

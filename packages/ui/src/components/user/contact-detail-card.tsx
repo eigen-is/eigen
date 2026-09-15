@@ -1,5 +1,6 @@
 import { getMailComposeUrl } from '@workspace/lib/api';
 import { formatDateOnly } from '@workspace/lib/date';
+import { useMailEnabled } from '@workspace/lib/public';
 import type { Address, Contact } from '@workspace/lib/types/contact';
 import { cn } from '@workspace/ui/lib/utils';
 import { Building, Calendar, Mail, MapPin, Phone } from 'lucide-react';
@@ -18,6 +19,7 @@ function formatAddress(address: Address) {
 
 export function ContactDetailCard({ contact, labels, className }: ContactDetailCardProps) {
     const addresses = contact.address ?? [];
+    const mailEnabled = useMailEnabled();
 
     return (
         <div className={cn('flex flex-col md:flex-row gap-8', className)}>
@@ -54,9 +56,13 @@ export function ContactDetailCard({ contact, labels, className }: ContactDetailC
                             </h4>
                             {contact.email.map((email, index) => (
                                 <div key={index} className="pl-6">
-                                    <a className="text-primary hover:underline" href={getMailComposeUrl(email)}>
-                                        {email}
-                                    </a>
+                                    {mailEnabled ? (
+                                        <a className="text-primary hover:underline" href={getMailComposeUrl(email)}>
+                                            {email}
+                                        </a>
+                                    ) : (
+                                        email
+                                    )}
                                 </div>
                             ))}
                         </div>

@@ -1,7 +1,7 @@
 import { useAuth } from '@workspace/lib/auth';
 import { subjectFromMailAttachment, subjectInfo } from '@workspace/lib/file-subject';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
-import type { Attachment } from '@workspace/lib/types/mail';
+import { type Attachment, isCalendarPart } from '@workspace/lib/types/mail';
 import { TooltipButton } from '@workspace/ui';
 import { SimpleAttachmentChip, useAttachmentChipMenu } from '@workspace/ui/components/attachment';
 import { ContextMenuAnchor } from '@workspace/ui/components/context-menu';
@@ -25,9 +25,8 @@ export function ReadAttachments({ emailId, attachments }: ReadAttachmentsProps) 
     const subjects = useMemo(
         () =>
             (attachments ?? [])
-                .map((att, index) => ({ att, index }))
-                .filter(({ att }) => !att.contentType.startsWith('text/calendar'))
-                .map(({ att, index }) => subjectFromMailAttachment(ownerId, emailId, index, att)),
+                .filter((att) => !isCalendarPart(att))
+                .map((att) => subjectFromMailAttachment(ownerId, emailId, att.index, att)),
         [attachments, emailId, ownerId],
     );
     // Each chip's derived facts once: the key a press resolves through, the name and the byte URL.

@@ -10,6 +10,7 @@ Created during setup wizard. Uses better-auth `organization()` plugin with `team
 plugin.
 
 - All new users auto-joined as `member` (via `databaseHooks.user.create.after`)
+- Every sign-in re-attempts the join when the membership row is missing (`authEnsureDefaultOrgMembership`, called from `databaseHooks.session.create.after`), so an account whose sign-up join failed still reaches the org instead of staying invisible in Admin → Users; guests are skipped
 - Setup admin becomes `owner`
 - Config stored in `serverConfig` (`data/server/`)
 - New users also trigger share reconciliation (`reconcileSharesForNewUser`)

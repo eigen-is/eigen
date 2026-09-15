@@ -34,7 +34,7 @@ export function useSmartResults(ctx: CommandContext, input: string): PaletteResu
         const parsed = parseSmartInput(input);
 
         // Whole-input email or URL shape — deterministic claim on Top Hit.
-        if (parsed?.kind === 'email') {
+        if (ctx.mailEnabled && parsed?.kind === 'email') {
             const items = ctx.selection?.items ?? [];
             if (items.length > 0) {
                 const title =
@@ -83,7 +83,7 @@ export function useSmartResults(ctx: CommandContext, input: string): PaletteResu
         // the Suggestions section directly under it. Skip when the typed input is
         // already the suggestion's email (the deterministic path above covers it).
         const top = suggestions[0];
-        if (top && parsed?.value !== top.email) {
+        if (ctx.mailEnabled && top && parsed?.value !== top.email) {
             // Plain compose, no attachments — always offered when a contact matches so
             // the user can send a clean mail even with a Drive selection live.
             out.push({

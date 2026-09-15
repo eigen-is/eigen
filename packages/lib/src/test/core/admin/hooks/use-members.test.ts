@@ -1,15 +1,8 @@
 import { afterAll, expect, mock, test } from 'bun:test';
-import { Window } from 'happy-dom';
+import { installHappyDom } from '../../../happy-dom';
 
-// react-dom needs a DOM to render into; the globals are removed again in afterAll so later test
-// files see the plain bun environment. Recipe: the use-collab-doc test.
-const window = new Window({ url: 'http://localhost:3000' });
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-g.window = window;
-g.document = window.document;
-g.navigator = window.navigator;
-g.IS_REACT_ACT_ENVIRONMENT = true;
+// react-dom needs a DOM to render into.
+installHappyDom();
 
 const realAuthClientModule = await import('../../../../core/auth/hooks/use-auth-client');
 const realAuthContextModule = await import('../../../../core/auth/auth-context');
@@ -43,10 +36,6 @@ mock.module('../../../../core/auth/auth-context', () => ({
 }));
 
 afterAll(() => {
-    g.window = undefined;
-    g.document = undefined;
-    g.navigator = undefined;
-    g.IS_REACT_ACT_ENVIRONMENT = undefined;
     mock.module('../../../../core/auth/hooks/use-auth-client', () => realAuthClientModule);
     mock.module('../../../../core/auth/auth-context', () => realAuthContextModule);
 });
@@ -66,8 +55,8 @@ function Harness({ onRender }: { onRender: (r: Result) => void }) {
 test('useMembers pages through list-members until every member is loaded', async () => {
     const seen: { latest: Result | null } = { latest: null };
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const container = window.document.createElement('div');
-    const root = createRoot(container as unknown as Element);
+    const container = document.createElement('div');
+    const root = createRoot(container);
     await act(async () => {
         root.render(
             createElement(

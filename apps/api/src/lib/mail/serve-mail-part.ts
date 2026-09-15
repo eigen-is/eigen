@@ -1,5 +1,5 @@
 import { type Attachment, mailAttachmentName } from '@workspace/lib/types/mail';
-import { ApiError, contentDisposition, etagMatches, rangeResponse, scriptableInlineHeaders } from '../core';
+import { ApiError, contentDisposition, matchesIfNoneMatch, rangeResponse, scriptableInlineHeaders } from '../core';
 import type { Mail } from './mail-domain';
 
 // The part every mail route serves, or null on a 304 answered off the summary row, before the .eml is parsed.
@@ -17,7 +17,7 @@ export async function readMailPart(
     const etag = `"${summary.id}-${index}-${summary.date.getTime()}-${summary.size}"`;
     const ifNoneMatch = request.headers.get('if-none-match');
     const att =
-        ifNoneMatch && etagMatches(ifNoneMatch, etag) ? null : await mail.messageGetAttachment(messageId, index);
+        ifNoneMatch && matchesIfNoneMatch(ifNoneMatch, etag) ? null : await mail.messageGetAttachment(messageId, index);
     set.headers['Cache-Control'] = 'private, no-cache';
     set.headers['ETag'] = etag;
     return att;

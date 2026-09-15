@@ -1,4 +1,4 @@
-import { apps } from '@workspace/lib/apps';
+import { apps, isMailApp } from '@workspace/lib/apps';
 import type { Command } from '@workspace/lib/types/command-palette';
 import { BASE_RANKS } from './base-ranks';
 
@@ -11,5 +11,6 @@ export const navCommands: Command[] = apps.map((app) => ({
     keywords: [app.description.toLowerCase()],
     icon: app.icon,
     baseRank: BASE_RANKS.NAV_APP,
+    availability: isMailApp(app) ? (ctx) => ctx.mailEnabled : undefined,
     run: (ctx) => ctx.navigate(app.href),
 }));

@@ -15,6 +15,7 @@ import type {
     CellWithRowAndCol,
     Sheet,
     SheetConfig,
+    SheetImage,
     SheetWithCalcChain,
 } from './types';
 
@@ -34,10 +35,13 @@ type EncodedContent = string | number | boolean | Record<string, unknown>;
 // [row, col, borderIndex] — one per `config.borderInfo` key.
 type EncodedBorder = [number, number, number];
 
-type EncodedSheet = Omit<Sheet, 'celldata' | 'data' | 'config'> & {
+type EncodedSheet = Omit<Sheet, 'celldata' | 'data' | 'config' | 'images'> & {
     config?: Omit<SheetConfig, 'borderInfo'>;
     cells?: EncodedCell[];
     borderCells?: EncodedBorder[];
+    // Floating images ride verbatim — a handful of small records per sheet, nothing
+    // to intern. The key is omitted when the sheet has none; decode materializes it.
+    images?: SheetImage[];
 };
 
 type SnapshotV2 = {
@@ -65,9 +69,11 @@ export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean 
             selections: _selections,
             calcChain: _calcChain,
             config,
+            images,
             ...rest
         } = sheet as RuntimeSheet;
         const out: EncodedSheet = { ...rest };
+        if (images && images.length > 0) out.images = images;
 
         // The dense matrix never goes on the wire, but it is the authoritative copy
         // when present: editor state edits write `data` and leave `celldata` stale,
@@ -108,8 +114,11 @@ export function decodeSheetsSnapshot(snapshot: string): Sheet[] {
     // garbage-in would materialize a half-empty workbook instead of surfacing the problem.
     if (f !== FORMAT) throw unknownFormat(f);
     return sheets.map((encoded) => {
-        const { cells, borderCells, config, ...rest } = encoded;
-        const sheet: RuntimeSheet = { ...rest };
+        const { cells, borderCells, config, images, ...rest } = encoded;
+        // The list is materialized on every sheet, the way normalizeSheetConfig materializes
+        // a config collection: the editor replaces `images` wholesale, and a patch resolves
+        // against a base that already carries the key.
+        const sheet: RuntimeSheet = { ...rest, images: images ?? [] };
 
         if (cells) {
             const celldata: CellWithRowAndCol[] = [];

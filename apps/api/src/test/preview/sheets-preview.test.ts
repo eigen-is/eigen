@@ -1,9 +1,10 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { Sheet } from '@workspace/lib/sheets';
+import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { FormulaEngine } from '@workspace/sheet/engine';
 import * as Y from 'yjs';
-import { PREVIEW_SHEET_BUDGET, renderSheetsPreviewHtml } from '../../lib/export/sheets/render';
+import { PREVIEW_SHEET_BUDGET, renderSheetsHtml, renderSheetsPreviewHtml } from '../../lib/export/sheets/render';
 import { getHome } from '../../lib/home/get-home';
 import { renderEigensheetsPreviewBody } from '../../lib/preview/eigensheets-render';
 import {
@@ -18,7 +19,7 @@ import {
     HEAVY_FAR_CORNER,
     seedSheetsDoc,
 } from '../fixtures/heavy-sheets';
-import { authedRequest, driveGet, drivePost, getTestContext } from '../setup';
+import { authedRequest, driveGet, drivePost, getTestContext, NO_MEDIA } from '../setup';
 
 // Golden output assertions for the eigensheets preview pipeline (proposal Phase 0:
 // pin the rendered contract BEFORE the Yjs loader / renderer refactor). The hash at
@@ -105,7 +106,7 @@ describe('eigensheets preview (read policy)', () => {
         const doc = new Y.Doc();
         seedSheetsDoc(doc, buildGoldenSheets(), []);
 
-        const { body: rendered, warnings } = renderEigensheetsPreviewBody(doc);
+        const { body: rendered, warnings } = renderEigensheetsPreviewBody(doc, NO_MEDIA);
         expect(rendered).toContain('Region 1');
         expect(rendered).not.toContain(`>${GOLDEN_ROW1_TOTAL}</td>`);
         expect(warnings).toEqual([]);
@@ -133,10 +134,136 @@ describe('eigensheets preview (read policy)', () => {
         const doc = new Y.Doc();
         seedSheetsDoc(doc, [sheet], []);
 
-        const { body } = renderEigensheetsPreviewBody(doc);
+        const { body } = renderEigensheetsPreviewBody(doc, NO_MEDIA);
         expect(body).toContain('Beacon');
         expect(body).not.toContain('http://evil.example');
         expect(body).not.toMatch(/url\(http/i);
+        doc.destroy();
+    });
+});
+
+// Floating images are a media reference: the main thread resolves the name to a
+// /file/<id>/preview URL, and the preview body embeds it. A separate fixture — the golden
+// one above pins bytes that must not move for this.
+describe('eigensheets preview (floating images)', () => {
+    const IMAGE_URL = 'http://api.test/drive/owner/default/file/media-1/preview';
+
+    function seedImageSheet(x = 90): Y.Doc {
+        const cell = { v: 'Grid', m: 'Grid', ct: { fa: 'General', t: 'g' } };
+        const sheet: Sheet = {
+            id: 'images',
+            name: 'Images',
+            celldata: [{ r: 0, c: 0, v: cell }],
+            data: [[cell]],
+            config: {},
+            images: [{ id: 'img_1', mediaName: 'chart.png', x, y: 30, width: 160, height: 120 }],
+        };
+        const doc = new Y.Doc();
+        seedSheetsDoc(doc, [sheet], []);
+        return doc;
+    }
+
+    test('the image reaches the body at its stored geometry', () => {
+        const doc = seedImageSheet();
+        const { body } = renderEigensheetsPreviewBody(doc, new Map([['chart.png', IMAGE_URL]]));
+        expect(body).toContain(`src="${IMAGE_URL}"`);
+        expect(body).toContain('left:90px;top:30px;width:160px;height:120px');
+        doc.destroy();
+    });
+
+    // The overlay draws from the used range's origin, so an image anchored deeper in the
+    // grid keeps its cell only if the preview subtracts exactly what the export subtracts.
+    // The quick look renders this fragment at 1:1 in app CSS, where the grid under the
+    // overlay must keep the declared pitch (packages/ui globals.css, .eigensheets-preview).
+    test('an image past the used range origin gets the export geometry', () => {
+        // Used range starts at C5, the image at E7 — both in default grid pixels.
+        const cell = { v: 'C5', m: 'C5', ct: { fa: 'General', t: 'g' } };
+        const sheet: Sheet = {
+            id: 'offset',
+            name: 'Offset',
+            celldata: [{ r: 4, c: 2, v: cell }],
+            config: {},
+            images: [
+                {
+                    id: 'img_1',
+                    mediaName: 'chart.png',
+                    x: 4 * SHEET_DEFAULT_COL_WIDTH,
+                    y: 6 * SHEET_DEFAULT_ROW_HEIGHT,
+                    width: 160,
+                    height: 120,
+                },
+            ],
+        };
+        const media = new Map([['chart.png', IMAGE_URL]]);
+        // The C5 origin takes two columns and four rows off the stored geometry.
+        const geometry = `position:absolute;left:${2 * SHEET_DEFAULT_COL_WIDTH}px;top:${2 * SHEET_DEFAULT_ROW_HEIGHT}px;width:160px;height:120px`;
+
+        const doc = new Y.Doc();
+        seedSheetsDoc(doc, [sheet], []);
+        expect(renderEigensheetsPreviewBody(doc, media).body).toContain(`style="${geometry}"`);
+        // The full export interns the very same declaration into its stylesheet.
+        expect(renderSheetsHtml([sheet], media).css).toContain(`{${geometry}}`);
+        doc.destroy();
+    });
+
+    test('an image anchored above the used range reaches the body', () => {
+        const cell = { v: 'C5', m: 'C5', ct: { fa: 'General', t: 'g' } };
+        const sheet: Sheet = {
+            id: 'above',
+            name: 'Above',
+            celldata: [{ r: 4, c: 2, v: cell }],
+            config: {},
+            images: [{ id: 'img_1', mediaName: 'chart.png', x: 0, y: 0, width: 160, height: 60 }],
+        };
+        const doc = new Y.Doc();
+        seedSheetsDoc(doc, [sheet], []);
+        const { body } = renderEigensheetsPreviewBody(doc, new Map([['chart.png', IMAGE_URL]]));
+        expect(body).toContain('left:0px;top:0px;width:160px;height:60px');
+        doc.destroy();
+    });
+
+    // Past the budget window's own right edge, not merely past the one-cell grid: the
+    // overlay would stretch the fragment's scroll width and collapse the thumbnail.
+    test('an image parked far outside the budget window stays out of the body', () => {
+        const doc = seedImageSheet(20_000);
+        const { body } = renderEigensheetsPreviewBody(doc, new Map([['chart.png', IMAGE_URL]]));
+        expect(body).toContain('Grid');
+        expect(body).not.toContain('<img');
+        doc.destroy();
+    });
+
+    // A sheet with nothing but a chart takes the blank-grid branch, which renders its own overlay.
+    function seedChartOnlySheet(x: number): Y.Doc {
+        const sheet: Sheet = {
+            id: 'chart',
+            name: 'Chart',
+            celldata: [],
+            data: [],
+            config: {},
+            images: [{ id: 'img_1', mediaName: 'chart.png', x, y: 30, width: 160, height: 120 }],
+        };
+        const doc = new Y.Doc();
+        seedSheetsDoc(doc, [sheet], []);
+        return doc;
+    }
+
+    test('a chart-only sheet clips its overlay to the budget window as well', () => {
+        const far = seedChartOnlySheet(20_000);
+        expect(renderEigensheetsPreviewBody(far, new Map([['chart.png', IMAGE_URL]])).body).not.toContain('<img');
+        far.destroy();
+
+        const origin = seedChartOnlySheet(0);
+        expect(renderEigensheetsPreviewBody(origin, new Map([['chart.png', IMAGE_URL]])).body).toContain(
+            `src="${IMAGE_URL}"`,
+        );
+        origin.destroy();
+    });
+
+    test('a name the main thread could not resolve renders no img at all', () => {
+        const doc = seedImageSheet();
+        const { body } = renderEigensheetsPreviewBody(doc, NO_MEDIA);
+        expect(body).toContain('Grid');
+        expect(body).not.toContain('<img');
         doc.destroy();
     });
 });
@@ -195,7 +322,7 @@ describe('eigensheets preview (declared spans beyond the window)', () => {
             config: { merge: { '0_0': { r: 0, c: 0, rs: 5000, cs: 1000 } } },
         };
 
-        const { html, truncated } = renderSheetsPreviewHtml([sheet]);
+        const { html, truncated } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
         expect(truncated).toBe(true);
         expect(html).toContain(`colspan="${PREVIEW_SHEET_BUDGET.maxCols}"`);
         expect(html).toContain(`rowspan="${PREVIEW_SHEET_BUDGET.maxRows}"`);
@@ -221,7 +348,7 @@ describe('eigensheets preview (declared spans beyond the window)', () => {
         };
 
         const evaluate = spyOn(FormulaEngine.prototype, 'evaluate');
-        const { html } = renderSheetsPreviewHtml([sheet]);
+        const { html } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
         const evaluated = evaluate.mock.calls.length;
         evaluate.mockRestore();
 
@@ -252,7 +379,7 @@ describe('eigensheets preview (declared spans beyond the window)', () => {
             ],
         };
 
-        const { html } = renderSheetsPreviewHtml([sheet]);
+        const { html } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
         expect(html).toContain('background:#d1f0d1');
     });
 
@@ -278,7 +405,7 @@ describe('eigensheets preview (declared spans beyond the window)', () => {
         };
 
         const evaluate = spyOn(FormulaEngine.prototype, 'evaluate');
-        const { html } = renderSheetsPreviewHtml([sheet]);
+        const { html } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
         const evaluated = evaluate.mock.calls.length;
         evaluate.mockRestore();
 
@@ -288,6 +415,6 @@ describe('eigensheets preview (declared spans beyond the window)', () => {
 });
 
 // Recorded from the deterministic golden fixture. Regenerate (and justify) only on
-// an intentional renderer or preview-budget change. Last move: the preview read no
-// longer recalcs, so the fixture's valueless formula cells render empty (2026-08-04).
-const GOLDEN_BODY_SHA256 = '30976a0476b211d6695e14d2506a824cd9f965f8d00572d6b313ff27e49fa410';
+// an intentional renderer or preview-budget change. Last move: the default cell size is
+// 100 × 20, the editor's value, one constant with the renderer (2026-09-15).
+const GOLDEN_BODY_SHA256 = '58dca95a4f86e8c60264a12c277b5139159a8ab43c96c65068dde7121bbc3041';

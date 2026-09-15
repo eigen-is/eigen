@@ -64,6 +64,11 @@ current sheet's config with `getSheetConfig(ctx, id?)` (`state/context.ts`, besi
   than silently reopening the hole. This mirrors the row/column grid materialization in `engine/defaults.ts`, and for
   the same reason: **a base that is less materialized than the writer makes granular patches fail to resolve**, and
   `replaySheetsOps` then rolls back the whole batch — the edit is lost, not degraded.
+  **`calcChain` is the same kind of collection outside `config`**: the Workbook seeds it on every sheet at mount
+  (`seedCalcChain`), so the first formula a user types emits `add ['calcChain', 0]` in the same batch as the computed
+  cell. `withNormalizedSheet` (`engine/replay-ops.ts`) therefore materializes it on every replay base alongside
+  `images` — without it a fresh doc's formula cell exported blank, its value rolled back with the batch. An empty
+  chain still reads as "not computed", so the § Server-side recalc gate is unchanged.
 - a write on a path that then rejects the operation still costs the user an undo entry and ships an op. Because the
   collections already exist, no writer needs to create one, so this cannot happen by accident; `src/test/state/rejected-writes.test.ts`
   is the table-driven gate that keeps it that way. Add a row to it when you add a writer.
@@ -105,6 +110,7 @@ the op format and `replaySheetsOps` are untouched.
   `data` over stale `celldata`) and is never persisted; `selections` never persists either.
 - `config.borderInfo`'s `"r_c"` entries become `[r, c, borderIdx]` tuples over an interned
   `borders` dictionary (order carries nothing; the map is rebuilt on decode).
+- `images` — the sheet's floating images (`SheetImage[]` in `packages/lib/src/sheets/types.ts`, which `packages/sheet` re-exports as `Image`) — ride verbatim: a handful of small records per sheet, nothing to intern. The key is omitted when the sheet has none, and decode materializes the list on every sheet, the way `normalizeSheetConfig` materializes a config collection.
 - `calcChain` is never persisted. `computed: true` (importer post-recalc, every editor
   flush) makes the decoder seed it from the `f` cells — which is exactly the signal
   `sheetsNeedRecalc` keys off, so the § Server-side recalc gate is unchanged: an
@@ -128,6 +134,8 @@ Two storage patterns, deliberately. Everything that IS the cell — value, formu
 | Data validation | `sheet.dataVerification` | Rule outlives the value it validates |
 | Hyperlinks | `sheet.hyperlink` | Link outlives edits to the display text |
 | Row/col geometry | `config.rowlen` / `columnlen` / `rowhidden` / `colhidden` / `customHeight` / `customWidth` | Axis-keyed, not cell-keyed |
+
+A track the user never resized stores no `rowlen`/`columnlen` and falls back to `SHEET_DEFAULT_COL_WIDTH` × `SHEET_DEFAULT_ROW_HEIGHT` (100 × 20 px, `packages/lib/src/sheets/defaults.ts`) — the single source of the default cell size, read by the editor grid (`state/settings.ts`, `state/context.ts`), the xlsx importer's wrap estimate and the server-side HTML/PDF/preview renderer, so the screen and an export lay the grid out on the same pitch.
 
 Since N2 (2026-08-30) every `"r_c"` map is the same shape and shares the same machinery: `parseCellKey` (`packages/lib/src/sheets/borders.ts`) is the one key parser, `shiftCellKeyedForInsert/Delete` (`engine/rowcol.ts`) the one row/column re-keyer (borderInfo shifts in the engine with the other config collections; dataVerification and hyperlink through the same helper state-side), and `normalizeSheetConfig` materializes every config collection on every base. **`borderInfo` was the one exception until N2** — an append-only command log replayed at render time, whose order was semantic and could not converge; [SHEETS-TODO.md § N2](SHEETS-TODO.md) records the reshape.
 
@@ -454,6 +462,8 @@ threads them to `renderSheet`, and the per-sheet `buildCfFormulaEvaluator` produ
 formulas, only the CF rule's formula against existing values. The cell values it reads are already
 engine-fresh, though: `readSheetsFromDoc` runs the gated `recalcSheets` (see § Server-side recalc)
 before the sheets reach any exporter.
+
+**Floating images paint over the grid.** A sheet with `images` wraps its table in a `position:relative` box and emits one absolutely-positioned `<img>` per image at the stored `x`/`y`/`width`/`height`, rotated about its center by `angle` — the same box the editor's `ImgBoxs` lays out, because both read the same fields. The coordinates are unzoomed grid pixels from A1's top-left while the table starts at the used range, so the overlay subtracts the widths and heights of the rows and columns above and left of the window; an image anchored above or left of the used range pulls that window back to the row and column it starts in, so the offset never goes negative and the page (`getSheetContentSize`) covers it. The name is a media reference ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)): the main thread resolves it — a base64 `data:` URI for an export (`collectExportMedia`), the `/file/<id>/preview` URL for a preview (`buildPreviewUrlMap`) — and a name that resolves to nothing (a `pending:` upload that never settled, a deleted file) renders nothing. A sheet whose only content is an image still renders it. Native xlsx export drops them: ExcelJS has no floating-picture writer this exporter uses.
 
 Webpage hyperlinks render as `target="_blank" rel="noopener noreferrer"` anchors, scheme-gated
 through the same `resolveWebLink` (`@workspace/lib/sheets/web-link`) the editor's link navigation

@@ -13,6 +13,9 @@ updated: 2026-06-08
 Mail is your email in Eigen. You read, write, and organize messages without leaving the browser. This page is a
 quick tour of the layout, so you know where everything is.
 
+Some Eigen servers are set up without email. On those, Mail is missing from the app switcher, and opening it says
+so. Ask whoever runs your Eigen which mail app to use instead.
+
 The screen has three parts: the list of mailboxes on the left, the message list in the middle, and the reading
 pane on the right where the open message appears.
 

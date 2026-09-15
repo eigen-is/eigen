@@ -3,19 +3,15 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import type { ImportContactsResult } from '@workspace/lib/types/contact';
+import { installHappyDom } from '../../../happy-dom';
 
 const OWNER = 'a1b2c3d4';
 
-// react-dom needs a DOM to render the hooks into; the globals are removed again in afterAll so later
-// test files see the plain bun environment. Recipe: the use-backup test.
-const { Window } = await import('happy-dom');
-const window = new Window({ url: 'http://localhost:3000' });
+// react-dom needs a DOM to render the hooks into.
+installHappyDom();
+
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
 const g = globalThis as any;
-g.window = window;
-g.document = window.document;
-g.navigator = window.navigator;
-g.IS_REACT_ACT_ENVIRONMENT = true;
 
 // The hooks read the signed-in user from the auth context; there is no provider here.
 const realAuthContextModule = await import('../../../../core/auth/auth-context');
@@ -60,10 +56,6 @@ afterAll(() => {
     mock.module('../../../../core/api', () => realApiModule);
     mock.module('../../../../core/auth/auth-context', () => realAuthContextModule);
     mock.module('sonner', () => realSonnerModule);
-    g.window = undefined;
-    g.document = undefined;
-    g.navigator = undefined;
-    g.IS_REACT_ACT_ENVIRONMENT = undefined;
 });
 
 // One React root for every hook that has to be rendered to be observed. Recipe: the use-backup test.
@@ -77,8 +69,8 @@ async function renderHook<T>(use: () => T, queryClient: QueryClient): Promise<{ 
         seen.latest = use();
         return null;
     }
-    const container = window.document.createElement('div');
-    const root = createRoot(container as unknown as Element);
+    const container = document.createElement('div');
+    const root = createRoot(container);
     await act(async () => {
         root.render(createElement(QueryClientProvider, { client: queryClient }, createElement(Harness, null)));
     });

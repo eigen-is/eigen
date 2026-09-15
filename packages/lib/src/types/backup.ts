@@ -45,7 +45,7 @@ export type BackupJob = {
     id: string;
     kind: 'backup' | 'verify' | 'restore';
     ownerId: string;
-    // The admin who started it: the job's SSE pokes and notifications go to their home.
+    // The admin who started it: the job's notifications go to their home. Its pokes go to all admins.
     startedBy: string;
     state: 'running' | 'done' | 'failed';
     progress: { step: string; done: number; total: number };

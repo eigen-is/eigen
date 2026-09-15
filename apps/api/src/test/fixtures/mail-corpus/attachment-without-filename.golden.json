@@ -24,6 +24,7 @@
   "textAsHtml": "<p>Body text.</p>",
   "attachments": [
     {
+      "index": 0,
       "contentType": "image/png",
       "sha256": "f587f1dd3e1a538113e8f96a810f819f6eded5e5c3db08896f7e49aa329dd4c1",
       "size": 48

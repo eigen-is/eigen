@@ -10,7 +10,7 @@
 
 import { normalizeAngle } from '@workspace/lib/vector';
 import { Checkbox } from '@workspace/ui/components/checkbox';
-import { useId } from 'react';
+import { useId, useRef } from 'react';
 import { MergedNumberInput } from './merged-number-input';
 import { isMixed, type MergedValue } from './merged-value';
 import { PropertyRow, PropertySection } from './properties-panel';
@@ -67,13 +67,35 @@ export function TransformSection({
         !isMixed(width) && width !== undefined && !isMixed(height) && height !== undefined && height !== 0
             ? width / height
             : null;
-    const coupled = showAspect && aspectLocked && ratio !== null && ratio > 0;
+
+    // Every coupled write rounds the derived dim, so re-deriving the ratio from the box that came back
+    // drifts: 100x50 typed up to 250 passes through 25x13 and lands on 250x130 instead of 250x125. The
+    // ratio is latched with the box it wrote and reused for as long as the incoming box is still that
+    // one — anything else moving the selection re-derives.
+    const latch = useRef<{ width: number; height: number; ratio: number } | null>(null);
+    const held = latch.current;
+    const startRatio = held && held.width === width && held.height === height ? held.ratio : ratio;
+    const lockedRatio = showAspect && aspectLocked && startRatio !== null && startRatio > 0 ? startRatio : null;
 
     // The derived dim is floored at 1 — an extreme ratio must not couple a valid edit to a 0-size.
-    const changeWidth = (w: number) =>
-        onChange(coupled ? { width: w, height: Math.max(1, Math.round(w / ratio)) } : { width: w });
-    const changeHeight = (h: number) =>
-        onChange(coupled ? { width: Math.max(1, Math.round(h * ratio)), height: h } : { height: h });
+    const changeWidth = (w: number) => {
+        if (lockedRatio === null) {
+            onChange({ width: w });
+            return;
+        }
+        const h = Math.max(1, Math.round(w / lockedRatio));
+        latch.current = { width: w, height: h, ratio: lockedRatio };
+        onChange({ width: w, height: h });
+    };
+    const changeHeight = (h: number) => {
+        if (lockedRatio === null) {
+            onChange({ height: h });
+            return;
+        }
+        const w = Math.max(1, Math.round(h * lockedRatio));
+        latch.current = { width: w, height: h, ratio: lockedRatio };
+        onChange({ width: w, height: h });
+    };
 
     return (
         <PropertySection title="Transform">

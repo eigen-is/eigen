@@ -30,6 +30,9 @@ export type Attachment = {
     contentType: string;
     filename?: string | undefined;
     content: Uint8Array;
+    // Raw position in the message's part list. Every part route, keep list and chip addresses a part
+    // by it, so a payload that leaves parts out (a draft save's answer) still names each one exactly.
+    index: number;
     // Byte length of content; the detail payload blanks content, so the compose UI reads this instead.
     size: number;
     // The charset the part declares, kept for text parts: the bytes are not UTF-8 unless they say so.
@@ -43,6 +46,11 @@ export type Attachment = {
 export function mailAttachmentName(att: Pick<Attachment, 'filename'>, index: number): string {
     const name = (att.filename ?? '').replace(/\p{Cc}/gu, '').replace(/^.*[/\\]/, '');
     return name || `attachment-${index + 1}`;
+}
+
+// The one test for "belongs to the invite widget, not the chips": compose and the save can't disagree.
+export function isCalendarPart(att: Pick<Attachment, 'contentType'>): boolean {
+    return att.contentType.startsWith('text/calendar');
 }
 
 export type ParsedMail = {
@@ -159,7 +167,7 @@ export type AttachmentMeta = {
     filename: string;
     size: number;
     contentType: string;
-    // Position of the parsed attachment in the on-disk EML (for download URLs).
+    // The part's index as the server gave it — what the keep list and the download URL address.
     index?: number;
     // Blob URL for local image thumbnails — not sent to the server.
     localUrl?: string;

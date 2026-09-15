@@ -1,5 +1,4 @@
 import { describe, expect, mock, test } from 'bun:test';
-import { Window } from 'happy-dom';
 import {
     clipboardTextItemHasContent,
     EIGEN_CLIPBOARD_RENDER_ATTR,
@@ -22,12 +21,10 @@ import type {
 } from '../../../types/clipboard';
 import type { DrivePath } from '../../../types/drive';
 import { eigenMediaHref } from '../../../vector/media-refs';
+import { installHappyDom } from '../../happy-dom';
 
-// hasRichHtmlBeyondMarker parses text/html with DOMParser — install happy-dom at module scope the way
-// the classify test does.
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-g.DOMParser = new Window().DOMParser;
+// hasRichHtmlBeyondMarker parses text/html with DOMParser.
+installHappyDom();
 
 const EIGEN_MIME = 'application/eigen-clipboard';
 

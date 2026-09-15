@@ -45,6 +45,9 @@ const UNTRACKED_ORIGIN = Symbol('vector-untracked-write');
 // follows joins its step. The canvas' element ops, the panel's writes and the frame ops all go through
 // this — a gesture that deliberately coalesces (a nudge, a keystroke) simply doesn't call it.
 export function sealed<T>(undoManager: Y.UndoManager | null, op: () => T): T {
+    // A gesture is holding the window open (holdCapture), and it owns the step: sealing a write inside
+    // it would split one typed number into a step per digit.
+    if (undoManager?.captureTimeout === Number.POSITIVE_INFINITY) return op();
     undoManager?.stopCapturing();
     const result = op();
     undoManager?.stopCapturing();

@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1454 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1465 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -187,7 +187,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SSEProvider` | `@workspace/ui/components/sse-provider` | packages/ui/src/components/sse-provider/sse-provider.tsx |
 | `UploadProvider` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-provider.tsx |
 
-## Contexts, schemas & classes (9)
+## Contexts, schemas & classes (10)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -199,9 +199,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PartialDeleteError` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 | `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
+| `PropertyGestureContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (268)
+## Hooks (271)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -402,6 +403,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useNotifications` | `@workspace/lib/notification` | packages/lib/src/core/notification/hooks/use-notifications.ts |
 | `useUnreadNotificationCount` | `@workspace/lib/notification` | packages/lib/src/core/notification/hooks/use-notifications.ts |
 | `useJoinWaitlist` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
+| `useMailEnabled` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
 | `usePublicConfig` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
 | `usePublicUser` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
 | `usePublicUsers` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
@@ -446,6 +448,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useOptionalPreview` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-context.ts |
 | `usePreview` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-context.ts |
 | `useAspectLock` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/use-aspect-lock.ts |
+| `useHeldGesture` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `useZOrderHotkeys` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/z-order.tsx |
 | `useFindBarRefocus` | `@workspace/ui/components/search` | packages/ui/src/components/search/find-in-document-button.tsx |
 | `useOptionalDocSearchBar` | `@workspace/ui/components/search` | packages/ui/src/components/search/doc-search-provider.tsx |
@@ -461,6 +464,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useDialogOpen` | `@workspace/ui/hooks/use-dialog-open` | packages/ui/src/hooks/use-dialog-open.ts |
 | `useDialogPending` | `@workspace/ui/hooks/use-dialog-pending` | packages/ui/src/hooks/use-dialog-pending.ts |
 | `useEigenDocEditorRoute` | `@workspace/ui/hooks/use-eigen-doc-editor-route` | packages/ui/src/hooks/use-eigen-doc-editor-route.ts |
+| `useElementSize` | `@workspace/ui/hooks/use-element-size` | packages/ui/src/hooks/use-element-size.ts |
 | `useFileDropTarget` | `@workspace/ui/hooks/use-file-drop-target` | packages/ui/src/hooks/use-file-drop-target.ts |
 | `useFilePasteTarget` | `@workspace/ui/hooks/use-file-paste-target` | packages/ui/src/hooks/use-file-paste-target.ts |
 | `useFocusTrap` | `@workspace/ui/hooks/use-focus-trap` | packages/ui/src/hooks/use-focus-trap.ts |
@@ -474,7 +478,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (346)
+## Types (348)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -528,6 +532,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Range` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `Sheet` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SheetConfig` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
+| `SheetImage` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SheetWithCalcChain` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SingleRange` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `ActivityLines` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
@@ -804,6 +809,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ColorPickerButtonProps` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker-button.tsx |
 | `ColorPickerProps` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker.tsx |
 | `MountFormValues` | `@workspace/ui/components/mount` | packages/ui/src/components/mount/mount-form.tsx |
+| `BeginGesture` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `MergedValue` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-value.ts |
 | `TransformFields` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/transform-section.tsx |
 | `ZOp` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/z-order.tsx |
@@ -825,7 +831,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (665)
+## Utilities & constants (670)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -918,6 +924,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `retryWhenTransformBusy` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `wasToasted` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `apps` | `@workspace/lib/apps` | packages/lib/src/core/apps.ts |
+| `isMailApp` | `@workspace/lib/apps` | packages/lib/src/core/apps.ts |
 | `authClient` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-auth-client.ts |
 | `backgroundCss` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
 | `DEFAULT_FILL_COLOR` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
@@ -1105,6 +1112,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `subjectInfo` | `@workspace/lib/file-subject` | packages/lib/src/core/file-subject.ts |
 | `bytesToBase64` | `@workspace/lib/format` | packages/lib/src/core/format.ts |
 | `formatFileSize` | `@workspace/lib/format` | packages/lib/src/core/format.ts |
+| `isRecord` | `@workspace/lib/guards` | packages/lib/src/core/guards.ts |
 | `escapeHtml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `escapeXml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `LIGHT_EDITOR_ATTRS` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
@@ -1151,6 +1159,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `mergedBorderSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `mergeEdgeSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `parseCellKey` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
+| `SHEET_DEFAULT_COL_WIDTH` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
+| `SHEET_DEFAULT_ROW_HEIGHT` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `CHATS_FOLDER_NAME` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `CLIENT_FILE_EVENT_TYPES` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `CODE_EXTENSIONS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -1181,6 +1191,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getEigenDocInfoByType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `IMIP_METHODS` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `isAttachmentReference` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
+| `isCalendarPart` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `isChatType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isClientFileEventType` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `isCollabType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |

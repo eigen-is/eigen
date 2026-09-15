@@ -1,6 +1,7 @@
 import { getDriveItemUrl, getDriveShareUrl, openMailComposeWith } from '@workspace/lib/api';
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import { fileActionsFor } from '@workspace/lib/file-actions';
+import { useMailEnabled } from '@workspace/lib/public';
 import { type DrivePath, type ExportFormat, exportFormatsFor, isOpenable } from '@workspace/lib/types';
 import {
     DropdownMenuItem,
@@ -72,6 +73,7 @@ export function DriveItemMenuItems({
 }: DriveItemMenuItemsProps) {
     const href = hrefOverride ?? getDriveItemUrl(item);
     const canOpen = isOpenable(item);
+    const mailEnabled = useMailEnabled();
     // Which formats a type offers is the registry's answer, so this menu and the editors' File menu
     // draw the same rows and the export route gates on the same list.
     const exportFormats = exportFormatsFor(item.type);
@@ -179,10 +181,12 @@ export function DriveItemMenuItems({
                                 <Link className="h-4 w-4 mr-2" />
                                 Copy link
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={run(() => openMailComposeWith({ attachments: [item] }))}>
-                                <Mail className="h-4 w-4 mr-2" />
-                                Mail to…
-                            </DropdownMenuItem>
+                            {mailEnabled && (
+                                <DropdownMenuItem onClick={run(() => openMailComposeWith({ attachments: [item] }))}>
+                                    <Mail className="h-4 w-4 mr-2" />
+                                    Mail to…
+                                </DropdownMenuItem>
+                            )}
                         </DropdownMenuSubContent>
                     </DropdownMenuSub>
                 </>

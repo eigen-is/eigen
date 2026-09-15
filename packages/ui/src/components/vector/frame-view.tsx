@@ -15,8 +15,9 @@ import {
     type VectorElement,
     type VectorFrame,
 } from '@workspace/lib/vector';
+import { useElementSize } from '@workspace/ui/hooks/use-element-size';
 import { cn } from '@workspace/ui/lib/utils';
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useMemo, useRef } from 'react';
 import { ElementLayer } from './element-layer';
 import { CANVAS_PAPER_CLASS } from './paper';
 
@@ -33,29 +34,20 @@ type FrameViewProps = {
 };
 
 export function FrameView({ frame, elements, resolveMedia, interactive, className }: FrameViewProps) {
-    const containerRef = useRef<HTMLDivElement | null>(null);
+    const [setContainer, { width }] = useElementSize<HTMLDivElement>();
     // 0 until measured: the page is drawn at frame scale and shrunk, so there is nothing to draw yet.
-    const [scale, setScale] = useState(0);
-
-    useEffect(() => {
-        const el = containerRef.current;
-        if (!el) return;
-        const measure = () => {
-            const width = el.clientWidth;
-            if (width > 0) setScale(width / frame.width);
-        };
-        const observer = new ResizeObserver(measure);
-        observer.observe(el);
-        measure();
-        return () => observer.disconnect();
-    }, [frame.width]);
+    // Only a 0x0 reading is dropped for us, so a 0-wide one (a rail column collapsed behind a closed
+    // panel) still arrives; keep the last real scale instead of blanking the page.
+    const lastScale = useRef(0);
+    if (width > 0) lastScale.current = width / frame.width;
+    const scale = lastScale.current;
 
     const own = useMemo(() => orderByFractionalIndex(elementsInFrame(elements, frame.id)), [elements, frame.id]);
     const byId = useMemo(() => new Map(elements.map((el) => [el.id, el])), [elements]);
 
     return (
         <div
-            ref={containerRef}
+            ref={setContainer}
             // The page is the canvas' PAPER here too (FramePage carries the same pin on the live
             // canvas): a thumbnail and present mode render user content on a light page, so what is
             // inside must resolve against the light palette even in dark mode.

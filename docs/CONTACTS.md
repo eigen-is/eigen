@@ -229,12 +229,8 @@ Two ceilings guard the PUT path. `CARD_MAX_BYTES` (5 MiB) is the whole-vCard saf
 raw body before any parse and re-checked on the stored bytes (413 / `max-resource-size`). Beyond it, contacts
 share the **mail + contacts** storage budget: `enforceCardBudget` runs `enforceContactsIngest`, crediting the
 size of the card being replaced, and a projection over budget → 507. `Contacts.size()` answers from in-memory
-byte counters (`cardsBytes + avatarsBytes`), so contact growth is always exact. The mail half of the budget is
-`SUM(emails.size)` over the message index, not a maildir walk, and is still **memoized per user for 15 s**
-(`mailSizeCache`, `config/enforcement.ts`): an initial device sync that PUTs hundreds of cards reads it once,
-and the contacts half stays live. REST avatar upload shares the one cache (accepted drift — only
-recently-delivered mail can read stale, bounded by the same window). What the index does not carry is a known
-gap ([ROADMAP.md](ROADMAP.md) § Cheap wins, "Mail usage counts only the indexed messages").
+byte counters (`cardsBytes + avatarsBytes`), so contact growth is always exact. The mail half of the budget is `SUM(emails.size)` over the message index (`MailDB.size`), not a maildir walk, and is **memoized per user for 15 s** (`mailSizeCache`, `config/enforcement.ts`): an initial device sync that PUTs hundreds of cards reads it once, and the contacts half stays live. REST avatar upload shares the one cache (accepted drift — only
+recently-delivered mail can read stale, bounded by the same window).
 
 ## vCard import / export
 
@@ -295,12 +291,7 @@ CardDAV address card next to CalDAV/IMAP/WebDAV, carrying the address-book URL.
   own email restores it when a client strips the property. Only a client edit that strips the property *and*
   changes the email in one go loses the link until the user re-saves their profile. A `DELETE` of the self card
   is refused **403** (`deleteCard` → `self-delete`); because a client like Thunderbird drops the card from its view before the request and ignores the 403, the refusal also **touches** the self card (bumps the book `ctag` and re-stamps its `cardCtag`, bytes/etag untouched) so the next `sync-collection` delta lists it as an unchanged 200 row and any client that locally dropped it re-downloads it — the refused delete self-heals on the client's own schedule, at the cost of one phantom re-fetch row for other clients.
-- **Editing a value drops its params.** The app diffs a multi-value property (`EMAIL`, `TEL`) by *value*, so
-  changing one value — retyping a work email — is a delete of the old line plus an append of a bare new one:
-  the old line's params (`TYPE=WORK`, a grouped `item1.X-ABLabel`) don't carry to the new value, so an edited
-  work email reaches the phone unlabeled. Inherent to value-keyed set diffing — positional pairing of an old
-  value to its replacement is ambiguous — and a decided trade-off: untouched values keep their labels, and
-  re-picking the type on the client restores an edited one.
+- **Editing a value keeps its params only when the change is unambiguous.** The app diffs a multi-value property (`EMAIL`, `TEL`, `ADR`) by *value*, so changing one value is a dropped line plus an appended one; when a single save drops exactly one line of a property and appends exactly one value, the merge pairs them and the replacement inherits the dropped line's group and params (`TYPE=WORK`, a grouped `item1.X-ABLabel`), which also keeps the label anchored to its group. Any other shape — one out and two in, a swap of two values in one save — has no unambiguous pairing, so those values append bare and re-picking the type on the client restores the label.
 
 ## Where the code lives
 

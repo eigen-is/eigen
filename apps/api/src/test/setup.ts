@@ -139,10 +139,6 @@ export async function getTestContext(): Promise<TestContext> {
     const bob = await createTestUser('bob@test.eigen.is', 'testpassword123', 'Bob Test');
     const charlie = await createTestUser('charlie@test.eigen.is', 'testpassword123', 'Charlie Test');
 
-    // Auto-join non-admin users to default org (Alice is already owner from setup)
-    // await authAddUserToDefaultOrg(bob.id);
-    // await authAddUserToDefaultOrg(charlie.id);
-
     context = {
         alice: {
             user: alice,
@@ -381,6 +377,9 @@ export const TEST_PNG_BYTES = new Uint8Array([
     156, 99, 248, 207, 192, 0, 71, 8, 22, 94, 14, 0, 174, 147, 15, 241, 166, 148, 72, 35, 0, 0, 0, 0, 73, 69, 78, 68,
     174, 66, 96, 130,
 ]);
+
+// Nothing to resolve: a document with no media, a workbook with no floating images.
+export const NO_MEDIA = new Map<string, string>();
 
 export { app, TEST_DATA_DIR };
 

@@ -123,3 +123,20 @@ The Admin app's `/settings` route renders `ServerSettingsPage`
 
 Onboarding and guest settings are separate admin pages over the same `PUT /settings/server` route — see
 [ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md).
+
+## Mail environment
+
+Whether this deployment hosts mailboxes at all, and how the API hands mail to an MTA, are deployment identity rather than runtime settings, so they live in the environment: `isMailEnabled()` (`apps/api/src/lib/config/env.ts`) and `createTransport()` (`apps/api/src/lib/core/mailer.ts`). Without `SMTP_HOST` the transport is local `/usr/sbin/sendmail`.
+
+| Variable        | Default              | Meaning                                                                       |
+|-----------------|----------------------|-------------------------------------------------------------------------------|
+| `MAIL_ENABLED`  | on                   | `0` on a server run without the `mail` docker profile — no hosted mailboxes     |
+| `SMTP_HOST`     | `postfix` in compose | The MTA to relay through. Unset → sendmail                                     |
+| `SMTP_PORT`     | `25`                 | Its port                                                                       |
+| `SMTP_USER`     | unset                | SASL username. Set it and the transport authenticates                          |
+| `SMTP_PASSWORD` | unset                | SASL password. Required whenever `SMTP_USER` is set                            |
+| `SMTP_SECURE`   | port `465`           | `1` = implicit TLS from the first byte, `0` = plain + STARTTLS                  |
+
+`MAIL_ENABLED` rides out to the frontend as `mailEnabled` on `GET /p/config`, where `useMailEnabled()` (`packages/lib/src/core/public/hooks/use-public.ts`) is the one read of it: it reports on until the config lands, so the common deployment never flashes a missing Mail app. `useMailboxes` is the exception — it gates its fetch on `mailEnabled === true` from the config itself, so a mail-off server is never asked for a mailbox list. Outbound mail is unaffected: share notifications, invites and "Email collaborators" keep going out over SMTP with mailboxes off.
+
+Transport security follows `SMTP_USER`: an anonymous hop is the bundled postfix or a host-local relay (self-signed, no cert) and keeps opportunistic TLS, while a relay that takes credentials must accept STARTTLS and present a certificate that checks out, so credentials never travel in the clear. `SMTP_USER` without `SMTP_PASSWORD` is a config error — `createTransport()` throws rather than authenticate with a blank password. These are the API's own credentials — the `SMTP_RELAY_*` pair in `.env.production` is read by the bundled postfix instead, and the two are independent.

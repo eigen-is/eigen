@@ -121,20 +121,15 @@ export async function runDocumentExport(
     path: DrivePath,
     signal?: AbortSignal,
 ): Promise<Buffer> {
-    // Sheets embed no media. Doc and slides do, and the Mount I/O plus the screen
-    // previews behind it stay on this thread.
-    if (job.documentType === 'eigensheets') {
-        const title = stripEigenExtension(path.name);
-        return runTransformToBytes(mount, path, { kind: 'export', ...job, title }, { signal });
-    }
-
     // Refuse before the prep: media collection is Mount I/O plus a screen preview per
     // image, and a job the runner will not admit must not pay for it. run() rechecks
     // authoritatively — this is only the early exit.
     documentTransformRunner.assertAdmissible('foreground');
 
+    // The prep is skipped for the one format that inlines nothing: the xlsx writer carries
+    // cells alone.
     const prepStart = performance.now();
-    const media = await collectExportMedia(mount, path);
+    const media = job.format === 'xlsx' ? [] : await collectExportMedia(mount, path);
     const prepMs = performance.now() - prepStart;
     // The eigendoc <title> keeps the UNstripped container name (frozen output); the
     // docx document property carries the stripped one, applied in the Worker.

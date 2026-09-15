@@ -5,12 +5,13 @@ import { normalizeSheetConfig, sheetsNeedRecalc } from '@workspace/sheet/engine'
 import ExcelJS from 'exceljs';
 import * as Y from 'yjs';
 import { readSheetsFromDoc, writeSheetsSnapshotToYjs } from '../../lib/document/sheets';
+import { renderSheetsExportDocument } from '../../lib/export/sheets/render';
 import { getHome } from '../../lib/home/get-home';
 import { importIntoDocument } from '../../lib/import/import-document';
 import type { Mount } from '../../lib/mount';
 import { writeSheetsToYjs } from '../fixtures/heavy-sheets';
 import { readPersistedDoc } from '../fixtures/transform-results';
-import { driveGet, drivePost, getTestContext } from '../setup';
+import { driveGet, drivePost, getTestContext, NO_MEDIA } from '../setup';
 
 // Persisted workbook → Sheet[] plus whether recalc fell back, the way every reader
 // gets one now.
@@ -27,12 +28,13 @@ function withoutData(sheets: Sheet[]): Sheet[] {
     return sheets.map(({ data: _data, ...sheet }) => sheet);
 }
 
-// The replay materializes every config collection so the editor's granular config ops
-// (`['config','rowlen','2']`) resolve against a stored sheet that predates them. Expectations
-// built from raw fixtures have to carry the same shape.
+// The replay materializes every config collection, the `images` list and `calcChain`, so the
+// editor's granular ops (`['config','rowlen','2']`, a whole-array image write, `['calcChain', 0]`)
+// resolve against a stored sheet that predates them. Every sheet it returns carries that shape — the snapshot's and an addSheet op's
+// alike — so expectations built from raw fixtures have to carry it too.
 function normalized(sheets: Sheet[]): Sheet[] {
     return sheets.map((sheet) => {
-        const next = { ...sheet, config: { ...sheet.config } };
+        const next = { ...sheet, config: { ...sheet.config }, images: sheet.images ?? [], calcChain: [] };
         normalizeSheetConfig(next);
         return next;
     });
@@ -287,6 +289,42 @@ describe('document/sheets — patch op replay', () => {
         expect(result[0].id).toBe('sheet-1');
         expect(result[0].data![1][1]?.v).toBe('b2');
         expect(result[0].celldata).toEqual([{ r: 1, c: 1, v: { v: 'b2', m: 'b2' } }]);
+    });
+
+    test("a first formula's batch carries a calcChain op — the computed value survives", async () => {
+        // The editor seeds calcChain on every sheet at mount, so the first formula a user
+        // types emits `add ['calcChain', 0]` in the same batch as the cell. A base without
+        // the key makes that patch throw and the rollback takes the cell's value with it —
+        // the formula cell then exported blank while its neighbours rendered.
+        const sheetsPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/sheets`,
+            { fileName: 'replay-first-formula' },
+        );
+
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
+
+        // Captured from updateCell + patchToOp: A1 = "asdf", B1 = "=1+1", C1 = "test".
+        const batches: Op[][] = [
+            [{ op: 'replace', id: 'sheet-1', path: ['data', 0, 0], value: { v: 'asdf', m: 'asdf' } }],
+            [
+                { op: 'replace', id: 'sheet-1', path: ['data', 0, 1], value: { v: 2, f: '=1+1', m: '2' } },
+                { op: 'add', id: 'sheet-1', path: ['calcChain', 0], value: { r: 0, c: 1, id: 'sheet-1' } },
+            ],
+            [{ op: 'replace', id: 'sheet-1', path: ['data', 0, 2], value: { v: 'test', m: 'test' } }],
+        ];
+        collab.doc.transact(() => {
+            collab.doc.getArray<Op[]>('ops').push(batches);
+        });
+
+        const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
+        const { sheets: result } = await readSheets(mount, path);
+
+        expect(result[0].data![0][1]).toEqual({ v: 2, f: '=1+1', m: '2' });
+        expect(renderSheetsExportDocument(result, 'first-formula', NO_MEDIA)).toContain('>2<');
     });
 
     test('reads doc with snapshot + multiple op batches → applies in order', async () => {

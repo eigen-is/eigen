@@ -8,7 +8,11 @@ import {
     type ConditionalFormatRule,
     type MergeCell,
     mergedBorderSides,
+    SHEET_DEFAULT_COL_WIDTH,
+    SHEET_DEFAULT_ROW_HEIGHT,
     type Sheet,
+    type SheetConfig,
+    type SheetImage,
 } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import {
@@ -35,8 +39,6 @@ import { resolveFontFamily } from './fonts';
 // module must not reach the Mount or the main-thread transform seam - the Worker
 // imports it.
 
-const DEFAULT_COL_WIDTH = 73;
-const DEFAULT_ROW_HEIGHT = 19;
 // Defaults applied to every td: inline in the preview so the markup renders without the
 // document <head> CSS (preview embedders strip it), and as the shared td{} rule in the
 // class-based export stylesheet. Vertical-align is intentionally absent — buildCellStyle
@@ -46,6 +48,11 @@ const BASE_TD_STYLE = 'overflow:hidden;white-space:nowrap;padding:1px 2px';
 
 const PAGE_MARGIN = 40;
 const PAGE_SLACK = 20;
+
+// Floating-image sources by media name: data: URIs for an export, the prepared
+// /file/<id>/preview URLs for a preview. A workbook without floating images resolves
+// nothing and the grid renders alone.
+type MediaUrls = Map<string, string>;
 
 // Full exports intern every emitted style into a class ("s0", "s1", …) declared in a
 // body <style> element: a real workbook repeats a few hundred distinct styles across
@@ -106,8 +113,8 @@ function cssLength(value: number | undefined, fallback: number): number {
 
 // Runs inside the transform Worker (worker.ts owns execution; the format logic
 // stays here in export/).
-export function renderSheetsExportDocument(sheets: Sheet[], title: string): string {
-    const { html, css } = renderSheetsHtml(sheets);
+export function renderSheetsExportDocument(sheets: Sheet[], title: string, mediaUrls: MediaUrls): string {
+    const { html, css } = renderSheetsHtml(sheets, mediaUrls);
     // target isn't in DOMPurify's default allowlist; hyperlink anchors always pair
     // it with rel="noopener noreferrer", so letting it through is tabnabbing-safe.
     const sanitized = sanitizeExportHtml(`<style>${css}</style>\n${html}`, { ADD_ATTR: ['target'] });
@@ -117,7 +124,7 @@ export function renderSheetsExportDocument(sheets: Sheet[], title: string): stri
 // Runs inside the transform Worker. The page is sized to the widest/tallest sheet
 // so WeasyPrint never clips a wide grid. Unlike the HTML export this sanitizes
 // with no options — no `target` on anchors in a PDF.
-export function renderSheetsPdfDocument(sheets: Sheet[], title: string): string {
+export function renderSheetsPdfDocument(sheets: Sheet[], title: string, mediaUrls: MediaUrls): string {
     let maxW = 0;
     let maxH = 0;
     for (const sheet of sheets) {
@@ -126,7 +133,7 @@ export function renderSheetsPdfDocument(sheets: Sheet[], title: string): string 
         if (size.height > maxH) maxH = size.height;
     }
 
-    const { html, css } = renderSheetsHtml(sheets);
+    const { html, css } = renderSheetsHtml(sheets, mediaUrls);
     const sanitized = sanitizeExportHtml(`<style>${css}</style>\n${html}`);
     const pageSize = {
         width: maxW + 2 * PAGE_MARGIN + PAGE_SLACK,
@@ -160,11 +167,11 @@ function createRenderContext(sheets: Sheet[]): { engine: FormulaEngine; resolver
     return { engine, resolver };
 }
 
-export function renderSheetsHtml(sheets: Sheet[]): { html: string; css: string } {
+export function renderSheetsHtml(sheets: Sheet[], mediaUrls: MediaUrls): { html: string; css: string } {
     const { engine, resolver } = createRenderContext(sheets);
     const styles: StyleRegistry = new Map();
     const html = sheets
-        .map((sheet, i) => renderSheet(sheet, i === sheets.length - 1, engine, resolver, { styles }).html)
+        .map((sheet, i) => renderSheet(sheet, i === sheets.length - 1, engine, resolver, { styles, mediaUrls }).html)
         .join('\n');
     return { html, css: serializeStyleRules(styles) };
 }
@@ -174,10 +181,10 @@ export function renderSheetsHtml(sheets: Sheet[]): { html: string; css: string }
 // still spans every sheet so cross-sheet CF formula refs resolve correctly.
 // `truncated` is true whenever rows, columns, cells, or additional sheets were
 // omitted — the caller appends the shared truncated marker.
-export function renderSheetsPreviewHtml(sheets: Sheet[]): { html: string; truncated: boolean } {
+export function renderSheetsPreviewHtml(sheets: Sheet[], mediaUrls: MediaUrls): { html: string; truncated: boolean } {
     if (sheets.length === 0) return { html: '', truncated: false };
     const { engine, resolver } = createRenderContext(sheets);
-    const first = renderSheet(sheets[0], true, engine, resolver, { budget: PREVIEW_SHEET_BUDGET });
+    const first = renderSheet(sheets[0], true, engine, resolver, { budget: PREVIEW_SHEET_BUDGET, mediaUrls });
     return { html: first.html, truncated: first.truncated || sheets.length > 1 };
 }
 
@@ -243,23 +250,39 @@ function clipRulesToWindow(
     return clipped;
 }
 
+// Laid-out pixels across `[from, to]`, hidden tracks contributing nothing — the one place the
+// stored-length-or-default rule lives, for both the grid's own size and the floating overlay's offset.
+function colSpan(config: SheetConfig, from: number, to: number): number {
+    let width = 0;
+    for (let c = from; c <= to; c++) {
+        if (config.colhidden?.[c]) continue;
+        width += cssLength(config.columnlen?.[c], SHEET_DEFAULT_COL_WIDTH);
+    }
+    return width;
+}
+
+function rowSpan(config: SheetConfig, from: number, to: number): number {
+    let height = 0;
+    for (let r = from; r <= to; r++) {
+        if (config.rowhidden?.[r]) continue;
+        height += cssLength(config.rowlen?.[r], SHEET_DEFAULT_ROW_HEIGHT);
+    }
+    return height;
+}
+
 export function getSheetContentSize(sheet: Sheet): { width: number; height: number } {
     const config = sheet.config ?? {};
-    const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, config.borderInfo ?? {});
-    if (maxRow < 0 || maxCol < 0) return { width: 0, height: 0 };
-
-    let width = 0;
-    for (let c = minCol; c <= maxCol; c++) {
-        if (config.colhidden?.[c]) continue;
-        width += cssLength(config.columnlen?.[c], DEFAULT_COL_WIDTH);
+    const { minRow, minCol, maxRow, maxCol } = getRenderBounds(sheet, config);
+    const blank = maxRow < 0 || maxCol < 0;
+    const offset = blank ? { left: 0, top: 0 } : gridOffset(config, minRow, minCol);
+    let width = blank ? 0 : colSpan(config, minCol, maxCol);
+    let height = blank ? 0 : rowSpan(config, minRow, maxRow);
+    // The overlay draws at the stored grid coordinate, so an image parked past the used range
+    // is still on the page — measured in the table's space, like the overlay positions it.
+    for (const img of sheet.images ?? []) {
+        width = Math.max(width, cssLength(img.x, 0) + cssLength(img.width, 0) - offset.left);
+        height = Math.max(height, cssLength(img.y, 0) + cssLength(img.height, 0) - offset.top);
     }
-
-    let height = 0;
-    for (let r = minRow; r <= maxRow; r++) {
-        if (config.rowhidden?.[r]) continue;
-        height += cssLength(config.rowlen?.[r], DEFAULT_ROW_HEIGHT);
-    }
-
     return { width, height };
 }
 
@@ -270,15 +293,35 @@ function renderSheet(
     isLast: boolean,
     engine: FormulaEngine,
     resolver: CellResolver,
-    { budget, styles }: { budget?: SheetPreviewBudget; styles?: StyleRegistry } = {},
+    { budget, styles, mediaUrls }: { budget?: SheetPreviewBudget; styles?: StyleRegistry; mediaUrls: MediaUrls },
 ): { html: string; truncated: boolean } {
     const forStylesheet = styles !== undefined;
     const config = sheet.config ?? {};
     const showGrid = sheet.showGridLines !== false && sheet.showGridLines !== 0;
 
-    const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, config.borderInfo ?? {});
+    // The preview clips the overlay to its budget window, not to the table: an image parked
+    // outside it would stretch the fragment and collapse the thumbnail scaled by it.
+    const overlayFor = (minRow: number, minCol: number): string =>
+        sheet.images?.length
+            ? renderFloatingImages(
+                  sheet.images,
+                  mediaUrls,
+                  gridOffset(config, minRow, minCol),
+                  styles,
+                  budget
+                      ? {
+                            width: colSpan(config, minCol, minCol + budget.maxCols - 1),
+                            height: rowSpan(config, minRow, minRow + budget.maxRows - 1),
+                        }
+                      : undefined,
+              )
+            : '';
+
+    const { minRow, minCol, maxRow, maxCol } = getRenderBounds(sheet, config);
     if (maxRow < 0 || maxCol < 0) {
-        return { html: `<div class="sheet"></div>`, truncated: false };
+        // An image pasted onto an otherwise blank sheet is all there is to render, clipped to the
+        // same budget window as the grid path below.
+        return { html: `<div class="sheet">${overlayBox('', overlayFor(0, 0), 0, styles)}</div>`, truncated: false };
     }
 
     // The render window comes first: everything below is bounded by what is actually
@@ -345,7 +388,7 @@ function renderSheet(
     const cols: string[] = [];
     let tableWidth = 0;
     for (const c of renderCols) {
-        const w = cssLength(config.columnlen?.[c], DEFAULT_COL_WIDTH);
+        const w = cssLength(config.columnlen?.[c], SHEET_DEFAULT_COL_WIDTH);
         tableWidth += w;
         cols.push(`<col ${styleAttr(styles, `width:${w}px`)}>`);
     }
@@ -353,7 +396,7 @@ function renderSheet(
 
     const rows: string[] = [];
     for (const r of renderRows) {
-        const h = cssLength(config.rowlen?.[r], DEFAULT_ROW_HEIGHT);
+        const h = cssLength(config.rowlen?.[r], SHEET_DEFAULT_ROW_HEIGHT);
         const cells: string[] = [];
         const rowMerges = merges.filter((m) => m.r <= r && r < m.r + m.rs);
 
@@ -411,8 +454,9 @@ function renderSheet(
     const pageBreak = isLast || forStylesheet ? '' : ' style="page-break-after:always"';
     const q = fontQuote(forStylesheet);
     const tableStyle = `border-collapse:collapse;table-layout:fixed;font-family:${q}Inter${q},system-ui,sans-serif;font-size:11px;color:#1a1a2e;background:#fff;width:${tableWidth}px`;
+    const table = `<table ${styleAttr(styles, tableStyle)}>${colgroup}<tbody>${rows.join('')}</tbody></table>`;
     const html = `<div class="${divClass}"${pageBreak}>
-<table ${styleAttr(styles, tableStyle)}>${colgroup}<tbody>${rows.join('')}</tbody></table>
+${overlayBox(table, overlayFor(minRow, minCol), tableWidth, styles)}
 </div>`;
     return { html, truncated };
 }
@@ -456,6 +500,49 @@ function renderDataBar(bar: DataBar, display: string, styles?: StyleRegistry): s
 
     const barStyle = `position:absolute;top:0;left:${left}%;width:${width}%;height:100%;background:${fill};z-index:0`;
     return `<div ${styleAttr(styles, barStyle)}></div><span ${styleAttr(styles, 'position:relative;z-index:1')}>${display}</span>`;
+}
+
+// Floating images are stored in unzoomed grid pixels from A1's top-left (the editor's
+// ImgBoxs reads the same fields into left/top/width/height), while the table starts at
+// the used range — so the overlay subtracts the rows and columns the window skipped.
+function gridOffset(config: SheetConfig, minRow: number, minCol: number): { left: number; top: number } {
+    return { left: colSpan(config, 0, minCol - 1), top: rowSpan(config, 0, minRow - 1) };
+}
+
+// An image whose name resolves to nothing renders nothing: a `pending:` name from an
+// upload that never settled, or a media file deleted under the reference.
+function renderFloatingImages(
+    images: SheetImage[],
+    mediaUrls: MediaUrls,
+    offset: { left: number; top: number },
+    styles?: StyleRegistry,
+    box?: { width: number; height: number },
+): string {
+    const parts: string[] = [];
+    for (const img of images) {
+        const src = mediaUrls.get(img.mediaName);
+        if (src === undefined) continue;
+        // Geometry is schemaless at the Yjs boundary, like every other stored dimension here.
+        const left = cssLength(img.x, 0) - offset.left;
+        const top = cssLength(img.y, 0) - offset.top;
+        const w = cssLength(img.width, 0);
+        const h = cssLength(img.height, 0);
+        if (box && (left >= box.width || top >= box.height || left + w <= 0 || top + h <= 0)) continue;
+        const angle = cssLength(img.angle, 0);
+        const decl =
+            `position:absolute;left:${left}px;top:${top}px;` +
+            `width:${w}px;height:${h}px` +
+            (angle ? `;transform:rotate(${angle}deg);transform-origin:center center` : '');
+        parts.push(`<img ${styleAttr(styles, decl)} src="${escapeHtml(src)}" alt="">`);
+    }
+    return parts.join('');
+}
+
+// The grid's positioning context. With no images the table is emitted bare, so a workbook
+// without them renders exactly the markup it always did.
+function overlayBox(table: string, overlay: string, width: number, styles?: StyleRegistry): string {
+    if (!overlay) return table;
+    return `<div ${styleAttr(styles, `position:relative;width:${width}px`)}>${table}${overlay}</div>`;
 }
 
 function buildCellStyle(
@@ -630,6 +717,38 @@ function getGridBounds(
 
     if (maxRow < 0) return { minRow: 0, minCol: 0, maxRow: -1, maxCol: -1 };
     return { minRow, minCol, maxRow, maxCol };
+}
+
+// Images are stored in grid pixels from A1 while the overlay positions them against the window's
+// first cell, so one anchored above or left of the used range would take a negative offset and
+// fall off the page: the window drops to the track the earliest image starts in.
+function getRenderBounds(
+    sheet: Sheet,
+    config: SheetConfig,
+): { minRow: number; minCol: number; maxRow: number; maxCol: number } {
+    const bounds = getGridBounds(sheet, config.borderInfo ?? {});
+    if (!sheet.images?.length || bounds.maxRow < 0) return bounds;
+
+    let x = Number.MAX_SAFE_INTEGER;
+    let y = Number.MAX_SAFE_INTEGER;
+    for (const img of sheet.images) {
+        x = Math.min(x, cssLength(img.x, 0));
+        y = Math.min(y, cssLength(img.y, 0));
+    }
+
+    let minCol = 0;
+    let left = 0;
+    while (minCol < bounds.minCol && left + colSpan(config, minCol, minCol) <= x) {
+        left += colSpan(config, minCol, minCol);
+        minCol++;
+    }
+    let minRow = 0;
+    let top = 0;
+    while (minRow < bounds.minRow && top + rowSpan(config, minRow, minRow) <= y) {
+        top += rowSpan(config, minRow, minRow);
+        minRow++;
+    }
+    return { ...bounds, minRow, minCol };
 }
 
 function wrapInDocument(title: string, bodyHtml: string, pageSize?: { width: number; height: number }): string {

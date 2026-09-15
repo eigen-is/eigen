@@ -1,7 +1,7 @@
 import { formatEventWhen } from '@workspace/lib/calendar/calendar-utils';
 import { escapeHtml } from '@workspace/lib/html';
 import type { Attendee, CalendarEvent, EventData, ImipMethod } from '@workspace/lib/types/calendar';
-import type { AddressObject, Attachment, CalendarInvite } from '@workspace/lib/types/mail';
+import { type AddressObject, type Attachment, type CalendarInvite, isCalendarPart } from '@workspace/lib/types/mail';
 import { externalOwnerId } from '@workspace/lib/types/owner';
 import { parseIcs } from '../caldav/ical-parse';
 import { serializeEventForImip } from '../caldav/ical-serialize';
@@ -159,7 +159,7 @@ export function composeRsvpReply(
 export function extractCalendarAttachment(mail: {
     attachments: Attachment[];
 }): { ics: string; method?: ImipMethod } | null {
-    const attachment = mail.attachments.find((a) => a.contentType.startsWith('text/calendar'));
+    const attachment = mail.attachments.find(isCalendarPart);
     if (!attachment) return null;
 
     return { ics: Buffer.from(attachment.content).toString(), method: attachment.calendarMethod };

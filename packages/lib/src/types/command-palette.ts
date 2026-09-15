@@ -50,6 +50,9 @@ export type PaletteSelectionActions = {
 // real caller needs them.
 export type CommandContext = {
     ownerId: string;
+    // False on a server that runs without hosted mail — every Mail-flavored command and provider
+    // gates on it, so no palette row leads into an app that isn't there.
+    mailEnabled: boolean;
     selection: PaletteSelection;
     selectionActions: PaletteSelectionActions;
     // The open eigendoc's search controller (published by DocSearchProvider). null in the drive

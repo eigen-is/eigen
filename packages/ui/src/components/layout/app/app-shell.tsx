@@ -4,6 +4,7 @@ import { useAuth } from '@workspace/lib/auth';
 import { useCommandPalette, useOptionalCommandPalette } from '@workspace/lib/command-palette';
 import { subjectFromPath } from '@workspace/lib/file-subject';
 import { useIsMobile, useIsTablet } from '@workspace/lib/media';
+import { useMailEnabled } from '@workspace/lib/public';
 import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
 import type { CommandContext } from '@workspace/lib/types/command-palette';
 import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
@@ -131,6 +132,7 @@ function PaletteRunnerInner() {
     const { data: settings } = useSpaceSettings();
     const updateSettings = useUpdateSpaceSettings();
     const { openPreview } = usePreview();
+    const mailEnabled = useMailEnabled();
     const [createDialog, setCreateDialog] = useState<CreateDialogKind>(null);
 
     // The palette hands out DrivePaths; the overlay takes subjects. Memoized because ctx below
@@ -147,6 +149,7 @@ function PaletteRunnerInner() {
     const ctx = useMemo<CommandContext>(
         () => ({
             ownerId,
+            mailEnabled,
             selection,
             selectionActions,
             docSearch,
@@ -165,6 +168,7 @@ function PaletteRunnerInner() {
         }),
         [
             ownerId,
+            mailEnabled,
             selection,
             selectionActions,
             docSearch,

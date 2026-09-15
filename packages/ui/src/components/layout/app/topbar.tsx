@@ -1,9 +1,10 @@
 import { useRouter } from '@tanstack/react-router';
 import { useIsAdmin } from '@workspace/lib/admin';
 import { getAdminAppUrl, getSpacePasswordUrl, getSpaceProfileUrl, getSupportUrl } from '@workspace/lib/api';
-import { apps } from '@workspace/lib/apps';
+import { apps, isMailApp } from '@workspace/lib/apps';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useUnreadNotificationCount } from '@workspace/lib/notification';
+import { useMailEnabled } from '@workspace/lib/public';
 import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
 import { cn } from '@workspace/ui/lib/utils';
 import { Grip, LifeBuoy, LogOut, Palette, Settings, Shield, UserRound } from 'lucide-react';
@@ -85,7 +86,8 @@ function useLogout(rootRoute: TopbarProps['rootRoute']) {
 function AppSwitcher({ isGuest }: { isGuest: boolean }) {
     const { appName } = useLayout();
     const isAdmin = useIsAdmin();
-    const appList = isGuest ? apps.filter((app) => GUEST_APPS.has(app.name)) : apps;
+    const mailEnabled = useMailEnabled();
+    const appList = apps.filter((app) => (!isGuest || GUEST_APPS.has(app.name)) && (mailEnabled || !isMailApp(app)));
 
     return (
         <DropdownMenu>

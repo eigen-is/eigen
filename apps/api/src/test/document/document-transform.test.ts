@@ -72,6 +72,7 @@ import {
     drivePost,
     driveUpload,
     getTestContext,
+    NO_MEDIA,
     TEST_PNG_BYTES,
 } from '../setup';
 
@@ -192,12 +193,13 @@ describe('document transform (eigensheets preview)', () => {
 
         // Main-thread execution of the exact Worker pipeline (capture → materialize
         // → render/sanitize), against the Worker execution via the real runner.
+        const mediaUrls = await buildPreviewUrlMap(mount, path);
         const persisted = await readPersistedDoc(mount, path);
-        const direct = renderEigensheetsPreviewBody(persisted);
+        const direct = renderEigensheetsPreviewBody(persisted, mediaUrls);
         persisted.destroy();
 
         const response = await documentTransformRunner.run(
-            { kind: 'preview', documentType: 'eigensheets', source: await captureCollabSource(mount, path) },
+            { kind: 'preview', documentType: 'eigensheets', mediaUrls, source: await captureCollabSource(mount, path) },
             PREVIEW_OPTIONS,
         );
         expect(previewBody(response)).toBe(direct.body);
@@ -216,7 +218,12 @@ describe('document transform (eigensheets preview)', () => {
         const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
         try {
             const response = await documentTransformRunner.run(
-                { kind: 'preview', documentType: 'eigensheets', source: await captureCollabSource(mount, path) },
+                {
+                    kind: 'preview',
+                    documentType: 'eigensheets',
+                    mediaUrls: NO_MEDIA,
+                    source: await captureCollabSource(mount, path),
+                },
                 PREVIEW_OPTIONS,
             );
             expect(response.ok && response.warnings).toContainEqual({ code: 'corrupt-blobs-skipped', count: 1 });
@@ -255,12 +262,12 @@ describe('document transform (eigensheets preview)', () => {
             expect(fromDoc.recalcError).toBe('forced recalc failure');
             expect(fromDoc.sheets[0].celldata?.[0]?.v?.v).toBe('replayed-value');
 
-            const exported = await renderEigensheetsExport(doc, 'html', 'Warned');
+            const exported = await renderEigensheetsExport(doc, 'html', 'Warned', []);
             expect(exported.warnings).toContainEqual({ code: 'recalc-failed', message: 'forced recalc failure' });
             expect(new TextDecoder().decode(exported.data)).toContain('replayed-value');
 
             // The preview read never invokes recalc, so the forced failure is unreachable.
-            const { body, warnings } = renderEigensheetsPreviewBody(doc);
+            const { body, warnings } = renderEigensheetsPreviewBody(doc, NO_MEDIA);
             expect(warnings).toEqual([]);
             expect(body).toContain('replayed-value');
         } finally {
@@ -284,7 +291,7 @@ describe('document transform (eigensheets preview)', () => {
         ];
         doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
 
-        const { body, warnings } = renderEigensheetsPreviewBody(doc);
+        const { body, warnings } = renderEigensheetsPreviewBody(doc, NO_MEDIA);
         expect(warnings.some((warning) => warning.code === 'byte-guard-truncated')).toBe(true);
         expect(body).toContain('Preview truncated');
         expect(body.length).toBeLessThan(1000);
@@ -431,10 +438,10 @@ describe('document transform (eigensheets preview)', () => {
 
 // Pinned bytes of the golden fixture's export documents (the html download and the
 // wrapped document fed to htmlToPdf). Regenerate only for an intentional renderer
-// change — last moved by the class-based export styles (2026-08-05), which replaced
-// every inline style attribute with interned classes in a body <style> element.
-const GOLDEN_EXPORT_HTML_SHA256 = 'f5d528de407c003abef49b98ce37a24c8aea7f7a1f366e46118535680d6512fe';
-const GOLDEN_EXPORT_PDF_HTML_SHA256 = '5cc180f8ccf3b9f2864b9226c9323810a8ba780c0ed6ad94b754ec43dc22c2bd';
+// change — last moved by the default cell size becoming the editor's 100 × 20 (2026-09-15),
+// one constant shared by the grid, the importer and this renderer.
+const GOLDEN_EXPORT_HTML_SHA256 = 'f2f65cfdbfd0af4556382d43010db959fa9c940d3aca9e0f1725b3fd2e6713d4';
+const GOLDEN_EXPORT_PDF_HTML_SHA256 = 'ef17ebd0f2cc893d7e8329a68e5fd6b87b500cffdff738af4297a50c34788f0f';
 
 describe('document transform (eigensheets export)', () => {
     let golden: { mount: Mount; path: DrivePath };
@@ -459,7 +466,7 @@ describe('document transform (eigensheets export)', () => {
             format: 'pdf-html',
             title: 'golden-export',
         } as const;
-        const html = await runTransformToBytes(golden.mount, golden.path, job, {});
+        const html = await runTransformToBytes(golden.mount, golden.path, { ...job, media: [] }, {});
         expect(sha256(html)).toBe(GOLDEN_EXPORT_PDF_HTML_SHA256);
     }, 120_000);
 

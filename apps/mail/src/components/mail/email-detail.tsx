@@ -2,7 +2,13 @@ import { getMailComposeUrl } from '@workspace/lib/api';
 import { MAILBOX_ARCHIVE, MAILBOX_JUNK, MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
 import { formatDateTime } from '@workspace/lib/date';
 import { flattenAddresses } from '@workspace/lib/mail';
-import type { AddressObject, Attachment, Email, MaildirMailbox } from '@workspace/lib/types/mail';
+import {
+    type AddressObject,
+    type Attachment,
+    type Email,
+    isCalendarPart,
+    type MaildirMailbox,
+} from '@workspace/lib/types/mail';
 import { KebabTrigger, ShadowContent, Toolbar, TooltipButton } from '@workspace/ui';
 import { DropdownMenu, DropdownMenuContent } from '@workspace/ui/components/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
@@ -294,9 +300,9 @@ export function EmailDetail({ email, toggleMailRead, highlightTerm }: EmailDetai
 
                     {/* Calendar invite widgets */}
                     {email.attachments?.map(
-                        (attachment: Attachment, index: number) =>
-                            attachment.contentType.startsWith('text/calendar') && (
-                                <CalendarInviteWidget key={index} invite={attachment.calendarInvite} />
+                        (attachment: Attachment) =>
+                            isCalendarPart(attachment) && (
+                                <CalendarInviteWidget key={attachment.index} invite={attachment.calendarInvite} />
                             ),
                     )}
                 </div>

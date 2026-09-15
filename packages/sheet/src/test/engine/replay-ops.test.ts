@@ -48,6 +48,15 @@ describe('replaySheetsOps', () => {
         expect(result[1].id).toBe('s2');
     });
 
+    test('a sheet an addSheet op introduces is materialized like the replay base', () => {
+        // The editor writes `images` and the config collections as whole values, so a patch
+        // against a sheet that lacks them fails to resolve and drops the batch.
+        const ops: Op[][] = [[{ op: 'addSheet', path: [], value: baseSheet('s2', 'Sheet2') }]];
+        const [base, added] = replaySheetsOps([baseSheet('s1', 'Sheet1')], ops);
+        expect(added.images).toEqual([]);
+        expect(added.config).toEqual(base.config);
+    });
+
     test('deleteSheet filters by id', () => {
         const sheets = [baseSheet('s1', 'Sheet1'), baseSheet('s2', 'Sheet2')];
         const ops: Op[][] = [[{ op: 'deleteSheet', id: 's1', path: [] }]];
@@ -409,13 +418,14 @@ describe('replaySheetsOps', () => {
     });
 });
 
-// A granular config patch (`['config','rowlen','2']`) only resolves if the collection already
-// exists. Every document written before the editor started materializing them — and every
-// fresh doc before its first snapshot flush — stores `config: {}`, so the replay base must
-// materialize them too. Without this, replaySheetsOps throws "path doesn't resolve" and rolls
-// back the WHOLE batch: the edit is lost, not degraded, on every reader (a second client
-// opening the doc, the preview renderer, and every xlsx/HTML/PDF export).
-describe('config ops from a normalizing editor apply to an un-normalized stored sheet', () => {
+// A granular patch into a collection (`['config','rowlen','2']`, `['calcChain', 0]`) only
+// resolves if the collection already exists. Every document written before the editor started
+// materializing them — and every fresh doc before its first snapshot flush — stores `config: {}`
+// and no `calcChain`, so the replay base must materialize them too. Without this,
+// replaySheetsOps throws "path doesn't resolve" and rolls back the WHOLE batch: the edit is
+// lost, not degraded, on every reader (a second client opening the doc, the preview renderer,
+// and every xlsx/HTML/PDF export).
+describe('ops from a normalizing editor apply to an un-normalized stored sheet', () => {
     const storedBeforeThisBranch = (): Sheet[] => [{ name: 'Sheet1', id: 'id_1', order: 0, celldata: [], config: {} }];
 
     test('a granular row-height op resolves and is kept', () => {
@@ -437,6 +447,20 @@ describe('config ops from a normalizing editor apply to an un-normalized stored 
             ],
         ]);
         expect(out[0].config?.borderInfo).toEqual({ '0_0': { l: { style: 1, color: '#000' } } });
+    });
+
+    test("the first formula's calcChain op resolves, so the cell's value is not rolled back", () => {
+        // seedCalcChain hands every mounted sheet a calcChain, so the first formula a user
+        // types emits `add ['calcChain', 0]` in the SAME batch as the computed cell. A fresh
+        // doc replays over createDefaultSheets — without a materialized chain that batch rolled
+        // back whole and the formula cell exported blank between its two text neighbours.
+        const out = replaySheetsOps(createDefaultSheets(), [
+            [
+                { op: 'replace', id: 'sheet-1', path: ['data', 0, 1], value: { v: 2, f: '=1+1', m: '2' } },
+                { op: 'add', id: 'sheet-1', path: ['calcChain', 0], value: { r: 0, c: 1, id: 'sheet-1' } },
+            ],
+        ]);
+        expect(out[0].data![0][1]).toEqual({ v: 2, f: '=1+1', m: '2' });
     });
 
     test('a sheet added mid-session takes ops on its config too', () => {

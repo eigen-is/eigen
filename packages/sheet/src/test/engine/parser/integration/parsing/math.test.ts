@@ -96,6 +96,16 @@ describe('.parse() math', () => {
         });
     });
 
+    // Excel binds negation tighter than `^`, so `-2^2` is (-2)^2 = 4, not -(2^2).
+    test('unary sign binds tighter than ^', () => {
+        expect(parser!.parse('-2 ^ 2')).toMatchObject({ error: null, result: 4 });
+        expect(parser!.parse('+2 ^ 2')).toMatchObject({ error: null, result: 4 });
+        expect(parser!.parse('-2 ^ 3')).toMatchObject({ error: null, result: -8 });
+        expect(parser!.parse('2 ^ -3')).toMatchObject({ error: null, result: 0.125 });
+        expect(parser!.parse('-2 ^ -2')).toMatchObject({ error: null, result: 0.25 });
+        expect(parser!.parse('-(2 ^ 2)')).toMatchObject({ error: null, result: -4 });
+    });
+
     test('operator: &', () => {
         expect(parser!.parse('2 & 5')).toMatchObject({ error: null, result: '25' });
         expect(parser!.parse('(2 & 5)')).toMatchObject({
@@ -129,6 +139,19 @@ describe('.parse() math', () => {
         expect(parser!.parse('-(1/0)')).toMatchObject({ error: '#DIV/0!', result: null });
         expect(parser!.parse('-NA()')).toMatchObject({ error: '#N/A', result: null });
         expect(parser!.parse('+NA()')).toMatchObject({ error: '#N/A', result: null });
+    });
+
+    test('number literals', () => {
+        expect(parser!.parse('1e3')).toMatchObject({ error: null, result: 1000 });
+        expect(parser!.parse('1E3')).toMatchObject({ error: null, result: 1000 });
+        expect(parser!.parse('1.5e-3')).toMatchObject({ error: null, result: 0.0015 });
+        expect(parser!.parse('2e+2 + 1')).toMatchObject({ error: null, result: 201 });
+        expect(parser!.parse('.5')).toMatchObject({ error: null, result: 0.5 });
+        expect(parser!.parse('-.5')).toMatchObject({ error: null, result: -0.5 });
+        expect(parser!.parse('.5 + .25')).toMatchObject({ error: null, result: 0.75 });
+        expect(parser!.parse('1.5')).toMatchObject({ error: null, result: 1.5 });
+        expect(parser!.parse('50%')).toMatchObject({ error: null, result: 0.5 });
+        expect(parser!.parse('SUM(.5, 1e1)')).toMatchObject({ error: null, result: 10.5 });
     });
 
     test('mixed operators', () => {

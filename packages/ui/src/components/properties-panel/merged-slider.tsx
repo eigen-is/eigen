@@ -1,17 +1,14 @@
 import { Slider } from '@workspace/ui/components/slider';
 import { cn } from '@workspace/ui/lib/utils';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback } from 'react';
 import { MergedNumberInput } from './merged-number-input';
 import { isMixed, type MergedValue } from './merged-value';
+import { useHeldGesture } from './property-gesture';
 
 type MergedSliderProps = {
     value: MergedValue<number>;
-    // The write itself — plain and unsealed; the gesture around it decides the undo step.
+    // The write itself; the gesture around it decides the undo step.
     onChange: (v: number) => void;
-    // Opens one undo step and returns its release. A drag opens on its first change and releases on
-    // commit, a typed number on its first keystroke and on blur, so however long the user takes over
-    // either, ⌘Z reverts the whole edit. See docs/CANVAS.md § sealing.
-    beginGesture: () => () => void;
     min: number;
     max: number;
     step?: number;
@@ -22,29 +19,21 @@ type MergedSliderProps = {
 // the continuous edit (drag, or Arrow / Shift+Arrow for step / step×10); the input stays editable for
 // an exact number. A mixed selection parks the thumb at min and drops the filled range — the input's
 // '—' carries the meaning — and the first edit collapses the selection to one value, as typing does.
-export function MergedSlider({ value, onChange, beginGesture, min, max, step = 1, ...props }: MergedSliderProps) {
+export function MergedSlider({ value, onChange, min, max, step = 1, ...props }: MergedSliderProps) {
     const mixed = isMixed(value);
-    const release = useRef<(() => void) | null>(null);
-    // Radix commits on pointer-up only when the value actually changed, and per keypress for the arrows;
-    // the pointer-up below is the safety net that closes a gesture which ended where it started.
-    const endGesture = useCallback(() => {
-        release.current?.();
-        release.current = null;
-    }, []);
-    // Both controls write per change — the slider per drag frame, the field per keystroke — so the
-    // gesture opens on the first of them and stays open until a commit or a blur closes it. Typed
-    // digits are ONE edit that way: without the hold, "100" seals three undo steps (1, 10, 100).
+    // The slider writes per drag frame, so the gesture opens on the first of them and stays open until
+    // a commit or a blur closes it — one drag is one undo step however long it lasts. The number field
+    // beside it holds its own gesture over a typed edit; both come from the panel. Radix commits on
+    // pointer-up only when the value actually changed, and per keypress for the arrows; the pointer-up
+    // below is the safety net that closes a gesture which ended where it started.
+    const { hold, end: endGesture } = useHeldGesture();
     const write = useCallback(
         (v: number) => {
-            release.current ??= beginGesture();
+            hold();
             onChange(v);
         },
-        [beginGesture, onChange],
+        [hold, onChange],
     );
-    // A gesture the component never sees end: Escape mid-drag deselects and unmounts this section, and
-    // so does a peer deleting the element. An unreleased hold leaves captureTimeout at Infinity for the
-    // rest of the session, so every later edit would merge into one undo step.
-    useEffect(() => endGesture, [endGesture]);
 
     return (
         // onBlur rides on the row rather than on either control: React's is the bubbling focusout, so
@@ -66,7 +55,7 @@ export function MergedSlider({ value, onChange, beginGesture, min, max, step = 1
             {/* Wide enough for "100" at the panel's 14px input text, with px-2 rather than the
                 default px-3 so the slider keeps most of the row. */}
             <div className="w-16 shrink-0">
-                <MergedNumberInput value={value} onChange={write} min={min} max={max} step={step} className="px-2" />
+                <MergedNumberInput value={value} onChange={onChange} min={min} max={max} step={step} className="px-2" />
             </div>
         </div>
     );
