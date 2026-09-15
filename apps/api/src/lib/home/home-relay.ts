@@ -33,7 +33,7 @@ import { getAvatarsDir, getUserHomePath } from '../config/paths';
 import { resolveUserQuotas } from '../config/quota';
 import { CARDS_DIR } from '../contacts/card-store';
 import { LocalFilesystem, PATHS } from '../core';
-import { readMailTotalSize } from '../mail/maildb';
+import { maildirSize } from '../mail/mailutils';
 import { createDefaultMountConfig, createMountConfig, readMountTotalSize } from '../mount/helpers';
 import type { User } from '../user';
 import { getMemberships, getUserByEmail, updateUser } from '../user';
@@ -166,11 +166,11 @@ export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeRespons
     const homeDir = getUserHomePath(ownerUserId);
     // A user who has never signed in has no home folder yet, and sizing must not create one.
     const homeFs = fs.existsSync(homeDir) ? new LocalFilesystem(homeDir) : null;
-    const [cards, avatars] = await Promise.all([
+    const [mail, cards, avatars] = await Promise.all([
+        homeFs ? maildirSize(homeFs) : 0,
         homeFs?.dirSize(`${PATHS.CONTACTS.ROOT}/${CARDS_DIR}`) ?? 0,
         homeFs?.dirSize(`${PATHS.CONTACTS.ROOT}/${PATHS.CONTACTS.AVATARS}`) ?? 0,
     ]);
-    const mail = readMailTotalSize(path.join(homeDir, PATHS.MAIL.DB));
     const driveUsed = readMountTotalSize(
         path.join(homeDir, PATHS.DRIVE.ROOT, PATHS.DRIVE.DEFAULT_MOUNT, PATHS.DRIVE.METADATA_DB),
     );
