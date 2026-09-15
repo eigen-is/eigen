@@ -24,6 +24,7 @@
   "textAsHtml": "<p>Inline document follows.</p>",
   "attachments": [
     {
+      "index": 0,
       "contentType": "application/pdf",
       "filename": "doc.pdf",
       "sha256": "3d35ba198d22d37b366dd845bcb00765ece35df90debe9d2f2bd37664466f539",

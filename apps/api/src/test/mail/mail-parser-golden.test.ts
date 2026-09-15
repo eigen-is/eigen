@@ -15,6 +15,7 @@ function projectAttachment(att: ParsedMail['attachments'][number]): unknown {
     const hasher = new Bun.CryptoHasher('sha256');
     hasher.update(att.content);
     return {
+        index: att.index,
         contentType: att.contentType,
         filename: att.filename,
         calendarMethod: att.calendarMethod,

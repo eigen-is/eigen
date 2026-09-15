@@ -24,6 +24,7 @@
   "textAsHtml": "<p>Attachment name uses RFC 2231.</p>",
   "attachments": [
     {
+      "index": 0,
       "contentType": "text/plain",
       "filename": "£ résumé.txt",
       "sha256": "e236963c020ff97f96189ce95f2ac85f3cb954f1ed2528ff744ffebb93a85981",

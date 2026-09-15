@@ -24,6 +24,7 @@
   "textAsHtml": "<p>The report is attached.</p>",
   "attachments": [
     {
+      "index": 0,
       "contentType": "application/pdf",
       "filename": "report.pdf",
       "sha256": "c0bcd15e3842d58b3413ae63c7881865d68c4eecb55fcc2c3118739b79b9cde7",

@@ -24,6 +24,7 @@
   "textAsHtml": "<p>This is the text part.</p>",
   "attachments": [
     {
+      "index": 0,
       "contentType": "application/octet-stream",
       "filename": "test.bin",
       "sha256": "89b89a5916db2c551e803f1d9d3c0fceb38a8db28eea62ea5a7fd00410176278",

@@ -22,6 +22,7 @@
   "html": "<p>Only <i>html</i> here, see attachment.</p>",
   "attachments": [
     {
+      "index": 0,
       "contentType": "text/csv",
       "filename": "data.csv",
       "sha256": "a64a34aacbdacd17c0c52c867be14c6b9dab76b5e7348392eb829431fbba3a33",
