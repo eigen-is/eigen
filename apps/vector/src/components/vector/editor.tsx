@@ -65,7 +65,7 @@ export function VectorEditor({
     // Aspect lock, lifted here so the panel checkbox and the canvas' ObjectTransform
     // resizeMode share one ephemeral setting. Default ON for image-only selections.
     const allImageSelected = selectedElements.length > 0 && selectedElements.every((el) => el.type === 'image');
-    const [aspectLocked, setAspectLocked] = useAspectLock(selectedIds.join(','), allImageSelected);
+    const [aspectLocked, setAspectLocked] = useAspectLock(selectedIds, allImageSelected);
 
     const canvasRef = useRef<CanvasHandle | null>(null);
 

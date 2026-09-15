@@ -85,7 +85,7 @@ function SheetEditorInner({
     // right-side properties panel. Its aspect-lock — images default CHECKED — feeds BOTH the
     // panel checkbox and the canvas ObjectTransform, so it lives here, one level above both.
     const [activeImage, setActiveImage] = useState<SheetImage | null>(null);
-    const [imageAspectLocked, setImageAspectLocked] = useAspectLock(activeImage?.id ?? '', true);
+    const [imageAspectLocked, setImageAspectLocked] = useAspectLock(activeImage ? [activeImage.id] : [], true);
 
     const {
         initialData,

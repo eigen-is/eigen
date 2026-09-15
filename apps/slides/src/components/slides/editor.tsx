@@ -112,7 +112,7 @@ function SlideEditorInner({
     );
     // Aspect lock, lifted so the panel checkbox and the canvas' ObjectTransform share one setting.
     const allImageSelected = selectedElements.length > 0 && selectedElements.every((el) => el.type === 'image');
-    const [aspectLocked, setAspectLocked] = useAspectLock(selectedIds.join(','), allImageSelected);
+    const [aspectLocked, setAspectLocked] = useAspectLock(selectedIds, allImageSelected);
 
     // Revealing an element means going to its slide FIRST — ⌘F and the comment pane both span the
     // whole deck, so either can land on an element the canvas is not currently showing.
