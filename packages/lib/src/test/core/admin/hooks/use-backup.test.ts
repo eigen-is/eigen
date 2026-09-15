@@ -5,17 +5,10 @@ import type { BackupJob } from '@workspace/lib/types/backup';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { backupKeys, invalidateBackup } from '../../../../core/admin/hooks/keys';
 import { handleAdminSSEvent } from '../../../../core/admin/sse-handlers';
+import { installHappyDom } from '../../../happy-dom';
 
-// react-dom needs a DOM to render the upload hook into; the globals are removed again in afterAll so
-// later test files see the plain bun environment. Recipe: the use-members test.
-const { Window } = await import('happy-dom');
-const window = new Window({ url: 'http://localhost:3000' });
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-g.window = window;
-g.document = window.document;
-g.navigator = window.navigator;
-g.IS_REACT_ACT_ENVIRONMENT = true;
+// react-dom needs a DOM to render the upload hook into.
+installHappyDom();
 
 // The queries below read `useIsGuest`, which reads the auth context; there is no provider here.
 const realAuthContextModule = await import('../../../../core/auth/auth-context');
@@ -44,10 +37,6 @@ mock.module('../../../../core/api', () => ({
 afterAll(() => {
     mock.module('../../../../core/api', () => realApiModule);
     mock.module('../../../../core/auth/auth-context', () => realAuthContextModule);
-    g.window = undefined;
-    g.document = undefined;
-    g.navigator = undefined;
-    g.IS_REACT_ACT_ENVIRONMENT = undefined;
 });
 
 // Record every queryKey passed to invalidateQueries so we can assert which caches a call touches.
@@ -124,8 +113,8 @@ async function renderHook<T>(use: () => T, queryClient: QueryClient): Promise<{ 
         seen.latest = use();
         return null;
     }
-    const container = window.document.createElement('div');
-    const root = createRoot(container as unknown as Element);
+    const container = document.createElement('div');
+    const root = createRoot(container);
     await act(async () => {
         root.render(createElement(QueryClientProvider, { client: queryClient }, createElement(Harness, null)));
     });

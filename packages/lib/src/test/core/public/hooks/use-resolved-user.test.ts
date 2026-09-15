@@ -3,17 +3,10 @@
 import { afterAll, describe, expect, mock, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import { API_HOST } from '@workspace/lib/api';
+import { installHappyDom } from '../../../happy-dom';
 
-// react-dom needs a DOM to render the hook into; the globals are removed again in afterAll so later test
-// files see the plain bun environment. Recipe: the use-transfer test.
-const { Window } = await import('happy-dom');
-const window = new Window({ url: 'http://localhost:3000' });
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-g.window = window;
-g.document = window.document;
-g.navigator = window.navigator;
-g.IS_REACT_ACT_ENVIRONMENT = true;
+// react-dom needs a DOM to render the hook into.
+installHappyDom();
 
 // Signed out: the contact and public-user queries stay disabled, so the hook resolves off `imageUrl` alone.
 const realAuthContextModule = await import('../../../../core/auth/auth-context');
@@ -23,10 +16,6 @@ mock.module('../../../../core/auth/auth-context', () => ({
 
 afterAll(() => {
     mock.module('../../../../core/auth/auth-context', () => realAuthContextModule);
-    g.window = undefined;
-    g.document = undefined;
-    g.navigator = undefined;
-    g.IS_REACT_ACT_ENVIRONMENT = undefined;
 });
 
 async function avatarSrcFor(imageUrl: string): Promise<string> {
@@ -40,8 +29,8 @@ async function avatarSrcFor(imageUrl: string): Promise<string> {
         seen.src = useResolvedUser({ email: 'ada@example.com', imageUrl }).avatarSrc;
         return null;
     }
-    const container = window.document.createElement('div');
-    const root = createRoot(container as unknown as Element);
+    const container = document.createElement('div');
+    const root = createRoot(container);
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     await act(async () => {
         root.render(createElement(QueryClientProvider, { client: queryClient }, createElement(Harness, null)));
