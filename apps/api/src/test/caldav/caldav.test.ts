@@ -1,7 +1,9 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { handleDeleteCalendar } from '../../lib/caldav/proppatch';
 import { EVENT_MAX_BYTES } from '../../lib/caldav/resource';
+import { Calendar } from '../../lib/calendar/calendar';
 import { ApiError } from '../../lib/core';
+import { getHome } from '../../lib/home/get-home';
 import { app, getTestContext } from '../setup';
 
 describe('CalDAV', () => {
@@ -1477,11 +1479,13 @@ describe('CalDAV', () => {
     test('a delete failure that is not the default-calendar refusal keeps its own status', async () => {
         // The relay leg of deleteCalendar (a shared calendar's un-share) can fail with any status;
         // renaming those to 403 would tell the client the calendar is protected.
-        const failing = { deleteCalendar: () => Promise.reject(new ApiError(502, 'Home unreachable')) };
-        await expect(handleDeleteCalendar(failing, 'shared-cal')).rejects.toMatchObject({
-            status: 502,
-            message: 'Home unreachable',
-        });
+        const home = await getHome(userId);
+        const spy = spyOn(Calendar.prototype, 'deleteCalendar').mockRejectedValue(
+            new ApiError(502, 'Home unreachable'),
+        );
+        const deleting = handleDeleteCalendar(home.calendar, 'shared-cal');
+        await expect(deleting).rejects.toMatchObject({ status: 502, message: 'Home unreachable' });
+        spy.mockRestore();
     });
 
     // The props that fixed the macOS duplicate-on-edit class (2026-08-18) — a named request must serve them.

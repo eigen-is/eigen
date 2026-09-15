@@ -53,10 +53,7 @@ export function handleMkcalendar(calendar: Calendar, ownerId: string, calendarId
 // DELETE /dav/calendars/:ownerId/:calendarId/ — the MKCALENDAR twin. deleteCalendar owns which calendars may go
 // (and the SSE broadcast), and DAV renames exactly one of its statuses: the default calendar's 400 refusal is
 // WebDAV's 403 on a protected collection. Every other failure travels on with its own status.
-export async function handleDeleteCalendar(
-    calendar: Pick<Calendar, 'deleteCalendar'>,
-    calendarId: string,
-): Promise<Response> {
+export async function handleDeleteCalendar(calendar: Calendar, calendarId: string): Promise<Response> {
     try {
         await calendar.deleteCalendar(calendarId);
     } catch (error) {
