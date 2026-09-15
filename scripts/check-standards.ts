@@ -12,12 +12,12 @@ const BASELINE_PATH = 'scripts/standards-baseline.json';
 const verbose = process.argv.includes('--verbose');
 const update = process.argv.includes('--update');
 
-// Non-test, non-generated source. packages/sheet is a fork with its own conventions.
+// Non-test, non-generated source. The sheet grammar parser is jison output (biome skips it too).
+const GENERATED = ['routeTree.gen.ts', 'packages/sheet/src/engine/parser/grammar-parser/grammar-parser.ts'];
 function inScope(path: string): boolean {
     if (!/\.tsx?$/.test(path)) return false;
-    if (path.startsWith('packages/sheet/')) return false;
     if (path.includes('/src/test/')) return false;
-    return !(path.endsWith('.d.ts') || /\.test\.tsx?$/.test(path) || path.endsWith('routeTree.gen.ts'));
+    return !(path.endsWith('.d.ts') || /\.test\.tsx?$/.test(path) || GENERATED.some((tail) => path.endsWith(tail)));
 }
 
 // The scanner is TypeScript's own (`typescript/unstable/ast`, the one parser-grade surface the 7.x

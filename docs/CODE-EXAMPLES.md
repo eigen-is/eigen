@@ -199,7 +199,7 @@ const response = await driveApi({ ownerId })({ mountId }).folder({ pathId }).get
 
 ## Standards Gates
 
-The mechanical rules in [CODE-STANDARDS.md](CODE-STANDARDS.md) are enforced, not just documented. Biome carries what it can express (`noExplicitAny` is an error, and `noRestrictedImports` rejects extension-suffixed workspace specifiers and `lib → ui/sheet` imports). Everything else runs through `bun scripts/check-standards.ts`, part of `bun run check`. It scans non-test, non-generated `.ts`/`.tsx` under `apps/` and `packages/` (`packages/sheet` is a fork with its own conventions and is skipped) and counts twelve metrics.
+The mechanical rules in [CODE-STANDARDS.md](CODE-STANDARDS.md) are enforced, not just documented. Biome carries what it can express (`noExplicitAny` is an error, and `noRestrictedImports` rejects extension-suffixed workspace specifiers and `lib → ui/sheet` imports). Everything else runs through `bun scripts/check-standards.ts`, part of `bun run check`. It scans non-test, non-generated `.ts`/`.tsx` under `apps/` and `packages/` (the jison output `grammar-parser.ts` in the sheet engine counts as generated) and counts twelve metrics.
 
 Seven are hard zeros — any hit fails: `"use client"` directives, imports reaching past a package barrel (`@workspace/lib/core/…`, `@workspace/lib/src/…`, `@workspace/ui/src/…`, extension-suffixed specifiers), `export type` re-exports from a `packages/lib/src/core/**/index.ts` barrel, and `useQuery`/`useMutation`/`useInfiniteQuery`/`toast.error`/`toast.success` calls in an app outside a `hooks/` folder, plus three rules that carry the conventions the prose used to carry alone:
 
