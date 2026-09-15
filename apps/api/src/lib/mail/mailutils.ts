@@ -1,8 +1,6 @@
 import { hostname } from 'node:os';
-import * as path from 'node:path';
 import type { AddressObject, EmailSummary, RecipientSummary } from '@workspace/lib/types/mail';
 import { getMailDomain } from '../config/server-config';
-import { type LocalFilesystem, PATHS } from '../core';
 import type { MailFlag } from './mail-store';
 
 let deliveryCounter = 0;
@@ -24,13 +22,6 @@ function serializeFlags(flags: Partial<Record<MailFlag, boolean>>): string {
         .map(([, char]) => char)
         .sort()
         .join('');
-}
-
-// The mail half of the storage budget, for a home-rooted filesystem: every byte under the Maildir
-// tree. Both the quota gate and the admin usage view answer from here, so a message the index never
-// saw (a skipSync delivery) and Dovecot's own per-folder index files count on both surfaces.
-export function maildirSize(homeFs: LocalFilesystem): Promise<number> {
-    return homeFs.dirSize(path.join(PATHS.MAIL.ROOT, PATHS.MAIL.MAILDIR));
 }
 
 export function createUniqueMessageId(): string {
