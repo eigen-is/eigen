@@ -18,6 +18,10 @@ export type MailSearchOptions = {
     to?: string;
 };
 
+// One entry per named, non-calendar part of a draft EML, under the part's raw index — the number a
+// keep list addresses. An entry from a sidecar written before the index existed carries none.
+export type DraftMetaAttachment = { filename: string; contentType: string; size: number; index?: number };
+
 export type DraftMeta = {
     subject: string;
     to?: AddressObject;
@@ -28,11 +32,9 @@ export type DraftMeta = {
     // on disk has baked in. Overlaid on messageGet so the compose view shows what the
     // user typed, not the rendered card block at the bottom.
     html: string;
-    attachments: Array<{ filename: string; contentType: string; size: number }>;
-    // Invite parts the EML carries and `attachments` leaves out (the composer hides them too).
-    // The draft fast path needs them to read a keep list, which numbers raw EML positions.
-    // Absent on sidecars written before the field existed.
-    hiddenCalendarCount?: number;
+    // A sidecar whose entries carry no index sends the next save down the full path rather than
+    // guessing at positions.
+    attachments: DraftMetaAttachment[];
     driveReferences?: AttachmentReference[];
     inReplyTo?: string;
     references?: string[] | string;

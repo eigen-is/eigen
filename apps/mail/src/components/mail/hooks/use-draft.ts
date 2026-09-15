@@ -134,17 +134,18 @@ export function initFields(
             subject: email.subject ? String(email.subject) : '',
             body: email.html || email.text || '',
             bodyText: email.text || '',
-            // index stays the raw EML position, so hiding an invite never shifts the chips around it.
-            attachments: (email.attachments || []).flatMap((a, index) =>
+            // Each chip keeps the index the server gave the part, so hiding an invite never shifts
+            // the chips around it.
+            attachments: (email.attachments || []).flatMap((a) =>
                 isCalendarPart(a)
                     ? []
                     : [
                           {
-                              key: `saved-${index}-${a.filename ?? ''}-${a.size}`,
-                              filename: mailAttachmentName(a, index),
+                              key: `saved-${a.index}-${a.filename ?? ''}-${a.size}`,
+                              filename: mailAttachmentName(a, a.index),
                               size: a.size,
                               contentType: a.contentType,
-                              index,
+                              index: a.index,
                           },
                       ],
             ),
@@ -238,29 +239,30 @@ export function mergeServerAttachments(
     sent: AttachmentMeta[],
     parsed: Attachment[],
 ): { serverActual: AttachmentMeta[]; localNext: AttachmentMeta[] } {
-    // index is the raw position in the message's attachment list, calendar parts included.
-    const indexed = parsed.map((a, index) => ({ a, index })).filter(({ a }) => !isCalendarPart(a));
-    const serverActual = indexed.map(({ a, index }) => {
-        const filename = mailAttachmentName(a, index);
-        const prevMatch = local.find((p) => p.filename === filename && p.size === a.size);
-        return {
-            key: prevMatch?.key ?? `server-${index}-${filename}-${a.size}`,
-            filename,
-            size: a.size,
-            contentType: a.contentType,
-            index,
-            localUrl: prevMatch?.localUrl,
-        };
-    });
+    const serverActual = parsed
+        .filter((a) => !isCalendarPart(a))
+        .map((a) => {
+            const filename = mailAttachmentName(a, a.index);
+            const prevMatch = local.find((p) => p.filename === filename && p.size === a.size);
+            return {
+                key: prevMatch?.key ?? `server-${a.index}-${filename}-${a.size}`,
+                filename,
+                size: a.size,
+                contentType: a.contentType,
+                index: a.index,
+                localUrl: prevMatch?.localUrl,
+            };
+        });
 
     const removedDuringSave = sent.filter((s) => !local.some((l) => l.filename === s.filename && l.size === s.size));
     const withoutRemoved = serverActual.filter(
         (a) => !removedDuringSave.some((r) => r.filename === a.filename && r.size === a.size),
     );
+    // An upload settles against every part the server has, invites included: a `.ics` the user
+    // attached lands as a hidden part, so matching the chipped ones only would keep the chip on a
+    // tempId the server already consumed and every later save would 404 on it.
     const inFlightAdditions = local.filter(
-        (l) =>
-            !!l.tempId &&
-            !indexed.some(({ a, index }) => mailAttachmentName(a, index) === l.filename && a.size === l.size),
+        (l) => !!l.tempId && !parsed.some((a) => mailAttachmentName(a, a.index) === l.filename && a.size === l.size),
     );
 
     return { serverActual, localNext: [...withoutRemoved, ...inFlightAdditions] };

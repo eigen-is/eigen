@@ -1296,6 +1296,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
                 contentType: 'text/calendar',
                 filename: 'invite.ics',
                 content: Buffer.from(ics),
+                index: 0,
                 size: ics.length,
                 calendarMethod: method,
             },
