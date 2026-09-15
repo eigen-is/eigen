@@ -44,15 +44,21 @@ function defaultFrom(): OutboundAddress {
 }
 
 export function createTransport(): Mail {
-    if (process.env['SMTP_HOST']) {
-        // This hop stays inside the docker network (SMTP_HOST defaults to the bundled postfix)
-        // or reaches a host-local relay — self-signed/no cert, so verification is off by design.
-        // Postfix owns TLS toward the internet.
+    const host = process.env['SMTP_HOST'];
+    if (host) {
+        const port = Number(process.env['SMTP_PORT'] || 25);
+        const user = process.env['SMTP_USER'];
+        // Port 465 is implicit TLS; anything else starts plain and upgrades with STARTTLS.
+        const secure = process.env['SMTP_SECURE'] ? process.env['SMTP_SECURE'] === '1' : port === 465;
         return nodemailer.createTransport({
-            host: process.env['SMTP_HOST'],
-            port: Number(process.env['SMTP_PORT'] || 25),
-            secure: false,
-            tls: { rejectUnauthorized: false },
+            host,
+            port,
+            secure,
+            auth: user ? { user, pass: process.env['SMTP_PASSWORD'] } : undefined,
+            // An unauthenticated hop is the bundled postfix or a host-local relay (self-signed/no
+            // cert) and postfix owns TLS toward the internet, but credentials only go to a relay
+            // whose certificate checks out.
+            tls: { rejectUnauthorized: Boolean(user) },
         });
     }
     return nodemailer.createTransport({

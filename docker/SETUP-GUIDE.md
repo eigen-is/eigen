@@ -463,7 +463,16 @@ SMTP_PORT=25
 - Bind to `0.0.0.0` (or the docker bridge gateway, default `172.20.0.1`), not just `127.0.0.1`
 - Permit relay from the docker bridge subnet (`172.20.0.0/24`, or whatever you set `EIGEN_SUBNET` to)
 
-Third-party relays (Brevo, SendGrid, Postmark) need authentication, and the API talks plain unauthenticated SMTP only (`apps/api/src/lib/core/mailer.ts`). The `SMTP_RELAY_*` credentials are read by the bundled postfix, not by the API, so without the `mail` profile your host mail server has to be the one that authenticates to the relay.
+A third-party relay (Brevo, SendGrid, Postmark) needs authentication. Point the API straight at it:
+
+```
+SMTP_HOST=smtp-relay.brevo.com
+SMTP_PORT=587
+SMTP_USER=your-relay-login
+SMTP_PASSWORD=your-relay-key
+```
+
+Port 587 starts plain and upgrades with STARTTLS; port 465 is implicit TLS. Set `SMTP_SECURE=1` or `0` to override that if your relay listens on some other port. The relay's certificate is verified as soon as `SMTP_USER` is set, so the credentials never go over an unverified connection. These are the API's own credentials — the `SMTP_RELAY_*` pair is read by the bundled postfix, and the two are set independently.
 
 > **Heads-up:** the in-app **Mail** tab still appears when bundled mail is off, and clicking it returns errors (the gating flag is on the roadmap). Tell users to point their IMAP client at your existing mail server.
 
