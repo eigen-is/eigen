@@ -854,6 +854,21 @@ describe('Sheets HTML export — floating images', () => {
         expect(classesFor(out, `left:${left}px;top:${top}px`)).toHaveLength(1);
     });
 
+    test('an image anchored above the used range pulls the window up instead of going negative', () => {
+        const sheet: Sheet = {
+            ...makeSheet([{ r: 4, c: 2, v: { v: 'C5' } }]),
+            images: [{ id: 'img_1', mediaName: 'chart.png', x: 0, y: 0, width: 160, height: 60 }],
+        };
+        const out = renderSheetsHtml([sheet], MEDIA);
+        // The window starts at A1 now, so the overlay draws at the stored geometry...
+        expect(classesFor(out, 'left:0px;top:0px;width:160px;height:60px')).toHaveLength(1);
+        // ...and the page spans the empty rows and columns the image sits over.
+        expect(getSheetContentSize(sheet)).toEqual({
+            width: 3 * SHEET_DEFAULT_COL_WIDTH,
+            height: 5 * SHEET_DEFAULT_ROW_HEIGHT,
+        });
+    });
+
     test('a workbook without floating images emits the bare table it always did', () => {
         const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'grid' } }])], MEDIA);
         expect(out.html).not.toContain('position:relative;width:');

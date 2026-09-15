@@ -272,7 +272,7 @@ function rowSpan(config: SheetConfig, from: number, to: number): number {
 
 export function getSheetContentSize(sheet: Sheet): { width: number; height: number } {
     const config = sheet.config ?? {};
-    const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, config.borderInfo ?? {});
+    const { minRow, minCol, maxRow, maxCol } = getRenderBounds(sheet, config);
     const blank = maxRow < 0 || maxCol < 0;
     const offset = blank ? { left: 0, top: 0 } : gridOffset(config, minRow, minCol);
     let width = blank ? 0 : colSpan(config, minCol, maxCol);
@@ -299,12 +299,8 @@ function renderSheet(
     const config = sheet.config ?? {};
     const showGrid = sheet.showGridLines !== false && sheet.showGridLines !== 0;
 
-    // Guarded on the images: the offset walks every row above the window, and a lone cell
-    // far down the grid makes that walk a million iterations for nothing. The preview clips
-    // the overlay to the budget window rather than to the table — a chart sitting right of a
-    // small grid belongs in the thumbnail, while an image parked far outside the window would
-    // stretch the fragment's scroll width and collapse the thumbnail scaled by it. The full
-    // export keeps every image and getSheetContentSize sizes the page to reach it.
+    // The preview clips the overlay to its budget window, not to the table: an image parked
+    // outside it would stretch the fragment and collapse the thumbnail scaled by it.
     const overlayFor = (minRow: number, minCol: number): string =>
         sheet.images?.length
             ? renderFloatingImages(
@@ -321,7 +317,7 @@ function renderSheet(
               )
             : '';
 
-    const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, config.borderInfo ?? {});
+    const { minRow, minCol, maxRow, maxCol } = getRenderBounds(sheet, config);
     if (maxRow < 0 || maxCol < 0) {
         // An image pasted onto an otherwise blank sheet is all there is to render, clipped to the
         // same budget window as the grid path below.
@@ -721,6 +717,38 @@ function getGridBounds(
 
     if (maxRow < 0) return { minRow: 0, minCol: 0, maxRow: -1, maxCol: -1 };
     return { minRow, minCol, maxRow, maxCol };
+}
+
+// Images are stored in grid pixels from A1 while the overlay positions them against the window's
+// first cell, so one anchored above or left of the used range would take a negative offset and
+// fall off the page: the window drops to the track the earliest image starts in.
+function getRenderBounds(
+    sheet: Sheet,
+    config: SheetConfig,
+): { minRow: number; minCol: number; maxRow: number; maxCol: number } {
+    const bounds = getGridBounds(sheet, config.borderInfo ?? {});
+    if (!sheet.images?.length || bounds.maxRow < 0) return bounds;
+
+    let x = Number.MAX_SAFE_INTEGER;
+    let y = Number.MAX_SAFE_INTEGER;
+    for (const img of sheet.images) {
+        x = Math.min(x, cssLength(img.x, 0));
+        y = Math.min(y, cssLength(img.y, 0));
+    }
+
+    let minCol = 0;
+    let left = 0;
+    while (minCol < bounds.minCol && left + colSpan(config, minCol, minCol) <= x) {
+        left += colSpan(config, minCol, minCol);
+        minCol++;
+    }
+    let minRow = 0;
+    let top = 0;
+    while (minRow < bounds.minRow && top + rowSpan(config, minRow, minRow) <= y) {
+        top += rowSpan(config, minRow, minRow);
+        minRow++;
+    }
+    return { ...bounds, minRow, minCol };
 }
 
 function wrapInDocument(title: string, bodyHtml: string, pageSize?: { width: number; height: number }): string {

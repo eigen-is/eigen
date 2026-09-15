@@ -122,7 +122,7 @@ function AppPasswords() {
 
 function ServicesComponent() {
     const { user } = useAuth();
-    const mailEnabled = useMailEnabled() !== false;
+    const mailEnabled = useMailEnabled();
     const host = SERVER_HOSTNAME;
     const davBase = DAV_HOST;
     const webdavBase = `${API_HOST}/webdav`;

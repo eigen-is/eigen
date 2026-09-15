@@ -85,6 +85,12 @@ describe('AppError messages', () => {
         expect(getErrorMessage(error)).toBe('Not found (404)');
     });
 
+    test('an array body falls back to the status instead of stringifying itself', () => {
+        const error = new AppError({ error: { status: 500, value: [{ message: 'nope' }] }, status: 500 });
+
+        expect(getErrorMessage(error)).toBe('Server error (500)');
+    });
+
     test('no error payload at all falls back to the status', () => {
         const error = new AppError({ error: null, status: 500 });
 

@@ -1,6 +1,6 @@
 import { type RefCallback, type RefObject, useCallback, useState } from 'react';
 
-export type ElementSize = { width: number; height: number };
+type ElementSize = { width: number; height: number };
 
 // Tracks a node's content box, for the surfaces that lay themselves out from their own measured width
 // (the drive grid's column count, the doc page's scale, a frame's shrink-to-fit).

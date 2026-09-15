@@ -1,4 +1,5 @@
 import { toast } from 'sonner';
+import { isRecord } from './guards';
 
 const STATUS_MESSAGES: Record<number, string> = {
     400: 'Invalid request',
@@ -13,10 +14,6 @@ const STATUS_MESSAGES: Record<number, string> = {
     503: 'Service unavailable',
     507: 'Insufficient storage',
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-    return value !== null && typeof value === 'object';
-}
 
 function readString(source: Record<string, unknown>, key: string): string | undefined {
     const field = source[key];
@@ -35,7 +32,7 @@ function messageFromBody(value: unknown, status: number): string {
             : undefined;
         return readString(value, 'message') ?? readString(value, 'summary') ?? firstDetail ?? fallback;
     }
-    return value === null || value === undefined ? fallback : String(value);
+    return value === null || value === undefined || Array.isArray(value) ? fallback : String(value);
 }
 
 export class AppError extends Error {
