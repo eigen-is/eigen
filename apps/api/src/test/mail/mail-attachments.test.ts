@@ -530,6 +530,53 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         expect(raw).toContain('v2');
     });
 
+    test('a sidecar whose parts carry a non-numeric index takes the full save', async () => {
+        const token = ctx.alice.user.sessionToken;
+        const ownerId = ctx.alice.user.id;
+        const uploaded = await uploadDraftAttachment(
+            token,
+            ownerId,
+            new File(['broken-bytes'], 'broken.txt', { type: 'text/plain' }),
+        );
+        const first = await putDraft(
+            token,
+            ownerId,
+            {
+                subject: 'Broken sidecar',
+                to: { value: [{ address: 'bob@test.eigen.is', name: 'Bob' }], text: 'Bob <bob@test.eigen.is>' },
+                text: 'v1',
+                html: '<p>v1</p>',
+            },
+            { tempAttachmentIds: [uploaded.tempId] },
+        );
+
+        // The sidecar is plain JSON on disk, so a hand-edited or truncated one can name a part with
+        // anything at all. Nothing but a number can be matched against a keep list.
+        const metaPath = join(
+            process.env['EIGEN_DATA_ROOT']!,
+            'home',
+            ownerId,
+            'eigen.mail',
+            'draft-meta',
+            `${first.id.replace(/[^a-zA-Z0-9-_]/g, '_')}.json`,
+        );
+        const meta = JSON.parse(readFileSync(metaPath, 'utf8')) as { attachments: Array<{ index: number | null }> };
+        for (const a of meta.attachments) a.index = null;
+        writeFileSync(metaPath, JSON.stringify(meta));
+
+        // No keep list: the fast path would accept the sidecar wholesale and hand the null back.
+        const second = await putDraft(token, ownerId, {
+            id: first.id,
+            subject: 'Broken sidecar',
+            to: first.to,
+            text: 'v2',
+            html: '<p>v2</p>',
+        });
+        expect(second.attachments.map((a) => [a.filename, a.index])).toEqual([['broken.txt', 0]]);
+        const raw = await (await authedRequest(token, `/mail/${ownerId}/message/${first.id}/download`)).text();
+        expect(raw).toContain('v2');
+    });
+
     test('send after fast-path saves includes attachments', async () => {
         const file = new File(['send-after-fast'], 'send-after-fast.txt', { type: 'text/plain' });
         const uploaded = await uploadDraftAttachment(ctx.alice.user.sessionToken, ctx.alice.user.id, file);

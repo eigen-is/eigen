@@ -274,10 +274,10 @@ export class Mail {
                 if (meta && meta.attachments.length > 0) {
                     // The keep list names raw EML parts, so the fast path only holds when the kept
                     // set is exactly the set the sidecar lists: anything else adds or drops a part
-                    // and needs the EML rebuilt. A sidecar written before its parts carried an
-                    // index can't answer that, so it takes the full save.
+                    // and needs the EML rebuilt. The sidecar is unvalidated JSON on disk, so a part
+                    // whose index is not a number can't answer that and takes the full save.
                     const parts = meta.attachments.flatMap((a) =>
-                        a.index === undefined ? [] : [{ ...a, index: a.index }],
+                        typeof a.index !== 'number' ? [] : [{ ...a, index: a.index }],
                     );
                     const kept = options.keepAttachmentIndexes ? new Set(options.keepAttachmentIndexes) : null;
                     const keepAll =
