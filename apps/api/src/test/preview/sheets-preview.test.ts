@@ -183,6 +183,33 @@ describe('eigensheets preview (floating images)', () => {
         doc.destroy();
     });
 
+    // A sheet with nothing but a chart takes the blank-grid branch, which renders its own overlay.
+    function seedChartOnlySheet(x: number): Y.Doc {
+        const sheet: Sheet = {
+            id: 'chart',
+            name: 'Chart',
+            celldata: [],
+            data: [],
+            config: {},
+            images: [{ id: 'img_1', mediaName: 'chart.png', x, y: 30, width: 160, height: 120 }],
+        };
+        const doc = new Y.Doc();
+        seedSheetsDoc(doc, [sheet], []);
+        return doc;
+    }
+
+    test('a chart-only sheet clips its overlay to the budget window as well', () => {
+        const far = seedChartOnlySheet(20_000);
+        expect(renderEigensheetsPreviewBody(far, new Map([['chart.png', IMAGE_URL]])).body).not.toContain('<img');
+        far.destroy();
+
+        const origin = seedChartOnlySheet(0);
+        expect(renderEigensheetsPreviewBody(origin, new Map([['chart.png', IMAGE_URL]])).body).toContain(
+            `src="${IMAGE_URL}"`,
+        );
+        origin.destroy();
+    });
+
     test('a name the main thread could not resolve renders no img at all', () => {
         const doc = seedImageSheet();
         const { body } = renderEigensheetsPreviewBody(doc, NO_MEDIA);

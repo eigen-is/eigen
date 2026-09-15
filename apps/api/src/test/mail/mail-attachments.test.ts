@@ -333,9 +333,9 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         );
         expect(first.attachments.length).toBe(2);
 
-        // The compose chips cover parts the sidecar's list does not (a part without a filename),
-        // so a keep list as long as that list can still be dropping one. Keeping [1, 2] removes
-        // alpha, and only the full save rebuilds the EML without it.
+        // Two named parts, so the sidecar accounts for indexes 0 and 1 only. Keeping [1, 2] is as
+        // long as its list, so a count compare would have taken the fast path and left alpha in
+        // the EML; index 2 names no part it has, which marks the list as dropping one.
         const second = await putDraft(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,

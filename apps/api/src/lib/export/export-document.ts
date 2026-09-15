@@ -134,8 +134,8 @@ export async function runDocumentExport(
     // authoritatively — this is only the early exit.
     documentTransformRunner.assertAdmissible('foreground');
 
-    // A format that inlines nothing skips the prep entirely: collection is Mount I/O plus a
-    // screen preview per image, and the xlsx writer would drop every byte of it.
+    // A format that inlines nothing skips the prep entirely: the xlsx writer would drop every
+    // byte of it.
     const prepStart = performance.now();
     const media = MEDIA_EMBEDDING_FORMATS.has(job.format) ? await collectExportMedia(mount, path) : [];
     const prepMs = performance.now() - prepStart;

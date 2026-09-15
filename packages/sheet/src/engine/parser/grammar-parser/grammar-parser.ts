@@ -406,7 +406,6 @@ class Lexer {
 
     _input = "";
     _more = false;
-    pendingEmptyArgument = false;
     _backtrack = false;
     done = false;
     yylineno = 0;
@@ -435,7 +434,7 @@ class Lexer {
     setInput(input: string, yy?: any): this {
         this.yy = yy || this.yy || {};
         this._input = input;
-        this._more = this._backtrack = this.done = this.pendingEmptyArgument = false;
+        this._more = this._backtrack = this.done = false;
         this.yylineno = this.yyleng = 0;
         this.yytext = this.matched = this.match = "";
         this.conditionStack = ["INITIAL"];
@@ -692,14 +691,6 @@ class Lexer {
     }
 
     lex(): any {
-        // An empty argument slot is a blank, like a reference to an empty cell. The grammar has
-        // no empty production, so the slot is handed to the parser here as a NUMBER with no
-        // text; the number production (case 3) turns that into the engine's blank.
-        if (this.pendingEmptyArgument) {
-            this.pendingEmptyArgument = false;
-            this.yytext = "";
-            return symbols_["NUMBER"];
-        }
         const r = this.next();
         if (r) {
             return r;
@@ -790,7 +781,6 @@ class Lexer {
             case 18:
                 return 29;
             case 19:
-                this.pendingEmptyArgument = /^\s*[,)]/.test(this._input);
                 return 30;
             case 20:
                 return 18;
@@ -803,7 +793,6 @@ class Lexer {
             case 24:
                 return 20;
             case 25:
-                this.pendingEmptyArgument = /^\s*,/.test(this._input);
                 return 12;
             case 26:
                 return 13;
@@ -878,10 +867,7 @@ export class Parser {
                 this.$ = yy.callVariable($$[$0][0]);
                 break;
             case 3:
-                // Empty text only reaches here from an omitted argument slot (the NUMBER rule
-                // matches digits). Blank is `undefined`, as an empty cell reference is: 0 where
-                // a number is wanted, "" in text context.
-                this.$ = $$[$0] === "" ? undefined : yy.toNumber($$[$0]);
+                this.$ = yy.toNumber($$[$0]);
                 break;
             case 4:
                 this.$ = yy.trimEdges($$[$0]);

@@ -1,6 +1,5 @@
 /* NOT the source of the shipped parser: grammar-parser.ts is hand-maintained and has diverged
-   (sheet-qualified cell regexes, quoted-string tail, NUMBER rule, empty-argument injection,
-   bare-ref and unary-sign fixes). */
+   (sheet-qualified cell regexes, quoted-string tail, NUMBER rule, bare-ref and unary-sign fixes). */
 /* description: Parses end evaluates mathematical expressions. */
 /* lexical grammar */
 %lex
