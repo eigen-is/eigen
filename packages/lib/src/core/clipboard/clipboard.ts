@@ -15,6 +15,7 @@ import {
 } from '../../vector/media-refs';
 import { getDriveDownloadUrl } from '../api';
 import { bytesToBase64 } from '../format';
+import { isRecord } from '../guards';
 
 const EIGEN_CLIPBOARD_MIME = 'application/eigen-clipboard';
 const HTML_MARKER = 'data-eigen-clipboard';
@@ -82,12 +83,6 @@ export function readClipboardBox(item: EigenClipboardItem): ClipboardBox {
 // blank paragraph/cell. The one home for that convention.
 export function clipboardTextItemHasContent(item: EigenClipboardTextItem): boolean {
     return item.text.trim().length > 0;
-}
-
-// Arrays are objects too, and every caller below reads named fields: a forged `[]` payload would pass
-// as a record and read `undefined` for all of them.
-function isRecord(v: unknown): v is Record<string, unknown> {
-    return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
 // One forged item must not cost the whole paste. The wire is writable by any web page, and every

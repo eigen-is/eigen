@@ -38,6 +38,7 @@
     "./file-presentation": "./src/core/file-presentation.ts",
     "./file-subject": "./src/core/file-subject.ts",
     "./format": "./src/core/format.ts",
+    "./guards": "./src/core/guards.ts",
     "./html": "./src/core/html.ts",
     "./html-dom": "./src/core/html-dom.ts",
     "./mailbox-icons": "./src/core/mailbox-icons.ts",

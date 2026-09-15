@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1465 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1466 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -832,7 +832,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ElementSize` | `@workspace/ui/hooks/use-element-size` | packages/ui/src/hooks/use-element-size.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (669)
+## Utilities & constants (670)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1113,6 +1113,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `subjectInfo` | `@workspace/lib/file-subject` | packages/lib/src/core/file-subject.ts |
 | `bytesToBase64` | `@workspace/lib/format` | packages/lib/src/core/format.ts |
 | `formatFileSize` | `@workspace/lib/format` | packages/lib/src/core/format.ts |
+| `isRecord` | `@workspace/lib/guards` | packages/lib/src/core/guards.ts |
 | `escapeHtml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `escapeXml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `LIGHT_EDITOR_ATTRS` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
