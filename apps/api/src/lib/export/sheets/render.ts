@@ -250,24 +250,32 @@ function clipRulesToWindow(
     return clipped;
 }
 
+// Laid-out pixels across `[from, to]`, hidden tracks contributing nothing — the one place the
+// stored-length-or-default rule lives, for both the grid's own size and the floating overlay's offset.
+function colSpan(config: SheetConfig, from: number, to: number): number {
+    let width = 0;
+    for (let c = from; c <= to; c++) {
+        if (config.colhidden?.[c]) continue;
+        width += cssLength(config.columnlen?.[c], DEFAULT_COL_WIDTH);
+    }
+    return width;
+}
+
+function rowSpan(config: SheetConfig, from: number, to: number): number {
+    let height = 0;
+    for (let r = from; r <= to; r++) {
+        if (config.rowhidden?.[r]) continue;
+        height += cssLength(config.rowlen?.[r], DEFAULT_ROW_HEIGHT);
+    }
+    return height;
+}
+
 export function getSheetContentSize(sheet: Sheet): { width: number; height: number } {
     const config = sheet.config ?? {};
     const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, config.borderInfo ?? {});
     if (maxRow < 0 || maxCol < 0) return { width: 0, height: 0 };
 
-    let width = 0;
-    for (let c = minCol; c <= maxCol; c++) {
-        if (config.colhidden?.[c]) continue;
-        width += cssLength(config.columnlen?.[c], DEFAULT_COL_WIDTH);
-    }
-
-    let height = 0;
-    for (let r = minRow; r <= maxRow; r++) {
-        if (config.rowhidden?.[r]) continue;
-        height += cssLength(config.rowlen?.[r], DEFAULT_ROW_HEIGHT);
-    }
-
-    return { width, height };
+    return { width: colSpan(config, minCol, maxCol), height: rowSpan(config, minRow, maxRow) };
 }
 
 // `styles` present is the full-document export (interned classes, stylesheet escaping);
@@ -477,17 +485,7 @@ function renderDataBar(bar: DataBar, display: string, styles?: StyleRegistry): s
 // ImgBoxs reads the same fields into left/top/width/height), while the table starts at
 // the used range — so the overlay subtracts the rows and columns the window skipped.
 function gridOffset(config: SheetConfig, minRow: number, minCol: number): { left: number; top: number } {
-    let left = 0;
-    for (let c = 0; c < minCol; c++) {
-        if (config.colhidden?.[c]) continue;
-        left += cssLength(config.columnlen?.[c], DEFAULT_COL_WIDTH);
-    }
-    let top = 0;
-    for (let r = 0; r < minRow; r++) {
-        if (config.rowhidden?.[r]) continue;
-        top += cssLength(config.rowlen?.[r], DEFAULT_ROW_HEIGHT);
-    }
-    return { left, top };
+    return { left: colSpan(config, 0, minCol - 1), top: rowSpan(config, 0, minRow - 1) };
 }
 
 // An image whose name resolves to nothing renders nothing: a `pending:` name from an

@@ -1,7 +1,7 @@
 import { Input } from '@workspace/ui/components/input';
 import { cn } from '@workspace/ui/lib/utils';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { usePropertyGesture } from './property-gesture';
+import { useState } from 'react';
+import { useHeldGesture } from './property-gesture';
 
 type PropertyNumberInputProps = {
     value: number | undefined;
@@ -29,16 +29,7 @@ export function PropertyNumberInput({
 }: PropertyNumberInputProps) {
     const [localValue, setLocalValue] = useState(() => String(value ?? ''));
     const [focused, setFocused] = useState(false);
-    const beginGesture = usePropertyGesture();
-    const release = useRef<(() => void) | null>(null);
-
-    const endGesture = useCallback(() => {
-        release.current?.();
-        release.current = null;
-    }, []);
-    // A gesture the field never sees end: Escape mid-edit deselects and unmounts the section, and so
-    // does a peer deleting the element. An unreleased hold would merge every later edit into one step.
-    useEffect(() => endGesture, [endGesture]);
+    const { hold, end: endGesture } = useHeldGesture();
 
     const externalStr = String(value ?? '');
     if (!focused && localValue !== externalStr) {
@@ -62,7 +53,7 @@ export function PropertyNumberInput({
                     const lo = min ?? Number.NEGATIVE_INFINITY;
                     const hi = max ?? Number.POSITIVE_INFINITY;
                     if (!Number.isNaN(v)) {
-                        release.current ??= beginGesture();
+                        hold();
                         onChange(Math.min(hi, Math.max(lo, v)));
                     }
                 }
