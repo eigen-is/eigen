@@ -24,7 +24,7 @@ export type {
 } from '@workspace/lib/sheets';
 export type { CellCoordinate };
 
-import type { Cell, CellMatrix } from '@workspace/lib/sheets';
+import type { CalcChainEntry, Cell, CellMatrix } from '@workspace/lib/sheets';
 
 // Editor-only SheetConfig overlay: structural per-row/col flags the state layer
 // reads/writes and the engine's row/col shifter shifts, but the BE/wire-shape
@@ -102,15 +102,7 @@ export type SheetInfo = {
     dynamicArrayCompute: unknown[];
 };
 
-// Calc-chain entry: dependency-graph node for a formula cell. Engine producers
-// always stamp `r`/`c`/`id`; state's UI ordering layer adds an optional
-// `index` used by formula-cache.execFunctionExist consumers.
-export type CalcChainEntry = {
-    r: number;
-    c: number;
-    id: string;
-    index?: number;
-};
+export type { CalcChainEntry, SheetWithCalcChain } from '@workspace/lib/sheets';
 
 export type EvaluationResult = {
     value: Cell['v'];

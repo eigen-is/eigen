@@ -7,7 +7,16 @@
 // decoder rebuilds is exactly today's shape.
 
 import { cloneSides, parseCellKey } from './borders';
-import type { Cell, CellBorderSides, CellMatrix, CellWithRowAndCol, Sheet, SheetConfig } from './types';
+import type {
+    CalcChainEntry,
+    Cell,
+    CellBorderSides,
+    CellMatrix,
+    CellWithRowAndCol,
+    Sheet,
+    SheetConfig,
+    SheetWithCalcChain,
+} from './types';
 
 const FORMAT = 'eigensheets/2';
 
@@ -40,10 +49,8 @@ type SnapshotV2 = {
 };
 
 // Editor-runtime extras the wire shape omits: `selections` is a per-client cursor,
-// `calcChain` (packages/sheet engine/types.ts) is regenerated on decode. lib cannot
-// import the sheet package, so the entry shape is restated here.
-type CalcChainEntry = { r: number; c: number; id: string };
-type RuntimeSheet = Sheet & { selections?: unknown; calcChain?: CalcChainEntry[] };
+// `calcChain` is regenerated on decode.
+type RuntimeSheet = SheetWithCalcChain & { selections?: unknown };
 
 export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean }): string {
     const styles: StyleTuple[] = [];

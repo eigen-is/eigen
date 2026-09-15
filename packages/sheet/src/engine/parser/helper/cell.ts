@@ -41,10 +41,12 @@ export function columnIndexToLabel(column: number): string {
     return result.toUpperCase();
 }
 
-const simpleSheetName = '[A-Za-z0-9_\\u00C0-\\u02AF]+';
-const quotedSheetName = "'(?:(?!').|'')*'";
-const sheetNameRegexp = `(${simpleSheetName}|${quotedSheetName})!`;
-const LABEL_EXTRACT_REGEXP = new RegExp(`^(?:${sheetNameRegexp})?([$])?([A-Za-z]*)([$])?([0-9]*)$`);
+// The two sheet-name spellings a reference may carry (`Sheet1!A1`, `'My Sheet'!A1`); every
+// reference regex in the engine composes from these.
+export const SIMPLE_SHEET_NAME = '[A-Za-z0-9_\\u00C0-\\u02AF]+';
+export const QUOTED_SHEET_NAME = "'(?:(?!').|'')*'";
+export const SHEET_NAME_PREFIX = `(${SIMPLE_SHEET_NAME}|${QUOTED_SHEET_NAME})!`;
+const LABEL_EXTRACT_REGEXP = new RegExp(`^(?:${SHEET_NAME_PREFIX})?([$])?([A-Za-z]*)([$])?([0-9]*)$`);
 
 // Split a cell label like `Sheet1!$A$1` into [row, column, sheetName]. Returns
 // [null, null, null] when unparseable. Used by the parser to build cell refs.
