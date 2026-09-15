@@ -11,31 +11,36 @@ const TEST_WORKER_URL = new URL('../fixtures/transform-test-worker.ts', import.m
 
 type TestDirective = { behavior?: string; ms?: number };
 
-function makeRequest(directive: TestDirective = {}, buffers: ArrayBuffer[] = []): DocumentTransformRequest {
-    const request = {
+// The scriptable worker reads its script off `test`, the one field a production request
+// never carries. Fixtures are the production type plus that directive, so a new required
+// field on a request arm breaks them at compile time instead of at run time.
+type TestRequest = DocumentTransformRequest & { test: TestDirective };
+
+function makeRequest(directive: TestDirective = {}, buffers: ArrayBuffer[] = []): TestRequest {
+    return {
         kind: 'preview',
         documentType: 'eigensheets',
+        mediaUrls: new Map(),
         source: { snapshot: null, updates: buffers.map((data, i) => ({ id: i + 1, data })) },
         test: directive,
     };
-    return request as unknown as DocumentTransformRequest;
 }
 
-function makeExportRequest(directive: TestDirective = {}): DocumentTransformRequest {
-    const request = {
+function makeExportRequest(directive: TestDirective = {}): TestRequest {
+    return {
         kind: 'export',
         documentType: 'eigensheets',
         format: 'html',
         title: 'runner-test',
+        media: [],
         source: { snapshot: null, updates: [] },
         test: directive,
     };
-    return request as unknown as DocumentTransformRequest;
 }
 
 // Doc/slides exports carry prepared media buffers, which ride the same transfer list.
-function makeMediaExportRequest(directive: TestDirective, media: ArrayBuffer[]): DocumentTransformRequest {
-    const request = {
+function makeMediaExportRequest(directive: TestDirective, media: ArrayBuffer[]): TestRequest {
+    return {
         kind: 'export',
         documentType: 'eigendoc',
         format: 'html',
@@ -44,24 +49,21 @@ function makeMediaExportRequest(directive: TestDirective, media: ArrayBuffer[]):
         source: { snapshot: null, updates: [] },
         test: directive,
     };
-    return request as unknown as DocumentTransformRequest;
 }
 
-function makeImportRequest(directive: TestDirective = {}, data: ArrayBuffer = new ArrayBuffer(0)) {
-    const request = { kind: 'import', sourceFormat: 'xlsx', targetType: 'eigensheets', data, test: directive };
-    return request as unknown as DocumentTransformRequest;
+function makeImportRequest(directive: TestDirective = {}, data: ArrayBuffer = new ArrayBuffer(0)): TestRequest {
+    return { kind: 'import', sourceFormat: 'xlsx', targetType: 'eigensheets', data, test: directive };
 }
 
 // The only result arm with a nested payload of its own: the extracted docx images.
-function makeDocImportRequest(directive: TestDirective = {}) {
-    const request = {
+function makeDocImportRequest(directive: TestDirective = {}): TestRequest {
+    return {
         kind: 'import',
         sourceFormat: 'docx',
         targetType: 'eigendoc',
         data: new ArrayBuffer(0),
         test: directive,
     };
-    return request as unknown as DocumentTransformRequest;
 }
 
 // The production limits per kind. Tests about lifecycle rather than admission run
