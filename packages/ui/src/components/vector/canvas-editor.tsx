@@ -50,6 +50,7 @@ import { cn } from '@workspace/ui/lib/utils';
 import { ImageIcon } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isTypingTarget } from '../../hooks/is-typing-target';
+import { useDialogOpen } from '../../hooks/use-dialog-open';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
 import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
 import { CursorLayer } from '../collab';
@@ -444,9 +445,11 @@ export function CanvasEditor({
     // Every canvas hotkey (V/R/D/O/T, Q, Delete/Backspace, arrows, ⌘A, ⌘D, ⌘Z/⌘⇧Z, z-order) is gated
     // off while ANY text surface is open — the textarea's native undo/typing owns keys in-session, and
     // the lib's ignoreInputs default does not cover a ProseMirror contenteditable, so a tool letter
-    // would otherwise be swallowed as a keystroke inside the in-place editor.
+    // would otherwise be swallowed as a keystroke inside the in-place editor. An open dialog stands the
+    // keymap down too, or Delete on its button would delete the selection behind it.
+    const dialogOpen = useDialogOpen();
     useCanvasKeyboard({
-        enabled: canEdit && !textEditing,
+        enabled: canEdit && !textEditing && !dialogOpen,
         elements: visibleElements,
         selectedIds,
         setTool,
@@ -517,13 +520,13 @@ export function CanvasEditor({
     // Layered Escape (bubble phase): ObjectTransform claims mid-resize/rotate Escapes in the capture
     // phase and stops them, so this never fires during a grip drag. It cancels an in-progress
     // canvas gesture, else deselects, else returns to the select tool.
-    const escRef = useRef({ hasSelection: false, tool, toolLocked });
-    escRef.current = { hasSelection: selectedIds.length > 0, tool, toolLocked };
+    const escRef = useRef({ hasSelection: false, tool, toolLocked, dialogOpen });
+    escRef.current = { hasSelection: selectedIds.length > 0, tool, toolLocked, dialogOpen };
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
-            // A dialog/palette input owns its own Escape (close, clear); no gesture can be active
-            // while one has focus, so skipping the whole handler is safe.
-            if (e.key !== 'Escape' || isTypingTarget()) return;
+            // A dialog or a palette input owns its own Escape (close, clear); no gesture can be active
+            // while one is up, so skipping the whole handler is safe.
+            if (e.key !== 'Escape' || isTypingTarget() || escRef.current.dialogOpen) return;
             const g = gestureRef.current;
             const s = escRef.current;
             if (g) {

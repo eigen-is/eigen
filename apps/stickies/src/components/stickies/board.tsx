@@ -29,6 +29,7 @@ import { CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/c
 import { useContextMenu } from '@workspace/ui/components/context-menu';
 import { NoteCard } from '@workspace/ui/components/notes';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
+import { useDialogOpen } from '@workspace/ui/hooks/use-dialog-open';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import * as Y from 'yjs';
 import { AddColumnDialog } from './add-column-dialog';
@@ -165,7 +166,9 @@ export function StickiesBoard({
     useStickiesPresence(provider, user, presenceCardIds);
     const cardPresence = useCardPresence(provider);
 
-    useYjsUndoHotkeys(undoManager, canWrite);
+    // Off while a dialog (the card editor, a confirm) is up: ⌘Z on its button would undo the board.
+    const dialogOpen = useDialogOpen();
+    useYjsUndoHotkeys(undoManager, canWrite && !dialogOpen);
 
     const { isMobile } = useLayout();
     const [editColumnId, setEditColumnId] = useState<string | null>(null);

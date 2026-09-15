@@ -7,6 +7,7 @@ import type {
     DocSearchOptions,
 } from '@workspace/lib/types/doc-search';
 import { FindReplaceBar } from '@workspace/ui/components/search/find-replace-bar';
+import { useDialogOpen } from '@workspace/ui/hooks/use-dialog-open';
 import { cn } from '@workspace/ui/lib/utils';
 import type React from 'react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -305,22 +306,32 @@ export function DocSearchProvider({
         openBar(true);
     }, [openBar]);
 
-    useHotkey('Mod+F', (e) => {
-        e.preventDefault();
-        openBar(true);
-    });
+    // The keys listen on the document; behind an open dialog the bar would open unseen.
+    const dialogOpen = useDialogOpen();
+    useHotkey(
+        'Mod+F',
+        (e) => {
+            e.preventDefault();
+            openBar(true);
+        },
+        { enabled: !dialogOpen },
+    );
     // ⌥⌘F on macOS, Ctrl+Alt+F elsewhere (order-free at runtime)
-    useHotkey('Mod+Alt+F', (e) => {
-        e.preventDefault();
-        openReplace();
-    });
+    useHotkey(
+        'Mod+Alt+F',
+        (e) => {
+            e.preventDefault();
+            openReplace();
+        },
+        { enabled: !dialogOpen },
+    );
     useHotkey(
         'Mod+H',
         (e) => {
             e.preventDefault();
             openReplace();
         },
-        { enabled: !isMac },
+        { enabled: !isMac && !dialogOpen },
     );
     useHotkey(
         'Mod+G',
@@ -328,7 +339,7 @@ export function DocSearchProvider({
             e.preventDefault();
             findStep(1);
         },
-        { enabled: open || query !== '' },
+        { enabled: (open || query !== '') && !dialogOpen },
     );
     useHotkey(
         'Mod+Shift+G',
@@ -336,7 +347,7 @@ export function DocSearchProvider({
             e.preventDefault();
             findStep(-1);
         },
-        { enabled: open || query !== '' },
+        { enabled: (open || query !== '') && !dialogOpen },
     );
     // Escape fires in inputs by @tanstack/hotkeys default; the bar input also wires Esc→close on its
     // own onKeyDown (belt-and-suspenders + so per-surface layered-Escape plans can gate this one).
@@ -347,7 +358,7 @@ export function DocSearchProvider({
             e.preventDefault();
             close();
         },
-        { enabled: open },
+        { enabled: open && !dialogOpen },
     );
 
     const onQueryChange = useCallback(

@@ -8,6 +8,7 @@ import {
     mailboxRouteSegment,
 } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary } from '@workspace/lib/types/mail';
+import { useDialogOpen } from '@workspace/ui/hooks/use-dialog-open';
 import type { UseListSelectionReturn } from '@workspace/ui/hooks/use-list-selection';
 import { type RefObject, useEffect, useRef, useState } from 'react';
 
@@ -30,12 +31,6 @@ function isEditableTarget(el: Element | null): boolean {
     }
     if (el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) return true;
     return el instanceof HTMLElement && el.isContentEditable;
-}
-
-// Radix traps focus inside an open modal (a drive location picker, a confirm), so the active element
-// says whether one is up. Every key here listens on the document and would act on the message behind it.
-function isInsideDialog(el: Element | null): boolean {
-    return !!el?.closest('[role="dialog"], [role="alertdialog"]');
 }
 
 type UseMailShortcutsOptions = {
@@ -113,19 +108,17 @@ export function useMailShortcuts({
     onForward,
     undoLast,
 }: UseMailShortcutsOptions): void {
-    const optedIn = shortcutsEnabled && !isComposing && !helpOpen;
+    // Every key here listens on the document, so the set stands down while a dialog is open (a drive
+    // location picker, a confirm, the quick-look preview) or it would act on the message behind it.
+    const dialogOpen = useDialogOpen();
+    const enabled = shortcutsEnabled && !isComposing && !helpOpen && !dialogOpen;
 
-    // Two focus gates. A dialog stands the whole set down. A field stands the chords down: the
-    // sequence matcher (unlike the single-key one) fires even inside inputs, so typing e.g. "git" in
-    // search would trigger `g i`.
-    const [dialogFocused, setDialogFocused] = useState(false);
+    // The sequence matcher (unlike the single-key one) fires even inside inputs, so gate the chords
+    // off while a field is focused — otherwise typing e.g. "git" in search would trigger `g i`.
     const [inputFocused, setInputFocused] = useState(false);
     useEffect(() => {
-        if (!optedIn) return;
-        const sync = () => {
-            setDialogFocused(isInsideDialog(document.activeElement));
-            setInputFocused(isEditableTarget(document.activeElement));
-        };
+        if (!enabled) return;
+        const sync = () => setInputFocused(isEditableTarget(document.activeElement));
         sync();
         document.addEventListener('focusin', sync);
         document.addEventListener('focusout', sync);
@@ -133,8 +126,7 @@ export function useMailShortcuts({
             document.removeEventListener('focusin', sync);
             document.removeEventListener('focusout', sync);
         };
-    }, [optedIn]);
-    const enabled = optedIn && !dialogFocused;
+    }, [enabled]);
     const chordsEnabled = enabled && !inputFocused;
 
     // `*` select chords in one capture-phase listener: `*` arms, and the key right after it (within
@@ -242,11 +234,10 @@ export function useMailShortcuts({
     // ? — open the help overlay. RawHotkey because '?' is Shift+/ (layout-dependent, excluded from
     // the lib's typed string union), so the matcher needs key '?' + shift.
     // `?` toggles the help overlay — enabled while it's open (unlike the rest of the map) so a second
-    // `?` can close it, not just Escape/overlay-click; the help overlay is itself a dialog, hence the
-    // helpOpen escape from the dialog gate. Any other dialog (the quick-look preview) stands it down,
-    // or the overlay opens unseen behind it.
+    // `?` can close it, not just Escape/overlay-click; the overlay is itself a dialog, hence the
+    // helpOpen escape from the dialog gate. Any other dialog stands it down, or it opens unseen behind.
     useHotkey({ key: '?', shift: true }, () => openHelp(), {
-        enabled: shortcutsEnabled && !isComposing && (helpOpen || !dialogFocused),
+        enabled: shortcutsEnabled && !isComposing && (helpOpen || !dialogOpen),
     });
 
     // Destructive: e archive / ! spam / # delete. Priority open > selection > cursor.

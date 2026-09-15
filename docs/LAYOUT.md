@@ -318,6 +318,8 @@ If hover icons would affect row height, use `absolute` positioning so they float
 Use `@tanstack/react-hotkeys` for global shortcuts and `formatForDisplay()` for tooltip labels. Keep manual
 listeners for stateful navigation (`use-keyboard-list-navigation.ts`) and framework-specific contexts (Tiptap).
 
+**A document-level keymap folds `useDialogOpen()` (`packages/ui/src/hooks/use-dialog-open.ts`) into its `enabled`.** The library's own guard covers text fields only; a key pressed on a dialog button otherwise acts on the document behind it (Delete on a confirm button deleting the canvas selection, `#` in the mail location picker trashing the message). The hook watches the DOM for an open `role="dialog"` / `role="alertdialog"` element — Radix dialogs, alert dialogs and popovers, and the `useFocusTrap` overlays all carry it — so no registry is kept. Overlays that are dialogs themselves (`file-preview.tsx`, the mail cheat sheet) register their keys ungated. Current consumers: the mail shortcut set, the canvas keymap and its layered Escape, the find bar, the stickies undo keys.
+
 ```tsx
 import { useHotkey, formatForDisplay } from '@tanstack/react-hotkeys';
 
