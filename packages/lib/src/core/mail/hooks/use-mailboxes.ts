@@ -3,13 +3,16 @@ import { mailApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import { AppError } from '../../api-error';
+import { usePublicConfig } from '../../public';
 import { mailboxKeys } from './keys';
 
-// `enabled` off for a mail-off server: the route still mounts (a bookmark lands there) and would
-// otherwise fetch and retry a mailbox list no backend serves.
-export function useMailboxes(enabled = true) {
+// Off until the config says mail is on: the route still mounts (a bookmark lands there) and would
+// otherwise fetch and retry a mailbox list no backend serves. `useMailEnabled()` is the wrong gate
+// here — it assumes on until the config lands, so a fresh load of a mail-off server still fetched.
+export function useMailboxes() {
     const { user } = useAuth();
     const ownerId = user?.id || '';
+    const { data: config } = usePublicConfig();
 
     return useQuery({
         queryKey: mailboxKeys.lists(ownerId),
@@ -20,6 +23,6 @@ export function useMailboxes(enabled = true) {
         },
         staleTime: STALE_TIME.ONE_MINUTE,
         retry: 1,
-        enabled: enabled && !!ownerId,
+        enabled: config?.mailEnabled === true && !!ownerId,
     });
 }
