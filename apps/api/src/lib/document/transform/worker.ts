@@ -28,7 +28,7 @@ async function renderPreview(
     switch (request.documentType) {
         case 'eigensheets': {
             const { renderEigensheetsPreviewBody } = await import('../../preview/eigensheets-render');
-            return renderEigensheetsPreviewBody(doc);
+            return renderEigensheetsPreviewBody(doc, request.mediaUrls);
         }
         case 'eigendoc': {
             const { renderEigendocPreviewBody } = await import('../../preview/eigendoc-render');
@@ -52,7 +52,7 @@ async function renderExport(
     switch (request.documentType) {
         case 'eigensheets': {
             const { renderEigensheetsExport } = await import('../../export/sheets/transform');
-            return renderEigensheetsExport(doc, request.format, request.title);
+            return renderEigensheetsExport(doc, request.format, request.title, request.media);
         }
         case 'eigendoc': {
             const { renderEigendocExport } = await import('../../export/doc/transform');

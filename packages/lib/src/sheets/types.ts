@@ -120,6 +120,21 @@ export type BorderStyleName =
 
 export type MergeCell = { r: number; c: number; rs: number; cs: number };
 
+// A floating image on a sheet: absolutely positioned over the grid in unzoomed grid
+// pixels (0,0 is A1's top-left), rotated about its own center. `mediaName` names the
+// file in the document's `media/` folder — the editor and the server renderers both
+// resolve it at render time (docs/MEDIA-REFERENCES.md). `angle` is absent on images
+// stored before rotation existed and reads as 0 at every render/commit site.
+export type SheetImage = {
+    id: string;
+    mediaName: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    angle?: number;
+};
+
 // Per-cell data-validation rule, produced by the editor's state layer
 // (state/modules/data-verification.ts) and consumed by the canvas painter
 // (red-triangle indicator + checkbox draw). Keyed by `${row}_${col}` on
@@ -248,6 +263,10 @@ export type Sheet = {
     // goToLink navigation. The linked cell carries the `hl` backref. linkType
     // ∈ webpage | sheet | cellrange (state/modules/hyperlink.ts).
     hyperlink?: Record<string, { linkType: string; linkAddress: string }>;
+    // Floating images, in paint order. Empty on every sheet that has none — the
+    // decoder materializes the list the way normalizeSheetConfig materializes a
+    // config collection, so an op replacing it resolves against any base.
+    images?: SheetImage[];
 };
 
 // The editor-runtime Sheet: the wire shape plus the calc chain the reader gate keys off.

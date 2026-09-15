@@ -9,6 +9,8 @@ import {
     type MergeCell,
     mergedBorderSides,
     type Sheet,
+    type SheetConfig,
+    type SheetImage,
 } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import {
@@ -46,6 +48,11 @@ const BASE_TD_STYLE = 'overflow:hidden;white-space:nowrap;padding:1px 2px';
 
 const PAGE_MARGIN = 40;
 const PAGE_SLACK = 20;
+
+// Floating-image sources by media name: data: URIs for an export, the prepared
+// /file/<id>/preview URLs for a preview. A caller with nothing to resolve passes none
+// and the grid renders alone — a workbook without floating images needs no media.
+type MediaUrls = Map<string, string>;
 
 // Full exports intern every emitted style into a class ("s0", "s1", …) declared in a
 // body <style> element: a real workbook repeats a few hundred distinct styles across
@@ -106,8 +113,8 @@ function cssLength(value: number | undefined, fallback: number): number {
 
 // Runs inside the transform Worker (worker.ts owns execution; the format logic
 // stays here in export/).
-export function renderSheetsExportDocument(sheets: Sheet[], title: string): string {
-    const { html, css } = renderSheetsHtml(sheets);
+export function renderSheetsExportDocument(sheets: Sheet[], title: string, mediaUrls: MediaUrls): string {
+    const { html, css } = renderSheetsHtml(sheets, mediaUrls);
     // target isn't in DOMPurify's default allowlist; hyperlink anchors always pair
     // it with rel="noopener noreferrer", so letting it through is tabnabbing-safe.
     const sanitized = sanitizeExportHtml(`<style>${css}</style>\n${html}`, { ADD_ATTR: ['target'] });
@@ -117,7 +124,7 @@ export function renderSheetsExportDocument(sheets: Sheet[], title: string): stri
 // Runs inside the transform Worker. The page is sized to the widest/tallest sheet
 // so WeasyPrint never clips a wide grid. Unlike the HTML export this sanitizes
 // with no options — no `target` on anchors in a PDF.
-export function renderSheetsPdfDocument(sheets: Sheet[], title: string): string {
+export function renderSheetsPdfDocument(sheets: Sheet[], title: string, mediaUrls: MediaUrls): string {
     let maxW = 0;
     let maxH = 0;
     for (const sheet of sheets) {
@@ -126,7 +133,7 @@ export function renderSheetsPdfDocument(sheets: Sheet[], title: string): string 
         if (size.height > maxH) maxH = size.height;
     }
 
-    const { html, css } = renderSheetsHtml(sheets);
+    const { html, css } = renderSheetsHtml(sheets, mediaUrls);
     const sanitized = sanitizeExportHtml(`<style>${css}</style>\n${html}`);
     const pageSize = {
         width: maxW + 2 * PAGE_MARGIN + PAGE_SLACK,
@@ -160,11 +167,11 @@ function createRenderContext(sheets: Sheet[]): { engine: FormulaEngine; resolver
     return { engine, resolver };
 }
 
-export function renderSheetsHtml(sheets: Sheet[]): { html: string; css: string } {
+export function renderSheetsHtml(sheets: Sheet[], mediaUrls?: MediaUrls): { html: string; css: string } {
     const { engine, resolver } = createRenderContext(sheets);
     const styles: StyleRegistry = new Map();
     const html = sheets
-        .map((sheet, i) => renderSheet(sheet, i === sheets.length - 1, engine, resolver, { styles }).html)
+        .map((sheet, i) => renderSheet(sheet, i === sheets.length - 1, engine, resolver, { styles, mediaUrls }).html)
         .join('\n');
     return { html, css: serializeStyleRules(styles) };
 }
@@ -174,10 +181,10 @@ export function renderSheetsHtml(sheets: Sheet[]): { html: string; css: string }
 // still spans every sheet so cross-sheet CF formula refs resolve correctly.
 // `truncated` is true whenever rows, columns, cells, or additional sheets were
 // omitted — the caller appends the shared truncated marker.
-export function renderSheetsPreviewHtml(sheets: Sheet[]): { html: string; truncated: boolean } {
+export function renderSheetsPreviewHtml(sheets: Sheet[], mediaUrls?: MediaUrls): { html: string; truncated: boolean } {
     if (sheets.length === 0) return { html: '', truncated: false };
     const { engine, resolver } = createRenderContext(sheets);
-    const first = renderSheet(sheets[0], true, engine, resolver, { budget: PREVIEW_SHEET_BUDGET });
+    const first = renderSheet(sheets[0], true, engine, resolver, { budget: PREVIEW_SHEET_BUDGET, mediaUrls });
     return { html: first.html, truncated: first.truncated || sheets.length > 1 };
 }
 
@@ -270,15 +277,22 @@ function renderSheet(
     isLast: boolean,
     engine: FormulaEngine,
     resolver: CellResolver,
-    { budget, styles }: { budget?: SheetPreviewBudget; styles?: StyleRegistry } = {},
+    { budget, styles, mediaUrls }: { budget?: SheetPreviewBudget; styles?: StyleRegistry; mediaUrls?: MediaUrls } = {},
 ): { html: string; truncated: boolean } {
     const forStylesheet = styles !== undefined;
     const config = sheet.config ?? {};
     const showGrid = sheet.showGridLines !== false && sheet.showGridLines !== 0;
 
     const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, config.borderInfo ?? {});
+    // Guarded on the images: the offset walks every row above the window, and a lone cell
+    // far down the grid makes that walk a million iterations for nothing.
+    const overlay =
+        sheet.images?.length && mediaUrls
+            ? renderFloatingImages(sheet.images, mediaUrls, gridOffset(config, minRow, minCol), styles)
+            : '';
     if (maxRow < 0 || maxCol < 0) {
-        return { html: `<div class="sheet"></div>`, truncated: false };
+        // An image pasted onto an otherwise blank sheet is all there is to render.
+        return { html: `<div class="sheet">${overlayBox('', overlay, 0, styles)}</div>`, truncated: false };
     }
 
     // The render window comes first: everything below is bounded by what is actually
@@ -411,8 +425,9 @@ function renderSheet(
     const pageBreak = isLast || forStylesheet ? '' : ' style="page-break-after:always"';
     const q = fontQuote(forStylesheet);
     const tableStyle = `border-collapse:collapse;table-layout:fixed;font-family:${q}Inter${q},system-ui,sans-serif;font-size:11px;color:#1a1a2e;background:#fff;width:${tableWidth}px`;
+    const table = `<table ${styleAttr(styles, tableStyle)}>${colgroup}<tbody>${rows.join('')}</tbody></table>`;
     const html = `<div class="${divClass}"${pageBreak}>
-<table ${styleAttr(styles, tableStyle)}>${colgroup}<tbody>${rows.join('')}</tbody></table>
+${overlayBox(table, overlay, tableWidth, styles)}
 </div>`;
     return { html, truncated };
 }
@@ -456,6 +471,53 @@ function renderDataBar(bar: DataBar, display: string, styles?: StyleRegistry): s
 
     const barStyle = `position:absolute;top:0;left:${left}%;width:${width}%;height:100%;background:${fill};z-index:0`;
     return `<div ${styleAttr(styles, barStyle)}></div><span ${styleAttr(styles, 'position:relative;z-index:1')}>${display}</span>`;
+}
+
+// Floating images are stored in unzoomed grid pixels from A1's top-left (the editor's
+// ImgBoxs reads the same fields into left/top/width/height), while the table starts at
+// the used range — so the overlay subtracts the rows and columns the window skipped.
+function gridOffset(config: SheetConfig, minRow: number, minCol: number): { left: number; top: number } {
+    let left = 0;
+    for (let c = 0; c < minCol; c++) {
+        if (config.colhidden?.[c]) continue;
+        left += cssLength(config.columnlen?.[c], DEFAULT_COL_WIDTH);
+    }
+    let top = 0;
+    for (let r = 0; r < minRow; r++) {
+        if (config.rowhidden?.[r]) continue;
+        top += cssLength(config.rowlen?.[r], DEFAULT_ROW_HEIGHT);
+    }
+    return { left, top };
+}
+
+// An image whose name resolves to nothing renders nothing: a `pending:` name from an
+// upload that never settled, or a media file deleted under the reference.
+function renderFloatingImages(
+    images: SheetImage[],
+    mediaUrls: MediaUrls,
+    offset: { left: number; top: number },
+    styles?: StyleRegistry,
+): string {
+    const parts: string[] = [];
+    for (const img of images) {
+        const src = mediaUrls.get(img.mediaName);
+        if (src === undefined) continue;
+        // Geometry is schemaless at the Yjs boundary, like every other stored dimension here.
+        const angle = cssLength(img.angle, 0);
+        const decl =
+            `position:absolute;left:${cssLength(img.x, 0) - offset.left}px;top:${cssLength(img.y, 0) - offset.top}px;` +
+            `width:${cssLength(img.width, 0)}px;height:${cssLength(img.height, 0)}px` +
+            (angle ? `;transform:rotate(${angle}deg);transform-origin:center center` : '');
+        parts.push(`<img ${styleAttr(styles, decl)} src="${escapeHtml(src)}" alt="">`);
+    }
+    return parts.join('');
+}
+
+// The grid's positioning context. With no images the table is emitted bare, so a workbook
+// without them renders exactly the markup it always did.
+function overlayBox(table: string, overlay: string, width: number, styles?: StyleRegistry): string {
+    if (!overlay) return table;
+    return `<div ${styleAttr(styles, `position:relative;width:${width}px`)}>${table}${overlay}</div>`;
 }
 
 function buildCellStyle(

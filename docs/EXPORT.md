@@ -122,7 +122,7 @@ bytes transferred back to the main thread
         +-> PDF export (feed to WeasyPrint subprocess)
 ```
 
-`runDocumentExport(job, mount, path, signal?)` (`export-document.ts`) is the single main-thread entry every type and format shares: it derives the title, prepares the media for doc, slides and vector (sheets embed none), then calls `runTransformToBytes` — the same seam the previews use. `html` and `pdf-html` produce the identical document today (WeasyPrint renders exactly what the download serves), and `docx` is that same document converted in the Worker. The `<title>` keeps the UNstripped container name (`Report.eigendoc`) — frozen output, pinned by `document-export-route.test.ts`; the docx document property keeps the stripped name (`Report`).
+`runDocumentExport(job, mount, path, signal?)` (`export-document.ts`) is the single main-thread entry every type and format shares: it derives the title, prepares the media for every type, then calls `runTransformToBytes` — the same seam the previews use. `html` and `pdf-html` produce the identical document today (WeasyPrint renders exactly what the download serves), and `docx` is that same document converted in the Worker. The `<title>` keeps the UNstripped container name (`Report.eigendoc`) — frozen output, pinned by `document-export-route.test.ts`; the docx document property keeps the stripped name (`Report`).
 
 ### Sanitization and SSRF
 
@@ -276,7 +276,8 @@ loop:
 | `html`  | `Sheet[]` → `renderSheetsExportDocument` standalone HTML | headers + response |
 
 All three formats go through `runDocumentExport` (`export-document.ts`), the single main-thread entry — it
-derives the title and calls `runTransformToBytes` (`lib/document/transform/run-transform.ts`), the one
+derives the title, prepares the media (a workbook's floating images, `collectExportMedia`) and calls
+`runTransformToBytes` (`lib/document/transform/run-transform.ts`), the one
 main-thread seam that captures the compressed Yjs blobs, admits the job, surfaces warnings, and maps failures,
 shared with the sheets preview. Inside the Worker,
 `renderEigensheetsExport` (`export/sheets/transform.ts`) materializes once and lazily imports only the
@@ -307,7 +308,9 @@ whose rules ship in a body `<style>` element, so DOMPurify never CSS-parses per-
 keeps inline styles (its fragment embeds without a `<head>`), clips
 the first sheet to the preview budget and runs inside the document-transform Worker (see PREVIEWS.md). Both
 render webpage hyperlinks as `target="_blank" rel="noopener noreferrer"` anchors through the same scheme
-gate (internal links stay plain text — no meaningful target in standalone HTML).
+gate (internal links stay plain text — no meaningful target in standalone HTML). Both paint the sheet's
+floating images over the grid, from the prepared media map — data: URIs for an export, preview URLs for the
+preview (SHEETS.md § HTML/PDF export). The xlsx arm drops them: ExcelJS writes no floating picture here.
 
 ### File Structure
 

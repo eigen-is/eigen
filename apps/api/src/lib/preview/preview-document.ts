@@ -15,11 +15,7 @@ export async function generateDocumentPreview(
     drivePath: DrivePath,
     priority: TransformPriority = 'foreground',
 ): Promise<string> {
-    // Doc/slides/vector media resolves here — the Worker never sees a Mount.
-    if (documentType === 'eigensheets') {
-        return runTransformToText(mount, drivePath, { kind: 'preview', documentType }, { priority });
-    }
-
+    // Media resolves here — the Worker never sees a Mount.
     const prepStart = performance.now();
     const mediaUrls = await buildPreviewUrlMap(mount, drivePath);
     const job = { kind: 'preview', documentType, mediaUrls } as const;
