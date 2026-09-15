@@ -116,8 +116,9 @@ type SSEventSpace = {
     type: typeof SSEventType.SPACE_SETTINGS_UPDATED;
 };
 
-// Sent to the admin who started the job on every state or progress change. The payload is a poke:
-// the admin pane refetches the job and artifact lists, which the server answers from the job map.
+// Sent to every admin on every state or progress change, because any of them can have the pane open.
+// The payload is a poke: the pane refetches the job and artifact lists, which the server answers from
+// the job map.
 type SSEventBackup = {
     type: typeof SSEventType.BACKUP_JOB_UPDATED;
     jobId: string;
