@@ -254,6 +254,19 @@ export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseView
         set(settle(zoomAt(viewportRef.current, 1, width / 2, height / 2)));
     }, [fitFrame, containerExtent, settle, set]);
 
+    // Bring a scene point to the container center at the current zoom (a ⌘F reveal). A bounded page
+    // settles back to its fit, so there it is a no-op; an unmeasured container is left to the opening
+    // effect, which centers the origin once it has a size.
+    const centerOn = useCallback(
+        (x: number, y: number) => {
+            const { width, height } = containerExtent();
+            if (width === 0 || height === 0) return;
+            const { zoom } = viewportRef.current;
+            set(settle({ zoom, scrollX: width / 2 / zoom - x, scrollY: height / 2 / zoom - y }));
+        },
+        [containerExtent, settle, set],
+    );
+
     // Non-passive wheel: pan by default, zoom-at-cursor on ctrl/meta (trackpad pinch sends ctrl).
     // Bound once; reads the live viewport through `write` and the container rect at call time.
     useEffect(() => {
@@ -295,6 +308,7 @@ export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseView
         panBy,
         pinch,
         resetZoom,
+        centerOn,
         frozenRef,
         zoom,
     };

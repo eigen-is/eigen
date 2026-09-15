@@ -89,6 +89,10 @@ describe('useViewport in frame mode', () => {
         // The zoom pill is hidden in frame mode; its action re-fits rather than jumping to 100%.
         act(() => h.state.resetZoom());
         expect(h.state.viewportRef.current).toEqual(fitted);
+
+        // A ⌘F reveal settles back to the fit: the whole page is already on screen.
+        act(() => h.state.centerOn(1800, 1000));
+        expect(h.state.viewportRef.current).toEqual(fitted);
         h.unmount();
     });
 
@@ -124,6 +128,18 @@ describe('useViewport on the infinite canvas', () => {
         h.wheel({ deltaY: 200 });
         expect(h.state.viewportRef.current.scrollY).toBeLessThan(zoomed.scrollY);
         expect(h.state.viewportRef.current.zoom).toBe(zoomed.zoom);
+        h.unmount();
+    });
+
+    test('centerOn brings a scene point to the container center at the current zoom', () => {
+        const h = mount({ mode: 'infinite' }, { width: 1600, height: 1000 });
+        act(() => h.state.centerOn(300, -200));
+        expect(h.state.viewportRef.current).toEqual({ zoom: 1, scrollX: 500, scrollY: 700 });
+
+        h.wheel({ deltaY: -200, ctrlKey: true, clientX: 800, clientY: 500 });
+        const { zoom } = h.state.viewportRef.current;
+        act(() => h.state.centerOn(300, -200));
+        expect(h.state.viewportRef.current).toEqual({ zoom, scrollX: 800 / zoom - 300, scrollY: 500 / zoom + 200 });
         h.unmount();
     });
 });

@@ -243,6 +243,7 @@ export function CanvasEditor({
         panBy,
         pinch,
         resetZoom,
+        centerOn,
         frozenRef,
         zoom,
     } = useViewport({
@@ -567,6 +568,16 @@ export function CanvasEditor({
     visibleRef.current = visibleElements;
     const elementsRef = useRef(elements);
     elementsRef.current = elements;
+
+    // A ⌘F step brings its match to the container center, or the bar could cover it. Keyed on the id
+    // alone: a scene edit while the bar is open must not snap the view back to the match.
+    useEffect(() => {
+        if (!searchActiveId) return;
+        const el = elementsRef.current.find((e) => e.id === searchActiveId);
+        if (!el) return;
+        const box = elementBox(el);
+        centerOn(box.x + box.width / 2, box.y + box.height / 2);
+    }, [searchActiveId, centerOn]);
 
     // Snap targets = every OTHER visible element's edges/center (rotated → center only), plus the
     // frame's own edges and center lines when there is one — an object aligns to the page the way it
