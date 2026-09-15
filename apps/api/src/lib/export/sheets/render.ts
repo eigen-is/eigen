@@ -272,7 +272,7 @@ function rowSpan(config: SheetConfig, from: number, to: number): number {
 
 export function getSheetContentSize(sheet: Sheet): { width: number; height: number } {
     const config = sheet.config ?? {};
-    const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, config.borderInfo ?? {});
+    const { minRow, minCol, maxRow, maxCol } = getRenderBounds(sheet, config);
     const blank = maxRow < 0 || maxCol < 0;
     const offset = blank ? { left: 0, top: 0 } : gridOffset(config, minRow, minCol);
     let width = blank ? 0 : colSpan(config, minCol, maxCol);
@@ -321,7 +321,7 @@ function renderSheet(
               )
             : '';
 
-    const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, config.borderInfo ?? {});
+    const { minRow, minCol, maxRow, maxCol } = getRenderBounds(sheet, config);
     if (maxRow < 0 || maxCol < 0) {
         // An image pasted onto an otherwise blank sheet is all there is to render, clipped to the
         // same budget window as the grid path below.
@@ -721,6 +721,38 @@ function getGridBounds(
 
     if (maxRow < 0) return { minRow: 0, minCol: 0, maxRow: -1, maxCol: -1 };
     return { minRow, minCol, maxRow, maxCol };
+}
+
+// Images are stored in grid pixels from A1 while the overlay positions them against the window's
+// first cell, so one anchored above or left of the used range would take a negative offset and
+// fall off the page: the window drops to the track the earliest image starts in.
+function getRenderBounds(
+    sheet: Sheet,
+    config: SheetConfig,
+): { minRow: number; minCol: number; maxRow: number; maxCol: number } {
+    const bounds = getGridBounds(sheet, config.borderInfo ?? {});
+    if (!sheet.images?.length || bounds.maxRow < 0) return bounds;
+
+    let x = Number.MAX_SAFE_INTEGER;
+    let y = Number.MAX_SAFE_INTEGER;
+    for (const img of sheet.images) {
+        x = Math.min(x, cssLength(img.x, 0));
+        y = Math.min(y, cssLength(img.y, 0));
+    }
+
+    let minCol = 0;
+    let left = 0;
+    while (minCol < bounds.minCol && left + colSpan(config, minCol, minCol) <= x) {
+        left += colSpan(config, minCol, minCol);
+        minCol++;
+    }
+    let minRow = 0;
+    let top = 0;
+    while (minRow < bounds.minRow && top + rowSpan(config, minRow, minRow) <= y) {
+        top += rowSpan(config, minRow, minRow);
+        minRow++;
+    }
+    return { ...bounds, minRow, minCol };
 }
 
 function wrapInDocument(title: string, bodyHtml: string, pageSize?: { width: number; height: number }): string {

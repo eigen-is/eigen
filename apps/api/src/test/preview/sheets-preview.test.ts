@@ -206,6 +206,22 @@ describe('eigensheets preview (floating images)', () => {
         doc.destroy();
     });
 
+    test('an image anchored above the used range reaches the body', () => {
+        const cell = { v: 'C5', m: 'C5', ct: { fa: 'General', t: 'g' } };
+        const sheet: Sheet = {
+            id: 'above',
+            name: 'Above',
+            celldata: [{ r: 4, c: 2, v: cell }],
+            config: {},
+            images: [{ id: 'img_1', mediaName: 'chart.png', x: 0, y: 0, width: 160, height: 60 }],
+        };
+        const doc = new Y.Doc();
+        seedSheetsDoc(doc, [sheet], []);
+        const { body } = renderEigensheetsPreviewBody(doc, new Map([['chart.png', IMAGE_URL]]));
+        expect(body).toContain('left:0px;top:0px;width:160px;height:60px');
+        doc.destroy();
+    });
+
     // Past the budget window's own right edge, not merely past the one-cell grid: the
     // overlay would stretch the fragment's scroll width and collapse the thumbnail.
     test('an image parked far outside the budget window stays out of the body', () => {
