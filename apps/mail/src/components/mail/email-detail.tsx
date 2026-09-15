@@ -300,9 +300,9 @@ export function EmailDetail({ email, toggleMailRead, highlightTerm }: EmailDetai
 
                     {/* Calendar invite widgets */}
                     {email.attachments?.map(
-                        (attachment: Attachment, index: number) =>
+                        (attachment: Attachment) =>
                             isCalendarPart(attachment) && (
-                                <CalendarInviteWidget key={index} invite={attachment.calendarInvite} />
+                                <CalendarInviteWidget key={attachment.index} invite={attachment.calendarInvite} />
                             ),
                     )}
                 </div>

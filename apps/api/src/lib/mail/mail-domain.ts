@@ -33,7 +33,7 @@ import { MaxFileSizeExceededError, parseMultipartRequest } from '../multipart';
 import type { StorageFile } from '../storage';
 import { grantAccessForReferences } from './access-grants';
 import { parseMail } from './mail-parser';
-import type { DraftMeta, MailSearchOptions, MailStore } from './mail-store';
+import type { DraftMeta, DraftMetaAttachment, MailSearchOptions, MailStore } from './mail-store';
 import { createEmlContent, type EmlAttachment } from './mailfile';
 import { buildRecipientSummary, createUniqueMessageId } from './mailutils';
 import { MAX_PERSONALISED_SEND_BYTES } from './recipients';
@@ -272,21 +272,21 @@ export class Mail {
             if (dbRecord) {
                 const meta = await this.store.readDraftMeta(existingId);
                 if (meta && meta.attachments.length > 0) {
-                    // The keep list carries raw EML indexes while the sidecar lists the named parts
-                    // only, so counting is not enough: an index has to land on a part the sidecar
-                    // knows. Anything past them (a part with no filename, which the sidecar drops
-                    // but the composer still chips) means the list is dropping one of the named
-                    // parts, and the fast path would keep it. The hidden invite is the one part
-                    // that shifts those indexes without being listed.
-                    const kept = options.keepAttachmentIndexes;
-                    const knownParts = meta.attachments.length + (meta.hiddenCalendarCount ?? 0);
+                    // The keep list names raw EML parts, so the fast path only holds when the kept
+                    // set is exactly the set the sidecar lists: anything else adds or drops a part
+                    // and needs the EML rebuilt. A sidecar written before its parts carried an
+                    // index can't answer that, so it takes the full save.
+                    const parts = meta.attachments.flatMap((a) =>
+                        a.index === undefined ? [] : [{ ...a, index: a.index }],
+                    );
+                    const kept = options.keepAttachmentIndexes ? new Set(options.keepAttachmentIndexes) : null;
                     const keepAll =
-                        !kept ||
-                        (new Set(kept).size === meta.attachments.length && kept.every((i) => i >= 0 && i < knownParts));
+                        parts.length === meta.attachments.length &&
+                        (!kept || (kept.size === parts.length && parts.every((a) => kept.has(a.index))));
 
                     const stale = meta.lastFullSaveAt && Date.now() - meta.lastFullSaveAt > FULL_SAVE_INTERVAL_MS;
                     if (keepAll && !stale) {
-                        return this.draftFastSave(email, existingId, meta, dbRecord);
+                        return this.draftFastSave(email, existingId, meta, parts, dbRecord);
                     }
                 }
             }
@@ -299,6 +299,7 @@ export class Mail {
         email: NewDraft | EmailDraft,
         existingId: string,
         prevMeta: DraftMeta,
+        parts: Array<Required<DraftMetaAttachment>>,
         dbRecord: EmailSummary,
     ): Promise<EmailDraft> {
         const driveReferences = email.driveReferences ?? prevMeta.driveReferences;
@@ -309,8 +310,7 @@ export class Mail {
             bcc: email.bcc,
             text: email.text || '',
             html: email.html || '',
-            attachments: prevMeta.attachments,
-            hiddenCalendarCount: prevMeta.hiddenCalendarCount,
+            attachments: parts,
             driveReferences,
             inReplyTo: email.inReplyTo,
             references: email.references,
@@ -325,11 +325,12 @@ export class Mail {
         this.emit(SSEventType.MAIL_DRAFT_UPDATED, { messageId: existingId, mailbox: MAILBOX_DRAFTS });
 
         const user = this.home.user;
-        const attachments = meta.attachments.map((a) => ({
+        const attachments = parts.map((a) => ({
             contentType: a.contentType,
             filename: a.filename,
             content: Buffer.alloc(0),
             size: a.size,
+            index: a.index,
         }));
 
         return {
@@ -389,10 +390,9 @@ export class Mail {
         if (existingId && this.store.getSummary(existingId)) {
             const attachments = await this.store.getAttachments(existingId);
             const keepSet = options.keepAttachmentIndexes ? new Set(options.keepAttachmentIndexes) : null;
-            for (let i = 0; i < attachments.length; i++) {
-                const a = attachments[i];
+            for (const a of attachments) {
                 if (!a.filename || isCalendarPart(a)) continue;
-                if (keepSet && !keepSet.has(i)) continue;
+                if (keepSet && !keepSet.has(a.index)) continue;
                 existingAttachments.push({
                     filename: a.filename,
                     content: Buffer.from(a.content),
@@ -458,10 +458,9 @@ export class Mail {
             html: cleanHtml,
             attachments: saved.attachments.flatMap((a) =>
                 a.filename && !isCalendarPart(a)
-                    ? [{ filename: a.filename, contentType: a.contentType, size: a.size }]
+                    ? [{ filename: a.filename, contentType: a.contentType, size: a.size, index: a.index }]
                     : [],
             ),
-            hiddenCalendarCount: saved.attachments.filter(isCalendarPart).length,
             driveReferences,
             inReplyTo: email.inReplyTo,
             references: email.references,

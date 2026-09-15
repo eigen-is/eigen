@@ -43,6 +43,7 @@ export function parseMail(bytes: Buffer): ParsedMail {
                             ? libmime.detectMimeType(filename)
                             : contentType,
                     filename,
+                    index: attachments.length,
                     content,
                     size: content.length,
                     ...(charset && CHARSET_TOKEN.test(charset) && { charset }),

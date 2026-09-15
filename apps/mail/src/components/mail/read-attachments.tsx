@@ -25,9 +25,8 @@ export function ReadAttachments({ emailId, attachments }: ReadAttachmentsProps) 
     const subjects = useMemo(
         () =>
             (attachments ?? [])
-                .map((att, index) => ({ att, index }))
-                .filter(({ att }) => !isCalendarPart(att))
-                .map(({ att, index }) => subjectFromMailAttachment(ownerId, emailId, index, att)),
+                .filter((att) => !isCalendarPart(att))
+                .map((att) => subjectFromMailAttachment(ownerId, emailId, att.index, att)),
         [attachments, emailId, ownerId],
     );
     // Each chip's derived facts once: the key a press resolves through, the name and the byte URL.

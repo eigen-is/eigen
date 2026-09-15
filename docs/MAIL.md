@@ -160,8 +160,9 @@ are in [IMAP.md § File Watching](IMAP.md#file-watching).
 `messageHandleDraft` (`mail-domain.ts`) runs a two-mode draft state machine:
 
 - **Fast save** — writes only the `DraftMeta` JSON sidecar + a light DB content update; skips the EML
-  rebuild. Used when no attachments changed and the last full save is recent (`FULL_SAVE_INTERVAL_MS` = 5
-  min). This leaves the on-disk `.eml` stale until a full save (external IMAP clients see old content).
+  rebuild. Used when the kept set is exactly the set of parts the sidecar lists and the last full save is
+  recent (`FULL_SAVE_INTERVAL_MS` = 5 min). This leaves the on-disk `.eml` stale until a full save
+  (external IMAP clients see old content).
 - **Full save** — rebuilds the RFC 5322 `.eml` (`createEmlContent`), baking Drive reference-pill HTML in.
 
 `messageGet` overlays the sidecar onto the parsed draft so the composer shows what the user typed, not the
@@ -169,7 +170,9 @@ baked markup. `Mail.destruct` force-flushes pending sidecars so a restart never 
 
 The composer (`apps/mail/src/components/mail/email-draft.tsx` + its `hooks/use-draft.ts`) handles To/Cc/Bcc via `ContactAutosuggest`, a `LightEditor` (Tiptap) body, drag/paste-to-attach, debounced (2.5 s) autosave keyed off a fingerprint diff, a forced full save on unmount, signature injection for new/reply drafts, and Mod+Enter to send. Reply/forward are FE-only (quoted-body composition in `use-mail-actions.ts`); reply drafts also seed the `inReplyTo`/`references` threading headers. The send flow (recipient canonicalization, per-recipient link copies, and the access-grant dialog) is its own topic below.
 
-**Calendar parts are never compose chips.** `isCalendarPart` (`@workspace/lib/types/mail`) is the one test the composer, the reader's chip row and `messageHandleDraft` all ask, so a draft an IMAP client left carrying an invite shows only its real attachments while each chip keeps the raw EML index the keep list addresses — which is why the fast-save gate compares the keep list's length against the sidecar's rather than its positions, and bounds every index by the parts the sidecar accounts for (its own list plus `hiddenCalendarCount`, the invites it leaves out). An index past them names a part the sidecar never had, so the save takes the full path rather than keeping an attachment the user removed.
+**Every part carries its index.** `Attachment.index` is the part's raw position in the parsed message, and the server sets it wherever it describes a part: the parser numbers the parts it collects, the sidecar stores each listed part's index, and both draft-save answers carry one per attachment even when they leave parts out. A keep list (`keepAttachmentIndexes`) therefore always names raw parts, and nothing downstream re-numbers — the composer's chips, the reader's chips and the part routes all address the number the server gave.
+
+**Calendar parts are never compose chips.** `isCalendarPart` (`@workspace/lib/types/mail`) is the one test the composer, the reader's chip row and `messageHandleDraft` all ask, so a draft an IMAP client left carrying an invite shows only its real attachments, each under its own index. That is what the fast-save gate compares: the kept set against the set of indexes the sidecar lists, equal meaning nothing was added or removed. A sidecar written before its entries carried an index can't answer that and takes the full save, which rewrites it with indexes. An upload settles against every part the server has, invites included, so a `.ics` a user attaches — which the EML embeds as a hidden calendar part — never leaves its chip holding a tempId the server already consumed. The chip does disappear when the save lands, and the full save rebuilds from the chipped parts only, so that invite is gone from the draft once one runs: compose has no representation for a calendar part today ([ROADMAP.md](ROADMAP.md)).
 
 ## Send path
 

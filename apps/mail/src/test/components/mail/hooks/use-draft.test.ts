@@ -2,16 +2,16 @@ import { describe, expect, test } from 'bun:test';
 import type { Attachment, AttachmentMeta, EmailDraft } from '@workspace/lib/types/mail';
 import { initFields, mergeServerAttachments } from '../../../../components/mail/hooks/use-draft';
 
-function att(filename: string | undefined, contentType: string, size = 10): Attachment {
-    return { filename, contentType, size, content: new Uint8Array(size) };
+function att(filename: string | undefined, contentType: string, index: number, size = 10): Attachment {
+    return { filename, contentType, index, size, content: new Uint8Array(size) };
 }
 
 describe('mergeServerAttachments', () => {
     // A chip's index feeds keepAttachmentIndexes verbatim, so it must be a raw index into the full list.
     const parsed: Attachment[] = [
-        att('invite.ics', 'text/calendar'),
-        att('a.pdf', 'application/pdf'),
-        att('b.pdf', 'application/pdf'),
+        att('invite.ics', 'text/calendar', 0),
+        att('a.pdf', 'application/pdf', 1),
+        att('b.pdf', 'application/pdf', 2),
     ];
 
     test('chips carry raw indexes when a calendar part precedes real attachments', () => {
@@ -28,7 +28,7 @@ describe('mergeServerAttachments', () => {
     });
 
     test('a filename-less part reconciles against the chip named by mailAttachmentName', () => {
-        const nameless: Attachment[] = [att(undefined, 'application/pdf')];
+        const nameless: Attachment[] = [att(undefined, 'application/pdf', 0)];
         const local: AttachmentMeta[] = [
             { key: 'local-0', tempId: 't1', filename: 'attachment-1', size: 10, contentType: 'application/pdf' },
         ];
@@ -36,6 +36,25 @@ describe('mergeServerAttachments', () => {
         expect(serverActual.map((c) => c.filename)).toEqual(['attachment-1']);
         // Same name on both sides: the chip keeps its key and doesn't come back as an in-flight addition.
         expect(localNext.map((c) => c.key)).toEqual(['local-0']);
+    });
+
+    test('an uploaded invite settles instead of staying in flight', () => {
+        const local: AttachmentMeta[] = [
+            { key: 'local-0', tempId: 't1', filename: 'invite.ics', size: 10, contentType: 'text/calendar' },
+        ];
+        // The server embedded it as a hidden calendar part. Matching only the chipped parts would
+        // leave the chip carrying a tempId the server has already consumed, and every later save
+        // would re-send it.
+        const { serverActual, localNext } = mergeServerAttachments(local, [], [att('invite.ics', 'text/calendar', 0)]);
+        expect(serverActual).toEqual([]);
+        expect(localNext).toEqual([]);
+    });
+
+    test('chips take the index the server gave each part, not its position in the answer', () => {
+        // What a fast save answers with: the named parts only, each under its raw EML index.
+        const fastSave: Attachment[] = [att('a.pdf', 'application/pdf', 1), att('b.pdf', 'application/pdf', 3)];
+        const { localNext } = mergeServerAttachments([], [], fastSave);
+        expect(localNext.map((c) => c.index)).toEqual([1, 3]);
     });
 });
 
@@ -66,14 +85,16 @@ describe('initFields', () => {
     }
 
     test('an invite an IMAP client left on the draft is no compose chip', () => {
-        const fields = initFields(savedDraft([att('invite.ics', 'text/calendar'), att('menu.pdf', 'application/pdf')]));
+        const fields = initFields(
+            savedDraft([att('invite.ics', 'text/calendar', 0), att('menu.pdf', 'application/pdf', 1)]),
+        );
         expect(fields.attachments.map((a) => a.filename)).toEqual(['menu.pdf']);
         // The keep list the save sends is built from these indexes, so they stay raw EML positions.
         expect(fields.attachments.map((a) => a.index)).toEqual([1]);
     });
 
     test('a draft without an invite keeps every part', () => {
-        const fields = initFields(savedDraft([att('a.pdf', 'application/pdf'), att('b.pdf', 'application/pdf')]));
+        const fields = initFields(savedDraft([att('a.pdf', 'application/pdf', 0), att('b.pdf', 'application/pdf', 1)]));
         expect(fields.attachments.map((a) => a.index)).toEqual([0, 1]);
     });
 });
