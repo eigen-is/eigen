@@ -57,7 +57,10 @@ const $V0 = [1, 5],
     $Vo = [5, 10, 11, 13, 14, 15, 16, 17, 29, 30],
     $Vp = [5, 10, 13, 14, 15, 16, 29, 30],
     $Vq = [5, 10, 11, 13, 14, 15, 16, 17, 18, 19, 29, 30],
-    $Vr = [13, 29, 30];
+    $Vr = [13, 29, 30],
+    // The unary-sign states' reduce set: $Vo plus '^', because Excel binds negation
+    // tighter than the power operator — `-2^2` is (-2)^2.
+    $Vs = [5, 10, 11, 13, 14, 15, 16, 17, 20, 29, 30];
 
 const symbols_: Record<string, number> = {
     error: 2,
@@ -262,8 +265,8 @@ const table: any[] = [
         9: $Vb, 10: $Vc, 11: $Vd, 13: [1, 54], 14: $Ve, 15: $Vf, 16: $Vg,
         17: $Vh, 18: $Vi, 19: $Vj, 20: $Vk,
     },
-    o($Vo, [2, 19], {9: $Vb, 18: $Vi, 19: $Vj, 20: $Vk}),
-    o($Vo, [2, 20], {9: $Vb, 18: $Vi, 19: $Vj, 20: $Vk}),
+    o($Vs, [2, 19], {9: $Vb, 18: $Vi, 19: $Vj}),
+    o($Vs, [2, 20], {9: $Vb, 18: $Vi, 19: $Vj}),
     {
         2: 11, 4: 57, 6: 3, 7: 4, 8: $V0, 11: $V1, 12: $V2, 13: [1, 55],
         17: $V3, 21: $V4, 22: 56, 23: 10, 24: $V5, 25: $V6, 26: $V7,
@@ -357,7 +360,7 @@ const lexerRules: RegExp[] = [
     /^(?:[A-Za-z\.]+(?=[(]))/,
     /^(?:[A-Za-z]{1,}[A-Za-z_0-9]+)/,
     /^(?:[A-Za-z_]+)/,
-    /^(?:[0-9]+)/,
+    /^(?:(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?)/,
     /^(?:\[(.*)?\])/,
     /^(?:&)/,
     /^(?: )/,
@@ -403,6 +406,7 @@ class Lexer {
 
     _input = "";
     _more = false;
+    pendingEmptyArgument = false;
     _backtrack = false;
     done = false;
     yylineno = 0;
@@ -431,7 +435,7 @@ class Lexer {
     setInput(input: string, yy?: any): this {
         this.yy = yy || this.yy || {};
         this._input = input;
-        this._more = this._backtrack = this.done = false;
+        this._more = this._backtrack = this.done = this.pendingEmptyArgument = false;
         this.yylineno = this.yyleng = 0;
         this.yytext = this.matched = this.match = "";
         this.conditionStack = ["INITIAL"];
@@ -688,6 +692,13 @@ class Lexer {
     }
 
     lex(): any {
+        // Excel reads an empty argument slot as 0. The grammar has no empty production, so the
+        // slot's literal is handed to the parser here rather than added to the tables.
+        if (this.pendingEmptyArgument) {
+            this.pendingEmptyArgument = false;
+            this.yytext = "0";
+            return symbols_.NUMBER;
+        }
         const r = this.next();
         if (r) {
             return r;
@@ -778,6 +789,7 @@ class Lexer {
             case 18:
                 return 29;
             case 19:
+                this.pendingEmptyArgument = /^\s*[,)]/.test(this._input);
                 return 30;
             case 20:
                 return 18;
@@ -790,6 +802,7 @@ class Lexer {
             case 24:
                 return 20;
             case 25:
+                this.pendingEmptyArgument = /^\s*,/.test(this._input);
                 return 12;
             case 26:
                 return 13;
