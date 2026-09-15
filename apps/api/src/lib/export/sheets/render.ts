@@ -299,12 +299,8 @@ function renderSheet(
     const config = sheet.config ?? {};
     const showGrid = sheet.showGridLines !== false && sheet.showGridLines !== 0;
 
-    // Guarded on the images: the offset walks every row above the window, and a lone cell
-    // far down the grid makes that walk a million iterations for nothing. The preview clips
-    // the overlay to the budget window rather than to the table — a chart sitting right of a
-    // small grid belongs in the thumbnail, while an image parked far outside the window would
-    // stretch the fragment's scroll width and collapse the thumbnail scaled by it. The full
-    // export keeps every image and getSheetContentSize sizes the page to reach it.
+    // The preview clips the overlay to its budget window, not to the table: an image parked
+    // outside it would stretch the fragment and collapse the thumbnail scaled by it.
     const overlayFor = (minRow: number, minCol: number): string =>
         sheet.images?.length
             ? renderFloatingImages(
