@@ -311,6 +311,40 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         expect(fetched.attachments.length).toBe(1);
     });
 
+    test('a keep list reaching past the sidecar parts takes the full save', async () => {
+        const alpha = new File(['alpha-bytes'], 'alpha.txt', { type: 'text/plain' });
+        const beta = new File(['beta-bytes'], 'beta.txt', { type: 'text/plain' });
+        const upAlpha = await uploadDraftAttachment(ctx.alice.user.sessionToken, ctx.alice.user.id, alpha);
+        const upBeta = await uploadDraftAttachment(ctx.alice.user.sessionToken, ctx.alice.user.id, beta);
+
+        const first = await putDraft(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            {
+                subject: 'Stale sidecar',
+                to: {
+                    value: [{ address: 'bob@test.eigen.is', name: 'Bob' }],
+                    text: 'Bob <bob@test.eigen.is>',
+                },
+                text: 'v1',
+                html: '<p>v1</p>',
+            },
+            { tempAttachmentIds: [upAlpha.tempId, upBeta.tempId] },
+        );
+        expect(first.attachments.length).toBe(2);
+
+        // The compose chips cover parts the sidecar's list does not (a part without a filename),
+        // so a keep list as long as that list can still be dropping one. Keeping [1, 2] removes
+        // alpha, and only the full save rebuilds the EML without it.
+        const second = await putDraft(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            { id: first.id, subject: 'Stale sidecar', to: first.to, text: 'v2', html: '<p>v2</p>' },
+            { keepAttachmentIndexes: [1, 2] },
+        );
+        expect(second.attachments.map((a) => a.filename)).toEqual(['beta.txt']);
+    });
+
     test('a draft carrying an invite still takes the fast path', async () => {
         const invite = new File(['BEGIN:VCALENDAR\r\nEND:VCALENDAR'], 'invite.ics', { type: 'text/calendar' });
         const doc = new File(['agenda-bytes'], 'agenda.txt', { type: 'text/plain' });
