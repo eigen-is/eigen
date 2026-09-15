@@ -48,6 +48,13 @@ export function createTransport(): Mail {
     if (host) {
         const port = Number(process.env['SMTP_PORT'] || 25);
         const user = process.env['SMTP_USER'];
+        const pass = process.env['SMTP_PASSWORD'];
+        if (user && !pass) {
+            throw new Error(
+                'SMTP_USER is set without SMTP_PASSWORD. ' +
+                    'Set both to authenticate to the relay, or neither for an anonymous hop.',
+            );
+        }
         // Port 465 is implicit TLS; anything else starts plain and upgrades with STARTTLS.
         const secureEnv = process.env['SMTP_SECURE'];
         const secure = secureEnv ? secureEnv === '1' : port === 465;
@@ -55,10 +62,12 @@ export function createTransport(): Mail {
             host,
             port,
             secure,
-            auth: user ? { user, pass: process.env['SMTP_PASSWORD'] } : undefined,
+            auth: user && pass ? { user, pass } : undefined,
             // An unauthenticated hop is the bundled postfix or a host-local relay (self-signed/no
-            // cert) and postfix owns TLS toward the internet, but credentials only go to a relay
-            // whose certificate checks out.
+            // cert) and postfix owns TLS toward the internet, but credentials only go over a
+            // connection that is encrypted and whose certificate checks out — without
+            // requireTLS nodemailer skips STARTTLS when the server doesn't advertise it.
+            requireTLS: Boolean(user),
             tls: { rejectUnauthorized: Boolean(user) },
         });
     }
