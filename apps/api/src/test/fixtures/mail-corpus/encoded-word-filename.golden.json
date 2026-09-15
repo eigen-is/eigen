@@ -24,6 +24,7 @@
   "textAsHtml": "<p>Attachment name is an encoded word.</p>",
   "attachments": [
     {
+      "index": 0,
       "contentType": "text/plain",
       "filename": "účet.txt",
       "sha256": "7bc8a3af08e53e7c8c6e9e445d81f33032f0951108f4668a8cb64051c715a299",

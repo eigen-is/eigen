@@ -24,6 +24,7 @@
   "textAsHtml": "<p>Invite with method only in the body.</p>",
   "attachments": [
     {
+      "index": 0,
       "contentType": "text/calendar",
       "filename": "invite.ics",
       "sha256": "4975c6516e4c0c28c2bef6625556b163139271c1f40ab07ce7fa71754476af16",

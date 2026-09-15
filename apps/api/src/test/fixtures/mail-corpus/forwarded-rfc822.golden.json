@@ -24,6 +24,7 @@
   "textAsHtml": "<p>See the forwarded message below.</p>",
   "attachments": [
     {
+      "index": 0,
       "contentType": "message/rfc822",
       "sha256": "d048fc3046b8a0025ec279e34b612fe06c9e190c120ae5c91ce643e9b6076904",
       "size": 190

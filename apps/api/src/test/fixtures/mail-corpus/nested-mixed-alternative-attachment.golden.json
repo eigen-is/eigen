@@ -24,6 +24,7 @@
   "textAsHtml": "<p>Nested plain body.</p>",
   "attachments": [
     {
+      "index": 0,
       "contentType": "application/octet-stream",
       "filename": "data.bin",
       "sha256": "6449f9076cb5c3dd2872940ed9c9e7d6d2339ae30ec7b5a8c9eff9ca0f4ed4e2",

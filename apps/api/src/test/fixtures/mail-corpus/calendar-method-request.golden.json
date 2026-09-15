@@ -24,6 +24,7 @@
   "textAsHtml": "<p>You are invited.</p>",
   "attachments": [
     {
+      "index": 0,
       "contentType": "text/calendar",
       "filename": "invite.ics",
       "calendarMethod": "REQUEST",

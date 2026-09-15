@@ -22,6 +22,7 @@
   "html": "<p>Inline image: <img src=\"data:image/png;base64,iVBORw0KGgoLMFV6n8TpDjNYfaLH7BE2W4Clyu8UOV6DqM3yFzxhhqvQ9Ro/ZImu\"></p>",
   "attachments": [
     {
+      "index": 0,
       "contentType": "image/png",
       "filename": "inline.png",
       "sha256": "f587f1dd3e1a538113e8f96a810f819f6eded5e5c3db08896f7e49aa329dd4c1",

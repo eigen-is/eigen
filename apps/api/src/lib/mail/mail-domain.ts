@@ -274,10 +274,10 @@ export class Mail {
                 if (meta && meta.attachments.length > 0) {
                     // The keep list names raw EML parts, so the fast path only holds when the kept
                     // set is exactly the set the sidecar lists: anything else adds or drops a part
-                    // and needs the EML rebuilt. A sidecar written before its parts carried an
-                    // index can't answer that, so it takes the full save.
+                    // and needs the EML rebuilt. The sidecar is unvalidated JSON on disk, so a part
+                    // whose index is not a number can't answer that and takes the full save.
                     const parts = meta.attachments.flatMap((a) =>
-                        a.index === undefined ? [] : [{ ...a, index: a.index }],
+                        typeof a.index !== 'number' ? [] : [{ ...a, index: a.index }],
                     );
                     const kept = options.keepAttachmentIndexes ? new Set(options.keepAttachmentIndexes) : null;
                     const keepAll =
@@ -391,8 +391,10 @@ export class Mail {
             const attachments = await this.store.getAttachments(existingId);
             const keepSet = options.keepAttachmentIndexes ? new Set(options.keepAttachmentIndexes) : null;
             for (const a of attachments) {
-                if (!a.filename || isCalendarPart(a)) continue;
-                if (keepSet && !keepSet.has(a.index)) continue;
+                if (!a.filename) continue;
+                // A keep list names the composer's chips, and a calendar part never gets one, so its
+                // absence can't mean the user removed it — carry it through every rebuild.
+                if (!isCalendarPart(a) && keepSet && !keepSet.has(a.index)) continue;
                 existingAttachments.push({
                     filename: a.filename,
                     content: Buffer.from(a.content),
