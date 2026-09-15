@@ -49,7 +49,8 @@ export function createTransport(): Mail {
         const port = Number(process.env['SMTP_PORT'] || 25);
         const user = process.env['SMTP_USER'];
         // Port 465 is implicit TLS; anything else starts plain and upgrades with STARTTLS.
-        const secure = process.env['SMTP_SECURE'] ? process.env['SMTP_SECURE'] === '1' : port === 465;
+        const secureEnv = process.env['SMTP_SECURE'];
+        const secure = secureEnv ? secureEnv === '1' : port === 465;
         return nodemailer.createTransport({
             host,
             port,

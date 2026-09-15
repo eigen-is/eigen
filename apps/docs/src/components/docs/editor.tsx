@@ -304,7 +304,6 @@ const TiptapEditor = ({
     }, []);
 
     const [setScrollContainer, scrollSize] = useElementSize(scrollContainerRef);
-    const containerWidth = Math.min(scrollSize.width, A4_WIDTH_PX);
 
     // Hand-rolled rather than useElementSize: this measures the BORDER box, and stays quiet while
     // unscaled so a doc that needs no scaling never re-renders on its own growth.
@@ -795,7 +794,7 @@ const TiptapEditor = ({
 
     // The panel is a flex sibling, so the scroll box already ends at its edge: the page only has to
     // fit that box's width.
-    const canvasScale = containerWidth === 0 ? 1 : Math.min(1, containerWidth / A4_WIDTH_PX);
+    const canvasScale = scrollSize.width === 0 ? 1 : Math.min(1, scrollSize.width / A4_WIDTH_PX);
     const needsScale = canvasScale < 1;
 
     // The document observer stays quiet while unscaled, so seed the height on the way in.

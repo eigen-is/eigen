@@ -1,4 +1,4 @@
-import { type RefObject, useCallback, useState } from 'react';
+import { type RefCallback, type RefObject, useCallback, useState } from 'react';
 
 export type ElementSize = { width: number; height: number };
 
@@ -11,7 +11,7 @@ export type ElementSize = { width: number; height: number };
 //
 // A 0x0 reading is dropped and `size` keeps the last real one: a hidden surface (the mobile pane)
 // measures zero while it is away, and collapsing the layout and rebuilding it is a visible flip.
-export function useElementSize<T extends Element>(ref?: RefObject<T | null>): [(el: T | null) => void, ElementSize] {
+export function useElementSize<T extends Element>(ref?: RefObject<T | null>): [RefCallback<T>, ElementSize] {
     const [size, setSize] = useState<ElementSize>({ width: 0, height: 0 });
 
     const setElement = useCallback(
