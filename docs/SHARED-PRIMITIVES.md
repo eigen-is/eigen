@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1454 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1456 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -201,7 +201,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (268)
+## Hooks (269)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -402,6 +402,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useNotifications` | `@workspace/lib/notification` | packages/lib/src/core/notification/hooks/use-notifications.ts |
 | `useUnreadNotificationCount` | `@workspace/lib/notification` | packages/lib/src/core/notification/hooks/use-notifications.ts |
 | `useJoinWaitlist` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
+| `useMailEnabled` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
 | `usePublicConfig` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
 | `usePublicUser` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
 | `usePublicUsers` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
@@ -825,7 +826,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (665)
+## Utilities & constants (666)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -918,6 +919,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `retryWhenTransformBusy` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `wasToasted` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `apps` | `@workspace/lib/apps` | packages/lib/src/core/apps.ts |
+| `isMailApp` | `@workspace/lib/apps` | packages/lib/src/core/apps.ts |
 | `authClient` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-auth-client.ts |
 | `backgroundCss` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
 | `DEFAULT_FILL_COLOR` | `@workspace/lib/background` | packages/lib/src/background/style.ts |

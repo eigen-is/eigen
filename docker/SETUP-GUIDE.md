@@ -454,9 +454,12 @@ tailscale funnel --bg 443
 Set `COMPOSE_PROFILES=edge` in `.env.production` — postfix, dovecot, and unbound containers won't start. Outbound notifications (welcome, password reset, calendar invites) keep working through your existing SMTP. Add to `.env.production`:
 
 ```
+MAIL_ENABLED=0
 SMTP_HOST=host.docker.internal
 SMTP_PORT=25
 ```
+
+`MAIL_ENABLED=0` tells the apps there are no hosted mailboxes here, so the Mail app, its entries in the app switcher and command palette, the "Mail to…" actions and the IMAP settings card all disappear, and anyone who still opens `/mail` gets a plain "Mail is turned off on this server" page. Leave it unset whenever the `mail` profile is on.
 
 `host.docker.internal` is Docker's name for "the machine the container is running on". For this to work, your host postfix needs to:
 
@@ -474,7 +477,7 @@ SMTP_PASSWORD=your-relay-key
 
 Port 587 starts plain and upgrades with STARTTLS; port 465 is implicit TLS. Set `SMTP_SECURE=1` or `0` to override that if your relay listens on some other port. The relay's certificate is verified as soon as `SMTP_USER` is set, so the credentials never go over an unverified connection. These are the API's own credentials — the `SMTP_RELAY_*` pair is read by the bundled postfix, and the two are set independently.
 
-> **Heads-up:** the in-app **Mail** tab still appears when bundled mail is off, and clicking it returns errors (the gating flag is on the roadmap). Tell users to point their IMAP client at your existing mail server.
+Tell users to point their mail client at your existing mail server — Eigen no longer advertises IMAP settings of its own.
 
 ### Mail at a different domain than the web URL
 

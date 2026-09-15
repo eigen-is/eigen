@@ -39,6 +39,9 @@ Each app does one job. You can use as many or as few as you like.
 
 If you help run your Eigen, you'll also see **Admin**, for managing organizations, teams, and the server.
 
+Not every Eigen hosts email. If yours doesn't, Mail isn't in the app switcher and you keep using your usual mail
+app. Everything else works the same.
+
 ## Move between apps
 
 Open the grid icon at the top-left of any page to switch to another app. The app you're in is highlighted, so

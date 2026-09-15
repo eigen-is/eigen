@@ -1,5 +1,6 @@
 import { useIsAdmin } from '@workspace/lib/admin';
 import { getAdminAppUrl } from '@workspace/lib/api';
+import { useMailEnabled } from '@workspace/lib/public';
 import { SidebarBody, SidebarItem, SidebarSection } from '@workspace/ui';
 import { StorageUsage } from '@workspace/ui/components/home';
 import { BookUser, KeySquare, LockKeyholeIcon, Mail, MonitorSmartphone, Shield, UserRound } from 'lucide-react';
@@ -10,6 +11,7 @@ type SpaceSidebarProps = {
 
 export function SpaceSidebar({ condensed = false }: SpaceSidebarProps) {
     const isAdmin = useIsAdmin();
+    const mailEnabled = useMailEnabled();
 
     return (
         <SidebarBody>
@@ -55,15 +57,17 @@ export function SpaceSidebar({ condensed = false }: SpaceSidebarProps) {
                 />
             </SidebarSection>
 
-            <SidebarSection condensed={condensed} title={condensed ? undefined : 'App settings'}>
-                <SidebarItem
-                    icon={<Mail className="h-4 w-4" />}
-                    label="Mail"
-                    condensed={condensed}
-                    to="/email"
-                    params={{}}
-                />
-            </SidebarSection>
+            {mailEnabled && (
+                <SidebarSection condensed={condensed} title={condensed ? undefined : 'App settings'}>
+                    <SidebarItem
+                        icon={<Mail className="h-4 w-4" />}
+                        label="Mail"
+                        condensed={condensed}
+                        to="/email"
+                        params={{}}
+                    />
+                </SidebarSection>
+            )}
 
             {isAdmin && (
                 <SidebarSection condensed={condensed}>

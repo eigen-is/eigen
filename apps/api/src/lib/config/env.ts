@@ -9,3 +9,9 @@ export function isTest(): boolean {
 export function isDemo(): boolean {
     return process.env['EIGEN_DEMO'] === '1';
 }
+
+// Hosted mailboxes come with the `mail` docker profile (postfix + dovecot). A deployment that
+// runs without it sets MAIL_ENABLED=0, and the apps then hide every Mail entry point.
+export function isMailEnabled(): boolean {
+    return process.env['MAIL_ENABLED'] !== '0';
+}

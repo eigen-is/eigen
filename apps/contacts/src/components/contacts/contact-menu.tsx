@@ -2,6 +2,7 @@ import { type AuthUser, useAuth } from '@workspace/lib/auth';
 import { useStartChatWith } from '@workspace/lib/chat';
 import { useExportContacts } from '@workspace/lib/contacts';
 import { useOpenWriteEmailTo } from '@workspace/lib/mail';
+import { useMailEnabled } from '@workspace/lib/public';
 import type { Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { ChatCreateWizard } from '@workspace/ui/components/chat';
@@ -42,6 +43,7 @@ export type ContactMenuActions = {
 // the menu content.
 export function useContactMenu() {
     const openWriteEmailTo = useOpenWriteEmailTo();
+    const mailEnabled = useMailEnabled();
     const startChatWith = useStartChatWith();
     const { exportContacts, isExporting } = useExportContacts();
     const { user } = useAuth();
@@ -69,6 +71,7 @@ export function useContactMenu() {
             name: `${c.firstName} ${c.lastName}`.trim(),
         }));
         const canReach = eligible.length > 0;
+        const canMail = canReach && mailEnabled;
 
         const canExport = !!showExport && contacts.length > 0;
         const topGroup = canReach || (!!single && !!showPrint) || canExport;
@@ -82,37 +85,37 @@ export function useContactMenu() {
 
         return (
             <>
+                {canMail && (
+                    <DropdownMenuItem
+                        onClick={() => {
+                            openWriteEmailTo(eligiblePeople.map((p) => p.email));
+                            close();
+                        }}
+                    >
+                        <Mail className="h-4 w-4 mr-2" />
+                        {eligible.length === 1 ? 'Send email' : `Send email to ${eligible.length} contacts`}
+                    </DropdownMenuItem>
+                )}
                 {canReach && (
-                    <>
-                        <DropdownMenuItem
-                            onClick={() => {
-                                openWriteEmailTo(eligiblePeople.map((p) => p.email));
-                                close();
-                            }}
-                        >
-                            <Mail className="h-4 w-4 mr-2" />
-                            {eligible.length === 1 ? 'Send email' : `Send email to ${eligible.length} contacts`}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                            onClick={() => {
-                                // One eligible contact keeps the direct-open probe (its full address
-                                // list lets startChatWith prefer the registered account); several open
-                                // the wizard directly, pre-filled with every eligible person.
-                                if (eligible.length === 1) {
-                                    void startChat(
-                                        (eligible[0].email ?? []).filter((e) => e.trim().length > 0),
-                                        eligiblePeople[0].name,
-                                    );
-                                } else {
-                                    setChatWith(eligiblePeople);
-                                }
-                                close();
-                            }}
-                        >
-                            <MessageSquare className="h-4 w-4 mr-2" />
-                            {eligible.length === 1 ? 'Start chat' : `Start chat with ${eligible.length} contacts`}
-                        </DropdownMenuItem>
-                    </>
+                    <DropdownMenuItem
+                        onClick={() => {
+                            // One eligible contact keeps the direct-open probe (its full address
+                            // list lets startChatWith prefer the registered account); several open
+                            // the wizard directly, pre-filled with every eligible person.
+                            if (eligible.length === 1) {
+                                void startChat(
+                                    (eligible[0].email ?? []).filter((e) => e.trim().length > 0),
+                                    eligiblePeople[0].name,
+                                );
+                            } else {
+                                setChatWith(eligiblePeople);
+                            }
+                            close();
+                        }}
+                    >
+                        <MessageSquare className="h-4 w-4 mr-2" />
+                        {eligible.length === 1 ? 'Start chat' : `Start chat with ${eligible.length} contacts`}
+                    </DropdownMenuItem>
                 )}
                 {single && showPrint && (
                     <DropdownMenuItem

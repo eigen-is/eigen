@@ -105,4 +105,10 @@ const apps = [
     },
 ];
 
-export { apps };
+type AppEntry = (typeof apps)[number];
+
+// Hosted mail is optional on a server, so both registry consumers (the AppSwitcher and the
+// palette's nav commands) need one way to spot its entry.
+const isMailApp = (app: AppEntry) => app.name === 'Mail';
+
+export { apps, isMailApp };

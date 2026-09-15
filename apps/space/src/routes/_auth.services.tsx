@@ -4,6 +4,7 @@ import { useAppPasswords, useAuth, useCreateAppPassword, useDeleteAppPassword } 
 import { formatDate } from '@workspace/lib/date';
 import { useMounts } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
+import { useMailEnabled } from '@workspace/lib/public';
 import { teamOwnerId } from '@workspace/lib/types';
 import { Column, ColumnLayout, CopyInput, ToolbarTitle } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -121,6 +122,7 @@ function AppPasswords() {
 
 function ServicesComponent() {
     const { user } = useAuth();
+    const mailEnabled = useMailEnabled();
     const host = SERVER_HOSTNAME;
     const davBase = DAV_HOST;
     const webdavBase = `${API_HOST}/webdav`;
@@ -178,25 +180,28 @@ function ServicesComponent() {
                                 </CardContent>
                             </Card>
 
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="flex items-center gap-2">
-                                        <Mail className="h-5 w-5" />
-                                        IMAP (Email sync)
-                                    </CardTitle>
-                                    <CardDescription>
-                                        Use these settings to access your Eigen mailbox from an external email client.
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="grid grid-cols-2 gap-3">
-                                    <CopyInput label="IMAP server" value={host} />
-                                    <CopyInput label="IMAP Port" value="993" />
-                                    <CopyInput label="Security" value="SSL/TLS" />
-                                    <CopyInput label="Username" value={user?.email ?? ''} />
-                                    <CopyInput label="SMTP server" value={host} />
-                                    <CopyInput label="SMTP port" value="465" />
-                                </CardContent>
-                            </Card>
+                            {mailEnabled && (
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle className="flex items-center gap-2">
+                                            <Mail className="h-5 w-5" />
+                                            IMAP (Email sync)
+                                        </CardTitle>
+                                        <CardDescription>
+                                            Use these settings to access your Eigen mailbox from an external email
+                                            client.
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="grid grid-cols-2 gap-3">
+                                        <CopyInput label="IMAP server" value={host} />
+                                        <CopyInput label="IMAP Port" value="993" />
+                                        <CopyInput label="Security" value="SSL/TLS" />
+                                        <CopyInput label="Username" value={user?.email ?? ''} />
+                                        <CopyInput label="SMTP server" value={host} />
+                                        <CopyInput label="SMTP port" value="465" />
+                                    </CardContent>
+                                </Card>
+                            )}
 
                             <Card>
                                 <CardHeader>

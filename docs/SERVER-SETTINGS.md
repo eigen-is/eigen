@@ -124,16 +124,19 @@ The Admin app's `/settings` route renders `ServerSettingsPage`
 Onboarding and guest settings are separate admin pages over the same `PUT /settings/server` route — see
 [ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md).
 
-## Outbound SMTP environment
+## Mail environment
 
-How the API hands mail to an MTA is deployment identity, not a runtime setting, so it lives in the environment and is read in `createTransport()` (`apps/api/src/lib/core/mailer.ts`). Without `SMTP_HOST` the transport is local `/usr/sbin/sendmail`.
+Whether this deployment hosts mailboxes at all, and how the API hands mail to an MTA, are deployment identity rather than runtime settings, so they live in the environment: `isMailEnabled()` (`apps/api/src/lib/config/env.ts`) and `createTransport()` (`apps/api/src/lib/core/mailer.ts`). Without `SMTP_HOST` the transport is local `/usr/sbin/sendmail`.
 
 | Variable        | Default              | Meaning                                                                       |
 |-----------------|----------------------|-------------------------------------------------------------------------------|
+| `MAIL_ENABLED`  | on                   | `0` on a server run without the `mail` docker profile — no hosted mailboxes     |
 | `SMTP_HOST`     | `postfix` in compose | The MTA to relay through. Unset → sendmail                                     |
 | `SMTP_PORT`     | `25`                 | Its port                                                                       |
 | `SMTP_USER`     | unset                | SASL username. Set it and the transport authenticates                          |
 | `SMTP_PASSWORD` | unset                | SASL password                                                                  |
 | `SMTP_SECURE`   | port `465`           | `1` = implicit TLS from the first byte, `0` = plain + STARTTLS                  |
+
+`MAIL_ENABLED` rides out to the frontend as `mailEnabled` on `GET /p/config`, where `useMailEnabled()` (`packages/lib/src/core/public/hooks/use-public.ts`) is the one read of it. Outbound mail is unaffected: share notifications, invites and "Email collaborators" keep going out over SMTP with mailboxes off.
 
 Certificate verification follows `SMTP_USER`: an anonymous hop is the bundled postfix or a host-local relay (self-signed, no cert) and stays unverified, while a relay that takes credentials must present a certificate that checks out. These are the API's own credentials — the `SMTP_RELAY_*` pair in `.env.production` is read by the bundled postfix instead, and the two are independent.

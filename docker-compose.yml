@@ -55,6 +55,8 @@ services:
       EIGEN_DEMO: ${EIGEN_DEMO:-0}
       DOMAIN: ${DOMAIN}
       MAIL_DOMAIN: ${MAIL_DOMAIN:-${DOMAIN}}
+      # Off (0) on a deployment whose COMPOSE_PROFILES omits `mail`, so the apps hide every Mail entry point.
+      MAIL_ENABLED: ${MAIL_ENABLED:-1}
       SMTP_HOST: ${SMTP_HOST:-postfix}
       SMTP_PORT: ${SMTP_PORT:-25}
       # Empty unless the API relays through an authenticated third-party relay instead of postfix.
