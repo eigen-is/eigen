@@ -1,4 +1,4 @@
-import type { Op, Sheet } from '@workspace/lib/sheets';
+import type { Op, Sheet, SheetWithCalcChain } from '@workspace/lib/sheets';
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
 import { applyPatches, enablePatches } from 'immer';
 import { celldataToData, dataToCelldata } from './celldata';
@@ -42,11 +42,17 @@ function asSheet(v: unknown): Sheet | null {
 }
 
 // The one shape every sheet leaves the replay in, whichever door it came through — the decoded
-// snapshot or an addSheet op's value. Config collections and `images` are materialized because
-// the editor writes them as whole collections, and a patch against one that doesn't exist yet
-// fails to resolve (see normalizeSheetConfig, and the decode in lib's snapshot-codec).
-function withNormalizedSheet(s: Sheet): Sheet {
-    const next = { ...s, config: { ...s.config }, images: s.images ?? [] };
+// snapshot or an addSheet op's value. Config collections, `images` and `calcChain` are
+// materialized because the editor writes them as whole collections, and a patch against one that
+// doesn't exist yet fails to resolve (see normalizeSheetConfig, and the decode in lib's
+// snapshot-codec). `calcChain` earns its place here: the editor seeds it on every sheet at mount
+// (seedCalcChain), so the first formula a user types emits `add ['calcChain', 0]` in the SAME
+// batch as the cell's value — against a base without the key that patch throws and takes the
+// whole batch down with it, which is how a fresh doc's formula cell used to export blank. An
+// empty chain is also what the recalc gate reads as "not computed", so materializing it leaves
+// sheetsNeedRecalc unchanged.
+function withNormalizedSheet(s: SheetWithCalcChain): SheetWithCalcChain {
+    const next = { ...s, config: { ...s.config }, images: s.images ?? [], calcChain: s.calcChain ?? [] };
     normalizeSheetConfig(next);
     return next;
 }
