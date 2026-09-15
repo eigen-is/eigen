@@ -1,15 +1,14 @@
 import { describe, expect, test } from 'bun:test';
-import { Window } from 'happy-dom';
 import * as Y from 'yjs';
 import { readCards } from '../../../../core/comments/hooks/use-comment-cards';
 import { sanitizeCommentCardHtml } from '../../../../core/html-dom';
 import type { CommentCard } from '../../../../types/comments';
 import type { AttachmentReference } from '../../../../types/drive-reference';
+import { installHappyDom } from '../../../happy-dom';
 
-// readCards sanitizes each card's description (it reaches us verbatim from a hostile peer's Y.Doc
-// write and is rendered via dangerouslySetInnerHTML) — install happy-dom the way html-dom.test.ts does.
-const window = new Window();
-Object.assign(globalThis, { DOMParser: window.DOMParser, document: window.document, Node: window.Node });
+// readCards sanitizes each card's description: it reaches us verbatim from a hostile peer's Y.Doc write
+// and is rendered via dangerouslySetInnerHTML.
+installHappyDom();
 
 function cardWithDescription(html: string): CommentCard {
     const doc = new Y.Doc();

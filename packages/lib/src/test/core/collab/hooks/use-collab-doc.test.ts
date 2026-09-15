@@ -1,8 +1,8 @@
 import { afterAll, afterEach, beforeEach, describe, expect, jest, mock, test } from 'bun:test';
-import { Window } from 'happy-dom';
 import type * as Y from 'yjs';
 import { COLLAB_HOME_REPLACED_CLOSE, COLLAB_STORAGE_UNAVAILABLE_CLOSE } from '../../../../constants/collab';
 import type { CollabDoc, UseCollabDocOptions } from '../../../../core/collab/hooks/use-collab-doc';
+import { installHappyDom } from '../../../happy-dom';
 
 // The hook news up a WebsocketProvider itself, so the test swaps the module for a fake that never
 // opens a socket and lets each case drive the connection through the same events y-websocket emits,
@@ -77,20 +77,10 @@ class FakeProvider {
 const realWebsocketModule = await import('y-websocket');
 mock.module('y-websocket', () => ({ WebsocketProvider: FakeProvider }));
 
-// react-dom needs a DOM to render the hook harness into. The globals are removed again in afterAll
-// so later test files see the plain bun environment.
-const window = new Window({ url: 'http://localhost:3000' });
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-g.window = window;
-g.document = window.document;
-g.navigator = window.navigator;
-g.IS_REACT_ACT_ENVIRONMENT = true;
+// react-dom needs a DOM to render the hook harness into; the window itself is the one whose
+// `location.reload` the offline path calls.
+const window = installHappyDom();
 afterAll(() => {
-    g.window = undefined;
-    g.document = undefined;
-    g.navigator = undefined;
-    g.IS_REACT_ACT_ENVIRONMENT = undefined;
     mock.module('y-websocket', () => realWebsocketModule);
 });
 
@@ -105,8 +95,8 @@ function Harness({ options, onRender }: { options: UseCollabDocOptions; onRender
 
 function mount(options: UseCollabDocOptions) {
     let latest: CollabDoc | null = null;
-    const container = window.document.createElement('div');
-    const root = createRoot(container as unknown as Element);
+    const container = document.createElement('div');
+    const root = createRoot(container);
     const render = (next: UseCollabDocOptions) =>
         act(() => {
             root.render(createElement(Harness, { options: next, onRender: (c) => (latest = c) }));

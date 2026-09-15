@@ -1,11 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { Window } from 'happy-dom';
 import { sanitizeToLightEditorHtml } from '../../core/html-dom';
+import { installHappyDom } from '../happy-dom';
 
-// The sanitizer parses with DOMParser and rebuilds through `document` — install happy-dom at module
-// scope the way the clipboard test does.
-const window = new Window();
-Object.assign(globalThis, { DOMParser: window.DOMParser, document: window.document, Node: window.Node });
+// The sanitizer parses with DOMParser and rebuilds through `document`.
+installHappyDom();
 
 describe('sanitizeToLightEditorHtml — links', () => {
     test('a safe link opens in a new tab with the opener sealed', () => {
