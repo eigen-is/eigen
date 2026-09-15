@@ -62,6 +62,50 @@ test('a width below its minimum is still clamped before it is written', async ()
     expect(await typeInto('W', '0')).toEqual([{ width: 1 }]);
 });
 
+// A coupled edit divides by the ratio the gesture STARTED from. Re-deriving it per keystroke reads
+// it back off the rounded box the previous one wrote: 100x50 typed up to 250 walks 2x1, 25x13 and
+// lands on 250x130 instead of 250x125.
+test('an aspect-locked width keeps the ratio it started the edit with', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    let box = { width: 100, height: 50 };
+    const render = async () => {
+        await act(async () => {
+            root.render(
+                createElement(TransformSection, {
+                    x: 0,
+                    y: 0,
+                    width: box.width,
+                    height: box.height,
+                    angle: 0,
+                    aspectLocked: true,
+                    onAspectLockChange: () => {},
+                    onChange: (fields: Record<string, number>) => {
+                        box = { ...box, ...fields };
+                    },
+                }),
+            );
+        });
+    };
+    await render();
+
+    const input = [...container.querySelectorAll('input')][2];
+    if (!input) throw new Error('the transform section did not render its inputs');
+    for (const typed of ['2', '25', '250']) {
+        await act(async () => {
+            input.focus();
+            nativeValueSetter?.call(input, typed);
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        await render();
+    }
+    expect(box).toEqual({ width: 250, height: 125 });
+
+    await act(async () => root.unmount());
+    container.remove();
+});
+
 // Typing a number is ONE edit, not one per digit: the panel's writes are sealed on both sides, so
 // without the panel gesture around them "250" leaves three undo steps and ⌘Z walks back through the
 // digits.

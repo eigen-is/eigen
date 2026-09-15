@@ -21,7 +21,9 @@ import {
     MergedSelect,
     PropertyRow,
     PropertySection,
+    useHeldGesture,
 } from '@workspace/ui/components/properties-panel';
+import { useRef } from 'react';
 import { loadVectorFont, measureVectorText } from '../text-measure';
 import type { KindPanelSectionProps } from './index';
 
@@ -40,6 +42,8 @@ const ARROWHEAD_OPTIONS: { value: Arrowhead; label: string }[] = [
 ];
 
 export function ArrowPanelSection({ elements, scene, onChange, onChangeEach }: KindPanelSectionProps) {
+    const { hold, end: endGesture } = useHeldGesture();
+    const pendingFontWrites = useRef(0);
     // The panel mounts a kind's section only for a SOLE-kind selection, so this narrows rather than filters.
     const arrows = elements.filter((el): el is VectorArrowElement => el.type === 'arrow');
     // An elbow arrow's route lives in the unrotated local frame, so a pure-elbow selection also pins the
@@ -75,16 +79,27 @@ export function ArrowPanelSection({ elements, scene, onChange, onChangeEach }: K
     // A font family / size change re-measures each arrow's own label and writes `labelWidth` (the sole
     // width source, height derives from the line count) in the SAME transact as the font — after the face
     // loads, or measureText reads fallback metrics. Per-element widths (each label differs), one undo step.
+    //
+    // The Size field holds its own gesture only while it is focused, and on a cold face the write lands
+    // after the blur that released it — every digit would be its own undo step. So the write takes the
+    // window back itself and keeps it until the last pending load has landed.
     const applyFont = async (patch: { fontSize?: number; fontFamily?: string }) => {
-        await Promise.all(
-            arrows.map((el) => loadVectorFont(patch.fontSize ?? el.fontSize, patch.fontFamily ?? el.fontFamily)),
-        );
-        onChangeEach((el) => {
-            if (el.type !== 'arrow') return patch;
-            const size = patch.fontSize ?? el.fontSize;
-            const family = patch.fontFamily ?? el.fontFamily;
-            return { ...patch, labelWidth: measureVectorText(el.text, size, family).width };
-        });
+        pendingFontWrites.current += 1;
+        try {
+            await Promise.all(
+                arrows.map((el) => loadVectorFont(patch.fontSize ?? el.fontSize, patch.fontFamily ?? el.fontFamily)),
+            );
+            hold();
+            onChangeEach((el) => {
+                if (el.type !== 'arrow') return patch;
+                const size = patch.fontSize ?? el.fontSize;
+                const family = patch.fontFamily ?? el.fontFamily;
+                return { ...patch, labelWidth: measureVectorText(el.text, size, family).width };
+            });
+        } finally {
+            pendingFontWrites.current -= 1;
+            if (pendingFontWrites.current === 0) endGesture();
+        }
     };
 
     return (

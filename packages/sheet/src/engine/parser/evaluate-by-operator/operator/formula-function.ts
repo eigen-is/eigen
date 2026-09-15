@@ -46,6 +46,16 @@ const OVERRIDES: Record<string, (params: FormulaArg[]) => FormulaOutput | undefi
         return undefined;
     },
 
+    // formulajs runs SUBSTITUTE as `text.split(old).join(new)`, and `Array.join` swaps a blank
+    // `new_text` for its own default "," separator, so `SUBSTITUTE("abc","a",)` reads ",bc".
+    // Excel removes the old text. Normalize the blank and let formulajs do the rest.
+    SUBSTITUTE(params) {
+        if (params.length > 2 && params[2] == null) {
+            params[2] = '';
+        }
+        return undefined;
+    },
+
     // formulajs ships TEXT as `throw new Error('TEXT is not implemented')`, so every
     // `=TEXT(...)` was #ERROR!. Format through `update()` — the same numfmt masks the
     // grid renders cells with, so `TEXT(x, fa)` reads like the formatted cell it mimics.

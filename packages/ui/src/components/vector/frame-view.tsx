@@ -17,7 +17,7 @@ import {
 } from '@workspace/lib/vector';
 import { useElementSize } from '@workspace/ui/hooks/use-element-size';
 import { cn } from '@workspace/ui/lib/utils';
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useRef } from 'react';
 import { ElementLayer } from './element-layer';
 import { CANVAS_PAPER_CLASS } from './paper';
 
@@ -36,7 +36,11 @@ type FrameViewProps = {
 export function FrameView({ frame, elements, resolveMedia, interactive, className }: FrameViewProps) {
     const [setContainer, { width }] = useElementSize<HTMLDivElement>();
     // 0 until measured: the page is drawn at frame scale and shrunk, so there is nothing to draw yet.
-    const scale = width / frame.width;
+    // Only a 0x0 reading is dropped for us, so a 0-wide one (a rail column collapsed behind a closed
+    // panel) still arrives; keep the last real scale instead of blanking the page.
+    const lastScale = useRef(0);
+    if (width > 0) lastScale.current = width / frame.width;
+    const scale = lastScale.current;
 
     const own = useMemo(() => orderByFractionalIndex(elementsInFrame(elements, frame.id)), [elements, frame.id]);
     const byId = useMemo(() => new Map(elements.map((el) => [el.id, el])), [elements]);

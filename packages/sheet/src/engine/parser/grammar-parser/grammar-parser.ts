@@ -692,11 +692,12 @@ class Lexer {
     }
 
     lex(): any {
-        // Excel reads an empty argument slot as 0. The grammar has no empty production, so the
-        // slot's literal is handed to the parser here rather than added to the tables.
+        // An empty argument slot is a blank, like a reference to an empty cell. The grammar has
+        // no empty production, so the slot is handed to the parser here as a NUMBER with no
+        // text; the number production (case 3) turns that into the engine's blank.
         if (this.pendingEmptyArgument) {
             this.pendingEmptyArgument = false;
-            this.yytext = "0";
+            this.yytext = "";
             return symbols_["NUMBER"];
         }
         const r = this.next();
@@ -877,7 +878,10 @@ export class Parser {
                 this.$ = yy.callVariable($$[$0][0]);
                 break;
             case 3:
-                this.$ = yy.toNumber($$[$0]);
+                // Empty text only reaches here from an omitted argument slot (the NUMBER rule
+                // matches digits). Blank is `undefined`, as an empty cell reference is: 0 where
+                // a number is wanted, "" in text context.
+                this.$ = $$[$0] === "" ? undefined : yy.toNumber($$[$0]);
                 break;
             case 4:
                 this.$ = yy.trimEdges($$[$0]);
