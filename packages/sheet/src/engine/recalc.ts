@@ -628,6 +628,9 @@ function hasNonErrorCachedValue(cell: Cell): boolean {
 // gate stays off and the read path pays nothing (audit DP1b/DP4b).
 export function sheetsNeedRecalc(sheets: Sheet[]): boolean {
     for (const sheet of sheets) {
+        // recalcSheets skips id-less sheets, so arming on one re-fires the pass on
+        // every read for nothing.
+        if (!sheet.id) continue;
         const calcChain = (sheet as SheetWithCalcChain).calcChain;
         if (Array.isArray(calcChain) && calcChain.length > 0) {
             continue;

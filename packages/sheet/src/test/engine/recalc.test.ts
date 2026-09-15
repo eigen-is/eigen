@@ -179,6 +179,24 @@ describe('engine/recalc — recalcSheets', () => {
         expect(out[0].data![0][1]?.m).toBe('FALSE');
     });
 
+    test('date result keeps the imported serial and its masked display', () => {
+        // The xlsx-imported shape: Excel's cached serial + a real date mask. A
+        // stringified Date here exports as a text cell and loses the date.
+        const cached = { v: 46027, m: '2026-01-05', ct: { fa: 'yyyy-mm-dd', t: 'd' } };
+        const sheets = [sheet('s1', 'Sheet1', [[formula('=DATE(2026,1,5)', cached)]])];
+        const out = recalcSheets(sheets);
+        expect(out[0].data![0][0]?.v).toBe(46027);
+        expect(out[0].data![0][0]?.m).toBe('2026-01-05');
+    });
+
+    test('EOMONTH over a serial writes the month-end serial', () => {
+        // A2 is 2026-01-05 as a serial; EOMONTH(A2,0) is 2026-01-31.
+        const sheets = [sheet('s1', 'Sheet1', [[formula('=EOMONTH(A2,0)')], [num(46027)]])];
+        const out = recalcSheets(sheets);
+        expect(out[0].data![0][0]?.v).toBe(46053);
+        expect(out[0].data![0][0]?.m).toBe('46053');
+    });
+
     test('celldata-only input is materialized and computed', () => {
         const sheets: Sheet[] = [
             {
@@ -244,6 +262,18 @@ describe('engine/recalc — sheetsNeedRecalc', () => {
 
     test('recalc output no longer triggers the gate (idempotent)', () => {
         const out = recalcSheets([sheet('s1', 'Sheet1', [[num(1), formula('=A1+1')]])]);
+        expect(sheetsNeedRecalc(out)).toBe(false);
+    });
+
+    test('false for an id-less sheet — recalcSheets skips it, so it must not arm the gate', () => {
+        const idless: Sheet = { name: 'Loose', order: 0, config: {}, data: [[num(1), formula('=A1+1')]] };
+        expect(sheetsNeedRecalc([idless])).toBe(false);
+        expect(recalcSheets([idless])[0]).toBe(idless);
+    });
+
+    test('recalc output of a doc carrying an id-less sheet no longer triggers the gate', () => {
+        const idless: Sheet = { name: 'Loose', order: 0, config: {}, data: [[num(1), formula('=A1+1')]] };
+        const out = recalcSheets([sheet('s1', 'Sheet1', [[num(1), formula('=A1+1')]]), idless]);
         expect(sheetsNeedRecalc(out)).toBe(false);
     });
 });

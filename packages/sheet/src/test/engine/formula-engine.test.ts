@@ -109,3 +109,66 @@ describe('engine/formula-engine — FormulaEngine.evaluate', () => {
         expect(result.type).toBe('number');
     });
 });
+
+// ─── Date results ───────────────────────────────────────────────────────────
+
+describe('engine/formula-engine — date results', () => {
+    const engine = new FormulaEngine();
+
+    test('DATE yields the Excel serial, typed date', () => {
+        const result = engine.evaluate('=DATE(2026,1,5)', 'sheet1', 0, 0, resolver);
+        expect(result).toEqual({ value: 46027, display: '46027', type: 'date' });
+    });
+
+    test('date arithmetic stays a day count =DATE(2026,1,5)-DATE(2026,1,1)', () => {
+        const result = engine.evaluate('=DATE(2026,1,5)-DATE(2026,1,1)', 'sheet1', 0, 0, resolver);
+        expect(result.value).toBe(4);
+        expect(result.type).toBe('number');
+    });
+
+    test('DATEVALUE yields the Excel serial', () => {
+        const result = engine.evaluate('=DATEVALUE("2026-01-05")', 'sheet1', 0, 0, resolver);
+        expect(result.value).toBe(46027);
+    });
+
+    test('NOW yields a number, not a stringified Date', () => {
+        const result = engine.evaluate('=NOW()', 'sheet1', 0, 0, resolver);
+        expect(typeof result.value).toBe('number');
+        expect(result.type).toBe('date');
+    });
+});
+
+// ─── Range bounds ───────────────────────────────────────────────────────────
+
+describe('engine/formula-engine — range bounds', () => {
+    const engine = new FormulaEngine();
+
+    test('whole-column =ROWS(A:A) counts the grid rows, not one past', () => {
+        expect(engine.evaluate('=ROWS(A:A)', 'sheet1', 0, 0, resolver).value).toBe(2);
+    });
+
+    test('whole-row =COLUMNS(1:1) counts the grid columns, not one past', () => {
+        expect(engine.evaluate('=COLUMNS(1:1)', 'sheet1', 0, 0, resolver).value).toBe(3);
+    });
+
+    test('=COUNTBLANK(A:A) sees no phantom cell past the grid', () => {
+        expect(engine.evaluate('=COUNTBLANK(A:A)', 'sheet1', 0, 0, resolver).value).toBe(0);
+    });
+
+    test('explicit range clamps to the grid — =ROWS(A1:A100) is the grid row count', () => {
+        expect(engine.evaluate('=ROWS(A1:A100)', 'sheet1', 0, 0, resolver).value).toBe(2);
+    });
+
+    test('=SUM over an oversized explicit range reads only the grid', () => {
+        expect(engine.evaluate('=SUM(A1:ZZ20000)', 'sheet1', 0, 0, resolver).value).toBe(165);
+    });
+
+    test('=SUM over a full-sheet xlsx range completes', () => {
+        // Unclamped, `A1:XFD1048576` is 17 billion cell reads — the pin is that it returns.
+        expect(engine.evaluate('=SUM(A1:XFD1048576)', 'sheet1', 0, 0, resolver).value).toBe(165);
+    });
+
+    test('a range starting past the grid is empty, not a throw', () => {
+        expect(engine.evaluate('=SUM(A9:B12)', 'sheet1', 0, 0, resolver).value).toBe(0);
+    });
+});
