@@ -43,6 +43,7 @@ import {
     type MergedValue,
     numToStr,
     PropertiesPanel,
+    PropertyGestureContext,
     PropertyRow,
     PropertySection,
     TransformSection,
@@ -162,9 +163,9 @@ export function CanvasPropertiesPanel({
         sealed(undoManager, () => updateElements(selectedIds.map((id) => ({ id, fields }))));
     };
 
-    // One edit = one undo step for every control that writes as the user goes: the panel hands each of
-    // them this hold, which `sealed` stands down inside, so an opacity drag and a typed number are each
-    // one step instead of one per frame or per digit.
+    // One edit = one undo step for every control that writes as the user goes: this host publishes the
+    // hold, which `sealed` stands down inside, so an opacity drag and a typed number are each one step
+    // instead of one per frame or per digit.
     const beginGesture = useCallback(() => holdCapture(undoManager), [undoManager]);
 
     // A patch computed PER element — a kind section's seam for the writes one uniform patch cannot
@@ -259,143 +260,145 @@ export function CanvasPropertiesPanel({
     // Sections follow the canonical order documented on PropertiesPanel — geometry, content, paint,
     // appearance, actions.
     return (
-        <PropertiesPanel title={title} beginGesture={beginGesture}>
-            {has && (
-                <TransformSection
-                    x={tx}
-                    y={ty}
-                    width={tWidth}
-                    height={tHeight}
-                    angle={tAngle}
-                    onChange={applyTransform}
-                    // An elbow arrow's route lives in the unrotated local frame, so it pins angle 0 — the
-                    // Angle input is disabled for a pure-elbow selection (W/H stay editable).
-                    angleDisabled={allElbow}
-                    aspectLocked={aspectLocked}
-                    onAspectLockChange={onAspectLockChange}
-                />
-            )}
-
-            {KindSection && (
-                <KindSection
-                    elements={selectedElements}
-                    scene={sceneById}
-                    onChange={applyToAll}
-                    onChangeEach={applyToEach}
-                />
-            )}
-
-            {showFill && (
-                /* BackgroundFillBlock IS the section: the paint (solid or two-stop linear gradient) plus,
-                   for the kinds roughjs hatches, the hatch style — both halves of the one stored fill. */
-                <BackgroundFillBlock
-                    title="Fill"
-                    value={fillValue}
-                    mixed={isMixed(fillRaw)}
-                    onChange={(next) => {
-                        const paint: FillPaint = next === null || next.type === 'image' ? TRANSPARENT_FILL : next;
-                        applyFill((fill) => ({ ...paint, style: fill.style }));
-                    }}
-                    allowedTypes={['solid', 'gradient']}
-                >
-                    {showFillStyle && (
-                        <PropertyRow label="Style">
-                            <MergedSelect
-                                value={fillStyle}
-                                onChange={(v) => applyFill((fill) => ({ ...fill, style: v }))}
-                                options={FILL_STYLE_OPTIONS}
-                            />
-                        </PropertyRow>
-                    )}
-                </BackgroundFillBlock>
-            )}
-
-            {has && (
-                <PropertySection title="Stroke">
-                    <ColorRow
-                        label="Color"
-                        value={strokeColor}
-                        onChange={(c) => applyToAll({ strokeColor: c })}
-                        allowNone={strokeOptional}
+        <PropertyGestureContext.Provider value={beginGesture}>
+            <PropertiesPanel title={title}>
+                {has && (
+                    <TransformSection
+                        x={tx}
+                        y={ty}
+                        width={tWidth}
+                        height={tHeight}
+                        angle={tAngle}
+                        onChange={applyTransform}
+                        // An elbow arrow's route lives in the unrotated local frame, so it pins angle 0 — the
+                        // Angle input is disabled for a pure-elbow selection (W/H stay editable).
+                        angleDisabled={allElbow}
+                        aspectLocked={aspectLocked}
+                        onAspectLockChange={onAspectLockChange}
                     />
-                    <PropertyRow label="Width">
-                        <MergedSelect
-                            value={numToStr(strokeWidth)}
-                            onChange={(v) => applyToAll({ strokeWidth: Number(v) })}
-                            options={STROKE_WIDTH_OPTIONS}
+                )}
+
+                {KindSection && (
+                    <KindSection
+                        elements={selectedElements}
+                        scene={sceneById}
+                        onChange={applyToAll}
+                        onChangeEach={applyToEach}
+                    />
+                )}
+
+                {showFill && (
+                    /* BackgroundFillBlock IS the section: the paint (solid or two-stop linear gradient) plus,
+                   for the kinds roughjs hatches, the hatch style — both halves of the one stored fill. */
+                    <BackgroundFillBlock
+                        title="Fill"
+                        value={fillValue}
+                        mixed={isMixed(fillRaw)}
+                        onChange={(next) => {
+                            const paint: FillPaint = next === null || next.type === 'image' ? TRANSPARENT_FILL : next;
+                            applyFill((fill) => ({ ...paint, style: fill.style }));
+                        }}
+                        allowedTypes={['solid', 'gradient']}
+                    >
+                        {showFillStyle && (
+                            <PropertyRow label="Style">
+                                <MergedSelect
+                                    value={fillStyle}
+                                    onChange={(v) => applyFill((fill) => ({ ...fill, style: v }))}
+                                    options={FILL_STYLE_OPTIONS}
+                                />
+                            </PropertyRow>
+                        )}
+                    </BackgroundFillBlock>
+                )}
+
+                {has && (
+                    <PropertySection title="Stroke">
+                        <ColorRow
+                            label="Color"
+                            value={strokeColor}
+                            onChange={(c) => applyToAll({ strokeColor: c })}
+                            allowNone={strokeOptional}
                         />
-                    </PropertyRow>
-                    {showStrokeStyle && (
+                        <PropertyRow label="Width">
+                            <MergedSelect
+                                value={numToStr(strokeWidth)}
+                                onChange={(v) => applyToAll({ strokeWidth: Number(v) })}
+                                options={STROKE_WIDTH_OPTIONS}
+                            />
+                        </PropertyRow>
+                        {showStrokeStyle && (
+                            <PropertyRow label="Style">
+                                <MergedSelect
+                                    value={strokeStyle}
+                                    onChange={(v) => applyToAll({ strokeStyle: v })}
+                                    options={STROKE_STYLE_OPTIONS}
+                                />
+                            </PropertyRow>
+                        )}
+                    </PropertySection>
+                )}
+
+                {showShape && (
+                    <PropertySection title="Shape">
+                        {showCorners && (
+                            <PropertyRow label="Corners">
+                                <MergedSelect
+                                    value={corners}
+                                    onChange={(v) => applyToAll({ corners: v })}
+                                    options={CORNERS_OPTIONS}
+                                />
+                            </PropertyRow>
+                        )}
+                        {showEdges && (
+                            <PropertyRow label="Edges">
+                                <MergedSelect
+                                    value={roundness}
+                                    onChange={(v) => applyToAll({ roundness: v })}
+                                    options={EDGES_OPTIONS}
+                                />
+                            </PropertyRow>
+                        )}
+                    </PropertySection>
+                )}
+
+                {has && (
+                    <PropertySection title="Sketch">
                         <PropertyRow label="Style">
                             <MergedSelect
-                                value={strokeStyle}
-                                onChange={(v) => applyToAll({ strokeStyle: v })}
-                                options={STROKE_STYLE_OPTIONS}
+                                value={numToStr(roughness)}
+                                onChange={(v) => applyToAll({ roughness: Number(v) })}
+                                options={ROUGHNESS_OPTIONS}
                             />
                         </PropertyRow>
-                    )}
-                </PropertySection>
-            )}
+                    </PropertySection>
+                )}
 
-            {showShape && (
-                <PropertySection title="Shape">
-                    {showCorners && (
-                        <PropertyRow label="Corners">
-                            <MergedSelect
-                                value={corners}
-                                onChange={(v) => applyToAll({ corners: v })}
-                                options={CORNERS_OPTIONS}
+                {has && (
+                    <PropertySection title="Appearance">
+                        <PropertyRow label="Opacity">
+                            <MergedSlider
+                                aria-label="Opacity"
+                                value={opacity}
+                                onChange={(v) => applyToAll({ opacity: v })}
+                                min={0}
+                                max={100}
+                                step={1}
                             />
                         </PropertyRow>
-                    )}
-                    {showEdges && (
-                        <PropertyRow label="Edges">
-                            <MergedSelect
-                                value={roundness}
-                                onChange={(v) => applyToAll({ roundness: v })}
-                                options={EDGES_OPTIONS}
-                            />
-                        </PropertyRow>
-                    )}
-                </PropertySection>
-            )}
+                    </PropertySection>
+                )}
 
-            {has && (
-                <PropertySection title="Sketch">
-                    <PropertyRow label="Style">
-                        <MergedSelect
-                            value={numToStr(roughness)}
-                            onChange={(v) => applyToAll({ roughness: Number(v) })}
-                            options={ROUGHNESS_OPTIONS}
-                        />
-                    </PropertyRow>
-                </PropertySection>
-            )}
+                {!has && emptySection}
 
-            {has && (
-                <PropertySection title="Appearance">
-                    <PropertyRow label="Opacity">
-                        <MergedSlider
-                            aria-label="Opacity"
-                            value={opacity}
-                            onChange={(v) => applyToAll({ opacity: v })}
-                            min={0}
-                            max={100}
-                            step={1}
-                        />
-                    </PropertyRow>
-                </PropertySection>
-            )}
+                {has && (
+                    <PropertySection title="Arrange">
+                        <ZOrderButtons onApply={handleZOrderApply} />
+                    </PropertySection>
+                )}
 
-            {!has && emptySection}
-
-            {has && (
-                <PropertySection title="Arrange">
-                    <ZOrderButtons onApply={handleZOrderApply} />
-                </PropertySection>
-            )}
-
-            {selectedElements.length >= 2 && <AlignSection count={selectedElements.length} onApply={handleAlign} />}
-        </PropertiesPanel>
+                {selectedElements.length >= 2 && <AlignSection count={selectedElements.length} onApply={handleAlign} />}
+            </PropertiesPanel>
+        </PropertyGestureContext.Provider>
     );
 }

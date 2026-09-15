@@ -7,7 +7,7 @@ const window = installHappyDom();
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { holdCapture, sealed } = await import('../../../components/vector/hooks/use-canvas-doc');
-const { PropertiesPanel } = await import('../../../components/properties-panel/properties-panel');
+const { PropertyGestureContext } = await import('../../../components/properties-panel/property-gesture');
 const { TransformSection } = await import('../../../components/properties-panel/transform-section');
 const { useAspectLock } = await import('../../../components/properties-panel/use-aspect-lock');
 
@@ -108,7 +108,7 @@ test('an aspect-locked width keeps the ratio it started the edit with', async ()
 });
 
 // Typing a number is ONE edit, not one per digit: the panel's writes are sealed on both sides, so
-// without the panel gesture around them "250" leaves three undo steps and ⌘Z walks back through the
+// without the host gesture around them "250" leaves three undo steps and ⌘Z walks back through the
 // digits.
 test('typing three digits into a transform field is one undo step', async () => {
     const doc = new Y.Doc();
@@ -120,9 +120,10 @@ test('typing three digits into a transform field is one undo step', async () => 
     const root = createRoot(container);
     await act(async () => {
         root.render(
-            createElement(PropertiesPanel, {
-                beginGesture: () => holdCapture(undoManager),
-                children: createElement(TransformSection, {
+            createElement(
+                PropertyGestureContext.Provider,
+                { value: () => holdCapture(undoManager) },
+                createElement(TransformSection, {
                     x: 0,
                     y: 0,
                     width: 100,
@@ -133,7 +134,7 @@ test('typing three digits into a transform field is one undo step', async () => 
                             for (const [field, v] of Object.entries(fields)) box.set(field, v);
                         }),
                 }),
-            }),
+            ),
         );
     });
 

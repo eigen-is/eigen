@@ -3,12 +3,13 @@ import { createContext, useCallback, useContext, useEffect, useRef } from 'react
 // Opens one undo step and returns its release. Every control in the panel writes on every change — a
 // slider per drag frame, a number field per keystroke — so the control opens a gesture on its first
 // write and releases it on commit or blur, and ⌘Z reverts the whole edit rather than one digit of it.
-// The host supplies it because only the host knows the undo stack; the panel just spans the edit.
+// The host supplies it on PropertyGestureContext because only the host knows the undo stack; the
+// control just spans the edit.
 export type BeginGesture = () => () => void;
 
-// No host gesture: every write stands alone, which is the behaviour of a panel over an undo stack
+// Default: no host gesture, so every write stands alone — the behaviour of a panel over an undo stack
 // that has no hold to offer (docs' ProseMirror history).
-export const NO_GESTURE: BeginGesture = () => () => {};
+const NO_GESTURE: BeginGesture = () => () => {};
 
 export const PropertyGestureContext = createContext<BeginGesture>(NO_GESTURE);
 
