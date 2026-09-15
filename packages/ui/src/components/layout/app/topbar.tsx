@@ -87,9 +87,7 @@ function AppSwitcher({ isGuest }: { isGuest: boolean }) {
     const { appName } = useLayout();
     const isAdmin = useIsAdmin();
     const mailEnabled = useMailEnabled();
-    const appList = (isGuest ? apps.filter((app) => GUEST_APPS.has(app.name)) : apps).filter(
-        (app) => mailEnabled || !isMailApp(app),
-    );
+    const appList = apps.filter((app) => (!isGuest || GUEST_APPS.has(app.name)) && (mailEnabled || !isMailApp(app)));
 
     return (
         <DropdownMenu>

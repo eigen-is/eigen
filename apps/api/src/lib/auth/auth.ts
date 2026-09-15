@@ -268,7 +268,7 @@ export const auth = betterAuth({
 // Joins the default org (config.orgId, pinned at setup — not "the first org row", whose order is
 // unspecified). Both the sign-up hook and every sign-in call this, so an account whose sign-up join
 // failed still reaches Admin → Users instead of staying outside the org with no repair path.
-export async function authEnsureDefaultOrgMembership(userId: string): Promise<void> {
+async function authEnsureDefaultOrgMembership(userId: string): Promise<void> {
     const orgId = getServerConfig()?.orgId;
     if (!orgId) return;
 

@@ -1,9 +1,9 @@
 import { Slider } from '@workspace/ui/components/slider';
 import { cn } from '@workspace/ui/lib/utils';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback } from 'react';
 import { MergedNumberInput } from './merged-number-input';
 import { isMixed, type MergedValue } from './merged-value';
-import { usePropertyGesture } from './property-gesture';
+import { useHeldGesture } from './property-gesture';
 
 type MergedSliderProps = {
     value: MergedValue<number>;
@@ -21,28 +21,19 @@ type MergedSliderProps = {
 // '—' carries the meaning — and the first edit collapses the selection to one value, as typing does.
 export function MergedSlider({ value, onChange, min, max, step = 1, ...props }: MergedSliderProps) {
     const mixed = isMixed(value);
-    const beginGesture = usePropertyGesture();
-    const release = useRef<(() => void) | null>(null);
-    // Radix commits on pointer-up only when the value actually changed, and per keypress for the arrows;
-    // the pointer-up below is the safety net that closes a gesture which ended where it started.
-    const endGesture = useCallback(() => {
-        release.current?.();
-        release.current = null;
-    }, []);
     // The slider writes per drag frame, so the gesture opens on the first of them and stays open until
     // a commit or a blur closes it — one drag is one undo step however long it lasts. The number field
-    // beside it holds its own gesture over a typed edit; both come from the panel.
+    // beside it holds its own gesture over a typed edit; both come from the panel. Radix commits on
+    // pointer-up only when the value actually changed, and per keypress for the arrows; the pointer-up
+    // below is the safety net that closes a gesture which ended where it started.
+    const { hold, end: endGesture } = useHeldGesture();
     const write = useCallback(
         (v: number) => {
-            release.current ??= beginGesture();
+            hold();
             onChange(v);
         },
-        [beginGesture, onChange],
+        [hold, onChange],
     );
-    // A gesture the component never sees end: Escape mid-drag deselects and unmounts this section, and
-    // so does a peer deleting the element. An unreleased hold leaves captureTimeout at Infinity for the
-    // rest of the session, so every later edit would merge into one undo step.
-    useEffect(() => endGesture, [endGesture]);
 
     return (
         // onBlur rides on the row rather than on either control: React's is the bubbling focusout, so

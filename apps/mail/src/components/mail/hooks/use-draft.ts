@@ -135,16 +135,19 @@ export function initFields(
             body: email.html || email.text || '',
             bodyText: email.text || '',
             // index stays the raw EML position, so hiding an invite never shifts the chips around it.
-            attachments: (email.attachments || [])
-                .map((a, index) => ({ a, index }))
-                .filter(({ a }) => !isCalendarPart(a))
-                .map(({ a, index }) => ({
-                    key: `saved-${index}-${a.filename ?? ''}-${a.size}`,
-                    filename: mailAttachmentName(a, index),
-                    size: a.size,
-                    contentType: a.contentType,
-                    index,
-                })),
+            attachments: (email.attachments || []).flatMap((a, index) =>
+                isCalendarPart(a)
+                    ? []
+                    : [
+                          {
+                              key: `saved-${index}-${a.filename ?? ''}-${a.size}`,
+                              filename: mailAttachmentName(a, index),
+                              size: a.size,
+                              contentType: a.contentType,
+                              index,
+                          },
+                      ],
+            ),
             driveReferences: email.driveReferences ?? [],
             inReplyTo: email.inReplyTo,
             references: email.references,

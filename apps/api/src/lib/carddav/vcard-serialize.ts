@@ -125,10 +125,11 @@ function diffText(
     for (const line of lines) {
         if (line.name !== name) continue;
         const pos = remaining.indexOf(unescapeText(line.value).trim());
-        if (pos === -1) dropped.push(line);
-        else remaining.splice(pos, 1);
+        if (pos === -1) {
+            dropped.push(line);
+            toRemove.add(line);
+        } else remaining.splice(pos, 1);
     }
-    for (const line of dropped) toRemove.add(line);
     appendDiffed(name, remaining.map(escapeContentText), dropped, toAppend);
 }
 
@@ -142,10 +143,11 @@ function diffAddresses(card: ParsedCard, wanted: Address[], toRemove: Set<VCardL
         if (line.name !== 'ADR') continue;
         const existing = card.address[k++];
         const pos = remaining.findIndex((a) => addressEquals(a, existing));
-        if (pos === -1) dropped.push(line);
-        else remaining.splice(pos, 1);
+        if (pos === -1) {
+            dropped.push(line);
+            toRemove.add(line);
+        } else remaining.splice(pos, 1);
     }
-    for (const line of dropped) toRemove.add(line);
     appendDiffed('ADR', remaining.map(buildAddressValue), dropped, toAppend);
 }
 
