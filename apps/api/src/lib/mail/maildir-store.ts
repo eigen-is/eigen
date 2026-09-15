@@ -28,7 +28,6 @@ import {
     buildMaildirFilename,
     createUniqueMessageId,
     getMailIDfromFileName,
-    maildirSize,
     parseFlagsFromFilename,
     rebuildFlagsSuffix,
 } from './mailutils';
@@ -95,7 +94,7 @@ export class MaildirStore implements MailStore {
     }
 
     async size(): Promise<number> {
-        return maildirSize(this.home.fs);
+        return this.db.size();
     }
 
     search(opts: MailSearchOptions): EmailSummary[] {

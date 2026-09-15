@@ -1,3 +1,5 @@
+import { Database } from 'bun:sqlite';
+import * as fs from 'node:fs';
 import { MAIL_PREVIEW_CHARS } from '@workspace/lib/constants/mail';
 import { MAILBOX_JUNK, MAILBOX_TRASH } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary, RecipientSummary } from '@workspace/lib/types/mail';
@@ -9,6 +11,22 @@ import type { Home } from '../home';
 import { MAIL_DB_CONFIG } from './db-config';
 import type { MailSearchOptions } from './mail-store';
 import * as schema from './schema';
+
+// What MailDB.size() answers, for a mail.db nobody has opened — the admin usage view sizes every
+// home at once, so it reads the same index sum the quota gate uses. Read-write on purpose: a WAL
+// database whose owner is not holding it open has no -shm beside it, and a read-only open of one
+// fails outright. Only ever used for this SELECT.
+export function readMailTotalSize(dbPath: string): number {
+    if (!fs.existsSync(dbPath)) return 0;
+    const db = new Database(dbPath, { readwrite: true, create: false });
+    try {
+        db.run('PRAGMA busy_timeout = 5000;');
+        const row = db.query<{ total: number }, []>('SELECT COALESCE(SUM(size), 0) AS total FROM emails').get();
+        return row?.total ?? 0;
+    } finally {
+        db.close();
+    }
+}
 
 // Mailboxes excluded from default mail search — users can still search them explicitly.
 const SEARCH_EXCLUDED_MAILBOXES = [MAILBOX_TRASH, MAILBOX_JUNK];
@@ -89,6 +107,10 @@ export default class MailDB {
                     .run();
             }
         });
+    }
+
+    size() {
+        return this.db.select({ size: sql<number>`SUM(size)` }).from(schema.emails).get()?.size || 0;
     }
 
     getEmailsCount(mailbox: string) {

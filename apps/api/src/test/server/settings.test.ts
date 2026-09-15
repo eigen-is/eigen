@@ -1048,7 +1048,7 @@ describe('GET /settings/users/usage', () => {
     });
 
     // The admin view sizes from the home's own files, the user's own storage page from their booted
-    // home: same paths table, same maildir walk, same cards and avatars, same quota resolution.
+    // home: same paths table, same emails index, same cards and avatars, same quota resolution.
     test('reads the same totals the home itself reports', async () => {
         // A home of its own: Alice's carries documents earlier files left open, whose 30 s syncs re-stat
         // sizes between the two reads below. One file and one card give both halves something to add up.

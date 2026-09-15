@@ -97,7 +97,7 @@ All endpoints require the org role `admin` or `owner`. Defined in `apps/api/src/
 | PUT    | `/settings/s3config`      | Validate a connection, then write `defaults.mount.s3Config`     |
 | POST   | `/settings/s3check`       | Test an S3 connection without saving                           |
 | GET    | `/settings/users`         | `AdminUserRow[]` — every org member **and** orphan for the Users page (auth-DB join incl. `lastLoginAt` + session-derived `lastActiveAt`, teams) |
-| GET    | `/settings/users/usage`   | `Record<userId, HomeSizeResponse>` — per-user disk usage via the `pullHomeSize` home-relay read, which sizes a home from its own files (the mount `metadata.db` total + the maildir/cards/avatars walks) rather than booting it (concurrency 4, 5-min in-memory cache) |
+| GET    | `/settings/users/usage`   | `Record<userId, HomeSizeResponse>` — per-user disk usage via the `pullHomeSize` home-relay read, which sizes a home from its own files (the mount `metadata.db` and `mail.db` totals + the cards/avatars walks) rather than booting it (concurrency 4, 5-min in-memory cache) |
 | GET    | `/settings/users/guests`  | Guest accounts only, for the admin Guests page                 |
 | DELETE | `/settings/user/:userId`  | Delete a user account (cannot delete self)                     |
 
