@@ -156,7 +156,9 @@ export const driveRouter = new Elysia({ name: 'drive' })
     )
     .post(
         '/drive/:ownerId/:mountId/path/:pathId/copy',
-        async ({ params, body, user }) => {
+        async ({ params, body, request, user, server }) => {
+            // A deep cross-mount or S3 copy stays silent past the server-wide idleTimeout — without this the client retries into a duplicate tree.
+            server?.timeout(request, 0);
             const sourceDrive = await getSharedDrive(params.ownerId, user);
             const src = await sourceDrive.getPath(params.mountId, params.pathId);
             if (!src) throw new ApiError(404, 'Source not found');

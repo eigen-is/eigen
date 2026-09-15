@@ -33,9 +33,10 @@ const server = app.listen({
     maxRequestBodySize: BACKUP_UPLOAD_MAX_BYTES,
     // Bun closes idle connections by default (10s documented; ~30s observed on 1.3.14),
     // which killed every silent long-running response. 200s is a broad floor for slow
-    // routes (large copies, protocol ops); it can NOT cover the transform routes — queue
+    // routes (protocol ops); it can NOT cover the transform routes — queue
     // wait + 120s deadline (+ 60s WeasyPrint) exceeds Bun's 255s cap on this knob — so
-    // those exempt themselves per-request via server.timeout(request, 0) (routes/drive.ts).
+    // those and the copy routes exempt themselves per-request via server.timeout(request, 0)
+    // (routes/drive.ts).
     // WebSockets are unaffected (own keepalive config).
     idleTimeout: 200,
 });

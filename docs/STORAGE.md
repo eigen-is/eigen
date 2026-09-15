@@ -206,7 +206,7 @@ valid independent doc; copy flushes the live `data.db` first and skips the `vers
 folder. A copied file carries the source's media facts (`details.width/height/duration`) and, when its file still exists, its thumbnail, copied as `<thumbsDir>/<thumbnail>` under the new id; `originalName` and `webdavProps` stay with the source. The bridge re-uploads and gets a fresh thumbnail from the upload path. Route `POST /drive/:o/:m/path/:p/copy` (body `{targetOwnerId, targetMountId, targetParentId,
 name?}`) picks fast-path vs bridge, dedups the destination name at the route level (kept out of
 `Drive.copyPath` so WebDAV COPY keeps overwrite/409 semantics), and rejects copying/moving a folder
-into its own subtree via `Mount.isSelfOrDescendant`. Cross-mount MOVE is deferred — it would change
+into its own subtree via `Mount.isSelfOrDescendant`. That route and WebDAV COPY both stream nothing while the tree copies, so each exempts its request from the server-wide `idleTimeout` with `server.timeout(request, 0)`; otherwise a copy past 200s reaches the client as an empty reply it would retry into a duplicate tree. Cross-mount MOVE is deferred — it would change
 `ownerId/mountId/pathId`, breaking shares, links, and history.
 
 See: [DATABASE.md](DATABASE.md) for schema details, [ACL.md](ACL.md) for permissions

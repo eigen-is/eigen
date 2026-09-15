@@ -49,7 +49,7 @@ Every mutating method goes through `assertWritable()` (lock check) and the conta
 | `DELETE` | 1 | `Drive.deletePath` (soft) | Goes to trash. `resolvePath` skips trashed rows so subsequent `GET`/`PROPFIND` returns 404. |
 | `MKCOL` | 1 | `Drive.createFolder` | Bodied `MKCOL` returns `415` (RFC 4918 §9.3.1). |
 | `MOVE` | 1 | `Drive.movePath` + `renamePath` | Same-mount only. `Overwrite: F` → `412` if target exists. Same source and destination URL → `403` (RFC 4918 §9.9.4), checked before anything is trashed. |
-| `COPY` | 1 | `Drive.copyPath` | Same-mount only. Server-side copy — does not round-trip bytes through HTTP. `Depth: 0` on a collection copies the folder without members (RFC 4918 §9.8.3). Same source and destination URL → `403`. |
+| `COPY` | 1 | `Drive.copyPath` | Same-mount only. Server-side copy — does not round-trip bytes through HTTP. `Depth: 0` on a collection copies the folder without members (RFC 4918 §9.8.3). Same source and destination URL → `403`. Exempt from the server-wide `idleTimeout` (`server.timeout(request, 0)`), so a deep copy past 200s still answers instead of dropping the connection. |
 | `PROPPATCH` | 1 | `Drive.updatePathDetails` | Live properties (`getcontentlength`, `getetag`, ...) return `403`. Unknown dead properties (e.g. `Z:Win32CreationTime`) persist in `DrivePath.details.webdavProps`. 207 multistatus; a malformed body or a property name that is not an XML name is `400` before anything persists (the name is echoed as an element in every later PROPFIND). |
 | `LOCK` / `UNLOCK` | 2 | `Drive.lockManager` | In-memory tokens. Default TTL 600 s, capped at 24 h. Depth-infinity locks gate writes on descendants. Released on `DELETE`. |
 
