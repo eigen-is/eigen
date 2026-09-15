@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mailAttachmentName } from '../../types/mail';
+import { isCalendarPart, mailAttachmentName } from '../../types/mail';
 
 describe('mailAttachmentName', () => {
     test('returns the part filename when it has one', () => {
@@ -28,5 +28,18 @@ describe('mailAttachmentName', () => {
     test('strips control characters that would forge a header line', () => {
         expect(mailAttachmentName({ filename: 'in\r\nvoice.pdf' }, 0)).toBe('invoice.pdf');
         expect(mailAttachmentName({ filename: '\u007f' }, 0)).toBe('attachment-1');
+    });
+});
+
+describe('isCalendarPart', () => {
+    test('matches the bare type and a parameterized one', () => {
+        expect(isCalendarPart({ contentType: 'text/calendar' })).toBe(true);
+        expect(isCalendarPart({ contentType: 'text/calendar; method=REQUEST; charset=utf-8' })).toBe(true);
+    });
+
+    test('leaves every other part alone', () => {
+        expect(isCalendarPart({ contentType: 'application/pdf' })).toBe(false);
+        expect(isCalendarPart({ contentType: 'text/plain' })).toBe(false);
+        expect(isCalendarPart({ contentType: 'application/ics' })).toBe(false);
     });
 });

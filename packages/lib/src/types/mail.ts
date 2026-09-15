@@ -45,6 +45,11 @@ export function mailAttachmentName(att: Pick<Attachment, 'filename'>, index: num
     return name || `attachment-${index + 1}`;
 }
 
+// The one test for "belongs to the invite widget, not the chips": compose and the save can't disagree.
+export function isCalendarPart(att: Pick<Attachment, 'contentType'>): boolean {
+    return att.contentType.startsWith('text/calendar');
+}
+
 export type ParsedMail = {
     attachments: Attachment[];
     html: string | null;

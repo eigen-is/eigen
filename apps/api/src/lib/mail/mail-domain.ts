@@ -15,6 +15,7 @@ import {
     type Email,
     type EmailDraft,
     type EmailSummary,
+    isCalendarPart,
     isEmailDraft,
     type MaildirMailbox,
     type NewDraft,
@@ -126,7 +127,7 @@ export class Mail {
         // Process iMIP calendar attachments (blocking so event exists before client queries)
         try {
             const parsed = parseMail(message);
-            const hasCalendar = parsed.attachments.some((a) => a.contentType.startsWith('text/calendar'));
+            const hasCalendar = parsed.attachments.some(isCalendarPart);
             if (hasCalendar) {
                 processInboundImip(this.home, parsed);
             }
@@ -159,7 +160,7 @@ export class Mail {
 
         // Summarize invite parts while the parsed content is still in memory, then blank it.
         for (const a of message.attachments) {
-            if (a.contentType.startsWith('text/calendar')) {
+            if (isCalendarPart(a)) {
                 a.calendarInvite = summarizeCalendarInvite(a);
             }
             a.content = Buffer.alloc(0);
@@ -271,10 +272,11 @@ export class Mail {
             if (dbRecord) {
                 const meta = await this.store.readDraftMeta(existingId);
                 if (meta && meta.attachments.length > 0) {
+                    // A count compare, not a positional one: the keep list carries raw EML indexes,
+                    // and a hidden calendar part makes those skip a number the sidecar never had.
                     const keepAll =
                         !options.keepAttachmentIndexes ||
-                        (options.keepAttachmentIndexes.length === meta.attachments.length &&
-                            options.keepAttachmentIndexes.every((v, i) => v === i));
+                        options.keepAttachmentIndexes.length === meta.attachments.length;
 
                     const stale = meta.lastFullSaveAt && Date.now() - meta.lastFullSaveAt > FULL_SAVE_INTERVAL_MS;
                     if (keepAll && !stale) {
@@ -382,7 +384,7 @@ export class Mail {
             const keepSet = options.keepAttachmentIndexes ? new Set(options.keepAttachmentIndexes) : null;
             for (let i = 0; i < attachments.length; i++) {
                 const a = attachments[i];
-                if (!a.filename || a.contentType.startsWith('text/calendar')) continue;
+                if (!a.filename || isCalendarPart(a)) continue;
                 if (keepSet && !keepSet.has(i)) continue;
                 existingAttachments.push({
                     filename: a.filename,
@@ -448,7 +450,7 @@ export class Mail {
             text: email.text || '',
             html: cleanHtml,
             attachments: saved.attachments.flatMap((a) =>
-                a.filename && !a.contentType.startsWith('text/calendar')
+                a.filename && !isCalendarPart(a)
                     ? [{ filename: a.filename, contentType: a.contentType, size: a.size }]
                     : [],
             ),

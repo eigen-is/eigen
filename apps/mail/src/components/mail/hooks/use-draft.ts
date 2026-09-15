@@ -6,6 +6,7 @@ import {
     type Attachment,
     type AttachmentMeta,
     type EmailDraft,
+    isCalendarPart,
     mailAttachmentName,
     type NewDraft,
 } from '@workspace/lib/types/mail';
@@ -117,7 +118,7 @@ function plainSignature(sig: string | undefined): string {
         .trim();
 }
 
-function initFields(
+export function initFields(
     email: EmailDraft | null,
     prefillTo?: string,
     prefillDraft?: NewDraft,
@@ -133,13 +134,17 @@ function initFields(
             subject: email.subject ? String(email.subject) : '',
             body: email.html || email.text || '',
             bodyText: email.text || '',
-            attachments: (email.attachments || []).map((a, i) => ({
-                key: `saved-${i}-${a.filename ?? ''}-${a.size}`,
-                filename: mailAttachmentName(a, i),
-                size: a.size,
-                contentType: a.contentType,
-                index: i,
-            })),
+            // index stays the raw EML position, so hiding an invite never shifts the chips around it.
+            attachments: (email.attachments || [])
+                .map((a, index) => ({ a, index }))
+                .filter(({ a }) => !isCalendarPart(a))
+                .map(({ a, index }) => ({
+                    key: `saved-${index}-${a.filename ?? ''}-${a.size}`,
+                    filename: mailAttachmentName(a, index),
+                    size: a.size,
+                    contentType: a.contentType,
+                    index,
+                })),
             driveReferences: email.driveReferences ?? [],
             inReplyTo: email.inReplyTo,
             references: email.references,
@@ -231,9 +236,7 @@ export function mergeServerAttachments(
     parsed: Attachment[],
 ): { serverActual: AttachmentMeta[]; localNext: AttachmentMeta[] } {
     // index is the raw position in the message's attachment list, calendar parts included.
-    const indexed = parsed
-        .map((a, index) => ({ a, index }))
-        .filter(({ a }) => !a.contentType.startsWith('text/calendar'));
+    const indexed = parsed.map((a, index) => ({ a, index })).filter(({ a }) => !isCalendarPart(a));
     const serverActual = indexed.map(({ a, index }) => {
         const filename = mailAttachmentName(a, index);
         const prevMatch = local.find((p) => p.filename === filename && p.size === a.size);

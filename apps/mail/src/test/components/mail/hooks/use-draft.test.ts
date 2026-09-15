@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import type { Attachment, AttachmentMeta } from '@workspace/lib/types/mail';
-import { mergeServerAttachments } from '../../../../components/mail/hooks/use-draft';
+import type { Attachment, AttachmentMeta, EmailDraft } from '@workspace/lib/types/mail';
+import { initFields, mergeServerAttachments } from '../../../../components/mail/hooks/use-draft';
 
 function att(filename: string | undefined, contentType: string, size = 10): Attachment {
     return { filename, contentType, size, content: new Uint8Array(size) };
@@ -36,5 +36,44 @@ describe('mergeServerAttachments', () => {
         expect(serverActual.map((c) => c.filename)).toEqual(['attachment-1']);
         // Same name on both sides: the chip keeps its key and doesn't come back as an in-flight addition.
         expect(localNext.map((c) => c.key)).toEqual(['local-0']);
+    });
+});
+
+describe('initFields', () => {
+    function savedDraft(attachments: Attachment[]): EmailDraft {
+        return {
+            id: 'draft-1',
+            filename: 'draft-1.eml',
+            subject: 'Lunch',
+            fromShort: 'Alice',
+            fromAddress: 'alice@test.eigen.is',
+            toShort: 'Bob',
+            toAddress: 'bob@test.eigen.is',
+            recipientsAll: 'bob@test.eigen.is',
+            textShort: 'see you',
+            date: new Date('2026-09-15T10:00:00Z'),
+            isRead: true,
+            isFlagged: false,
+            isDraft: true,
+            isReplied: false,
+            hasAttachments: true,
+            mailbox: 'Drafts',
+            size: 100,
+            attachments,
+            html: '<p>see you</p>',
+            text: 'see you',
+        };
+    }
+
+    test('an invite an IMAP client left on the draft is no compose chip', () => {
+        const fields = initFields(savedDraft([att('invite.ics', 'text/calendar'), att('menu.pdf', 'application/pdf')]));
+        expect(fields.attachments.map((a) => a.filename)).toEqual(['menu.pdf']);
+        // The keep list the save sends is built from these indexes, so they stay raw EML positions.
+        expect(fields.attachments.map((a) => a.index)).toEqual([1]);
+    });
+
+    test('a draft without an invite keeps every part', () => {
+        const fields = initFields(savedDraft([att('a.pdf', 'application/pdf'), att('b.pdf', 'application/pdf')]));
+        expect(fields.attachments.map((a) => a.index)).toEqual([0, 1]);
     });
 });
