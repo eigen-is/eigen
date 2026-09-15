@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1462 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1463 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -832,7 +832,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ElementSize` | `@workspace/ui/hooks/use-element-size` | packages/ui/src/hooks/use-element-size.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (666)
+## Utilities & constants (667)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1089,6 +1089,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `buildSearchRegex` | `@workspace/lib/doc-search` | packages/lib/src/doc-search/build-search-regex.ts |
 | `A4_WIDTH_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/index.ts |
 | `getDocExtensions` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/extensions.ts |
+| `PAGE_MARGIN_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/index.ts |
 | `downloadBlob` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
 | `filenameFromDisposition` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
 | `triggerDownload` | `@workspace/lib/download` | packages/lib/src/core/download.ts |

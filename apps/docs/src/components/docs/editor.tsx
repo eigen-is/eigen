@@ -27,7 +27,7 @@ import {
 } from '@workspace/lib/comments';
 import { userColor } from '@workspace/lib/constants/colors';
 import { getFontFamily, getFontName } from '@workspace/lib/constants/fonts';
-import { A4_WIDTH_PX, getDocExtensions } from '@workspace/lib/docs/eigendoc';
+import { A4_WIDTH_PX, getDocExtensions, PAGE_MARGIN_PX } from '@workspace/lib/docs/eigendoc';
 import {
     isPendingMediaName,
     MediaResolverProvider,
@@ -65,6 +65,7 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import { PROPERTIES_PANEL_WIDTH_PX } from '@workspace/ui/components/properties-panel';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { useProseMirrorSearchController } from '@workspace/ui/components/search/prosemirror-search-controller';
 import { SearchHighlight } from '@workspace/ui/components/search/prosemirror-search-highlight';
@@ -175,6 +176,13 @@ const lowlight = createLowlight(common);
 
 // Block-level text-align values docs models; an unrecognized wire value drops rather than storing garbage.
 const TEXT_ALIGNS = new Set(['left', 'center', 'right', 'justify']);
+
+// The panel is an absolute overlay, so it covers all of the scroll box's content box but its p-4 gutter.
+const PANEL_INTRUSION_PX = PROPERTIES_PANEL_WIDTH_PX - 16;
+// Only the text column has to stay clear of the panel; the page's right margin may tuck under it.
+const TEXT_COLUMN_RIGHT_PX = A4_WIDTH_PX - PAGE_MARGIN_PX;
+// Above this the panel clears the centered page outright: every value below is pinned, so stop storing width.
+const PANEL_CLEAR_WIDTH_PX = 2 * (TEXT_COLUMN_RIGHT_PX + PANEL_INTRUSION_PX) - A4_WIDTH_PX;
 
 export const CollaborativeEditor = ({
     path,
@@ -304,6 +312,8 @@ const TiptapEditor = ({
     }, []);
 
     const [setScrollContainer, scrollSize] = useElementSize(scrollContainerRef);
+    // Past PANEL_CLEAR_WIDTH_PX the page and the panel no longer contend, so the layout math stops there.
+    const containerWidth = Math.min(scrollSize.width, PANEL_CLEAR_WIDTH_PX);
 
     // Hand-rolled rather than useElementSize: this measures the BORDER box, and stays quiet while
     // unscaled so a doc that needs no scaling never re-renders on its own growth.
@@ -792,9 +802,16 @@ const TiptapEditor = ({
 
     const showSidebar = !isMobile && (panel !== null || (canWrite && sidebarContext !== 'document'));
 
-    // The panel is a flex sibling, so the scroll box already ends at its edge: the page only has to
-    // fit that box's width.
-    const canvasScale = scrollSize.width === 0 ? 1 : Math.min(1, scrollSize.width / A4_WIDTH_PX);
+    // Slide the centered page left by its overlap with the panel; only shrink once the slack runs out.
+    const centredSlack = Math.max(0, (containerWidth - A4_WIDTH_PX) / 2);
+    const panelLeft = containerWidth - PANEL_INTRUSION_PX;
+    const panelOverlap = showSidebar ? Math.max(0, centredSlack + TEXT_COLUMN_RIGHT_PX - panelLeft) : 0;
+    const canShift = containerWidth > 0 && panelOverlap <= centredSlack;
+    const canvasShift = canShift ? panelOverlap : 0;
+    const canvasScale =
+        containerWidth === 0
+            ? 1
+            : Math.min(1, containerWidth / A4_WIDTH_PX, canShift ? 1 : panelLeft / TEXT_COLUMN_RIGHT_PX);
     const needsScale = canvasScale < 1;
 
     // The document observer stays quiet while unscaled, so seed the height on the way in.
@@ -890,11 +907,11 @@ const TiptapEditor = ({
                                 />
                             }
                         >
-                            <div className="flex h-full w-full overflow-hidden">
+                            <div className="h-full relative overflow-hidden">
                                 <div
                                     ref={setScrollContainer}
                                     className={cn(
-                                        'h-full flex-1 min-w-0 overflow-y-scroll bg-muted p-4',
+                                        'h-full w-full overflow-y-scroll bg-muted p-4',
                                         needsScale && 'overflow-x-hidden',
                                     )}
                                     onClick={(e) => {
@@ -918,26 +935,31 @@ const TiptapEditor = ({
                                                       transformOrigin: 'top left',
                                                       marginBottom: -(1 - canvasScale) * docHeight,
                                                   }
-                                                : undefined
+                                                : canvasShift > 0
+                                                  ? { transform: `translateX(${-canvasShift}px)` }
+                                                  : undefined
                                         }
                                     >
                                         <EditorContent editor={editor} className="h-full min-w-0 tiptap-wrapper" />
                                     </div>
                                 </div>
                                 {/* Unmounted when closed: the properties panels key-remount per caret move. */}
-                                {showSidebar &&
-                                    (panel ? (
-                                        <PanelColumn activePanel={panel} {...panelProps} />
-                                    ) : lastPanelRef.current === 'figure' ? (
-                                        <FigurePropertiesPanel
-                                            key={editor.state.selection.from}
-                                            editor={editor}
-                                            onReplaceImage={handleReplaceImage}
-                                            onReplaceImageFromDrive={handleReplaceImageFromDrive}
-                                        />
-                                    ) : (
-                                        <TablePropertiesPanel editor={editor} />
-                                    ))}
+                                {showSidebar && (
+                                    <div className="absolute inset-y-0 right-0">
+                                        {panel ? (
+                                            <PanelColumn activePanel={panel} {...panelProps} />
+                                        ) : lastPanelRef.current === 'figure' ? (
+                                            <FigurePropertiesPanel
+                                                key={editor.state.selection.from}
+                                                editor={editor}
+                                                onReplaceImage={handleReplaceImage}
+                                                onReplaceImageFromDrive={handleReplaceImageFromDrive}
+                                            />
+                                        ) : (
+                                            <TablePropertiesPanel editor={editor} />
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         </Column>
                     </DocSearchProvider>

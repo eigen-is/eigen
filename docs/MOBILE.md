@@ -35,7 +35,10 @@ components and viewport gates, [COMMENTS.md](COMMENTS.md) for panel hosting, `on
 - The sheet engine re-measures on container resize, not just on window resize. That also fixes the
   desktop panel-clip bug: the grid now resizes to the panel edge and the scrollbar stays
   reachable.
-- Docs comment and activity panels render from 768px. The old 1200px `isWide` gate is gone. The panel is a flex sibling (the slides and sheets arrangement), so the scroll container ends at its edge and the page scales to fit what is left. The figure and table properties panels ride the same gate — intentional: from 768px up, selecting a figure or a table auto-opens its panel for writers.
+- Docs comment and activity panels render from 768px. The old 1200px `isWide` gate is gone. The
+  page shifts left before it scales, so the text column always clears the panel. The figure and
+  table properties panels ride the same gate — intentional: from 768px up, selecting a figure or a
+  table auto-opens its panel for writers.
 - Slides on mobile is view-only for everyone (`canEdit = canWrite && !isMobile`): a phone gets the frame-fit canvas itself, read-only, with a one-finger horizontal swipe between slides, the slide counter, present mode, comments and the file menu. The slide rail and the properties panel are desktop surfaces — a 208px rail would take half a phone. Rail long-press and the rail context menu are desktop and iPad-desktop-layout only. The kebab open-state cue was dropped again: it is unreachable under the takeover pane.
 - Present mode has a transient exit X, a `fullscreenchange` sync and a `.catch` on
   `requestFullscreen`. Esc now exits fullscreen too, and editing is inert while presenting (object
@@ -125,5 +128,7 @@ Everything so far is Chromium-only. Open on a real phone and tablet:
   exit. Check the 2s fade window when the fullscreen transition is slow.
 - Slides rail callout suppression. `[-webkit-touch-callout:none]` as a TSX arbitrary property is the first of its kind here, so confirm it on a fresh build (stale-JIT gotcha).
 - The phone deck swipe on a real touch surface: a slide step per flick, no fight with the view-only pan, and the counter following along.
-- Docs between 768 and 830px: page legibility at scale ~0.6 with a panel open.
-- Docs figure click at 900px (the properties panel opens beside the scaled page; code-verified only) and the mobile mark-tap path (the card dialog opens over the document and closes back into it).
+- Docs between 768 and 830px: page legibility at scale ~0.6 with a panel open. Wide tables and
+  full-bleed figures may tuck under the panel in the shift band. That is by design, so eyeball it.
+- Docs figure click at 900px (the properties panel opens through the shift; code-verified only)
+  and the mobile mark-tap path (the card dialog opens over the document and closes back into it).
