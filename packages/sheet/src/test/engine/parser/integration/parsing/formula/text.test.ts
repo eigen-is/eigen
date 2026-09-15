@@ -397,22 +397,42 @@ describe('.parse() text formulas', () => {
         });
     });
 
-    xit('TEXT', () => {
-        expect(parser!.parse('TEXT()')).toMatchObject({
-            error: '#N/A',
-            result: null,
-        });
-        expect(parser!.parse('TEXT(1234.99)')).toMatchObject({
+    // formulajs ships TEXT as `throw new Error('TEXT is not implemented')`, so every
+    // TEXT() was #ERROR!. The override formats through the same numfmt masks the grid
+    // uses, which is why the `####.#` results differ from hot-formula-parser's.
+    it('TEXT', () => {
+        expect(parser!.parse('TEXT()')).toMatchObject({ error: '#VALUE!', result: null });
+        expect(parser!.parse('TEXT(1234.99)')).toMatchObject({ error: '#VALUE!', result: null });
+        expect(parser!.parse('TEXT(1234.5, "0.00")')).toMatchObject({
             error: null,
-            result: '1,235',
+            result: '1234.50',
         });
+        expect(parser!.parse('TEXT("1234.5", "0.00")')).toMatchObject({
+            error: null,
+            result: '1234.50',
+        });
+        expect(parser!.parse('TEXT(0.5, "0%")')).toMatchObject({ error: null, result: '50%' });
         expect(parser!.parse('TEXT(1234.99, "####.#")')).toMatchObject({
             error: null,
-            result: '1235.0',
+            result: '1235.',
         });
         expect(parser!.parse('TEXT(1234.99, "####.###")')).toMatchObject({
             error: null,
-            result: '1234.990',
+            result: '1234.99',
+        });
+        expect(parser!.parse('TEXT("abc", "0")')).toMatchObject({ error: null, result: 'abc' });
+        expect(parser!.parse('TEXT(A1, "0.00")')).toMatchObject({ error: null, result: '0.00' });
+        expect(parser!.parse('TEXT(1 / 0, "0")')).toMatchObject({ error: '#DIV/0!', result: null });
+    });
+
+    it('TEXT formats date serials and Date results', () => {
+        expect(parser!.parse('TEXT(46027, "yyyy-mm-dd")')).toMatchObject({
+            error: null,
+            result: '2026-01-05',
+        });
+        expect(parser!.parse('TEXT(DATE(2026, 1, 5), "d mmm yyyy")')).toMatchObject({
+            error: null,
+            result: '5 Jan 2026',
         });
     });
 

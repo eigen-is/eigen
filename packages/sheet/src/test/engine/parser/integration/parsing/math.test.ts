@@ -55,7 +55,15 @@ describe('.parse() math', () => {
             error: '#DIV/0!',
             result: null,
         });
+        expect(parser!.parse('0 / 0')).toMatchObject({
+            error: '#DIV/0!',
+            result: null,
+        });
         expect(parser!.parse('"foo" / 4.333')).toMatchObject({
+            error: '#VALUE!',
+            result: null,
+        });
+        expect(parser!.parse('4.333 / "foo"')).toMatchObject({
             error: '#VALUE!',
             result: null,
         });
@@ -100,6 +108,18 @@ describe('.parse() math', () => {
             error: null,
             result: 'Hello world!',
         });
+        expect(parser!.parse('TRUE & "x"')).toMatchObject({ error: null, result: 'TRUEx' });
+        expect(parser!.parse('"a" & FALSE')).toMatchObject({ error: null, result: 'aFALSE' });
+    });
+
+    test('unary sign', () => {
+        expect(parser!.parse('-"3"')).toMatchObject({ error: null, result: -3 });
+        expect(parser!.parse('+"3"')).toMatchObject({ error: null, result: 3 });
+        expect(parser!.parse('-TRUE')).toMatchObject({ error: null, result: -1 });
+        // A blank cell coerces to 0, an unparseable string is #VALUE! — not a silent 0.
+        expect(parser!.parse('-A1')).toMatchObject({ error: null, result: 0 });
+        expect(parser!.parse('-"a"')).toMatchObject({ error: '#VALUE!', result: null });
+        expect(parser!.parse('+"a"')).toMatchObject({ error: '#VALUE!', result: null });
     });
 
     test('mixed operators', () => {

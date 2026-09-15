@@ -1,7 +1,9 @@
 // @ts-expect-error - No types available for @formulajs/formulajs
 import * as formulajs from '@formulajs/formulajs';
+import { update } from '../../../format';
 import type { FormulaArg, FormulaOutput } from '../../../types';
-import { ERROR_NAME } from '../../error';
+import { ERROR_NAME, ERROR_VALUE } from '../../error';
+import { toNumber } from '../../helper/number';
 import SUPPORTED_FORMULAS from '../../supported-formulas';
 
 export const SYMBOL = SUPPORTED_FORMULAS;
@@ -42,6 +44,19 @@ const OVERRIDES: Record<string, (params: FormulaArg[]) => FormulaOutput | undefi
         if (typeof v === 'number') return v;
         if (typeof v === 'boolean') return v ? 1 : 0;
         return undefined;
+    },
+
+    // formulajs ships TEXT as `throw new Error('TEXT is not implemented')`, so every
+    // `=TEXT(...)` was #ERROR!. Format through `update()` — the same numfmt masks the
+    // grid renders cells with, so `TEXT(x, fa)` reads like the formatted cell it mimics.
+    TEXT(params) {
+        const [value, mask] = params;
+        if (value instanceof Error) return value;
+        if (mask === undefined || mask === null || mask === '') throw Error(ERROR_VALUE);
+        // A blank argument is 0, as in Excel.
+        const num = toNumber(value ?? 0);
+        // Non-numeric text keeps its text, formatted by the mask's text section: TEXT("abc","0") = "abc".
+        return update(String(mask), num !== undefined && Number.isFinite(num) ? num : String(value));
     },
 };
 
