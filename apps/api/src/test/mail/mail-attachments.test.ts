@@ -384,6 +384,59 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         expect(fetched.attachments.map((a) => a.contentType.split(';')[0])).toEqual(['text/calendar', 'text/plain']);
     });
 
+    test('a user-attached invite survives a full save and the send', async () => {
+        const token = ctx.alice.user.sessionToken;
+        const ownerId = ctx.alice.user.id;
+        const to = { value: [{ address: 'bob@test.eigen.is', name: 'Bob' }], text: 'Bob <bob@test.eigen.is>' };
+        const stage = async (name: string, type: string, body: string) =>
+            (await uploadDraftAttachment(token, ownerId, new File([body], name, { type }))).tempId;
+        const invite = await stage('meeting.ics', 'text/calendar', 'BEGIN:VCALENDAR\r\nEND:VCALENDAR');
+        const doc = await stage('notes.txt', 'text/plain', 'notes-bytes');
+
+        const first = await putDraft(
+            token,
+            ownerId,
+            { subject: 'Invite ride-along', to, text: 'v1', html: '<p>v1</p>' },
+            { tempAttachmentIds: [invite, doc] },
+        );
+        expect(first.attachments.map((a) => a.filename)).toEqual(['meeting.ics', 'notes.txt']);
+
+        // Body-only save: the composer chips the named part only, so the invite is never in a keep list.
+        await putDraft(
+            token,
+            ownerId,
+            { id: first.id, subject: 'Invite ride-along', to: first.to, text: 'v2', html: '<p>v2</p>' },
+            { keepAttachmentIndexes: [1] },
+        );
+
+        const forceRes = await authedRequest(token, `/mail/${ownerId}/message/draft`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                mail: { id: first.id, subject: 'Invite ride-along', to: first.to, text: 'v3', html: '<p>v3</p>' },
+                keepAttachmentIndexes: [1],
+                forceFullSave: true,
+            }),
+        });
+        const rebuilt = await assertJson<{ attachments: Array<{ filename?: string }> }>(forceRes);
+        expect(rebuilt.attachments.map((a) => a.filename)).toEqual(['meeting.ics', 'notes.txt']);
+
+        // The send rebuilds with no keep list at all.
+        const sendRes = await authedRequest(token, `/mail/${ownerId}/message/send`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                mail: { id: first.id, subject: 'Invite ride-along', to: first.to, text: 'v3', html: '<p>v3</p>' },
+            }),
+        });
+        expect(sendRes.status).toBe(200);
+
+        const sent = await assertJson<{ attachments: Array<{ filename?: string }> }>(
+            await authedRequest(token, `/mail/${ownerId}/message/${first.id}`),
+        );
+        expect(sent.attachments.map((a) => a.filename)).toEqual(['meeting.ics', 'notes.txt']);
+    });
+
     test('a fast save hands every kept part back with its raw index', async () => {
         const token = ctx.alice.user.sessionToken;
         const ownerId = ctx.alice.user.id;
@@ -415,19 +468,20 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
             ['report.pdf', 2],
         ]);
 
-        // The user removes doc.txt, so the keep list is the surviving chip's own index.
+        // The user removes doc.txt, so the keep list is the surviving chip's own index. The invite,
+        // which has no chip to remove, rides the rebuild.
         const third = await putDraft(
             token,
             ownerId,
             { id: first.id, subject: 'Index drift', to: first.to, text: 'v3', html: '<p>v3</p>' },
             { keepAttachmentIndexes: [2] },
         );
-        expect(third.attachments.map((a) => a.filename)).toEqual(['report.pdf']);
+        expect(third.attachments.map((a) => a.filename)).toEqual(['invite.ics', 'report.pdf']);
 
         const fetched = await assertJson<{ attachments: Array<{ filename?: string }> }>(
             await authedRequest(token, `/mail/${ownerId}/message/${first.id}`),
         );
-        expect(fetched.attachments.map((a) => a.filename)).toEqual(['report.pdf']);
+        expect(fetched.attachments.map((a) => a.filename)).toEqual(['invite.ics', 'report.pdf']);
     });
 
     test('a sidecar whose parts carry no index takes the full save', async () => {

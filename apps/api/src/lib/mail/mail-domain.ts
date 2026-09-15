@@ -391,8 +391,10 @@ export class Mail {
             const attachments = await this.store.getAttachments(existingId);
             const keepSet = options.keepAttachmentIndexes ? new Set(options.keepAttachmentIndexes) : null;
             for (const a of attachments) {
-                if (!a.filename || isCalendarPart(a)) continue;
-                if (keepSet && !keepSet.has(a.index)) continue;
+                if (!a.filename) continue;
+                // A keep list names the composer's chips, and a calendar part never gets one, so its
+                // absence can't mean the user removed it — carry it through every rebuild.
+                if (!isCalendarPart(a) && keepSet && !keepSet.has(a.index)) continue;
                 existingAttachments.push({
                     filename: a.filename,
                     content: Buffer.from(a.content),
