@@ -31,6 +31,13 @@ describe('.parse() function', () => {
         expect(parser!.parse('CONCATENATE("a,,b")')).toMatchObject({ error: null, result: 'a,,b' });
     });
 
+    // The same empty slot is "" in text context, as a blank cell is.
+    test('should read an empty argument as blank text', () => {
+        expect(parser!.parse('SUBSTITUTE("abc","a",)')).toMatchObject({ error: null, result: 'bc' });
+        expect(parser!.parse('CONCATENATE("a",,"b")')).toMatchObject({ error: null, result: 'ab' });
+        expect(parser!.parse('CONCATENATE(,"b")')).toMatchObject({ error: null, result: 'b' });
+    });
+
     test('should evaluate function with arguments passed as an stringified array', () => {
         expect(parser!.parse('SUM([])')).toMatchObject({ error: null, result: 0 });
         expect(parser!.parse('SUM([1])')).toMatchObject({ error: null, result: 1 });
