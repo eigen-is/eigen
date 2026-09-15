@@ -3,7 +3,7 @@ import type { Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { FormulaEngine } from '@workspace/sheet/engine';
 import * as Y from 'yjs';
-import { PREVIEW_SHEET_BUDGET, renderSheetsPreviewHtml } from '../../lib/export/sheets/render';
+import { PREVIEW_SHEET_BUDGET, renderSheetsHtml, renderSheetsPreviewHtml } from '../../lib/export/sheets/render';
 import { getHome } from '../../lib/home/get-home';
 import { renderEigensheetsPreviewBody } from '../../lib/preview/eigensheets-render';
 import {
@@ -170,6 +170,31 @@ describe('eigensheets preview (floating images)', () => {
         const { body } = renderEigensheetsPreviewBody(doc, new Map([['chart.png', IMAGE_URL]]));
         expect(body).toContain(`src="${IMAGE_URL}"`);
         expect(body).toContain('left:90px;top:30px;width:160px;height:120px');
+        doc.destroy();
+    });
+
+    // The overlay draws from the used range's origin, so an image anchored deeper in the
+    // grid keeps its cell only if the preview subtracts exactly what the export subtracts.
+    // The quick look renders this fragment at 1:1 in app CSS, where the grid under the
+    // overlay must keep the declared pitch (packages/ui globals.css, .eigensheets-preview).
+    test('an image past the used range origin gets the export geometry', () => {
+        // Used range starts at C5, the image at E7 — both in default 73 × 19 grid pixels.
+        const cell = { v: 'C5', m: 'C5', ct: { fa: 'General', t: 'g' } };
+        const sheet: Sheet = {
+            id: 'offset',
+            name: 'Offset',
+            celldata: [{ r: 4, c: 2, v: cell }],
+            config: {},
+            images: [{ id: 'img_1', mediaName: 'chart.png', x: 4 * 73, y: 6 * 19, width: 160, height: 120 }],
+        };
+        const media = new Map([['chart.png', IMAGE_URL]]);
+        const geometry = 'position:absolute;left:146px;top:38px;width:160px;height:120px';
+
+        const doc = new Y.Doc();
+        seedSheetsDoc(doc, [sheet], []);
+        expect(renderEigensheetsPreviewBody(doc, media).body).toContain(`style="${geometry}"`);
+        // The full export interns the very same declaration into its stylesheet.
+        expect(renderSheetsHtml([sheet], media).css).toContain(`{${geometry}}`);
         doc.destroy();
     });
 

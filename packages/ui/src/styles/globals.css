@@ -415,6 +415,22 @@
         transform: scale(calc(100cqw / var(--page-w)));
     }
 
+    /* The sheets preview fragment (quick look + drive hero) embeds bare, without the
+       <head> reset its own export document carries, so it inherits ours instead. Two
+       inherited rules move the grid under the floating-image overlay, which positions
+       each image in declared grid pixels: the app line-height stretches every row past
+       the height its <tr> declares (19px → 19.5px, so the anchor cell drifts half a
+       pixel per row above the image), and preflight's `img { max-width: 100% }`
+       shrinks the image to the table's width. Restore what SHEET_CSS_BASE
+       (apps/api/src/lib/export/sheets/render.ts) gives the same markup in the export,
+       so an image lands on the same cell in both. */
+    .eigensheets-preview {
+        line-height: normal;
+    }
+    .eigensheets-preview img {
+        max-width: none;
+    }
+
     /* DrivePreview hero: scaled-down server-rendered HTML preview for an
        eigendoc/slides/sheet/text file. The component wraps innerHTML in this
        class; rules below tame the wrapped body. The hero shows page one only —
