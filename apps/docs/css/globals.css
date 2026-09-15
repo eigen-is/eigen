@@ -103,10 +103,13 @@
     text-align: left;
 }
 
-/* Reset mobile canvas scaling for print */
+/* The page's narrow-viewport scale-to-fit is cloned with its inline transform; paper gets the
+   unscaled layout. !important is the only way a stylesheet rule can override a cloned inline style. */
 @media print {
     [data-document] {
-        transform: none;
-        margin-bottom: 0;
+        /* biome-ignore lint/complexity/noImportantStyles: must beat the cloned inline transform */
+        transform: none !important;
+        /* biome-ignore lint/complexity/noImportantStyles: must beat the cloned inline margin */
+        margin-bottom: 0 !important;
     }
 }
