@@ -199,12 +199,17 @@ export function useKeyboardListNavigation<T>({
 
             // Backspace deletes too, the way Finder, Apple Mail and Contacts do on macOS.
             case 'Delete':
-            case 'Backspace':
+            case 'Backspace': {
                 e.preventDefault();
-                if (onDelete && selectedIndex >= 0 && selectedIndex < items.length) {
-                    onDelete(items[selectedIndex]);
-                }
+                // ⌘A on a list nobody clicked yet selects every row with the cursor still at -1,
+                // so fall back to the first selected row — the adopter expands it to the batch.
+                const target =
+                    selectedIndex >= 0 && selectedIndex < items.length
+                        ? items[selectedIndex]
+                        : items.find((item) => selection?.isSelected(getSelectionId(item)));
+                if (onDelete && target) onDelete(target);
                 break;
+            }
 
             case 'PageUp':
             case 'Home':
