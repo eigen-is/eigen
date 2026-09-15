@@ -1,7 +1,8 @@
 // Writes Eigen-owned edits back into a stored vCard while preserving every byte we don't own. Owned
 // properties are diffed against the parsed projection: a multi-value line (EMAIL/TEL/ADR) whose
 // value is unchanged keeps its exact source bytes, a removed value drops its line (plus any now-orphaned
-// same-group X- label), and an edited single-value property is rewritten in place — keeping the first line's
+// same-group X- label), one line out against one value in carries the dropped line's group and params onto
+// the replacement, and an edited single-value property is rewritten in place — keeping the first line's
 // group and params, and taking the whole property name so no repeated line of it survives the edit.
 // Everything else — IMPP, URL, X-SOCIALPROFILE, unknown props, VERSION/UID/PRODID/REV — rides through
 // untouched. `createVCard` emits the minimal clean 3.0 card a brand-new contact starts from.
@@ -102,8 +103,16 @@ function sameNames(a: string[], b: string[]): boolean {
     return x.every((v, i) => v === y[i]);
 }
 
+// One line dropped against one value added is an edit of that value, not a swap of two, so the new line
+// inherits the dropped line's group and params: a retyped work email keeps TYPE=WORK and its grouped
+// X-ABLabel. Any other count is ambiguous to pair and appends bare, as a pure addition does.
+function appendDiffed(name: string, values: string[], dropped: VCardLine[], toAppend: VCardLine[]): void {
+    const edited = dropped.length === 1 && values.length === 1 ? dropped[0] : null;
+    for (const value of values) toAppend.push(makeLine(name, value, edited?.params, edited?.group ?? null));
+}
+
 // Diff a text-valued multi-value property (EMAIL/TEL): kept lines stay byte-for-byte, unmatched lines are
-// marked for removal, and wanted values with no matching line append a bare new line.
+// marked for removal, and wanted values with no matching line append a new line.
 function diffText(
     lines: VCardLine[],
     name: string,
@@ -112,28 +121,32 @@ function diffText(
     toAppend: VCardLine[],
 ): void {
     const remaining = [...wanted];
+    const dropped: VCardLine[] = [];
     for (const line of lines) {
         if (line.name !== name) continue;
         const pos = remaining.indexOf(unescapeText(line.value).trim());
-        if (pos === -1) toRemove.add(line);
+        if (pos === -1) dropped.push(line);
         else remaining.splice(pos, 1);
     }
-    for (const value of remaining) toAppend.push(makeLine(name, escapeContentText(value)));
+    for (const line of dropped) toRemove.add(line);
+    appendDiffed(name, remaining.map(escapeContentText), dropped, toAppend);
 }
 
 // ADR diffs by the mapped Address (field-wise, '' ≡ absent). Existing ADR lines correspond positionally to
 // `card.address`, so we compare against the projection instead of re-parsing the value.
 function diffAddresses(card: ParsedCard, wanted: Address[], toRemove: Set<VCardLine>, toAppend: VCardLine[]): void {
     const remaining = [...wanted];
+    const dropped: VCardLine[] = [];
     let k = 0;
     for (const line of card.lines) {
         if (line.name !== 'ADR') continue;
         const existing = card.address[k++];
         const pos = remaining.findIndex((a) => addressEquals(a, existing));
-        if (pos === -1) toRemove.add(line);
+        if (pos === -1) dropped.push(line);
         else remaining.splice(pos, 1);
     }
-    for (const a of remaining) toAppend.push(makeLine('ADR', buildAddressValue(a)));
+    for (const line of dropped) toRemove.add(line);
+    appendDiffed('ADR', remaining.map(buildAddressValue), dropped, toAppend);
 }
 
 export function mergeVCard(card: ParsedCard, edits: CardEdits): string {
@@ -144,11 +157,13 @@ export function mergeVCard(card: ParsedCard, edits: CardEdits): string {
     if (edits.address !== undefined) diffAddresses(card, edits.address, toRemove, toAppend);
 
     // Dropping a grouped value orphans its label (item1.EMAIL + item1.X-ABLabel): once nothing non-X keeps
-    // the group, drop the group's X- lines too.
+    // the group — an appended line that inherited it included — drop the group's X- lines too.
     const removedGroups = new Set<string>();
     for (const line of toRemove) if (line.group) removedGroups.add(line.group);
     for (const group of removedGroups) {
-        const anchored = card.lines.some((l) => l.group === group && !l.name.startsWith('X-') && !toRemove.has(l));
+        const anchored =
+            toAppend.some((l) => l.group === group) ||
+            card.lines.some((l) => l.group === group && !l.name.startsWith('X-') && !toRemove.has(l));
         if (!anchored) {
             for (const l of card.lines) if (l.group === group && l.name.startsWith('X-')) toRemove.add(l);
         }
