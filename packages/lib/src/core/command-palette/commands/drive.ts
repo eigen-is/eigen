@@ -94,7 +94,7 @@ export const driveCommands: Command[] = [
         icon: Mail,
         baseRank: BASE_RANKS.DRIVE_MAIL_TO,
         group: 'selection',
-        availability: (ctx) => (ctx.selection?.items.length ?? 0) > 0,
+        availability: (ctx) => ctx.mailEnabled && (ctx.selection?.items.length ?? 0) > 0,
         dynamicTitle: (ctx) => `Mail ${selectionLabel(ctx)}`,
         run: (ctx) => {
             if (!ctx.selection || ctx.selection.items.length === 0) return;

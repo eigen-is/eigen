@@ -2,7 +2,7 @@ import { MAX_PUBLIC_USERS_PER_BATCH } from '@workspace/lib/constants/public';
 import type { PublicUser } from '@workspace/lib/types/public';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
-import { isDemo } from '../lib/config/env';
+import { isDemo, isMailEnabled } from '../lib/config/env';
 import { getPublicConfig } from '../lib/config/server-config';
 import { getServerSettings } from '../lib/config/server-settings';
 import { ApiError } from '../lib/core/errors';
@@ -89,5 +89,6 @@ export const publicRouter = new Elysia({ name: 'public' })
             waitlistEnabled: settings.onboarding?.waitlist?.enabled ?? false,
             landingLinks: settings.landing?.links ?? [],
             demoMode: isDemo(),
+            mailEnabled: isMailEnabled(),
         };
     });

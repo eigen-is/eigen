@@ -49,6 +49,23 @@ describe('Public Routes', () => {
             expect(withLink.landingLinks).toEqual([link]);
         });
 
+        test('reports hosted mail as on by default and off with MAIL_ENABLED=0', async () => {
+            const on = await assertJson<{ mailEnabled: boolean }>(
+                await ctx.app.handle(new Request('http://localhost/p/config')),
+            );
+            expect(on.mailEnabled).toBe(true);
+
+            process.env['MAIL_ENABLED'] = '0';
+            try {
+                const off = await assertJson<{ mailEnabled: boolean }>(
+                    await ctx.app.handle(new Request('http://localhost/p/config')),
+                );
+                expect(off.mailEnabled).toBe(false);
+            } finally {
+                delete process.env['MAIL_ENABLED'];
+            }
+        });
+
         // Reset to defaults even on failure — JsonStore is shared across the whole suite.
         afterAll(async () => {
             await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {

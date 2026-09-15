@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { driveCommands } from '../../../../core/command-palette/commands/drive';
+import { navCommands } from '../../../../core/command-palette/commands/nav';
 import type { CommandContext } from '../../../../types/command-palette';
 import type { DrivePath, DrivePathType } from '../../../../types/drive';
 
@@ -24,9 +25,10 @@ function path(p: Partial<DrivePath> & { name: string; type: DrivePathType }): Dr
     };
 }
 
-function context(items: DrivePath[]): CommandContext {
+function context(items: DrivePath[], mailEnabled = true): CommandContext {
     return {
         ownerId: 'owner-1',
+        mailEnabled,
         selection: { items },
         selectionActions: { onDownload: () => {} },
         docSearch: null,
@@ -40,10 +42,10 @@ function context(items: DrivePath[]): CommandContext {
     };
 }
 
-function isAvailable(commandId: string, items: DrivePath[]): boolean {
-    const command = driveCommands.find((c) => c.id === commandId);
+function isAvailable(commandId: string, items: DrivePath[], mailEnabled = true): boolean {
+    const command = [...driveCommands, ...navCommands].find((c) => c.id === commandId);
     if (!command) throw new Error(`No command ${commandId}`);
-    return command.availability?.(context(items)) ?? true;
+    return command.availability?.(context(items, mailEnabled)) ?? true;
 }
 
 const file = path({ name: 'holiday.jpg', type: 'file', mimeType: 'image/jpeg' });
@@ -70,5 +72,12 @@ describe('drive selection commands', () => {
             expect(isAvailable(id, [file, folder])).toBe(false);
             expect(isAvailable(id, [])).toBe(false);
         }
+    });
+
+    test('the Mail commands stand down on a server without hosted mail', () => {
+        expect(isAvailable('drive.mail-to', [file])).toBe(true);
+        expect(isAvailable('drive.mail-to', [file], false)).toBe(false);
+        expect(isAvailable('nav.mail', [], false)).toBe(false);
+        expect(isAvailable('nav.drive', [], false)).toBe(true);
     });
 });

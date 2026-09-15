@@ -20,6 +20,14 @@ export function usePublicConfig() {
     });
 }
 
+// The one read of the server's hosted-mail flag: every Mail entry point gates on this, and a
+// server that runs without the mail containers hides them all. Assume on until the config lands,
+// so the common deployment never flashes a missing Mail app.
+export function useMailEnabled(): boolean {
+    const { data } = usePublicConfig();
+    return data?.mailEnabled !== false;
+}
+
 export function useJoinWaitlist() {
     return useMutation({
         mutationFn: async (body: { email: string; notes: string }) => {

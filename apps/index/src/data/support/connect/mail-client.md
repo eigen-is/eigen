@@ -13,6 +13,9 @@ updated: 2026-06-08
 Your Eigen mailbox is available over IMAP and SMTP, so you can use any standard email client alongside or instead
 of the browser. This article walks you through getting the connection details and entering them in your client.
 
+If the **Integrations** page has no **IMAP (Email sync)** card, your Eigen is set up without email. There is no
+mailbox to connect to, so keep using the mail account you already have.
+
 ## Before you start
 
 You need an **app password** to connect. App passwords are separate credentials you create for external clients.

@@ -55,8 +55,14 @@ services:
       EIGEN_DEMO: ${EIGEN_DEMO:-0}
       DOMAIN: ${DOMAIN}
       MAIL_DOMAIN: ${MAIL_DOMAIN:-${DOMAIN}}
+      # Off (0) on a deployment whose COMPOSE_PROFILES omits `mail`, so the apps hide every Mail entry point.
+      MAIL_ENABLED: ${MAIL_ENABLED:-1}
       SMTP_HOST: ${SMTP_HOST:-postfix}
       SMTP_PORT: ${SMTP_PORT:-25}
+      # Empty unless the API relays through an authenticated third-party relay instead of postfix.
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_SECURE: ${SMTP_SECURE:-}
       COOKIE_DOMAIN: .${DOMAIN}
       # Loopback plus the docker bridge subnet (same EIGEN_SUBNET the network and postfix use), so
       # Postfix/Dovecot bridge callers are trusted without the whole 172.16/12 range.

@@ -22,9 +22,9 @@ export function useMailSearchResults(
     const debouncedInput = useDebouncedValue(input, MAIL_SEARCH_DEBOUNCE_MS);
     const parsed = parseQuery(debouncedInput);
 
-    // Skip the network call when scope excludes mail. The effective scope already
+    // Skip the network call when hosted mail is off or the scope excludes mail. The effective scope already
     // merges the typed prefix (`mail:`, `>`, `@`) with the chip scope set via Tab.
-    const scopeBlocks = scope === 'actions' || scope === 'contacts' || scope === 'doc';
+    const scopeBlocks = !ctx.mailEnabled || scope === 'actions' || scope === 'contacts' || scope === 'doc';
 
     const { data, isFetching } = useSearchQuery({
         ownerId: ctx.ownerId,
