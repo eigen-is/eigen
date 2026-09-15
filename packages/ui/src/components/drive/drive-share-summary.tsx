@@ -1,5 +1,5 @@
-import { type DriveAccessItem, useDriveAccess } from '@workspace/lib/drive';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { useDriveAccess } from '@workspace/lib/drive';
+import type { DriveAccessItem, DrivePath } from '@workspace/lib/types/drive';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { UserAvatar } from '@workspace/ui/components/user/user-avatar';
 import { cn } from '@workspace/ui/lib/utils';

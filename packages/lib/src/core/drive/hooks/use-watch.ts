@@ -2,19 +2,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
-import type { DrivePath } from '@workspace/lib/types/drive';
-import type { PathWatchStatus } from '@workspace/lib/types/file-history';
 import { AppError, onMutationError } from '../../api-error';
 import { driveKeys } from './keys';
 
 // GET WATCH STATUS — is the current user watching this path? (direct or via ancestor)
 export function useIsPathWatched(ownerId: string, mountId: string, pathId: string) {
-    return useQuery<PathWatchStatus>({
+    return useQuery({
         queryKey: driveKeys.pathWatched(ownerId, mountId, pathId),
         queryFn: async () => {
             const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).watch.get();
             if (response.error) throw new AppError(response);
-            return response.data!;
+            return response.data;
         },
         enabled: !!ownerId && !!mountId && !!pathId,
         staleTime: STALE_TIME.ONE_MINUTE,
@@ -63,7 +61,7 @@ export function useUnwatchPath(ownerId: string, mountId: string, pathId: string)
 export function useAllWatches() {
     const { user } = useAuth();
     const ownerId = user?.id || '';
-    return useQuery<DrivePath[]>({
+    return useQuery({
         queryKey: driveKeys.watchesAll(),
         queryFn: async () => {
             const response = await driveApi({ ownerId }).watches.get({ query: { all: '1' } });

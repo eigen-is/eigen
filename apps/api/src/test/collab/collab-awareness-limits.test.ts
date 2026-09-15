@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import type { ServerWebSocket } from 'bun';
+import type { ServerWebSocket } from 'elysia/ws/bun';
 import * as encoding from 'lib0/encoding';
 
 import { getHome } from '../../lib/home/get-home';

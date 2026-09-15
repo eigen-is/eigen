@@ -1,5 +1,5 @@
 import { MAX_SEND_RECIPIENTS } from '@workspace/lib/constants/mail';
-import type { DriveAccessCheckResult, DrivePath } from '@workspace/lib/types/drive';
+import { type DriveAccessCheckResult, type DrivePath, isConvertTarget } from '@workspace/lib/types/drive';
 import type { FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
 import type { TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
@@ -25,11 +25,14 @@ import {
 import { getThumbnail } from '../lib/shared/thumbnails';
 import { SNAPSHOT_NAME_FORMAT } from '../lib/versioning/timestamp';
 import { betterAuth } from './auth';
-import { eigenDocTypeSchema } from './shared-schemas';
+import { clientFileEventBody, eigenDocTypeSchema } from './shared-schemas';
 
 // One cap for every free-text share note (collaborator email + access request), so a single
 // oversized body can't be persisted or mailed.
 const MAX_SHARE_MESSAGE_LENGTH = 12000;
+
+// Preview and thumb URLs carry updatedAt, so a content change is a new URL and the entry can live a day.
+const PREVIEW_MAX_AGE_SECONDS = 86400;
 
 // Drive routes allow cross-owner access (shared drives, team drives).
 // Access control is enforced by getSharedDrive() → SharedDrive ACL checks, not by ownerId === user.id.
@@ -165,9 +168,11 @@ export const driveRouter = new Elysia({ name: 'drive' })
 
             // Dedup the root name against the target folder. Done here (not in Drive.copyPath) so
             // WebDAV COPY keeps its overwrite/409 semantics. The self-into-subtree cycle guard lives
-            // in Drive.copyPath now — cross-mount copies can never be self-descendant.
+            // in Drive.copyPath, which WebDAV COPY enters too — cross-mount copies can never be
+            // self-descendant.
             const targetDrive = sameMount ? sourceDrive : await getSharedDrive(body.targetOwnerId, user);
-            const desired = (body.name ?? src.name).replace(/[/\\]/g, '_');
+            // NFC first: the store keeps names NFC, so the compare below has to see the same form.
+            const desired = (body.name ?? src.name).replace(/[/\\]/g, '_').normalize('NFC');
             const siblings = await targetDrive.getFolderContents(body.targetMountId, body.targetParentId);
             const used = new Set(siblings.map((s) => s.name.toLowerCase()));
             const finalName = used.has(desired.toLowerCase()) ? getUniqueFileName(desired, used) : desired;
@@ -177,8 +182,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             }
             return await copyPathAcross(
                 sourceDrive,
-                params.mountId,
-                params.pathId,
+                src,
                 targetDrive,
                 body.targetMountId,
                 body.targetParentId,
@@ -220,7 +224,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         async ({ params, request, user, server }) => {
             // Same idle-timeout exemption as the export route: silent while queued + transforming.
             server?.timeout(request, 0);
-            if (params.targetType !== 'eigensheets' && params.targetType !== 'eigendoc') {
+            if (!isConvertTarget(params.targetType)) {
                 throw new ApiError(400, `Conversion to "${params.targetType}" is not supported`);
             }
             const drive = await getSharedDrive(params.ownerId, user);
@@ -249,9 +253,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 throw new ApiError(403, 'No write permission');
             }
             const maxSize = await getUploadMaxSize(params.ownerId, user.id, params.mountId);
-            // The shared bounded reader, as the contacts import uses it: a Content-Length over the ceiling is
-            // refused before anything is read, and a chunked or lying body has its stream cancelled the moment
-            // the running total crosses it — never buffered whole first.
+            // Bounded reader: Content-Length over the ceiling is refused before any read, a lying stream is cancelled as it crosses it.
             const bytes = await readBoundedBodyBytes(request, maxSize);
             if (bytes === null) throw new ApiError(413, 'Upload too large');
             await importIntoDocument(
@@ -317,7 +319,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 set.redirect = result.url;
                 return;
             }
-            setCacheHeaders(set, 86400);
+            setCacheHeaders(set, PREVIEW_MAX_AGE_SECONDS);
             set.headers['Content-Type'] = result.contentType;
             // SVG previews are served as-is (uploaded SVGs are user bytes) and rendered inline on the API
             // origin, so a scriptable payload gets the same sandbox CSP as /embed (scriptableInlineHeaders).
@@ -340,9 +342,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 // TanStack refetch trigger (useTextPreview's staleTime), not this header.
                 set.headers['Cache-Control'] = 'no-store';
             } else {
-                // 1 day, matching image previews: the URL carries `updatedAt` (see below), so a
-                // content change yields a new URL rather than relying on a short max-age to expire.
-                setCacheHeaders(set, 86400);
+                setCacheHeaders(set, PREVIEW_MAX_AGE_SECONDS);
             }
             return result.value;
         },
@@ -350,27 +350,23 @@ export const driveRouter = new Elysia({ name: 'drive' })
         // off the URL, so a stale URL serves stale content after an inline edit.
         { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
     )
-    // A .vcf previews as contact cards, so it answers with the cards themselves rather than a body —
-    // the overlay and the drive hero render them (PREVIEWS.md). Same ACL path and cache-bust
-    // convention as the text preview beside it.
+    // A .vcf answers with the contact cards themselves rather than a body — the overlay and the drive hero render them (PREVIEWS.md).
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/vcard-preview',
         async ({ params, user, set }): Promise<VCardPreview> => {
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
-            assertVCardPreviewable(path.name, path.mimeType || '', path.size);
+            assertVCardPreviewable(path.name, path.mimeType, path.size);
 
             const result = await getVCardPreview(mount, path);
             if (!result) throw new ApiError(404, 'No preview available');
             // Stale-while-revalidate and the long max-age work exactly as they do for a text preview.
             if (result.stale) set.headers['Cache-Control'] = 'no-store';
-            else setCacheHeaders(set, 86400);
+            else setCacheHeaders(set, PREVIEW_MAX_AGE_SECONDS);
             return result.value;
         },
         { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
     )
-    // Version history (file-level snapshots; see lib/versioning). Access flows
-    // through getSharedDrive() → SharedDrive ACL, like every other drive route.
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/versions',
         async ({ params, user }) => {
@@ -454,9 +450,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const drive = await getSharedDrive(params.ownerId, user);
             // Delta contract: the server merges add/remove onto the current ACL, so concurrent
             // sharers can't revert each other's entries.
-            // getSharedDrive returns raw Drive for own-owner — pass actor explicitly so
-            // propagateSharedPathChange can fire user/guest share emails. SharedDrive ignores
-            // this param and uses this.user instead.
+            // Raw Drive (own-owner) needs the actor passed explicitly for share emails; SharedDrive ignores it.
             await drive.updateACLDelta(
                 params.mountId,
                 params.pathId,
@@ -472,7 +466,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 add: t.Optional(
                     t.Array(
                         t.Object({
-                            id: t.String(),
+                            id: t.String({ maxLength: MAX_EMAIL_LENGTH }),
                             read: t.Boolean(),
                             write: t.Boolean(),
                         }),
@@ -590,7 +584,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const { mount } = await drive.resolveFile(params.mountId, pathId);
             const file = await getThumbnail(mount.thumbsDir, pathId);
             if (!file) throw new ApiError(404, 'No thumbnail available');
-            setCacheHeaders(set, 86400);
+            setCacheHeaders(set, PREVIEW_MAX_AGE_SECONDS);
             set.headers['Content-Type'] = 'image/webp';
             return file;
         },
@@ -676,16 +670,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         {
             auth: true,
-            body: t.Union([
-                t.Object({
-                    eventType: t.Union([t.Literal('sticky-added'), t.Literal('sticky-moved')]),
-                    details: t.Object({ card: t.String(), toColumn: t.String(), cardId: t.String() }),
-                }),
-                t.Object({
-                    eventType: t.Literal('sticky-removed'),
-                    details: t.Object({ card: t.String(), cardId: t.String() }),
-                }),
-            ]),
+            body: clientFileEventBody,
         },
     )
     // Watching (file/folder notification subscriptions; folder watches cascade)
@@ -716,8 +701,6 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true },
     )
-    // Watched listing. ?all=1 fans out over the caller's own home, their teams, and every owner that
-    // shared into this home — each via the same ACL-checked getSharedDrive → getWatches; self-only.
     .get(
         '/drive/:ownerId/watches',
         async ({ params, query, user }): Promise<DrivePath[]> => {

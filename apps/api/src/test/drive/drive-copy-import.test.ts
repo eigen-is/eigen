@@ -169,8 +169,7 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
             const user = await getUserById(ownerId);
             const copied = await copyPathAcross(
                 home.drive,
-                mountId,
-                doc.id,
+                doc,
                 home.drive,
                 mountId,
                 aliceRootId,

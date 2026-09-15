@@ -5,7 +5,7 @@ import type { DriveACL, DriveAccessCheckResult, DrivePath, DriveVisibility } fro
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
-import { collabKeys } from '../../collab/hooks/keys';
+import { invalidateCollabDocument } from '../../collab/hooks/keys';
 import { driveKeys, invalidateAclSharedOrUnshared, invalidateAclUpdated } from './keys';
 
 // UPDATE ACL
@@ -47,10 +47,7 @@ export function useUpdateACL(ownerId: string, mountId: string = DEFAULT_MOUNT_ID
             if (currentUserId && currentUserId !== ownerId) {
                 invalidateAclSharedOrUnshared(queryClient, currentUserId);
             }
-            // Invalidate collab info so canWrite refreshes in document views
-            queryClient.invalidateQueries({
-                queryKey: collabKeys.document(ownerId, variables.path.mountId, variables.path.id),
-            });
+            invalidateCollabDocument(queryClient, ownerId, variables.path.mountId, variables.path.id);
             toast.success('Sharing updated');
         },
         onError: onMutationError,
@@ -115,18 +112,15 @@ export function useEffectiveMembers(ownerId: string, mountId: string, pathId: st
 }
 
 export function useSharedPaths(ownerId: string, to: 'by-me' | 'with-me') {
-    return useQuery<DrivePath[]>({
+    return useQuery({
         queryKey: driveKeys.shared(ownerId, to),
         queryFn: async () => {
-            if (to === 'by-me') {
-                const response = await driveApi({ ownerId }).shared['by-me'].get();
-                if (response.error) throw new AppError(response);
-                return response.data;
-            } else {
-                const response = await driveApi({ ownerId }).shared['with-me'].get();
-                if (response.error) throw new AppError(response);
-                return response.data;
-            }
+            const response =
+                to === 'by-me'
+                    ? await driveApi({ ownerId }).shared['by-me'].get()
+                    : await driveApi({ ownerId }).shared['with-me'].get();
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
         enabled: !!ownerId,
         staleTime: STALE_TIME.FIVE_MINUTES,

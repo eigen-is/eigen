@@ -6,7 +6,7 @@ export function useYjsUndoState(undoManager: Y.UndoManager | null, canWrite: boo
     const [canRedo, setCanRedo] = useState(false);
 
     useEffect(() => {
-        if (!undoManager?.undoStack || !canWrite) {
+        if (!undoManager || !canWrite) {
             setCanUndo(false);
             setCanRedo(false);
             return;

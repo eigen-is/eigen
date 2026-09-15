@@ -1,6 +1,6 @@
+import type { ChatAttachment } from '@workspace/lib/types/chat';
+import type { FileSubject } from '@workspace/lib/types/file-subject';
 import { useCallback } from 'react';
-import type { ChatAttachment } from '../../../types/chat';
-import type { FileSubject } from '../../../types/file-subject';
 import { subjectFromPath } from '../../file-subject';
 import { useFolderLookup } from './reads';
 

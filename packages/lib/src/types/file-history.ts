@@ -48,6 +48,15 @@ export type FileEventRecord = {
 
 export type ClientFileEventRecord = Extract<FileEventRecord, { eventType: ClientFileEventType }>;
 
+// What a client may POST to /history. cardId is required on the wire; the read shape keeps it optional
+// because old persisted rows lack it.
+export type ClientFileEventInput = {
+    [K in ClientFileEventType]: { eventType: K; details: Flatten<FileEventDetailsMap[K] & { cardId: string }> };
+}[ClientFileEventType];
+
+// A plain object type, so the route schema's Static can be checked for identity against it.
+type Flatten<T> = { [P in keyof T]: T[P] };
+
 export type FileEventInput = FileEventRecord & { pathId: string; actor: { id: string; email: string } };
 
 // Discriminated read shape. pathName/pathType are resolved at read time so folder

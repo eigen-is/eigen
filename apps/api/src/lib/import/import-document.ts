@@ -1,4 +1,10 @@
-import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, type DrivePath, isCollabType } from '@workspace/lib/types/drive';
+import {
+    type ConvertTarget,
+    DRIVE_MIME_DOC,
+    DRIVE_MIME_SHEETS,
+    type DrivePath,
+    isCollabType,
+} from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
 import { writeEigendocUpdateToYjs } from '../document/doc';
 import { writeSheetsSnapshotToYjs } from '../document/sheets';
@@ -64,7 +70,7 @@ export async function convertToDocument(
     drive: DriveLike,
     mount: Mount,
     sourcePath: DrivePath,
-    targetType: 'eigensheets' | 'eigendoc',
+    targetType: ConvertTarget,
     user: User,
 ): Promise<DrivePath> {
     if (!sourcePath.parentId) throw new ApiError(400, 'Cannot convert a root file');

@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import type { MountConfig, MountSettings } from '@workspace/lib/types';
-import { EIGEN_DOCUMENT_TYPES } from '@workspace/lib/types/drive';
+import { EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
 import { type SQL, sql } from 'drizzle-orm';
 import { getS3Config } from '../config/server-settings';
 import { ApiError } from '../core';
@@ -20,6 +20,9 @@ export function isReservedName(name: string): boolean {
 // biome-ignore lint/suspicious/noControlCharactersInRegex: matching control chars is the point
 export const CONTROL_CHARS = /[\x00-\x1f]/;
 
+// Filesystem ENAMETOOLONG is a byte limit, not a character limit.
+export const MAX_NAME_BYTES = 255;
+
 // One path segment and nothing else. Split out of validateName so an archived paths table can be
 // held to the same rule without throwing: a live row always passes (validateName wrote it), a row
 // that came in inside an uploaded archive has never been held to anything.
@@ -37,14 +40,13 @@ export function validateName(name: string): string {
     if (isReservedName(normalized)) {
         throw new ApiError(400, `"${name}" is a reserved name`);
     }
-    // Filesystem ENAMETOOLONG is a byte limit, not a character limit.
-    if (Buffer.byteLength(normalized, 'utf8') > 255) {
-        throw new ApiError(400, 'File or folder name too long (max 255 bytes)');
+    if (Buffer.byteLength(normalized, 'utf8') > MAX_NAME_BYTES) {
+        throw new ApiError(400, `File or folder name too long (max ${MAX_NAME_BYTES} bytes)`);
     }
     return normalized;
 }
 
-// Subquery: ids of every eigendoc container (every EIGEN_DOCUMENT_TYPES row) and
+// Subquery: ids of every eigendoc container (every EIGEN_DOC_TYPES row) and
 // every path descended from one. Embedded as `parentId NOT IN (…)` to filter out
 // container internals (data.db, media, embedded chats) — file rows the user
 // never sees in the drive UI and shouldn't see in search.
@@ -52,7 +54,7 @@ export const docContainerDescendantIds = sql`
     WITH RECURSIVE doc_tree AS (
         SELECT id FROM paths
         WHERE type IN (${sql.join(
-            EIGEN_DOCUMENT_TYPES.map((t) => sql`${t}`),
+            EIGEN_DOC_TYPES.map((t) => sql`${t}`),
             sql`, `,
         )}) AND trashedAt IS NULL
         UNION ALL

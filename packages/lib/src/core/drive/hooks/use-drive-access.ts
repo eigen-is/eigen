@@ -1,28 +1,10 @@
+import { parseOwnerId } from '@workspace/lib/types';
+import type { DirectAccessItem, DriveAccessItem, DrivePath, InheritedAccessItem } from '@workspace/lib/types/drive';
 import { useCallback, useMemo } from 'react';
-import { parseOwnerId } from '../../../types';
-import type { DrivePath } from '../../../types/drive';
 import { useAuth } from '../../auth';
 import { useMyTeams } from '../../home';
 import { usePublicUser } from '../../public';
-import { useBreadcrumb } from '../index';
-
-export type DirectAccessItem = {
-    id: string;
-    read: boolean;
-    write: boolean;
-    owner: boolean;
-};
-
-export type InheritedAccessItem = {
-    id: string;
-    read: boolean;
-    write: boolean;
-    sourceFolderName: string;
-};
-
-export type DriveAccessItem =
-    | (DirectAccessItem & { inherited?: never; sourceFolderName?: never })
-    | (InheritedAccessItem & { owner?: never; inherited: true });
+import { useBreadcrumb } from './reads';
 
 export function useDriveAccess(
     path: DrivePath,

@@ -1,11 +1,10 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
-import { collabKeys } from '../../collab/hooks/keys';
+import { invalidateCollabDocument } from '../../collab/hooks/keys';
 import { invalidateHomeSize } from '../../home';
 
 export { DEFAULT_MOUNT_ID };
 
-// Define query keys for reuse
 export const driveKeys = {
     all: ['drive'] as const,
     owner: (ownerId: string) => [...driveKeys.all, ownerId] as const,
@@ -53,7 +52,7 @@ export const driveKeys = {
         [...driveKeys.watches(ownerId), mountId, pathId] as const,
 };
 
-// SSE invalidation functions
+// Invalidators, called from the write hooks' onSuccess and from the drive SSE handlers.
 export function invalidateAclSharedOrUnshared(queryClient: QueryClient, ownerId: string): void {
     queryClient.invalidateQueries({ queryKey: driveKeys.shared(ownerId, 'with-me') });
 }
@@ -103,7 +102,7 @@ export function invalidatePathRenamed(
     mimeType: string | null | undefined,
 ): void {
     queryClient.invalidateQueries({ queryKey: driveKeys.path(ownerId, mountId, pathId) });
-    queryClient.invalidateQueries({ queryKey: collabKeys.document(ownerId, mountId, pathId) });
+    invalidateCollabDocument(queryClient, ownerId, mountId, pathId);
     if (parentId) {
         queryClient.invalidateQueries({ queryKey: driveKeys.folder(ownerId, mountId, parentId) });
     }

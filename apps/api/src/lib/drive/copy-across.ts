@@ -11,32 +11,28 @@ import type { DriveLike } from './get-drive';
 // internal children are referenced by name, not pathId.
 export async function copyPathAcross(
     source: DriveLike,
-    srcMountId: string,
-    srcPathId: string,
+    src: DrivePath,
     target: DriveLike,
     destMountId: string,
     destParentId: string,
     name: string,
     user: User,
 ): Promise<DrivePath> {
-    const src = await source.getPath(srcMountId, srcPathId);
-    if (!src) throw new ApiError(404, 'Source not found');
-
     if (isContainerType(src.type)) {
         const isEigenDoc = src.type !== DRIVE_TYPE_FOLDER;
-        if (isEigenDoc) await source.flushContainerDb(srcMountId, srcPathId);
+        if (isEigenDoc) await source.flushContainerDb(src.mountId, src.id);
         const containerType = isEigenDoc ? src.type : DRIVE_TYPE_FOLDER;
         const created = await target.createFolder(destMountId, destParentId, name, user, containerType);
 
-        const children = await source.getFolderContents(srcMountId, srcPathId);
+        const children = await source.getFolderContents(src.mountId, src.id);
         for (const child of children) {
             if (isEigenDoc && isVersionsFolder(child)) continue;
-            await copyPathAcross(source, srcMountId, child.id, target, destMountId, created.id, child.name, user);
+            await copyPathAcross(source, child, target, destMountId, created.id, child.name, user);
         }
         return created;
     }
 
-    const file = await source.downloadFile(srcMountId, srcPathId);
+    const file = await source.downloadFile(src.mountId, src.id);
     if (!file) throw new ApiError(404, 'Source file data not found');
     return target.createFileFromData(destMountId, destParentId, name, src.mimeType, file, user);
 }

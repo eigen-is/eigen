@@ -650,6 +650,15 @@ describe('getUniqueFileName', () => {
         const used = new Set(['.trash']);
         expect(getUniqueFileName('.trash', used)).toBe('.trash (2)');
     });
+
+    test("trims the stem so the suffixed name still fits validateName's 255 bytes", () => {
+        const long = `${'\u00e9'.repeat(125)}.txt`; // 250 + 4 = 254 bytes
+        const used = new Set([long]);
+        const result = getUniqueFileName(long, used);
+        expect(result.endsWith(' (2).txt')).toBe(true);
+        expect(Buffer.byteLength(result, 'utf8')).toBeLessThanOrEqual(255);
+        expect(result.startsWith('\u00e9'.repeat(120))).toBe(true);
+    });
 });
 
 describe('Trash query filtering', () => {

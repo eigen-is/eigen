@@ -1,4 +1,4 @@
-import type { DrivePath } from '../../../types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 
 // Splits settled copy results into the successes and the failure count. Pure so the copy semantics can
 // be unit-tested without React; used by the copy/duplicate/media-folder write hooks (writes.ts) and its

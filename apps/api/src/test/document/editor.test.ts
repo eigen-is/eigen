@@ -120,7 +120,8 @@ describe('Editor', () => {
             });
             expect(status).toBe(200);
             expect(data?.conflict).toBe(false);
-            expect(data?.updatedAt).toBeDefined();
+            if (data?.conflict !== false) throw new Error('expected a saved result');
+            expect(data.updatedAt).toBeDefined();
 
             // Verify content was saved
             const { data: reloaded } = await editorGet(uploaded.id);
@@ -150,7 +151,8 @@ describe('Editor', () => {
                 expectedUpdatedAt: updatedAt, // stale!
             });
             expect(data?.conflict).toBe(true);
-            expect(data?.currentUpdatedAt).toBeDefined();
+            if (data?.conflict !== true) throw new Error('expected a conflict');
+            expect(data.currentUpdatedAt).toBeDefined();
         });
 
         test('force save ignores stale updatedAt', async () => {

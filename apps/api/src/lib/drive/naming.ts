@@ -1,3 +1,5 @@
+import { MAX_NAME_BYTES } from '../mount/helpers';
+
 export function getUniqueFileName(name: string, usedNames: Set<string>): string {
     // A leading dot is a dotfile, not an extension (matches buildStorageKey / the v7 dedup split).
     const dotIdx = name.lastIndexOf('.');
@@ -12,11 +14,19 @@ export function getUniqueFileName(name: string, usedNames: Set<string>): string 
 
     do {
         counter++;
-        const candidate = `${base} (${counter})${ext}`;
+        const candidate = fitName(base, ` (${counter})${ext}`);
         if (!usedNames.has(candidate.toLowerCase())) {
             return candidate;
         }
     } while (counter < 10000);
 
-    return `${base} (${Date.now()})${ext}`;
+    return fitName(base, ` (${Date.now()})${ext}`);
+}
+
+// Trims the stem so the suffixed name still passes validateName: a name already at the byte limit
+// would otherwise dedup to one the mount refuses. Whole code points, so a trim never splits a pair.
+function fitName(base: string, suffix: string): string {
+    const stem = Array.from(base);
+    while (stem.length > 0 && Buffer.byteLength(stem.join('') + suffix, 'utf8') > MAX_NAME_BYTES) stem.pop();
+    return `${stem.join('')}${suffix}`;
 }

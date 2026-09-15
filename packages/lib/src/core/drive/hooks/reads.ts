@@ -25,7 +25,7 @@ export function useMounts(ownerId: string) {
 
 // GET ROOT FOLDER
 export function useRootFolder(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
-    return useQuery<DrivePath | null>({
+    return useQuery({
         queryKey: driveKeys.root(ownerId, mountId),
         queryFn: async () => {
             const response = await driveApi({ ownerId })({ mountId }).root.get();
@@ -56,7 +56,7 @@ export function folderContentQueryConfig(ownerId: string, mountId: string, pathI
 }
 
 export function useFolderContent(ownerId: string, mountId: string, pathId: string) {
-    return useQuery<DrivePath[]>(folderContentQueryConfig(ownerId, mountId, pathId));
+    return useQuery(folderContentQueryConfig(ownerId, mountId, pathId));
 }
 
 // FOLDER LOOKUP — wraps useFolderContent with refetch-on-miss for name-based lookups.
@@ -103,8 +103,8 @@ export function useFolderLookup(ownerId: string, mountId: string, folderId: stri
 }
 
 // GET MIME CONTENTS (aggregates over all mounts of one owner)
-export function mimeContentQueryConfig(ownerId: string, mimeType: string, staleTime: number = STALE_TIME.FIVE_MINUTES) {
-    return {
+export function useMimeContent(ownerId: string, mimeType: string) {
+    return useQuery({
         queryKey: driveKeys.mime(ownerId, mimeType),
         queryFn: async (): Promise<DrivePath[]> => {
             if (!mimeType) return [];
@@ -114,12 +114,8 @@ export function mimeContentQueryConfig(ownerId: string, mimeType: string, staleT
         },
         enabled: !!mimeType && !!ownerId,
         retry: 1,
-        staleTime,
-    };
-}
-
-export function useMimeContent(ownerId: string, mimeType: string, staleTime?: number) {
-    return useQuery<DrivePath[]>(mimeContentQueryConfig(ownerId, mimeType, staleTime));
+        staleTime: STALE_TIME.FIVE_MINUTES,
+    });
 }
 
 // GET AGGREGATE MIME CONTENTS — personal + every team the signed-in user belongs to, merged and
@@ -132,7 +128,7 @@ export function useAggregateMimeContent(
 ) {
     const { user } = useAuth();
     const ownerId = user?.id || '';
-    return useQuery<DrivePath[]>({
+    return useQuery({
         queryKey: driveKeys.mimeAll(mimeType),
         queryFn: async () => {
             if (!mimeType || !ownerId) return [];
@@ -165,12 +161,12 @@ export function mountMimeContentQueryConfig(ownerId: string, mountId: string, mi
 }
 
 export function useMountMimeContent(ownerId: string, mountId: string, mimeType: string) {
-    return useQuery<DrivePath[]>(mountMimeContentQueryConfig(ownerId, mountId, mimeType));
+    return useQuery(mountMimeContentQueryConfig(ownerId, mountId, mimeType));
 }
 
 // GET PATH INFO
 export function usePathInfo(ownerId: string, mountId: string, pathId: string | undefined) {
-    return useQuery<DrivePath | null>({
+    return useQuery({
         queryKey: driveKeys.path(ownerId, mountId, pathId || ''),
         queryFn: async () => {
             if (!pathId) return null;
@@ -204,7 +200,7 @@ export function usePathInfos(refs: { ownerId: string; mountId: string; pathId: s
 
 // GET BREADCRUMB PATH
 export function useBreadcrumb(ownerId: string, mountId: string, pathId: string | undefined) {
-    return useQuery<DrivePath[]>({
+    return useQuery({
         queryKey: driveKeys.breadcrumb(ownerId, mountId, pathId || ''),
         queryFn: async () => {
             if (!pathId) return [];

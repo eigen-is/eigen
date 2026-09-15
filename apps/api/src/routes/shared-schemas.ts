@@ -1,6 +1,7 @@
 import { S3_NONCURRENT_DAYS_MAX } from '@workspace/lib/constants/s3';
 import type { EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
+import type { ClientFileEventInput } from '@workspace/lib/types/file-history';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { type Static, t } from 'elysia';
 
@@ -27,16 +28,7 @@ export const attachmentReferenceSchema = t.Object({
     mountId: t.String(),
     id: t.String(),
     name: t.String(),
-    driveType: t.Union([
-        t.Literal('doc'),
-        t.Literal('stickies'),
-        t.Literal('slides'),
-        t.Literal('sheets'),
-        t.Literal('chat'),
-        t.Literal('vector'),
-        t.Literal('folder'),
-        t.Literal('file'),
-    ]),
+    driveType: t.Union([...eigenDocTypeSchema.anyOf, t.Literal('folder'), t.Literal('file')]),
     mimeType: t.String(),
 });
 
@@ -48,6 +40,16 @@ const _attachmentReferenceSchemaMatchesType: TypesEqual<
     AttachmentReference
 > = true;
 void _attachmentReferenceSchemaMatchesType;
+
+// One object per event type, so the identity guard below can hold it against ClientFileEventInput.
+const stickyCardDetails = t.Object({ card: t.String(), toColumn: t.String(), cardId: t.String() });
+export const clientFileEventBody = t.Union([
+    t.Object({ eventType: t.Literal('sticky-added'), details: stickyCardDetails }),
+    t.Object({ eventType: t.Literal('sticky-moved'), details: stickyCardDetails }),
+    t.Object({ eventType: t.Literal('sticky-removed'), details: t.Object({ card: t.String(), cardId: t.String() }) }),
+]);
+const _clientFileEventBodyMatchesType: TypesEqual<Static<typeof clientFileEventBody>, ClientFileEventInput> = true;
+void _clientFileEventBodyMatchesType;
 
 export const s3ConfigBody = t.Object({
     endpoint: t.String({ minLength: 1 }),
@@ -63,14 +65,7 @@ export const s3HardenBody = t.Object({
     noncurrentDays: t.Integer({ minimum: 1, maximum: S3_NONCURRENT_DAYS_MAX }),
 });
 
-export function toS3Config(body: {
-    endpoint: string;
-    bucket: string;
-    prefix?: string;
-    accessKeyId: string;
-    secretAccessKey: string;
-    region?: string;
-}): S3Config {
+export function toS3Config(body: Static<typeof s3ConfigBody>): S3Config {
     return {
         endpoint: body.endpoint,
         bucket: body.bucket,

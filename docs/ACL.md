@@ -235,7 +235,12 @@ to the internal full-replace `Drive.updateACL` for validation, persistence, and 
 replace is deliberately not accepted from clients: a dialog built from a stale cache would silently revert
 entries a concurrent sharer just added (the same failure class chat-invite bubbling fixed). The FE share
 dialog (`DriveAccessListEdit`) diffs its edited list against the initial one and sends only the delta.
-Defined in `apps/api/src/routes/drive.ts`.
+Defined in `apps/api/src/routes/drive.ts`. Each `add[].id` is bounded by `MAX_EMAIL_LENGTH` at the schema (an id is
+an email or a `team_` id, the same bound the chat invite route uses); the number of entries is not capped
+([ROADMAP](ROADMAP.md) § Cheap wins).
+
+`GET /drive/:ownerId/:mountId/path/:pathId/permissions` answers `{ canRead, canWrite }` for any caller, never 403 — a
+stranger gets `{ false, false }`, which is what the request-access view keys off.
 
 Leaving a share is a delete: `SharedDrive.deletePath` checks whether the path's own ACL names the caller by email (and the caller isn't an effective owner) and, if so, removes only that entry through `Drive.updateACLDelta` (no write check — a read-only recipient can always leave, restricted or not), so the owner's file and every other recipient are untouched; the recipient's own home skips the "removed your access" notification for it. Access through a shared folder, a team drive or a team ACL entry is not a direct share: a delete there trashes the owner's copy as before, write-gated. The FE mirrors the same test with `useIsSharedWithMe()` so `DriveDeleteItem` can say "Remove shared item" instead of "Move to trash", and `useDriveLayoutDialogs` confirms every delete in a drive the caller doesn't own (`useIsEffectiveOwnerOf()`).
 

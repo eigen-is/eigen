@@ -7,6 +7,7 @@ import type {
     DriveVisibility,
     EffectiveMember,
     EigenDocType,
+    InviteResult,
 } from '@workspace/lib/types/drive';
 import type { ClientFileEventRecord, FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
 import type { MountInfo } from '@workspace/lib/types/mount';
@@ -265,7 +266,7 @@ export default class SharedDrive {
         chatId: string,
         email: string,
         _actor?: User | null,
-    ): Promise<{ alreadyHasAccess: boolean; targetPathId: string }> {
+    ): Promise<InviteResult> {
         const memberships = await this.getUserMemberships();
 
         if (!(await this.canWrite(mountId, chatId, this.user, memberships))) {

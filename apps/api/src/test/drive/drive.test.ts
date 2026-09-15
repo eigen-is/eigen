@@ -3431,8 +3431,7 @@ describe('Drive', () => {
 
             const copied = await copyPathAcross(
                 source,
-                aliceMountId,
-                uploaded.id,
+                uploaded,
                 target,
                 teamMountId,
                 teamRootId,
@@ -3465,16 +3464,7 @@ describe('Drive', () => {
             const source = await getSharedDrive(ctx.alice.user.id, actor!);
             const target = await getSharedDrive(teamOwner, actor!);
 
-            const copied = await copyPathAcross(
-                source,
-                aliceMountId,
-                doc.id,
-                target,
-                teamMountId,
-                teamRootId,
-                doc.name,
-                actor!,
-            );
+            const copied = await copyPathAcross(source, doc, target, teamMountId, teamRootId, doc.name, actor!);
 
             expect(copied.ownerId).toBe(teamOwner);
             expect(copied.type).toBe(DRIVE_TYPE_DOC);

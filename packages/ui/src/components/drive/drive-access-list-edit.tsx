@@ -1,10 +1,10 @@
 import { getDriveShareUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { copyToClipboard } from '@workspace/lib/clipboard';
-import { type DirectAccessItem, useDriveAccess, useIsEffectiveOwner } from '@workspace/lib/drive';
+import { useDriveAccess, useIsEffectiveOwner } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
-import type { DriveACL, DriveACLDelta, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
+import type { DirectAccessItem, DriveACL, DriveACLDelta, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
 import { AvatarIcon } from '@workspace/ui/components/avatar';
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
