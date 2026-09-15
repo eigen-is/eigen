@@ -19,7 +19,8 @@ export type MailSearchOptions = {
 };
 
 // One entry per named, non-calendar part of a draft EML, under the part's raw index — the number a
-// keep list addresses. An entry from a sidecar written before the index existed carries none.
+// keep list addresses. An entry from a sidecar written before the index existed carries none, and
+// sends the next save down the full path rather than guessing at positions.
 export type DraftMetaAttachment = { filename: string; contentType: string; size: number; index?: number };
 
 export type DraftMeta = {
@@ -32,8 +33,6 @@ export type DraftMeta = {
     // on disk has baked in. Overlaid on messageGet so the compose view shows what the
     // user typed, not the rendered card block at the bottom.
     html: string;
-    // A sidecar whose entries carry no index sends the next save down the full path rather than
-    // guessing at positions.
     attachments: DraftMetaAttachment[];
     driveReferences?: AttachmentReference[];
     inReplyTo?: string;

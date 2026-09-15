@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createTransport } from '../../lib/core/mailer';
 
+// nodemailer's Transporter type does not surface the resolved options the factory built, so the
+// suite reads them through this one cast.
+function transportOptions(transport: ReturnType<typeof createTransport>): Record<string, unknown> {
+    return (transport as unknown as { options: Record<string, unknown> }).options;
+}
+
 describe('createTransport', () => {
     const originalEnv = { ...process.env };
 
@@ -15,14 +21,13 @@ describe('createTransport', () => {
     test('uses SMTP transport when SMTP_HOST is set', () => {
         process.env['SMTP_HOST'] = 'postfix';
         process.env['SMTP_PORT'] = '25';
-        const transport = createTransport();
-        const opts = (transport as unknown as { options: Record<string, unknown> }).options;
-        expect(opts?.['host']).toBe('postfix');
-        expect(opts?.['port']).toBe(25);
-        expect(opts?.['secure']).toBe(false);
-        expect(opts?.['auth']).toBeUndefined();
-        expect(opts?.['requireTLS']).toBe(false);
-        expect(opts?.['tls']).toEqual({ rejectUnauthorized: false });
+        const opts = transportOptions(createTransport());
+        expect(opts['host']).toBe('postfix');
+        expect(opts['port']).toBe(25);
+        expect(opts['secure']).toBe(false);
+        expect(opts['auth']).toBeUndefined();
+        expect(opts['requireTLS']).toBe(false);
+        expect(opts['tls']).toEqual({ rejectUnauthorized: false });
     });
 
     test('authenticates and verifies the certificate when relay credentials are set', () => {
@@ -30,12 +35,11 @@ describe('createTransport', () => {
         process.env['SMTP_PORT'] = '587';
         process.env['SMTP_USER'] = 'relay-user';
         process.env['SMTP_PASSWORD'] = 'relay-secret';
-        const transport = createTransport();
-        const opts = (transport as unknown as { options: Record<string, unknown> }).options;
-        expect(opts?.['auth']).toEqual({ user: 'relay-user', pass: 'relay-secret' });
-        expect(opts?.['secure']).toBe(false);
-        expect(opts?.['requireTLS']).toBe(true);
-        expect(opts?.['tls']).toEqual({ rejectUnauthorized: true });
+        const opts = transportOptions(createTransport());
+        expect(opts['auth']).toEqual({ user: 'relay-user', pass: 'relay-secret' });
+        expect(opts['secure']).toBe(false);
+        expect(opts['requireTLS']).toBe(true);
+        expect(opts['tls']).toEqual({ rejectUnauthorized: true });
     });
 
     test('refuses a relay user without a password', () => {
@@ -49,24 +53,21 @@ describe('createTransport', () => {
     test('uses implicit TLS on port 465', () => {
         process.env['SMTP_HOST'] = 'smtp-relay.brevo.com';
         process.env['SMTP_PORT'] = '465';
-        const transport = createTransport();
-        const opts = (transport as unknown as { options: Record<string, unknown> }).options;
-        expect(opts?.['secure']).toBe(true);
+        const opts = transportOptions(createTransport());
+        expect(opts['secure']).toBe(true);
     });
 
     test('SMTP_SECURE overrides the port-derived TLS mode', () => {
         process.env['SMTP_HOST'] = 'smtp-relay.brevo.com';
         process.env['SMTP_PORT'] = '2525';
         process.env['SMTP_SECURE'] = '1';
-        const transport = createTransport();
-        const opts = (transport as unknown as { options: Record<string, unknown> }).options;
-        expect(opts?.['secure']).toBe(true);
+        const opts = transportOptions(createTransport());
+        expect(opts['secure']).toBe(true);
     });
 
     test('uses sendmail transport when SMTP_HOST is not set', () => {
         delete process.env['SMTP_HOST'];
-        const transport = createTransport();
-        const opts = (transport as unknown as { options: Record<string, unknown> }).options;
-        expect(opts?.['sendmail']).toBe(true);
+        const opts = transportOptions(createTransport());
+        expect(opts['sendmail']).toBe(true);
     });
 });
