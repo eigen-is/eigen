@@ -697,7 +697,7 @@ class Lexer {
         if (this.pendingEmptyArgument) {
             this.pendingEmptyArgument = false;
             this.yytext = "0";
-            return symbols_.NUMBER;
+            return symbols_["NUMBER"];
         }
         const r = this.next();
         if (r) {
