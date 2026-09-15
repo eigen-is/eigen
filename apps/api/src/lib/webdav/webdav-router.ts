@@ -142,8 +142,10 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             ifHeader: request.headers.get('If'),
         });
     })
-    .route('COPY', '/:ownerId/:mountId/*', async ({ request, params }) => {
+    .route('COPY', '/:ownerId/:mountId/*', async ({ request, params, server }) => {
         const user = await authenticateBasic(request);
+        // Same idle-timeout exemption as the REST copy route: a deep tree copy stays silent until it lands.
+        server?.timeout(request, 0);
         return handleCopy({
             user,
             ownerId: params.ownerId,
