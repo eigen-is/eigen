@@ -12,16 +12,12 @@ import {
     exportFormatsFor,
 } from '@workspace/lib/types/drive';
 import type { Snapshot } from '@workspace/lib/types/versioning';
-import { Button } from '@workspace/ui/components/button';
 import {
-    DropdownMenu,
-    DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuSeparator,
     DropdownMenuSub,
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
-    DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { Download, FileText, Folder, type LucideIcon, Mail, Pencil, Trash2, Upload, UserRoundPlus } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
@@ -30,6 +26,7 @@ import { DriveDeleteItem } from '../../drive/drive-delete-item';
 import { DriveEmailCollaborators } from '../../drive/drive-email-collaborators';
 import { DriveFilePicker } from '../../drive/drive-file-picker';
 import { DriveRenameItem } from '../../drive/drive-rename-item';
+import { ToolbarMenu } from './toolbar-menu';
 import { RestoreVersionDialog, VersionHistoryMenu } from './version-history-menu';
 
 const OPEN_LABELS: Record<EigenDocType, { mime: string; title: string }> = {
@@ -102,73 +99,68 @@ export function FileMenu({
 
     return (
         <>
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button variant="ghost">File</Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                    {/* Section 1: Create & Open */}
-                    <DropdownMenuItem onClick={() => setCreateOpen(true)}>
-                        <CreateIcon className="h-4 w-4 mr-2" /> {createLabel}
+            <ToolbarMenu label="File">
+                {/* Section 1: Create & Open */}
+                <DropdownMenuItem onClick={() => setCreateOpen(true)}>
+                    <CreateIcon className="h-4 w-4 mr-2" /> {createLabel}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setOpenPickerOpen(true)}>
+                    <Folder className="h-4 w-4 mr-2" /> Open…
+                </DropdownMenuItem>
+                {canWrite && onImport && (
+                    <DropdownMenuItem onClick={onImport}>
+                        <Upload className="h-4 w-4 mr-2" /> {importLabel ?? 'Import…'}
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setOpenPickerOpen(true)}>
-                        <Folder className="h-4 w-4 mr-2" /> Open…
+                )}
+
+                {/* Section 2: Export & Rename */}
+                {(canDownload || canWrite) && <DropdownMenuSeparator />}
+                {canDownload && onExport && (
+                    <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                            <Download className="h-4 w-4 mr-2" /> Download
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent>
+                            {downloadFormats.map((format) => (
+                                <DropdownMenuItem key={format} onClick={() => onExport(format)}>
+                                    {formatDownloadLabel(format)}
+                                </DropdownMenuItem>
+                            ))}
+                        </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                )}
+                {canWrite && (
+                    <DropdownMenuItem onClick={() => setRenameOpen(true)}>
+                        <Pencil className="h-4 w-4 mr-2" /> Rename
                     </DropdownMenuItem>
-                    {canWrite && onImport && (
-                        <DropdownMenuItem onClick={onImport}>
-                            <Upload className="h-4 w-4 mr-2" /> {importLabel ?? 'Import…'}
-                        </DropdownMenuItem>
-                    )}
+                )}
 
-                    {/* Section 2: Export & Rename */}
-                    {(canDownload || canWrite) && <DropdownMenuSeparator />}
-                    {canDownload && onExport && (
-                        <DropdownMenuSub>
-                            <DropdownMenuSubTrigger>
-                                <Download className="h-4 w-4 mr-2" /> Download
-                            </DropdownMenuSubTrigger>
-                            <DropdownMenuSubContent>
-                                {downloadFormats.map((format) => (
-                                    <DropdownMenuItem key={format} onClick={() => onExport(format)}>
-                                        {formatDownloadLabel(format)}
-                                    </DropdownMenuItem>
-                                ))}
-                            </DropdownMenuSubContent>
-                        </DropdownMenuSub>
-                    )}
-                    {canWrite && (
-                        <DropdownMenuItem onClick={() => setRenameOpen(true)}>
-                            <Pencil className="h-4 w-4 mr-2" /> Rename
-                        </DropdownMenuItem>
-                    )}
-
-                    {/* Section 3: Share */}
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={onAccessDialogOpen}>
-                        <UserRoundPlus className="h-4 w-4 mr-2" /> Share
+                {/* Section 3: Share */}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={onAccessDialogOpen}>
+                    <UserRoundPlus className="h-4 w-4 mr-2" /> Share
+                </DropdownMenuItem>
+                {canWrite && (
+                    <DropdownMenuItem onClick={() => setEmailOpen(true)}>
+                        <Mail className="h-4 w-4 mr-2" /> Email collaborators
                     </DropdownMenuItem>
-                    {canWrite && (
-                        <DropdownMenuItem onClick={() => setEmailOpen(true)}>
-                            <Mail className="h-4 w-4 mr-2" /> Email collaborators
+                )}
+
+                {/* Section 4: Version history & Print */}
+                {(canWrite || children) && <DropdownMenuSeparator />}
+                {canWrite && <VersionHistoryMenu path={path} onRequestRestore={setPendingSnapshot} />}
+                {children}
+
+                {/* Section 5: Move to trash */}
+                {canWrite && (
+                    <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => setDeleteOpen(true)}>
+                            <Trash2 className="h-4 w-4 mr-2" /> Move to trash
                         </DropdownMenuItem>
-                    )}
-
-                    {/* Section 4: Version history & Print */}
-                    {(canWrite || children) && <DropdownMenuSeparator />}
-                    {canWrite && <VersionHistoryMenu path={path} onRequestRestore={setPendingSnapshot} />}
-                    {children}
-
-                    {/* Section 5: Move to trash */}
-                    {canWrite && (
-                        <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => setDeleteOpen(true)}>
-                                <Trash2 className="h-4 w-4 mr-2" /> Move to trash
-                            </DropdownMenuItem>
-                        </>
-                    )}
-                </DropdownMenuContent>
-            </DropdownMenu>
+                    </>
+                )}
+            </ToolbarMenu>
 
             <DriveCreateEigenDoc
                 open={createOpen}
