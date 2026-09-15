@@ -1,22 +1,12 @@
 import { isContainerType } from '@workspace/lib/types/drive';
 import { enforceMountQuota } from '../config/enforcement';
 import { ApiError } from '../core/errors';
-import { computeEtag, etagMatches, rangeResponse, scriptableInlineHeaders } from '../core/http';
+import { computeEtag, matchesIfMatch, matchesIfNoneMatch, rangeResponse, scriptableInlineHeaders } from '../core/http';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
 import { enclosingDocumentContainer } from './container-guard';
 import { assertWritable } from './locks';
 import { splitParentAndName } from './path';
-
-// If-Match only — RFC 7232 requires STRONG comparison here (no W/ strip); If-None-Match
-// uses the shared weak matcher etagMatches.
-function ifMatchesEtag(header: string, etag: string): boolean {
-    if (header === '*') return true;
-    return header
-        .split(',')
-        .map((s) => s.trim())
-        .includes(etag);
-}
 
 export async function handleGet(args: {
     user: User;
@@ -37,10 +27,10 @@ export async function handleGet(args: {
     const etag = computeEtag(path);
 
     // RFC 7232 §6 precondition order: If-Match before If-None-Match.
-    if (ifMatch && !ifMatchesEtag(ifMatch, etag)) {
+    if (ifMatch && !matchesIfMatch(ifMatch, etag)) {
         return new Response(null, { status: 412 });
     }
-    if (ifNoneMatch && etagMatches(ifNoneMatch, etag)) {
+    if (ifNoneMatch && matchesIfNoneMatch(ifNoneMatch, etag)) {
         return new Response(null, { status: 304, headers: { ETag: etag } });
     }
 
@@ -117,7 +107,7 @@ export async function handlePut(args: {
 
     if (existing) {
         const etag = computeEtag(existing);
-        if (ifMatch && !ifMatchesEtag(ifMatch, etag)) {
+        if (ifMatch && !matchesIfMatch(ifMatch, etag)) {
             return new Response(null, { status: 412 });
         }
         if (ifNoneMatch === '*') return new Response(null, { status: 412 });

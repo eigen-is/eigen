@@ -1,7 +1,13 @@
 import { DRIVE_TYPE_FILE } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../core';
-import { computeEtag, contentDisposition, etagMatches, rangeResponse, scriptableInlineHeaders } from '../core/http';
+import {
+    computeEtag,
+    contentDisposition,
+    matchesIfNoneMatch,
+    rangeResponse,
+    scriptableInlineHeaders,
+} from '../core/http';
 import type { Mount } from '../mount';
 
 // Header/range/CSP mechanics for serving a file body. Pure Mount function —
@@ -34,7 +40,7 @@ export async function serveFile(
     if (disposition === 'inline') Object.assign(headers, scriptableInlineHeaders(mimeType));
 
     // RFC 7232 §6: a matching conditional GET returns 304 regardless of Range.
-    if (ifNoneMatch && etagMatches(ifNoneMatch, etag)) {
+    if (ifNoneMatch && matchesIfNoneMatch(ifNoneMatch, etag)) {
         return new Response(null, { status: 304, headers });
     }
 

@@ -122,8 +122,7 @@ Shared with CalDAV and CardDAV from `apps/api/src/lib/dav/`: `XML_CONTENT_TYPE` 
 The multistatus builders are deliberately WebDAV's own: the dav ones declare the CalDAV/CardDAV
 namespaces and emit no newlines.
 
-`computeEtag` is not a WebDAV concern — it is imported from `lib/core/http` and shared with the REST routes,
-so the same file reports the same validator on both paths.
+`computeEtag` is not a WebDAV concern — it is imported from `lib/core/http` and shared with the REST routes, so the same file reports the same validator on both paths. The preconditions come from the same module: `matchesIfMatch` (strong, RFC 7232 §3.1) and `matchesIfNoneMatch` (weak, §3.2) are the API's only two etag comparisons, shared with CalDAV, CardDAV and the REST file routes. Both take the etag in its quoted wire form, so a surface storing a bare hash quotes it at the call.
 
 Route entry points always go through `getSharedDrive(ownerId, user)`, so cross-owner ACL is enforced
 the same way as the REST API. The drive-side helpers (`resolvePath`, `copyPath`, `readRange`,
