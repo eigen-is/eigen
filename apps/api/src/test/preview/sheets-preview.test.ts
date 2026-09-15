@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { Sheet } from '@workspace/lib/sheets';
+import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { FormulaEngine } from '@workspace/sheet/engine';
 import * as Y from 'yjs';
@@ -175,17 +176,27 @@ describe('eigensheets preview (floating images)', () => {
     // The quick look renders this fragment at 1:1 in app CSS, where the grid under the
     // overlay must keep the declared pitch (packages/ui globals.css, .eigensheets-preview).
     test('an image past the used range origin gets the export geometry', () => {
-        // Used range starts at C5, the image at E7 — both in default 73 × 19 grid pixels.
+        // Used range starts at C5, the image at E7 — both in default grid pixels.
         const cell = { v: 'C5', m: 'C5', ct: { fa: 'General', t: 'g' } };
         const sheet: Sheet = {
             id: 'offset',
             name: 'Offset',
             celldata: [{ r: 4, c: 2, v: cell }],
             config: {},
-            images: [{ id: 'img_1', mediaName: 'chart.png', x: 4 * 73, y: 6 * 19, width: 160, height: 120 }],
+            images: [
+                {
+                    id: 'img_1',
+                    mediaName: 'chart.png',
+                    x: 4 * SHEET_DEFAULT_COL_WIDTH,
+                    y: 6 * SHEET_DEFAULT_ROW_HEIGHT,
+                    width: 160,
+                    height: 120,
+                },
+            ],
         };
         const media = new Map([['chart.png', IMAGE_URL]]);
-        const geometry = 'position:absolute;left:146px;top:38px;width:160px;height:120px';
+        // The C5 origin takes two columns and four rows off the stored geometry.
+        const geometry = `position:absolute;left:${2 * SHEET_DEFAULT_COL_WIDTH}px;top:${2 * SHEET_DEFAULT_ROW_HEIGHT}px;width:160px;height:120px`;
 
         const doc = new Y.Doc();
         seedSheetsDoc(doc, [sheet], []);
@@ -388,6 +399,6 @@ describe('eigensheets preview (declared spans beyond the window)', () => {
 });
 
 // Recorded from the deterministic golden fixture. Regenerate (and justify) only on
-// an intentional renderer or preview-budget change. Last move: the preview read no
-// longer recalcs, so the fixture's valueless formula cells render empty (2026-08-04).
-const GOLDEN_BODY_SHA256 = '30976a0476b211d6695e14d2506a824cd9f965f8d00572d6b313ff27e49fa410';
+// an intentional renderer or preview-budget change. Last move: the default cell size is
+// 100 × 20, the editor's value, one constant with the renderer (2026-09-15).
+const GOLDEN_BODY_SHA256 = '58dca95a4f86e8c60264a12c277b5139159a8ab43c96c65068dde7121bbc3041';

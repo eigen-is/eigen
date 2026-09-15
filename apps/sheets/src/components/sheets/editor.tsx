@@ -394,9 +394,6 @@ function SheetEditorInner({
                                     allowEdit={canWrite && !loadFailed}
                                     toolbarLeftItems={leftItems}
                                     toolbarRightItems={rightItems}
-                                    defaultRowHeight={20}
-                                    defaultFontSize={10}
-                                    defaultColWidth={100}
                                     imageAspectLocked={imageAspectLocked}
                                     hooks={{
                                         afterSelectionChange: (sheetId, selection) => {

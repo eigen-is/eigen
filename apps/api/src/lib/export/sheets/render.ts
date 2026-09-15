@@ -8,6 +8,8 @@ import {
     type ConditionalFormatRule,
     type MergeCell,
     mergedBorderSides,
+    SHEET_DEFAULT_COL_WIDTH,
+    SHEET_DEFAULT_ROW_HEIGHT,
     type Sheet,
     type SheetConfig,
     type SheetImage,
@@ -37,8 +39,6 @@ import { resolveFontFamily } from './fonts';
 // module must not reach the Mount or the main-thread transform seam - the Worker
 // imports it.
 
-const DEFAULT_COL_WIDTH = 73;
-const DEFAULT_ROW_HEIGHT = 19;
 // Defaults applied to every td: inline in the preview so the markup renders without the
 // document <head> CSS (preview embedders strip it), and as the shared td{} rule in the
 // class-based export stylesheet. Vertical-align is intentionally absent — buildCellStyle
@@ -256,7 +256,7 @@ function colSpan(config: SheetConfig, from: number, to: number): number {
     let width = 0;
     for (let c = from; c <= to; c++) {
         if (config.colhidden?.[c]) continue;
-        width += cssLength(config.columnlen?.[c], DEFAULT_COL_WIDTH);
+        width += cssLength(config.columnlen?.[c], SHEET_DEFAULT_COL_WIDTH);
     }
     return width;
 }
@@ -265,7 +265,7 @@ function rowSpan(config: SheetConfig, from: number, to: number): number {
     let height = 0;
     for (let r = from; r <= to; r++) {
         if (config.rowhidden?.[r]) continue;
-        height += cssLength(config.rowlen?.[r], DEFAULT_ROW_HEIGHT);
+        height += cssLength(config.rowlen?.[r], SHEET_DEFAULT_ROW_HEIGHT);
     }
     return height;
 }
@@ -392,7 +392,7 @@ function renderSheet(
     const cols: string[] = [];
     let tableWidth = 0;
     for (const c of renderCols) {
-        const w = cssLength(config.columnlen?.[c], DEFAULT_COL_WIDTH);
+        const w = cssLength(config.columnlen?.[c], SHEET_DEFAULT_COL_WIDTH);
         tableWidth += w;
         cols.push(`<col ${styleAttr(styles, `width:${w}px`)}>`);
     }
@@ -400,7 +400,7 @@ function renderSheet(
 
     const rows: string[] = [];
     for (const r of renderRows) {
-        const h = cssLength(config.rowlen?.[r], DEFAULT_ROW_HEIGHT);
+        const h = cssLength(config.rowlen?.[r], SHEET_DEFAULT_ROW_HEIGHT);
         const cells: string[] = [];
         const rowMerges = merges.filter((m) => m.r <= r && r < m.r + m.rs);
 

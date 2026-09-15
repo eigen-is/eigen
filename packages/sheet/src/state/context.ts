@@ -1,3 +1,4 @@
+import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import { isNil, sortBy } from 'es-toolkit/compat';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../engine/defaults';
 import type { Cell, CellMatrix } from '../engine/types';
@@ -281,8 +282,8 @@ export function defaultContext(refs: RefValues): Context {
         cellMainSrollBarSize: 12,
         tableContentSize: [0, 0],
 
-        defaultcollen: 73,
-        defaultrowlen: 19,
+        defaultcollen: SHEET_DEFAULT_COL_WIDTH,
+        defaultrowlen: SHEET_DEFAULT_ROW_HEIGHT,
 
         scrollLeft: 0,
         scrollTop: 0,

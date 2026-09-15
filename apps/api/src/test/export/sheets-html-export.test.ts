@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Cell, ConditionalFormatRule, Sheet, SheetImage } from '@workspace/lib/sheets';
+import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import { sanitizeExportHtml } from '../../lib/export/sanitize';
 import {
     getSheetContentSize,
@@ -203,8 +204,8 @@ describe('Sheets HTML export — class-based styles', () => {
         expectNoBreakout(doc);
         // Non-numeric dimensions fall back to the defaults rather than concatenating —
         // the same coercion getSheetContentSize applies for the @page rule.
-        expect(doc).toContain('width:73px');
-        expect(doc).toContain('height:19px');
+        expect(doc).toContain(`width:${SHEET_DEFAULT_COL_WIDTH}px`);
+        expect(doc).toContain(`height:${SHEET_DEFAULT_ROW_HEIGHT}px`);
         expect(doc).not.toContain('169.254.169.254');
     });
 
@@ -763,8 +764,11 @@ describe('Sheets export — content size (@page)', () => {
             rowlen: { 0: 25, 1: 'abc' as unknown as number },
         };
         // Pre-coercion this summed to the string "050;}@page{100", headed for the <head> @page CSS.
-        // Bad column → DEFAULT_COL_WIDTH (73), bad row → DEFAULT_ROW_HEIGHT (19).
-        expect(getSheetContentSize(sheet)).toEqual({ width: 73 + 100, height: 25 + 19 });
+        // Bad column → SHEET_DEFAULT_COL_WIDTH, bad row → SHEET_DEFAULT_ROW_HEIGHT.
+        expect(getSheetContentSize(sheet)).toEqual({
+            width: SHEET_DEFAULT_COL_WIDTH + 100,
+            height: 25 + SHEET_DEFAULT_ROW_HEIGHT,
+        });
     });
 
     test('an image parked past the used range is measured too', () => {
@@ -773,7 +777,7 @@ describe('Sheets export — content size (@page)', () => {
             images: [{ id: 'img_1', mediaName: 'chart.png', x: 400, y: 200, width: 100, height: 50 }],
         };
         // The overlay draws at the absolute grid coordinate, so the page has to reach the
-        // image's far edge — the one default cell (73 × 19) is not what bounds this sheet.
+        // image's far edge — the one default-sized cell is not what bounds this sheet.
         expect(getSheetContentSize(sheet)).toEqual({ width: 500, height: 250 });
     });
 
@@ -782,8 +786,11 @@ describe('Sheets export — content size (@page)', () => {
             ...makeSheet([{ r: 2, c: 1, v: { v: 'grid' } }]),
             images: [{ id: 'img_1', mediaName: 'chart.png', x: 300, y: 100, width: 10, height: 10 }],
         };
-        // Two default rows (19px) and one default column (73px) sit above/left of the table.
-        expect(getSheetContentSize(sheet)).toEqual({ width: 300 + 10 - 73, height: 100 + 10 - 2 * 19 });
+        // Two default rows and one default column sit above/left of the table.
+        expect(getSheetContentSize(sheet)).toEqual({
+            width: 300 + 10 - SHEET_DEFAULT_COL_WIDTH,
+            height: 100 + 10 - 2 * SHEET_DEFAULT_ROW_HEIGHT,
+        });
     });
 });
 
@@ -840,9 +847,11 @@ describe('Sheets HTML export — floating images', () => {
             ...makeSheet([{ r: 2, c: 1, v: { v: 'grid' } }]),
             images: [{ id: 'img_1', mediaName: 'chart.png', x: 100, y: 60, width: 10, height: 10 }],
         };
-        // Two default rows (19px) and one default column (73px) sit above/left of the table.
+        // Two default rows and one default column sit above/left of the table.
         const out = renderSheetsHtml([sheet], MEDIA);
-        expect(classesFor(out, `left:${100 - 73}px;top:${60 - 2 * 19}px`)).toHaveLength(1);
+        const left = 100 - SHEET_DEFAULT_COL_WIDTH;
+        const top = 60 - 2 * SHEET_DEFAULT_ROW_HEIGHT;
+        expect(classesFor(out, `left:${left}px;top:${top}px`)).toHaveLength(1);
     });
 
     test('a workbook without floating images emits the bare table it always did', () => {
