@@ -380,10 +380,8 @@ function renderSheet(
     const colgroup = `<colgroup>${cols.join('')}</colgroup>`;
 
     const rows: string[] = [];
-    let tableHeight = 0;
     for (const r of renderRows) {
         const h = cssLength(config.rowlen?.[r], DEFAULT_ROW_HEIGHT);
-        tableHeight += h;
         const cells: string[] = [];
         const rowMerges = merges.filter((m) => m.r <= r && r < m.r + m.rs);
 
@@ -437,7 +435,8 @@ function renderSheet(
 
     // Guarded on the images: the offset walks every row above the window, and a lone cell
     // far down the grid makes that walk a million iterations for nothing. The preview clips
-    // the grid to its budget, so it also clips the overlay — an image beyond the box would
+    // the overlay to the budget window rather than to the table — a chart sitting right of a
+    // small grid belongs in the thumbnail, while an image parked far outside the window would
     // stretch the fragment's scroll width and collapse the thumbnail scaled by it. The full
     // export keeps every image and getSheetContentSize sizes the page to reach it.
     const overlay =
@@ -447,7 +446,12 @@ function renderSheet(
                   mediaUrls,
                   gridOffset(config, minRow, minCol),
                   styles,
-                  budget ? { width: tableWidth, height: tableHeight } : undefined,
+                  budget
+                      ? {
+                            width: colSpan(config, minCol, minCol + budget.maxCols - 1),
+                            height: rowSpan(config, minRow, minRow + budget.maxRows - 1),
+                        }
+                      : undefined,
               )
             : '';
 

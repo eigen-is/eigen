@@ -150,7 +150,7 @@ describe('eigensheets preview (read policy)', () => {
 describe('eigensheets preview (floating images)', () => {
     const IMAGE_URL = 'http://api.test/drive/owner/default/file/media-1/preview';
 
-    function seedImageSheet(): Y.Doc {
+    function seedImageSheet(x = 90): Y.Doc {
         const cell = { v: 'Grid', m: 'Grid', ct: { fa: 'General', t: 'g' } };
         const sheet: Sheet = {
             id: 'images',
@@ -158,7 +158,7 @@ describe('eigensheets preview (floating images)', () => {
             celldata: [{ r: 0, c: 0, v: cell }],
             data: [[cell]],
             config: {},
-            images: [{ id: 'img_1', mediaName: 'chart.png', x: 90, y: 30, width: 160, height: 120 }],
+            images: [{ id: 'img_1', mediaName: 'chart.png', x, y: 30, width: 160, height: 120 }],
         };
         const doc = new Y.Doc();
         seedSheetsDoc(doc, [sheet], []);
@@ -170,6 +170,16 @@ describe('eigensheets preview (floating images)', () => {
         const { body } = renderEigensheetsPreviewBody(doc, new Map([['chart.png', IMAGE_URL]]));
         expect(body).toContain(`src="${IMAGE_URL}"`);
         expect(body).toContain('left:90px;top:30px;width:160px;height:120px');
+        doc.destroy();
+    });
+
+    // Past the budget window's own right edge, not merely past the one-cell grid: the
+    // overlay would stretch the fragment's scroll width and collapse the thumbnail.
+    test('an image parked far outside the budget window stays out of the body', () => {
+        const doc = seedImageSheet(20_000);
+        const { body } = renderEigensheetsPreviewBody(doc, new Map([['chart.png', IMAGE_URL]]));
+        expect(body).toContain('Grid');
+        expect(body).not.toContain('<img');
         doc.destroy();
     });
 
