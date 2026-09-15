@@ -41,8 +41,12 @@ function asSheet(v: unknown): Sheet | null {
     return sheet;
 }
 
-function withNormalizedConfig(s: Sheet): Sheet {
-    const next = { ...s, config: { ...s.config } };
+// The one shape every sheet leaves the replay in, whichever door it came through — the decoded
+// snapshot or an addSheet op's value. Config collections and `images` are materialized because
+// the editor writes them as whole collections, and a patch against one that doesn't exist yet
+// fails to resolve (see normalizeSheetConfig, and the decode in lib's snapshot-codec).
+function withNormalizedSheet(s: Sheet): Sheet {
+    const next = { ...s, config: { ...s.config }, images: s.images ?? [] };
     normalizeSheetConfig(next);
     return next;
 }
@@ -91,7 +95,7 @@ function collectDataOpSheetIds(batch: Op[]): Set<string> | null {
 export function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
     // Every base sheet carries its config collections before a single op is applied, so the
     // granular config patches the editor emits resolve here as well as they do in the editor.
-    let result = sheets.map(withNormalizedConfig);
+    let result = sheets.map(withNormalizedSheet);
     for (const batch of opBatches) {
         // One poisoned batch must never make the whole doc unreadable: on an
         // unexpected failure, roll back to the pre-batch state, warn, and keep
@@ -112,7 +116,7 @@ export function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
                         console.warn('[sheets] addSheet op has malformed value', op.value);
                         continue;
                     }
-                    result = [...result, withNormalizedConfig(newSheet)];
+                    result = [...result, withNormalizedSheet(newSheet)];
                 } else if (op.op === 'deleteSheet' && op.id) {
                     result = result.filter((s) => s.id !== op.id);
                 } else if (op.op === 'insertRowCol' && op.id) {

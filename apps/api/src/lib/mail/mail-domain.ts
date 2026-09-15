@@ -272,11 +272,17 @@ export class Mail {
             if (dbRecord) {
                 const meta = await this.store.readDraftMeta(existingId);
                 if (meta && meta.attachments.length > 0) {
-                    // A count compare, not a positional one: the keep list carries raw EML indexes,
-                    // and a hidden calendar part makes those skip a number the sidecar never had.
+                    // The keep list carries raw EML indexes while the sidecar lists the named parts
+                    // only, so counting is not enough: an index has to land on a part the sidecar
+                    // knows. Anything past them (a part with no filename, which the sidecar drops
+                    // but the composer still chips) means the list is dropping one of the named
+                    // parts, and the fast path would keep it. The hidden invite is the one part
+                    // that shifts those indexes without being listed.
+                    const kept = options.keepAttachmentIndexes;
+                    const knownParts = meta.attachments.length + (meta.hiddenCalendarCount ?? 0);
                     const keepAll =
-                        !options.keepAttachmentIndexes ||
-                        options.keepAttachmentIndexes.length === meta.attachments.length;
+                        !kept ||
+                        (new Set(kept).size === meta.attachments.length && kept.every((i) => i >= 0 && i < knownParts));
 
                     const stale = meta.lastFullSaveAt && Date.now() - meta.lastFullSaveAt > FULL_SAVE_INTERVAL_MS;
                     if (keepAll && !stale) {
@@ -304,6 +310,7 @@ export class Mail {
             text: email.text || '',
             html: email.html || '',
             attachments: prevMeta.attachments,
+            hiddenCalendarCount: prevMeta.hiddenCalendarCount,
             driveReferences,
             inReplyTo: email.inReplyTo,
             references: email.references,
@@ -454,6 +461,7 @@ export class Mail {
                     ? [{ filename: a.filename, contentType: a.contentType, size: a.size }]
                     : [],
             ),
+            hiddenCalendarCount: saved.attachments.filter(isCalendarPart).length,
             driveReferences,
             inReplyTo: email.inReplyTo,
             references: email.references,

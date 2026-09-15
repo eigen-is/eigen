@@ -48,6 +48,15 @@ describe('replaySheetsOps', () => {
         expect(result[1].id).toBe('s2');
     });
 
+    test('a sheet an addSheet op introduces is materialized like the replay base', () => {
+        // The editor writes `images` and the config collections as whole values, so a patch
+        // against a sheet that lacks them fails to resolve and drops the batch.
+        const ops: Op[][] = [[{ op: 'addSheet', path: [], value: baseSheet('s2', 'Sheet2') }]];
+        const [base, added] = replaySheetsOps([baseSheet('s1', 'Sheet1')], ops);
+        expect(added.images).toEqual([]);
+        expect(added.config).toEqual(base.config);
+    });
+
     test('deleteSheet filters by id', () => {
         const sheets = [baseSheet('s1', 'Sheet1'), baseSheet('s2', 'Sheet2')];
         const ops: Op[][] = [[{ op: 'deleteSheet', id: 's1', path: [] }]];

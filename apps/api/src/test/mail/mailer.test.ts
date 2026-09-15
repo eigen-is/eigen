@@ -21,6 +21,7 @@ describe('createTransport', () => {
         expect(opts?.['port']).toBe(25);
         expect(opts?.['secure']).toBe(false);
         expect(opts?.['auth']).toBeUndefined();
+        expect(opts?.['requireTLS']).toBe(false);
         expect(opts?.['tls']).toEqual({ rejectUnauthorized: false });
     });
 
@@ -33,7 +34,16 @@ describe('createTransport', () => {
         const opts = (transport as unknown as { options: Record<string, unknown> }).options;
         expect(opts?.['auth']).toEqual({ user: 'relay-user', pass: 'relay-secret' });
         expect(opts?.['secure']).toBe(false);
+        expect(opts?.['requireTLS']).toBe(true);
         expect(opts?.['tls']).toEqual({ rejectUnauthorized: true });
+    });
+
+    test('refuses a relay user without a password', () => {
+        process.env['SMTP_HOST'] = 'smtp-relay.brevo.com';
+        process.env['SMTP_PORT'] = '587';
+        process.env['SMTP_USER'] = 'relay-user';
+        delete process.env['SMTP_PASSWORD'];
+        expect(() => createTransport()).toThrow('SMTP_USER is set without SMTP_PASSWORD');
     });
 
     test('uses implicit TLS on port 465', () => {

@@ -29,6 +29,10 @@ export type DraftMeta = {
     // user typed, not the rendered card block at the bottom.
     html: string;
     attachments: Array<{ filename: string; contentType: string; size: number }>;
+    // Invite parts the EML carries and `attachments` leaves out (the composer hides them too).
+    // The draft fast path needs them to read a keep list, which numbers raw EML positions.
+    // Absent on sidecars written before the field existed.
+    hiddenCalendarCount?: number;
     driveReferences?: AttachmentReference[];
     inReplyTo?: string;
     references?: string[] | string;

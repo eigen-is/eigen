@@ -475,7 +475,7 @@ SMTP_USER=your-relay-login
 SMTP_PASSWORD=your-relay-key
 ```
 
-Port 587 starts plain and upgrades with STARTTLS; port 465 is implicit TLS. Set `SMTP_SECURE=1` or `0` to override that if your relay listens on some other port. The relay's certificate is verified as soon as `SMTP_USER` is set, so the credentials never go over an unverified connection. These are the API's own credentials — the `SMTP_RELAY_*` pair is read by the bundled postfix, and the two are set independently.
+Port 587 starts plain and upgrades with STARTTLS; port 465 is implicit TLS. Set `SMTP_SECURE=1` or `0` to override that if your relay listens on some other port. As soon as `SMTP_USER` is set, STARTTLS is mandatory and the relay's certificate is verified, so the credentials never go over a plain or unverified connection. Set `SMTP_USER` and `SMTP_PASSWORD` together — a user without a password is a config error and the API refuses to build the transport. These are the API's own credentials — the `SMTP_RELAY_*` pair is read by the bundled postfix, and the two are set independently.
 
 Tell users to point their mail client at your existing mail server — Eigen no longer advertises IMAP settings of its own.
 

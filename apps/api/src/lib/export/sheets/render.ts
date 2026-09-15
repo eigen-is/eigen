@@ -273,9 +273,17 @@ function rowSpan(config: SheetConfig, from: number, to: number): number {
 export function getSheetContentSize(sheet: Sheet): { width: number; height: number } {
     const config = sheet.config ?? {};
     const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, config.borderInfo ?? {});
-    if (maxRow < 0 || maxCol < 0) return { width: 0, height: 0 };
-
-    return { width: colSpan(config, minCol, maxCol), height: rowSpan(config, minRow, maxRow) };
+    const blank = maxRow < 0 || maxCol < 0;
+    const offset = blank ? { left: 0, top: 0 } : gridOffset(config, minRow, minCol);
+    let width = blank ? 0 : colSpan(config, minCol, maxCol);
+    let height = blank ? 0 : rowSpan(config, minRow, maxRow);
+    // The overlay draws at the stored grid coordinate, so an image parked past the used range
+    // is still on the page — measured in the table's space, like the overlay positions it.
+    for (const img of sheet.images ?? []) {
+        width = Math.max(width, cssLength(img.x, 0) + cssLength(img.width, 0) - offset.left);
+        height = Math.max(height, cssLength(img.y, 0) + cssLength(img.height, 0) - offset.top);
+    }
+    return { width, height };
 }
 
 // `styles` present is the full-document export (interned classes, stylesheet escaping);
@@ -292,14 +300,12 @@ function renderSheet(
     const showGrid = sheet.showGridLines !== false && sheet.showGridLines !== 0;
 
     const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, config.borderInfo ?? {});
-    // Guarded on the images: the offset walks every row above the window, and a lone cell
-    // far down the grid makes that walk a million iterations for nothing.
-    const overlay =
-        sheet.images?.length && mediaUrls
-            ? renderFloatingImages(sheet.images, mediaUrls, gridOffset(config, minRow, minCol), styles)
-            : '';
     if (maxRow < 0 || maxCol < 0) {
         // An image pasted onto an otherwise blank sheet is all there is to render.
+        const overlay =
+            sheet.images?.length && mediaUrls
+                ? renderFloatingImages(sheet.images, mediaUrls, { left: 0, top: 0 }, styles)
+                : '';
         return { html: `<div class="sheet">${overlayBox('', overlay, 0, styles)}</div>`, truncated: false };
     }
 
@@ -374,8 +380,10 @@ function renderSheet(
     const colgroup = `<colgroup>${cols.join('')}</colgroup>`;
 
     const rows: string[] = [];
+    let tableHeight = 0;
     for (const r of renderRows) {
         const h = cssLength(config.rowlen?.[r], DEFAULT_ROW_HEIGHT);
+        tableHeight += h;
         const cells: string[] = [];
         const rowMerges = merges.filter((m) => m.r <= r && r < m.r + m.rs);
 
@@ -426,6 +434,22 @@ function renderSheet(
 
         rows.push(`<tr ${styleAttr(styles, `height:${h}px`)}>${cells.join('')}</tr>`);
     }
+
+    // Guarded on the images: the offset walks every row above the window, and a lone cell
+    // far down the grid makes that walk a million iterations for nothing. The preview clips
+    // the grid to its budget, so it also clips the overlay — an image beyond the box would
+    // stretch the fragment's scroll width and collapse the thumbnail scaled by it. The full
+    // export keeps every image and getSheetContentSize sizes the page to reach it.
+    const overlay =
+        sheet.images?.length && mediaUrls
+            ? renderFloatingImages(
+                  sheet.images,
+                  mediaUrls,
+                  gridOffset(config, minRow, minCol),
+                  styles,
+                  budget ? { width: tableWidth, height: tableHeight } : undefined,
+              )
+            : '';
 
     // The .sheet div already carries a class, so in stylesheet mode the page-break style
     // joins it as a second class token rather than going through styleAttr.
@@ -495,16 +519,22 @@ function renderFloatingImages(
     mediaUrls: MediaUrls,
     offset: { left: number; top: number },
     styles?: StyleRegistry,
+    box?: { width: number; height: number },
 ): string {
     const parts: string[] = [];
     for (const img of images) {
         const src = mediaUrls.get(img.mediaName);
         if (src === undefined) continue;
         // Geometry is schemaless at the Yjs boundary, like every other stored dimension here.
+        const left = cssLength(img.x, 0) - offset.left;
+        const top = cssLength(img.y, 0) - offset.top;
+        const w = cssLength(img.width, 0);
+        const h = cssLength(img.height, 0);
+        if (box && (left >= box.width || top >= box.height || left + w <= 0 || top + h <= 0)) continue;
         const angle = cssLength(img.angle, 0);
         const decl =
-            `position:absolute;left:${cssLength(img.x, 0) - offset.left}px;top:${cssLength(img.y, 0) - offset.top}px;` +
-            `width:${cssLength(img.width, 0)}px;height:${cssLength(img.height, 0)}px` +
+            `position:absolute;left:${left}px;top:${top}px;` +
+            `width:${w}px;height:${h}px` +
             (angle ? `;transform:rotate(${angle}deg);transform-origin:center center` : '');
         parts.push(`<img ${styleAttr(styles, decl)} src="${escapeHtml(src)}" alt="">`);
     }
