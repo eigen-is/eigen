@@ -169,6 +169,8 @@ baked markup. `Mail.destruct` force-flushes pending sidecars so a restart never 
 
 The composer (`apps/mail/src/components/mail/email-draft.tsx` + its `hooks/use-draft.ts`) handles To/Cc/Bcc via `ContactAutosuggest`, a `LightEditor` (Tiptap) body, drag/paste-to-attach, debounced (2.5 s) autosave keyed off a fingerprint diff, a forced full save on unmount, signature injection for new/reply drafts, and Mod+Enter to send. Reply/forward are FE-only (quoted-body composition in `use-mail-actions.ts`); reply drafts also seed the `inReplyTo`/`references` threading headers. The send flow (recipient canonicalization, per-recipient link copies, and the access-grant dialog) is its own topic below.
 
+**Calendar parts are never compose chips.** `isCalendarPart` (`@workspace/lib/types/mail`) is the one test the composer, the reader's chip row and `messageHandleDraft` all ask, so a draft an IMAP client left carrying an invite shows only its real attachments while each chip keeps the raw EML index the keep list addresses — which is why the fast-save gate compares the keep list's length against the sidecar's rather than its positions.
+
 ## Send path
 
 `messageSend` (`mail-domain.ts`) does a full save, maps the draft to an `OutboundMail` (`draftToOutboundMail`, `sender.ts`), then delivers. `sendMail` (`lib/core/mailer.ts`) is the sendmail transport unless `SMTP_HOST` is set, and is **skipped in dev/test** (logged, not sent). On success the message moves to `Sent`, the draft flag clears, and `MAIL_SENT` fires. A demo box has no MTA, so `messageSend` throws `403` before any delivery and the message stays in Drafts.

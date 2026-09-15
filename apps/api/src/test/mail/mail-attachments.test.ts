@@ -311,6 +311,46 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         expect(fetched.attachments.length).toBe(1);
     });
 
+    test('a draft carrying an invite still takes the fast path', async () => {
+        const invite = new File(['BEGIN:VCALENDAR\r\nEND:VCALENDAR'], 'invite.ics', { type: 'text/calendar' });
+        const doc = new File(['agenda-bytes'], 'agenda.txt', { type: 'text/plain' });
+        const uploadedInvite = await uploadDraftAttachment(ctx.alice.user.sessionToken, ctx.alice.user.id, invite);
+        const uploadedDoc = await uploadDraftAttachment(ctx.alice.user.sessionToken, ctx.alice.user.id, doc);
+
+        const first = await putDraft(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            {
+                subject: 'Invite draft',
+                to: {
+                    value: [{ address: 'bob@test.eigen.is', name: 'Bob' }],
+                    text: 'Bob <bob@test.eigen.is>',
+                },
+                text: 'v1',
+                html: '<p>v1</p>',
+            },
+            { tempAttachmentIds: [uploadedInvite.tempId, uploadedDoc.tempId] },
+        );
+        expect(first.attachments.length).toBe(2);
+
+        // The composer hides the invite, so its keep list names the raw index of the one chip it shows.
+        await putDraft(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            { id: first.id, subject: 'Invite draft updated', to: first.to, text: 'v2', html: '<p>v2</p>' },
+            { keepAttachmentIndexes: [1] },
+        );
+
+        // A full save would have rebuilt the EML without the calendar part; the fast path leaves it alone.
+        const getRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/mail/${ctx.alice.user.id}/message/${first.id}`,
+        );
+        const fetched = await assertJson<{ html: string; attachments: Array<{ contentType: string }> }>(getRes);
+        expect(fetched.html).toContain('v2');
+        expect(fetched.attachments.map((a) => a.contentType.split(';')[0])).toEqual(['text/calendar', 'text/plain']);
+    });
+
     test('send after fast-path saves includes attachments', async () => {
         const file = new File(['send-after-fast'], 'send-after-fast.txt', { type: 'text/plain' });
         const uploaded = await uploadDraftAttachment(ctx.alice.user.sessionToken, ctx.alice.user.id, file);
