@@ -51,9 +51,53 @@ describe('engine/format — genarate', () => {
     test('infers monetary string (comma-formatted) as numeric', () => {
         const result = genarate('1,234.56');
         expect(result).not.toBeNull();
-        const [, ct] = result!;
+        const [m, ct, v] = result!;
+        expect(m).toBe('1,234.56');
         expect(ct.t).toBe('n');
         expect(ct.fa).toContain('#,##0');
+        expect(v).toBe(1234.56);
+    });
+
+    test('keeps the decimals of a one-group monetary string', () => {
+        expect(genarate('1,000.50')).toEqual(['1,000.50', { fa: '#,##0.00', t: 'n' }, 1000.5]);
+        expect(genarate('-1,000.50')).toEqual(['-1,000.50', { fa: '#,##0.00', t: 'n' }, -1000.5]);
+        expect(genarate('1,000.5')).toEqual(['1,000.5', { fa: '#,##0.0', t: 'n' }, 1000.5]);
+    });
+
+    test('two-group monetary strings keep their decimals as well', () => {
+        expect(genarate('1,000,000.50')).toEqual(['1,000,000.50', { fa: '#,##0.00', t: 'n' }, 1000000.5]);
+    });
+
+    test('monetary string without decimals stays an integer', () => {
+        expect(genarate('1,000')).toEqual(['1,000', { fa: '#,##0', t: 'n' }, 1000]);
+        expect(genarate('12,345')).toEqual(['12,345', { fa: '#,##0', t: 'n' }, 12345]);
+    });
+
+    test('a thousands group followed by junk stays text', () => {
+        const result = genarate('1,000x50');
+        expect(result).not.toBeNull();
+        const [m, ct, v] = result!;
+        expect(m).toBe('1,000x50');
+        expect(ct.t).toBe('g');
+        expect(v).toBe('1,000x50');
+    });
+
+    test('Infinity stays text — Excel has no infinite number literal', () => {
+        const result = genarate('Infinity');
+        expect(result).not.toBeNull();
+        const [m, ct, v] = result!;
+        expect(m).toBe('Infinity');
+        expect(ct.t).toBe('g');
+        expect(v).toBe('Infinity');
+    });
+
+    test('a hex literal stays text instead of being parsed down to its prefix', () => {
+        const result = genarate('0x10');
+        expect(result).not.toBeNull();
+        const [m, ct, v] = result!;
+        expect(m).toBe('0x10');
+        expect(ct.t).toBe('g');
+        expect(v).toBe('0x10');
     });
 
     test('infers TRUE boolean string', () => {

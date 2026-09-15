@@ -51,14 +51,21 @@ function applyCellStyle(map: ComputeMap, r: number, c: number, style: CellFormat
     if (style.dataBar != null) entry.dataBar = style.dataBar;
 }
 
-// Shared scan scaffolding for the CF evaluator: visits EVERY coordinate of
-// every range in order (range, then row, then column, ascending). No cell
-// filtering — each branch keeps its own guards, and some (duplicateValue,
-// formula) rely on visiting missing cells.
-function forEachCellInRanges(ranges: SingleRange[], cb: (r: number, c: number) => void) {
+// Shared scan scaffolding for the CF evaluator: visits every coordinate of every
+// range in order (range, then row, then column, ascending), clamped to the
+// materialized matrix. Holes INSIDE it are still visited — duplicateValue and
+// formula rules rely on that — but an xlsx sqref routinely runs far past the used
+// range (Excel writes a whole-column rule as A1:A1048576), and unclamped that costs
+// a million evaluations and map entries per rule on a three-row sheet. No cell
+// filtering beyond the bounds: each branch keeps its own guards.
+function forEachCellInRanges(data: CellMatrix, ranges: SingleRange[], cb: (r: number, c: number) => void) {
+    const lastRow = data.length - 1;
+    const lastColumn = (data[0]?.length ?? 0) - 1;
     for (const range of ranges) {
-        for (let r = range.row[0]; r <= range.row[1]; r += 1) {
-            for (let c = range.column[0]; c <= range.column[1]; c += 1) {
+        const rowEnd = Math.min(range.row[1], lastRow);
+        const columnEnd = Math.min(range.column[1], lastColumn);
+        for (let r = range.row[0]; r <= rowEnd; r += 1) {
+            for (let c = range.column[0]; c <= columnEnd; c += 1) {
                 cb(r, c);
             }
         }
@@ -107,7 +114,7 @@ export function evaluateConditionalFormat(
             const { cellrange, format } = rule;
             let max: number | null = null;
             let min: number | null = null;
-            forEachCellInRanges(cellrange, (r, c) => {
+            forEachCellInRanges(data, cellrange, (r, c) => {
                 if (isNil(data[r]) || isNil(data[r][c])) {
                     return;
                 }
@@ -132,7 +139,7 @@ export function evaluateConditionalFormat(
                     const plusLen = Math.round((maxNum / (maxNum - minNum)) * 10) / 10; // proportion of positive numbers
                     const minusLen = Math.round((Math.abs(minNum) / (maxNum - minNum)) * 10) / 10; // proportion of negative numbers
 
-                    forEachCellInRanges(cellrange, (r, c) => {
+                    forEachCellInRanges(data, cellrange, (r, c) => {
                         if (isNil(data[r]) || isNil(data[r][c])) {
                             return;
                         }
@@ -158,7 +165,7 @@ export function evaluateConditionalFormat(
                 } else {
                     const plusLen = 1;
 
-                    forEachCellInRanges(cellrange, (r, c) => {
+                    forEachCellInRanges(data, cellrange, (r, c) => {
                         if (isNil(data[r]) || isNil(data[r][c])) {
                             return;
                         }
@@ -181,7 +188,7 @@ export function evaluateConditionalFormat(
             let min: number | null = null;
             let sum = 0;
             let count = 0;
-            forEachCellInRanges(cellrange, (r, c) => {
+            forEachCellInRanges(data, cellrange, (r, c) => {
                 if (isNil(data[r]) || isNil(data[r][c])) {
                     return;
                 }
@@ -225,7 +232,7 @@ export function evaluateConditionalFormat(
                     return null;
                 };
 
-                forEachCellInRanges(cellrange, (r, c) => {
+                forEachCellInRanges(data, cellrange, (r, c) => {
                     const cell = data[r]?.[c];
                     if (isNil(cell) || isNil(cell.ct) || cell.ct.t !== 'n' || isNil(cell.v)) {
                         return;
@@ -263,7 +270,7 @@ export function evaluateConditionalFormat(
                     // Matches Excel/Google, mirroring the `between` branch below.
                     const threshold = Number(conditionValue0);
                     // iterate over apply range and evaluate
-                    forEachCellInRanges([range], (r, c) => {
+                    forEachCellInRanges(data, [range], (r, c) => {
                         if (isNil(data[r]) || isNil(data[r][c])) {
                             return;
                         }
@@ -292,7 +299,10 @@ export function evaluateConditionalFormat(
                                     ? cell.v !== threshold
                                     : cell.v.toString() !== conditionValue0;
                         } else if (conditionName === 'textContains') {
-                            matches = cell.v.toString().indexOf(String(conditionValue0)) !== -1;
+                            // Excel's "Text that contains" ignores case, and the xlsx importer
+                            // maps containsText onto this rule.
+                            matches =
+                                cell.v.toString().toLowerCase().indexOf(String(conditionValue0).toLowerCase()) !== -1;
                         }
                         if (matches) {
                             applyCellStyle(computeMap, r, c, { textColor, cellColor });
@@ -306,7 +316,7 @@ export function evaluateConditionalFormat(
                     const vBig = Math.max(v0, v1);
                     const vSmall = Math.min(v0, v1);
                     // iterate over apply range and evaluate
-                    forEachCellInRanges([range], (r, c) => {
+                    forEachCellInRanges(data, [range], (r, c) => {
                         if (isNil(data[r]) || isNil(data[r][c])) {
                             return;
                         }
@@ -332,7 +342,7 @@ export function evaluateConditionalFormat(
                         dSmall = genarate(str[0].trim())[2].toString();
                     }
                     // iterate over apply range and evaluate
-                    forEachCellInRanges([range], (r, c) => {
+                    forEachCellInRanges(data, [range], (r, c) => {
                         if (isNil(data[r]) || isNil(data[r][c])) {
                             return;
                         }
@@ -346,8 +356,14 @@ export function evaluateConditionalFormat(
                 } else if (conditionName === 'duplicateValue') {
                     // process cells in apply range
                     const dmap: Record<string, { r: number; c: number }[]> = {};
-                    forEachCellInRanges([range], (r, c) => {
-                        const item = String(cellValueAt(data, r, c));
+                    forEachCellInRanges(data, [range], (r, c) => {
+                        const value = cellValueAt(data, r, c);
+                        // Excel's Duplicate Values never highlights blanks, and these rules are
+                        // normally drawn over a whole column of mostly empty cells.
+                        if (isRealNull(value)) {
+                            return;
+                        }
+                        const item = String(value);
                         if (!(item in dmap)) {
                             dmap[item] = [];
                         }
@@ -380,7 +396,7 @@ export function evaluateConditionalFormat(
                 ) {
                     // cell values in apply range (numeric type)
                     const dArr: number[] = [];
-                    forEachCellInRanges([range], (r, c) => {
+                    forEachCellInRanges(data, [range], (r, c) => {
                         if (isNil(data[r]) || isNil(data[r][c])) {
                             return;
                         }
@@ -415,7 +431,7 @@ export function evaluateConditionalFormat(
                         // Membership set — O(1) per-cell lookup instead of indexOf's O(n) scan.
                         const cSet = new Set(cArr);
                         // iterate over apply range and evaluate
-                        forEachCellInRanges([range], (r, c) => {
+                        forEachCellInRanges(data, [range], (r, c) => {
                             if (isNil(data[r]) || isNil(data[r][c])) {
                                 return;
                             }
@@ -429,7 +445,7 @@ export function evaluateConditionalFormat(
                         const averageNum = dArr.reduce((acc, n) => acc + n, 0) / dArr.length;
                         const matches = (n: number) =>
                             conditionName === 'aboveAverage' ? n > averageNum : n < averageNum;
-                        forEachCellInRanges([range], (r, c) => {
+                        forEachCellInRanges(data, [range], (r, c) => {
                             if (isNil(data[r]) || isNil(data[r][c])) {
                                 return;
                             }
@@ -446,18 +462,8 @@ export function evaluateConditionalFormat(
 
                     const formulaSrc = String(conditionValue0);
                     const formulaTxt = formulaSrc.startsWith('=') ? formulaSrc : `=${formulaSrc}`;
-                    // Clamp to the last materialized row before iterating. An xlsx sqref routinely
-                    // runs far past the used range, and every evaluation costs a ref-shift plus a
-                    // full formula parse — on a real workbook two thirds of them landed on rows
-                    // that don't exist. Rows only: `data.length` is an exact bound, while a ragged
-                    // matrix has no single column extent, and unlike the value-comparing branches
-                    // this one intentionally evaluates cells the matrix doesn't hold (a formula
-                    // rule may style an empty cell). The anchor stays the original top-left.
-                    const bounded = {
-                        row: [range.row[0], Math.min(range.row[1], data.length - 1)],
-                        column: range.column,
-                    };
-                    forEachCellInRanges([bounded], (r, c) => {
+                    // The anchor stays the original top-left, even where the scan clamps the range.
+                    forEachCellInRanges(data, [range], (r, c) => {
                         const raw = evaluateFormula(formulaTxt, str, stc, r, c);
                         const v = typeof raw === 'boolean' ? raw : !!Number(raw);
                         if (v) {

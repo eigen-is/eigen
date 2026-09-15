@@ -53,11 +53,11 @@ export function genarate(value: string | number | boolean): [string, CellType, s
     let ct: CellType = {};
     let v: string | number | boolean = value;
 
-    if (/^-?[0-9]{1,}[,][0-9]{3}(.[0-9]{1,2})?$/.test(value as string)) {
+    if (/^-?[0-9]{1,}[,][0-9]{3}(\.[0-9]{1,2})?$/.test(value as string)) {
         value = value as string;
         // String representing a monetary amount, e.g. 12,000.00 or -12,000.00
         m = value;
-        v = Number(value.split('.')[0].replace(',', ''));
+        v = Number(value.replace(',', ''));
         let fa = '#,##0';
         if (value.split('.')[1]) {
             fa = '#,##0.';
@@ -85,6 +85,7 @@ export function genarate(value: string | number | boolean): [string, CellType, s
         ct = { fa: '@', t: 's' };
     } else if (
         isRealNum(value) &&
+        Number.isFinite(parseFloat(value as string)) &&
         Math.abs(parseFloat(value as string)) > 0 &&
         (Math.abs(parseFloat(value as string)) >= 1e11 || Math.abs(parseFloat(value as string)) < 1e-9)
     ) {
@@ -220,7 +221,13 @@ export function genarate(value: string | number | boolean): [string, CellType, s
             m = value.toString();
             ct = { fa: '@', t: 's' };
         }
-    } else if (isRealNum(value)) {
+    } else if (
+        // isRealNum tests with Number(), which reads "Infinity" and the radix prefixes parseFloat
+        // stops at ("0x10" → 0); Excel keeps both as text, so require the two to agree.
+        isRealNum(value) &&
+        Number.isFinite(parseFloat(value as string)) &&
+        parseFloat(value as string) === Number(value)
+    ) {
         m = parseFloat(value as string).toString();
         ct = { fa: 'General', t: 'n' };
         v = parseFloat(value as string);
