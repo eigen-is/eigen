@@ -14,7 +14,7 @@ import { useAspectLock } from '@workspace/ui/components/properties-panel';
 import {
     CanvasDocumentShell,
     CanvasEditor,
-    type CanvasImageInsert,
+    type CanvasHandle,
     CanvasPropertiesPanel,
     CanvasToolbar,
     useActiveFrame,
@@ -250,10 +250,9 @@ function SlideEditorInner({
         return () => document.removeEventListener('keydown', onKeyDown, true);
     }, [exitPresent]);
 
-    // Toolbar "Add image": the picker lives here, placement goes through the canvas' published insert
-    // surface (placement needs the live viewport).
+    // Toolbar "Add image": the picker lives here, placement goes through the canvas handle.
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
-    const imageInsertRef = useRef<CanvasImageInsert | null>(null);
+    const canvasRef = useRef<CanvasHandle | null>(null);
 
     const background = frame ? parseBackgroundFill(frame.background) : null;
     const backgroundImageUrl = background?.type === 'image' ? resolveMediaUrl(background.mediaName) : null;
@@ -312,7 +311,7 @@ function SlideEditorInner({
             initialSearchTerm={initialSearchTerm}
             imagePickerOpen={imagePickerOpen}
             onImagePickerOpenChange={setImagePickerOpen}
-            imageInsertRef={imageInsertRef}
+            canvasRef={canvasRef}
             toolbar={
                 <CanvasToolbar
                     path={path}
@@ -407,7 +406,7 @@ function SlideEditorInner({
                             toggle={toggle}
                             aspectLocked={aspectLocked}
                             publishCursor={publishCursor}
-                            imageInsertRef={imageInsertRef}
+                            canvasRef={canvasRef}
                             onOpenCard={comments.openCard}
                             commentCards={comments.lifecycle.cards}
                             onAddComment={canWrite && chatFolderId ? comments.addCommentTo : undefined}

@@ -815,7 +815,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserItemProps` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-item.tsx |
 | `UserNameCardProps` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name-card.tsx |
 | `UserNameProps` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name.tsx |
-| `CanvasImageInsert` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/canvas-editor.tsx |
+| `CanvasHandle` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/canvas-editor.tsx |
 | `NewVectorElement` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-doc.ts |
 | `PublishCursor` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-presence.ts |
 | `VectorElementPatch` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-doc.ts |

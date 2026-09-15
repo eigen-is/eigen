@@ -17,7 +17,7 @@ import { Column, ColumnLayout } from '../layout/app/column-layout';
 import { useLayout } from '../layout/app/layout-context';
 import { UnsyncedEditsGuard } from '../layout/app/unsynced-edits-guard';
 import { DocSearchProvider } from '../search/doc-search-provider';
-import type { CanvasImageInsert } from './canvas-editor';
+import type { CanvasHandle } from './canvas-editor';
 import type { CanvasCommentHost } from './hooks/use-canvas-comment-host';
 import type { CanvasDoc } from './hooks/use-canvas-doc';
 
@@ -32,7 +32,7 @@ type CanvasDocumentShellProps = {
     initialSearchTerm?: string;
     imagePickerOpen: boolean;
     onImagePickerOpenChange: (open: boolean) => void;
-    imageInsertRef: RefObject<CanvasImageInsert | null>;
+    canvasRef: RefObject<CanvasHandle | null>;
     toolbar: ReactNode;
     // Shown on the right edge when the comment/activity pane is not; the host builds it because the
     // deck adds its slide-background section.
@@ -52,7 +52,7 @@ export function CanvasDocumentShell({
     initialSearchTerm,
     imagePickerOpen,
     onImagePickerOpenChange,
-    imageInsertRef,
+    canvasRef,
     toolbar,
     propertiesPanel,
     children,
@@ -103,9 +103,9 @@ export function CanvasDocumentShell({
                                 canPick={(item) => isImageMime(item.mimeType)}
                                 multiSelect
                                 onPickFromDrive={(paths) =>
-                                    void imageInsertRef.current?.insertDrivePaths(paths).catch(() => {})
+                                    void canvasRef.current?.insertDrivePaths(paths).catch(() => {})
                                 }
-                                onPickFromDevice={(files) => imageInsertRef.current?.insertFiles(files)}
+                                onPickFromDevice={(files) => canvasRef.current?.insertFiles(files)}
                                 accept="image/*"
                                 multiple
                             />

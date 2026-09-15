@@ -1,5 +1,5 @@
 export { CanvasDocumentShell } from './canvas-document-shell';
-export { CanvasEditor, type CanvasImageInsert } from './canvas-editor';
+export { CanvasEditor, type CanvasHandle } from './canvas-editor';
 export { CanvasPropertiesPanel } from './canvas-properties-panel';
 export { CanvasToolbar } from './canvas-toolbar';
 export { FrameThumbnail, FrameView } from './frame-view';

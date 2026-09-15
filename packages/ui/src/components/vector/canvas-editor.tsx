@@ -116,11 +116,13 @@ type Gesture = { pointerId: number } & (
     | { kind: 'marquee'; startX: number; startY: number; additive: boolean; base: string[] }
 );
 
-// Imperative image-insert surface the canvas publishes for the toolbar's Insert entries — the
-// editor owns the picker dialog, but placement needs the live viewport (center + zoom).
-export type CanvasImageInsert = {
+// Imperative surface the canvas publishes for the host: the toolbar's Insert entries (the editor owns
+// the picker dialog, but placement needs the live viewport) and a reveal (⌘F, a comment card), which
+// pans the element to the container center at the current zoom.
+export type CanvasHandle = {
     insertFiles: (files: File[]) => void;
     insertDrivePaths: (paths: DrivePath[]) => Promise<void>;
+    centerOn: (el: VectorElement) => void;
 };
 
 type CanvasEditorProps = {
@@ -155,7 +157,7 @@ type CanvasEditorProps = {
     // local pointer's scene position (throttled in the editor's use-canvas-presence).
     publishCursor: PublishCursor;
     // Published/cleared by the canvas itself; optional so read-only hosts can omit it.
-    imageInsertRef?: { current: CanvasImageInsert | null };
+    canvasRef?: { current: CanvasHandle | null };
     // Comments. A commented element marks its top-right corner; clicking the mark opens the first card
     // (the host reveals it). Omitting onOpenCard hides the marks, omitting onAddComment the menu row.
     onOpenCard?: (cardId: string) => void;
@@ -192,7 +194,7 @@ export function CanvasEditor({
     toggle,
     aspectLocked,
     publishCursor,
-    imageInsertRef,
+    canvasRef,
     onOpenCard,
     commentCards,
     onAddComment,
@@ -569,16 +571,6 @@ export function CanvasEditor({
     const elementsRef = useRef(elements);
     elementsRef.current = elements;
 
-    // A ⌘F step brings its match to the container center, or the bar could cover it. Keyed on the id
-    // alone: a scene edit while the bar is open must not snap the view back to the match.
-    useEffect(() => {
-        if (!searchActiveId) return;
-        const el = elementsRef.current.find((e) => e.id === searchActiveId);
-        if (!el) return;
-        const box = elementBox(el);
-        centerOn(box.x + box.width / 2, box.y + box.height / 2);
-    }, [searchActiveId, centerOn]);
-
     // Snap targets = every OTHER visible element's edges/center (rotated → center only), plus the
     // frame's own edges and center lines when there is one — an object aligns to the page the way it
     // aligns to its neighbors. The infinite canvas has no edges to seed. Threshold is screen-space:
@@ -841,17 +833,21 @@ export function CanvasEditor({
         ],
     );
 
-    // Publish the insert surface for the toolbar (cleared on unmount so a stale canvas never places).
+    // Publish the handle for the host (cleared on unmount so a stale canvas never places or pans).
     useEffect(() => {
-        if (!imageInsertRef) return;
-        imageInsertRef.current = {
+        if (!canvasRef) return;
+        canvasRef.current = {
             insertFiles: (files) => void insertImageFiles(files, viewportCenterScene()),
             insertDrivePaths,
+            centerOn: (el) => {
+                const box = elementBox(el);
+                centerOn(box.x + box.width / 2, box.y + box.height / 2);
+            },
         };
         return () => {
-            imageInsertRef.current = null;
+            canvasRef.current = null;
         };
-    }, [imageInsertRef, insertImageFiles, viewportCenterScene, insertDrivePaths]);
+    }, [canvasRef, insertImageFiles, viewportCenterScene, insertDrivePaths, centerOn]);
 
     // Image ingestion is gated on a real upload target (a fresh .eigenvector scaffolds media/, so
     // this is normally present) and is closed while a text overlay owns paste + the pointer.

@@ -7,7 +7,7 @@ import { ColorRow, PropertySection, useAspectLock } from '@workspace/ui/componen
 import {
     CanvasDocumentShell,
     CanvasEditor,
-    type CanvasImageInsert,
+    type CanvasHandle,
     CanvasPropertiesPanel,
     CanvasToolbar,
     useCanvasCommentHost,
@@ -67,8 +67,17 @@ export function VectorEditor({
     const allImageSelected = selectedElements.length > 0 && selectedElements.every((el) => el.type === 'image');
     const [aspectLocked, setAspectLocked] = useAspectLock(selectedIds.join(','), allImageSelected);
 
-    // On the infinite canvas a reveal is just a selection — there is no slide to go to first.
-    const revealElement = useCallback((el: VectorElement) => setSelectedIds([el.id]), [setSelectedIds]);
+    const canvasRef = useRef<CanvasHandle | null>(null);
+
+    // A reveal (⌘F, a comment card) selects the element and brings it to the center — the infinite
+    // canvas has no slide to go to first, but the element may sit anywhere.
+    const revealElement = useCallback(
+        (el: VectorElement) => {
+            setSelectedIds([el.id]);
+            canvasRef.current?.centerOn(el);
+        },
+        [setSelectedIds],
+    );
 
     const comments = useCanvasCommentHost({
         ownerId,
@@ -94,10 +103,8 @@ export function VectorEditor({
         onReveal: revealElement,
     });
 
-    // Toolbar "Add image": the picker lives here, placement goes through the canvas' published
-    // insert surface (placement needs the live viewport).
+    // Toolbar "Add image": the picker lives here, placement goes through the canvas handle.
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
-    const imageInsertRef = useRef<CanvasImageInsert | null>(null);
 
     return (
         <MediaResolverProvider
@@ -117,7 +124,7 @@ export function VectorEditor({
                 initialSearchTerm={initialSearchTerm}
                 imagePickerOpen={imagePickerOpen}
                 onImagePickerOpenChange={setImagePickerOpen}
-                imageInsertRef={imageInsertRef}
+                canvasRef={canvasRef}
                 toolbar={
                     <CanvasToolbar
                         path={path}
@@ -184,7 +191,7 @@ export function VectorEditor({
                         toggle={toggle}
                         aspectLocked={aspectLocked}
                         publishCursor={publishCursor}
-                        imageInsertRef={imageInsertRef}
+                        canvasRef={canvasRef}
                         onOpenCard={comments.openCard}
                         commentCards={comments.lifecycle.cards}
                         onAddComment={canWrite && chatFolderId ? comments.addCommentTo : undefined}
