@@ -1408,6 +1408,70 @@ describe('CalDAV', () => {
         expect(await propRes.text()).toContain(`<D:displayname>${calId}</D:displayname>`);
     });
 
+    test('DELETE on a client-created calendar removes it, and PROPFIND no longer lists it', async () => {
+        const calId = 'doomed-cal';
+        const mkRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'MKCALENDAR',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: '',
+            }),
+        );
+        expect(mkRes.status).toBe(201);
+
+        const delRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'DELETE',
+                headers: { Authorization: basicAuth(ctx.alice.user.email) },
+            }),
+        );
+        expect(delRes.status).toBe(204);
+
+        const homeRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '1' },
+            }),
+        );
+        expect(await homeRes.text()).not.toContain(`/dav/calendars/${userId}/${calId}/`);
+
+        const propRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+            }),
+        );
+        expect(propRes.status).toBe(404);
+    });
+
+    test('DELETE on an unknown calendar URL is 404', async () => {
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/no-such-cal/`, {
+                method: 'DELETE',
+                headers: { Authorization: basicAuth(ctx.alice.user.email) },
+            }),
+        );
+        expect(res.status).toBe(404);
+    });
+
+    test('DELETE on the default calendar is refused and leaves it in place', async () => {
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'DELETE',
+                headers: { Authorization: basicAuth(ctx.alice.user.email) },
+            }),
+        );
+        expect(res.status).toBe(403);
+
+        const homeRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '1' },
+            }),
+        );
+        expect(await homeRes.text()).toContain(`/dav/calendars/${userId}/${defaultCalendarId}/`);
+    });
+
     // The props that fixed the macOS duplicate-on-edit class (2026-08-18) — a named request must serve them.
     test('a named PROPFIND requesting current-user-privilege-set and owner returns both', async () => {
         const res = await app.handle(

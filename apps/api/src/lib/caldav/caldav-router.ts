@@ -5,7 +5,7 @@ import { readBoundedBody } from '../core/http';
 import { getHome } from '../home';
 import { handleCalendarHomePropfind, handlePrincipalPropfind, handleRootPropfind } from './discovery';
 import { handleCalendarPropfind, handleEventPropfind } from './propfind';
-import { handleMkcalendar, handleProppatch } from './proppatch';
+import { handleDeleteCalendar, handleMkcalendar, handleProppatch } from './proppatch';
 import { handleReport } from './report';
 import { EVENT_MAX_BYTES, handleDelete, handleGet, handlePut } from './resource';
 import { DAV_BODY_MAX_BYTES, davError, parsePropfind, wantsBrief } from './xml-builder';
@@ -149,16 +149,18 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         );
     })
 
-    // DELETE .ics resource
+    // DELETE an .ics resource, or the calendar collection itself
     .delete('/dav/calendars/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
         const parsed = parseDavPath(params['*']);
-        if (!parsed.ok || !parsed.calendarId || !parsed.resourceUri) {
+        if (!parsed.ok || !parsed.calendarId) {
             return new Response('Bad Request', { status: 400 });
         }
 
         const home = await getHome(params.ownerId);
+        if (!parsed.resourceUri) return handleDeleteCalendar(home.calendar, parsed.calendarId);
+
         const ifMatch = request.headers.get('If-Match');
         return handleDelete(home.calendar, parsed.calendarId, parsed.resourceUri, ifMatch);
     })
