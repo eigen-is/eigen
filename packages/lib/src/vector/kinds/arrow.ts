@@ -28,7 +28,7 @@ import {
     serializeFixedSegments,
     type VectorArrowElement,
 } from '../types';
-import { elbowRoundedShaftPath, labelClipPath, renderArrowhead, renderArrowLabel } from './arrow-render';
+import { elbowRoundedShaftPath, labelMask, maskShaft, renderArrowhead, renderArrowLabel } from './arrow-render';
 import { defineKind } from './kind';
 import { bool, clampCoord, fontFamily, fontSize, labelText, MAX_COORD, num, oneOf, str } from './read-fields';
 import { baseRoughOptions, drawableToSvg, svgId } from './render-utils';
@@ -124,9 +124,9 @@ export const arrowKind = defineKind<VectorArrowElement>({
     },
     outline: (el) => polylineOutline(parsePoints(el.points).map((p) => linearLocalToScene(el, p))),
     // An arrow is a line shaft (sharp linearPath / round curve, never filled) plus roughjs heads on either
-    // end and an optional label. The label rect (+5px padding) is cut out of the shaft with an even-odd
-    // clip hole so the shaft shows nothing under the text; heads and label draw on top, unclipped. All
-    // coordinates are the arrow's local frame — the group transform rotates the whole arrow, label and all.
+    // end and an optional label. The label rect (+5px padding) is cut out of the shaft with a mask hole so
+    // the shaft shows nothing under the text; heads and label draw on top, unmasked. All coordinates are
+    // the arrow's local frame — the group transform rotates the whole arrow, label and all.
     render: (el, ctx) => {
         const gen = new RoughGenerator();
         const points = ctx.route ?? parsePoints(el.points);
@@ -152,9 +152,9 @@ export const arrowKind = defineKind<VectorArrowElement>({
         let shaft = shaftPaths;
         let defs = '';
         if (label) {
-            const clipId = svgId('arrow-label-clip', el.id);
-            defs = `<clipPath id="${clipId}">${labelClipPath(points, label, el.strokeWidth)}</clipPath>`;
-            shaft = `<g clip-path="url(#${clipId})">${shaftPaths}</g>`;
+            const maskId = svgId('arrow-label-mask', el.id);
+            defs = labelMask(maskId, points, label, el.strokeWidth);
+            shaft = maskShaft(shaftPaths, maskId);
         }
 
         const heads =

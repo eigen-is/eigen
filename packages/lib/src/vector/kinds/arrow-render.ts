@@ -1,4 +1,4 @@
-// The arrow's drawing bodies: the rounded elbow shaft path, the arrowheads, the label's clip hole and
+// The arrow's drawing bodies: the rounded elbow shaft path, the arrowheads, the label's mask hole and
 // the label text. Split from the kind because they are three times its size; nothing here reads a field
 // the kind does not already own.
 
@@ -106,12 +106,13 @@ function headOptions(el: VectorArrowElement, solidFill: boolean, roughnessCap: n
     return options;
 }
 
-// The even-odd clip hole under a label: an outer rect minus the label rect + 5px padding, both as
-// rectangle subpaths of one path. Evenodd leaves the inner rect uncovered, so the shaft is cut there.
-// The clip HIDES anything outside the outer rect, so it must enclose the whole shaft — the point bounds
-// (and the hole) padded past roughjs jitter + the stroke half-width, never a fixed square (an arrow
-// larger than it would lose its shaft).
-export function labelClipPath(points: Point[], label: LabelBox, strokeWidth: number): string {
+// The hole under a label: a white ground rect the shaft paints through, with the label rect + 5px of
+// padding in black so nothing shows under the text. A mask rather than an even-odd clipPath because
+// WeasyPrint ignores `clip-rule="evenodd"` and the shaft then strikes through the label in a PDF.
+// The ground HIDES anything outside it, so it must enclose the whole shaft — the point bounds (and the
+// hole) padded past roughjs jitter + the stroke half-width, never a fixed square (an arrow larger than
+// it would lose its shaft).
+export function labelMask(id: string, points: Point[], label: LabelBox, strokeWidth: number): string {
     const pad = 5;
     const hx = label.center.x - label.width / 2 - pad;
     const hy = label.center.y - label.height / 2 - pad;
@@ -134,9 +135,15 @@ export function labelClipPath(points: Point[], label: LabelBox, strokeWidth: num
     const ow = round(maxX - minX + margin * 2);
     const oh = round(maxY - minY + margin * 2);
 
-    const outer = `M${ox} ${oy} h${ow} v${oh} h${round(-ow)} Z`;
-    const hole = `M${round(hx)} ${round(hy)} h${round(hw)} v${round(hh)} h${round(-hw)} Z`;
-    return `<path clip-rule="evenodd" d="${outer} ${hole}"/>`;
+    const ground = `<rect x="${ox}" y="${oy}" width="${ow}" height="${oh}" fill="#fff"/>`;
+    const hole = `<rect x="${round(hx)}" y="${round(hy)}" width="${round(hw)}" height="${round(hh)}" fill="#000"/>`;
+    return `<mask id="${id}" maskUnits="userSpaceOnUse" x="${ox}" y="${oy}" width="${ow}" height="${oh}">${ground}${hole}</mask>`;
+}
+
+// WeasyPrint applies a mask AFTER it has drawn a node's children, so a wrapping `<g mask>` masks
+// nothing there — the reference has to ride each shaft path.
+export function maskShaft(shaftPaths: string, id: string): string {
+    return shaftPaths.replaceAll('<path ', `<path mask="url(#${id})" `);
 }
 
 // The label text, centered on the label rect in the arrow's local frame — the renderText baseline math
