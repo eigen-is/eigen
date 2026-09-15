@@ -98,7 +98,7 @@ export function PresentMode({ frame, elements, onNext, onPrev, onExit }: Present
                 onPrev();
             }}
         >
-            {/* The slide fits the LIMITING axis. FrameView scales itself from its own clientWidth, so on
+            {/* The slide fits the LIMITING axis. FrameView scales itself from its own measured width, so on
                 a viewport wider than the frame's ratio a full-width box would run taller than the
                 screen and crop the slide — cap the width at what the height affords. */}
             <div style={{ width: `min(100%, calc(100dvh * ${frame.width} / ${frame.height}))` }}>

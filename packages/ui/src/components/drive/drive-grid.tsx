@@ -1,6 +1,7 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { DrivePath } from '@workspace/lib/types';
-import { useEffect, useRef, useState } from 'react';
+import { useRef } from 'react';
+import { useElementSize } from '../../hooks/use-element-size';
 import { useLongPress } from '../../hooks/use-long-press';
 import { DriveItemContextMenu } from './drive-item-context-menu';
 import type { DriveViewProps } from './drive-table';
@@ -38,18 +39,9 @@ export function DriveGrid({
     unreadPathIds,
 }: DriveGridProps) {
     const containerRef = useRef<HTMLDivElement>(null);
+    const [setContainer, { width }] = useElementSize(containerRef);
     // 0 = not yet measured; the initial scroll and scrollToIndex wait for a real column count.
-    const [columns, setColumns] = useState(0);
-
-    useEffect(() => {
-        const el = containerRef.current;
-        if (!el) return;
-        const measure = () => setColumns(Math.max(1, Math.floor(el.clientWidth / TILE_MIN_WIDTH)));
-        const obs = new ResizeObserver(measure);
-        obs.observe(el);
-        measure();
-        return () => obs.disconnect();
-    }, []);
+    const columns = width === 0 ? 0 : Math.max(1, Math.floor(width / TILE_MIN_WIDTH));
 
     const rowCount = Math.ceil(items.length / Math.max(columns, 1));
 
@@ -81,7 +73,7 @@ export function DriveGrid({
 
     return (
         <div
-            ref={containerRef}
+            ref={setContainer}
             tabIndex={0}
             onKeyDown={controller.handleKeyDown}
             role="grid"

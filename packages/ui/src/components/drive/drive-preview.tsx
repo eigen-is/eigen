@@ -8,6 +8,7 @@ import type { Contact } from '@workspace/lib/types/contact';
 import { type DrivePath, isVCardFile } from '@workspace/lib/types/drive';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { useElementSize } from '../../hooks/use-element-size';
 import { cn } from '../../lib/utils';
 import { UserAvatar } from '../user/user-avatar';
 import { getFilePresentation } from './file-presentation';
@@ -148,8 +149,10 @@ const WRAPPER_CLASS: Record<TextPreviewMode, string> = {
 // Scale a server-rendered HTML preview down to fit the thumbnail panel.
 function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }) {
     const { data } = useTextPreview(path.ownerId, path.mountId, path.id, path.updatedAt, true);
-    const containerRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
+    const [setContainer, { width: containerW }] = useElementSize<HTMLDivElement>();
+    // The body's own box is a trigger, not a measurement: a reflow means scrollWidth may have moved.
+    const [setContent, contentBox] = useElementSize(contentRef);
     const [scale, setScale] = useState(1);
 
     const intrinsicWidth = data ? INTRINSIC_WIDTH[data.mode] : null;
@@ -157,33 +160,21 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
     const intrinsicPadding = intrinsicWidth === A4_WIDTH_PX ? '2cm' : undefined;
 
     useEffect(() => {
-        const container = containerRef.current;
-        if (!container) return;
-        const measure = () => {
-            const containerW = container.clientWidth;
-            if (containerW <= 0) return;
-            if (intrinsicWidth) {
-                setScale(containerW / intrinsicWidth);
-                return;
-            }
-            const content = contentRef.current;
-            if (!content) return;
-            const contentW = content.scrollWidth;
-            if (contentW > 0) setScale(containerW / contentW);
-        };
-        const obs = new ResizeObserver(measure);
-        obs.observe(container);
-        if (!intrinsicWidth && contentRef.current) obs.observe(contentRef.current);
-        measure();
-        return () => obs.disconnect();
-    }, [data?.body, intrinsicWidth]);
+        if (containerW === 0) return;
+        if (intrinsicWidth) {
+            setScale(containerW / intrinsicWidth);
+            return;
+        }
+        const contentW = contentRef.current?.scrollWidth ?? 0;
+        if (contentW > 0) setScale(containerW / contentW);
+    }, [containerW, contentBox, data?.body, intrinsicWidth]);
 
     if (!data?.body) return null;
 
     return (
-        <div ref={containerRef} className="drive-preview-hero absolute inset-0 bg-background pointer-events-none">
+        <div ref={setContainer} className="drive-preview-hero absolute inset-0 bg-background pointer-events-none">
             <div
-                ref={contentRef}
+                ref={setContent}
                 className={WRAPPER_CLASS[data.mode]}
                 style={{
                     transform: `scale(${scale})`,

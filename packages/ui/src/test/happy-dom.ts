@@ -42,8 +42,9 @@ const OWN = [
 
 export type HappyDomOptions = {
     /**
-     * Receives the callback of every ResizeObserver the code under test constructs, so a test can
-     * drive a re-measure itself — happy-dom lays nothing out, so nothing else ever fires one.
+     * Receives a trigger for every ResizeObserver the code under test constructs, so a test can
+     * drive a re-measure itself — happy-dom lays nothing out, so nothing else ever fires one. Each
+     * observed target reports its stubbed `getBoundingClientRect()` as the entry's `contentRect`.
      */
     onResizeObserver?: (callback: () => void) => void;
 };
@@ -74,12 +75,21 @@ export function installHappyDom(options: HappyDomOptions = {}): Window {
 
     const { onResizeObserver } = options;
     class FakeResizeObserver {
-        constructor(callback: () => void) {
-            onResizeObserver?.(callback);
+        private targets: Element[] = [];
+        constructor(callback: (entries: { target: Element; contentRect: DOMRect }[]) => void) {
+            onResizeObserver?.(() =>
+                callback(this.targets.map((target) => ({ target, contentRect: target.getBoundingClientRect() }))),
+            );
         }
-        observe() {}
-        unobserve() {}
-        disconnect() {}
+        observe(target: Element) {
+            this.targets.push(target);
+        }
+        unobserve(target: Element) {
+            this.targets = this.targets.filter((t) => t !== target);
+        }
+        disconnect() {
+            this.targets = [];
+        }
     }
     g.ResizeObserver = FakeResizeObserver;
     // Radix and the canvas hooks paint inside one rAF; running it inline keeps every assertion on the
