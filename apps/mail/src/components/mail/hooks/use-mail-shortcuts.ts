@@ -32,6 +32,12 @@ function isEditableTarget(el: Element | null): boolean {
     return el instanceof HTMLElement && el.isContentEditable;
 }
 
+// Radix traps focus inside an open modal (a drive location picker, a confirm), so the active element
+// says whether one is up. Every key here listens on the document and would act on the message behind it.
+function isInsideDialog(el: Element | null): boolean {
+    return !!el?.closest('[role="dialog"], [role="alertdialog"]');
+}
+
 type UseMailShortcutsOptions = {
     orderedEmails: EmailSummary[];
     cursorIndex: number;
@@ -107,14 +113,19 @@ export function useMailShortcuts({
     onForward,
     undoLast,
 }: UseMailShortcutsOptions): void {
-    const enabled = shortcutsEnabled && !isComposing && !helpOpen;
+    const optedIn = shortcutsEnabled && !isComposing && !helpOpen;
 
-    // The sequence matcher (unlike the single-key one) fires even inside inputs, so gate the chords
-    // off while a field is focused — otherwise typing e.g. "git" in search would trigger `g i`.
+    // Two focus gates. A dialog stands the whole set down. A field stands the chords down: the
+    // sequence matcher (unlike the single-key one) fires even inside inputs, so typing e.g. "git" in
+    // search would trigger `g i`.
+    const [dialogFocused, setDialogFocused] = useState(false);
     const [inputFocused, setInputFocused] = useState(false);
     useEffect(() => {
-        if (!enabled) return;
-        const sync = () => setInputFocused(isEditableTarget(document.activeElement));
+        if (!optedIn) return;
+        const sync = () => {
+            setDialogFocused(isInsideDialog(document.activeElement));
+            setInputFocused(isEditableTarget(document.activeElement));
+        };
         sync();
         document.addEventListener('focusin', sync);
         document.addEventListener('focusout', sync);
@@ -122,7 +133,8 @@ export function useMailShortcuts({
             document.removeEventListener('focusin', sync);
             document.removeEventListener('focusout', sync);
         };
-    }, [enabled]);
+    }, [optedIn]);
+    const enabled = optedIn && !dialogFocused;
     const chordsEnabled = enabled && !inputFocused;
 
     // `*` select chords in one capture-phase listener: `*` arms, and the key right after it (within

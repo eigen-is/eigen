@@ -245,7 +245,7 @@ the limiter, so a saturated bucket never locks out an app-password client.
 
 Opt-in Gmail-style shortcuts (`use-mail-shortcuts.ts`; cheat sheet in `mail-shortcuts-dialog.tsx`, opened
 with `?`) cover navigation (`j`/`k`/`o`/`u`), actions (`e`/`#`/`s`/`r`/`a`/`f`/`[`/`]`), `g`-chord jumps, and
-`*`-chord bulk selection; compose sends on ⌘/Ctrl+Enter. Mail preferences live in the **space** app, not
+`*`-chord bulk selection; compose sends on ⌘/Ctrl+Enter. The whole set stands down while focus sits inside a modal dialog (every key listens on the document, and Radix traps focus in an open modal), and the chords also while a field is focused. Mail preferences live in the **space** app, not
 `apps/mail`: `apps/space/src/components/space/mail-prefs-section.tsx` (the `keyboardShortcuts` toggle +
 `autoAdvance` select) and `signature-section.tsx` (a single rich-text signature), both stored under
 `UserSettings.email` (`packages/lib/src/types/settings.ts`) and consumed by the mail route via
