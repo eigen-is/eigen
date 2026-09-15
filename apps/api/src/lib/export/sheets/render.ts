@@ -301,10 +301,22 @@ function renderSheet(
 
     const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, config.borderInfo ?? {});
     if (maxRow < 0 || maxCol < 0) {
-        // An image pasted onto an otherwise blank sheet is all there is to render.
+        // An image pasted onto an otherwise blank sheet is all there is to render, clipped to the
+        // same budget window as the grid path below.
         const overlay =
             sheet.images?.length && mediaUrls
-                ? renderFloatingImages(sheet.images, mediaUrls, { left: 0, top: 0 }, styles)
+                ? renderFloatingImages(
+                      sheet.images,
+                      mediaUrls,
+                      { left: 0, top: 0 },
+                      styles,
+                      budget
+                          ? {
+                                width: colSpan(config, 0, budget.maxCols - 1),
+                                height: rowSpan(config, 0, budget.maxRows - 1),
+                            }
+                          : undefined,
+                  )
                 : '';
         return { html: `<div class="sheet">${overlayBox('', overlay, 0, styles)}</div>`, truncated: false };
     }
