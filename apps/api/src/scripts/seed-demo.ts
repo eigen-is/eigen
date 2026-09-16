@@ -414,7 +414,19 @@ async function main(): Promise<void> {
         avatar: '',
         labels: [],
     });
-    const seedVCard = (spec: VCardSpec): string => createVCard(contactInput(spec), `demo-${spec.email}`);
+    // The optional portrait is embedded as an inline PHOTO, read from the same avatars/ fixtures the
+    // personas use. A missing fixture is logged and skipped, never fatal, like a persona avatar.
+    const cardPhoto = (spec: VCardSpec): { bytes: Uint8Array; mediaType: string } | undefined => {
+        if (!spec.photo) return undefined;
+        const filePath = join(AVATARS_DIR, spec.photo);
+        if (!existsSync(filePath)) {
+            console.warn(`vcard photo fixture missing, skipping: ${spec.photo}`);
+            return undefined;
+        }
+        return { bytes: readFileSync(filePath), mediaType: 'image/jpeg' };
+    };
+    const seedVCard = (spec: VCardSpec): string =>
+        createVCard({ ...contactInput(spec), photo: cardPhoto(spec) }, `demo-${spec.email}`);
     for (const vcf of VCARD_FILES) {
         const path = await teamDrive.createFileFromData(
             teamMountId,

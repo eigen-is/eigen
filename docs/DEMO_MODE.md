@@ -137,7 +137,9 @@ demo settings (`guests.openSignup: false`, `defaultMountMaxSizeMB: 50`, `maxUplo
 - **Contact cards as `.vcf` files.** `content.ts` `VCARD_FILES` are vCard specs (`VCardSpec`, the same
   shape a seeded address-book contact uses) the seeder serializes with the shipped `createVCard` and
   uploads into a team-drive folder like any other file (`production/`, MIME `VCARD_MIMES[0]`, uid
-  `demo-<email>`). Each one registers under its name in the seeded-documents map, so a chat line or
+  `demo-<email>`). A spec may name an optional `photo` — a portrait fixture from `fixtures/avatars/` the
+  writer embeds as the card's inline `PHOTO`, logged and skipped when the file is missing, so the quick
+  look shows a face. Each one registers under its name in the seeded-documents map, so a chat line or
   card can `attach` it as a drive reference and the drive's vCard quick look has something to open.
 - **Portraits in `avatars/`.** `demo/fixtures/avatars/*.jpg` (one per persona plus the admin, keyed by
   `content.ts` `avatar`, credits in the folder's `CREDITS.md`) go through the real avatar upload +

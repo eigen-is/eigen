@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
-import { cpSync, existsSync, mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
@@ -40,6 +40,7 @@ import {
 const runSlow = Boolean(process.env['CI'] || process.env['EIGEN_SLOW_TESTS']);
 const MAIL_DOMAIN = 'tuimel.test';
 const API_DIR = join(import.meta.dir, '../../..');
+const AVATARS_DIR = join(API_DIR, 'src', 'scripts', 'demo', 'fixtures', 'avatars');
 
 // Read-write open (not readonly): the WAL-mode managed DBs need to (re)create their -shm on open,
 // which readonly forbids. The seeder process has exited, so there is no lock contention, and the
@@ -225,7 +226,12 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                     `SELECT file FROM paths WHERE parentId = '${cardFolder[0].id}' AND name = '${card.name}' AND trashedAt IS NULL`,
                 );
                 expect(cardRows.length).toBe(1);
-                expect(statSync(join(mountsDir, mountId, 'data', cardRows[0].file)).size).toBeGreaterThan(0);
+                const cardBlob = join(mountsDir, mountId, 'data', cardRows[0].file);
+                expect(statSync(cardBlob).size).toBeGreaterThan(0);
+                // The portrait only rides along once its fixture is committed; the seeder skips a missing one.
+                if (card.card.photo && existsSync(join(AVATARS_DIR, card.card.photo))) {
+                    expect(readFileSync(cardBlob, 'utf8')).toContain('PHOTO;ENCODING=b');
+                }
             }
 
             // Personal notes: the sampled persona's own drive has a "my notes" eigendoc container.

@@ -510,6 +510,7 @@ export type VCardSpec = {
     company?: string;
     jobTitle?: string;
     notes?: string;
+    photo?: string; // fixture filename under fixtures/avatars/, embedded as the card's PHOTO
 };
 
 // A .vcf uploaded into the team drive like any other file. `name` doubles as the attach key, so a
@@ -534,6 +535,7 @@ export const VCARD_FILES: SeededVCardFile[] = [
             company: 'Dekzeil & Zo',
             jobTitle: 'Rentals',
             notes: 'Tarps and tents. Quoted the rain cover for the second stage.',
+            photo: 'ruud.jpg',
         },
     },
 ];
@@ -1527,6 +1529,7 @@ export const MAILS: SeededMail[] = [
                             phone: '+31 6 3311 4477',
                             jobTitle: 'First aider',
                             notes: "Imke's neighbor. Did first aid at the harbor festival last year. Backup for Sunday morning.",
+                            photo: 'hanna.jpg',
                         },
                     },
                 ],
