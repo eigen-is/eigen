@@ -16,11 +16,43 @@ The Tuimel Festival in the demo is (always) three weeks away, the line-up is bas
 
 You join as one of the twenty people on the crew. Every time you enter, you get a random crew member. That person has a mailbox, a calendar, active chats with the team, and a shared drive containing a budget sheet, a sponsor deck, a production plan, a stickies board, and a site plan.
 
+<media-grid columns="4">
+  <media 
+    src="/data/blog/media/2026-08-14-eigen-demo/chat.webp" 
+    thumb="/data/blog/media/2026-08-14-eigen-demo/thumb_chat.webp"
+    type="image" 
+    caption="eigen|chat>" />
+  <media 
+    src="/data/blog/media/2026-08-14-eigen-demo/slides.webp" 
+    thumb="/data/blog/media/2026-08-14-eigen-demo/thumb_slides.webp" 
+    type="image" 
+    caption="eigen|slides>" />
+  <media 
+    src="/data/blog/media/2026-08-14-eigen-demo/stickies.webp" 
+    thumb="/data/blog/media/2026-08-14-eigen-demo/thumb_stickies.webp" 
+    type="image" 
+    caption="eigen|stickies>" />
+  <media 
+    src="/data/blog/media/2026-08-14-eigen-demo/vector.webp" 
+    thumb="/data/blog/media/2026-08-14-eigen-demo/thumb_vector.webp" 
+    type="image" 
+    caption="eigen|vector>" />
+</media-grid>
+
 Everything is made up, but the workspace has comments, history, and unread messages, so you can see how Eigen works in use.
 
 ## All apps work
 
 It is a real Eigen server, so all apps are there: mail, drive, docs, sheets, slides, stickies, chat, calendar, contacts, and vector. The only thing that is switched off is outgoing mail.
+
+
+<media-grid columns="1">
+  <media 
+    src="/data/blog/media/2026-08-14-eigen-demo/sheets.mp4" 
+    poster="/data/blog/media/2026-08-14-eigen-demo/sheets-thumb.webp"
+    type="video" 
+    caption="eigen|sheets>" />
+</media-grid>
 
 Real-time collaboration works too. If you open the same document in a second browser window (using a private window, so you enter as a different crew member), you will see two cursors in the same text.
 
