@@ -344,7 +344,9 @@ export type CardSpec = {
     // seeded by the creator persona (chat) and referenced back by name (chatName on the card).
     chat: string; // slug, lowercase, no extension
     chatText: string;
-    chatReplies?: { author: string; text: string; attach?: string[] }[]; // attach: see ChatLine.attach
+    // attach: see ChatLine.attach. attachVCards names VCARD_FILES entries uploaded into the chat's own
+    // media/ as a plain file attachment, the way a user's upload in a card chat lands.
+    chatReplies?: { author: string; text: string; attach?: string[]; attachVCards?: string[] }[];
     attach?: string[]; // seeded team documents pinned to the card, see ChatLine.attach
 };
 
@@ -443,7 +445,7 @@ export const KANBAN = {
                 {
                     author: 'saar',
                     text: 'Quote is in from Dekzeil & Zo. They have a stage rain cover free that weekend, wind rated. Their card is attached if you want to talk sizes.',
-                    attach: ['dekzeil & zo.vcf'],
+                    attachVCards: ['dekzeil & zo.vcf'],
                 },
             ],
         },
@@ -513,8 +515,8 @@ export type VCardSpec = {
     photo?: string; // fixture filename under fixtures/avatars/, embedded as the card's PHOTO
 };
 
-// A .vcf uploaded into the team drive like any other file. `name` doubles as the attach key, so a
-// chat line can pin the card as a drive reference (see ChatLine.attach).
+// A .vcf uploaded into the team drive like any other file. `name` doubles as the key a card chat
+// reply's `attachVCards` uploads a copy under (see CardSpec.chatReplies).
 export type SeededVCardFile = {
     folder: TeamFolder;
     name: string; // lowercase, with the .vcf extension

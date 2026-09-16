@@ -213,8 +213,7 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 expect(statSync(blob).size).toBeGreaterThan(0);
             }
 
-            // Team drive contact cards: each spec was serialized and uploaded as a real .vcf blob,
-            // which is also what a chat line attaches as a drive reference.
+            // Team drive contact cards: each spec was serialized and uploaded as a real .vcf blob.
             for (const card of VCARD_FILES) {
                 const cardFolder = query<{ id: string }>(
                     metadataDb,
@@ -379,6 +378,31 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 expect(task.chatName).toEndWith('.eigenchat');
                 expect(task.creator).toContain('@');
             }
+
+            // A card chat reply's attachVCards uploads the card into that chat's own media/ folder, the
+            // folder the thread resolves attachment names in, and the message names the file.
+            const vcardReplyCard = KANBAN.cards.find((card) => card.chatReplies?.some((r) => r.attachVCards));
+            if (!vcardReplyCard) throw new Error('no kanban card chat reply attaches a vCard');
+            const cardChat = query<{ id: string }>(
+                metadataDb,
+                `SELECT id FROM paths WHERE name = '${vcardReplyCard.chat}.eigenchat' AND trashedAt IS NULL`,
+            );
+            expect(cardChat.length).toBe(1);
+            const cardChatMedia = query<{ id: string }>(
+                metadataDb,
+                `SELECT id FROM paths WHERE parentId = '${cardChat[0].id}' AND name = 'media' AND trashedAt IS NULL`,
+            );
+            expect(cardChatMedia.length).toBe(1);
+            const cardChatFiles = query<{ name: string }>(
+                metadataDb,
+                `SELECT name FROM paths WHERE parentId = '${cardChatMedia[0].id}' AND trashedAt IS NULL`,
+            ).map((row) => row.name);
+            expect(cardChatFiles).toContain('dekzeil & zo.vcf');
+            const cardChatAttachments = query<{ attachments: string }>(
+                findContainerDataDb(metadataDb, mountsDir, mountId, `${vcardReplyCard.chat}.eigenchat`),
+                'SELECT attachments FROM messages WHERE attachments IS NOT NULL',
+            ).flatMap((row) => JSON.parse(row.attachments) as unknown[]);
+            expect(cardChatAttachments).toContain('dekzeil & zo.vcf');
 
             // Site plan: a vector drawing built straight into the container's Y.Doc from SITE_PLAN
             // (no fixture). It reads back through the shipped reader with surviving shape bindings,

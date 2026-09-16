@@ -30,6 +30,7 @@ import { MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
 import { DOCX_MIME } from '@workspace/lib/constants/mime';
 import { commentAssignedTag } from '@workspace/lib/notification/tags';
 import type { Attendee, EventData } from '@workspace/lib/types/calendar';
+import type { ChatAttachment } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { CreateContactInput } from '@workspace/lib/types/contact';
 import {
@@ -355,7 +356,7 @@ async function main(): Promise<void> {
         chatId: string,
         author: User,
         text: string,
-        attachments?: AttachmentReference[],
+        attachments?: ChatAttachment[],
     ): Promise<void> => {
         const room = await teamDrive.getChat(teamMountId, chatId);
         await room.postMessage(author, text, 'message', undefined, undefined, attachments);
@@ -428,7 +429,7 @@ async function main(): Promise<void> {
     const seedVCard = (spec: VCardSpec): string =>
         createVCard({ ...contactInput(spec), photo: cardPhoto(spec) }, `demo-${spec.email}`);
     for (const vcf of VCARD_FILES) {
-        const path = await teamDrive.createFileFromData(
+        await teamDrive.createFileFromData(
             teamMountId,
             folderId.get(vcf.folder)!,
             vcf.name,
@@ -436,7 +437,6 @@ async function main(): Promise<void> {
             Buffer.from(seedVCard(vcf.card), 'utf8'),
             userByKey.get(vcf.uploader)!,
         );
-        teamDocs.set(vcf.name, path);
     }
 
     // --- Volunteer roster: a doc in volunteers/ listing every crew member with a link to their team
@@ -675,7 +675,25 @@ async function main(): Promise<void> {
         const chat = await teamDrive.create(teamMountId, boardChatFolder.id, card.chat, 'chat', cardAuthor);
         await postTo(chat.id, cardAuthor, card.chatText);
         for (const reply of card.chatReplies ?? []) {
-            await postTo(chat.id, userByKey.get(reply.author)!, reply.text, reply.attach?.map(teamDocRef));
+            const replyAuthor = userByKey.get(reply.author)!;
+            const attachments: ChatAttachment[] = reply.attach?.map(teamDocRef) ?? [];
+            // An uploaded copy lands in the chat's own media/, where the thread resolves attachment names.
+            for (const name of reply.attachVCards ?? []) {
+                const vcf = VCARD_FILES.find((file) => file.name === name);
+                if (!vcf) throw new Error(`Card chat reply attaches unknown vCard file '${name}'`);
+                const chatMedia = await teamDrive.getChildByName(teamMountId, chat.id, 'media');
+                if (!chatMedia) throw new Error(`media/ subfolder missing for ${chat.name}`);
+                const upload = await teamDrive.createFileFromData(
+                    teamMountId,
+                    chatMedia.id,
+                    vcf.name,
+                    VCARD_MIMES[0],
+                    Buffer.from(seedVCard(vcf.card), 'utf8'),
+                    replyAuthor,
+                );
+                attachments.push(upload.name);
+            }
+            await postTo(chat.id, replyAuthor, reply.text, attachments);
         }
         cardChatNames.set(`card-${i + 1}`, chat.name);
     }
