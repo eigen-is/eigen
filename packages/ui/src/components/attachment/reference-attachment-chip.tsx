@@ -1,4 +1,4 @@
-import { getDriveItemUrl } from '@workspace/lib/api';
+import { getDriveShareUrl } from '@workspace/lib/api';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import { ExternalLink } from 'lucide-react';
@@ -13,25 +13,25 @@ type ReferenceAttachmentChipProps = {
     className?: string;
 };
 
-// Chip for eigendoc/folder reference attachments in chat messages.
-// Clicking opens the referenced item in a new tab. No thumbnail (can't resolve cross-mount).
+// Chip for drive reference attachments in chat messages. Clicking opens the referenced item in a
+// new tab; a plain file opens Drive with it selected. No thumbnail (can't resolve cross-mount).
 export function ReferenceAttachmentChip({ reference, onRemove, className }: ReferenceAttachmentChipProps) {
     const displayName = stripEigenExtension(reference.name);
 
     const outerClass = cn(CHIP_BASE_CLASS, 'hover:bg-muted/80 transition-colors cursor-pointer', className);
 
     function handleClick() {
-        const url = getDriveItemUrl({
-            id: reference.id,
-            mountId: reference.mountId,
-            ownerId: reference.ownerId,
-            name: reference.name,
-            type: reference.driveType,
-            mimeType: reference.mimeType,
-        });
-        if (url) {
-            window.open(url, '_blank');
-        }
+        window.open(
+            getDriveShareUrl({
+                id: reference.id,
+                mountId: reference.mountId,
+                ownerId: reference.ownerId,
+                name: reference.name,
+                type: reference.driveType,
+                mimeType: reference.mimeType,
+            }),
+            '_blank',
+        );
     }
 
     return (

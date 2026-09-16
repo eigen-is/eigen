@@ -63,10 +63,11 @@ export function HomeComponent() {
             <EigenCyclingLogo className="text-5xl mb-8" />
             <div className="text-lg text-center mb-8 max-w-md">
                 <div>
+                    <p className="mb-4">A self-hosted alternative to Google Workspace.</p>
                     <p className="mb-4">
-                        A self-hosted alternative to Google Workspace.
-                        <br />
-                        Simple and secure. You control your data.
+                        {demoMode
+                            ? 'Explore a shared workspace of a small fictional crew organizing the Tuimel Festival. It resets every hour.'
+                            : 'Simple and secure. You control your data.'}
                     </p>
                 </div>
             </div>

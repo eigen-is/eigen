@@ -9,7 +9,7 @@ import { type DrivePath, isVCardFile } from '@workspace/lib/types/drive';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useElementSize } from '../../hooks/use-element-size';
-import { cn } from '../../lib/utils';
+import { cn, IMAGE_CHECKERBOARD_STYLE } from '../../lib/utils';
 import { UserAvatar } from '../user/user-avatar';
 import { getFilePresentation } from './file-presentation';
 
@@ -39,7 +39,12 @@ export function DrivePreview({ path, onActivate, className }: DrivePreviewProps)
                 interactive && 'cursor-pointer hover:ring-2 hover:ring-ring transition-shadow',
                 className,
             )}
-            style={{ backgroundColor: presentation.softColorVar }}
+            // An image sits on the transparency checkerboard, under its blurred backdrop.
+            style={
+                showThumbnail && thumbnailUrl
+                    ? IMAGE_CHECKERBOARD_STYLE
+                    : { backgroundColor: presentation.softColorVar }
+            }
         >
             <span
                 className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded-full bg-background text-[10px] font-medium uppercase tracking-wider"

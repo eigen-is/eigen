@@ -120,10 +120,12 @@ demo settings (`guests.openSignup: false`, `defaultMountMaxSizeMB: 50`, `maxUplo
   - The **stickies board is content-driven**: `author-fixtures.ts` regenerates it from `KANBAN` when the
     board's title/description/column/creator content changes (the exact Y.Doc shapes the editors read
     live in `demo/fixtures-build.ts` `buildStickiesDoc`, which `author-fixtures.ts` calls). Its `creator`
-    keys are rewritten to runtime emails after copy, and each `CardSpec`'s `chat` slug +
+    keys are rewritten to runtime emails after copy, and its `createdAt` stamps to seed-relative dates
+    (the board 14 days back, then a card a day) — the fixture bakes the day it was authored, which would
+    read as created weeks before the chat replies under the card. Each `CardSpec`'s `chat` slug +
     `chatText`/`chatReplies` become a live chat
-    (real personas, same as doc comments) with `color`/`chatName` patched onto the placed board's `tasks`
-    Y.Map — so that part needs no fixture regen.
+    (real personas, same as doc comments) with `color`/`chatName`/`createdAt` patched onto the placed
+    board's `tasks` Y.Map — so that part needs no fixture regen. A reply's `attach` posts seeded team documents as drive references; its `attachVCards` names `VCARD_FILES` entries whose serialized card is uploaded into that chat's own `media/` folder and attached by filename, exactly like a user's upload in the card chat, so the chip gets the in-place quick look, Save to Drive and Import to Contacts. Don't `attach` a plain file: a drive-reference chip to a file opens Drive in a new tab instead.
 - **Sponsor deck is content-driven, no fixture.** `content.ts` `SPONSOR_DECK` is a typed slide spec (per slide: a background, text boxes of TipTap HTML, images); `demo/deck-build.ts` `buildDeckDoc` writes it straight into a freshly created `sponsor pitch.eigenslides` container's Y.Doc (authored by Mees in `marketing/`), the way the site plan is. A deck is a canvas of frames — one frame per slide, pinned 1920x1080, elements positioned relative to their frame — so it shares the site plan's model and its builder shape: full editor-parity field sets through `baseDefaultsFor` + `ELEMENT_KINDS[...].defaults(SLIDES_STYLE_DEFAULTS)`, deterministic ids and fractional indices. Nothing on a slide is roughjs-drawn, so unlike the site plan the deck settles no seeds. The referenced images upload into the container's `media/` subfolder via `createFileFromData`, matching each image element's `mediaName`. The deck carries no comment threads yet.
 - **Site plan is content-driven, no fixture.** `content.ts` `SITE_PLAN` is a typed spec (shapes, arrows, lines, images, texts); `demo/vector-build.ts` `buildVectorDoc` writes it straight into a freshly created `site plan.eigenvector` container's Y.Doc (authored by Saar in `production/`), the way the stickies board is authored but without any byte-copied fixture to migrate. Text is sized from the `demo/excalifont-metrics.ts` advance table (the seeder has no DOM to `measureText` with); ids and roughjs seeds are deterministic so every reseed renders identical jitter. The two referenced images upload into the container's `media/` subfolder via `createFileFromData`, matching each image element's `mediaName`. Arrows bind to shapes by key (`{ shape, side, along? }`) and settle through the lib's own `followBindings`, so they read back exactly as an editor would store them; shapes take an `angle`, lines a `freedraw` flag. The spec is authored top-left-positive; the builder shifts the finished drawing so its bounding box is centered on the scene origin, where the editor opens. To eyeball a layout change without a browser, build a fresh Y.Doc with `buildVectorDoc`, run it through `readVectorFromDoc` + `sceneToSvg` (the same renderer the app and previews use), and open the SVG.
 - **Site photos in `images/`.** `demo/fixtures/images/*.webp` (five of the maintainer's own
@@ -132,6 +134,13 @@ demo settings (`guests.openSignup: false`, `defaultMountMaxSizeMB: 50`, `maxUplo
   Attribution + licensing in `demo/fixtures/images/CREDITS.md`.
 - **Branding in `branding/`.** `demo/fixtures/branding/*` (the festival logo) uploaded into a
   `branding/` team-drive folder the same way (`content.ts` `BRANDING`).
+- **Contact cards as `.vcf` files.** `content.ts` `VCARD_FILES` are vCard specs (`VCardSpec`, the same
+  shape a seeded address-book contact uses) the seeder serializes with the shipped `createVCard` and
+  uploads into a team-drive folder like any other file (`production/`, MIME `VCARD_MIMES[0]`, uid
+  `demo-<email>`). A spec may name an optional `photo` — a portrait fixture from `fixtures/avatars/` the
+  writer embeds as the card's inline `PHOTO`, logged and skipped when the file is missing, so the quick
+  look shows a face. The Drive copy gives the drive's vCard hero and quick look something to open; a card chat
+  reply's `attachVCards` uploads a second copy of the same spec into the chat (see the stickies bullet).
 - **Portraits in `avatars/`.** `demo/fixtures/avatars/*.jpg` (one per persona plus the admin, keyed by
   `content.ts` `avatar`, credits in the folder's `CREDITS.md`) go through the real avatar upload +
   self-update path, so `pushUserProfile` writes `server/avatars/<id>.webp` and sets `user.image` exactly
@@ -143,8 +152,13 @@ demo settings (`guests.openSignup: false`, `defaultMountMaxSizeMB: 50`, `maxUplo
   relative to seed time) and `Home.mail.mailboxDeliver` indexes them into `mail.db`. Most personas get
   a dedicated `inbox-thread` with an external party; a persona's OWN replies in that thread are moved
   to their Sent box and marked read (`messageMove`/`messageSetRead`), so only genuinely inbound mail
-  stays in the inbox. All-hands mail lands in every persona's inbox. A message may carry `html`
-  (rendered as a real `multipart/alternative` list/paragraph body); an all-hands flow may set
+  stays in the inbox. All-hands mail is delivered into every persona's inbox, with ONE Message-ID per
+  message shared by every copy — a list mail is one message delivered many times, and only matching ids
+  let a later message in the flow thread onto it through `In-Reply-To`/`References`; the sender's own
+  copy moves to Sent and is marked read, exactly like an inbox-thread reply. A message may carry `html`
+  (rendered as a real `multipart/alternative` list/paragraph body) and `attachments` — either committed
+  fixture bytes (the logo `.svg`) or a `VCardSpec` serialized through `createVCard` — which land as real
+  MIME parts, so the mail client's attachment previews have something to open. An all-hands flow may set
   `attachTeamDrive` to append an "Open festival →" drive-reference pill (`renderAttachmentPills`)
   linking the shared team drive, the same pill the mail client bakes into a sent message.
 - **Comment cards written AND anchored.** For each seeded comment the seeder wraps the anchor phrase

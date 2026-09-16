@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
-import { cpSync, existsSync, mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
@@ -29,6 +29,7 @@ import {
     SITE_PLAN,
     SPONSOR_DECK,
     TEAM_NAME,
+    VCARD_FILES,
 } from '../../scripts/demo/content';
 
 // Contract test for the demo-world seeder. The seeder relies on module-level singletons
@@ -39,6 +40,7 @@ import {
 const runSlow = Boolean(process.env['CI'] || process.env['EIGEN_SLOW_TESTS']);
 const MAIL_DOMAIN = 'tuimel.test';
 const API_DIR = join(import.meta.dir, '../../..');
+const AVATARS_DIR = join(API_DIR, 'src', 'scripts', 'demo', 'fixtures', 'avatars');
 
 // Read-write open (not readonly): the WAL-mode managed DBs need to (re)create their -shm on open,
 // which readonly forbids. The seeder process has exited, so there is no lock contention, and the
@@ -156,6 +158,13 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             expect(existsSync(mailDb)).toBe(true);
             const mail = query<{ n: number }>(mailDb, 'SELECT count(*) AS n FROM emails');
             expect(mail[0].n).toBeGreaterThanOrEqual(1);
+            // Seeded attachments are real MIME parts, so the delivery parser flags the row — every
+            // persona holds the all-hands mail that carries the logo.
+            const withAttachments = query<{ n: number }>(
+                mailDb,
+                'SELECT count(*) AS n FROM emails WHERE hasAttachments = 1',
+            );
+            expect(withAttachments[0].n).toBeGreaterThanOrEqual(1);
 
             // Team drive: file history populated (actors were threaded through every mutation).
             const mountsDir = join(root, 'team', teamId!, 'mounts');
@@ -202,6 +211,26 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 const blob = join(mountsDir, mountId, 'data', asset.file);
                 expect(existsSync(blob)).toBe(true);
                 expect(statSync(blob).size).toBeGreaterThan(0);
+            }
+
+            // Team drive contact cards: each spec was serialized and uploaded as a real .vcf blob.
+            for (const card of VCARD_FILES) {
+                const cardFolder = query<{ id: string }>(
+                    metadataDb,
+                    `SELECT id FROM paths WHERE name = '${card.folder}' AND trashedAt IS NULL`,
+                );
+                expect(cardFolder.length).toBe(1);
+                const cardRows = query<{ file: string }>(
+                    metadataDb,
+                    `SELECT file FROM paths WHERE parentId = '${cardFolder[0].id}' AND name = '${card.name}' AND trashedAt IS NULL`,
+                );
+                expect(cardRows.length).toBe(1);
+                const cardBlob = join(mountsDir, mountId, 'data', cardRows[0].file);
+                expect(statSync(cardBlob).size).toBeGreaterThan(0);
+                // The portrait only rides along once its fixture is committed; the seeder skips a missing one.
+                if (card.card.photo && existsSync(join(AVATARS_DIR, card.card.photo))) {
+                    expect(readFileSync(cardBlob, 'utf8')).toContain('PHOTO;ENCODING=b');
+                }
             }
 
             // Personal notes: the sampled persona's own drive has a "my notes" eigendoc container.
@@ -349,6 +378,31 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 expect(task.chatName).toEndWith('.eigenchat');
                 expect(task.creator).toContain('@');
             }
+
+            // A card chat reply's attachVCards uploads the card into that chat's own media/ folder, the
+            // folder the thread resolves attachment names in, and the message names the file.
+            const vcardReplyCard = KANBAN.cards.find((card) => card.chatReplies?.some((r) => r.attachVCards));
+            if (!vcardReplyCard) throw new Error('no kanban card chat reply attaches a vCard');
+            const cardChat = query<{ id: string }>(
+                metadataDb,
+                `SELECT id FROM paths WHERE name = '${vcardReplyCard.chat}.eigenchat' AND trashedAt IS NULL`,
+            );
+            expect(cardChat.length).toBe(1);
+            const cardChatMedia = query<{ id: string }>(
+                metadataDb,
+                `SELECT id FROM paths WHERE parentId = '${cardChat[0].id}' AND name = 'media' AND trashedAt IS NULL`,
+            );
+            expect(cardChatMedia.length).toBe(1);
+            const cardChatFiles = query<{ name: string }>(
+                metadataDb,
+                `SELECT name FROM paths WHERE parentId = '${cardChatMedia[0].id}' AND trashedAt IS NULL`,
+            ).map((row) => row.name);
+            expect(cardChatFiles).toContain('dekzeil & zo.vcf');
+            const cardChatAttachments = query<{ attachments: string }>(
+                findContainerDataDb(metadataDb, mountsDir, mountId, `${vcardReplyCard.chat}.eigenchat`),
+                'SELECT attachments FROM messages WHERE attachments IS NOT NULL',
+            ).flatMap((row) => JSON.parse(row.attachments) as unknown[]);
+            expect(cardChatAttachments).toContain('dekzeil & zo.vcf');
 
             // Site plan: a vector drawing built straight into the container's Y.Doc from SITE_PLAN
             // (no fixture). It reads back through the shipped reader with surviving shape bindings,

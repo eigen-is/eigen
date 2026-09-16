@@ -1,17 +1,11 @@
 import { isTransparentColor, TRANSPARENT_COLOR } from '@workspace/lib/vector';
 import { ColorPicker } from '@workspace/ui/components/media/color-picker';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
-import { cn } from '@workspace/ui/lib/utils';
+import { CHECKERBOARD_STYLE, cn } from '@workspace/ui/lib/utils';
 import { Ban } from 'lucide-react';
 import { useState } from 'react';
 import { isMixed, type MergedValue } from './merged-value';
 import { PropertyRow } from './properties-panel';
-
-// The transparent swatch: a checkerboard in the border token, so "no paint" reads as no paint rather than as white.
-const CHECKER = {
-    backgroundImage: 'repeating-conic-gradient(var(--border) 0 25%, transparent 0 50%)',
-    backgroundSize: '8px 8px',
-};
 
 type ColorButtonProps = {
     value: MergedValue<string>;
@@ -44,7 +38,7 @@ function ColorButton({ value, onChange, allowNone, noneLabel = 'None' }: ColorBu
                 >
                     <div
                         className="h-4 w-4 shrink-0 rounded-sm border border-border"
-                        style={displayColor ? { backgroundColor: displayColor } : none ? CHECKER : undefined}
+                        style={displayColor ? { backgroundColor: displayColor } : none ? CHECKERBOARD_STYLE : undefined}
                     />
                     <span className="truncate text-muted-foreground">{mixed ? '—' : none ? noneLabel : value}</span>
                 </button>

@@ -344,7 +344,9 @@ export type CardSpec = {
     // seeded by the creator persona (chat) and referenced back by name (chatName on the card).
     chat: string; // slug, lowercase, no extension
     chatText: string;
-    chatReplies?: { author: string; text: string }[];
+    // attach: see ChatLine.attach. attachVCards names VCARD_FILES entries uploaded into the chat's own
+    // media/ as a plain file attachment, the way a user's upload in a card chat lands.
+    chatReplies?: { author: string; text: string; attach?: string[]; attachVCards?: string[] }[];
     attach?: string[]; // seeded team documents pinned to the card, see ChatLine.attach
 };
 
@@ -440,6 +442,11 @@ export const KANBAN = {
             chatText: 'Forecast for the field is turning windy Sunday. Need a call on tenting the second stage.',
             chatReplies: [
                 { author: 'saar', text: "Let's decide at the go/no-go, I'll get a wind-cover quote before then." },
+                {
+                    author: 'saar',
+                    text: 'Quote is in from Dekzeil & Zo. They have a stage rain cover free that weekend, wind rated. Their card is attached if you want to talk sizes.',
+                    attachVCards: ['dekzeil & zo.vcf'],
+                },
             ],
         },
     ] as CardSpec[],
@@ -492,6 +499,48 @@ export type BrandingAsset = {
 };
 
 export const BRANDING: BrandingAsset[] = [{ file: 'logo.svg', mimeType: 'image/svg+xml', uploader: 'mees' }];
+
+// --- Contact cards. One spec shape for every vCard in the demo world: the .vcf files below, the
+// cards attached to seeded mail, and the personas' address books (SeededContact). The seeder
+// serializes it with the shipped createVCard, so a seeded card is what the app itself writes. ---
+
+export type VCardSpec = {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string;
+    company?: string;
+    jobTitle?: string;
+    notes?: string;
+    photo?: string; // fixture filename under fixtures/avatars/, embedded as the card's PHOTO
+};
+
+// A .vcf uploaded into the team drive like any other file. `name` doubles as the key a card chat
+// reply's `attachVCards` uploads a copy under (see CardSpec.chatReplies).
+export type SeededVCardFile = {
+    folder: TeamFolder;
+    name: string; // lowercase, with the .vcf extension
+    uploader: string; // persona key
+    card: VCardSpec;
+};
+
+export const VCARD_FILES: SeededVCardFile[] = [
+    {
+        folder: 'production',
+        name: 'dekzeil & zo.vcf',
+        uploader: 'saar',
+        card: {
+            firstName: 'Ruud',
+            lastName: 'Dekker',
+            email: 'ruud@dekzeil-en-zo.example',
+            phone: '+31 6 2244 8890',
+            company: 'Dekzeil & Zo',
+            jobTitle: 'Rentals',
+            notes: 'Tarps and tents. Quoted the rain cover for the second stage.',
+            photo: 'ruud.jpg',
+        },
+    },
+];
 
 // --- Site plan (a vector drawing the seeder builds straight into the container's Y.Doc from this
 // spec — no fixture bytes; see vector-build.ts). Scene units are pixels, y down; every shape's
@@ -1102,24 +1151,32 @@ export const CHATS: SeededChat[] = [
 
 // --- Mail (raw RFC822 delivered into persona inboxes; dates spread over the past ~10 days) ---
 
+// An attachment on a seeded message: committed fixture bytes, or a vCard the seeder serializes with
+// the shipped writer. Both land as real MIME attachments.
+export type MailAttachment = { filename: string } & (
+    | { fixture: string; mimeType: string } // path under fixtures/
+    | { vcard: VCardSpec }
+);
+
 export type SeededMail = {
-    // 'inbox-thread' lands in one persona's inbox; 'all-hands' lands in every persona's inbox.
+    // 'inbox-thread' lands in one persona's inbox; 'all-hands' lands in every persona's inbox. Either
+    // way the messages form one thread: one Message-ID per message, later ones replying to it.
     kind: 'inbox-thread' | 'all-hands';
     to?: LeadRole | string; // required for inbox-thread; role or persona key (mirrors EVENTS.attendees)
-    from?: LeadRole; // sender lead for all-hands
     subject: string;
     // Appends an "Open festival →" drive-reference pill to this mail's HTML body at seed time,
     // linking the shared team drive (the pathId is only known at runtime). Requires a message html.
     attachTeamDrive?: boolean;
     messages: {
-        fromExternal?: { name: string; email: string }; // else `from` is the persona key
-        from?: string; // persona key
+        fromExternal?: { name: string; email: string }; // else `from` names the sender
+        from?: string; // lead role or persona key (mirrors EVENTS.attendees)
         daysAgo: number;
         hour: number;
         text: string;
         // Optional rich body — the mail client renders real paragraphs/lists, not just plain text.
         // `text` stays as the plain-text fallback (multipart/alternative) when this is set.
         html?: string;
+        attachments?: MailAttachment[];
     }[];
 };
 
@@ -1423,7 +1480,20 @@ export const MAILS: SeededMail[] = [
     },
     {
         kind: 'all-hands',
-        from: 'director',
+        subject: 'Logo in vector format',
+        messages: [
+            {
+                from: 'comms',
+                daysAgo: 3,
+                hour: 9,
+                text: 'Hi all,\n\nMy friend Mark redrew our logo as an SVG. Same logo, just properly in vector now.\n\nPlease use this one from now on: posters, the website, the sponsor deck. It stays sharp at any size, so no more fuzzy edges on a big print.\n\nIt is attached here, and it also lives in branding/ on the team drive.\n\nMees',
+                html: '<p>Hi all,</p><p>My friend Mark redrew our logo as an SVG. Same logo, just properly in vector now.</p><p>Please use this one from now on:</p><ul><li>posters</li><li>the website</li><li>the sponsor deck</li></ul><p>It stays sharp at any size, so no more fuzzy edges on a big print. It is attached here, and it also lives in <strong>branding/</strong> on the team drive.</p><p>Mees</p>',
+                attachments: [{ filename: 'logo.svg', fixture: 'branding/logo.svg', mimeType: 'image/svg+xml' }],
+            },
+        ],
+    },
+    {
+        kind: 'all-hands',
         subject: 'Three weeks out',
         attachTeamDrive: true,
         messages: [
@@ -1438,7 +1508,6 @@ export const MAILS: SeededMail[] = [
     },
     {
         kind: 'all-hands',
-        from: 'volunteers',
         subject: 'Volunteers needed for build weekend',
         messages: [
             {
@@ -1446,6 +1515,26 @@ export const MAILS: SeededMail[] = [
                 daysAgo: 1,
                 hour: 11,
                 text: 'Hi all,\n\nWe still need about 10 hands for the build weekend, plus one for the Sunday morning first-aid slot. If you know someone reliable, send them my way. Meals and a weekend ticket included.\n\nThank you!\nNour',
+            },
+            {
+                from: 'imke',
+                daysAgo: 1,
+                hour: 16,
+                text: 'Hi Nour,\n\nWillem already said yes to the Sunday morning first-aid slot, so that one is covered. My neighbor Hanna is a certified first aider too, she did the harbor festival last year and she is happy to be the backup on Sunday.\n\nHer card is attached, you can call her.\n\nImke',
+                attachments: [
+                    {
+                        filename: 'hanna groen.vcf',
+                        vcard: {
+                            firstName: 'Hanna',
+                            lastName: 'Groen',
+                            email: 'hanna.groen@example.com',
+                            phone: '+31 6 3311 4477',
+                            jobTitle: 'First aider',
+                            notes: "Imke's neighbor. Did first aid at the harbor festival last year. Backup for Sunday morning.",
+                            photo: 'hanna.jpg',
+                        },
+                    },
+                ],
             },
         ],
     },
@@ -1534,16 +1623,7 @@ export const EVENTS: SeededEvent[] = [
 
 // --- Contacts (external ecosystem, added to a few leads' address books) ---
 
-export type SeededContact = {
-    owner: LeadRole;
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone?: string;
-    company?: string;
-    jobTitle?: string;
-    notes?: string;
-};
+export type SeededContact = VCardSpec & { owner: LeadRole };
 
 export const CONTACTS: SeededContact[] = [
     {
