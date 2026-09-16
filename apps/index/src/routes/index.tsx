@@ -66,7 +66,7 @@ export function HomeComponent() {
                     <p className="mb-4">A self-hosted alternative to Google Workspace.</p>
                     <p className="mb-4">
                         {demoMode
-                            ? 'Try it out: enter the demo and join a small crew organizing the (made-up) Tuimel Festival. Their files, mail, chats and calendar are already there.'
+                            ? 'Try it out: explore a shared demo workspace of a small crew organizing the (made-up) Tuimel Festival. It resets every hour.'
                             : 'Simple and secure. You control your data.'}
                     </p>
                 </div>
