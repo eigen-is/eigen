@@ -259,13 +259,15 @@ export function useOpenWriteEmailTo() {
 type EmailListPatch = ((email: EmailSummary) => EmailSummary) | 'remove';
 type MailMutationContext = {
     snapshot: [readonly unknown[], InfiniteData<EmailSummary[]> | undefined][];
-    // Lists whose very first fetch was still in flight when cancelQueries hit (a notification
-    // deep-link racing the cold inbox load): nothing to patch, and TanStack won't restart them.
+    // Lists still on their very first fetch (a notification deep-link into a mailbox this tab never
+    // loaded): nothing to patch, and the page in flight was requested before the mutation.
     coldKeys: (readonly unknown[])[];
+    event: SSEventMail['type'];
+    messageId: string;
 };
 
 // Shared optimistic-mutation plumbing for the four mail mutations (move/delete/read/flag): cancel
-// in-flight list fetches, snapshot every cached list for rollback, patch the row by id, and record
+// in-flight list refetches, snapshot every cached list for rollback, patch the row by id, and record
 // the echo to suppress. Returns the rollback context.
 export async function beginOptimisticMailMutation(
     queryClient: QueryClient,
@@ -274,23 +276,39 @@ export async function beginOptimisticMailMutation(
     patch: EmailListPatch,
     event: SSEventMail['type'],
 ): Promise<MailMutationContext> {
-    await queryClient.cancelQueries({ queryKey: emailKeys.lists(ownerId) });
+    // Only a list with data can have its patch overwritten by a refetch; a cold list keeps fetching,
+    // or it would sit idle on "No emails found" until the request lands.
+    await queryClient.cancelQueries({
+        queryKey: emailKeys.lists(ownerId),
+        predicate: (query) => query.state.data !== undefined,
+    });
     const snapshot = queryClient.getQueriesData<InfiniteData<EmailSummary[]>>({ queryKey: emailKeys.lists(ownerId) });
     patchEmailInLists(queryClient, ownerId, messageId, patch);
     markRecentMailMutation(event, messageId);
-    return { snapshot, coldKeys: snapshot.filter(([, data]) => data === undefined).map(([key]) => key) };
+    const coldKeys = snapshot.filter(([, data]) => data === undefined).map(([key]) => key);
+    return { snapshot, coldKeys, event, messageId };
 }
 
-// Revive the cold lists only once the request has landed: mutationFn runs after onMutate resolves,
-// so a refetch kicked there left before the PUT and cached the row unchanged, with the SSE echo
-// already suppressed as "patched". Refetching here keeps the cold-open list from stranding on
-// pending forever and orders its first page after the server write.
-export function settleOptimisticMailMutation(queryClient: QueryClient, context: MailMutationContext | undefined): void {
-    if (context) for (const key of context.coldKeys) queryClient.refetchQueries({ queryKey: key });
+// A cold list's first page may predate the write and its SSE echo is already suppressed as
+// "patched", so refetch it once the request has settled (mutationFn only runs after onMutate, so
+// this can't live there). A first fetch still running is cancelled first: on a query without data,
+// refetch would join it instead of replacing it.
+export async function settleOptimisticMailMutation(
+    queryClient: QueryClient,
+    context: MailMutationContext | undefined,
+): Promise<void> {
+    if (!context) return;
+    for (const key of context.coldKeys) {
+        await queryClient.cancelQueries({ queryKey: key });
+        queryClient.refetchQueries({ queryKey: key });
+    }
 }
 
+// Restore the lists and release the echo entry, so the next real event for the message refreshes.
 function rollbackMailMutation(queryClient: QueryClient, context: MailMutationContext | undefined): void {
-    if (context) for (const [key, data] of context.snapshot) queryClient.setQueryData(key, data);
+    if (!context) return;
+    for (const [key, data] of context.snapshot) queryClient.setQueryData(key, data);
+    consumeRecentMailMutation(context.event, context.messageId);
 }
 
 // Patch a row by id across every cached list (sidesteps the ''/'inbox'/case mailbox-key pitfalls).
