@@ -286,12 +286,15 @@ function ProgressiveImage({
 
     const ratio = aspectRatio ?? loadedRatio;
     // Once the ratio is known the box is exactly the image area, so the checkerboard sits only
-    // behind the image: transparent line art stays readable on the dark backdrop.
+    // behind the image: transparent line art stays readable on the dark backdrop. Muted under
+    // border keeps the two squares close in tone; the backdrop showing through would be stark.
     const style: React.CSSProperties = ratio
         ? {
               width: `min(90vw, calc((100vh - 7rem) * ${ratio}))`,
               height: `min(calc(100vh - 7rem), calc(90vw / ${ratio}))`,
               ...CHECKERBOARD_STYLE,
+              backgroundColor: 'var(--muted)',
+              backgroundSize: '16px 16px',
           }
         : { width: '90vw', height: 'calc(100vh - 7rem)' };
 
