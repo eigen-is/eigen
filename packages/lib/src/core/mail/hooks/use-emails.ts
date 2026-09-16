@@ -139,6 +139,7 @@ export function useDeleteEmail() {
             rollbackMailMutation(queryClient, context);
             onMutationError(error);
         },
+        onSettled: (_email, _error, _vars, context) => settleOptimisticMailMutation(queryClient, context),
     });
 }
 
@@ -176,6 +177,7 @@ export function useToggleReadEmail() {
             rollbackMailMutation(queryClient, context);
             onMutationError(error);
         },
+        onSettled: (_email, _error, _vars, context) => settleOptimisticMailMutation(queryClient, context),
     });
 }
 
@@ -210,6 +212,7 @@ export function useToggleFlaggedEmail() {
             rollbackMailMutation(queryClient, context);
             onMutationError(error);
         },
+        onSettled: (_email, _error, _vars, context) => settleOptimisticMailMutation(queryClient, context),
     });
 }
 
@@ -240,6 +243,7 @@ export function useMoveEmail() {
             rollbackMailMutation(queryClient, context);
             onMutationError(error);
         },
+        onSettled: (_email, _error, _vars, context) => settleOptimisticMailMutation(queryClient, context),
     });
 }
 
@@ -253,7 +257,12 @@ export function useOpenWriteEmailTo() {
 }
 
 type EmailListPatch = ((email: EmailSummary) => EmailSummary) | 'remove';
-type MailMutationContext = { snapshot: [readonly unknown[], InfiniteData<EmailSummary[]> | undefined][] };
+type MailMutationContext = {
+    snapshot: [readonly unknown[], InfiniteData<EmailSummary[]> | undefined][];
+    // Lists whose very first fetch was still in flight when cancelQueries hit (a notification
+    // deep-link racing the cold inbox load): nothing to patch, and TanStack won't restart them.
+    coldKeys: (readonly unknown[])[];
+};
 
 // Shared optimistic-mutation plumbing for the four mail mutations (move/delete/read/flag): cancel
 // in-flight list fetches, snapshot every cached list for rollback, patch the row by id, and record
@@ -267,16 +276,17 @@ export async function beginOptimisticMailMutation(
 ): Promise<MailMutationContext> {
     await queryClient.cancelQueries({ queryKey: emailKeys.lists(ownerId) });
     const snapshot = queryClient.getQueriesData<InfiniteData<EmailSummary[]>>({ queryKey: emailKeys.lists(ownerId) });
-    // cancelQueries on a list whose very first fetch was still in flight (no prior data) leaves it
-    // stuck pending forever — TanStack doesn't auto-restart a canceled query with no fallback data.
-    // Kick those back off so a cold-open deep-link (e.g. auto-mark-as-read racing the initial inbox
-    // load) can't strand the list on "No emails found" with no self-heal.
-    for (const [key, data] of snapshot) {
-        if (data === undefined) queryClient.refetchQueries({ queryKey: key });
-    }
     patchEmailInLists(queryClient, ownerId, messageId, patch);
     markRecentMailMutation(event, messageId);
-    return { snapshot };
+    return { snapshot, coldKeys: snapshot.filter(([, data]) => data === undefined).map(([key]) => key) };
+}
+
+// Revive the cold lists only once the request has landed: mutationFn runs after onMutate resolves,
+// so a refetch kicked there left before the PUT and cached the row unchanged, with the SSE echo
+// already suppressed as "patched". Refetching here keeps the cold-open list from stranding on
+// pending forever and orders its first page after the server write.
+export function settleOptimisticMailMutation(queryClient: QueryClient, context: MailMutationContext | undefined): void {
+    if (context) for (const key of context.coldKeys) queryClient.refetchQueries({ queryKey: key });
 }
 
 function rollbackMailMutation(queryClient: QueryClient, context: MailMutationContext | undefined): void {
