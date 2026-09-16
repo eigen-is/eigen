@@ -145,15 +145,23 @@ export function DriveLayout({
         highlightHistory,
     };
 
-    // A resolved `pid` shows its detail even when the list doesn't hold it: a share link or a
-    // reference chip lands on a list (shared-with-me) that may not contain the item itself.
-    const showDetail = !!(selectedPath || (currentPath && currentPath.type !== 'folder'));
+    const mobileShowDetail = !!(selectedPath || (currentPath && currentPath?.type !== 'folder'));
+    // A folder shows only its own rows (a file moved out keeps its pid in the URL); a feed without a
+    // folder (shared, watched, mime views) shows any resolved pid, since a share link or a reference
+    // chip lands there for an item the feed itself may not list.
+    const pidInFolder = pid ? folderContents.some((p) => p.id === pid) : false;
+    const desktopShowDetail = !!(
+        pidInFolder ||
+        (!currentPath && selectedPath) ||
+        (currentPath && currentPath.type !== 'folder')
+    );
+    const showDetail = isMobile ? mobileShowDetail : desktopShowDetail;
 
     const detailToolbar = showDetail && detailPath ? <DriveDetailToolbar onClose={onBackToList} /> : null;
 
     return (
         <>
-            <ColumnLayout mobileColumn={showDetail ? 'detail' : 'list'}>
+            <ColumnLayout mobileColumn={mobileShowDetail ? 'detail' : 'list'}>
                 <Column id="list" width="flex" onBack="sidebar" toolbar={listToolbar}>
                     <DriveList {...listProps} />
                 </Column>
