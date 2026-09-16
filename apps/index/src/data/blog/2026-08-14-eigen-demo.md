@@ -49,7 +49,7 @@ It is a real Eigen server, so all apps are there: mail, drive, docs, sheets, sli
 <media-grid columns="1">
   <media 
     src="/data/blog/media/2026-08-14-eigen-demo/sheets.mp4" 
-    poster="/data/blog/media/2026-08-14-eigen-demo/sheets-thumb.webp"
+    poster="/data/blog/media/2026-08-14-eigen-demo/thumb_sheets.webp"
     type="video" 
     caption="eigen|sheets>" />
 </media-grid>
