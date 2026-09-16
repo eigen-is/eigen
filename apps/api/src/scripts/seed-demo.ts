@@ -31,6 +31,7 @@ import { DOCX_MIME } from '@workspace/lib/constants/mime';
 import { commentAssignedTag } from '@workspace/lib/notification/tags';
 import type { Attendee, EventData } from '@workspace/lib/types/calendar';
 import type { CommentCard } from '@workspace/lib/types/comments';
+import type { CreateContactInput } from '@workspace/lib/types/contact';
 import {
     DRIVE_MIME_FOLDER,
     DRIVE_TYPE_FOLDER,
@@ -63,6 +64,7 @@ import {
     PHOTOS,
     personaByKey,
     personaByRole,
+    type SeededMail,
     SITE_PLAN,
     SPONSOR_DECK,
     TEAM_FOLDERS,
@@ -397,19 +399,22 @@ async function main(): Promise<void> {
 
     // --- Contact cards: each spec through the shipped vCard writer, uploaded as a .vcf like any
     // other file. The uid is deterministic, so a reseed writes the same card. ---
-    const seedVCard = (spec: VCardSpec): string =>
-        createVCard(
-            {
-                firstName: spec.firstName,
-                lastName: spec.lastName,
-                email: [spec.email],
-                phone: spec.phone ? [spec.phone] : [],
-                company: spec.company,
-                jobTitle: spec.jobTitle,
-                notes: spec.notes,
-            },
-            `demo-${spec.email}`,
-        );
+    // One flattening for both card writers; the inert defaults emit nothing for an omitted spec field.
+    const contactInput = (spec: VCardSpec): CreateContactInput => ({
+        eigenId: '',
+        firstName: spec.firstName,
+        lastName: spec.lastName,
+        email: [spec.email],
+        phone: spec.phone ? [spec.phone] : [],
+        company: spec.company ?? '',
+        jobTitle: spec.jobTitle ?? '',
+        address: [],
+        birthday: '',
+        notes: spec.notes ?? '',
+        avatar: '',
+        labels: [],
+    });
+    const seedVCard = (spec: VCardSpec): string => createVCard(contactInput(spec), `demo-${spec.email}`);
     for (const vcf of VCARD_FILES) {
         const path = await teamDrive.createFileFromData(
             teamMountId,
@@ -665,12 +670,15 @@ async function main(): Promise<void> {
 
     // The fixture bakes card/column creators as bare persona keys; rewrite them to runtime emails
     // so the board resolves author names under any MAIL_DOMAIN. Every card also gets the shared
-    // default card color and its chat link.
+    // default card color, its chat link, and a createdAt relative to seed time.
+    const boardCreatedAt = Date.now() - 14 * 86_400_000;
     board.doc.transact(() => {
         for (const rootName of ['tasks', 'columns']) {
             for (const [, entry] of getItemMapRoot(board.doc, rootName)) {
                 const creator = entry.get('creator');
                 if (typeof creator === 'string' && !creator.includes('@')) entry.set('creator', emailFor(creator));
+                // The baked createdAt is the day the fixture was authored — weeks before the replies.
+                entry.set('createdAt', boardCreatedAt);
             }
         }
         const tasksMap = getItemMapRoot(board.doc, 'tasks');
@@ -678,6 +686,7 @@ async function main(): Promise<void> {
             const task = tasksMap.get(`card-${i + 1}`)!;
             task.set('color', DEFAULT_CARD_COLOR);
             task.set('chatName', cardChatNames.get(`card-${i + 1}`)!);
+            task.set('createdAt', boardCreatedAt + (i + 1) * 86_400_000); // a card a day after the board
             if (spec.attach) task.set('attachments', spec.attach.map(teamDocRef));
         }
     });
@@ -775,14 +784,42 @@ async function main(): Promise<void> {
                   contentType: attachment.mimeType,
                   content: readFileSync(join(FIXTURES_DIR, attachment.fixture)),
               };
+    // One flow's threading contract for both branches: the date, the Re: prefix and the
+    // In-Reply-To/References chain, so a branch only resolves from/to and delivers the buffer.
+    const threadState = (subject: string) => {
+        const references: string[] = [];
+        let previousId: string | undefined;
+        return async (
+            message: SeededMail['messages'][number],
+            o: { from: string; to: string; html?: string },
+        ): Promise<Buffer> => {
+            const date = new Date(now.getTime() - message.daysAgo * 86_400_000);
+            date.setHours(message.hour, 0, 0, 0);
+            const messageId = `${randomUUID()}@${MAIL_DOMAIN}`;
+            const buffer = await buildRfc822({
+                from: o.from,
+                to: o.to,
+                subject: previousId ? `Re: ${subject}` : subject,
+                date,
+                text: message.text,
+                html: o.html,
+                messageId,
+                inReplyTo: previousId,
+                references: references.length ? references : undefined,
+                attachments: message.attachments?.map(mailAttachment),
+            });
+            references.push(messageId);
+            previousId = messageId;
+            return buffer;
+        };
+    };
     for (const flow of MAILS) {
+        const nextInThread = threadState(flow.subject);
         if (flow.kind === 'inbox-thread') {
             const recipient = userByKey.get(resolvePersona(flow.to!).key)!;
             const recipientHome = await getHome(recipient.id);
             // The thread's external party (booker) — the other end of every message.
             const externalParty = flow.messages.find((m) => m.fromExternal)?.fromExternal;
-            const references: string[] = [];
-            let previousId: string | undefined;
             for (const message of flow.messages) {
                 const external = message.fromExternal;
                 const sender = external ? undefined : userByKey.get(resolvePersona(message.from!).key)!;
@@ -792,21 +829,7 @@ async function main(): Promise<void> {
                     : externalParty
                       ? `${externalParty.name} <${externalParty.email}>`
                       : recipient.email;
-                const date = new Date(now.getTime() - message.daysAgo * 86_400_000);
-                date.setHours(message.hour, 0, 0, 0);
-                const messageId = `${randomUUID()}@${MAIL_DOMAIN}`;
-                const buffer = await buildRfc822({
-                    from,
-                    to,
-                    subject: previousId ? `Re: ${flow.subject}` : flow.subject,
-                    date,
-                    text: message.text,
-                    html: message.html,
-                    messageId,
-                    inReplyTo: previousId,
-                    references: references.length ? references : undefined,
-                    attachments: message.attachments?.map(mailAttachment),
-                });
+                const buffer = await nextInThread(message, { from, to, html: message.html });
                 const deliveredId = await recipientHome.mail.mailboxDeliver(buffer);
                 // The persona's own replies in the thread belong in their Sent box, not their inbox
                 // (the other end is the external party). Moving them keeps only genuinely inbound mail
@@ -815,38 +838,25 @@ async function main(): Promise<void> {
                     await recipientHome.mail.messageMove(deliveredId, MAILBOX_SENT);
                     await recipientHome.mail.messageSetRead(deliveredId, true);
                 }
-                references.push(messageId);
-                previousId = messageId;
             }
         } else {
             const to = `${TEAM_NAME} <crew@${MAIL_DOMAIN}>`;
-            const references: string[] = [];
-            let previousId: string | undefined;
-            for (const message of flow.messages) {
+            for (const [i, message] of flow.messages.entries()) {
                 const senderKey = resolvePersona(message.from!).key;
                 const sender = userByKey.get(senderKey)!;
-                const date = new Date(now.getTime() - message.daysAgo * 86_400_000);
-                date.setHours(message.hour, 0, 0, 0);
-                // Seeded bodies are HTML fragments (no <body>), so the pill just appends — the same
-                // outcome as the mail client's appendReferenceLinks fallback for a sent message.
+                // Only the mail that opens the flow links the drive; a reply to it does not. Seeded bodies
+                // are HTML fragments (no <body>), so the pill just appends — the same outcome as the mail
+                // client's appendReferenceLinks fallback for a sent message.
                 const html =
-                    flow.attachTeamDrive && message.html
+                    i === 0 && flow.attachTeamDrive && message.html
                         ? message.html + renderAttachmentPills([teamDriveRef])
                         : message.html;
                 // One Message-ID for the whole fan-out, like a real list mail: every persona holds a
                 // copy of the SAME message, and a reply only threads if it references that one id.
-                const messageId = `${randomUUID()}@${MAIL_DOMAIN}`;
-                const buffer = await buildRfc822({
+                const buffer = await nextInThread(message, {
                     from: `${sender.name} <${sender.email}>`,
                     to,
-                    subject: previousId ? `Re: ${flow.subject}` : flow.subject,
-                    date,
-                    text: message.text,
                     html,
-                    messageId,
-                    inReplyTo: previousId,
-                    references: references.length ? references : undefined,
-                    attachments: message.attachments?.map(mailAttachment),
                 });
                 for (const persona of PERSONAS) {
                     const home = await getHome(userByKey.get(persona.key)!.id);
@@ -857,8 +867,6 @@ async function main(): Promise<void> {
                         await home.mail.messageSetRead(deliveredId, true);
                     }
                 }
-                references.push(messageId);
-                previousId = messageId;
             }
         }
     }
@@ -867,20 +875,7 @@ async function main(): Promise<void> {
     for (const contact of CONTACTS) {
         const owner = userForRole(contact.owner);
         const contacts = await getContacts(owner);
-        await contacts.addContact({
-            eigenId: '',
-            firstName: contact.firstName,
-            lastName: contact.lastName,
-            email: [contact.email],
-            phone: contact.phone ? [contact.phone] : [],
-            company: contact.company ?? '',
-            jobTitle: contact.jobTitle ?? '',
-            address: [],
-            birthday: '',
-            notes: contact.notes ?? '',
-            avatar: '',
-            labels: [],
-        });
+        await contacts.addContact(contactInput(contact));
     }
 
     // --- Personal-drive files shared person-to-person (shared-with-me variety). ---

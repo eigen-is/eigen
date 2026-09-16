@@ -1516,7 +1516,7 @@ export const MAILS: SeededMail[] = [
                 from: 'imke',
                 daysAgo: 1,
                 hour: 16,
-                text: 'Hi Nour,\n\nMy neighbor Hanna is a certified first aider. She did the harbor festival last year and she is up for the Sunday morning slot.\n\nHer card is attached, you can call her.\n\nImke',
+                text: 'Hi Nour,\n\nWillem already said yes to the Sunday morning first-aid slot, so that one is covered. My neighbor Hanna is a certified first aider too, she did the harbor festival last year and she is happy to be the backup on Sunday.\n\nHer card is attached, you can call her.\n\nImke',
                 attachments: [
                     {
                         filename: 'hanna groen.vcf',
@@ -1526,7 +1526,7 @@ export const MAILS: SeededMail[] = [
                             email: 'hanna.groen@example.com',
                             phone: '+31 6 3311 4477',
                             jobTitle: 'First aider',
-                            notes: "Imke's neighbor. Did first aid at the harbor festival last year.",
+                            notes: "Imke's neighbor. Did first aid at the harbor festival last year. Backup for Sunday morning.",
                         },
                     },
                 ],
