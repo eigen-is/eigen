@@ -5,6 +5,13 @@ export function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
 }
 
+// Transparency checkerboard in the border token: a transparent swatch or image area reads as
+// transparent rather than as white or as the backdrop.
+export const CHECKERBOARD_STYLE = {
+    backgroundImage: 'repeating-conic-gradient(var(--border) 0 25%, transparent 0 50%)',
+    backgroundSize: '8px 8px',
+} as const;
+
 export function ucfirst(str: string): string {
     if (!str || str.length === 0) return str;
     return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();

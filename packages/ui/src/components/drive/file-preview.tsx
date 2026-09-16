@@ -8,7 +8,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileSubject, MailPartRef } from '@workspace/lib/types/file-subject';
 import type { TextPreviewResult } from '@workspace/lib/types/preview';
 import { useFocusTrap } from '@workspace/ui/hooks/use-focus-trap';
-import { cn } from '@workspace/ui/lib/utils';
+import { CHECKERBOARD_STYLE, cn } from '@workspace/ui/lib/utils';
 import { ChevronLeft, ChevronRight, ExternalLink, FolderDown, Loader2, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
@@ -285,15 +285,18 @@ function ProgressiveImage({
     const [loadedRatio, setLoadedRatio] = useState<number>();
 
     const ratio = aspectRatio ?? loadedRatio;
+    // Once the ratio is known the box is exactly the image area, so the checkerboard sits only
+    // behind the image: transparent line art stays readable on the dark backdrop.
     const style: React.CSSProperties = ratio
         ? {
               width: `min(90vw, calc((100vh - 7rem) * ${ratio}))`,
               height: `min(calc(100vh - 7rem), calc(90vw / ${ratio}))`,
+              ...CHECKERBOARD_STYLE,
           }
         : { width: '90vw', height: 'calc(100vh - 7rem)' };
 
     return (
-        <div className="relative" style={style}>
+        <div className="relative rounded" style={style}>
             {/* Thumbnail: always visible until preview is ready */}
             {thumbnailUrl && (
                 <img src={thumbnailUrl} alt={alt} className="absolute inset-0 w-full h-full rounded object-contain" />
