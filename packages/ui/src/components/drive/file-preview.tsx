@@ -8,7 +8,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileSubject, MailPartRef } from '@workspace/lib/types/file-subject';
 import type { TextPreviewResult } from '@workspace/lib/types/preview';
 import { useFocusTrap } from '@workspace/ui/hooks/use-focus-trap';
-import { CHECKERBOARD_STYLE, cn } from '@workspace/ui/lib/utils';
+import { cn, IMAGE_CHECKERBOARD_STYLE } from '@workspace/ui/lib/utils';
 import { ChevronLeft, ChevronRight, ExternalLink, FolderDown, Loader2, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
@@ -286,23 +286,26 @@ function ProgressiveImage({
 
     const ratio = aspectRatio ?? loadedRatio;
     // Once the ratio is known the box is exactly the image area, so the checkerboard sits only
-    // behind the image: transparent line art stays readable on the dark backdrop. Muted under
-    // border keeps the two squares close in tone; the backdrop showing through would be stark.
+    // behind the image: transparent line art stays readable on the dark backdrop.
     const style: React.CSSProperties = ratio
         ? {
               width: `min(90vw, calc((100vh - 7rem) * ${ratio}))`,
               height: `min(calc(100vh - 7rem), calc(90vw / ${ratio}))`,
-              ...CHECKERBOARD_STYLE,
-              backgroundColor: 'var(--muted)',
-              backgroundSize: '16px 16px',
+              ...IMAGE_CHECKERBOARD_STYLE,
           }
         : { width: '90vw', height: 'calc(100vh - 7rem)' };
 
     return (
         <div className="relative rounded" style={style}>
-            {/* Thumbnail: always visible until preview is ready */}
+            {/* Thumbnail: crossfades out as the preview lands. It must not stay underneath, or its
+                upscaled edges show through the transparent parts of an SVG or PNG. */}
             {thumbnailUrl && (
-                <img src={thumbnailUrl} alt={alt} className="absolute inset-0 w-full h-full rounded object-contain" />
+                <img
+                    src={thumbnailUrl}
+                    alt={alt}
+                    className="absolute inset-0 w-full h-full rounded object-contain transition-opacity duration-300"
+                    style={{ opacity: previewReady ? 0 : 1 }}
+                />
             )}
             {/* Full preview: loads in background, fades in on top when ready */}
             <img
