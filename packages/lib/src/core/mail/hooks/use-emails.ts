@@ -139,7 +139,6 @@ export function useDeleteEmail() {
             rollbackMailMutation(queryClient, context);
             onMutationError(error);
         },
-        onSettled: (_email, _error, _vars, context) => settleOptimisticMailMutation(queryClient, context),
     });
 }
 
@@ -177,7 +176,6 @@ export function useToggleReadEmail() {
             rollbackMailMutation(queryClient, context);
             onMutationError(error);
         },
-        onSettled: (_email, _error, _vars, context) => settleOptimisticMailMutation(queryClient, context),
     });
 }
 
@@ -212,7 +210,6 @@ export function useToggleFlaggedEmail() {
             rollbackMailMutation(queryClient, context);
             onMutationError(error);
         },
-        onSettled: (_email, _error, _vars, context) => settleOptimisticMailMutation(queryClient, context),
     });
 }
 
@@ -243,7 +240,6 @@ export function useMoveEmail() {
             rollbackMailMutation(queryClient, context);
             onMutationError(error);
         },
-        onSettled: (_email, _error, _vars, context) => settleOptimisticMailMutation(queryClient, context),
     });
 }
 
@@ -257,17 +253,10 @@ export function useOpenWriteEmailTo() {
 }
 
 type EmailListPatch = ((email: EmailSummary) => EmailSummary) | 'remove';
-type MailMutationContext = {
-    snapshot: [readonly unknown[], InfiniteData<EmailSummary[]> | undefined][];
-    // Lists still on their very first fetch (a notification deep-link into a mailbox this tab never
-    // loaded): nothing to patch, and the page in flight was requested before the mutation.
-    coldKeys: (readonly unknown[])[];
-    event: SSEventMail['type'];
-    messageId: string;
-};
+type MailMutationContext = { snapshot: [readonly unknown[], InfiniteData<EmailSummary[]> | undefined][] };
 
 // Shared optimistic-mutation plumbing for the four mail mutations (move/delete/read/flag): cancel
-// in-flight list refetches, snapshot every cached list for rollback, patch the row by id, and record
+// in-flight list fetches, snapshot every cached list for rollback, patch the row by id, and record
 // the echo to suppress. Returns the rollback context.
 export async function beginOptimisticMailMutation(
     queryClient: QueryClient,
@@ -276,39 +265,22 @@ export async function beginOptimisticMailMutation(
     patch: EmailListPatch,
     event: SSEventMail['type'],
 ): Promise<MailMutationContext> {
-    // Only a list with data can have its patch overwritten by a refetch; a cold list keeps fetching,
-    // or it would sit idle on "No emails found" until the request lands.
-    await queryClient.cancelQueries({
-        queryKey: emailKeys.lists(ownerId),
-        predicate: (query) => query.state.data !== undefined,
-    });
+    await queryClient.cancelQueries({ queryKey: emailKeys.lists(ownerId) });
     const snapshot = queryClient.getQueriesData<InfiniteData<EmailSummary[]>>({ queryKey: emailKeys.lists(ownerId) });
+    // cancelQueries on a list whose very first fetch was still in flight (no prior data) leaves it
+    // stuck pending forever — TanStack doesn't auto-restart a canceled query with no fallback data.
+    // Kick those back off so a cold-open deep-link (e.g. auto-mark-as-read racing the initial inbox
+    // load) can't strand the list on "No emails found" with no self-heal.
+    for (const [key, data] of snapshot) {
+        if (data === undefined) queryClient.refetchQueries({ queryKey: key });
+    }
     patchEmailInLists(queryClient, ownerId, messageId, patch);
     markRecentMailMutation(event, messageId);
-    const coldKeys = snapshot.filter(([, data]) => data === undefined).map(([key]) => key);
-    return { snapshot, coldKeys, event, messageId };
+    return { snapshot };
 }
 
-// A cold list's first page may predate the write and its SSE echo is already suppressed as
-// "patched", so refetch it once the request has settled (mutationFn only runs after onMutate, so
-// this can't live there). A first fetch still running is cancelled first: on a query without data,
-// refetch would join it instead of replacing it.
-export async function settleOptimisticMailMutation(
-    queryClient: QueryClient,
-    context: MailMutationContext | undefined,
-): Promise<void> {
-    if (!context) return;
-    for (const key of context.coldKeys) {
-        await queryClient.cancelQueries({ queryKey: key });
-        queryClient.refetchQueries({ queryKey: key });
-    }
-}
-
-// Restore the lists and release the echo entry, so the next real event for the message refreshes.
 function rollbackMailMutation(queryClient: QueryClient, context: MailMutationContext | undefined): void {
-    if (!context) return;
-    for (const [key, data] of context.snapshot) queryClient.setQueryData(key, data);
-    consumeRecentMailMutation(context.event, context.messageId);
+    if (context) for (const [key, data] of context.snapshot) queryClient.setQueryData(key, data);
 }
 
 // Patch a row by id across every cached list (sidesteps the ''/'inbox'/case mailbox-key pitfalls).

@@ -131,12 +131,7 @@ re-fetched the whole mailbox. Four shipped changes fix it (measured on a dev Mac
    in the response only (the full body stays in the DB for FTS). Page size 200, max 500.
 2. **Optimistic cache updates.** move/read/flag/delete patch the cached pages by id (`patchEmailInLists`)
    inside an `onMutate` snapshot → patch → rollback-on-error contract, instead of invalidating. The UI is
-   instant; no mutation-path refetch. The one exception is a list still on its very first fetch (a
-   notification deep-link into a never-opened mailbox): `onMutate` leaves it fetching (only lists with
-   data are cancelled, so it never idles on "No emails found"), and `settleOptimisticMailMutation`
-   cancels and refetches it from `onSettled`, after the request landed. Its first page was requested
-   before the write and the echo below is already suppressed, so nothing else would correct it. A
-   rollback also releases the echo entry, so a failed request doesn't swallow the next real event.
+   instant; no mutation-path refetch.
 3. **Own-echo suppression.** The server echoes every mutation back to its originator over SSE. Each mutation
    records the echo it expects (`markRecentMailMutation`) in a short-TTL per-tab registry; the SSE handler
    `consumeRecentMailMutation`s it and skips the list refetch (keeping the cheap counts/search invalidations).
