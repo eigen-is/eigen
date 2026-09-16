@@ -145,16 +145,15 @@ export function DriveLayout({
         highlightHistory,
     };
 
-    const mobileShowDetail = !!(selectedPath || (currentPath && currentPath?.type !== 'folder'));
-    const pidInFolder = pid ? folderContents.some((p) => p.id === pid) : false;
-    const desktopShowDetail = !!(pidInFolder || (currentPath && currentPath?.type !== 'folder'));
-    const showDetail = isMobile ? mobileShowDetail : desktopShowDetail;
+    // A resolved `pid` shows its detail even when the list doesn't hold it: a share link or a
+    // reference chip lands on a list (shared-with-me) that may not contain the item itself.
+    const showDetail = !!(selectedPath || (currentPath && currentPath.type !== 'folder'));
 
     const detailToolbar = showDetail && detailPath ? <DriveDetailToolbar onClose={onBackToList} /> : null;
 
     return (
         <>
-            <ColumnLayout mobileColumn={mobileShowDetail ? 'detail' : 'list'}>
+            <ColumnLayout mobileColumn={showDetail ? 'detail' : 'list'}>
                 <Column id="list" width="flex" onBack="sidebar" toolbar={listToolbar}>
                     <DriveList {...listProps} />
                 </Column>
