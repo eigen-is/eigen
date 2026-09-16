@@ -25,12 +25,19 @@ import type { JSONContent } from '@tiptap/core';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
+import { VCARD_CONTENT_TYPE } from '@workspace/lib/constants/contact';
 import { MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
 import { DOCX_MIME } from '@workspace/lib/constants/mime';
 import { commentAssignedTag } from '@workspace/lib/notification/tags';
 import type { Attendee, EventData } from '@workspace/lib/types/calendar';
 import type { CommentCard } from '@workspace/lib/types/comments';
-import { DRIVE_MIME_FOLDER, DRIVE_TYPE_FOLDER, type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
+import {
+    DRIVE_MIME_FOLDER,
+    DRIVE_TYPE_FOLDER,
+    type DrivePath,
+    stripEigenExtension,
+    VCARD_MIMES,
+} from '@workspace/lib/types/drive';
 import { type AttachmentReference, toAttachmentReference } from '@workspace/lib/types/drive-reference';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import * as Y from 'yjs';
@@ -48,6 +55,7 @@ import {
     KANBAN,
     type LeadRole,
     MAILS,
+    type MailAttachment,
     NOTES,
     ORG_NAME,
     PERSONAL_SHARES,
@@ -60,6 +68,8 @@ import {
     TEAM_FOLDERS,
     TEAM_MOUNT_NAME,
     TEAM_NAME,
+    VCARD_FILES,
+    type VCardSpec,
 } from './demo/content';
 import { buildDeckDoc } from './demo/deck-build';
 import { buildVectorDoc } from './demo/vector-build';
@@ -127,6 +137,7 @@ async function buildRfc822(o: {
     messageId: string;
     inReplyTo?: string;
     references?: string[];
+    attachments?: { filename: string; contentType: string; content: string | Buffer }[];
 }): Promise<Buffer> {
     return new MailComposer({
         from: o.from,
@@ -138,6 +149,7 @@ async function buildRfc822(o: {
         messageId: `<${o.messageId}>`,
         inReplyTo: o.inReplyTo ? `<${o.inReplyTo}>` : undefined,
         references: o.references?.length ? o.references.map((r) => `<${r}>`) : undefined,
+        attachments: o.attachments,
     })
         .compile()
         .build();
@@ -218,6 +230,7 @@ async function main(): Promise<void> {
     const { pushTeamAvatar, sendToHome } = await import('../lib/home/home-relay');
     const { generateImagePreview } = await import('../lib/shared/thumbnails');
     const { renderAttachmentPills } = await import('../lib/core/mail-template');
+    const { createVCard } = await import('../lib/carddav/vcard-serialize');
     const { default: htmlToDocx } = await import('@turbodocx/html-to-docx');
 
     // Tiny quotas + no signups; local-id storage came from the setup call. Apply before any home
@@ -336,9 +349,14 @@ async function main(): Promise<void> {
         folderId.set(name, folder.id);
     }
 
-    const postTo = async (chatId: string, author: User, text: string): Promise<void> => {
+    const postTo = async (
+        chatId: string,
+        author: User,
+        text: string,
+        attachments?: AttachmentReference[],
+    ): Promise<void> => {
         const room = await teamDrive.getChat(teamMountId, chatId);
-        await room.postMessage(author, text);
+        await room.postMessage(author, text, 'message', undefined, undefined, attachments);
     };
 
     // Seeded team documents by content name, so chat lines can attach them as drive references.
@@ -375,6 +393,33 @@ async function main(): Promise<void> {
             bytes,
             userByKey.get(asset.uploader)!,
         );
+    }
+
+    // --- Contact cards: each spec through the shipped vCard writer, uploaded as a .vcf like any
+    // other file. The uid is deterministic, so a reseed writes the same card. ---
+    const seedVCard = (spec: VCardSpec): string =>
+        createVCard(
+            {
+                firstName: spec.firstName,
+                lastName: spec.lastName,
+                email: [spec.email],
+                phone: spec.phone ? [spec.phone] : [],
+                company: spec.company,
+                jobTitle: spec.jobTitle,
+                notes: spec.notes,
+            },
+            `demo-${spec.email}`,
+        );
+    for (const vcf of VCARD_FILES) {
+        const path = await teamDrive.createFileFromData(
+            teamMountId,
+            folderId.get(vcf.folder)!,
+            vcf.name,
+            VCARD_MIMES[0],
+            Buffer.from(seedVCard(vcf.card), 'utf8'),
+            userByKey.get(vcf.uploader)!,
+        );
+        teamDocs.set(vcf.name, path);
     }
 
     // --- Volunteer roster: a doc in volunteers/ listing every crew member with a link to their team
@@ -613,7 +658,7 @@ async function main(): Promise<void> {
         const chat = await teamDrive.create(teamMountId, boardChatFolder.id, card.chat, 'chat', cardAuthor);
         await postTo(chat.id, cardAuthor, card.chatText);
         for (const reply of card.chatReplies ?? []) {
-            await postTo(chat.id, userByKey.get(reply.author)!, reply.text);
+            await postTo(chat.id, userByKey.get(reply.author)!, reply.text, reply.attach?.map(teamDocRef));
         }
         cardChatNames.set(`card-${i + 1}`, chat.name);
     }
@@ -721,6 +766,15 @@ async function main(): Promise<void> {
         driveType: DRIVE_TYPE_FOLDER,
         mimeType: DRIVE_MIME_FOLDER,
     };
+    // Real MIME attachments: committed fixture bytes, or a vCard written by the shipped writer.
+    const mailAttachment = (attachment: MailAttachment) =>
+        'vcard' in attachment
+            ? { filename: attachment.filename, contentType: VCARD_CONTENT_TYPE, content: seedVCard(attachment.vcard) }
+            : {
+                  filename: attachment.filename,
+                  contentType: attachment.mimeType,
+                  content: readFileSync(join(FIXTURES_DIR, attachment.fixture)),
+              };
     for (const flow of MAILS) {
         if (flow.kind === 'inbox-thread') {
             const recipient = userByKey.get(resolvePersona(flow.to!).key)!;
@@ -731,7 +785,7 @@ async function main(): Promise<void> {
             let previousId: string | undefined;
             for (const message of flow.messages) {
                 const external = message.fromExternal;
-                const sender = external ? undefined : userByKey.get(message.from!)!;
+                const sender = external ? undefined : userByKey.get(resolvePersona(message.from!).key)!;
                 const from = external ? `${external.name} <${external.email}>` : `${sender!.name} <${sender!.email}>`;
                 const to = external
                     ? recipient.email
@@ -751,6 +805,7 @@ async function main(): Promise<void> {
                     messageId,
                     inReplyTo: previousId,
                     references: references.length ? references : undefined,
+                    attachments: message.attachments?.map(mailAttachment),
                 });
                 const deliveredId = await recipientHome.mail.mailboxDeliver(buffer);
                 // The persona's own replies in the thread belong in their Sent box, not their inbox
@@ -764,30 +819,46 @@ async function main(): Promise<void> {
                 previousId = messageId;
             }
         } else {
-            const sender = userForRole(flow.from!);
-            const message = flow.messages[0];
-            const date = new Date(now.getTime() - message.daysAgo * 86_400_000);
-            date.setHours(message.hour, 0, 0, 0);
-            const from = `${sender.name} <${sender.email}>`;
             const to = `${TEAM_NAME} <crew@${MAIL_DOMAIN}>`;
-            // Seeded bodies are HTML fragments (no <body>), so the pill just appends — the same
-            // outcome as the mail client's appendReferenceLinks fallback for a sent message.
-            const html =
-                flow.attachTeamDrive && message.html
-                    ? message.html + renderAttachmentPills([teamDriveRef])
-                    : message.html;
-            for (const persona of PERSONAS) {
-                const home = await getHome(userByKey.get(persona.key)!.id);
+            const references: string[] = [];
+            let previousId: string | undefined;
+            for (const message of flow.messages) {
+                const senderKey = resolvePersona(message.from!).key;
+                const sender = userByKey.get(senderKey)!;
+                const date = new Date(now.getTime() - message.daysAgo * 86_400_000);
+                date.setHours(message.hour, 0, 0, 0);
+                // Seeded bodies are HTML fragments (no <body>), so the pill just appends — the same
+                // outcome as the mail client's appendReferenceLinks fallback for a sent message.
+                const html =
+                    flow.attachTeamDrive && message.html
+                        ? message.html + renderAttachmentPills([teamDriveRef])
+                        : message.html;
+                // One Message-ID for the whole fan-out, like a real list mail: every persona holds a
+                // copy of the SAME message, and a reply only threads if it references that one id.
+                const messageId = `${randomUUID()}@${MAIL_DOMAIN}`;
                 const buffer = await buildRfc822({
-                    from,
+                    from: `${sender.name} <${sender.email}>`,
                     to,
-                    subject: flow.subject,
+                    subject: previousId ? `Re: ${flow.subject}` : flow.subject,
                     date,
                     text: message.text,
                     html,
-                    messageId: `${randomUUID()}@${MAIL_DOMAIN}`,
+                    messageId,
+                    inReplyTo: previousId,
+                    references: references.length ? references : undefined,
+                    attachments: message.attachments?.map(mailAttachment),
                 });
-                await home.mail.mailboxDeliver(buffer);
+                for (const persona of PERSONAS) {
+                    const home = await getHome(userByKey.get(persona.key)!.id);
+                    const deliveredId = await home.mail.mailboxDeliver(buffer);
+                    // The sender's own copy belongs in their Sent box, same as an inbox-thread reply.
+                    if (persona.key === senderKey) {
+                        await home.mail.messageMove(deliveredId, MAILBOX_SENT);
+                        await home.mail.messageSetRead(deliveredId, true);
+                    }
+                }
+                references.push(messageId);
+                previousId = messageId;
             }
         }
     }

@@ -29,6 +29,7 @@ import {
     SITE_PLAN,
     SPONSOR_DECK,
     TEAM_NAME,
+    VCARD_FILES,
 } from '../../scripts/demo/content';
 
 // Contract test for the demo-world seeder. The seeder relies on module-level singletons
@@ -156,6 +157,13 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             expect(existsSync(mailDb)).toBe(true);
             const mail = query<{ n: number }>(mailDb, 'SELECT count(*) AS n FROM emails');
             expect(mail[0].n).toBeGreaterThanOrEqual(1);
+            // Seeded attachments are real MIME parts, so the delivery parser flags the row — every
+            // persona holds the all-hands mail that carries the logo.
+            const withAttachments = query<{ n: number }>(
+                mailDb,
+                'SELECT count(*) AS n FROM emails WHERE hasAttachments = 1',
+            );
+            expect(withAttachments[0].n).toBeGreaterThanOrEqual(1);
 
             // Team drive: file history populated (actors were threaded through every mutation).
             const mountsDir = join(root, 'team', teamId!, 'mounts');
@@ -202,6 +210,22 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 const blob = join(mountsDir, mountId, 'data', asset.file);
                 expect(existsSync(blob)).toBe(true);
                 expect(statSync(blob).size).toBeGreaterThan(0);
+            }
+
+            // Team drive contact cards: each spec was serialized and uploaded as a real .vcf blob,
+            // which is also what a chat line attaches as a drive reference.
+            for (const card of VCARD_FILES) {
+                const cardFolder = query<{ id: string }>(
+                    metadataDb,
+                    `SELECT id FROM paths WHERE name = '${card.folder}' AND trashedAt IS NULL`,
+                );
+                expect(cardFolder.length).toBe(1);
+                const cardRows = query<{ file: string }>(
+                    metadataDb,
+                    `SELECT file FROM paths WHERE parentId = '${cardFolder[0].id}' AND name = '${card.name}' AND trashedAt IS NULL`,
+                );
+                expect(cardRows.length).toBe(1);
+                expect(statSync(join(mountsDir, mountId, 'data', cardRows[0].file)).size).toBeGreaterThan(0);
             }
 
             // Personal notes: the sampled persona's own drive has a "my notes" eigendoc container.

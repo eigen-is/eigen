@@ -132,6 +132,11 @@ demo settings (`guests.openSignup: false`, `defaultMountMaxSizeMB: 50`, `maxUplo
   Attribution + licensing in `demo/fixtures/images/CREDITS.md`.
 - **Branding in `branding/`.** `demo/fixtures/branding/*` (the festival logo) uploaded into a
   `branding/` team-drive folder the same way (`content.ts` `BRANDING`).
+- **Contact cards as `.vcf` files.** `content.ts` `VCARD_FILES` are vCard specs (`VCardSpec`, the same
+  shape a seeded address-book contact uses) the seeder serializes with the shipped `createVCard` and
+  uploads into a team-drive folder like any other file (`production/`, MIME `VCARD_MIMES[0]`, uid
+  `demo-<email>`). Each one registers under its name in the seeded-documents map, so a chat line or
+  card can `attach` it as a drive reference and the drive's vCard quick look has something to open.
 - **Portraits in `avatars/`.** `demo/fixtures/avatars/*.jpg` (one per persona plus the admin, keyed by
   `content.ts` `avatar`, credits in the folder's `CREDITS.md`) go through the real avatar upload +
   self-update path, so `pushUserProfile` writes `server/avatars/<id>.webp` and sets `user.image` exactly
@@ -143,8 +148,13 @@ demo settings (`guests.openSignup: false`, `defaultMountMaxSizeMB: 50`, `maxUplo
   relative to seed time) and `Home.mail.mailboxDeliver` indexes them into `mail.db`. Most personas get
   a dedicated `inbox-thread` with an external party; a persona's OWN replies in that thread are moved
   to their Sent box and marked read (`messageMove`/`messageSetRead`), so only genuinely inbound mail
-  stays in the inbox. All-hands mail lands in every persona's inbox. A message may carry `html`
-  (rendered as a real `multipart/alternative` list/paragraph body); an all-hands flow may set
+  stays in the inbox. All-hands mail is delivered into every persona's inbox, with ONE Message-ID per
+  message shared by every copy — a list mail is one message delivered many times, and only matching ids
+  let a later message in the flow thread onto it through `In-Reply-To`/`References`; the sender's own
+  copy moves to Sent and is marked read, exactly like an inbox-thread reply. A message may carry `html`
+  (rendered as a real `multipart/alternative` list/paragraph body) and `attachments` — either committed
+  fixture bytes (the logo `.svg`) or a `VCardSpec` serialized through `createVCard` — which land as real
+  MIME parts, so the mail client's attachment previews have something to open. An all-hands flow may set
   `attachTeamDrive` to append an "Open festival →" drive-reference pill (`renderAttachmentPills`)
   linking the shared team drive, the same pill the mail client bakes into a sent message.
 - **Comment cards written AND anchored.** For each seeded comment the seeder wraps the anchor phrase
