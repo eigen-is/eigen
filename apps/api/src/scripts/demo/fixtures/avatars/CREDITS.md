@@ -31,5 +31,5 @@ Downloaded face-cropped via the Unsplash CDN:
 | `sem.jpg` | Décor & art | Max Harlynking | https://unsplash.com/photos/man-in-black-and-white-long-sleeve-shirt-zaItO-b0afs |
 | `tessa.jpg` | Sound assistant | Filipp Romanovski | https://unsplash.com/photos/woman-in-black-scoop-neck-shirt-CGKYNN3uuVo |
 | `admin.jpg` | Admin | Lance Reis | https://unsplash.com/photos/a-man-with-a-beard-pp76Y6Fq6xw |
-| `hanna.jpg` | Hanna Groen (vCard, volunteer first aider) | TBD | TBD |
-| `ruud.jpg` | Ruud Dekker (vCard, Dekzeil & Zo) | TBD | TBD |
+| `hanna.jpg` | Hanna Groen (vCard, volunteer first aider) | Troy Spoelma | https://unsplash.com/photos/a-woman-with-long-brown-hair-smiling-at-the-camera-3paKXHWzsDw |
+| `ruud.jpg` | Ruud Dekker (vCard, Dekzeil & Zo) | Sophie Paterson | https://unsplash.com/photos/a-smiling-man-wearing-a-puffer-vest-outdoors-LE9Y6zXxHDw |
