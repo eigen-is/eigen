@@ -271,7 +271,8 @@ export function getDriveItemUrl(path: DriveItemRef, opts?: { card?: string; chat
     return url;
 }
 
-export function getDriveShareUrl(path: DrivePath): string {
+// Every item has a URL: an openable one, or Drive with the item's detail selected (plain files quick-look there).
+export function getDriveShareUrl(path: DriveItemRef): string {
     return (
         getDriveItemUrl(path) ?? getDriveAppUrl(`shared/with-me?pid=${path.id}&uid=${path.ownerId}&mid=${path.mountId}`)
     );
