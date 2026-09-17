@@ -31,6 +31,11 @@ describe('iMIP sender authentication (unit)', () => {
         ).toBe(true);
     });
 
+    test('a semicolon inside an OpenDKIM comment does not split the result', () => {
+        const header = `${authserv};\n\tdkim=pass (2048-bit key; unprotected) header.d=partner.com header.i=@partner.com`;
+        expect(request('alice@partner.com', header).verified).toBe(true);
+    });
+
     test('header.i is accepted in place of header.d', () => {
         expect(request('alice@partner.com', `${authserv}; dkim=pass header.i=@partner.com`).verified).toBe(true);
     });

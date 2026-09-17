@@ -27,9 +27,10 @@ export function domainsAligned(a: string, b: string): boolean {
 
 // Each `dkim=<result>` method segment in one Authentication-Results value, with its signing domain
 // (from `header.d`, else the domain part of `header.i`). One header can carry several DKIM results.
+// Comments go first: OpenDKIM writes `(2048-bit key; unprotected)`, and its ';' would split a result.
 function dkimResults(value: string): { result: string; domain: string | null }[] {
     const out: { result: string; domain: string | null }[] = [];
-    for (const segment of value.split(';')) {
+    for (const segment of value.replace(/\([^)]*\)/g, '').split(';')) {
         const result = /^\s*dkim\s*=\s*([a-z]+)/i.exec(segment);
         if (!result) continue;
         const d = /\bheader\.d\s*=\s*([^\s;()]+)/i.exec(segment);
