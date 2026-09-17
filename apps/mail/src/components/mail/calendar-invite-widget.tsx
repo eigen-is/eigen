@@ -3,7 +3,7 @@ import { formatEventWhen, getMonthRange, viewerTimeZone } from '@workspace/lib/c
 import type { CalendarInvite } from '@workspace/lib/types/mail';
 import { Button } from '@workspace/ui/components/button';
 import { cn } from '@workspace/ui/lib/utils';
-import { Calendar, ExternalLink } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 
 function buildCalendarLink(invite: CalendarInvite): string {
     if (!invite.uid) return getCalendarAppUrl();
@@ -64,10 +64,7 @@ export function CalendarInviteWidget({ invite }: CalendarInviteWidgetProps) {
                 {organizer && <p className="text-xs text-muted-foreground">Organizer: {organizer}</p>}
             </div>
             <Button variant="outline" size="sm" className="shrink-0" asChild>
-                <a href={buildCalendarLink(invite)} target="_blank" rel="noreferrer">
-                    View in Calendar
-                    <ExternalLink className="ml-1.5 h-3 w-3" />
-                </a>
+                <a href={buildCalendarLink(invite)}>View in Calendar</a>
             </Button>
         </div>
     );
