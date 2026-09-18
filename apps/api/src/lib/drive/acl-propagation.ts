@@ -8,6 +8,7 @@ import { sendToHome } from '../home/home-relay';
 import { addRegistryEntry } from '../share';
 import { getTeamMembers } from '../team';
 import { getUserByEmail } from '../user/';
+import { canonicalACLId } from './acl';
 
 // 'registered' skips the share email for entries that resolve to a registered user — mirror fan-out,
 // SSE and the in-app notification still fire, and an account-less email keeps the mail as its only
@@ -38,17 +39,18 @@ export async function resolveACLUserIds(ownerId: string, acls: DriveACL[]): Prom
     return ids;
 }
 
-// Canonical ACL diff (lowercased entry ids, all entry types). History details and
-// propagation both derive from this — one source of truth for "who was added/removed".
-export function diffACLEmails(
+// Canonical ACL diff (all entry types). History details and propagation both derive from this —
+// one source of truth for "who was added/removed". Ids go through canonicalACLId, the same rule
+// normalizeACL stores them under: blanket-lowercasing would emit a team id that resolves to nothing.
+export function diffACLPrincipals(
     oldACL: DriveACL[] | null,
     newACL: DriveACL[] | null,
 ): { added: string[]; removed: string[] } {
-    const oldEmails = new Set((oldACL ?? []).map((e) => e.id.toLowerCase()));
-    const newEmails = new Set((newACL ?? []).map((e) => e.id.toLowerCase()));
+    const oldIds = new Set((oldACL ?? []).map((e) => canonicalACLId(e.id)));
+    const newIds = new Set((newACL ?? []).map((e) => canonicalACLId(e.id)));
     return {
-        added: [...newEmails].filter((e) => !oldEmails.has(e)),
-        removed: [...oldEmails].filter((e) => !newEmails.has(e)),
+        added: [...newIds].filter((e) => !oldIds.has(e)),
+        removed: [...oldIds].filter((e) => !newIds.has(e)),
     };
 }
 
@@ -151,7 +153,7 @@ export async function propagateSharedPathChange(
 
     const suppress = options?.suppressShareEmail;
     if (actor && newACL && suppress !== 'all') {
-        const addedUserEmails = diffACLEmails(oldACL, newACL).added.filter((e) => parseOwnerId(e).type === 'user');
+        const addedUserEmails = diffACLPrincipals(oldACL, newACL).added.filter((e) => parseOwnerId(e).type === 'user');
         if (addedUserEmails.length > 0) {
             const settings = getServerSettings();
             for (const email of addedUserEmails) {

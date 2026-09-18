@@ -10,7 +10,6 @@ import {
     useUpdateEvent,
     viewerTimeZone,
 } from '@workspace/lib/calendar';
-import { useMyTeams } from '@workspace/lib/home';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { DeleteDialog } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -36,9 +35,9 @@ import {
     UsersRound,
     X as XIcon,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { AttendeeList } from './attendee-editor';
-import { resolveCalendarName } from './calendar-utils';
+import { useSharedCalendarLabel } from './calendar-utils';
 import { EditEventDialog } from './edit-event-dialog';
 import { rruleToText } from './recurrence-picker';
 import type { RecurringAction } from './recurring-action-dialog';
@@ -66,14 +65,15 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const createEvent = useCreateEvent(eventOwnerId);
     const updateEvent = useUpdateEvent(eventOwnerId);
     const rsvp = useRsvp(user?.id || '');
-    const { data: myTeams } = useMyTeams();
+    const sharedCalendars = useMemo(() => (sharedCalendar ? [sharedCalendar] : []), [sharedCalendar]);
+    const sharedCalendarLabel = useSharedCalendarLabel(sharedCalendars);
 
     if (!event) return null;
 
     const isRecurring = !!event.rrule;
     const isException = !!event.parentEventId;
     const isPartOfSeries = isRecurring || isException;
-    const calendarName = calendar?.name || (sharedCalendar ? resolveCalendarName(sharedCalendar, myTeams) : null);
+    const calendarName = calendar?.name || (sharedCalendar ? sharedCalendarLabel(sharedCalendar) : null);
     const isShared = !!sharedCalendar;
     const canEdit = !isShared || sharedCalendar?.permission === 'write';
     const isLinkedEvent = !!event.data?.organizer;

@@ -8,7 +8,6 @@ import {
     useUpdateCalendar,
     useUpdateSharedCalendar,
 } from '@workspace/lib/calendar';
-import { useMyTeams } from '@workspace/lib/home';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { SidebarBody, SidebarItem, SidebarSection, TooltipButton } from '@workspace/ui';
@@ -18,6 +17,7 @@ import { cn } from '@workspace/ui/lib/utils';
 import { CalendarDays, CalendarPlus, CalendarRange, Check, Pencil, Plus } from 'lucide-react';
 import { type MouseEvent, useMemo, useState } from 'react';
 import { CalendarConfigDialog } from './calendar-config-dialog';
+import { useSharedCalendarLabel } from './calendar-utils';
 import { CreateEventDialog } from './create-event-dialog';
 import { SharedCalendarConfigDialog } from './shared-calendar-config-dialog';
 
@@ -93,7 +93,6 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
     const ownerId = user?.id || '';
     const { data: calendars = [], isLoading: calendarsLoading } = useCalendars(ownerId);
     const { data: sharedCalendars = [], isLoading: sharedLoading } = useSharedCalendars(ownerId);
-    const { data: myTeams } = useMyTeams();
     const updateCalendar = useUpdateCalendar(ownerId);
     const updateSharedCalendar = useUpdateSharedCalendar(ownerId);
     const navigate = useNavigate();
@@ -120,10 +119,7 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
         return { personalShared: personal, teamShared: team };
     }, [sharedCalendars]);
 
-    const getTeamName = (ownerUserId: string) => {
-        const parsed = parseOwnerId(ownerUserId);
-        return myTeams?.find((t) => t.id === parsed.id)?.name || ownerUserId;
-    };
+    const sharedCalendarLabel = useSharedCalendarLabel(teamShared);
 
     const handleEditCalendar = (cal: CalendarItem) => {
         setConfigCalendar(cal);
@@ -225,7 +221,10 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                     {teamShared.length > 0 && (
                         <SidebarSection condensed={condensed} title="Team Calendars" loading={sharedLoading}>
                             {teamShared.map((sc) => {
-                                const display = { ...sc, calendarName: getTeamName(sc.ownerUserId) };
+                                const display = {
+                                    ...sc,
+                                    calendarName: sharedCalendarLabel(sc),
+                                };
                                 return (
                                     <CalendarRow
                                         key={sc.id}

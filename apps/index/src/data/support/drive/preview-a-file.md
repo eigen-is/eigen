@@ -6,7 +6,7 @@ category: Files
 tags: [drive, preview, files]
 related: [drive/get-started, drive/download-files]
 order: 60
-updated: 2026-09-14
+updated: 2026-09-18
 ---
 
 Drive can show you the contents of a file without opening a separate app or tab. Images, PDFs, videos, audio, text files, and contact files all have a built-in preview. Text files over 1 MB show the file card instead.
@@ -46,7 +46,7 @@ When the preview is open, you can move to the next or previous file without clos
 
 ## Download from the preview
 
-The bar at the bottom of the preview has a **Download** button that saves the file to your computer. For text and code files, there is also an **Open** button that opens the file in the editor in a new tab.
+The bar at the bottom of the preview has a **Download** button that saves the file to your computer. For text and code files, there is also an **Open** button that opens the file in the editor.
 
 Some files get extra buttons in the same bar:
 

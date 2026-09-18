@@ -24,10 +24,12 @@ eigendoc editors' *Activity* side panel (`ActivityPanel`, toggled from `Document
   avatar (`notification-badge.tsx`: app color + glyph from `EIGEN_DOC_ICONS`/`colorVar`,
   `--app-*-color` vars); panel rows don't — their context is already one item.
 - Unread (bell only): `bg-primary/5` tint, `font-medium` primary.
-- Bell rows navigate in the **same tab** (`window.location.assign` in `notification-bell.tsx`), like
-  the panels. Only the toast's **View** action opens a new tab (`window.open(url, '_blank',
-  'noopener')` in `packages/lib/src/core/notification/sse-handlers.ts`) — a toast can land while you
-  are working, so it must not take you away.
+- A plain click navigates in the **same tab** everywhere: the bell (`window.location.assign` in
+  `notification-bell.tsx`), the panels, and the toast's **View** action
+  (`packages/lib/src/core/notification/sse-handlers.ts`). Drive's *Recent activity* rows are real
+  `<a href>`s, so cmd/middle-click opens a new tab there — the user's choice, not a default. The bell
+  can't be one: its URL needs an async resolve, and its dismiss control can't nest inside an anchor.
+  The product-wide rule is in [LAYOUT.md § Opening Items and Links](LAYOUT.md#opening-items-and-links).
 
 ## Action-line rules
 
@@ -78,7 +80,7 @@ through `formatChatPreview`.
 | `chat-message` | `New message from Daan in "chat"` | message snippet * | — | chat room |
 | `comment-reply` | `Daan commented on "Doc"` | message snippet * | — | doc `?chat=` |
 | `access-request` | `Hanne requested access` | item name | request message | share dialog `?sharePathId=&shareEmail=` |
-| `file-event` | `${actor} ${lines.action}` via `describeFileEvent` | `lines.primary` * (comment events) | `lines.secondary` | item URL + `?card=`/`?chat=` from details; else `fs?pid=&showHistory=1` |
+| `file-event` | `${actor} ${lines.action}` via `describeFileEvent` | `lines.primary` * (comment events) | `lines.secondary` | item URL + `?card=`/`?chat=` from details; else `fs?pid=` (gated, see below) |
 
 ## File-event rows (activity panel)
 
@@ -93,7 +95,7 @@ limitation — resolving would cost a fetch per row).
 | `uploaded` | `uploaded "<name>"` | `uploaded` | — / item name | size | open item |
 | `edited` / `moved` / `copied` / `restored` | bare verb | bare verb | — / item name | — | open item |
 | `renamed` | `renamed` | `renamed` | `Old → New` | — | open item |
-| `acl-changed` | `updated sharing` | `updated sharing` | — / item name | `Added …` / `Removed …` | share dialog (`?sharePathId=`) |
+| `acl-changed` | `updated sharing` | `updated sharing` | — / item name | `Added …` / `Removed …` (team entries named, see below) | share dialog (`?sharePathId=`) |
 | `trashed` / `deleted` | bare verb | bare verb | — / item name | — | not clickable |
 | `version-restored` | `restored a version` | `restored a version of "<name>"` | version name | — | open item |
 | `commented` | `commented` | `commented on "<name>"` | `“preview”` * | — | doc `?chat=<chatName>` |
@@ -105,6 +107,10 @@ limitation — resolving would cost a fetch per row).
 | `reopened` | `reopened a comment` | `reopened a comment in "<name>"` | card title | — | doc `?chat=<chatName>` |
 
 `<assignee>` renders as `you` for the viewer, else the resolved display name (email local-part fallback).
+
+`acl-changed` secondaries list ACL principal ids. Emails render as-is; a `team_<id>` renders the team name and falls back to `UNRESOLVED_TEAM_LABEL` (`@workspace/lib/types/owner`) when it can't be resolved. Both sides go through the shared public resolver, which names users and teams alike: the panel through `usePublicUsers`, the server through `getBatchPublicInfo` before it composes the notification body (that body is persisted, so it can't be fixed at render time).
+
+The fs listing links (`?sharePathId=`, `?pid=`) need read access to the item's **parent** folder, which a viewer granted the item alone doesn't have. Link builders don't test for that: the fs route gets the authoritative 403 and redirects to `getDriveShareUrl` for the `?pid=` item, keeping *Request access* for a viewer who can't read that item either ([LAYOUT.md § Opening Items and Links](LAYOUT.md#opening-items-and-links)).
 
 ## Data
 

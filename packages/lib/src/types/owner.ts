@@ -4,6 +4,10 @@ export type OwnerType = 'user' | 'team' | 'org' | 'external' | 'invalid';
 
 export type ParsedOwnerId = { type: OwnerType; id: string };
 
+// Stands in for a team whose name the caller can't resolve — showing the raw `team_<id>` would
+// leak the id of a team they aren't a member of.
+export const UNRESOLVED_TEAM_LABEL = 'Team';
+
 export function parseOwnerId(ownerId: string): ParsedOwnerId {
     // `external_` must be checked before the email branch — `external_a@b.com`
     // is a syntactically valid email (the local-part allows '_'), so the email

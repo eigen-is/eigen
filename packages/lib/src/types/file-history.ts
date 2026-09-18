@@ -1,6 +1,7 @@
 import { formatChatPreview } from '../core/chat/format-preview';
 import { formatFileSize } from '../core/format';
 import { type DrivePathType, stripEigenExtension } from './drive';
+import { parseOwnerId, UNRESOLVED_TEAM_LABEL } from './owner';
 
 export type FileEventDetailsMap = {
     uploaded: { size: number };
@@ -118,6 +119,14 @@ export function toFileEventType(raw: string): FileEventType {
 
 export type ActivityLines = { action: string; primary?: string; secondary?: string };
 
+const isTeamPrincipal = (id: string) => parseOwnerId(id).type === 'team';
+
+// One source for the label below and both prefetchers, so no prefetch list can drift from what renders.
+export function aclPrincipalsToResolve(details: FileEvent['details'] | undefined): string[] {
+    if (!details || !('added' in details)) return [];
+    return [...new Set([...details.added, ...details.removed])].filter(isTeamPrincipal);
+}
+
 // One phrasing layer for the activity panel and file-event notifications; callers prepend
 // the actor ("You" / <UserNameCard/> / `${actor.name}`). ctx 'own' omits the item name (the
 // panel title shows it); 'container' names it. Details are read via `in`-narrowing since
@@ -125,7 +134,7 @@ export type ActivityLines = { action: string; primary?: string; secondary?: stri
 export function describeFileEvent(
     event: Pick<FileEvent, 'eventType' | 'details' | 'pathName' | 'pathType'>,
     ctx: 'own' | 'container',
-    opts?: { resolveName?: (email: string) => string | undefined; viewerEmail?: string },
+    opts?: { resolveName?: (idOrEmail: string) => string | undefined; viewerEmail?: string },
 ): ActivityLines {
     const name = stripEigenExtension(event.pathName);
     const container = ctx === 'container';
@@ -152,10 +161,14 @@ export function describeFileEvent(
             const d = details && 'added' in details ? details : null;
             let secondary: string | undefined;
             if (d) {
-                if (d.added.length && d.removed.length)
-                    secondary = `Added ${d.added.join(', ')} · removed ${d.removed.join(', ')}`;
-                else if (d.added.length) secondary = `Added ${d.added.join(', ')}`;
-                else if (d.removed.length) secondary = `Removed ${d.removed.join(', ')}`;
+                // An email reads fine as-is; an opaque `team_<id>` doesn't, so only teams get named.
+                const label = (id: string) =>
+                    isTeamPrincipal(id) ? (opts?.resolveName?.(id) ?? UNRESOLVED_TEAM_LABEL) : id;
+                const added = d.added.map(label).join(', ');
+                const removed = d.removed.map(label).join(', ');
+                if (d.added.length && d.removed.length) secondary = `Added ${added} · removed ${removed}`;
+                else if (d.added.length) secondary = `Added ${added}`;
+                else if (d.removed.length) secondary = `Removed ${removed}`;
             }
             return { action: 'updated sharing', primary: container ? name : undefined, secondary };
         }

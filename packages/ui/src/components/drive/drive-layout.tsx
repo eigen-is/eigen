@@ -31,7 +31,6 @@ export type DriveLayoutProps = {
     pid?: string;
     unreadPathIds?: Set<string>;
     emptyState?: React.ReactNode;
-    highlightHistory?: boolean;
 };
 
 export function DriveLayout({
@@ -53,7 +52,6 @@ export function DriveLayout({
     title,
     unreadPathIds,
     emptyState,
-    highlightHistory,
 }: DriveLayoutProps) {
     const { isMobile } = useLayout();
     const actions = useDriveLayoutDialogs({ ownerId, mountId, currentPath, capabilities, onAfterAction });
@@ -142,7 +140,6 @@ export function DriveLayout({
         onDuplicate: actions.onDuplicate,
         onExport: actions.onExport,
         onEmailCollaborators: actions.onEmailCollaborators,
-        highlightHistory,
     };
 
     const mobileShowDetail = !!(selectedPath || (currentPath && currentPath?.type !== 'folder'));

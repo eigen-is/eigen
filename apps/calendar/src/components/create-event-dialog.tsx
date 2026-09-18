@@ -6,7 +6,6 @@ import {
     useSharedCalendars,
     viewerTimeZone,
 } from '@workspace/lib/calendar';
-import { useMyTeams } from '@workspace/lib/home';
 import type { Attendee } from '@workspace/lib/types/calendar';
 import { Button } from '@workspace/ui/components/button';
 import {
@@ -36,9 +35,8 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
     const ownerId = user?.id || '';
     const { data: calendars = [] } = useCalendars(ownerId);
     const { data: sharedCalendars = [] } = useSharedCalendars(ownerId);
-    const { data: myTeams } = useMyTeams();
 
-    const calendarOptions = useCalendarOptions(ownerId, calendars, sharedCalendars, myTeams);
+    const calendarOptions = useCalendarOptions(ownerId, calendars, sharedCalendars);
 
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');

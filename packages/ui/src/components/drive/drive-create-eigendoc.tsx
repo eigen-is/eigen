@@ -1,4 +1,4 @@
-import { getDriveItemUrl } from '@workspace/lib/api';
+import { openDocument } from '@workspace/lib/api';
 import { useCreateDriveItem } from '@workspace/lib/drive';
 import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
 import { DriveLocationPicker } from './drive-location-picker';
@@ -19,7 +19,6 @@ type DriveCreateEigenDocProps = {
     defaultOwnerId?: string;
     defaultFolderId?: string;
     defaultMountId?: string;
-    openInNewTab?: boolean;
     onAfterCreate?: (path: DrivePath) => void;
 };
 
@@ -30,7 +29,6 @@ export function DriveCreateEigenDoc({
     defaultOwnerId,
     defaultFolderId,
     defaultMountId,
-    openInNewTab = true,
     onAfterCreate,
 }: DriveCreateEigenDocProps) {
     const createMutation = useCreateDriveItem(type);
@@ -44,11 +42,8 @@ export function DriveCreateEigenDoc({
             parentId: location.folderId,
             fileName: location.name.trim(),
         });
-        if (openInNewTab) {
-            const url = getDriveItemUrl(newPath);
-            if (url) window.open(url, '_blank');
-        }
         onAfterCreate?.(newPath);
+        openDocument(newPath);
     };
 
     return (

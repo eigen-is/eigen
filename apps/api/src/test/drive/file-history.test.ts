@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { describeFileEvent, type FileEvent, toFileEventType } from '@workspace/lib/types/file-history';
 import type { Notification } from '@workspace/lib/types/notification';
+import { UNRESOLVED_TEAM_LABEL } from '@workspace/lib/types/owner';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
@@ -128,6 +129,13 @@ describe('describeFileEvent', () => {
         // readonly, which is not assignable to FileEventDetailsMap['acl-changed'].string[].
         const e = { ...base, eventType: 'acl-changed' as const, details: { added: ['a@x.nl'], removed: ['b@x.nl'] } };
         expect(describeFileEvent(e, 'own').secondary).toBe('Added a@x.nl · removed b@x.nl');
+    });
+    test('acl-changed names team entries instead of leaking the owner id', () => {
+        const teamId = 'fjw1r9uihrwboyveczhbuowyegp4vaeg';
+        const e = { ...base, eventType: 'acl-changed' as const, details: { added: [`team_${teamId}`], removed: [] } };
+        expect(describeFileEvent(e, 'own', { resolveName: () => 'Design' }).secondary).toBe('Added Design');
+        // A team the viewer can't resolve stays unnamed rather than showing team_<id>.
+        expect(describeFileEvent(e, 'own').secondary).toBe(`Added ${UNRESOLVED_TEAM_LABEL}`);
     });
 });
 

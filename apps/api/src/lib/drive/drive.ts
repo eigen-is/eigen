@@ -67,7 +67,7 @@ import {
 import {
     type ACLPropagationOptions,
     addEffectiveMember,
-    diffACLEmails,
+    diffACLPrincipals,
     propagateSharedPathChange,
     resolveACLToEmails,
 } from './acl-propagation';
@@ -837,7 +837,7 @@ export default class Drive {
         await propagateSharedPathChange(updatedItem, oldACL, normalizedACL, actor ?? null, options);
         this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem);
         if (actor) {
-            const { added, removed } = diffACLEmails(oldACL, normalizedACL);
+            const { added, removed } = diffACLPrincipals(oldACL, normalizedACL);
             if (added.length || removed.length) {
                 await this.recordFileEvent(mountId, pathId, actor, {
                     eventType: 'acl-changed',

@@ -1,4 +1,11 @@
-import { driveApi, getCalendarAppUrl, getDriveAppUrl, getDriveItemUrl, getMailAppUrl } from '@workspace/lib/api';
+import {
+    driveApi,
+    getCalendarAppUrl,
+    getDriveAppUrl,
+    getDriveItemUrl,
+    getDriveShareUrl,
+    getMailAppUrl,
+} from '@workspace/lib/api';
 import { getMonthRange } from '@workspace/lib/calendar';
 import { isChatType, isCollabType } from '@workspace/lib/types/drive';
 import type { ChatNotificationThread, Notification } from '@workspace/lib/types/notification';
@@ -40,11 +47,7 @@ async function resolveDriveLink(parsed: ChatNotificationThread | null): Promise<
     if (response.error || !response.data) return getDriveAppUrl();
 
     const path = response.data;
-    const itemUrl = getDriveItemUrl(path, { chat: parsed.chatName });
-    if (itemUrl) return itemUrl;
-
-    // Regular files (images, PDFs, etc.) open in shared-with-me with the file pre-selected
-    return getDriveAppUrl(`shared/with-me?pid=${path.id}&uid=${path.ownerId}&mid=${path.mountId}`);
+    return getDriveItemUrl(path, { chat: parsed.chatName }) ?? getDriveShareUrl(path);
 }
 
 async function resolveAccessRequestLink(tag: string): Promise<string | null> {
@@ -122,16 +125,14 @@ export async function resolveNotificationLink(
             if (response.error || !response.data) return getDriveAppUrl();
             const path = response.data;
             // Only collab/chat types navigate directly into their app; plain files and folders
-            // land on the fs view with history open so the user sees what changed.
+            // land on the fs view with the item selected.
             if (isCollabType(path.type) || isChatType(path.type)) {
                 const cardId = details && 'cardId' in details ? details.cardId : undefined;
                 const chatName = details && 'chatName' in details ? details.chatName : undefined;
                 const itemUrl = getDriveItemUrl(path, { card: cardId, chat: chatName });
                 if (itemUrl) return itemUrl;
             }
-            return getDriveAppUrl(
-                `fs/${parsed.ownerId}/${parsed.mountId}/${path.parentId ?? path.id}?pid=${path.id}&showHistory=1`,
-            );
+            return getDriveAppUrl(`fs/${parsed.ownerId}/${parsed.mountId}/${path.parentId ?? path.id}?pid=${path.id}`);
         }
 
         default:

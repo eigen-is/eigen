@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { getDriveShareUrl } from '@workspace/lib/api';
 import { AppError } from '@workspace/lib/api-error';
 import { useAuth } from '@workspace/lib/auth';
 import { useUnreadChatIds } from '@workspace/lib/chat';
@@ -19,14 +20,13 @@ export const Route = createFileRoute('/_auth/fs/$ownerId/$mountId/$pathId')({
         const uid = typeof search.uid === 'string' ? search.uid : undefined;
         const sharePathId = typeof search.sharePathId === 'string' ? search.sharePathId : undefined;
         const shareEmail = typeof search.shareEmail === 'string' ? search.shareEmail : undefined;
-        const showHistory = search.showHistory === '1' || search.showHistory === true;
-        return { pid, uid, sharePathId, shareEmail, showHistory };
+        return { pid, uid, sharePathId, shareEmail };
     },
 });
 
 function DriveRoute() {
     const { ownerId, mountId, pathId } = Route.useParams();
-    const { pid, sharePathId, shareEmail, showHistory } = Route.useSearch();
+    const { pid, sharePathId, shareEmail } = Route.useSearch();
     const navigate = useNavigate();
     const { rootPath } = useContext(DriveContext);
     const { user } = useAuth();
@@ -51,10 +51,17 @@ function DriveRoute() {
         isLoading: isFolderContentLoading,
         error: isFolderContentLoadingError,
     } = useFolderContent(ownerId, mountId, skipDataFetch ? '' : pathId);
-    const { data: selectedPath = null } = usePathInfo(ownerId, mountId, pid);
+    const { data: selectedPath = null, isLoading: isSelectedPathLoading } = usePathInfo(ownerId, mountId, pid);
     const { data: currentPath = null } = usePathInfo(ownerId, mountId, pathId);
     const { data: shareTargetPath = null } = usePathInfo(ownerId, mountId, sharePathId || '');
     const shareDialogOpen = !!sharePathId && !!shareTargetPath;
+
+    // This listing needs the parent folder; a viewer shared only ?pid= can still open that item.
+    const isForbidden = isFolderContentLoadingError instanceof AppError && isFolderContentLoadingError.status === 403;
+    const selectedItemUrl = isForbidden && selectedPath ? getDriveShareUrl(selectedPath) : undefined;
+    useEffect(() => {
+        if (selectedItemUrl) window.location.replace(selectedItemUrl);
+    }, [selectedItemUrl]);
 
     // One capability set for menus, detail column and quick look; owners skip the permissions round trip.
     const isOwner = useIsEffectiveOwner(ownerId);
@@ -124,7 +131,8 @@ function DriveRoute() {
     }
 
     if (isFolderContentLoadingError) {
-        if (isFolderContentLoadingError instanceof AppError && isFolderContentLoadingError.status === 403) {
+        if (isForbidden) {
+            if (isSelectedPathLoading || selectedPath) return <LoadingState />;
             return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId} />;
         }
         return <EmptyState message="Encountering the null vector: a rendezvous with nothing at all." />;
@@ -149,7 +157,6 @@ function DriveRoute() {
                 onQuickLook={onQuickLook}
                 pid={pid}
                 unreadPathIds={unreadChatIds}
-                highlightHistory={showHistory}
             />
             {shareTargetPath && (
                 <DriveAccessDialog

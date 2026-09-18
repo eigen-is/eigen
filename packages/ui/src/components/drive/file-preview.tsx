@@ -9,7 +9,7 @@ import type { FileSubject, MailPartRef } from '@workspace/lib/types/file-subject
 import type { TextPreviewResult } from '@workspace/lib/types/preview';
 import { useFocusTrap } from '@workspace/ui/hooks/use-focus-trap';
 import { cn, IMAGE_CHECKERBOARD_STYLE } from '@workspace/ui/lib/utils';
-import { ChevronLeft, ChevronRight, ExternalLink, FolderDown, Loader2, X } from 'lucide-react';
+import { ArrowRight, ChevronLeft, ChevronRight, FolderDown, Loader2, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
 import { getFileIcon } from './file-presentation';
@@ -162,7 +162,7 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
             >
                 {openUrl && (
                     <FooterButton href={openUrl}>
-                        <ExternalLink className="size-3.5" />
+                        <ArrowRight className="size-3.5" />
                         Open
                     </FooterButton>
                 )}
@@ -322,12 +322,11 @@ function ProgressiveImage({
     );
 }
 
+// Anchor, not a button: a real href keeps cmd/middle-click opening a new tab when the user asks.
 function FooterButton({ href, children }: { href: string; children: React.ReactNode }) {
     return (
         <a
             href={href}
-            target="_blank"
-            rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white text-sm transition-colors"
         >
             {children}

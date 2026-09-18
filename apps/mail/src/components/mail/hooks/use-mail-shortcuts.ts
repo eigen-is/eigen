@@ -75,8 +75,9 @@ type UseMailShortcutsOptions = {
 // the same rows/cursor/selection the list renders. Inert unless opted in, and while composing or the
 // help overlay is open — except Delete/Backspace, which delete whether or not the set is on. The lib
 // auto-suppresses keys (and Shift combos) in inputs. Target priority is open conversation >
-// selection > cursor, except that a multi-row selection outranks the open conversation
-// (`openWins`); landing rules per the Phase 3 brief.
+// selection > cursor, except for the keys with a batch form (destructive, flag, mark), where a
+// selection naming anything but the open message outranks it (`openWins`); `[`/`]` and the reply
+// keys have no batch form and stay open-first. Landing rules per the Phase 3 brief.
 export function useMailShortcuts({
     orderedEmails,
     cursorIndex,
@@ -182,10 +183,10 @@ export function useMailShortcuts({
     // closures). `open` gates the open-conversation branch; cursorId is the cursored row's id.
     const open = !!openEmailId && !isComposing;
     const cursorId = cursorIndex >= 0 && cursorIndex < orderedEmails.length ? orderedEmails[cursorIndex].id : undefined;
-    // A plain row click both opens and selects, so shift/cmd-extending a selection always leaves a
-    // message open behind it. The user sees N rows marked and expects all N to act, so a multi-row
-    // selection outranks the open conversation for every key that resolves a target.
-    const openWins = open && selection.selectedCount <= 1;
+    // `o` and `x` move independently, so a one-row selection can name a different message than the open one.
+    const selectedRows = selection.selectedItems;
+    const selectionIsOpenOnly = selectedRows.length === 1 && selectedRows[0].id === openEmailId;
+    const openWins = open && (selectedRows.length === 0 || selectionIsOpenOnly);
 
     // Letters register uppercase — the matcher is case-insensitive, so 'J' fires on lowercase j.
 
@@ -251,8 +252,8 @@ export function useMailShortcuts({
             actOnOpenEmail(action);
             return;
         }
-        if (selection.selectedCount > 0) {
-            const ids = selection.selectedItems.map((e) => e.id);
+        if (selectedRows.length > 0) {
+            const ids = selectedRows.map((e) => e.id);
             if (action === 'archive') archiveEmailsByIds(ids);
             else if (action === 'spam') reportSpamByIds(ids);
             else deleteEmailsByIds(ids);
@@ -318,12 +319,12 @@ export function useMailShortcuts({
             if (s) setFlaggedById(openEmailId, !s.isFlagged, s.isFlagged);
             return;
         }
-        if (selection.selectedCount > 0) {
+        if (selectedRows.length > 0) {
             // Collapse the toggle to a single direction so ONE Undoable covers the whole batch: flag
             // all if any is unflagged, otherwise unflag all (matches the all-same cases exactly).
-            const flagged = selection.selectedItems.some((e) => !e.isFlagged);
+            const flagged = selectedRows.some((e) => !e.isFlagged);
             void setFlaggedByIds(
-                selection.selectedItems.map((e) => ({ id: e.id, currentFlagged: e.isFlagged })),
+                selectedRows.map((e) => ({ id: e.id, currentFlagged: e.isFlagged })),
                 flagged,
             );
             return;
@@ -352,9 +353,9 @@ export function useMailShortcuts({
             if (s) void setReadById(openEmailId, isRead, s.isRead);
             return;
         }
-        if (selection.selectedCount > 0) {
+        if (selectedRows.length > 0) {
             void setReadByIds(
-                selection.selectedItems.map((e) => ({ id: e.id, currentIsRead: e.isRead })),
+                selectedRows.map((e) => ({ id: e.id, currentIsRead: e.isRead })),
                 isRead,
             );
             return;

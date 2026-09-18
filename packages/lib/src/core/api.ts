@@ -242,18 +242,14 @@ function getDocumentUrl(path: DriveItemRef): string | undefined {
     return undefined;
 }
 
-export function openDocument(path: DrivePath, newTab: boolean = false) {
+// Same tab always. See LAYOUT.md § Opening Items and Links.
+export function openDocument(path: DriveItemRef) {
     const url = getDocumentUrl(path);
     if (!url) {
         console.warn('Cannot open document. Unsupported type:', path.type);
-        return false;
+        return;
     }
-    if (newTab) {
-        window.open(url, '_blank');
-    } else {
-        window.location.href = url;
-    }
-    return true;
+    window.location.href = url;
 }
 
 export function getDriveItemUrl(path: DriveItemRef, opts?: { card?: string; chat?: string }): string | undefined {

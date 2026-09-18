@@ -129,8 +129,8 @@ never pruned.
   row in `app-sidebar.tsx`; a read-only listing of everything the user watches, everywhere.
 - **Click-through** — `core/notification/resolve-link.ts` parses the `file-event` tag: collab and
   chat items open in their app (deep-linking the card when the event carries one); everything else
-  lands on the Drive view with `?showHistory=1`, which the route turns into `highlightHistory` and
-  scrolls *Recent activity* into view.
+  lands on the Drive view with the item selected; the route redirects to the item itself when the
+  viewer can't read the parent folder.
 - **Live refresh** — recording broadcasts `drive:file-history-updated` (`drive/sse-events.ts`) to
   the owner home *and* the effective members, since plain `drive:*` events only reach the owner
   home; `core/drive/sse-handlers.ts` invalidates the history keys on it.

@@ -6,7 +6,7 @@ category: Basics
 tags: [slides, presentation, editing, text, images]
 related: [slides/get-started, slides/add-slides, slides/insert-content]
 order: 20
-updated: 2026-09-11
+updated: 2026-09-18
 ---
 
 Create a presentation in Slides, place text and images onto a 16:9 canvas, and adjust everything from the properties panel on the right.
@@ -16,7 +16,7 @@ Create a presentation in Slides, place text and images onto a 16:9 canvas, and a
 1. Open [Slides](/slides).
 2. Click **New slide** in the sidebar. A dialog opens.
 3. Type a name for your presentation in the **Slide name** field.
-4. Click **Create**. The presentation opens in a new tab.
+4. Click **Create**. The presentation opens in Slides straight away.
 
 You can also create a presentation while you already have one open. Click **File** in the toolbar and choose **New slides**.
 

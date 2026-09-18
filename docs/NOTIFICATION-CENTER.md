@@ -154,8 +154,9 @@ Links are constructed client-side based on notification `type` and `tag`:
 - `mail` → `getMailAppUrl('box/inbox?mailId={id}')` when `details.mailId` is set (v2), else bare `box/inbox`
 - `file-event` → async: fetches `DrivePath`; collab/chat docs open in their app via `getDriveItemUrl()`, appending
   `?card={cardId}` or `?chat={chatName}` when `details` carries them (deep-links to the exact card / comment thread);
-  plain files and folders land on Drive at `/fs/{ownerId}/{mountId}/{parentId}?pid={pathId}&showHistory=1` (item
-  selected, details sidebar open, Recent Activity scrolled into view)
+  plain files and folders land on Drive at `/fs/{ownerId}/{mountId}/{parentId}?pid={pathId}` (item selected,
+  details sidebar open); that route needs read access to the parent folder, so for a watcher granted the item
+  alone it 403s and redirects to the item itself
 - `unshare` → not clickable (resource no longer accessible)
 
 Link resolution logic lives in `packages/lib/src/core/notification/resolve-link.ts`. No URLs stored in the
@@ -200,7 +201,7 @@ type SSEventNotificationCreated = {
 
 `title`/`body` feed the toast (`toast(title, { description: body })`); `notificationType` + `tag` let the toast's
 **View** action resolve the same target the bell uses (`resolveNotificationLink({ type, tag, details: null })`) and
-open it in a new tab. Still minimal — no full row, no `details` (so the View link uses only tag-derivable targets;
+open it in the same tab, like every other row. Still minimal — no full row, no `details` (so the View link uses only tag-derivable targets;
 `?card=`/`?mailId=` come from the fetched row in the bell). The list is fetched via API, not populated from SSE. A
 sibling `SSEventNotificationChanged` (`notification:changed`, bare `{ type }`) tells the bell to refetch its
 count/list without toasting (e.g. after a read or dismiss).

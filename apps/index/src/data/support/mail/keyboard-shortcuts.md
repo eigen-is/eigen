@@ -91,9 +91,9 @@ names.
 | **[** | Archive & older |
 | **z** | Undo last action |
 
-Archive, delete, report spam, star, and the two mark keys act on the message you have open. With nothing open they
-act on the messages you have selected, and failing that on the row under the cursor. When you have more than one
-message selected, they act on the whole selection, even with a message open.
+Archive, delete, report spam, star, and the two mark keys act on the messages you have selected, however many that
+is, and whether or not a message is open. With nothing selected they act on the message you have open, and failing
+that on the row under the cursor.
 
 The **Delete** and **Backspace** keys also send a message to the Trash, and they pick their target the same way.
 Those two are not part of the set above: they work whether or not the shortcuts are turned on.
