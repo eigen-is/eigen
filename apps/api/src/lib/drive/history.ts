@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { type DrivePath, type DrivePathType, isDocumentType } from '@workspace/lib/types/drive';
 import {
+    aclPrincipalsToResolve,
     describeFileEvent,
     type FileEvent,
     type FileEventInput,
@@ -13,6 +14,7 @@ import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { sendToHome } from '../home/home-relay';
 import type * as schema from '../mount/schema';
 import { fileEvents, paths, pathWatchers } from '../mount/schema';
+import { getBatchPublicInfo } from '../space/public';
 import { getMemberships, getUserById, type User } from '../user';
 import { canReadFromAncestors } from './acl';
 
@@ -207,6 +209,10 @@ export class FileHistory {
     ): Promise<void> {
         // Compose the row once through the shared phrasing layer (the same the activity panel
         // renders with): title = actor + action, body = primary content, details = link/secondary.
+        // The body is persisted, so the team names an acl-changed row shows are resolved here
+        // rather than at render time; describeFileEvent prints every other principal id verbatim.
+        const d = opts.details;
+        const names = await getBatchPublicInfo(aclPrincipalsToResolve(d));
         const lines = describeFileEvent(
             {
                 eventType: opts.eventType,
@@ -215,8 +221,8 @@ export class FileHistory {
                 pathType: opts.pathType,
             },
             'container',
+            { resolveName: (id) => names[id]?.name },
         );
-        const d = opts.details;
         const cardId = d && 'cardId' in d ? d.cardId : undefined;
         const chatName = d && 'chatName' in d ? d.chatName : undefined;
         // Concurrent + per-watcher isolated: delivery runs after the mutation committed, so one

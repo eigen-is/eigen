@@ -6,7 +6,7 @@ category: Sharing
 tags: [drive, notifications, watch, activity, collaboration]
 related: [drive/file-activity, drive/share-a-file]
 order: 140
-updated: 2026-09-13
+updated: 2026-09-18
 ---
 
 When you work on something with other people, you can ask Eigen to tell you when it changes. Watching a file or a
@@ -47,8 +47,7 @@ hear about it when someone else:
 You are never notified about your own changes. Repeated changes to the same file collapse into one notification
 rather than a new one each time.
 
-Click a notification to go to the item. For most changes this opens the file in Drive and scrolls its **Recent
-activity** into view, so you can see what happened. See
+Click a notification to go to the item. For most changes this opens the file in Drive with the file selected. See
 [See what happened to a file](/support/drive/file-activity).
 
 ## See everything you watch

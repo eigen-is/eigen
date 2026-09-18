@@ -6,7 +6,7 @@ category: Basics
 tags: [docs, editing, create, writing]
 related: [docs/format-text, docs/get-started]
 order: 20
-updated: 2026-09-13
+updated: 2026-09-18
 ---
 
 Docs is the document editor in Eigen. You can create a new document in seconds, write and format your content
@@ -17,8 +17,8 @@ in the browser, and share it with others when you're ready. Everything saves as 
 You can create a document from a few places.
 
 **From Docs:** click the **New doc** button in the sidebar. A dialog appears asking for a name and where
-to save the document. Type a name, choose a location, and click **Create**. The new document opens in a
-new tab.
+to save the document. Type a name, choose a location, and click **Create**. The new document opens in Docs
+straight away.
 
 **From Drive:** click the **New** button in the sidebar, then choose **New doc** from the dropdown.
 The same dialog appears.

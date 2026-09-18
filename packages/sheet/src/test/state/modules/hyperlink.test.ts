@@ -59,8 +59,10 @@ describe('goToLink scheme allowlist', () => {
         expect(calls).toEqual(['https://example.com']);
     });
 
-    test('opens links via _blank with noopener so the target cannot reach back through window.opener', () => {
+    test('opens links via _blank with noopener so the page cannot reach back through window.opener', () => {
+        // This one test is about WHERE a link opens, so it keeps every argument.
         const calls: (string | undefined)[][] = [];
+        previousWindow = g.window;
         g.window = { open: (...args: (string | undefined)[]) => void calls.push(args) };
         goToLink(webpageContext('https://example.com'), 0, 0, 'webpage', 'https://example.com', scrollEl);
         expect(calls).toEqual([['https://example.com', '_blank', 'noopener,noreferrer']]);

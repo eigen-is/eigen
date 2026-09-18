@@ -1,7 +1,8 @@
+import { usePublicUsers } from '@workspace/lib/public';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { cn } from '@workspace/ui/lib/utils';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 
 export type CalendarOption = {
     id: string;
@@ -34,34 +35,53 @@ export function eventPillStateClasses(
     );
 }
 
-export function resolveCalendarName(sc: SharedCalendar, teams?: { id: string; name: string }[]): string {
-    const parsed = parseOwnerId(sc.ownerUserId);
-    if (parsed.type === 'team') {
-        return teams?.find((t) => t.id === parsed.id)?.name || sc.calendarName;
-    }
-    return sc.calendarName;
+// The one place that decides what a shared calendar is called. Batched, so a team the viewer isn't
+// a member of still gets a name; an unresolved one keeps the calendar's own name, never `team_<id>`.
+export function useSharedCalendarLabel(sharedCalendars: SharedCalendar[]): (sc: SharedCalendar) => string {
+    const teamOwnerIds = useMemo(
+        () => [
+            ...new Set(
+                sharedCalendars
+                    .filter((sc) => parseOwnerId(sc.ownerUserId).type === 'team')
+                    .map((sc) => sc.ownerUserId),
+            ),
+        ],
+        [sharedCalendars],
+    );
+    const teams = usePublicUsers(teamOwnerIds);
+
+    return useCallback(
+        (sc: SharedCalendar) => {
+            if (parseOwnerId(sc.ownerUserId).type === 'team') {
+                return teams[sc.ownerUserId]?.name?.trim() || sc.calendarName;
+            }
+            return sc.calendarName;
+        },
+        [teams],
+    );
 }
 
 export function useCalendarOptions(
     ownerId: string,
     calendars: CalendarItem[],
     sharedCalendars: SharedCalendar[],
-    teams?: { id: string; name: string }[],
 ): CalendarOption[] {
+    const label = useSharedCalendarLabel(sharedCalendars);
+
     return useMemo(() => {
         const options: CalendarOption[] = calendars.map((c) => ({ id: c.id, name: c.name, color: c.color, ownerId }));
         for (const sc of sharedCalendars) {
             if (sc.permission === 'write') {
                 options.push({
                     id: sc.calendarId,
-                    name: resolveCalendarName(sc, teams),
+                    name: label(sc),
                     color: sc.color || sc.calendarColor,
                     ownerId: sc.ownerUserId,
                 });
             }
         }
         return options;
-    }, [calendars, sharedCalendars, ownerId, teams]);
+    }, [calendars, sharedCalendars, ownerId, label]);
 }
 
 // All-day events store midnight-UTC bounds with an exclusive end (day after the last day); timed events keep

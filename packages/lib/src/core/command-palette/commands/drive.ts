@@ -4,7 +4,7 @@ import { fileActionsFor } from '@workspace/lib/file-actions';
 import { subjectFromPath } from '@workspace/lib/file-subject';
 import type { Command, CommandContext } from '@workspace/lib/types/command-palette';
 import { isOpenable, stripEigenExtension } from '@workspace/lib/types/drive';
-import { Download, ExternalLink, Eye, Link, Mail, Pencil, Trash2, UserRoundPlus } from 'lucide-react';
+import { ArrowRight, Download, ExternalLink, Eye, Link, Mail, Pencil, Trash2, UserRoundPlus } from 'lucide-react';
 import { BASE_RANKS } from './base-ranks';
 
 // Selection-aware commands. They surface only when the palette has a non-empty
@@ -28,7 +28,7 @@ export const driveCommands: Command[] = [
         id: 'drive.open',
         title: 'Open',
         keywords: ['open'],
-        icon: ExternalLink,
+        icon: ArrowRight,
         baseRank: BASE_RANKS.DRIVE_OPEN,
         group: 'selection',
         availability: (ctx) =>
@@ -62,7 +62,7 @@ export const driveCommands: Command[] = [
             const item = ctx.selection?.items[0];
             if (!item) return;
             const url = getDriveItemUrl(item);
-            if (url) window.open(url, '_blank');
+            if (url) window.open(url, '_blank', 'noopener,noreferrer');
         },
     },
     {

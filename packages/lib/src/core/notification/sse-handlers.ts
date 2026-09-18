@@ -34,7 +34,7 @@ export function handleNotificationSSEvent(event: SSEvent, queryClient: QueryClie
                     onClick: () => {
                         resolveNotificationLink({ type: notificationType, tag, details: null })
                             .then((url) => {
-                                if (url) window.open(url, '_blank', 'noopener');
+                                if (url) window.location.assign(url);
                             })
                             .catch(() => {});
                     },

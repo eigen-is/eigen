@@ -420,7 +420,6 @@ export type DriveSearchParams = {
     mid?: string;
     sharePathId?: string;
     shareEmail?: string;
-    showHistory?: boolean;
 };
 
 export type DriveContextType = {

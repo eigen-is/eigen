@@ -349,6 +349,21 @@ Rules:
 - **Anything > 50 needs a comment** explaining why (current exceptions are `FilePreview`, the slides `PresentMode` overlay and the `abovePreview` Dialog prop).
 - **The sheet engine's `cellArea` is its own world** — overlays under it stay ≤ 30; portaled menus rely on shadcn's z-50 to land above.
 
+## Opening Items and Links
+
+The rule is **who started the navigation**, not where the link points. It is written this way so a user can predict it by looking: buttons in the UI navigate here, links in text open a new tab. A rule that depended on the destination's host would be invisible — two links that look identical would behave differently.
+
+**Navigation affordances navigate in the same tab.** A notification row and its SSE toast's **View**, activity and file-history rows, drive rows, Quick Look's **Open**, and creating a new document all mean "take me there". `openDocument()` (`packages/lib/src/core/api.ts`) has no new-tab branch, so the eigen-document open path can't drift; it covers the six eigen document types, and every other navigation affordance follows the rule by convention (`navigate()` for inline-editables, `window.location.href` in the drive and mail write hooks). Links aren't gated on access up front: the fs listing route needs read access to the item's **parent** folder, so when it 403s and the URL carries `?pid=`, it redirects to `getDriveShareUrl()` for that item — the destination knows the answer, the link builders would only be guessing. *Request access* still shows for a viewer who can't read the item either.
+
+**Links and chips inside content open a new tab, whatever they point at.** A URL typed into a chat message, a comment, a sticky card or an email is an aside while the user is mid-task, and so is the drive-reference chip rendered beside it — clicking either must not abandon the conversation they are reading. Enforced unconditionally in the sanitizer (`core/html-dom.ts`), chat's linkifier (`rich-content.tsx`), sheet cell hyperlinks, the docs and LightEditor Tiptap `Link` extensions, and `reference-attachment-chip.tsx`.
+
+Two further carve-outs on the same-tab side:
+
+- **The user asked for a new tab** — Drive's **Open in new tab** row and the `drive.open-in-new-tab` command. Prefer a real `<a href>` for a navigation affordance wherever the markup allows it — `DriveItemNameLink`, Quick Look's **Open**, and Drive's *Recent activity* rows (`ActivityRow` takes `href`, which wins over `onOpen`): an anchor lets cmd/middle-click open a new tab, so the user keeps the choice and the default matters less. A `div` driven by `window.location.assign` takes that choice away. Two things block it: a URL that needs an async resolve (the notification bell), and an interactive control in `trailing` — a `<button>` inside an `<a>` is invalid HTML.
+- **Genuinely external destinations** — downloads, the marketing site, exported HTML read outside the instance, and mail. Mail is deliberate twice over: our own share email is read in other clients as often as in Eigen Mail, and deriving "open in this tab" from a *stranger's* URL is exactly where an Eigen-looking phishing host would replace the reader's inbox.
+
+Open question, not yet decided: on touch, a new tab is harder to escape than on desktop, so the content rule may deserve a `pointer-coarse` exception ([MOBILE.md](MOBILE.md)).
+
 ## File Locations
 
 The shell itself lives in `packages/ui/src/components/layout/app/` (`app-shell.tsx`, `eigen-app.tsx`,

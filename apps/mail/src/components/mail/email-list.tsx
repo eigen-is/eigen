@@ -183,7 +183,7 @@ export function EmailList({
     const longPress = useLongPress(openAt);
 
     const contextIds = contextMenu.item
-        ? selection.selectedCount > 1
+        ? selection.selectedItems.length > 1
             ? selection.selectedItems.map((e) => e.id)
             : [contextMenu.item.id]
         : [];

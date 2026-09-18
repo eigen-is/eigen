@@ -5,7 +5,7 @@ type: troubleshooting
 tags: [drive, preview, permissions, access, troubleshooting]
 related: [drive/request-access, drive/preview-a-file, drive/use-the-trash]
 order: 210
-updated: 2026-09-13
+updated: 2026-09-18
 ---
 
 If clicking a file does nothing, shows an error, or gives you a "No preview available" message, one of a few
@@ -38,7 +38,7 @@ preview overlay shows **No preview available**.
 
 To work with the file:
 
-- Click **Open** in the footer of the preview to open it in a new tab, if applicable.
+- Click **Open** in the footer of the preview to open it in the editor, if applicable.
 - Right-click the file (or click its **⋮** button) and choose **Download** to save it to your computer, then
   open it with a suitable application.
 

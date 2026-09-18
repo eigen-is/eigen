@@ -97,7 +97,10 @@ export function DriveItemMenuItems({
                 </DropdownMenuItem>
             )}
             {href && (
-                <DropdownMenuItem onClick={run(() => window.open(href, '_blank'))} className="flex items-center">
+                <DropdownMenuItem
+                    onClick={run(() => window.open(href, '_blank', 'noopener,noreferrer'))}
+                    className="flex items-center"
+                >
                     <ExternalLink className="h-4 w-4 mr-2" />
                     Open in new tab
                 </DropdownMenuItem>

@@ -49,7 +49,6 @@ type DriveDetailProps = {
     allowDelete?: boolean;
     // The listing's own write capability, carried into the subject the menu and preview act on.
     canWrite?: boolean;
-    highlightHistory?: boolean;
 };
 
 export function DriveDetail({
@@ -67,7 +66,6 @@ export function DriveDetail({
     onEmailCollaborators,
     allowDelete,
     canWrite = true,
-    highlightHistory,
 }: DriveDetailProps) {
     const preview = useOptionalPreview();
     const subject = useMemo(() => (path ? subjectFromPath(path, canWrite) : null), [path, canWrite]);
@@ -149,7 +147,7 @@ export function DriveDetail({
                 <DetailsSection path={path} />
                 <h3 className="eigen-section-label mt-6 mb-2">Shared with</h3>
                 <DriveAccessList path={path} onShareClick={onShareClick} />
-                <RecentActivity path={path} highlight={highlightHistory} />
+                <RecentActivity path={path} />
             </div>
             {runner.dialogs}
         </div>

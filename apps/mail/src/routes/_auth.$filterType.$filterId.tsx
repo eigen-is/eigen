@@ -156,6 +156,13 @@ function MailRoute() {
         activeId: mailId,
     });
 
+    // The one seam every opener goes through (row click, `o`, `[`/`]`, auto-advance). Opening a row
+    // also makes it the selection, so the batch keys act on the message the user is reading.
+    const openEmail = (emailId: string) => {
+        selection.setSelection([emailId]);
+        actions.handleRowClick(emailId);
+    };
+
     // Gmail keyboard layer — opt-in via the space setting, inert while composing/editing a draft
     // or while the help overlay is open.
     const shortcutsEnabled = spaceSettings?.email?.keyboardShortcuts ?? false;
@@ -221,7 +228,7 @@ function MailRoute() {
         } else {
             void actions.moveEmailByIdOnly(id, action === 'archive' ? MAILBOX_ARCHIVE : MAILBOX_JUNK);
         }
-        if (landId) actions.handleRowClick(landId);
+        if (landId) openEmail(landId);
         else actions.navigateToList();
     };
 
@@ -249,7 +256,7 @@ function MailRoute() {
         helpOpen,
         shortcutsEnabled,
         openEmailId: mailId,
-        onRowClick: actions.handleRowClick,
+        onRowClick: openEmail,
         navigateToList: actions.navigateToList,
         navigateToMailbox: (targetFilterId: string) =>
             navigate({ to: Route.fullPath, params: { filterType: 'box', filterId: targetFilterId }, search: {} }),
@@ -354,7 +361,7 @@ function MailRoute() {
                                 hasMore={!isSearching && !!hasNextPage}
                                 isFetchingMore={isFetchingNextPage}
                                 onLoadMore={fetchNextPage}
-                                onRowClick={actions.handleRowClick}
+                                onRowClick={openEmail}
                                 activeRowId={mailId}
                                 // The same gate the shortcuts layer uses: while the inline composer owns
                                 // typing, the list must not grab or reclaim focus.

@@ -31,6 +31,7 @@ export function ReferenceAttachmentChip({ reference, onRemove, className }: Refe
                 mimeType: reference.mimeType,
             }),
             '_blank',
+            'noopener,noreferrer',
         );
     }
 

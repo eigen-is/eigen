@@ -1,6 +1,6 @@
-import { useMyTeams } from '@workspace/lib/home';
+import { useResolvedUser } from '@workspace/lib/public';
 import { useTeamMembers } from '@workspace/lib/team';
-import { parseOwnerId } from '@workspace/lib/types/owner';
+import { parseOwnerId, teamOwnerId } from '@workspace/lib/types/owner';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { cn } from '@workspace/ui/lib/utils';
@@ -65,13 +65,13 @@ export function OwnerInfoPopover({
 }
 
 function TeamMembersContent({ teamId }: { teamId: string }) {
-    const { data: teams } = useMyTeams();
-    const team = teams?.find((t) => t.id === teamId);
+    // The public resolver also names a team the viewer isn't a member of.
+    const { displayName } = useResolvedUser({ userId: teamOwnerId(teamId) });
     const { data: members = [] } = useTeamMembers(teamId);
 
     return (
         <CollapsibleUserList
-            title={team?.name ?? 'Team'}
+            title={displayName}
             count={members.length}
             collapseThreshold={Number.POSITIVE_INFINITY}
             summaryLines={[`${members.length} ${members.length === 1 ? 'member' : 'members'}`]}

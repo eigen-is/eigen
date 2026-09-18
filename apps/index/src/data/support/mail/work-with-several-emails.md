@@ -6,7 +6,7 @@ category: Basics
 tags: [mail, email, select, organize]
 related: [mail/archive-delete-spam, mail/move-email-between-folders, mail/get-started]
 order: 60
-updated: 2026-09-13
+updated: 2026-09-18
 ---
 
 When you have a stack of messages to tidy, you don't have to handle them one at a time. Select several in the
@@ -41,7 +41,7 @@ selected, not the one you clicked.
 - **Delete** sends the set to the Trash. The item shows the count, like **Delete 4 emails**.
 - **Move to folder** opens a list of your other mailboxes. Pick one to move the whole set there.
 
-With no message open, pressing **Delete** or **Backspace** sends the whole selection to the Trash as well.
+Pressing **Delete** or **Backspace** sends the whole selection to the Trash as well.
 
 Reply, Reply All, Forward, and Download only make sense for one message, so those appear in the menu only when a single
 message is selected.

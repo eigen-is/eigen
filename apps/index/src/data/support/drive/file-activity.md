@@ -7,7 +7,7 @@ tags: [drive, activity, history, collaboration, docs]
 related: [drive/watch-for-changes, drive/file-versions]
 crossSections: [docs]
 order: 130
-updated: 2026-09-13
+updated: 2026-09-18
 ---
 
 Eigen keeps a record of what happens to your files: who created one, who edited it, who changed the sharing, and
@@ -35,7 +35,7 @@ The wording follows the action:
 - **edited**, for a change inside a document, spreadsheet, presentation, board, or drawing.
 - **renamed**, with the old and new name.
 - **moved**, **copied**, **trashed**, or **deleted**.
-- **updated sharing**, with the people added or removed underneath.
+- **updated sharing**, with the people and teams added or removed underneath.
 - **restored a version**, with the name of the version.
 - **commented**, with a short preview of the comment.
 - **added a card**, **moved a card**, or **removed a card**, for a board in Stickies.

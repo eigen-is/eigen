@@ -6,6 +6,7 @@ import {
     type DriveVisibility,
     isCollabType,
 } from '@workspace/lib/types/drive';
+import { validateEmailAddress } from '@workspace/lib/validation';
 import type { User } from '../user';
 import type { Memberships } from '../user/';
 
@@ -71,15 +72,15 @@ export function matchesACL(
     return false;
 }
 
-// Merges an add/remove delta onto the current ACL: removals first (case-insensitive id match),
+// Merges an add/remove delta onto the current ACL: removals first (matched on canonicalACLId),
 // then upserts — re-adding an existing id replaces its entry, which is how permission changes
 // travel. The server-side merge is what makes concurrent sharers safe: a full-array replace
 // built from a stale client cache silently reverts other people's entries.
 export function mergeACLDelta(current: DriveACL[] | null, delta: DriveACLDelta): DriveACL[] {
-    const removed = new Set((delta.remove ?? []).map((id) => id.toLowerCase()));
-    const merged = (current ?? []).filter((entry) => !removed.has(entry.id.toLowerCase()));
+    const removed = new Set((delta.remove ?? []).map(canonicalACLId));
+    const merged = (current ?? []).filter((entry) => !removed.has(canonicalACLId(entry.id)));
     for (const entry of delta.add ?? []) {
-        const existing = merged.findIndex((e) => e.id.toLowerCase() === entry.id.toLowerCase());
+        const existing = merged.findIndex((e) => canonicalACLId(e.id) === canonicalACLId(entry.id));
         if (existing >= 0) {
             merged[existing] = entry;
         } else {
@@ -89,18 +90,18 @@ export function mergeACLDelta(current: DriveACL[] | null, delta: DriveACLDelta):
     return merged;
 }
 
+// The comparison form of an ACL entry id. Only emails are case-insensitive; every other entry
+// form (team, org, bare auth user id) is case-sensitive and lowercasing it resolves to nothing.
+export function canonicalACLId(id: string): string {
+    return validateEmailAddress(id) ? id.toLowerCase() : id;
+}
+
 export function normalizeACL(acl: DriveACL[] | null): DriveACL[] | null {
     if (!acl || acl.length === 0) {
         return null;
     }
 
-    return acl.map((a) => {
-        const parsed = parseOwnerId(a.id);
-        return {
-            ...a,
-            id: parsed.type === 'user' ? a.id.toLowerCase() : a.id,
-        };
-    });
+    return acl.map((a) => ({ ...a, id: canonicalACLId(a.id) }));
 }
 
 // Walk the ancestors list (root-first) to find the outermost collab container.
@@ -131,7 +132,7 @@ export function filterRedundantACL(
         if (ancestor.id === path.id) continue;
         if (ancestor.acl) {
             for (const entry of ancestor.acl) {
-                const key = entry.id.toLowerCase();
+                const key = canonicalACLId(entry.id);
                 if (!inherited.has(key)) {
                     inherited.set(key, { read: entry.read, write: entry.write });
                 }
@@ -154,7 +155,7 @@ export function filterRedundantACL(
         }
 
         if (!isRedundant) {
-            const inheritedPerms = inherited.get(entry.id.toLowerCase());
+            const inheritedPerms = inherited.get(canonicalACLId(entry.id));
             if (inheritedPerms) {
                 const readCovered = !entry.read || inheritedPerms.read;
                 const writeCovered = !entry.write || inheritedPerms.write;

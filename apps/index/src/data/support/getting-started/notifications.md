@@ -6,7 +6,7 @@ category: Basics
 tags: [notifications, bell, getting-started, alerts]
 related: [getting-started/your-first-steps, chat/notifications, drive/share-a-file]
 order: 5
-updated: 2026-09-13
+updated: 2026-09-18
 ---
 
 When someone shares a file with you, invites you to a meeting, or mentions you in a comment, Eigen tells you in
@@ -72,7 +72,7 @@ turns it off again. Everything you watch is listed under **Watched** in the Driv
 ## Pop-ups and the browser tab
 
 While you have Eigen open, a new notification also appears as a short pop-up in the corner of the screen. It
-shows the same title and preview, with a **View** button that opens the item in a new tab.
+shows the same title and preview, with a **View** button that opens the item.
 
 The browser tab title carries the count too. With three unread notifications a Drive tab reads
 `(3) eigen|drive>`, so you can leave Eigen in the background and still spot when something arrives.

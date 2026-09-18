@@ -12,7 +12,6 @@ import {
     useUpdateEvent,
     viewerTimeZone,
 } from '@workspace/lib/calendar';
-import { useMyTeams } from '@workspace/lib/home';
 import type { Attendee, CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { ConfirmDialog } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -56,11 +55,10 @@ export function EditEventDialog({
 
     const { data: fetchedCalendars = [] } = useCalendars(ownerId);
     const { data: fetchedSharedCalendars = [] } = useSharedCalendars(ownerId);
-    const { data: myTeams } = useMyTeams();
     const calendars = calendarsProp || fetchedCalendars;
     const sharedCalendars = sharedCalendarsProp || fetchedSharedCalendars;
 
-    const calendarOptions = useCalendarOptions(ownerId, calendars, sharedCalendars, myTeams);
+    const calendarOptions = useCalendarOptions(ownerId, calendars, sharedCalendars);
 
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
