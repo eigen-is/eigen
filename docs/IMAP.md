@@ -102,8 +102,7 @@ eigen.mail/
 against path traversal and special characters. `canonicalMailbox()` in `mail-domain.ts` normalizes case-insensitive
 input to canonical form.
 
-Mailbox membership is the only organization Eigen has. The `emailLabels`/`emailsToLabels` tables are
-**vestigial** — the v1 `CREATE TABLE` is the only place they appear; no code reads or writes them.
+Mailbox membership is the only organization Eigen has — there are no labels.
 
 ## Delivery Flow
 
@@ -223,4 +222,4 @@ the field is left out.
 
 - **Stale `tmp/` cleanup.** Per Maildir spec, files in `tmp/` older than 36 hours can be safely deleted. No
   housekeeping code exists.
-- **Labels.** The `emailLabels`/`emailsToLabels` tables exist in the v1 migration and nowhere else.
+- **Labels.** Mail has no labels at all; a message belongs to exactly one mailbox.
