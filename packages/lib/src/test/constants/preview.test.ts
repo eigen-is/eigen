@@ -21,6 +21,12 @@ describe('isSearchableTextFile', () => {
         expect(isSearchableTextFile('text/x-vcard', 'team.vcf')).toBe(true);
         expect(isSearchableTextFile('application/octet-stream', 'team.vcf')).toBe(true);
     });
+    // A calendar previews as its events, but its raw body carries the summaries and locations a search
+    // is looking for, so it keeps being indexed as text.
+    test('a calendar file is searchable, though it has no text preview', () => {
+        expect(isSearchableTextFile('text/calendar', 'festival.ics')).toBe(true);
+        expect(isSearchableTextFile('application/octet-stream', 'festival.ics')).toBe(true);
+    });
 });
 
 describe('getTextPreviewMode', () => {
@@ -46,5 +52,13 @@ describe('getBytesTextPreviewMode', () => {
         expect(getBytesTextPreviewMode('text/plain', 'notes.txt')).toBe('plaintext');
         expect(getBytesTextPreviewMode('application/json', 'data.json')).toBe('code');
         expect(getBytesTextPreviewMode('text/vcard', 'team.vcf')).toBeNull();
+    });
+    // A calendar reads as its events, never as its raw body: the text route answers for neither mime, so
+    // a path never carries two cached preview artifacts (pruneOldVersions is not format-scoped).
+    test('a calendar file has no text mode to be rendered under', () => {
+        expect(getBytesTextPreviewMode('text/calendar', 'festival.ics')).toBeNull();
+        expect(getBytesTextPreviewMode('text/calendar; method=REQUEST', 'invite.ics')).toBeNull();
+        expect(getBytesTextPreviewMode('application/octet-stream', 'festival.ics')).toBeNull();
+        expect(getTextPreviewMode('text/calendar', 'festival.ics')).toBeNull();
     });
 });

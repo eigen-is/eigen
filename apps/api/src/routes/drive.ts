@@ -1,7 +1,7 @@
 import { MAX_SEND_RECIPIENTS } from '@workspace/lib/constants/mail';
 import { type DriveAccessCheckResult, type DrivePath, isConvertTarget } from '@workspace/lib/types/drive';
 import type { FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
-import type { EmlPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
+import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { getUploadMaxSize } from '../lib/config/enforcement';
@@ -18,8 +18,10 @@ import { exportDocument } from '../lib/export/export-document';
 import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
 import {
     assertEmlPreviewable,
+    assertIcsPreviewable,
     assertVCardPreviewable,
     getEmlPreview,
+    getIcsPreview,
     getScreenPreview,
     getTextPreview,
     getVCardPreview,
@@ -385,6 +387,23 @@ export const driveRouter = new Elysia({ name: 'drive' })
             // filtered the body, so an EML_FORMAT bump has to reach a browser that already has one.
             if (result.stale) set.headers['Cache-Control'] = 'no-store';
             else set.headers['Cache-Control'] = 'private, no-cache';
+            return result.value;
+        },
+        { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
+    )
+    // An .ics answers with the events it holds — the overlay draws them as cards (PREVIEWS.md).
+    .get(
+        '/drive/:ownerId/:mountId/file/:pathId/ics-preview',
+        async ({ params, user, set }): Promise<IcsPreview> => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
+            assertIcsPreviewable(path.name, path.mimeType, path.size);
+
+            const result = await getIcsPreview(mount, path);
+            if (!result) throw new ApiError(404, 'No preview available');
+            // Stale-while-revalidate and the long max-age work exactly as they do for a text preview.
+            if (result.stale) set.headers['Cache-Control'] = 'no-store';
+            else setCacheHeaders(set, PREVIEW_MAX_AGE_SECONDS);
             return result.value;
         },
         { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },

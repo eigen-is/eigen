@@ -93,14 +93,16 @@ export function parseIcs(icsText: string): IcsParseResult {
 
     const vevents = comp.getAllSubcomponents('vevent');
 
-    // The timezone the recurring series is expanded in — the master VEVENT's DTSTART tz (the VEVENT
-    // without a RECURRENCE-ID). A UTC-Z RECURRENCE-ID / EXDATE (Exchange clients; Eigen's own tz-null
-    // exceptions) keys to a wall-clock date in THIS tz, not the exception's own (absent) tz (audit #8).
-    let seriesTz: string | null = null;
+    // The timezone each recurring series is expanded in — that UID's master VEVENT's DTSTART tz (the
+    // VEVENT without a RECURRENCE-ID). A UTC-Z RECURRENCE-ID / EXDATE (Exchange clients; Eigen's own
+    // tz-null exceptions) keys to a wall-clock date in THIS tz, not the exception's own (absent) tz
+    // (audit #8). Keyed by UID because a CalDAV resource holds one series but a previewed or imported
+    // file holds every series a calendar has, each in its author's own zone.
+    const seriesTzByUid = new Map<string, string | null>();
     for (const vevent of vevents) {
         if (vevent.getFirstProperty('recurrence-id')) continue;
-        seriesTz = propTzid(vevent.getFirstProperty('dtstart'));
-        break;
+        const uid = String(vevent.getFirstPropertyValue('uid') ?? '');
+        if (!seriesTzByUid.has(uid)) seriesTzByUid.set(uid, propTzid(vevent.getFirstProperty('dtstart')));
     }
 
     const results: ParsedEvent[] = [];
@@ -166,7 +168,7 @@ export function parseIcs(icsText: string): IcsParseResult {
         if (recurrenceId) {
             const rid = recurrenceId.getFirstValue() as ICAL.Time | string | null;
             if (rid instanceof ICAL.Time) {
-                recurrenceDate = icalTimeToRecurrenceKey(rid, seriesTz ?? tzid);
+                recurrenceDate = icalTimeToRecurrenceKey(rid, seriesTzByUid.get(uid) ?? tzid);
                 if (!rid.isDate && rid.zone === ICAL.Timezone.utcTimezone) {
                     recurrenceInstant = rid.toJSDate();
                 }

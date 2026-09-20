@@ -1,9 +1,10 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
+import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants/preview';
-import { DRIVE_MIME_SLIDES, EML_MIME } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_SLIDES, EML_MIME, ICS_MIME } from '@workspace/lib/types/drive';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
 import { getHome } from '../../lib/home/get-home';
 import { Mount } from '../../lib/mount/mount';
@@ -709,6 +710,103 @@ describe('eml preview route', () => {
 
     test('a file the caller cannot read is not previewed', async () => {
         const uploaded = await uploadEml('private.eml', MESSAGE);
+        const ctx = await getTestContext();
+
+        const res = await authedRequest(ctx.bob.user.sessionToken, previewUrl(uploaded.id));
+        expect(res.status).toBe(403);
+    });
+});
+
+// An .ics previews as the events it holds, served as JSON the overlay renders (PREVIEWS.md). The parse
+// is covered in ics-preview.test.ts; this pins what the route answers.
+describe('ics preview route', () => {
+    let token: string;
+    let ownerId: string;
+    const mountId = 'default';
+    let rootId: string;
+
+    const CALENDAR = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//Eigen//Test//EN',
+        'BEGIN:VEVENT',
+        'UID:festival@eigen',
+        'DTSTART;VALUE=DATE:20260920',
+        'DTEND;VALUE=DATE:20260922',
+        'SUMMARY:Harvest festival',
+        'LOCATION:Market square',
+        'ATTACH:https://tracker.example/agenda.pdf',
+        'END:VEVENT',
+        'END:VCALENDAR',
+        '',
+    ].join('\r\n');
+
+    beforeAll(async () => {
+        const ctx = await getTestContext();
+        token = ctx.alice.user.sessionToken;
+        ownerId = ctx.alice.user.id;
+        const root = await driveGet(token, ownerId, mountId, 'root');
+        rootId = root.id;
+    });
+
+    async function uploadIcs(name: string, content: string) {
+        const file = new File([content], name, { type: ICS_MIME });
+        return await driveUpload(token, ownerId, mountId, rootId, file);
+    }
+
+    const previewUrl = (pathId: string) => `/drive/${ownerId}/${mountId}/file/${pathId}/ics-preview`;
+
+    test('serves the events a calendar holds, with bare dates for an all-day one', async () => {
+        const uploaded = await uploadIcs('festival.ics', CALENDAR);
+
+        const res = await authedRequest(token, previewUrl(uploaded.id));
+        expect(res.status).toBe(200);
+        expect(res.headers.get('cache-control')).toContain('max-age=');
+        const data = await res.json();
+        expect(data.total).toBe(1);
+        expect(data.dropped).toBe(0);
+        expect(data.events[0]).toMatchObject({
+            uid: 'festival@eigen',
+            title: 'Harvest festival',
+            location: 'Market square',
+            // Date-shaped strings, not Dates: the route is read through the no-revival treaty.
+            start: '2026-09-20',
+            end: '2026-09-22',
+            allDay: true,
+        });
+        // Nothing the file points at rides along, so the card fetches nothing.
+        expect(JSON.stringify(data)).not.toContain('tracker.example');
+    });
+
+    test('a file over the ceiling is refused before its bytes are read', async () => {
+        // The stored size is what the route admits on, so a small file claiming a large one still 413s.
+        const bytes = Buffer.from(CALENDAR);
+        const seed = await uploadIcs('seed-for-ics-mount.ics', CALENDAR);
+        const home = await getHome(ownerId);
+        const { mount } = await home.drive.resolveFile(mountId, seed.id);
+        const hugeId = await mount.createFile(rootId, 'huge.ics', ICS_MIME, ICS_MAX_BYTES + 1, bytes);
+
+        const res = await authedRequest(token, previewUrl(hugeId));
+        expect(res.status).toBe(413);
+    });
+
+    test('a file that is not a calendar is refused outright', async () => {
+        const file = new File(['ford prefect'], 'notes.txt', { type: 'text/plain' });
+        const uploaded = await driveUpload(token, ownerId, mountId, rootId, file);
+
+        const res = await authedRequest(token, previewUrl(uploaded.id));
+        expect(res.status).toBe(400);
+    });
+
+    test('a file the parser refuses answers 422, never a crash', async () => {
+        const uploaded = await uploadIcs('garbage.ics', 'this is not iCalendar at all');
+
+        const res = await authedRequest(token, previewUrl(uploaded.id));
+        expect(res.status).toBe(422);
+    });
+
+    test('a file the caller cannot read is not previewed', async () => {
+        const uploaded = await uploadIcs('private.ics', CALENDAR);
         const ctx = await getTestContext();
 
         const res = await authedRequest(ctx.bob.user.sessionToken, previewUrl(uploaded.id));

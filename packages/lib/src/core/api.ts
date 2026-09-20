@@ -71,6 +71,12 @@ export const emlPreviewRoute = (ownerId: string, mountId: string, pathId: string
     plainApi.drive({ ownerId })({ mountId }).file({ pathId })['eml-preview'];
 export const mailEmlPreviewRoute = (ownerId: string, messageId: string, index: number) =>
     plainApi.mail({ ownerId }).message({ id: messageId }).attachment({ index }).preview.eml;
+// The .ics pair too: an all-day event's `start` is a bare YYYY-MM-DD, and an event titled after a date
+// is a string the card prints — Eden's reviver would hand the card a Date for either.
+export const icsPreviewRoute = (ownerId: string, mountId: string, pathId: string) =>
+    plainApi.drive({ ownerId })({ mountId }).file({ pathId })['ics-preview'];
+export const mailIcsPreviewRoute = (ownerId: string, messageId: string, index: number) =>
+    plainApi.mail({ ownerId }).message({ id: messageId }).attachment({ index }).preview.ics;
 export const mailApi = api.mail;
 export const publicApi = api.p;
 export const driveApi = api.drive;

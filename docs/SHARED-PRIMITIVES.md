@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1484 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1494 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -480,7 +480,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (350)
+## Types (352)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -725,6 +725,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PreviewMode` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
 | `SubjectInfo` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
 | `EmlPreview` | `@workspace/lib/types/preview` | packages/lib/src/types/preview.ts |
+| `IcsPreview` | `@workspace/lib/types/preview` | packages/lib/src/types/preview.ts |
+| `IcsPreviewEvent` | `@workspace/lib/types/preview` | packages/lib/src/types/preview.ts |
 | `TextPreviewResult` | `@workspace/lib/types/preview` | packages/lib/src/types/preview.ts |
 | `VCardPreview` | `@workspace/lib/types/preview` | packages/lib/src/types/preview.ts |
 | `Snapshot` | `@workspace/lib/types/versioning` | packages/lib/src/types/versioning.ts |
@@ -835,7 +837,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (685)
+## Utilities & constants (693)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -904,10 +906,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getSupportUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getVectorAppUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `homeApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `icsPreviewRoute` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `INDEX_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `MAIL_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `mailApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `mailEmlPreviewRoute` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `mailIcsPreviewRoute` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `mailVCardPreviewRoute` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `notificationApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `openDocument` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
@@ -1041,6 +1045,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getFontFamily` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `getFontName` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `getTextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
+| `ICS_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/calendar.ts |
+| `ICS_PREVIEW_MAX_ATTENDEES` | `@workspace/lib/constants` | packages/lib/src/constants/calendar.ts |
+| `ICS_PREVIEW_MAX_DESCRIPTION_CHARS` | `@workspace/lib/constants` | packages/lib/src/constants/calendar.ts |
+| `ICS_PREVIEW_MAX_EVENTS` | `@workspace/lib/constants` | packages/lib/src/constants/calendar.ts |
 | `IMPORT_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
 | `IMPORT_MAX_CARDS` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
 | `INDICATOR_RED` | `@workspace/lib/constants` | packages/lib/src/constants/comment-indicator.ts |
@@ -1206,6 +1214,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `externalOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `getEigenDocInfoByMime` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `getEigenDocInfoByType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `ICS_MIME` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `IMIP_METHODS` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `isAttachmentReference` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `isCalendarPart` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
@@ -1219,6 +1228,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isEmlFile` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isExternalOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `isFolderType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `isIcsFile` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isImageMime` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isInlineEditable` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isOpenable` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |

@@ -3,7 +3,9 @@ import {
     api,
     contactsApi,
     emlPreviewRoute,
+    icsPreviewRoute,
     mailEmlPreviewRoute,
+    mailIcsPreviewRoute,
     mailVCardPreviewRoute,
     vcardPreviewRoute,
 } from '../../core/api';
@@ -102,6 +104,7 @@ describe('API date parsing', () => {
             attachments: [],
             droppedAttachments: 0,
         };
+        // One Response per call: a body reads once, and both routes read the same preview.
         spyOn(globalThis, 'fetch')
             .mockResolvedValueOnce(Response.json(preview))
             .mockResolvedValueOnce(Response.json(preview));
@@ -113,6 +116,45 @@ describe('API date parsing', () => {
             expect(response.error).toBeNull();
             expect(response.data?.date).toBe('2026-08-15T10:30:00.000Z');
             expect(response.data?.date).not.toBeInstanceOf(Date);
+        }
+    });
+
+    test('keeps the .ics preview dates and a date-shaped title strings on both routes', async () => {
+        const preview = {
+            events: [
+                {
+                    uid: 'holiday@eigen',
+                    // A summary that looks like a date is a title, and the card prints it.
+                    title: '2026-09-20',
+                    description: null,
+                    location: null,
+                    start: '2026-09-20',
+                    end: '2026-09-22',
+                    allDay: true,
+                    timezone: null,
+                    rrule: null,
+                    status: 'confirmed',
+                    organizer: null,
+                    attendees: [],
+                    droppedAttendees: 0,
+                },
+            ],
+            dropped: 0,
+            total: 1,
+        };
+        // One Response per call: a body reads once, and both routes read the same preview.
+        spyOn(globalThis, 'fetch')
+            .mockResolvedValueOnce(Response.json(preview))
+            .mockResolvedValueOnce(Response.json(preview));
+
+        const drive = await icsPreviewRoute('owner-1', 'm1', 'p1').get({ query: {} });
+        const mail = await mailIcsPreviewRoute('owner-1', 'msg-1', 0).get();
+
+        for (const response of [drive, mail]) {
+            expect(response.error).toBeNull();
+            expect(response.data?.events[0]?.title).toBe('2026-09-20');
+            expect(response.data?.events[0]?.start).toBe('2026-09-20');
+            expect(response.data?.events[0]?.start).not.toBeInstanceOf(Date);
         }
     });
 

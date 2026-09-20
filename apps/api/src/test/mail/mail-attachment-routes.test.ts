@@ -1,10 +1,11 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants/preview';
-import { EML_MIME } from '@workspace/lib/types/drive';
+import { EML_MIME, ICS_MIME } from '@workspace/lib/types/drive';
 import type { EmailSummary } from '@workspace/lib/types/mail';
-import type { EmlPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
+import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
@@ -18,6 +19,8 @@ const ODD_NAME = 'räp"ort.txt';
 const ATTACHED_SUBJECT = 'Attached message fixture';
 const OVERSIZE_SUBJECT = 'Oversize vCard fixture';
 const OVERSIZE_TEXT_SUBJECT = 'Oversize text fixture';
+const INVITE_SUBJECT = 'Invitation fixture';
+const OVERSIZE_ICS_SUBJECT = 'Oversize calendar fixture';
 const NOTES_BODY = 'First line.\r\n\r\nSecond paragraph.';
 // A sender names the parts, so one named after a preview route must still download as its own bytes.
 const SHADOW_NAMED_BODY = 'bytes, not a preview';
@@ -600,6 +603,166 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
             const res = await authedRequest(ctx.bob.user.sessionToken, emlPreviewUrl(0));
             expect(res.status).toBe(403);
         });
+    });
+
+    // An invitation rides along as a text/calendar part, which the reader draws as its own widget: it
+    // previews as the events it holds, through the renderer the Drive route ends in.
+    describe('a calendar part', () => {
+        let inviteId: string;
+        const icsPreviewUrl = (index: number): string =>
+            `/mail/${ctx.alice.user.id}/message/${inviteId}/attachment/${index}/preview/ics`;
+
+        beforeAll(async () => {
+            const boundary = 'att-invite';
+            const invite = [
+                'BEGIN:VCALENDAR',
+                'VERSION:2.0',
+                'METHOD:REQUEST',
+                'BEGIN:VEVENT',
+                'UID:invite@external.com',
+                'DTSTART:20260420T140000Z',
+                'DTEND:20260420T150000Z',
+                'SUMMARY:Design review',
+                'ORGANIZER;CN=Ada Lovelace:mailto:ada@external.com',
+                'ATTACH:https://tracker.example/agenda.pdf',
+                'END:VEVENT',
+                'END:VCALENDAR',
+            ].join('\r\n');
+            const eml = [
+                'From: sender@external.com',
+                `To: ${ctx.alice.user.email}`,
+                `Subject: ${INVITE_SUBJECT}`,
+                'MIME-Version: 1.0',
+                `Content-Type: multipart/mixed; boundary="${boundary}"`,
+                '',
+                `--${boundary}`,
+                'Content-Type: text/plain; charset=utf-8',
+                '',
+                'Please join.',
+                `--${boundary}`,
+                // A sender names the part's purpose in the type's parameters and gives it no filename at
+                // all, so the mime is everything the route's guard has to go on.
+                `Content-Type: ${ICS_MIME}; method=REQUEST; charset=utf-8`,
+                '',
+                invite,
+                `--${boundary}`,
+                'Content-Type: text/plain; charset=utf-8',
+                'Content-Disposition: attachment; filename="note.txt"',
+                '',
+                'Not a calendar.',
+                `--${boundary}--`,
+            ].join('\r\n');
+
+            const deliverRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/mail/deliver/${ctx.alice.user.email}`,
+                { method: 'POST', body: new TextEncoder().encode(eml).buffer },
+            );
+            expect(deliverRes.status).toBe(200);
+
+            const listRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/mailbox/inbox`,
+            );
+            const list = await assertJson<EmailSummary[]>(listRes);
+            inviteId = findOrFail(list, (m) => m.subject === INVITE_SUBJECT).id;
+        });
+
+        test('previews as the events it holds, with nothing the file points at', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken, icsPreviewUrl(0));
+            const preview = await assertJson<IcsPreview>(res);
+
+            expect(preview.method).toBe('REQUEST');
+            expect(preview.total).toBe(1);
+            expect(preview.events[0]?.title).toBe('Design review');
+            expect(preview.events[0]?.start).toBe('2026-04-20T14:00:00.000Z');
+            expect(preview.events[0]?.organizer?.email).toBe('ada@external.com');
+            expect(JSON.stringify(preview)).not.toContain('tracker.example');
+        });
+
+        test('revalidates on every use and answers If-None-Match with 304', async () => {
+            const first = await authedRequest(ctx.alice.user.sessionToken, icsPreviewUrl(0));
+            expect(first.headers.get('cache-control')).toBe('private, no-cache');
+            const etag = first.headers.get('etag') ?? '';
+            expect(etag).not.toBe('');
+
+            const revalidated = await authedRequest(ctx.alice.user.sessionToken, icsPreviewUrl(0), {
+                headers: { 'if-none-match': etag },
+            });
+            expect(revalidated.status).toBe(304);
+            expect(revalidated.headers.get('etag')).toBe(etag);
+        });
+
+        // The renderer's format tag rides in the ETag, so a payload fix is not answered with a 304 on a
+        // message whose own bytes never changed.
+        test('carries a different ETag than the bytes of the same part', async () => {
+            const preview = await authedRequest(ctx.alice.user.sessionToken, icsPreviewUrl(0));
+            const bytes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/message/${inviteId}/attachment/0/attachment-1`,
+            );
+
+            expect(preview.headers.get('etag')).not.toBe(bytes.headers.get('etag'));
+            const stale = await authedRequest(ctx.alice.user.sessionToken, icsPreviewUrl(0), {
+                headers: { 'if-none-match': bytes.headers.get('etag') ?? '' },
+            });
+            expect(stale.status).toBe(200);
+        });
+
+        test('a part that is not a calendar is refused by the ics preview', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken, icsPreviewUrl(1));
+            expect(res.status).toBe(400);
+        });
+
+        test("another user's message is refused with 403", async () => {
+            const res = await authedRequest(ctx.bob.user.sessionToken, icsPreviewUrl(0));
+            expect(res.status).toBe(403);
+        });
+    });
+
+    test('a calendar part past the preview ceiling is refused with 413', async () => {
+        const boundary = 'att-oversize-ics';
+        const filler = 'DESCRIPTION:'.concat('x'.repeat(ICS_MAX_BYTES / 8), '\r\n');
+        const bigCalendar = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:huge@eigen',
+            'DTSTART:20260420T140000Z',
+            filler.repeat(9),
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+        const eml = [
+            'From: sender@external.com',
+            `To: ${ctx.alice.user.email}`,
+            `Subject: ${OVERSIZE_ICS_SUBJECT}`,
+            'MIME-Version: 1.0',
+            `Content-Type: multipart/mixed; boundary="${boundary}"`,
+            '',
+            `--${boundary}`,
+            `Content-Type: ${ICS_MIME}; charset=utf-8`,
+            'Content-Disposition: attachment; filename="huge.ics"',
+            '',
+            bigCalendar,
+            `--${boundary}--`,
+        ].join('\r\n');
+
+        const deliverRes = await authedRequest(ctx.alice.user.sessionToken, `/mail/deliver/${ctx.alice.user.email}`, {
+            method: 'POST',
+            body: new TextEncoder().encode(eml).buffer,
+        });
+        expect(deliverRes.status).toBe(200);
+
+        const listRes = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox/inbox`);
+        const list = await assertJson<EmailSummary[]>(listRes);
+        const bigId = findOrFail(list, (m) => m.subject === OVERSIZE_ICS_SUBJECT).id;
+
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/mail/${ctx.alice.user.id}/message/${bigId}/attachment/0/preview/ics`,
+        );
+        expect(res.status).toBe(413);
     });
 
     test('a vCard part past the import ceiling is refused with 413', async () => {

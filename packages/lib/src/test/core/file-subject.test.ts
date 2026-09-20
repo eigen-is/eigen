@@ -8,7 +8,7 @@ import {
     getMailAttachmentUrl,
 } from '../../core/api';
 import { getPreviewMode, subjectFromMailAttachment, subjectFromPath, subjectInfo } from '../../core/file-subject';
-import { type DrivePath, type DrivePathType, EML_MIME } from '../../types/drive';
+import { type DrivePath, type DrivePathType, EML_MIME, ICS_MIME } from '../../types/drive';
 import type { FileSubject } from '../../types/file-subject';
 
 function path(p: Partial<DrivePath> & { name: string; type: DrivePathType }): DrivePath {
@@ -125,6 +125,9 @@ describe('getPreviewMode', () => {
             expect(getPreviewMode(subject('forwarded.eml', EML_MIME))).toBe('eml');
             // An exporter that names the file but not the type is still a message.
             expect(getPreviewMode(subject('forwarded.eml', 'application/octet-stream'))).toBe('eml');
+            expect(getPreviewMode(subject('festival.ics', 'text/calendar'))).toBe('ics');
+            // A calendar part names its purpose in the type's parameters and often carries no filename.
+            expect(getPreviewMode(subject('attachment-1', 'text/calendar; method=REQUEST'))).toBe('ics');
         }
     });
 
@@ -133,6 +136,12 @@ describe('getPreviewMode', () => {
     test('a message has no text mode to be rendered under', () => {
         expect(getBytesTextPreviewMode(EML_MIME, 'forwarded.eml')).toBeNull();
         expect(getTextPreviewMode(EML_MIME, 'forwarded.eml')).toBeNull();
+    });
+
+    // Same rule for a calendar, whose mime would otherwise read as code and cache a second artifact.
+    test('a calendar has no text mode to be rendered under', () => {
+        expect(getBytesTextPreviewMode(ICS_MIME, 'festival.ics')).toBeNull();
+        expect(getTextPreviewMode(ICS_MIME, 'festival.ics')).toBeNull();
     });
 
     // A mime is the uploader's or the sender's word; only a real container earns the document modes,

@@ -1,4 +1,5 @@
 import type { ImipMethod } from '@workspace/lib/types/calendar';
+import { ICS_MIME } from '@workspace/lib/types/drive';
 import nodemailer from 'nodemailer';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import type Mail from 'nodemailer/lib/mailer';
@@ -101,7 +102,7 @@ export function buildMailOptions(message: OutboundMail): Mail.Options {
         const icsBase64 = icsBuffer.toString('base64');
         options.alternatives = [
             {
-                raw: `Content-Type: text/calendar; charset=utf-8; method=${message.icalEvent.method}\r\nContent-Transfer-Encoding: base64\r\n\r\n${icsBase64}`,
+                raw: `Content-Type: ${ICS_MIME}; charset=utf-8; method=${message.icalEvent.method}\r\nContent-Transfer-Encoding: base64\r\n\r\n${icsBase64}`,
             },
         ];
         options.attachments = [

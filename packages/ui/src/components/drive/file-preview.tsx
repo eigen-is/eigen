@@ -143,9 +143,10 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
                     {previewMode === 'vcard' && subject.mail && (
                         <MailVCardPreviewContent part={subject.mail} size={info.size} />
                     )}
-                    {/* The .eml renderers land with the rest of the message quick look; until then a
-                        message shows the file card its bytes showed before it had a mode of its own. */}
-                    {(previewMode === 'fallback' || previewMode === 'eml') && (
+                    {/* The .eml and .ics renderers land with the rest of their quick looks; until then a
+                        message or a calendar shows the file card its bytes showed before it had a mode
+                        of its own. */}
+                    {(previewMode === 'fallback' || previewMode === 'eml' || previewMode === 'ics') && (
                         <div className="flex flex-col items-center gap-4 text-white">
                             {getFileIcon(info.mimeType, drive?.type ?? 'file', info.name, {
                                 className: 'size-16 text-muted-foreground',
