@@ -1,14 +1,10 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { ICS_IMPORT_MAX_EVENTS, ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
-import type {
-    CalendarEvent,
-    CalendarEventOccurrence,
-    CalendarItem,
-    ImportEventsResult,
-} from '@workspace/lib/types/calendar';
+import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { type DrivePath, EML_MIME, ICS_MIME } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
+import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
@@ -143,7 +139,7 @@ describe('Calendar transfer routes', () => {
             vevent(`plain-3-${stamp}@other`, 'Demo', '20260404T090000Z', '20260404T100000Z'),
         );
 
-        const result = await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file));
+        const result = await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file));
         expect(result).toEqual({ imported: 3, skipped: 0, failed: 0 });
 
         const listed = await april();
@@ -191,12 +187,12 @@ describe('Calendar transfer routes', () => {
             vevent(`twice-2-${stamp}@other`, 'Again', '20260405T110000Z', '20260405T120000Z'),
         );
 
-        expect(await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file))).toEqual({
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
             imported: 2,
             skipped: 0,
             failed: 0,
         });
-        expect(await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file))).toEqual({
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
             imported: 0,
             skipped: 2,
             failed: 0,
@@ -208,12 +204,12 @@ describe('Calendar transfer routes', () => {
         const stamp = randomUUID();
         const file = feed(vevent(`elsewhere-${stamp}@other`, 'Only once', '20260406T090000Z', '20260406T100000Z'));
 
-        expect(await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file))).toEqual({
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
             imported: 1,
             skipped: 0,
             failed: 0,
         });
-        expect(await assertJson<ImportEventsResult>(await importRequest(alice, secondCalendarId, file))).toEqual({
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, secondCalendarId, file))).toEqual({
             imported: 0,
             skipped: 1,
             failed: 0,
@@ -244,7 +240,7 @@ describe('Calendar transfer routes', () => {
             'END:VCALENDAR',
         ].join('\r\n');
 
-        expect(await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file))).toEqual({
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
             imported: 1,
             skipped: 0,
             failed: 0,
@@ -337,7 +333,7 @@ describe('Calendar transfer routes', () => {
             vevent(`fine-2-${stamp}@other`, 'Fine two', '20260409T130000Z', '20260409T140000Z'),
         );
 
-        expect(await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file))).toEqual({
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
             imported: 2,
             skipped: 0,
             failed: 1,
@@ -354,7 +350,7 @@ describe('Calendar transfer routes', () => {
             vevent(`forward-${stamp}@other`, 'Forwards', '20260410T140000Z', '20260410T150000Z'),
         );
 
-        expect(await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file))).toEqual({
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
             imported: 1,
             skipped: 0,
             failed: 1,
@@ -373,7 +369,7 @@ describe('Calendar transfer routes', () => {
             vevent(uidB, 'Standup B moved', '20260416T140000Z', '20260416T143000Z', ['RECURRENCE-ID:20260416T100000Z']),
         );
 
-        expect(await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file))).toEqual({
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
             imported: 2,
             skipped: 0,
             failed: 0,
@@ -389,6 +385,34 @@ describe('Calendar transfer routes', () => {
         // The override of one series must not have re-titled the same day in the other.
         expect(findOrFail(seriesA, (e) => e.occurrenceDate === '2026-04-16').title).toBe('Standup A');
         expect(findOrFail(seriesB, (e) => e.occurrenceDate === '2026-04-15').title).toBe('Standup B');
+    });
+
+    // One occurrence is one exception row, whichever writer made it: a CalDAV PUT of a file with two
+    // VEVENTs for the same RECURRENCE-ID converges on the last one, so an import lands there in one pass.
+    test('two VEVENTs for one occurrence store one exception row, the last one', async () => {
+        const uid = `dupe-override-${randomUUID()}@other`;
+        const file = feed(
+            vevent(uid, 'Daily', '20260601T090000Z', '20260601T093000Z', ['RRULE:FREQ=DAILY;COUNT=3']),
+            vevent(uid, 'First write', '20260602T140000Z', '20260602T150000Z', ['RECURRENCE-ID:20260602T090000Z']),
+            vevent(uid, 'Last write', '20260602T160000Z', '20260602T170000Z', ['RECURRENCE-ID:20260602T090000Z']),
+        );
+
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
+            imported: 1,
+            skipped: 0,
+            failed: 0,
+        });
+
+        const home = await getHome(alice.id);
+        const rows = home.calendar.getRawEvents(calendarId).filter((e) => e.uid === uid && e.recurrenceDate);
+        expect(rows.length).toBe(1);
+        expect(rows[0]?.title).toBe('Last write');
+
+        const series = (await calendarRange(calendarId, '2026-06-01T00:00:00Z', '2026-06-05T23:59:59Z')).filter(
+            (e) => e.uid === uid,
+        );
+        expect(series.length).toBe(3);
+        expect(findOrFail(series, (e) => e.occurrenceDate === '2026-06-02').title).toBe('Last write');
     });
 
     test('a series of overrides is one broadcast, and every occurrence matches a CalDAV PUT of the same file', async () => {
@@ -408,7 +432,7 @@ describe('Calendar transfer routes', () => {
         );
 
         const sse = collectSSE(alice.id);
-        const result = await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file));
+        const result = await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file));
         sse.stop();
         expect(result).toEqual({ imported: 1, skipped: 0, failed: 0 });
         expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENT_CREATED).length).toBe(1);
@@ -441,7 +465,7 @@ describe('Calendar transfer routes', () => {
             vevent(uid, 'Traversal', '20260901T090000Z', '20260901T093000Z', ['RRULE:FREQ=DAILY;COUNT=3']),
             vevent(uid, 'Traversal moved', '20260902T110000Z', '20260902T113000Z', ['RECURRENCE-ID:20260902T090000Z']),
         );
-        expect(await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file))).toEqual({
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
             imported: 1,
             skipped: 0,
             failed: 0,
@@ -484,7 +508,7 @@ describe('Calendar transfer routes', () => {
             vevent(wholeUid, 'Whole event', '20260801T100000Z', '20260801T103000Z'),
         );
 
-        expect(await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file))).toEqual({
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
             imported: 1,
             skipped: 0,
             failed: 1,
@@ -564,7 +588,7 @@ describe('Calendar transfer routes', () => {
 
         const sse = collectSSE(alice.id);
         const started = Date.now();
-        const result = await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file));
+        const result = await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file));
         const elapsed = Date.now() - started;
         sse.stop();
 
@@ -671,6 +695,39 @@ describe('Calendar transfer routes', () => {
         expect((await april()).length).toBe(before);
     });
 
+    // iCalendar is UTF-8 (RFC 5545 §3.1), the same fact a vCard import answers on: the file is refused for
+    // its encoding, not lumped in with bytes that are no calendar at all.
+    test('a raw import that is not UTF-8 says so, like a vCard import does', async () => {
+        const before = (await april()).length;
+        // 0xE9 is "é" in Windows-1252 and an invalid UTF-8 byte — the shape of an older client's export.
+        const head = new TextEncoder().encode(
+            'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:latin1@other\r\nSUMMARY:Caf',
+        );
+        const tail = new TextEncoder().encode(
+            '\r\nDTSTART:20260427T090000Z\r\nDTEND:20260427T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n',
+        );
+
+        const res = await importRequest(alice, calendarId, new Blob([new Uint8Array([...head, 0xe9, ...tail])]));
+        expect(res.status).toBe(400);
+        expect(await res.text()).toContain('UTF-8');
+        expect((await april()).length).toBe(before);
+    });
+
+    test('import-from-drive on a file that is not UTF-8 is refused the same way', async () => {
+        const head = new TextEncoder().encode(
+            'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:latin1-drive@other\r\nSUMMARY:Caf',
+        );
+        const tail = new TextEncoder().encode(
+            '\r\nDTSTART:20260427T090000Z\r\nDTEND:20260427T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n',
+        );
+        const file = new File([new Uint8Array([...head, 0xe9, ...tail])], 'latin1.ics', { type: ICS_MIME });
+        const uploaded = await driveUpload(alice.sessionToken, alice.id, mountId, rootId, file);
+
+        const res = await importFromDrive(alice, calendarId, uploaded);
+        expect(res.status).toBe(400);
+        expect(await res.text()).toContain('UTF-8');
+    });
+
     test('a body over ICS_MAX_BYTES is 413 before the body is read', async () => {
         // The body is not a calendar (a 400 if it were ever parsed), so a 413 can only come from the
         // Content-Length check that runs first.
@@ -686,9 +743,30 @@ describe('Calendar transfer routes', () => {
             feed(vevent(`drive-${stamp}@other`, 'From Drive', '20260425T090000Z', '20260425T100000Z')),
         );
 
-        const result = await assertJson<ImportEventsResult>(await importFromDrive(alice, calendarId, uploaded));
+        const result = await assertJson<ImportCountsResult>(await importFromDrive(alice, calendarId, uploaded));
         expect(result).toEqual({ imported: 1, skipped: 0, failed: 0 });
         expect((await april()).some((e) => e.uid === `drive-${stamp}@other`)).toBe(true);
+    });
+
+    // A file of a thousand events writes a row apiece before the route answers, so it exempts itself from
+    // the server-wide idle timeout the way the raw import and both contacts imports do.
+    test('import-from-drive exempts its request from the idle timeout', async () => {
+        const uploaded = await uploadIcs(
+            feed(vevent(`timeout-${randomUUID()}@other`, 'Long run', '20260428T090000Z', '20260428T100000Z')),
+        );
+        // app.handle() runs with no server, so the route's `server?.timeout` is a no-op in tests: give the
+        // app a real one to observe the call, and take it away again.
+        const server = Bun.serve({ port: 0, fetch: () => new Response('') });
+        app.server = server;
+        const timeout = spyOn(server, 'timeout');
+        try {
+            expect((await importFromDrive(alice, calendarId, uploaded)).status).toBe(200);
+            expect(timeout.mock.calls.map(([, seconds]) => seconds)).toEqual([0]);
+        } finally {
+            timeout.mockRestore();
+            app.server = null;
+            server.stop(true);
+        }
     });
 
     test('import-from-drive on a file that is not an .ics is 400', async () => {

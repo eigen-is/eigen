@@ -1,5 +1,6 @@
 import { MAIL_PREVIEW_CHARS, MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
 import { canonicalMailbox, MAILBOX_DRAFTS, MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
+import { NOT_AN_EMAIL_FILE } from '@workspace/lib/constants/transfer';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import {
     type AddressObject,
@@ -19,7 +20,7 @@ import {
 } from '@workspace/lib/types/mail';
 import { type SSEventMail, SSEventType } from '@workspace/lib/types/sse';
 import { processInboundImip, summarizeCalendarInvite } from '../calendar/imip';
-import { enforceMailAndContactsQuota, invalidateMailSize } from '../config/enforcement';
+import { enforceMailAndContactsQuota } from '../config/enforcement';
 import { isDemo } from '../config/env';
 import { isInternalAddress } from '../config/server-config';
 import { ApiError, isSafePathSegment } from '../core';
@@ -144,16 +145,15 @@ export class Mail {
         try {
             parsed = parseMail(bytes);
         } catch {
-            throw new ApiError(400, 'Not an email file');
+            throw new ApiError(400, NOT_AN_EMAIL_FILE);
         }
         // Any bytes parse as a body; only an envelope header makes them a message.
         if (!parsed.from && !parsed.date && parsed.subject === undefined && !parsed.messageId) {
-            throw new ApiError(400, 'Not an email file');
+            throw new ApiError(400, NOT_AN_EMAIL_FILE);
         }
         await enforceMailAndContactsQuota(this.home.user.id, bytes.byteLength);
 
         const id = await this.store.append('', bytes, { arrival: false });
-        invalidateMailSize(this.home.user.id);
         return { id };
     }
 

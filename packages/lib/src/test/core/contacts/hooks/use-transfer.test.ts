@@ -2,7 +2,7 @@
 // their three counts through one copy, so the message is pinned here rather than in each caller.
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
-import type { ImportContactsResult } from '@workspace/lib/types/contact';
+import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { installHappyDom } from '../../../happy-dom';
 
 const OWNER = 'a1b2c3d4';
@@ -30,7 +30,7 @@ mock.module('sonner', () => ({
 }));
 
 // The Eden client, stubbed to the one call the drive-import path makes. Recipe: the use-backup test.
-let driveImportResult: ImportContactsResult = { imported: 0, skipped: 0, failed: 0 };
+let driveImportResult: ImportCountsResult = { imported: 0, skipped: 0, failed: 0 };
 const realApiModule = await import('../../../../core/api');
 mock.module('../../../../core/api', () => ({
     ...realApiModule,
@@ -45,7 +45,7 @@ mock.module('../../../../core/api', () => ({
 // bytes through the same stub first, so the calls are recorded in order.
 const realFetch = g.fetch;
 const fetchCalls: { url: string; body: BodyInit | null | undefined }[] = [];
-let fileImportResult: ImportContactsResult = { imported: 0, skipped: 0, failed: 0 };
+let fileImportResult: ImportCountsResult = { imported: 0, skipped: 0, failed: 0 };
 g.fetch = async (url: string, init?: RequestInit) => {
     fetchCalls.push({ url, body: init?.body });
     return new Response(JSON.stringify(fileImportResult), { status: 200 });
@@ -77,7 +77,7 @@ async function renderHook<T>(use: () => T, queryClient: QueryClient): Promise<{ 
     return { latest: seen.latest as T, unmount: () => root.unmount() };
 }
 
-async function importFile(result: ImportContactsResult): Promise<string> {
+async function importFile(result: ImportCountsResult): Promise<string> {
     const { act } = await import('react');
     const { useImportContacts } = await import('../../../../core/contacts/hooks/use-transfer');
     fileImportResult = result;

@@ -2,7 +2,7 @@ import { type QueryClient, useMutation, useQueryClient } from '@tanstack/react-q
 import { getMailImportUrl, mailApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
-import { EML_MIME } from '@workspace/lib/types/drive';
+import { type DriveImportSource, EML_MIME } from '@workspace/lib/types/drive';
 import type { ImportMailResult } from '@workspace/lib/types/mail';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
@@ -53,7 +53,7 @@ export function useImportMailFromDrive() {
     const ownerId = user?.id || '';
 
     return useMutation({
-        mutationFn: async (source: { sourceOwnerId: string; sourceMountId: string; sourcePathId: string }) => {
+        mutationFn: async (source: DriveImportSource) => {
             const response = await mailApi({ ownerId })['import-from-drive'].post(source);
             if (response.error) throw new AppError(response);
             return response.data;

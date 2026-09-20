@@ -2,8 +2,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getBytesTextPreviewMode, TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
-import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
+import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
+import { NOT_A_CALENDAR_FILE, NOT_A_VCARD_FILE, NOT_AN_EMAIL_FILE } from '@workspace/lib/constants/transfer';
 import { type DrivePath, isCollabType, isEmlFile, isIcsFile, isVCardFile } from '@workspace/lib/types/drive';
 import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { ApiError } from '../core/errors';
@@ -50,10 +51,12 @@ export const VCARD_FORMAT = 'vcard-f1';
 // The same reasoning for the message a .eml previews as, and one more reason to bump it: the payload's
 // html is what a DOMPurify upgrade filters, so a cached body predates every sanitizer fix (PREVIEWS.md).
 // eml-f2: CSS is refused on the `url(` token, and a data: reference survives only as a raster image.
-export const EML_FORMAT = 'eml-f2';
+// eml-f3: the parts past the cap are counted as `remainingAttachments`.
+export const EML_FORMAT = 'eml-f3';
 
 // And again for the events an .ics previews as.
-export const ICS_FORMAT = 'ics-f1';
+// ics-f2: `dropped` is the unreadable masters alone, and an event counts its `remainingAttendees`.
+export const ICS_FORMAT = 'ics-f2';
 
 function textCacheName(drivePath: DrivePath, format: string): string {
     return `${drivePath.id}-${drivePath.updatedAt.getTime()}.${format}.json`;
@@ -394,8 +397,8 @@ const VCARD_PREVIEW_JOB: VCardPreviewJob = { kind: 'preview', documentType: 'vca
 
 // The preview parses the whole file like an import does, so it shares the import's ceiling.
 export function assertVCardPreviewable(fileName: string, contentType: string, size: number): void {
-    if (!isVCardFile(contentType, fileName)) throw new ApiError(400, 'Not a vCard file');
-    if (size > IMPORT_MAX_BYTES) throw new ApiError(413, 'File too large to preview');
+    if (!isVCardFile(contentType, fileName)) throw new ApiError(400, NOT_A_VCARD_FILE);
+    if (size > VCARD_MAX_BYTES) throw new ApiError(413, 'File too large to preview');
 }
 
 // A .vcf reads as contact cards, never as its raw text — which is why getTextPreviewMode declines it and
@@ -416,7 +419,7 @@ const EML_PREVIEW_JOB: EmlPreviewJob = { kind: 'preview', documentType: 'eml' };
 
 // The preview parses the whole message like an import does, so it shares the import's ceiling.
 export function assertEmlPreviewable(fileName: string, contentType: string, size: number): void {
-    if (!isEmlFile(contentType, fileName)) throw new ApiError(400, 'Not an email file');
+    if (!isEmlFile(contentType, fileName)) throw new ApiError(400, NOT_AN_EMAIL_FILE);
     if (size > EML_MAX_BYTES) throw new ApiError(413, 'File too large to preview');
 }
 
@@ -438,7 +441,7 @@ const ICS_PREVIEW_JOB: IcsPreviewJob = { kind: 'preview', documentType: 'ics' };
 
 // The preview parses the whole calendar like an import does, so it shares the import's ceiling.
 export function assertIcsPreviewable(fileName: string, contentType: string, size: number): void {
-    if (!isIcsFile(contentType, fileName)) throw new ApiError(400, 'Not a calendar file');
+    if (!isIcsFile(contentType, fileName)) throw new ApiError(400, NOT_A_CALENDAR_FILE);
     if (size > ICS_MAX_BYTES) throw new ApiError(413, 'File too large to preview');
 }
 

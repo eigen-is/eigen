@@ -431,6 +431,11 @@ export type DriveSortKey = 'name' | 'modified' | 'size';
 export type DriveSortDir = 'asc' | 'desc';
 export type DriveViewPreferences = { mode: DriveViewMode; sortKey: DriveSortKey; sortDir: DriveSortDir };
 
+// The Drive file an import-from-drive request names: the picked file's owner, mount and path, and
+// nothing about where it lands. One type for every format, so the contacts, mail and calendar hooks and
+// the routes behind them cannot drift apart on the body they post (importFromDriveSchema mirrors it).
+export type DriveImportSource = { sourceOwnerId: string; sourceMountId: string; sourcePathId: string };
+
 // The identity subset of DrivePath needed to resolve a URL or open an item
 // (getDriveItemUrl, openDocument). DrivePath is assignable to it.
 export type DriveItemRef = {

@@ -15,6 +15,8 @@
 These are separate because they have different growth patterns. An email-heavy user is not blocked from uploading
 files, and vice versa.
 
+Calendar data is **unmetered**: nothing counts `calendar.db` against either bucket, so an import, a CalDAV PUT and an inbound iMIP all write event rows no ceiling bounds ([ROADMAP.md](ROADMAP.md) — "Calendar data has no quota"). The per-file import ceiling (`ICS_IMPORT_MAX_EVENTS`) bounds one call, not a Home.
+
 ## Resolution
 
 `resolveUserQuotas(mountConfig, teamIds)` computes a user's effective quotas by gathering candidates from the
@@ -88,7 +90,7 @@ saving a document does not double-count its current bytes.
 The attachment ceiling: `min(maxUploadSize, 25 MB)` intersected with what is left of the mail + contacts
 quota. Throws 507 when that bucket is already full.
 
-The mail half of that bucket is the index sum plus the staging directory: `SUM(emails.size)` over the message index (`MaildirStore.size` → `MailDB.size`), one query rather than a walk of the Maildir tree, and the bytes of the draft attachments staged in `draft-attachments/` (`readDraftStagingSize` in `maildir-store.ts`, a walk of that one small directory). So a staged attachment is charged from the moment it lands until the draft save or the 24 h sweep removes it, and staging is refused once the bucket is full. Bytes no sync ever indexed and outside staging do not count — the welcome mail, appended with `skipSync`, Dovecot's own per-folder index files, and the `draft-meta/` sidecars. The sum is memoized per user for 15 s (`mailSizeCache` in `enforcement.ts`, invalidated when a message is deleted and when staging adds or frees bytes); the contacts half stays live. The admin Users page reads the same two parts from the home's own files through `pullHomeSize` (`readMailTotalSize` + the same `readDraftStagingSize`), so both surfaces report the same number.
+The mail half of that bucket is the index sum plus the staging directory: `SUM(emails.size)` over the message index and the bytes of the draft attachments staged in `draft-attachments/` (`readDraftStagingSize` in `maildir-store.ts`, a walk of that one small directory). So a staged attachment is charged from the moment it lands until the draft save or the 24 h sweep removes it, and staging is refused once the bucket is full. Bytes no sync ever indexed and outside staging do not count — the welcome mail, appended with `skipSync`, Dovecot's own per-folder index files, and the `draft-meta/` sidecars. `MaildirStore.size()` answers both parts from in-memory byte counters, the way `Contacts.size()` does: they are seeded at `init` (one `SUM` query, one staging walk) and adjusted wherever the index gains or loses a row — the sync's own insert and delete phases included, so a Dovecot expunge lands in them too — and by a re-walk of the staging directory whenever its contents change. Nothing is memoized, so every write is charged to the very next check in both directions, and a metered CardDAV sync costs no query per card. A staged attachment is the one write charged only once it lands: the ceiling is read before its bytes stream in, so uploads in flight at the same moment each see the same room and can jointly overshoot the bucket by what they carry. The admin Users page sizes homes nobody has loaded, so it reads the same two parts from the home's own files through `pullHomeSize` (`readMailTotalSize` + the same `readDraftStagingSize`), and both surfaces report the same number.
 
 ### `enforceAvatarUpload(userId, fileSize)`
 

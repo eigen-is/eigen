@@ -1,10 +1,10 @@
 import { getDriveItemThumbnail } from '@workspace/lib/api';
-import { formatEventWhen, remainingEventsLine, viewerTimeZone } from '@workspace/lib/calendar';
+import { droppedEventsLine, formatEventWhen, remainingEventsLine, viewerTimeZone } from '@workspace/lib/calendar';
 import { CANVAS_PREVIEW_WIDTH, getTextPreviewMode, type TextPreviewMode } from '@workspace/lib/constants';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
-import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
+import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
-import { droppedLine, remainingLine } from '@workspace/lib/contacts';
+import { droppedContactsLine, remainingContactsLine } from '@workspace/lib/contacts';
 import { formatDateTime } from '@workspace/lib/date';
 import { A4_WIDTH_PX } from '@workspace/lib/docs/eigendoc';
 import { useEmlPreview, useIcsPreview, useTextPreview, useVCardPreview } from '@workspace/lib/drive';
@@ -29,7 +29,7 @@ export function DrivePreview({ path, onActivate, className }: DrivePreviewProps)
     const presentation = getFilePresentation(path.mimeType, path.type, path.name);
     const hasTextPreview = getTextPreviewMode(path.mimeType, path.name) !== null;
     // Same guard as the quick look: a file an import would refuse never gets a preview either.
-    const hasVCardPreview = isVCardFile(path.mimeType, path.name) && path.size <= IMPORT_MAX_BYTES;
+    const hasVCardPreview = isVCardFile(path.mimeType, path.name) && path.size <= VCARD_MAX_BYTES;
     const hasEmlPreview = isEmlFile(path.mimeType, path.name) && path.size <= EML_MAX_BYTES;
     const hasIcsPreview = isIcsFile(path.mimeType, path.name) && path.size <= ICS_MAX_BYTES;
     const { showThumbnail, thumbnailUrl } = getDriveItemThumbnail(path);
@@ -114,8 +114,12 @@ function VCardHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; c
             {contacts.map(({ contact }, index) => (
                 <VCardRow key={index} contact={contact} />
             ))}
-            {remaining > 0 && <p className="truncate text-xs text-muted-foreground">{remainingLine(remaining)}</p>}
-            {data.dropped > 0 && <p className="truncate text-xs text-muted-foreground">{droppedLine(data.dropped)}</p>}
+            {remaining > 0 && (
+                <p className="truncate text-xs text-muted-foreground">{remainingContactsLine(remaining)}</p>
+            )}
+            {data.dropped > 0 && (
+                <p className="truncate text-xs text-muted-foreground">{droppedContactsLine(data.dropped)}</p>
+            )}
         </div>
     );
 }
@@ -156,7 +160,8 @@ function IcsHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; col
     if (isLoading) return null;
     if (!data || events.length === 0) return <IconFallback icon={icon} color={color} />;
 
-    const remaining = data.total - events.length;
+    // The masters the file holds that this hero shows no line for — the unreadable ones get their own line.
+    const remaining = data.total - data.dropped - events.length;
 
     return (
         <div className="absolute inset-0 flex flex-col justify-center gap-2 overflow-hidden px-4 pt-8 pb-3">
@@ -176,6 +181,9 @@ function IcsHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; col
             ))}
             {remaining > 0 && (
                 <p className="truncate text-xs text-muted-foreground">{remainingEventsLine(remaining)}</p>
+            )}
+            {data.dropped > 0 && (
+                <p className="truncate text-xs text-muted-foreground">{droppedEventsLine(data.dropped)}</p>
             )}
         </div>
     );

@@ -106,14 +106,6 @@ export type UpdateEventInput = {
     data?: EventData | null;
 };
 
-// What one `.ics` import did: events written, UIDs the home already had, events the calendar refused.
-// The three counts a whole-file transfer can report, as ImportContactsResult reports them for a vCard.
-export type ImportEventsResult = {
-    imported: number;
-    skipped: number;
-    failed: number;
-};
-
 export type UpdateCalendarInput = {
     id: string;
     name?: string;

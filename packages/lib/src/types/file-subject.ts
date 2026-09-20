@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import type { DrivePath } from './drive';
+import type { DriveImportSource, DrivePath } from './drive';
 import type { Attachment } from './mail';
 
 // One file a surface can act on, whatever holds it: its identity, and nothing that follows from it.
@@ -35,9 +35,6 @@ export type SubjectInfo = {
 };
 
 export type PreviewMode = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'vcard' | 'eml' | 'ics' | 'fallback';
-
-// What every import-from-drive route takes: the file to read, not where it lands.
-export type DriveImportSource = { sourceOwnerId: string; sourceMountId: string; sourcePathId: string };
 
 // Where an import reads its bytes: the Drive file itself, copied server-side, or the URL behind them.
 export type FileImportSource = { drive: DriveImportSource; url?: undefined } | { drive?: undefined; url: string };

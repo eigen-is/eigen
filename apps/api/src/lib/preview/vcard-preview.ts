@@ -1,4 +1,4 @@
-import { IMPORT_MAX_CARDS, VCARD_PREVIEW_MAX_CARDS } from '@workspace/lib/constants/contact';
+import { VCARD_IMPORT_MAX_CARDS, VCARD_PREVIEW_MAX_CARDS } from '@workspace/lib/constants/contact';
 import type { VCardPreview } from '@workspace/lib/types/preview';
 import { ApiError } from '../core/errors';
 import { parsedCardToContact, parseVCard, splitVCards, transcodeTo30 } from '../vcard';
@@ -31,7 +31,7 @@ export function buildVCardPreviewPayload(data: ArrayBuffer): VCardPreview {
     // VCARD_PREVIEW_MAX_CARDS the counts are all a surface gets.
     const cards: VCardPreview['cards'] = [];
     let dropped = 0;
-    for (const text of texts.slice(0, IMPORT_MAX_CARDS)) {
+    for (const text of texts.slice(0, VCARD_IMPORT_MAX_CARDS)) {
         try {
             const parsed = parseVCard(transcodeTo30(text));
             if (cards.length < VCARD_PREVIEW_MAX_CARDS) cards.push(parsedCardToContact(parsed));

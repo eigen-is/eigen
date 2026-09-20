@@ -5,6 +5,9 @@ import * as path from 'node:path';
 import type { BunFile } from 'bun';
 import { resolveWithinBase } from './path-utils';
 
+// Once per process: the mount is the same for every home, so a line per message would be the whole log.
+let warnedDirSyncUnsupported = false;
+
 export class LocalFilesystem {
     private baseDir: string;
 
@@ -22,6 +25,53 @@ export class LocalFilesystem {
         const dir = path.dirname(fullPath);
         fs.mkdirSync(dir, { recursive: true });
         return await Bun.write(fullPath, data);
+    }
+
+    // A rename (or an unlink) only reaches the platter once the directory holding the name is fsynced:
+    // without this a power loss resurrects the old name under an already-acknowledged write. It runs after
+    // the rename, so a file system that refuses it (NFS, CIFS, some FUSE mounts) must not fail an operation
+    // that already happened — a mail delivery answering 500 makes the MTA retry a message that landed.
+    async syncDir(dirPath: string): Promise<void> {
+        try {
+            const handle = await fsPromises.open(this.getFilePath(dirPath), 'r');
+            try {
+                await handle.sync();
+            } finally {
+                await handle.close();
+            }
+        } catch (error) {
+            if (!warnedDirSyncUnsupported) {
+                warnedDirSyncUnsupported = true;
+                console.warn('Directory fsync failed; renames on this file system are not crash-safe:', error);
+            }
+        }
+    }
+
+    // The bytes must be on the platter before any name points at them, so the Maildir paths stage into
+    // `tmp/` with this and publish with renameDurable.
+    async writeDurable(filePath: string, data: Buffer | Uint8Array | string): Promise<void> {
+        const fullPath = this.getFilePath(filePath);
+        fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+        try {
+            const handle = await fsPromises.open(fullPath, 'w');
+            try {
+                await handle.writeFile(data);
+                await handle.sync();
+            } finally {
+                await handle.close();
+            }
+        } catch (error) {
+            // Nothing sweeps a partial staged file: no name outside the staging directory points at it.
+            await fsPromises.unlink(fullPath).catch(() => {});
+            throw error;
+        }
+    }
+
+    // Publishes a staged file under its final name. The directory losing the old name is fsynced by the
+    // caller instead, which only a move between mailboxes needs.
+    async renameDurable(oldPath: string, newPath: string): Promise<void> {
+        await this.rename(oldPath, newPath);
+        await this.syncDir(path.dirname(newPath));
     }
 
     // Durable, crash-safe write: stage a sibling temp file, fsync it, rename over the target so a
@@ -50,13 +100,7 @@ export class LocalFilesystem {
             await fsPromises.unlink(tempPath).catch(() => {});
             throw error;
         }
-        // fsync the directory entry the rename created (POSIX; darwin + linux are the only targets).
-        const dirHandle = await fsPromises.open(dir, 'r');
-        try {
-            await dirHandle.sync();
-        } finally {
-            await dirHandle.close();
-        }
+        await this.syncDir(path.dirname(filePath));
     }
 
     async delete(filePath: string): Promise<boolean> {

@@ -93,7 +93,7 @@ describe('buildIcsPreviewPayload', () => {
             status: 'confirmed',
             organizer: null,
             attendees: [],
-            droppedAttendees: 0,
+            remainingAttendees: 0,
         });
     });
 
@@ -144,7 +144,9 @@ describe('buildIcsPreviewPayload', () => {
         expect(payload.events[0]).toMatchObject({ allDay: true, start: '2026-09-20', end: '2026-09-22' });
     });
 
-    test('a feed past the event ceiling keeps the first events and counts the rest', () => {
+    // `dropped` is one thing in every preview payload: what the parser could not read. What is merely
+    // over the listing cap is the consumer's own `total - dropped - listed`.
+    test('a feed past the event ceiling keeps the first events and drops none of them', () => {
         const extra = 50;
         const payload = payloadOf(
             vcal(
@@ -161,7 +163,8 @@ describe('buildIcsPreviewPayload', () => {
 
         expect(payload.total).toBe(ICS_PREVIEW_MAX_EVENTS + extra);
         expect(payload.events).toHaveLength(ICS_PREVIEW_MAX_EVENTS);
-        expect(payload.dropped).toBe(extra);
+        expect(payload.dropped).toBe(0);
+        expect(payload.total - payload.dropped - payload.events.length).toBe(extra);
         const starts = payload.events.map((e) => e.start);
         expect([...starts].sort()).toEqual(starts);
     });
@@ -171,7 +174,7 @@ describe('buildIcsPreviewPayload', () => {
         const payload = payloadOf(vcal(timed('crowd@eigen', '20260601T100000Z', '20260601T110000Z', attendees)));
 
         expect(payload.events[0]?.attendees).toHaveLength(ICS_PREVIEW_MAX_ATTENDEES);
-        expect(payload.events[0]?.droppedAttendees).toBe(5000 - ICS_PREVIEW_MAX_ATTENDEES);
+        expect(payload.events[0]?.remainingAttendees).toBe(5000 - ICS_PREVIEW_MAX_ATTENDEES);
     });
 
     test('a novel-length description is cut to the payload ceiling', () => {
@@ -222,7 +225,8 @@ describe('buildIcsPreviewPayload', () => {
         expect(payload.events[0]?.attendees).toEqual([
             { email: 'bob@example.com', status: 'pending', role: 'required' },
         ]);
-        expect(payload.events[0]?.droppedAttendees).toBe(1);
+        // Omitted, never counted: `remainingAttendees` says how many addresses the card is not showing.
+        expect(payload.events[0]?.remainingAttendees).toBe(0);
         expect(JSON.stringify(payload)).not.toContain(HOSTILE);
     });
 
