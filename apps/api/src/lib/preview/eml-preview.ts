@@ -89,7 +89,7 @@ function sanitizeEmlHtml(html: string): string {
         if (data.tagName === 'style' && cssFetches(node.textContent ?? '')) node.textContent = '';
     });
     try {
-        return DOMPurify.sanitize(html, { ...READER_SANITIZE_CONFIG, FORBID_TAGS }) as string;
+        return DOMPurify.sanitize(html, { ...READER_SANITIZE_CONFIG, FORBID_TAGS });
     } finally {
         DOMPurify.removeHook('afterSanitizeAttributes');
         DOMPurify.removeHook('uponSanitizeElement');
