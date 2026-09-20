@@ -1,4 +1,3 @@
-import { fileActionsFor } from '@workspace/lib/file-actions';
 import { DropdownMenuItem } from '../dropdown-menu';
 import type { FileActionRunner } from './use-file-action-runner';
 
@@ -11,12 +10,9 @@ type FileActionMenuItemsProps = {
 // The one place a file action is drawn as a menu row, in the registry's order. A surface that adds
 // a row to FILE_ACTIONS gets it in every menu without editing one.
 export function FileActionMenuItems({ runner }: FileActionMenuItemsProps) {
-    const { subject } = runner;
-    if (!subject) return null;
-
     return (
         <>
-            {fileActionsFor(subject).map((action) => (
+            {runner.actions.map((action) => (
                 <DropdownMenuItem
                     key={action.id}
                     disabled={runner.isPending}

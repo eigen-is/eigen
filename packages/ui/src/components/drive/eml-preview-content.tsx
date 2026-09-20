@@ -1,0 +1,77 @@
+import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
+import { useEmlPreview } from '@workspace/lib/drive';
+import { formatFileSize } from '@workspace/lib/format';
+import { remainingAttachmentsLine, useMailEmlPreview } from '@workspace/lib/mail';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { MailPartRef } from '@workspace/lib/types/file-subject';
+import { mailAttachmentName } from '@workspace/lib/types/mail';
+import type { EmlPreview } from '@workspace/lib/types/preview';
+import { SimpleAttachmentChip } from '../attachment/simple-attachment-chip';
+import { MessageView } from '../mail/message-view';
+import { PreviewPane } from './preview-pane';
+
+// The served message, whichever route served it. Drive and mail each have their own component, so exactly
+// one query hook runs per render and the overlay picks by the subject it holds.
+export function EmlPreviewContent({ path }: { path: DrivePath }) {
+    const { data, isLoading } = useEmlPreview(path.ownerId, path.mountId, path.id, path.updatedAt, path.size);
+    return <EmlMessage data={data} isLoading={isLoading} oversize={path.size > EML_MAX_BYTES} />;
+}
+
+export function MailEmlPreviewContent({ part, size }: { part: MailPartRef; size: number }) {
+    const oversize = size > EML_MAX_BYTES;
+    const { data, isLoading } = useMailEmlPreview(part.ownerId, part.messageId, part.index, !oversize);
+    return <EmlMessage data={data} isLoading={isLoading} oversize={oversize} />;
+}
+
+// Both routes serve one shape, so one renderer reads it.
+function EmlMessage({
+    data,
+    isLoading,
+    oversize,
+}: {
+    data: EmlPreview | undefined;
+    isLoading: boolean;
+    oversize: boolean;
+}) {
+    return (
+        <PreviewPane oversize={oversize} maxBytes={EML_MAX_BYTES} isLoading={isLoading} unreadable={!data}>
+            {data && (
+                <div className="p-8">
+                    <MessageView
+                        subject={data.subject}
+                        from={data.from}
+                        to={data.to}
+                        cc={data.cc}
+                        date={data.date}
+                        html={data.html}
+                        text={data.text}
+                        abovePreview
+                        attachments={<PreviewAttachments data={data} />}
+                    />
+                </div>
+            )}
+        </PreviewPane>
+    );
+}
+
+// A quick look reads a message, it does not act on it: the parts are named and sized, and nothing else —
+// the payload carries no bytes to download or preview.
+function PreviewAttachments({ data }: { data: EmlPreview }) {
+    if (data.attachments.length === 0) return null;
+
+    return (
+        <div className="flex flex-col gap-2 mb-4">
+            <div className="flex flex-wrap items-center gap-2">
+                {data.attachments.map((att, index) => (
+                    <SimpleAttachmentChip
+                        key={`${index}-${att.filename ?? ''}`}
+                        filename={`${mailAttachmentName(att, index)} · ${formatFileSize(att.size)}`}
+                    />
+                ))}
+            </div>
+            {data.droppedAttachments > 0 && (
+                <p className="text-sm text-muted-foreground">{remainingAttachmentsLine(data.droppedAttachments)}</p>
+            )}
+        </div>
+    );
+}

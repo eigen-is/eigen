@@ -81,6 +81,7 @@
     "./components/file-actions": "./src/components/file-actions/index.ts",
     "./components/home": "./src/components/home/index.ts",
     "./components/labels": "./src/components/labels/index.ts",
+    "./components/mail": "./src/components/mail/index.ts",
     "./components/media": "./src/components/media/index.ts",
     "./components/mount": "./src/components/mount/index.ts",
     "./components/notes": "./src/components/notes/index.ts",

@@ -1,20 +1,13 @@
 import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { droppedLine, remainingLine } from '@workspace/lib/contacts';
 import { useVCardPreview } from '@workspace/lib/drive';
-import { formatFileSize } from '@workspace/lib/format';
 import { useMailVCardPreview } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { MailPartRef } from '@workspace/lib/types/file-subject';
 import type { VCardPreview } from '@workspace/lib/types/preview';
-import { cn } from '@workspace/ui/lib/utils';
 import { EmptyState } from '../layout/app/empty-state';
-import { ErrorState } from '../layout/app/error-state';
-import { LoadingState } from '../layout/app/loading-state';
 import { ContactDetailCard } from '../user/contact-detail-card';
-
-// The box every non-image preview fills: the overlay's content area minus its header and footer. Lives
-// here rather than in file-preview.tsx because that shell already imports this module.
-export const PREVIEW_PANE_CLASS = 'w-[80vw] h-[calc(100vh-7rem)]';
+import { PreviewPane } from './preview-pane';
 
 // The served cards, whichever route served them. Drive and mail each have their own component, so exactly
 // one query hook runs per render and the overlay picks by the subject it holds.
@@ -49,32 +42,26 @@ function VCardCards({
     ];
 
     return (
-        <div className={cn(PREVIEW_PANE_CLASS, 'overflow-auto rounded bg-background')}>
-            {oversize ? (
-                <EmptyState
-                    message="File too large to preview"
-                    hint={`A file over ${formatFileSize(IMPORT_MAX_BYTES)} can’t be imported either.`}
-                />
-            ) : isLoading ? (
-                <LoadingState />
-            ) : !data ? (
-                <ErrorState message="Could not read this file" />
-            ) : data.cards.length === 0 ? (
-                <EmptyState message="No contacts in this file" hint={counts.join(' · ') || undefined} />
-            ) : (
-                <div className="max-w-3xl mx-auto flex flex-col gap-8 p-8">
-                    {data.cards.map(({ contact, categories }, index) => (
-                        <ContactDetailCard
-                            key={index}
-                            contact={contact}
-                            labels={categories.map((name) => ({ name }))}
-                            className="border-b pb-8 last:border-b-0 last:pb-0"
-                        />
-                    ))}
-                    {remaining > 0 && <p className="text-sm text-muted-foreground">{remainingLine(remaining)}</p>}
-                    {data.dropped > 0 && <p className="text-sm text-muted-foreground">{droppedLine(data.dropped)}</p>}
-                </div>
-            )}
-        </div>
+        <PreviewPane oversize={oversize} maxBytes={IMPORT_MAX_BYTES} isLoading={isLoading} unreadable={!data}>
+            {data &&
+                (data.cards.length === 0 ? (
+                    <EmptyState message="No contacts in this file" hint={counts.join(' · ') || undefined} />
+                ) : (
+                    <div className="max-w-3xl mx-auto flex flex-col gap-8 p-8">
+                        {data.cards.map(({ contact, categories }, index) => (
+                            <ContactDetailCard
+                                key={index}
+                                contact={contact}
+                                labels={categories.map((name) => ({ name }))}
+                                className="border-b pb-8 last:border-b-0 last:pb-0"
+                            />
+                        ))}
+                        {remaining > 0 && <p className="text-sm text-muted-foreground">{remainingLine(remaining)}</p>}
+                        {data.dropped > 0 && (
+                            <p className="text-sm text-muted-foreground">{droppedLine(data.dropped)}</p>
+                        )}
+                    </div>
+                ))}
+        </PreviewPane>
     );
 }

@@ -3,16 +3,20 @@ import { useImportContactsFromDrive, useImportContactsFromUrl } from '@workspace
 import { triggerDownload } from '@workspace/lib/download';
 import { useConvertDocument } from '@workspace/lib/drive';
 import { subjectInfo } from '@workspace/lib/file-subject';
+import { useImportMailFromDrive, useImportMailFromUrl } from '@workspace/lib/mail';
 import type { ConvertTarget, DrivePath } from '@workspace/lib/types/drive';
-import type { FileAction, FileSubject } from '@workspace/lib/types/file-subject';
+import type { FileAction, FileActionId, FileSubject } from '@workspace/lib/types/file-subject';
 import { type ReactNode, useState } from 'react';
 import { ProgressDialog } from '../drive/progress-dialog';
 import { SaveToDrivePicker } from '../drive/save-to-drive-picker';
 import { usePreview } from '../preview-provider/preview-context';
+import { useFileActions } from './use-file-actions';
 
 export type FileActionRunner = {
     // The menu draws its rows from the subject the runner acts on, so a host can never pair two.
     subject: FileSubject | null;
+    // The rows to draw for this subject and this viewer, the host's own exclusions already dropped.
+    actions: FileAction[];
     run: (action: FileAction) => void;
     // For a host with a set of its own to save: the overlay's "Save all" row.
     openPicker: (subjects: FileSubject[]) => void;
@@ -25,12 +29,23 @@ export type FileActionRunner = {
 // A convert on a subject with nothing in Drive to convert saves first; the label names the row that asked.
 type PickerState = { subjects: FileSubject[]; convert?: { targetType: ConvertTarget; label: string } };
 
-// A host whose subject is state (the right-clicked chip or row) passes null while there is none.
-export function useFileActionRunner(subject: FileSubject | null, siblings?: FileSubject[]): FileActionRunner {
+// What every import-from-drive route takes: the file to read, not where it lands.
+type DriveSource = { sourceOwnerId: string; sourceMountId: string; sourcePathId: string };
+
+// A host whose subject is state (the right-clicked chip or row) passes null while there is none;
+// `exclude` drops a row the host draws itself (the overlay is Quick Look, so it drops that one).
+export function useFileActionRunner(
+    subject: FileSubject | null,
+    siblings?: FileSubject[],
+    exclude?: readonly FileActionId[],
+): FileActionRunner {
     const { openPreview } = usePreview();
     const convertDocument = useConvertDocument();
     const importContactsFromDrive = useImportContactsFromDrive();
     const importContactsFromUrl = useImportContactsFromUrl();
+    const importMailFromDrive = useImportMailFromDrive();
+    const importMailFromUrl = useImportMailFromUrl();
+    const actions = useFileActions(subject, exclude);
     // Open is its own flag: the closed picker keeps its subjects so its title holds through the exit animation.
     const [picker, setPicker] = useState<PickerState>({ subjects: [] });
     const [pickerOpen, setPickerOpen] = useState(false);
@@ -55,20 +70,18 @@ export function useFileActionRunner(subject: FileSubject | null, siblings?: File
         else convertPath(subject.drive, targetType);
     };
 
-    const runImportContacts = () => {
+    // Every import reads the same way: a file at a Drive location is copied server-side, anything else
+    // hands the route the bytes behind its download URL. Only the pair of hooks differs per format.
+    const runImport = (fromDrive: (source: DriveSource) => void, fromUrl: (input: { url: string }) => void) => {
         if (!subject) return;
         const { drive } = subject;
         if (drive) {
-            importContactsFromDrive.mutate({
-                sourceOwnerId: drive.ownerId,
-                sourceMountId: drive.mountId,
-                sourcePathId: drive.id,
-            });
+            fromDrive({ sourceOwnerId: drive.ownerId, sourceMountId: drive.mountId, sourcePathId: drive.id });
             return;
         }
         const { downloadUrl } = subjectInfo(subject);
         if (!downloadUrl) return;
-        importContactsFromUrl.mutate({ url: downloadUrl });
+        fromUrl({ url: downloadUrl });
     };
 
     const run = (action: FileAction) => {
@@ -92,13 +105,17 @@ export function useFileActionRunner(subject: FileSubject | null, siblings?: File
                 convert('eigendoc', action.label);
                 return;
             case 'import-contacts':
-                runImportContacts();
+                runImport(importContactsFromDrive.mutate, importContactsFromUrl.mutate);
+                return;
+            case 'import-mail':
+                runImport(importMailFromDrive.mutate, importMailFromUrl.mutate);
                 return;
         }
     };
 
     return {
         subject,
+        actions,
         run,
         openPicker,
         // Mounted while closed: "Download instead" fires staggered downloads from timers the picker clears on unmount.
@@ -125,6 +142,11 @@ export function useFileActionRunner(subject: FileSubject | null, siblings?: File
             </>
         ),
         isDialogOpen: pickerOpen || convertDocument.isPending,
-        isPending: convertDocument.isPending || importContactsFromDrive.isPending || importContactsFromUrl.isPending,
+        isPending:
+            convertDocument.isPending ||
+            importContactsFromDrive.isPending ||
+            importContactsFromUrl.isPending ||
+            importMailFromDrive.isPending ||
+            importMailFromUrl.isPending,
     };
 }

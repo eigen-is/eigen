@@ -57,8 +57,8 @@ type ShadowContentProps = {
     highlightTerm?: string;
 };
 
-// HTML content is sanitized server-side using DOMPurify before storage.
-// Shadow DOM provides style isolation; script isolation is handled by BE sanitization.
+// Injects the HTML it is handed, unchanged: every caller passes a body the API sanitized with DOMPurify
+// as it parsed it. Shadow DOM provides style isolation; script isolation is handled by BE sanitization.
 export function ShadowContent({
     content,
     className,
