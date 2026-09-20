@@ -1,6 +1,7 @@
 import type { FSWatcher } from 'node:fs';
 import * as path from 'node:path';
 import {
+    isStandardMailbox,
     MAILBOX_DRAFTS,
     MAILBOX_INBOX,
     MAILBOX_INBOX_IMAP,
@@ -40,6 +41,12 @@ export function readDraftStagingSize(homeFs: LocalFilesystem): Promise<number> {
 // may not — but never the `.` Maildir++ delimiter, and never nothing at all.
 const MAILBOX_SEGMENT = /^[A-Za-z0-9_\- ]+$/;
 
+// The one rule for a mailbox path: `mailboxDir` turns a passing name into a directory, and the disk
+// enumeration skips a Dovecot folder that fails it rather than reporting a name Eigen cannot address.
+function isValidMailboxPath(mailbox: string): boolean {
+    return mailbox.split(/[./]/).every((segment) => MAILBOX_SEGMENT.test(segment) && segment.trim() === segment);
+}
+
 // A message id and a staged-attachment temp id both become a filename, so an id no `MailStore` minted is
 // refused rather than mapped onto one — two mapped ids would collide on one file.
 function safeFileId(id: string): string {
@@ -56,6 +63,7 @@ export class MaildirStore implements MailStore {
     // Reconciliation (doSyncMailbox) must not straddle a mutation's fs+db pair, or its delete phase drops just-moved rows.
     private storeLock = new Semaphore(1);
     private watchers: FSWatcher[] = [];
+    private watchedMailboxes = new Set<string>();
 
     constructor(private home: Home) {
         this.basePath = PATHS.MAIL.MAILDIR;
@@ -75,8 +83,21 @@ export class MaildirStore implements MailStore {
         return isNew;
     }
 
-    watch(): void {
-        for (const mailbox of STANDARD_MAILBOXES) {
+    async watch(): Promise<void> {
+        await this.watchMailboxes();
+        // An IMAP client can create a folder at any time, so the Maildir root is watched too and each
+        // new `.Folder` picks up its own watchers as it appears.
+        this.watchers.push(
+            this.storage.watch(this.basePath, () =>
+                this.watchMailboxes().catch((err) => console.error('maildir: mailbox watch refresh failed', err)),
+            ),
+        );
+    }
+
+    private async watchMailboxes(): Promise<void> {
+        for (const mailbox of await this.listMailboxPaths()) {
+            if (this.watchedMailboxes.has(mailbox)) continue;
+            this.watchedMailboxes.add(mailbox);
             const mailboxPath = this.mailboxDir(mailbox);
             for (const subdir of [PATHS.MAIL.CUR, PATHS.MAIL.NEW]) {
                 try {
@@ -94,6 +115,7 @@ export class MaildirStore implements MailStore {
     async unwatch(): Promise<void> {
         for (const watcher of this.watchers) watcher.close();
         this.watchers = [];
+        this.watchedMailboxes.clear();
         // Let any in-flight mailbox sync (kicked fire-and-forget by the watcher) finish before
         // the domain flushes drafts and the db closes — later sync phases would hit a closed db.
         await Promise.allSettled([...this.syncingMailboxes.values()]);
@@ -118,10 +140,11 @@ export class MaildirStore implements MailStore {
 
     async mailboxesList(): Promise<MaildirMailbox[]> {
         const mailboxes: MaildirMailbox[] = [];
-        for (const name of STANDARD_MAILBOXES) {
-            if (await this.mailboxDirExists(name)) {
-                mailboxes.push(this.getMailboxInfo(name));
-            }
+        for (const name of await this.listMailboxPaths()) {
+            // A folder Eigen has never indexed — an IMAP client's, or one that predates this home's
+            // mail.db — has no rows to count, so its first listing indexes it, as a first open does.
+            if (this.db.getEmailsCount(name) === 0) await this.syncMailbox(name);
+            mailboxes.push(this.getMailboxInfo(name));
         }
         return mailboxes;
     }
@@ -540,6 +563,25 @@ export class MaildirStore implements MailStore {
         return this.storage.dirExists(this.mailboxDir(mailbox));
     }
 
+    // Every mailbox on disk, and the one enumeration `mailboxesList` and `watch()` share: the standard
+    // ones in their canonical order, then whatever else the Maildir holds, by path. A `.Folder` whose
+    // name Eigen cannot address is skipped, never an error — Dovecot accepts names this store does not.
+    private async listMailboxPaths(): Promise<string[]> {
+        const standard: string[] = [];
+        for (const name of STANDARD_MAILBOXES) {
+            if (await this.mailboxDirExists(name)) standard.push(name);
+        }
+
+        const custom: string[] = [];
+        for (const entry of await this.storage.readdir(this.basePath, { withFileTypes: true })) {
+            if (!entry.isDirectory() || !entry.name.startsWith('.')) continue;
+            const mailbox = entry.name.slice(1);
+            if (isStandardMailbox(mailbox) || !isValidMailboxPath(mailbox)) continue;
+            custom.push(mailbox);
+        }
+        return [...standard, ...custom.sort()];
+    }
+
     private async createMailboxDir(mailbox: string): Promise<void> {
         const mailboxPath = this.mailboxDir(mailbox);
         await this.storage.mkdir(mailboxPath);
@@ -640,11 +682,8 @@ export class MaildirStore implements MailStore {
     // Maildir++ directory `.Clients.Acme`, which is also the form `mailboxesList` reports.
     private mailboxDir(mailbox: string): string {
         if (mailbox === MAILBOX_INBOX || mailbox === MAILBOX_INBOX_IMAP) return this.basePath;
-        const segments = mailbox.split(/[./]/);
-        if (!segments.every((s) => MAILBOX_SEGMENT.test(s) && s.trim() === s)) {
-            throw new ApiError(400, `Invalid mailbox name: ${mailbox}`);
-        }
-        return `${this.basePath}/.${segments.join('.')}`;
+        if (!isValidMailboxPath(mailbox)) throw new ApiError(400, `Invalid mailbox name: ${mailbox}`);
+        return `${this.basePath}/.${mailbox.replaceAll('/', '.')}`;
     }
 
     // -- Private helpers --

@@ -61,10 +61,26 @@ export const MAILBOX_NO_CHILDREN_FLAG = '\\HasNoChildren';
 
 const BY_FLAG = new Map<string, SpecialMailbox>(Object.values(SPECIAL_MAILBOXES).map((box) => [box.flag, box]));
 
-// The `/box/:filterId` segment, and the mailbox part of a list query key: every mailbox lowercased, with
-// the canonical empty inbox spelled out.
+const STANDARD_BY_NAME = new Set<string>(STANDARD_MAILBOXES);
+
+// Whether a mailbox name is one of the standard six, spelled canonically. Everything else is a folder
+// the user (or their IMAP client) made, whose name Eigen neither case-folds nor rewrites.
+export function isStandardMailbox(mailbox: string): boolean {
+    return STANDARD_BY_NAME.has(mailbox);
+}
+
+// The `/box/:filterId` segment, and the mailbox part of a list query key: a standard mailbox lowercased,
+// with the canonical empty inbox spelled out. A folder outside the standard set travels verbatim — the
+// server case-folds only the standard names, so `Projects` lowercased would address no mailbox at all.
 export function mailboxRouteSegment(mailbox: string): string {
-    return mailbox.toLowerCase() || MAILBOX_INBOX_KEY;
+    if (mailbox === MAILBOX_INBOX) return MAILBOX_INBOX_KEY;
+    return isStandardMailbox(mailbox) ? mailbox.toLowerCase() : mailbox;
+}
+
+// What the UI calls a folder outside the standard set (which goes by its `SpecialMailbox.label`): the
+// full hierarchy, with the Maildir++ `.` delimiter shown as the `/` a reader takes for nesting.
+export function mailboxDisplayName(mailbox: string): string {
+    return mailbox.replaceAll('.', '/');
 }
 
 // The special mailbox a mailbox row's flags identify, if any — a custom folder matches none.

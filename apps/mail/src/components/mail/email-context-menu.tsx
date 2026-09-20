@@ -1,6 +1,11 @@
 import { getMailMessageDownloadUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
-import { MAILBOX_ARCHIVE, MAILBOX_JUNK, specialMailboxFromFlags } from '@workspace/lib/constants/mailboxes';
+import {
+    MAILBOX_ARCHIVE,
+    MAILBOX_JUNK,
+    mailboxDisplayName,
+    specialMailboxFromFlags,
+} from '@workspace/lib/constants/mailboxes';
 import type { MaildirMailbox } from '@workspace/lib/types/mail';
 import {
     DropdownMenuItem,
@@ -9,7 +14,6 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { ucfirst } from '@workspace/ui/lib/utils';
 import { AlertTriangle, Archive, Download, Forward, Printer, Reply, ReplyAll, Trash2 } from 'lucide-react';
 
 type EmailContextMenuProps = {
@@ -162,7 +166,7 @@ export function EmailContextMenu({
                                         onClose();
                                     }}
                                 >
-                                    {special ? special.label : ucfirst(mailbox.name)}
+                                    {special ? special.label : mailboxDisplayName(mailbox.path)}
                                 </DropdownMenuItem>
                             );
                         })}

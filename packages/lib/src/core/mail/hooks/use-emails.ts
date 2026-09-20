@@ -33,9 +33,9 @@ export function useEmails(mailboxPath: string) {
                 q.beforeDate = pageParam.beforeDate;
                 q.beforeId = pageParam.beforeId;
             }
-            const response = await mailApi({ ownerId })
-                .mailbox({ mailboxPath: mailboxPath.toLowerCase() })
-                .get({ query: q });
+            // Verbatim: the caller passes a route segment, which already spells the mailbox the way
+            // the server reads it — lowercasing here would lose a custom folder's case.
+            const response = await mailApi({ ownerId }).mailbox({ mailboxPath }).get({ query: q });
             if (response.error) throw new AppError(response);
             return response.data;
         },

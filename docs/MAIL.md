@@ -78,22 +78,24 @@ The behavior contract is the golden corpus: every `.eml` under `apps/api/src/tes
 
 ## Mailboxes and the naming gotcha
 
-**`packages/lib/src/constants/mailboxes.ts` is the single source of the special mailbox names** — `STANDARD_MAILBOXES = ['', 'Sent', 'Drafts', 'Trash', 'Junk', 'Archive']` (the empty string is INBOX) together with each one's IMAP special-use flag and the label the UI shows for it (`Junk` reads as "Spam"); FE and BE both import it and neither spells a mailbox by hand. It stays React-free so the API can import it, so the lucide icon per mailbox sits beside it in `packages/lib/src/core/mailbox-icons.ts` (`@workspace/lib/mailbox-icons`), the way `eigendoc-icons.ts` sits beside the doc-type registry. `canonicalMailbox()` (`mail-domain.ts`) normalizes any case (`inbox`/`Trash`/`trash`)
-to canonical form at every domain entry point. **Three representations of "the inbox" coexist** — the #1
-source of subtle mail bugs; never compare mailbox strings without knowing the layer:
+**`packages/lib/src/constants/mailboxes.ts` is the single source of the special mailbox names** — `STANDARD_MAILBOXES = ['', 'Sent', 'Drafts', 'Trash', 'Junk', 'Archive']` (the empty string is INBOX) together with each one's IMAP special-use flag and the label the UI shows for it (`Junk` reads as "Spam"); FE and BE both import it and neither spells a mailbox by hand. It stays React-free so the API can import it, so the lucide icon per mailbox sits beside it in `packages/lib/src/core/mailbox-icons.ts` (`@workspace/lib/mailbox-icons`), the way `eigendoc-icons.ts` sits beside the doc-type registry. `canonicalMailbox()` (`mail-domain.ts`) normalizes any case of those six (`inbox`/`Trash`/`trash`) to canonical form at every domain entry point. **Three representations of "the inbox" coexist** — the #1 source of subtle mail bugs; never compare mailbox strings without knowing the layer:
 
 | Layer | Inbox is | Others |
 |---|---|---|
-| BE canonical (DB `mailbox` column, SSE payloads, `canonicalMailbox`) | `''` | canonical case (`Sent`, `Archive`) |
-| FE query keys (`emailKeys.list`) | `'inbox'` | lowercased |
-| URL segment | `box/inbox` | lowercased |
+| BE canonical (DB `mailbox` column, SSE payloads, `canonicalMailbox`) | `''` | canonical case (`Sent`, `Archive`); a custom folder verbatim |
+| FE query keys (`emailKeys.list`) | `'inbox'` | standard lowercased; a custom folder verbatim |
+| URL segment | `box/inbox` | standard lowercased; a custom folder verbatim |
 
 The mailbox list search box passes the URL `filterId` (`'inbox'`) **verbatim** to the search endpoint —
 `Mail.search` re-canonicalizes it, so passing `''` would strip the filter and search every mailbox. The
 optimistic list patch sidesteps all of this by matching on message `id`, not the mailbox key. See
 [IMAP.md § Mailbox Structure](IMAP.md#mailbox-structure) for the on-disk `.Mailbox` layout.
 
-**A mailbox name is a folder name, not an id.** `mailboxDir` (`maildir-store.ts`) splits a path on either delimiter, `.` or `/`, and holds every segment to `A-Za-z0-9_- ` with no leading or trailing space and nothing empty — interior spaces because the name is user-visible, no `.` inside a segment because that is the Maildir++ delimiter, and no traversal because a segment holds no separator at all. Anything else is a 400. The segments are joined with `.`, so `Clients/Acme/2026` and `Clients.Acme.2026` are the one directory `.Clients.Acme.2026`, which is also the dotted form `mailboxesList` reports as `MaildirMailbox.path`. `''` stays the inbox and is the Maildir root itself.
+**A mailbox name is a folder name, not an id.** `isValidMailboxPath` (`maildir-store.ts`) splits a path on either delimiter, `.` or `/`, and holds every segment to `A-Za-z0-9_- ` with no leading or trailing space and nothing empty — interior spaces because the name is user-visible, no `.` inside a segment because that is the Maildir++ delimiter, and no traversal because a segment holds no separator at all. `mailboxDir` turns a passing name into a directory and answers anything else with a 400. The segments are joined with `.`, so `Clients/Acme/2026` and `Clients.Acme.2026` are the one directory `.Clients.Acme.2026`, which is also the dotted form `mailboxesList` reports as `MaildirMailbox.path`. `''` stays the inbox and is the Maildir root itself.
+
+**Every folder on disk is listed.** `mailboxesList` reports the standard six first, in their canonical order, then every other Maildir++ folder the Maildir holds, by path — a folder an IMAP client created through Dovecot appears in Eigen without anything in Eigen creating it. One private enumeration (`listMailboxPaths`) answers both that and `watch()`, so the list and the watchers can't drift, and it skips a `.Folder` whose name fails the rule above rather than erroring: Dovecot accepts names this store cannot address. A folder Eigen has never indexed has no rows to count, so its first listing indexes it — the rule `listMessages` applies on a first open. Enumeration stays behind the `MailStore` seam (no directory name reaches the domain or the routes), where an IMAP-backed store answers it with `LIST`. A folder created while the process runs is caught by a watcher on the Maildir root, which gives each new `.Folder` its own `cur/`+`new/` watchers as it appears.
+
+**A custom folder's name is taken literally.** `canonicalMailbox` case-folds the six standard names and passes everything else through unchanged, so `Projects` and `projects` are two different folders. The frontend matches that: `mailboxRouteSegment` lowercases a standard mailbox (`/box/sent`) but spells a custom one verbatim (`/box/Clients.Acme`), which is what the URL segment, the `emailKeys.list` key and the search `mailbox` filter all carry. The sidebar and the "Move to folder" menu label it with `mailboxDisplayName` — the full hierarchy with `/` for the Maildir++ `.` — under a **Folders** section below the standard six, using the same row component, so drag-to-move works there too. There is no create, rename or delete UI for folders, and the `g`-chords jump only to Inbox, Sent and Drafts.
 
 ## API routes
 
@@ -289,8 +291,7 @@ with `?`) cover navigation (`j`/`k`/`o`/`u`), actions (`e`/`#`/`s`/`r`/`a`/`f`/`
   a `skipAttachmentContent` flag is deliberately unbuilt; add it only if a real large-mailbox profile
   justifies it (largely subsumed by the worker move).
 - Fast-saved drafts leave the on-disk `.eml` stale until a full save — external IMAP clients see old content.
-- Only the six standard mailboxes are listed and watched. A mailbox created through the create route or by an IMAP
-  client exists on disk but never appears in the sidebar, and syncs only when its URL is opened ([ROADMAP.md](ROADMAP.md)).
+- Folders outside the standard six are listed, watched and openable, but Eigen offers no way to create, rename or delete one — that stays an IMAP client's job (the `POST /mail/:ownerId/mailbox` route exists and no UI calls it).
 - A `.eml` is a first-class file only on the way out (`/message/:id/download`): in Drive or as an attachment it gets the
   fallback card, and nothing imports one into a mailbox ([ROADMAP.md](ROADMAP.md)).
 - Primary-password protocol auth fails when 2FA is enabled (use an app password).
