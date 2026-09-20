@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
+import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import type { ImportContactsResult } from '@workspace/lib/types/contact';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { splitVCards } from '../../lib/vcard';
@@ -125,11 +125,11 @@ describe('Contacts transfer routes', () => {
         expect(await assertJson<ImportContactsResult>(res)).toEqual({ imported: 2, skipped: 0, failed: 0 });
     });
 
-    test('raw import over IMPORT_MAX_BYTES is 413 before the body is read', async () => {
+    test('raw import over VCARD_MAX_BYTES is 413 before the body is read', async () => {
         // The body is a fragment no importer would accept (a 400 if it were ever parsed), so a 413
         // can only come from the Content-Length check that runs first.
         const res = await importRequest(alice, new Blob([new TextEncoder().encode('BEGIN:VCARD\r\n')]), {
-            'Content-Length': String(IMPORT_MAX_BYTES + 1),
+            'Content-Length': String(VCARD_MAX_BYTES + 1),
         });
         expect(res.status).toBe(413);
     });

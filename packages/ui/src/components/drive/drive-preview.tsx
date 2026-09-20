@@ -2,7 +2,7 @@ import { getDriveItemThumbnail } from '@workspace/lib/api';
 import { formatEventWhen, remainingEventsLine, viewerTimeZone } from '@workspace/lib/calendar';
 import { CANVAS_PREVIEW_WIDTH, getTextPreviewMode, type TextPreviewMode } from '@workspace/lib/constants';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
-import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
+import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { droppedLine, remainingLine } from '@workspace/lib/contacts';
 import { formatDateTime } from '@workspace/lib/date';
@@ -29,7 +29,7 @@ export function DrivePreview({ path, onActivate, className }: DrivePreviewProps)
     const presentation = getFilePresentation(path.mimeType, path.type, path.name);
     const hasTextPreview = getTextPreviewMode(path.mimeType, path.name) !== null;
     // Same guard as the quick look: a file an import would refuse never gets a preview either.
-    const hasVCardPreview = isVCardFile(path.mimeType, path.name) && path.size <= IMPORT_MAX_BYTES;
+    const hasVCardPreview = isVCardFile(path.mimeType, path.name) && path.size <= VCARD_MAX_BYTES;
     const hasEmlPreview = isEmlFile(path.mimeType, path.name) && path.size <= EML_MAX_BYTES;
     const hasIcsPreview = isIcsFile(path.mimeType, path.name) && path.size <= ICS_MAX_BYTES;
     const { showThumbnail, thumbnailUrl } = getDriveItemThumbnail(path);

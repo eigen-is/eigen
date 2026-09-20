@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
-import { IMPORT_MAX_CARDS } from '@workspace/lib/constants/contact';
+import { VCARD_IMPORT_MAX_CARDS } from '@workspace/lib/constants/contact';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { getHome } from '../../lib/home';
@@ -190,9 +190,9 @@ describe('Contacts import', () => {
         expect(broadcasts.length).toBe(0);
     });
 
-    test('more than IMPORT_MAX_CARDS throws 413', async () => {
+    test('more than VCARD_IMPORT_MAX_CARDS throws 413', async () => {
         const { contacts } = await makeContacts();
-        const text = Array.from({ length: IMPORT_MAX_CARDS + 1 }, (_, i) =>
+        const text = Array.from({ length: VCARD_IMPORT_MAX_CARDS + 1 }, (_, i) =>
             card30(`Card${i} Many`, `many-${i}@example.com`, randomUUID()),
         ).join('');
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { ICS_MAX_BYTES } from '../../constants/calendar';
-import { IMPORT_MAX_BYTES } from '../../constants/contact';
+import { VCARD_MAX_BYTES } from '../../constants/contact';
 import { EML_MAX_BYTES } from '../../constants/mail';
 import { DOCX_MIME, XLSX_MIME } from '../../constants/mime';
 import { fileActionsFor, GUEST_DENIED_ACTIONS } from '../../core/file-actions';
@@ -76,7 +76,7 @@ describe('fileActionsFor on a Drive item', () => {
         },
         // Over the import ceiling the row is gone: the route answers a bigger vCard with a 413.
         {
-            item: path({ name: 'huge.vcf', type: 'file', mimeType: 'text/vcard', size: IMPORT_MAX_BYTES + 1 }),
+            item: path({ name: 'huge.vcf', type: 'file', mimeType: 'text/vcard', size: VCARD_MAX_BYTES + 1 }),
             ids: ['quick-look', 'download'],
         },
         {
@@ -96,7 +96,7 @@ describe('fileActionsFor on a Drive item', () => {
     }
 
     test('a .vcf imports to contacts right up to the ceiling', () => {
-        const atCeiling = path({ name: 'team.vcf', type: 'file', mimeType: 'text/vcard', size: IMPORT_MAX_BYTES });
+        const atCeiling = path({ name: 'team.vcf', type: 'file', mimeType: 'text/vcard', size: VCARD_MAX_BYTES });
         expect(idsFor(atCeiling)).toContain('import-contacts');
     });
 

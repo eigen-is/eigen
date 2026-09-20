@@ -2,7 +2,7 @@ import { useQueries, useQuery } from '@tanstack/react-query';
 import { driveApi, emlPreviewRoute, icsPreviewRoute, vcardPreviewRoute } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
-import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
+import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -255,7 +255,7 @@ export function useVCardPreview(ownerId: string, mountId: string, pathId: string
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        enabled: !!ownerId && !!mountId && !!pathId && size <= IMPORT_MAX_BYTES,
+        enabled: !!ownerId && !!mountId && !!pathId && size <= VCARD_MAX_BYTES,
         staleTime: Infinity,
         retry: retryWhenTransformBusy,
     });

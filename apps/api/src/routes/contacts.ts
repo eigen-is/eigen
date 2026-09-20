@@ -1,4 +1,4 @@
-import { IMPORT_MAX_BYTES, IMPORT_MAX_CARDS, VCARD_CONTENT_TYPE } from '@workspace/lib/constants/contact';
+import { VCARD_CONTENT_TYPE, VCARD_IMPORT_MAX_CARDS, VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import type { Contact, ContactTransferSource, ImportContactsResult } from '@workspace/lib/types/contact';
 import { isVCardFile } from '@workspace/lib/types/drive';
 import type { Label } from '@workspace/lib/types/label';
@@ -232,7 +232,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
         },
         {
             // The same card-count ceiling the import side enforces: one selection can't outgrow one file.
-            body: t.Object({ ids: t.Optional(t.Array(t.String(TEXT), { maxItems: IMPORT_MAX_CARDS })) }),
+            body: t.Object({ ids: t.Optional(t.Array(t.String(TEXT), { maxItems: VCARD_IMPORT_MAX_CARDS })) }),
             auth: true,
         },
     )
@@ -244,7 +244,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             // A whole book replays card by card through the CardDAV write seam, answering nothing until the
             // last one lands — longer than any server-wide idleTimeout, so exempt this request.
             server?.timeout(request, 0);
-            const bytes = await readBoundedBodyBytes(request, IMPORT_MAX_BYTES);
+            const bytes = await readBoundedBodyBytes(request, VCARD_MAX_BYTES);
             if (bytes === null) throw new ApiError(413, 'Upload too large');
             return await (await getContacts(user)).importCards(decodeVCardFile(bytes));
         },
@@ -260,7 +260,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             const bytes = await readImportSourceBytes(user, body, {
                 accepts: isVCardFile,
                 rejection: 'Not a vCard file',
-                maxBytes: IMPORT_MAX_BYTES,
+                maxBytes: VCARD_MAX_BYTES,
             });
             return await (await getContacts(user)).importCards(decodeVCardFile(bytes));
         },

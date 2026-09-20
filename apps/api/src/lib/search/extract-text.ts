@@ -1,5 +1,5 @@
 import { isSearchableTextFile } from '@workspace/lib/constants';
-import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
+import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import {
     DRIVE_MIME_CHAT,
     DRIVE_MIME_STICKIES,
@@ -68,7 +68,7 @@ export async function extractText(mount: Mount, path: DrivePath): Promise<string
 // (PREVIEWS.md), so they carry that job's ceilings — a file over the import ceiling, and a file the
 // decoder refuses, index as nothing rather than staying dirty for every later drain.
 async function extractVCardText(mount: Mount, path: DrivePath): Promise<string> {
-    if (path.size > IMPORT_MAX_BYTES) return '';
+    if (path.size > VCARD_MAX_BYTES) return '';
 
     let body: string | null;
     try {

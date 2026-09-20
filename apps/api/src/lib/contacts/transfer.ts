@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { IMPORT_MAX_CARDS } from '@workspace/lib/constants/contact';
+import { VCARD_IMPORT_MAX_CARDS } from '@workspace/lib/constants/contact';
 import type { ImportContactsResult } from '@workspace/lib/types/contact';
 import { eq } from 'drizzle-orm';
 import { ApiError } from '../core';
@@ -57,7 +57,7 @@ export async function importCards(contacts: Contacts, text: string): Promise<Imp
         if (e instanceof VCardError) throw new ApiError(400, 'Not a vCard file');
         throw e;
     }
-    if (cards.length > IMPORT_MAX_CARDS) throw new ApiError(413, 'Too many cards');
+    if (cards.length > VCARD_IMPORT_MAX_CARDS) throw new ApiError(413, 'Too many cards');
 
     const emails = new Set<string>();
     for (const contact of await contacts.getContacts()) {
