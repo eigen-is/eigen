@@ -15,7 +15,8 @@
    manages flag renames, and handles expunges. Eigen delivers to `new/` (always safe) and reads from `cur/`.
 3. **Eigen writes directly to `cur/` for local operations.** Flag changes, moves, and deletes rename files in `cur/`
    directly. This can cause a Dovecot UID reassignment if Dovecot scans simultaneously -- acceptable for a self-hosted
-   single-user system and self-correcting on Dovecot's next scan.
+   single-user system and self-correcting on Dovecot's next scan. Each of those writes fsyncs the file it stages and
+   the directories its rename touches ([MAIL.md § Files and index](MAIL.md#files-and-index)).
 4. **Standalone mode.** When Dovecot is not running, Eigen handles `new/` -> `cur/` moves itself. The sync engine
    handles both modes transparently using ENOENT-safe renames.
 5. **Six standard mailboxes, plus whatever else is on disk.** Eigen creates the standard six and lists every other

@@ -113,6 +113,19 @@ export default class MailDB {
         return this.db.select({ size: sql<number>`SUM(size)` }).from(schema.emails).get()?.size || 0;
     }
 
+    // What an upsert chunk is about to replace, in one query — the store's byte counter needs it before
+    // insertEmails runs, and a per-row select is what that path exists to avoid.
+    sumSizes(ids: string[]): number {
+        if (ids.length === 0) return 0;
+        return (
+            this.db
+                .select({ size: sql<number>`SUM(size)` })
+                .from(schema.emails)
+                .where(inArray(schema.emails.id, ids))
+                .get()?.size || 0
+        );
+    }
+
     getEmailsCount(mailbox: string) {
         return this.db.select({ count: count() }).from(schema.emails).where(eq(schema.emails.mailbox, mailbox)).get()!
             .count;
