@@ -18,7 +18,9 @@
 > multi-tenant deployments. HTTP Basic auth and two-way CalDAV write-back are explicit non-goals.
 
 Status: **not started** (verified against code 2026-07-06 — no subscription/import code exists
-anywhere in `../../apps/api/src/lib/calendar` or `../../apps/api/src/routes/calendar.ts`).
+anywhere in `../../apps/api/src/lib/calendar` or `../../apps/api/src/routes/calendar.ts`; re-checked 2026-09-20).
+
+**Depends on [PROPOSAL_CALENDAR_ICS_FILES.md](PROPOSAL_CALENDAR_ICS_FILES.md) (2026-09-20).** Calendar storage moves to one `.ics` file per UID with `calendar.db` as the index, and that move lands first. Three parts of this proposal change with it: the `subscription` column is created as part of the new `calendars` shape and needs no migration of its own (§ Migration); a feed snapshot becomes N resource writes plus one index commit, which is not atomic across a crash and needs its own commit contract (that proposal's § Risks); and file import goes through the `FILE_ACTIONS` registry, the way vCard import does (§ File import). The subscription model, the fetch policy and the read-only rules are unaffected.
 
 ## Goals
 
@@ -115,6 +117,8 @@ plus the matching Drizzle column in `schema.ts`
 (`text('subscription', { mode: 'json' }).$type<CalendarSubscription | null>()`). Additive and
 nullable — existing rows read back as `null` (owned). Frozen-format risk: **low**, no existing
 column or value changes meaning.
+
+Version 2 is also what the storage move claims. It lands first, so `subscription` is a column of the `calendars` table that version creates and the `ALTER TABLE` above is not needed. It stays here as the fallback for the case where import ships first after all; then the storage move takes version 3.
 
 ## Refresh mechanism
 
@@ -250,6 +254,8 @@ in `lib/export/` is weasyprint-specific), so this small policy lives in
 `calendar/subscription.ts` next to its only caller.
 
 ## File import
+
+**Through the file-action registry (2026-09-20).** A `.ics` reaches a user as a Drive file, a mail attachment or a chat attachment far more often than as a file on their disk, so the entry point is an `import-to-calendar` row in `FILE_ACTIONS` (`packages/lib/src/core/file-actions.ts`), beside `import-contacts`, and every menu and the quick-look footer pick it up. The routes mirror contacts (`routes/contacts.ts`): a raw-body `POST /calendar/:ownerId/import` for bytes the browser already holds (a mail part, a picked file) and `POST /calendar/:ownerId/import-from-drive`, which reads the Drive subject server-side through `getSharedDrive` so the bytes never round-trip through the browser. Both carry the target described in step 1 below and a shared FE/BE byte ceiling, checked before the bytes are read. The sidebar's "Import from file…" dialog stays as the entry point for a file on disk and posts to the raw-body route; it is not a second pipeline. The `.ics` quick look, the mail-reader chip for a calendar part and the shared event card are specified in [PROPOSAL_CALENDAR_ICS_FILES.md § Files everywhere](PROPOSAL_CALENDAR_ICS_FILES.md#files-everywhere-import-export-and-quick-look). The numbered steps below describe the import itself and hold for both routes; read "multipart upload" as the raw body.
 
 Reuse `parseIcs()`. The `POST /calendar/:ownerId/imports` route:
 

@@ -14,6 +14,8 @@ data/team/{teamId}/eigen.calendar/calendar.db
 
 Follows the Contacts/Mail pattern — per-user Home directory, not Drive.
 
+Calendar is the one domain whose truth is the database: mail is a Maildir plus `mail.db` and contacts are `cards/*.vcf` plus `contacts.db`, each with SQLite as a rebuildable index, while an event exists only as a row here. Moving events to one `.ics` file per UID with `calendar.db` as the index is designed in [PROPOSAL_CALENDAR_ICS_FILES.md](proposals/PROPOSAL_CALENDAR_ICS_FILES.md). Like contacts and unlike mail, every write goes through the API process; no other process opens this folder.
+
 ## Schema
 
 Four tables, Drizzle definitions in `apps/api/src/lib/calendar/schema.ts`. Only the columns that carry meaning
@@ -348,6 +350,14 @@ Regression nets: `caldav.test.ts` (protocol), `caldav-roundtrip.test.ts` (serial
 round-trips, TZ-pinned floating tests), `vtimezone.test.ts` (generator vs Intl),
 `calendar-timezone.test.ts` (occurrence keying), `ical-imip.test.ts` (iMIP scoping),
 `caldav-client-sync.test.ts` (client-faithful sync flows against web-created events).
+
+### Known limits of the regenerate model
+
+Both follow from storing columns and re-synthesizing the resource on GET, and both are addressed in [PROPOSAL_CALENDAR_ICS_FILES.md](proposals/PROPOSAL_CALENDAR_ICS_FILES.md):
+
+- **The round-trip is lossy.** `parseIcs` keeps what the columns model and `eventsToIcs` writes only that back, so a client's `VALARM` details, `ATTACH`, `RDATE`, `CATEGORIES`, `X-` properties and `RANGE=THISANDFUTURE` do not survive a PUT followed by a GET, and a sub-daily `RRULE` comes back as a single event.
+- **Any `ORGANIZER` locks the row.** `updateEvent` treats a row with `data.organizer` as an attendee-side linked copy and accepts only reminders and color, and `parseIcs` sets `data.organizer` from any `ORGANIZER` property, the user's own address included. An event with invitees created in Apple Calendar is therefore locked against that client's own later PUTs ([ROADMAP.md](ROADMAP.md), the `.ics` files row, phase −1).
+- **No UID-conflict check on PUT.** A UID already stored under another uri in the same calendar creates a second row; CardDAV answers the same case with `no-uid-conflict`.
 
 ## Where the code lives
 

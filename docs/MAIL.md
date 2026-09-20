@@ -51,6 +51,19 @@ v1 creates `emails` + base indexes; v2 adds the address columns; v3 adds the `em
 DESC)` — the composite index backing keyset pagination. **`emailLabels`/`emailsToLabels` are vestigial**:
 defined and migrated in v1, but nothing in the FE or BE reads or writes them.
 
+## Files and index
+
+Mail follows the contract contacts and calendar follow: standard files are the truth and SQLite is an index that rebuilds from them ([CONTACTS.md](CONTACTS.md) states the same for `cards/*.vcf`). What differs is the writer count. Contacts and calendar files are written by the API process alone; the Maildir is also written by Dovecot, out of process, which is why this store has `fs.watch` handles and a full readdir diff where contacts has a pending-write journal and a stat-only reconcile. The three share the primitives (`LocalFilesystem.writeAtomic`, `Semaphore(1)`, `ManagedDatabase`) and not a store class.
+
+| | Lives in | Rebuilds from the files |
+|---|---|---|
+| Messages, flags, mailbox membership | the `.eml` files and their Maildir names | yes |
+| `emails` rows, `emails_fts` | `mail.db` | yes, by `syncMailbox` |
+| A fast-saved draft's subject, preview and recipients | the `draft-meta/` sidecar and the row | no: the sync reads the `.eml` alone, so a rebuilt row shows the last full save; the sidecar still holds the truth and the composer overlays it |
+| Staged draft attachments | `draft-attachments/`, swept after 24 h | not indexed and not counted by the quota |
+
+Open against the standard contacts set, all in [ROADMAP.md](ROADMAP.md): Maildir writes do not fsync, the sidecar is not written atomically, a client-chosen draft id reaches a Maildir filename unvalidated, and staged attachments are outside the quota.
+
 ## Parsing
 
 `parseMail(bytes): ParsedMail` (`apps/api/src/lib/mail/mail-parser/`) turns a raw `.eml` into the parsed message. It is synchronous and non-streaming — the sole caller already holds the whole file in memory — across six files: `parse.ts` (entry + attachment/body/message-meta assembly), `split.ts` (non-streaming MIME tree with byte-exact bodies), `headers.ts` (unfolds continuation lines and decodes each header by name into a typed field), `decode.ts` (transfer, charset, and `format=flowed` decoding), `html.ts` (`htmlToText`, `textAsHtml` rendering, and `cid:` → data-URI inlining), and `linkify.ts` (one regex pass that links `http(s)://` and `mailto:` URLs, bare e-mail addresses, `www.` hosts and Bluesky `@handle`s, trimming trailing punctuation and unbalanced brackets; a bare `example.com` is deliberately not guessed, since that needs a TLD list and is the most false-positive-prone case). There is no header `Map`: headers are decoded into their exact types at the seam, so the output is the shared `ParsedMail` from `packages/lib/src/types/mail.ts`, which carries only the fields Eigen consumes.
@@ -269,6 +282,10 @@ with `?`) cover navigation (`j`/`k`/`o`/`u`), actions (`e`/`#`/`s`/`r`/`a`/`f`/`
   a `skipAttachmentContent` flag is deliberately unbuilt; add it only if a real large-mailbox profile
   justifies it (largely subsumed by the worker move).
 - Fast-saved drafts leave the on-disk `.eml` stale until a full save — external IMAP clients see old content.
+- Only the six standard mailboxes are listed and watched. A mailbox created through the create route or by an IMAP
+  client exists on disk but never appears in the sidebar, and syncs only when its URL is opened ([ROADMAP.md](ROADMAP.md)).
+- A `.eml` is a first-class file only on the way out (`/message/:id/download`): in Drive or as an attachment it gets the
+  fallback card, and nothing imports one into a mailbox ([ROADMAP.md](ROADMAP.md)).
 - Primary-password protocol auth fails when 2FA is enabled (use an app password).
 - A second `MailStore` backend (JMAP/Stalwart) is proposed only — see
   [PROPOSAL_STALWART_MAIL.md](proposals/PROPOSAL_STALWART_MAIL.md).

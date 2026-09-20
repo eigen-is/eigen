@@ -8,7 +8,10 @@
 ## Design Principles
 
 1. **Maildir on disk is the source of truth.** `mail.db` accelerates queries and stores parsed metadata. It can always
-   be rebuilt by scanning the Maildir.
+   be rebuilt by scanning the Maildir, with one exception: the list row of a fast-saved draft. A fast save writes
+   subject, preview and recipients to the row and the `draft-meta/` sidecar only, and the sync rebuilds rows from the
+   `.eml` alone, so a rebuilt index shows such a draft as of its last full save until it is opened or saved again
+   ([MAIL.md § Files and index](MAIL.md#files-and-index)).
 2. **Dovecot owns `new/` -> `cur/` transitions.** When Dovecot is running, it moves files from `new/` to `cur/`,
    manages flag renames, and handles expunges. Eigen delivers to `new/` (always safe) and reads from `cur/`.
 3. **Eigen writes directly to `cur/` for local operations.** Flag changes, moves, and deletes rename files in `cur/`
