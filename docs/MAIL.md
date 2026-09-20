@@ -60,11 +60,11 @@ This section describes `MaildirStore`, the only `MailStore` today; under a remot
 | Messages, flags, mailbox membership | the `.eml` files and their Maildir names | yes |
 | `emails` rows, `emails_fts` | `mail.db` | yes, by `syncMailbox` |
 | A fast-saved draft's subject, preview and recipients | the `draft-meta/` sidecar | yes, by `syncMailbox`: a Drafts row rebuilt from the stale `.eml` gets the sidecar projected back over it |
-| Staged draft attachments | `draft-attachments/`, swept after 24 h | not indexed and not counted by the quota |
+| Staged draft attachments | `draft-attachments/`, swept after 24 h | not indexed, but charged to the mail quota by a walk of that directory ([QUOTA.md](QUOTA.md)) |
 
 The sidecar is written through `writeAtomic`, and a sidecar that does not parse reads as absent — the same as a missing one — so bytes a crash tore fall back to the `.eml` instead of failing the read. `applyDraftMeta` (`MaildirStore`) is the one projection of a sidecar onto its index row: the fast save applies it beside the sidecar write, and the Drafts sync re-applies it over each row it has just rebuilt.
 
-Open against the standard contacts set, all in [ROADMAP.md](ROADMAP.md): Maildir writes do not fsync, a client-chosen draft id reaches a Maildir filename unvalidated, and staged attachments are outside the quota.
+Open against the standard contacts set, all in [ROADMAP.md](ROADMAP.md): Maildir writes do not fsync, and a client-chosen draft id reaches a Maildir filename unvalidated.
 
 ## Parsing
 
