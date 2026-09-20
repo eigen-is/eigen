@@ -133,7 +133,6 @@ export function EditEventDialog({
 
     const isRecurring = !!event.rrule;
     const isLinkedEvent = isInvitationFromOthers(event, {
-        id: eventOwnerId,
         email: eventOwnerId === user?.id ? user.email : undefined,
     });
 

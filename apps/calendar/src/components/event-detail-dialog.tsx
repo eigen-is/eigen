@@ -80,7 +80,6 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     // An ORGANIZER equal to the calendar owner is an event they organize, not an invitation to them;
     // the owner's address is known only when the owner is the viewer.
     const isLinkedEvent = isInvitationFromOthers(event, {
-        id: eventOwnerId,
         email: eventOwnerId === user?.id ? user.email : undefined,
     });
     const myAttendeeStatus = event.data?.attendees?.find(

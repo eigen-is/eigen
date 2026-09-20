@@ -171,14 +171,11 @@ export function formatFreeBusyTitle(endTime: Date): string {
 
 // The one answer to "is this row an invitation from someone else?". CalDAV clients write
 // ORGANIZER:mailto:<own address> on every event they create with guests, so a stored organizer alone
-// says nothing — only an organizer other than the Home that holds the event makes it an attendee copy.
-export function isInvitationFromOthers(
-    event: { data?: EventData | null },
-    owner: { id?: string; email?: string },
-): boolean {
+// says nothing — the organizer is me exactly when its address is the owner's, case-insensitively. An
+// owner with no address of its own (a team Home) matches nobody, so its rows stay locked.
+export function isInvitationFromOthers(event: { data?: EventData | null }, owner: { email?: string }): boolean {
     const organizer = event.data?.organizer;
     if (!organizer) return false;
-    if (organizer.userId && organizer.userId === owner.id) return false;
     return !owner.email || organizer.email.toLowerCase() !== owner.email.toLowerCase();
 }
 

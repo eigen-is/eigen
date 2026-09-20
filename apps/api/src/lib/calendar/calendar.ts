@@ -495,7 +495,18 @@ export class Calendar {
         const allDay = input.allDay ?? existing.allDay;
         const status = input.status ?? existing.status;
         const sequence = input.sequence ?? existing.sequence;
-        const data = input.data !== undefined ? input.data : existing.data;
+        const inputData = input.data !== undefined ? input.data : existing.data;
+        // organizer and organizerEventId are server-owned and absent from the HTTP schema, so an HTTP
+        // edit (the call that carries `user`) keeps the stored pair instead of erasing it. A CalDAV PUT
+        // stays a full-resource replace: a payload without ORGANIZER removes it.
+        const data =
+            user && inputData
+                ? {
+                      ...inputData,
+                      organizer: existing.data?.organizer,
+                      organizerEventId: existing.data?.organizerEventId,
+                  }
+                : inputData;
 
         // Same interval invariant as createEvent, on the resolved (possibly dragged) times.
         if (endTime < startTime) throw new ApiError(400, 'Event end time cannot be before start time');
@@ -600,7 +611,9 @@ export class Calendar {
         if (user && invitation?.organizer) {
             // Attendee deleting linked copy = decline
             const orgUserId = invitation.organizer.userId;
-            if (isExternalOwnerId(orgUserId)) {
+            // A CalDAV- or iMIP-parsed organizer is known by address only; with no Eigen id to relay to,
+            // the decline takes the same REPLY path an external organizer takes.
+            if (!orgUserId || isExternalOwnerId(orgUserId)) {
                 const mail = composeRsvpReply(existing, user.email, user.name ?? user.email, 'declined');
                 sendMail(mail).catch(console.error);
             } else {

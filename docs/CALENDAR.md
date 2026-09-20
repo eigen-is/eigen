@@ -78,7 +78,7 @@ guard and `deleteEvent` decline logic).
 **Propagation** (`invite-propagation.ts`):
 - Create/update with attendees: diff old vs new → add/remove/update linked copies + SSE notifications
 - Delete by organizer: cancel all attendee copies
-- Delete by attendee: treated as decline (propagates `declined` status to organizer)
+- Delete by attendee: treated as decline (propagates `declined` status to organizer). An organizer known by address only — no Eigen user id, which is every organizer a CalDAV PUT or an inbound `.ics` parsed — takes the same iMIP `REPLY` path as an `external_` organizer, because in-app propagation has no Home to address
 - Self-invite prevention: organizer's email is skipped during propagation
 - Unknown email: added to share registry for reconciliation on signup
 
@@ -99,7 +99,9 @@ All handled by `Calendar.rsvp()`. Per-occurrence data is stored as recurrence ex
 incoming rrule does not extend beyond any local truncation the attendee made. This prevents "delete this and following"
 from being undone by an organizer edit.
 
-**Linked event guard**: Attendees can only change `data.reminders` and `data.color` on linked copies. Title, time, description, location, rrule changes are blocked by `updateEvent()`. Detection is `isInvitationFromOthers()` from `@workspace/lib/calendar` (not the DB column `organizerEventId`): a stored organizer is someone else's only when its `userId` differs from the Home's owner id *and* its address differs from the Home user's address, compared case-insensitively. A stored organizer on its own means nothing — Apple Calendar and Thunderbird write `ORGANIZER:mailto:<the account's own address>` on every event they create with guests, and that event is the owner's own: editable by that client, by the web app and by the API, and its delete cancels for the guests instead of declining. One rule, every caller: the `updateEvent` guard and its invitation fan-out, `deleteEvent`, `rsvp()`, the inbound iMIP `REPLY` lookup and the calendar app's detail and edit dialogs. The edit dialog mirrors the guard (`EventFormFields`' `detailsDisabled`) so those fields are disabled rather than silently dropped on save; the calendar select stays live, because moving a linked copy goes through `moveEvent()`. In a shared calendar the viewer does not own, only the owner id is available — an address comparison would be against the wrong Home.
+**Linked event guard**: Attendees can only change `data.reminders` and `data.color` on linked copies. Title, time, description, location, rrule changes are blocked by `updateEvent()`. Detection is `isInvitationFromOthers()` from `@workspace/lib/calendar` (not the DB column `organizerEventId`): the organizer is the Home's own when `organizer.email` equals the Home user's address, compared case-insensitively — and an owner with no address of its own never matches, so a team calendar keeps a member-organized CalDAV event locked (a team Home's synthetic user has an empty address). A stored organizer on its own means nothing — Apple Calendar and Thunderbird write `ORGANIZER:mailto:<the account's own address>` on every event they create with guests, and that event is the owner's own: editable by that client, by the web app and by the API, and its delete cancels for the guests instead of declining. One rule, every caller: the `updateEvent` guard and its invitation fan-out, `deleteEvent`, `rsvp()`, the inbound iMIP `REPLY` lookup and the calendar app's detail and edit dialogs. The edit dialog mirrors the guard (`EventFormFields`' `detailsDisabled`) so those fields are disabled rather than silently dropped on save; the calendar select stays live, because moving a linked copy goes through `moveEvent()`. In a shared calendar the viewer does not own, the owner's address is not at hand — so the dialogs pass no address and the event reads as locked, while the server would accept the write.
+
+**`organizer` and `organizerEventId` are server-owned**: `EventDataSchema` (`routes/calendar.ts`) has no field for either, so an HTTP edit — the `updateEvent()` call that carries `user` — keeps the stored pair whatever `data` the client posts back. A CalDAV PUT (no `user`) stays a full-resource replace: a payload without `ORGANIZER` removes it.
 
 **SSE events**: `calendar:invite-received`, `calendar:invite-updated`, `calendar:invite-cancelled`, `calendar:invite-rsvp`.
 
@@ -326,6 +328,9 @@ stored exception — exception rows are internal and never appear as their own r
 - RECURRENCE-ID / EXDATE → `recurrenceDate` keys are wall-clock dates: TZID-form values key on their
   own wall components (RFC 5545 canonical), UTC-`Z` values convert the instant to the SERIES timezone,
   floating/DATE values keep their raw components
+- `ATTENDEE` / `ORGANIZER` values are URIs, so their `mailto:` scheme is stripped case-insensitively
+  (clients emit `MAILTO:` too). A surviving prefix would match no address in any comparison — the
+  owner check, the attendee lookup, the RSVP fan-out
 - Not supported (accepted, low): `RANGE=THISANDFUTURE` on RECURRENCE-ID degrades to a single-instance
   edit, and RDATE-added occurrences never appear — mainstream clients split such series into new UIDs
 
