@@ -3,7 +3,7 @@ import * as schema from './schema';
 
 export const MAIL_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'mail',
-    currentVersion: 4,
+    currentVersion: 5,
     schema,
     migrations: [
         {
@@ -99,6 +99,16 @@ export const MAIL_DB_CONFIG: DatabaseConfig<typeof schema> = {
             up: (db) =>
                 db.exec(`
                 CREATE INDEX IF NOT EXISTS idx_emails_mailbox_date ON emails(mailbox, date DESC, id DESC);
+            `),
+        },
+        {
+            // Mailbox membership is the only organization mail has, so the label tables v1 created
+            // never gained a reader. Child first, and message rows are untouched.
+            version: 5,
+            up: (db) =>
+                db.exec(`
+                DROP TABLE IF EXISTS emails_to_labels;
+                DROP TABLE IF EXISTS email_labels;
             `),
         },
     ],

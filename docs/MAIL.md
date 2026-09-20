@@ -45,11 +45,11 @@ in the DB for FTS, capped only at the list-response seam), `size`, `date`, the `
 `isDraft`/`isReplied`/`hasAttachments` booleans, `mailbox`, and `created/updatedAt`. The full parsed message
 (`Email = ParsedMail & EmailSummary`) is re-parsed from the `.eml` on demand; only the summary is cached.
 
-`mail.db` lives at `<home>/eigen.mail/mail.db`. `MAIL_DB_CONFIG` (`db-config.ts`, `currentVersion: 4`):
+`mail.db` lives at `<home>/eigen.mail/mail.db`. `MAIL_DB_CONFIG` (`db-config.ts`, `currentVersion: 5`):
 v1 creates `emails` + base indexes; v2 adds the address columns; v3 adds the `emails_fts` FTS5 table (porter
 + unicode61) with `emails_ai/ad/au` sync triggers; v4 adds `idx_emails_mailbox_date (mailbox, date DESC, id
-DESC)` — the composite index backing keyset pagination. **`emailLabels`/`emailsToLabels` are vestigial**:
-defined and migrated in v1, but nothing in the FE or BE reads or writes them.
+DESC)` — the composite index backing keyset pagination; v5 drops the `email_labels`/`emails_to_labels` tables
+v1 created and nothing ever read. `emails` is the only table the mail code touches.
 
 ## Files and index
 
@@ -271,7 +271,7 @@ with `?`) cover navigation (`j`/`k`/`o`/`u`), actions (`e`/`#`/`s`/`r`/`a`/`f`/`
 
 ## Not yet implemented / limitations
 
-- `emailLabels`/`emailsToLabels` tables are **vestigial** — created by migration, never used.
+- **No labels** — a message belongs to exactly one mailbox, and that is the only organization mail offers.
 - **Step 4 (worker offload) is deferred** — a cold index of tens of thousands of messages saturates the
   shared event loop until it drains (only matters for one-time bulk imports). The move also covers the
   residuals from the mail-parser audit: `DOMPurify.sanitize` still runs uncapped synchronous CPU on untrusted
