@@ -60,9 +60,9 @@ This section describes `MaildirStore`, the only `MailStore` today; under a remot
 | Messages, flags, mailbox membership | the `.eml` files and their Maildir names | yes |
 | `emails` rows, `emails_fts` | `mail.db` | yes, by `syncMailbox` |
 | A fast-saved draft's subject, preview and recipients | the `draft-meta/` sidecar and the row | no: the sync reads the `.eml` alone, so a rebuilt row shows the last full save; the sidecar still holds the truth and the composer overlays it |
-| Staged draft attachments | `draft-attachments/`, swept after 24 h | not indexed and not counted by the quota |
+| Staged draft attachments | `draft-attachments/`, swept after 24 h | not indexed, but charged to the mail quota by a walk of that directory ([QUOTA.md](QUOTA.md)) |
 
-Open against the standard contacts set, all in [ROADMAP.md](ROADMAP.md): Maildir writes do not fsync, the sidecar is not written atomically, a client-chosen draft id reaches a Maildir filename unvalidated, and staged attachments are outside the quota.
+Open against the standard contacts set, all in [ROADMAP.md](ROADMAP.md): Maildir writes do not fsync, the sidecar is not written atomically, and a client-chosen draft id reaches a Maildir filename unvalidated.
 
 ## Parsing
 

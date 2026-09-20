@@ -33,6 +33,14 @@ import {
 } from './mailutils';
 
 const STALE_DRAFT_TEMP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+// Sibling of the Maildir tree (not inside it) so Dovecot IMAP doesn't see it as a folder.
+const DRAFT_ATTACHMENTS_DIR = 'draft-attachments';
+
+// Staged draft attachments count toward the mail half of the quota, so the live store (MaildirStore.size)
+// and the admin's file-level sizing (pullHomeSize) charge them through this one walk.
+export function readDraftStagingSize(homeFs: LocalFilesystem): Promise<number> {
+    return homeFs.dirSize(path.join(PATHS.MAIL.ROOT, DRAFT_ATTACHMENTS_DIR));
+}
 
 export class MaildirStore implements MailStore {
     readonly basePath: string;
@@ -94,7 +102,7 @@ export class MaildirStore implements MailStore {
     }
 
     async size(): Promise<number> {
-        return this.db.size();
+        return this.db.size() + (await readDraftStagingSize(this.home.fs));
     }
 
     search(opts: MailSearchOptions): EmailSummary[] {
@@ -408,6 +416,8 @@ export class MaildirStore implements MailStore {
             await this.cleanupDraftTemp(tempId);
             throw e;
         }
+        // Staged bytes are charged immediately, so the next quota check must not read a pre-upload figure.
+        invalidateMailSize(this.home.user.id);
         return { tempId, ...meta };
     }
 
@@ -441,8 +451,7 @@ export class MaildirStore implements MailStore {
     }
 
     private getDraftTempDir(): string {
-        // Sibling of the Maildir tree (not inside it) so Dovecot IMAP doesn't see it as a folder.
-        return 'draft-attachments';
+        return DRAFT_ATTACHMENTS_DIR;
     }
 
     private async ensureDraftTempDir(): Promise<void> {
@@ -477,6 +486,7 @@ export class MaildirStore implements MailStore {
                 await this.storage.unlink(metaPath);
             }
         } catch {}
+        invalidateMailSize(this.home.user.id);
     }
 
     async cleanupStaleDraftTemps(): Promise<void> {
@@ -489,6 +499,7 @@ export class MaildirStore implements MailStore {
                 const stat = await this.storage.stat(filePath);
                 if (now - stat.mtimeMs > STALE_DRAFT_TEMP_MAX_AGE_MS) {
                     await this.storage.unlink(filePath);
+                    invalidateMailSize(this.home.user.id);
                 }
             } catch {}
         }
