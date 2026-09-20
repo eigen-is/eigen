@@ -60,13 +60,23 @@ This section describes `MaildirStore`, the only `MailStore` today; under a remot
 | Messages, flags, mailbox membership | the `.eml` files and their Maildir names | yes |
 | `emails` rows, `emails_fts` | `mail.db` | yes, by `syncMailbox` |
 | A fast-saved draft's subject, preview and recipients | the `draft-meta/` sidecar | yes, by `syncMailbox`: a Drafts row rebuilt from the stale `.eml` gets the sidecar projected back over it |
-| Staged draft attachments | `draft-attachments/`, swept after 24 h | not indexed, but charged to the mail quota by a walk of that directory ([QUOTA.md](QUOTA.md)) |
+| Staged draft attachments | `draft-attachments/`, swept after 24 h | not indexed, but charged to the mail quota, which re-walks that directory on every change to it ([QUOTA.md](QUOTA.md)) |
 
 The sidecar is written through `writeAtomic`, and a sidecar that cannot be read reads as absent — torn bytes, or an id no sidecar can exist under because another MDA named the file (`readDraftMeta` answers null rather than throwing, so one such file can't fail the whole Drafts reconcile). `applyDraftMeta` (`MaildirStore`) is the one projection of a sidecar onto its index row: the fast save applies it beside the sidecar write, and the Drafts sync re-applies it over each row it has just rebuilt.
 
 **A client-chosen id is a path segment.** A draft id names a Maildir file, its `draft-meta/` sidecar and, for a staged part, its `draft-attachments/` entry, so `messageHandleDraft` rejects an id `isSafePathSegment` (`lib/core/path-utils.ts`) refuses with a 400 — in the domain, not only in the store, because an id Eigen did not mint is wrong under any `MailStore`. `MaildirStore` asks the same predicate where it builds those filenames, for the staged temp ids too: a refusal, never a character mapping, since two mapped ids would collide on one file. The predicate is the one CardDAV resource names and calendar ids take ([CONTACTS.md](CONTACTS.md)); every id the server mints — `createUniqueMessageId`, `crypto.randomUUID` — passes it, which is why `createUniqueMessageId` reduces the host part to the predicate's charset instead of using Maildir's `\057`/`\072` escapes.
 
-Open against the standard contacts set, in [ROADMAP.md](ROADMAP.md): Maildir writes do not fsync.
+**Every Maildir write is durable.** `writeAtomic` is not the primitive here: its temp file sits beside the target, while Maildir delivery renames *across* directories, so both the source and the destination entry matter. Three `LocalFilesystem` methods carry it (`lib/core/local-filesystem.ts`): `writeDurable` writes the file in `tmp/` and fsyncs it, `renameDurable` renames it into place and fsyncs the directory that gained the name, and `syncDir` is called by the caller for a directory that *lost* one — which only a move between mailboxes needs, because there both ends are indexed and a resurrected old name would re-index as a second copy. So a delivery fsyncs the file, then `new/`, then `cur/` when the sync moves it over; a draft save fsyncs the file and `Drafts/cur/`; a flag change and `moveNewToCur` are one rename and one directory fsync; a delete unlinks and fsyncs `cur/`. `writeAtomic` shares `syncDir` and stays what the sidecar and the vCards use. Dovecot's own writes are outside this: it owns `new/` → `cur/` whenever it runs ([IMAP.md](IMAP.md)).
+
+**The file lands before the index row, always** — the files are the truth, so a crash between the two leaves the index behind the disk and the next `syncMailbox` repairs it:
+
+| A crash right after | Leaves | The next sync |
+|---|---|---|
+| the `tmp/` write | a staged file no name outside `tmp/` points at | never sees it: Eigen reads `cur/` only, and Dovecot sweeps a stale `tmp/` file |
+| the rename into `new/` or `cur/` | the message on disk, no row | indexes it, and announces it the way it announces anything it finds in a populated mailbox |
+| a flag rename in `cur/` | a row whose `filename` is the old one | reads the flags off the new name and updates the row |
+| a move's rename | the file in the target mailbox, the row still naming the source | drops the source row and indexes the file where it now is |
+| the delete's unlink | a row for a file that is gone | drops the row |
 
 ## Parsing
 
