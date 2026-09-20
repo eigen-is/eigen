@@ -1,6 +1,6 @@
 # Document Transform Workers
 
-> **TLDR**: Every CPU-heavy document transform — eigensheets/eigendoc/eigenslides/eigenvector and vCard previews, HTML/PDF/XLSX/DOCX
+> **TLDR**: Every CPU-heavy document transform — eigensheets/eigendoc/eigenslides/eigenvector previews and the vCard, message and calendar ones, HTML/PDF/XLSX/DOCX
 > exports, the xlsx/docx import and convert, and background search extraction — runs in a one-shot Bun Worker
 > behind one bounded runner (`apps/api/src/lib/document/transform/`). The main thread keeps auth/ACL, cache
 > coordination, storage I/O, media prep and the import commit; only transferred `ArrayBuffer`s and plain
@@ -32,14 +32,14 @@ Main thread                                       One-shot Bun Worker
 | `run-transform.ts`  | The one main-thread seam every transform goes through (`runTransformToText` / `runTransformToBytes` / `runFileTransformToText` / import variants): owns capture timing, per-operation deadline, admission, warning surfacing, failure mapping |
 | `runner.ts`         | Admission + Worker lifecycle only, no document logic; `TRANSFORM_LIMITS` lives here |
 | `worker.ts`         | Operation dispatch with lazy imports — a doc preview never evaluates the sheet engine or ExcelJS |
-| `protocol.ts`       | Closed discriminated request/response unions, transfer lists, result↔request pairing, result sizing. Two source shapes: a collab job carries the captured Yjs payload, a bytes job (the vCard preview, both imports) carries a transferred `ArrayBuffer`. A preview result is a string either way — the vCard one carries its cards as JSON |
+| `protocol.ts`       | Closed discriminated request/response unions, transfer lists, result↔request pairing, result sizing. Two source shapes: a collab job carries the captured Yjs payload, a bytes job (the vCard, `.eml` and `.ics` previews, both imports) carries a transferred `ArrayBuffer`. A preview result is a string either way — a bytes preview carries its typed payload as JSON |
 | `collab-source.ts`  | Main-thread capture of the compressed Yjs payload (`readYjsStatePayload`) |
 
 Every operation follows the same layout: a Worker-pure module per type behind a thin main-thread entry.
 
 | Operation | Main-thread entry | Worker-pure modules | Detail doc |
 |---|---|---|---|
-| Preview  | `preview/preview-document.ts` (collab), `preview/preview-cache.ts` (vCard) | `preview/eigen{doc,slides,sheets,vector}-render.ts`, `preview/vcard-preview.ts` | [PREVIEWS.md](PREVIEWS.md) |
+| Preview  | `preview/preview-document.ts` (collab), `preview/preview-cache.ts` (bytes) | `preview/eigen{doc,slides,sheets,vector}-render.ts`, `preview/{vcard,eml,ics}-preview.ts` | [PREVIEWS.md](PREVIEWS.md) |
 | Export   | `export/export-document.ts` (`runDocumentExport` + the format→envelope table) | `export/{doc,sheets,vector}/{render,transform}.ts`, `export/canvas/{render,transform}.ts` (both canvas types) | [EXPORT.md](EXPORT.md) |
 | Import / convert | `import/import-document.ts` | `import/{doc,sheets}/transform.ts` | [EXPORT.md](EXPORT.md), [SHEETS.md](SHEETS.md) |
 | Search extraction | `search/extract-text.ts` | `search/extract-render.ts` | [SEARCH.md](SEARCH.md) |
@@ -69,7 +69,7 @@ search extraction) priorities. Per-kind limits live in `TRANSFORM_LIMITS` (`runn
 | import        | 120s | 30s |
 | extract-text  | 30s  | 15s |
 
-`TRANSFORM_LIMITS` is keyed by kind, not document type, so the vCard preview runs under the same `preview` row as the collab ones. The deadline bounds runaways; the admission cost is what a job is expected to cost the queue. Because these
+`TRANSFORM_LIMITS` is keyed by kind, not document type, so the three bytes previews run under the same `preview` row as the collab ones. The deadline bounds runaways; the admission cost is what a job is expected to cost the queue. Because these
 routes are synchronous, a queued request holds its HTTP connection open — foreground admission is therefore
 bounded by predicted wait (summed admission costs, max 120s), not queue length alone. Overflow rejects with a
 human-readable `503` ("The server is busy…" — `useExportDocument` shows the raw text). Background work may
