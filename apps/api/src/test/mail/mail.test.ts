@@ -327,6 +327,33 @@ describe.skipIf(isWindows)('Mail', () => {
             const targetMessages = await assertJson<EmailSummary[]>(targetRes);
             expect(targetMessages.some((m) => m.id === messageId)).toBe(true);
         });
+
+        test('move-to-trash files the message in Trash', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/message/move-to-trash`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ messageId }),
+                },
+            );
+            expect(res.status).toBe(200);
+
+            const trashRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/mailbox/Trash`,
+            );
+            const trashMessages = await assertJson<EmailSummary[]>(trashRes);
+            expect(trashMessages.some((m) => m.id === messageId)).toBe(true);
+
+            const targetRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/mailbox/${targetMailbox}`,
+            );
+            const targetMessages = await assertJson<EmailSummary[]>(targetRes);
+            expect(targetMessages.some((m) => m.id === messageId)).toBe(false);
+        });
     });
 
     describe('Error Handling', () => {

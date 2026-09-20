@@ -1,4 +1,4 @@
-import { MAILBOX_TRASH, SPECIAL_MAILBOXES } from '@workspace/lib/constants/mailboxes';
+import { MAILBOX_TRASH } from '@workspace/lib/constants/mailboxes';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { type DraftAttachmentUpload, type Email, mailAttachmentName } from '@workspace/lib/types/mail';
 import { getMailUploadMaxSize, getUploadMaxSize } from '../config/enforcement';
@@ -40,13 +40,7 @@ export async function messageGet(user: User, messageId: string): Promise<Email> 
 
 export async function messageMoveToTrash(user: User, messageId: string) {
     const mail = await getMailClient(user);
-    const mailboxes = await mail.mailboxesList();
-    const trashFlag = SPECIAL_MAILBOXES[MAILBOX_TRASH].flag;
-    const target = mailboxes.find((mailbox) => mailbox.flags.includes(trashFlag));
-    if (!target) {
-        throw new ApiError(404, `Mailbox with flag '${trashFlag}' not found`);
-    }
-    return await mail.messageMove(messageId, target.path);
+    return await mail.messageMove(messageId, MAILBOX_TRASH);
 }
 
 export async function uploadDraftAttachment(user: User, request: Request) {
