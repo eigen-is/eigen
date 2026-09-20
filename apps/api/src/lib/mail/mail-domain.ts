@@ -15,14 +15,17 @@ import {
     type Email,
     type EmailDraft,
     type EmailSummary,
+    type ImportMailResult,
     isCalendarPart,
     isEmailDraft,
     type MaildirMailbox,
     type NewDraft,
+    type ParsedMail,
     type SentMailResult,
 } from '@workspace/lib/types/mail';
 import { type SSEventMail, SSEventType } from '@workspace/lib/types/sse';
 import { processInboundImip, summarizeCalendarInvite } from '../calendar/imip';
+import { enforceMailAndContactsQuota, invalidateMailSize } from '../config/enforcement';
 import { isDemo } from '../config/env';
 import { isInternalAddress } from '../config/server-config';
 import { ApiError, isSafePathSegment } from '../core';
@@ -145,6 +148,25 @@ export class Mail {
         }
 
         return uniqueId;
+    }
+
+    // No processInboundImip: an imported file carries no DKIM verdict, so it must never touch the calendar.
+    async messageImport(bytes: Buffer): Promise<ImportMailResult> {
+        let parsed: ParsedMail;
+        try {
+            parsed = parseMail(bytes);
+        } catch {
+            throw new ApiError(400, 'Not an email file');
+        }
+        // Any bytes parse as a body; only an envelope header makes them a message.
+        if (!parsed.from && !parsed.date && parsed.subject === undefined && !parsed.messageId) {
+            throw new ApiError(400, 'Not an email file');
+        }
+        await enforceMailAndContactsQuota(this.home.user.id, bytes.byteLength);
+
+        const id = await this.store.append('', bytes);
+        invalidateMailSize(this.home.user.id);
+        return { id };
     }
 
     async mailboxGet(

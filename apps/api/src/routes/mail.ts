@@ -1,9 +1,15 @@
-import { MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
-import { EML_MIME } from '@workspace/lib/types/drive';
-import { mailAttachmentName, type NewDraft, type SentMailResult } from '@workspace/lib/types/mail';
+import { EML_MAX_BYTES, MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
+import { EML_MIME, isEmlFile } from '@workspace/lib/types/drive';
+import {
+    type ImportMailResult,
+    mailAttachmentName,
+    type NewDraft,
+    type SentMailResult,
+} from '@workspace/lib/types/mail';
 import { Elysia, type Static, status, t } from 'elysia';
-import { ApiError, contentDisposition, setCacheHeaders } from '../lib/core';
+import { ApiError, contentDisposition, readBoundedBodyBytes, setCacheHeaders } from '../lib/core';
 import { requireLocalhost, requireNonGuest, requireSelf } from '../lib/core/access';
+import { getSharedDrive } from '../lib/drive';
 import {
     attachFromDrive,
     getMailClient,
@@ -24,7 +30,7 @@ import {
     VCARD_FORMAT,
 } from '../lib/preview/preview-cache';
 import { betterAuth } from './auth';
-import { attachmentReferenceSchema } from './shared-schemas';
+import { attachmentReferenceSchema, importFromDriveSchema } from './shared-schemas';
 
 const EmailAddressSchema = t.Object({
     address: t.Optional(t.String()),
@@ -398,4 +404,36 @@ export const mailRouter = new Elysia({ name: 'mail' })
             return getBytesEmlPreview(new Uint8Array(att.content).buffer);
         },
         { auth: true, params: AttachmentPreviewParamsSchema },
+    )
+    // The import pair: a saved `.eml` becomes an inbox message, from the browser's bytes or from Drive.
+    .post(
+        '/mail/:ownerId/import',
+        async ({ params, request, user }): Promise<ImportMailResult> => {
+            requireNonGuest(user);
+            requireSelf(params.ownerId, user.id);
+            const bytes = await readBoundedBodyBytes(request, EML_MAX_BYTES);
+            if (bytes === null) throw new ApiError(413, 'Upload too large');
+            return await (await getMailClient(user)).messageImport(Buffer.from(bytes));
+        },
+        { auth: true, parse: 'none' },
+    )
+    .post(
+        '/mail/:ownerId/import-from-drive',
+        async ({ params, body, user }): Promise<ImportMailResult> => {
+            requireNonGuest(user);
+            requireSelf(params.ownerId, user.id);
+            // The source can live in any drive the user may read — SharedDrive is what checks that.
+            const sourceDrive = await getSharedDrive(body.sourceOwnerId, user);
+            const source = await sourceDrive.getPath(body.sourceMountId, body.sourcePathId);
+            if (!source) throw new ApiError(404, 'Source file not found');
+            if (!isEmlFile(source.mimeType, source.name)) throw new ApiError(400, 'Not an email file');
+            if (source.size > EML_MAX_BYTES) throw new ApiError(413, 'Upload too large');
+            const file = await sourceDrive.downloadFile(body.sourceMountId, body.sourcePathId);
+            if (!file) throw new ApiError(404, 'Source file not found');
+            return await (await getMailClient(user)).messageImport(Buffer.from(await file.arrayBuffer()));
+        },
+        {
+            body: importFromDriveSchema,
+            auth: true,
+        },
     );

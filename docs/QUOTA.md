@@ -106,6 +106,8 @@ reports quota-used / quota-available from `getMountQuotaState` in `lib/webdav/pr
 `enforceMountQuota` in `routes/editor.ts`, crediting the size of the file being replaced. Mail draft
 attachments and mail-to-drive saves use `getMailUploadMaxSize` / `getUploadMaxSize` in `lib/mail/mail.ts`.
 
+Contact-card writes and `.eml` imports share one gate on the mail + contacts half of the budget, `enforceMailAndContactsQuota(userId, addBytes, creditBytes)`: `enforceCardBudget` (`lib/contacts/contacts.ts`) and `Mail.messageImport` (`lib/mail/mail-domain.ts`) both run it before writing, 507 on a projection over budget.
+
 ## Over-Quota Behavior
 
 When an admin lowers a quota below current usage (or team membership changes):

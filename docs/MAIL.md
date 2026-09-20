@@ -123,6 +123,8 @@ POST   /mail/:ownerId/message/:id/attachments/save-to-drive   save received atta
 GET    /mail/:ownerId/message/:id/attachment/:index/:fileName       download one attachment
 GET    /mail/:ownerId/message/:id/attachment/:index/embed/:fileName serve the same part inline
 GET    /mail/:ownerId/message/:id/attachment/:index/preview/:kind   preview one part (text | vcard | eml)
+POST   /mail/:ownerId/import                              import a saved .eml (raw body) into the inbox
+POST   /mail/:ownerId/import-from-drive                   import an .eml that sits in Drive
 ```
 
 ## Reading and the list (FE)
@@ -252,6 +254,8 @@ user's first mail init a welcome message is written straight into their INBOX (`
 `onboarding.welcomeMail` server setting), bypassing SMTP.
 
 **Role addresses.** When no user owns the recipient and `isRoleAddress` (`apps/api/src/lib/config/server-config.ts`) matches — an address on this server's mail domain whose local part is `postmaster`, `abuse`, or `noreply` (`ROLE_MAILBOX_LOCAL_PARTS`, `packages/lib/src/validation/username.ts`, also part of the reserved-username list) — `mailboxDeliver` delivers the raw bytes unchanged to the INBOX of every org admin (owners and admins, `getOrgAdmins`), so DMARC aggregate reports to `postmaster@` and delivery-status notifications for system mail sent as `noreply@` reach a human instead of bouncing (RFC 2142). No mailbox is created for these addresses. Nobody can claim one: the better-auth `user.create.before` / `user.update.before` hooks reject a role address on every creation and email-change path, and `requestOtp` refuses a guest sign-in for any address on the mail domain, since guest rows bypass those hooks. External addresses such as `postmaster@example.com` are unaffected.
+
+**Importing a saved message.** `POST /mail/:ownerId/import` takes one `.eml` as the raw body and `POST /mail/:ownerId/import-from-drive` takes one the user may read from any drive (`getSharedDrive`; not an `.eml` by `isEmlFile` → 400, past `EML_MAX_BYTES` → 413, the ceiling the raw route enforces on the body too). Both are `requireNonGuest` + `requireSelf` and end in `Mail.messageImport`, which parses the bytes first — a file carrying none of `From`, `Date`, `Subject` or `Message-ID` is not a message and is a 400 with nothing written — charges them to the mail + contacts budget (`enforceMailAndContactsQuota`, 507 before any write, [QUOTA.md](QUOTA.md)), then appends them to the INBOX through the store, so the message arrives unread with the sync and SSE event a delivery gets. It never runs `processInboundImip`: an imported file carries no DKIM verdict this server recorded, so a `text/calendar` REQUEST inside it stays an attachment and no calendar event is created or changed. Importing the same file twice gives two messages, the way an IMAP `APPEND` does.
 
 `POST /internal/mail/queue-alert` is the other localhost-only mail route. The queue lives on a private volume, so the API cannot count it; `docker/postfix/queue-monitor.sh` counts it inside the Postfix container and posts the number once it crosses `QUEUE_ALERT_THRESHOLD`. The route resolves `getOrgOwner()` and relays an `admin-alert` notification through `sendToHome` (never a cross-home `getHome()`), coalesced on the `mail-queue-backlog` tag. A notification and not an email, because an email about a jammed queue would sit in that queue.
 

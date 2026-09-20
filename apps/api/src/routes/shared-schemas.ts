@@ -51,6 +51,14 @@ export const clientFileEventBody = t.Union([
 const _clientFileEventBodyMatchesType: TypesEqual<Static<typeof clientFileEventBody>, ClientFileEventInput> = true;
 void _clientFileEventBodyMatchesType;
 
+// The Drive file an import-from-drive route reads its bytes from: the picked file's owner, mount and path.
+// One definition, so the contacts and mail routes cannot drift apart on the body their hooks post.
+export const importFromDriveSchema = t.Object({
+    sourceOwnerId: t.String(),
+    sourceMountId: t.String(),
+    sourcePathId: t.String(),
+});
+
 export const s3ConfigBody = t.Object({
     endpoint: t.String({ minLength: 1 }),
     bucket: t.String({ minLength: 1 }),

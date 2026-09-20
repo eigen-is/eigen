@@ -13,6 +13,7 @@ import { contentDisposition, readBoundedBodyBytes, setCacheHeaders } from '../li
 import { getSharedDrive } from '../lib/drive';
 import { parseVCardLines, unescapeText } from '../lib/vcard';
 import { betterAuth } from './auth';
+import { importFromDriveSchema } from './shared-schemas';
 
 // Field bounds in front of the ceiling the write seam enforces on the assembled card: generous enough that
 // no real contact meets them, tight enough that no single value can be the whole card. Free text is capped
@@ -57,15 +58,10 @@ const LabelSchema = t.Object({
     color: t.String(TEXT),
 });
 
-const ImportFromDriveSchema = t.Object({
-    sourceOwnerId: t.String(),
-    sourceMountId: t.String(),
-    sourcePathId: t.String(),
-});
-// Compile-time guard: a field added to ContactTransferSource without a schema entry here would be stripped
+// Compile-time guard: a field added to ContactTransferSource without a schema entry there would be stripped
 // by Elysia's normalize, so the key sets must match (a structural `extends` check would not catch it).
 type _ImportFromDriveSchemaCoversSource =
-    Exclude<keyof ContactTransferSource, keyof Static<typeof ImportFromDriveSchema>> extends never ? true : never;
+    Exclude<keyof ContactTransferSource, keyof Static<typeof importFromDriveSchema>> extends never ? true : never;
 const _importFromDriveSchemaCheck: _ImportFromDriveSchemaCoversSource = true;
 void _importFromDriveSchemaCheck;
 
@@ -273,7 +269,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             return await (await getContacts(user)).importCards(decodeVCardFile(bytes));
         },
         {
-            body: ImportFromDriveSchema,
+            body: importFromDriveSchema,
             auth: true,
         },
     );
