@@ -1,8 +1,9 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
+import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants/preview';
-import { DRIVE_MIME_SLIDES } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_SLIDES, EML_MIME } from '@workspace/lib/types/drive';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
 import { getHome } from '../../lib/home/get-home';
 import { Mount } from '../../lib/mount/mount';
@@ -615,6 +616,101 @@ describe('vCard preview route', () => {
 
         const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${uploaded.id}/vcard-preview`);
         expect(res.status).toBe(400);
+    });
+});
+
+// An .eml previews as the message it holds, served as JSON the overlay renders (PREVIEWS.md). The parse
+// and the sanitizer are covered in eml-preview.test.ts; this pins what the route answers.
+describe('eml preview route', () => {
+    let token: string;
+    let ownerId: string;
+    const mountId = 'default';
+    let rootId: string;
+
+    const MESSAGE = [
+        'From: Ada Lovelace <ada@external.com>',
+        'To: alice@example.com',
+        'Subject: Engine notes',
+        'Date: Tue, 15 Aug 2026 10:30:00 +0000',
+        'MIME-Version: 1.0',
+        'Content-Type: text/html; charset=utf-8',
+        '',
+        '<p>The engine <img src="https://tracker.example/pixel.png"> weaves patterns.</p>',
+        '',
+    ].join('\r\n');
+
+    beforeAll(async () => {
+        const ctx = await getTestContext();
+        token = ctx.alice.user.sessionToken;
+        ownerId = ctx.alice.user.id;
+        const root = await driveGet(token, ownerId, mountId, 'root');
+        rootId = root.id;
+    });
+
+    async function uploadEml(name: string, content: string) {
+        const file = new File([content], name, { type: EML_MIME });
+        return await driveUpload(token, ownerId, mountId, rootId, file);
+    }
+
+    const previewUrl = (pathId: string) => `/drive/${ownerId}/${mountId}/file/${pathId}/eml-preview`;
+
+    test('serves the message headers and a body that fetches nothing', async () => {
+        const uploaded = await uploadEml('notes.eml', MESSAGE);
+
+        const res = await authedRequest(token, previewUrl(uploaded.id));
+        expect(res.status).toBe(200);
+        expect(res.headers.get('cache-control')).toContain('max-age=');
+        const data = await res.json();
+        expect(data.subject).toBe('Engine notes');
+        expect(data.from.value[0].address).toBe('ada@external.com');
+        // A date-shaped string, not a Date: the route is read through the no-revival treaty.
+        expect(data.date).toBe('2026-08-15T10:30:00.000Z');
+        expect(data.html).toContain('weaves patterns');
+        expect(data.html).not.toContain('tracker.example');
+        expect(data.attachments).toEqual([]);
+    });
+
+    test('a file over the ceiling is refused before its bytes are read', async () => {
+        // The stored size is what the route admits on, so a small file claiming a large one still 413s.
+        const bytes = Buffer.from(MESSAGE);
+        const seed = await uploadEml('seed-for-eml-mount.eml', MESSAGE);
+        const home = await getHome(ownerId);
+        const { mount } = await home.drive.resolveFile(mountId, seed.id);
+        const hugeId = await mount.createFile(rootId, 'huge.eml', EML_MIME, EML_MAX_BYTES + 1, bytes);
+
+        const res = await authedRequest(token, previewUrl(hugeId));
+        expect(res.status).toBe(413);
+    });
+
+    test('a file that is not a message is refused outright', async () => {
+        const file = new File(['ford prefect'], 'notes.txt', { type: 'text/plain' });
+        const uploaded = await driveUpload(token, ownerId, mountId, rootId, file);
+
+        const res = await authedRequest(token, previewUrl(uploaded.id));
+        expect(res.status).toBe(400);
+    });
+
+    test('a file the parser refuses answers 422, never a crash', async () => {
+        const boundary = 'too-many-parts';
+        const garbage = [
+            'Content-Type: multipart/mixed; boundary="too-many-parts"',
+            '',
+            `--${boundary}\r\n`.repeat(1001),
+            `--${boundary}--`,
+        ].join('\r\n');
+
+        const uploaded = await uploadEml('garbage.eml', garbage);
+
+        const res = await authedRequest(token, previewUrl(uploaded.id));
+        expect(res.status).toBe(422);
+    });
+
+    test('a file the caller cannot read is not previewed', async () => {
+        const uploaded = await uploadEml('private.eml', MESSAGE);
+        const ctx = await getTestContext();
+
+        const res = await authedRequest(ctx.bob.user.sessionToken, previewUrl(uploaded.id));
+        expect(res.status).toBe(403);
     });
 });
 

@@ -65,6 +65,12 @@ export const vcardPreviewRoute = (ownerId: string, mountId: string, pathId: stri
 // same no-revival treaty.
 export const mailVCardPreviewRoute = (ownerId: string, messageId: string, index: number) =>
     plainApi.mail({ ownerId }).message({ id: messageId }).attachment({ index }).preview.vcard;
+// The .eml preview pair rides the same treaty for the same reason: its `date` is an ISO instant declared
+// as a string, and Eden's reviver would hand the renderer a Date the type does not admit.
+export const emlPreviewRoute = (ownerId: string, mountId: string, pathId: string) =>
+    plainApi.drive({ ownerId })({ mountId }).file({ pathId })['eml-preview'];
+export const mailEmlPreviewRoute = (ownerId: string, messageId: string, index: number) =>
+    plainApi.mail({ ownerId }).message({ id: messageId }).attachment({ index }).preview.eml;
 export const mailApi = api.mail;
 export const publicApi = api.p;
 export const driveApi = api.drive;

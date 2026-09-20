@@ -4,17 +4,20 @@ import type { Mail } from './mail-domain';
 
 // The part every mail route serves, or null on a 304 answered off the summary row, before the .eml is parsed.
 // no-cache: the URL has no version stamp, and a draft save rewrites the message under its id (date + size move).
+// A preview route passes its renderer's format tag, so a payload or sanitizer fix is not answered with a 304
+// on a message that has not changed; the two byte routes serve the part itself and have none.
 export async function readMailPart(
     mail: Mail,
     messageId: string,
     index: number,
     request: Request,
     set: { headers: Record<string, string | number> },
+    format?: string,
 ): Promise<Attachment | null> {
     const summary = mail.messageGetSummary(messageId);
     if (!summary) throw new ApiError(404, `Message '${messageId}' not found`);
 
-    const etag = `"${summary.id}-${index}-${summary.date.getTime()}-${summary.size}"`;
+    const etag = `"${summary.id}-${index}-${summary.date.getTime()}-${summary.size}${format ? `-${format}` : ''}"`;
     const ifNoneMatch = request.headers.get('if-none-match');
     const att =
         ifNoneMatch && matchesIfNoneMatch(ifNoneMatch, etag) ? null : await mail.messageGetAttachment(messageId, index);

@@ -1,7 +1,7 @@
 import { MAX_SEND_RECIPIENTS } from '@workspace/lib/constants/mail';
 import { type DriveAccessCheckResult, type DrivePath, isConvertTarget } from '@workspace/lib/types/drive';
 import type { FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
-import type { TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
+import type { EmlPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { getUploadMaxSize } from '../lib/config/enforcement';
@@ -17,7 +17,9 @@ import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
 import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
 import {
+    assertEmlPreviewable,
     assertVCardPreviewable,
+    getEmlPreview,
     getScreenPreview,
     getTextPreview,
     getVCardPreview,
@@ -361,6 +363,23 @@ export const driveRouter = new Elysia({ name: 'drive' })
             assertVCardPreviewable(path.name, path.mimeType, path.size);
 
             const result = await getVCardPreview(mount, path);
+            if (!result) throw new ApiError(404, 'No preview available');
+            // Stale-while-revalidate and the long max-age work exactly as they do for a text preview.
+            if (result.stale) set.headers['Cache-Control'] = 'no-store';
+            else setCacheHeaders(set, PREVIEW_MAX_AGE_SECONDS);
+            return result.value;
+        },
+        { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
+    )
+    // An .eml answers with the message it holds — headers, sanitized body and part list (PREVIEWS.md).
+    .get(
+        '/drive/:ownerId/:mountId/file/:pathId/eml-preview',
+        async ({ params, user, set }): Promise<EmlPreview> => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
+            assertEmlPreviewable(path.name, path.mimeType, path.size);
+
+            const result = await getEmlPreview(mount, path);
             if (!result) throw new ApiError(404, 'No preview available');
             // Stale-while-revalidate and the long max-age work exactly as they do for a text preview.
             if (result.stale) set.headers['Cache-Control'] = 'no-store';

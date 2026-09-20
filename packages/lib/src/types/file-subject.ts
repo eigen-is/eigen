@@ -34,7 +34,7 @@ export type SubjectInfo = {
     thumbnailUrl?: string;
 };
 
-export type PreviewMode = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'vcard' | 'fallback';
+export type PreviewMode = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'vcard' | 'eml' | 'fallback';
 
 export type FileActionId =
     | 'quick-look'

@@ -2,16 +2,18 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getBytesTextPreviewMode, TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants';
 import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
-import { type DrivePath, isCollabType, isVCardFile } from '@workspace/lib/types/drive';
-import type { TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
+import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
+import { type DrivePath, isCollabType, isEmlFile, isVCardFile } from '@workspace/lib/types/drive';
+import type { EmlPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { ApiError } from '../core/errors';
 import { COLLAB_DOCUMENT_TYPES } from '../document/collab-types';
-import type { VCardPreviewJob } from '../document/transform/protocol';
+import type { EmlPreviewJob, VCardPreviewJob } from '../document/transform/protocol';
 import { runBytesTransformToText, runFileTransformToText } from '../document/transform/run-transform';
 import type { TransformPriority } from '../document/transform/runner';
 import { decodeCharset } from '../mail/mail-parser/decode';
 import type { Mount } from '../mount';
 import { generateImagePreview } from '../shared/thumbnails';
+import { parseEmlPreview } from './eml-preview';
 import { isExiftoolCandidate } from './exiftool-preview';
 import { generateDocumentPreview } from './preview-document';
 import { inlineSvgMediaRefs } from './svg-media-inline';
@@ -41,7 +43,11 @@ const TEXT_FORMAT = 'f5';
 // is not format-scoped, but a .vcf has exactly one cached artifact: getTextPreviewMode declines it and
 // getScreenPreview does not answer for its mimes.) Bump on every change to the VCardPreview type: the stored
 // JSON is read back unchecked (vcard-preview.ts).
-const VCARD_FORMAT = 'vcard-f1';
+export const VCARD_FORMAT = 'vcard-f1';
+
+// The same reasoning for the message a .eml previews as, and one more reason to bump it: the payload's
+// html is what a DOMPurify upgrade filters, so a cached body predates every sanitizer fix (PREVIEWS.md).
+export const EML_FORMAT = 'eml-f1';
 
 function textCacheName(drivePath: DrivePath, format: string): string {
     return `${drivePath.id}-${drivePath.updatedAt.getTime()}.${format}.json`;
@@ -398,4 +404,26 @@ export async function getVCardPreview(mount: Mount, drivePath: DrivePath): Promi
 // The same cards from bytes the caller holds (a mail part): same Worker job, no cache.
 export async function getBytesVCardPreview(data: ArrayBuffer): Promise<VCardPreview> {
     return parseVCardPreview(await runBytesTransformToText(VCARD_PREVIEW_JOB, data, {}));
+}
+
+const EML_PREVIEW_JOB: EmlPreviewJob = { kind: 'preview', documentType: 'eml' };
+
+// The preview parses the whole message like an import does, so it shares the import's ceiling.
+export function assertEmlPreviewable(fileName: string, contentType: string, size: number): void {
+    if (!isEmlFile(contentType, fileName)) throw new ApiError(400, 'Not an email file');
+    if (size > EML_MAX_BYTES) throw new ApiError(413, 'File too large to preview');
+}
+
+// An .eml reads as the message it holds, never as its raw MIME source. The payload is parsed and
+// sanitized in the Worker from the file's own bytes and cached per file version like every other
+// preview; the caller admits the file's size before asking.
+export async function getEmlPreview(mount: Mount, drivePath: DrivePath): Promise<Served<EmlPreview> | null> {
+    return getOrCacheText(mount.previewsDir, drivePath, EML_FORMAT, parseEmlPreview, (priority) =>
+        runFileTransformToText(mount, drivePath, EML_PREVIEW_JOB, { priority }),
+    );
+}
+
+// The same message from bytes the caller holds (a mail part): same Worker job, no cache.
+export async function getBytesEmlPreview(data: ArrayBuffer): Promise<EmlPreview> {
+    return parseEmlPreview(await runBytesTransformToText(EML_PREVIEW_JOB, data, {}));
 }
