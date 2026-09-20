@@ -1,6 +1,11 @@
 import type { ImipMethod } from '../../types/calendar';
+import { unreadableLine } from '../transfer';
 
-// The counted line an `.ics` preview ends on when the file holds more events than the payload lists.
+// The two counted lines an `.ics` preview ends on, spelled once for the quick look and the drive hero.
+export function droppedEventsLine(dropped: number): string {
+    return unreadableLine(dropped, 'event');
+}
+
 export function remainingEventsLine(remaining: number): string {
     return `and ${remaining} more event${remaining === 1 ? '' : 's'}`;
 }

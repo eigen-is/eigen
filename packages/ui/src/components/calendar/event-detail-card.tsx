@@ -21,7 +21,7 @@ export type EventDetailCardProps = {
     organizer?: EventData['organizer'] | null;
     attendees?: Attendee[];
     // Guests the event holds that `attendees` does not list, counted by the payload that capped it.
-    droppedAttendees?: number;
+    remainingAttendees?: number;
     className?: string;
 };
 
@@ -40,7 +40,7 @@ export function EventDetailCard({
     description,
     organizer,
     attendees = [],
-    droppedAttendees = 0,
+    remainingAttendees = 0,
     className,
 }: EventDetailCardProps) {
     const recurrenceText = rruleToText(rrule ?? null);
@@ -93,9 +93,9 @@ export function EventDetailCard({
                     <UsersRound className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
                     <div className="flex-1">
                         <AttendeeList attendees={attendees} organizer={organizer} />
-                        {droppedAttendees > 0 && (
+                        {remainingAttendees > 0 && (
                             <p className="mt-1 text-xs text-muted-foreground">
-                                {remainingGuestsLine(droppedAttendees)}
+                                {remainingGuestsLine(remainingAttendees)}
                             </p>
                         )}
                     </div>

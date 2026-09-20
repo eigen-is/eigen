@@ -1,4 +1,4 @@
-import { ICS_METHOD_LABEL, remainingEventsLine } from '@workspace/lib/calendar';
+import { droppedEventsLine, ICS_METHOD_LABEL, remainingEventsLine } from '@workspace/lib/calendar';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { useIcsPreview } from '@workspace/lib/drive';
 import { useMailIcsPreview } from '@workspace/lib/mail';
@@ -37,11 +37,19 @@ function IcsEvents({
     isError: boolean;
     oversize: boolean;
 }) {
+    // The masters the file holds that this preview draws no card for — the unreadable ones get their own line.
+    const remaining = data ? data.total - data.dropped - data.events.length : 0;
+    // Both counts, for the empty state: a file whose every listable event failed still says how many.
+    const counts = [
+        ...(remaining > 0 ? [remainingEventsLine(remaining)] : []),
+        ...(data && data.dropped > 0 ? [droppedEventsLine(data.dropped)] : []),
+    ];
+
     return (
         <PreviewPane oversize={oversize} maxBytes={ICS_MAX_BYTES} isPending={isPending} unreadable={isError}>
             {data &&
                 (data.events.length === 0 ? (
-                    <EmptyState message="No events in this file" />
+                    <EmptyState message="No events in this file" hint={counts.join(' · ') || undefined} />
                 ) : (
                     <div className="max-w-3xl mx-auto flex flex-col gap-8 p-8">
                         {/* The METHOD belongs to the file, not to one of its events, so it is said once. */}
@@ -60,12 +68,15 @@ function IcsEvents({
                                 description={event.description}
                                 organizer={event.organizer}
                                 attendees={event.attendees}
-                                droppedAttendees={event.droppedAttendees}
+                                remainingAttendees={event.remainingAttendees}
                                 className="border-b pb-8 last:border-b-0 last:pb-0"
                             />
                         ))}
+                        {remaining > 0 && (
+                            <p className="text-sm text-muted-foreground">{remainingEventsLine(remaining)}</p>
+                        )}
                         {data.dropped > 0 && (
-                            <p className="text-sm text-muted-foreground">{remainingEventsLine(data.dropped)}</p>
+                            <p className="text-sm text-muted-foreground">{droppedEventsLine(data.dropped)}</p>
                         )}
                     </div>
                 ))}

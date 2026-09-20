@@ -82,7 +82,7 @@ test('the guests an event holds beyond the ones listed are counted', async () =>
         end: new Date('2026-09-20T10:00:00Z'),
         allDay: false,
         attendees: [{ email: 'ada@example.com', name: 'Ada', status: 'accepted', role: 'required' }],
-        droppedAttendees: 49,
+        remainingAttendees: 49,
     });
 
     expect(text).toContain('and 49 more guests');
