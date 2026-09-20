@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1467 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1469 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -831,7 +831,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (672)
+## Utilities & constants (674)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1034,6 +1034,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isExiftoolExtension` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `isLightColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `isSearchableTextFile` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
+| `isStandardMailbox` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `lightenColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `MAIL_PREVIEW_CHARS` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `MAILBOX_ARCHIVE` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
@@ -1045,6 +1046,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MAILBOX_NO_CHILDREN_FLAG` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `MAILBOX_SENT` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `MAILBOX_TRASH` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
+| `mailboxDisplayName` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `mailboxListFlags` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `mailboxRouteSegment` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `MAX_PUBLIC_USERS_PER_BATCH` | `@workspace/lib/constants` | packages/lib/src/constants/public.ts |

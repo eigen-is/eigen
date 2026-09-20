@@ -6,15 +6,15 @@ category: Basics
 tags: [mail, email, imap, sync, troubleshooting]
 related: [mail/get-started, mail/move-email-between-folders, connect/mount-drive-on-your-computer]
 order: 210
-updated: 2026-06-08
+updated: 2026-09-20
 ---
 
 A message that seems to have vanished is usually in another mailbox, not gone. And if you read the same account in
 a separate mail app on your phone or computer, the two can fall out of step for a few clear reasons. This page
 covers both: finding a missing message, and keeping Mail and an external app in sync.
 
-Most of the time the cause is one of three things: the message is in a mailbox you weren't looking at, it's in a
-custom folder that Mail doesn't show, or an external app is set up in a way that hides it.
+Most of the time the cause is one of two things: the message is in a mailbox you weren't looking at, or an
+external app is set up in a way that hides it.
 
 ## A message has disappeared from the Inbox
 
@@ -28,21 +28,19 @@ a message, so it's most likely in another mailbox. Check these, in order:
 Open each one from the sidebar to look. To bring a message back to your Inbox, move it there. See
 [Move email between folders](/support/mail/move-email-between-folders).
 
-## A message is in none of the mailboxes Mail shows
+## A message is in none of the six standard mailboxes
 
-**Mail shows six mailboxes, and only those six.** The sidebar holds **Inbox**, **Drafts**, **Sent**, **Spam**,
-**Trash**, and **Archive**. If you use a separate mail app on the same account and create your own folders there,
-or your old provider had extra folders, Mail does not list them and does not show what's inside them.
+**Mail lists your own folders too, below the standard six.** **Inbox**, **Drafts**, **Sent**, **Spam**, **Trash**,
+and **Archive** sit at the top of the sidebar. Folders you made in a separate mail app on the same account, or
+that came across from an old provider, appear under **Folders**, with the unread count beside each name. Click one
+to read what's in it.
 
-The messages are not lost. They're still in those folders, and you can see them in any mail app connected over
-IMAP. To read one in Mail, open the folder in your other app and move the message into one of the six mailboxes
-above. It then appears in Mail.
+A folder inside another folder shows its full path, so a folder called Acme inside Clients reads as
+**Clients/Acme**.
 
 <div class="eigen-callout">
 
-This works the other way too. If you move a message in your other app **out** of the six standard folders and into
-a custom one, it leaves Mail's view. Move it back into Inbox, Archive, or another standard folder and Mail picks it
-up again.
+Mail doesn't create, rename, or delete folders. Make them in your other mail app, and they appear in Mail.
 
 </div>
 
@@ -75,9 +73,8 @@ one.
 
 ## A folder you made in another app is missing from Mail
 
-**Custom folders live on the server, but Mail only shows the six standard mailboxes.** A folder you create in an
-external mail app stays there and keeps working in that app and any other IMAP app. It does not appear in Mail's
-sidebar.
+**Mail lists folders whose names use letters, numbers, spaces, hyphens, and underscores.** A folder with anything
+else in its name, such as an accent, an ampersand, or an emoji, stays on the server and keeps working in your
+other mail app, but Mail leaves it out of the sidebar.
 
-To keep a message reachable from Mail, file it in one of the six standard mailboxes rather than a folder of your
-own.
+Rename the folder in your other app to a plain name, or move the messages into a folder Mail lists.

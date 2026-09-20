@@ -81,7 +81,8 @@ Changing a flag renames the file in `cur/` via `renameInCur()`, then updates the
 ## Mailbox Structure
 
 Six standard mailboxes, canonical case. `STANDARD_MAILBOXES = ['', 'Sent', 'Drafts', 'Trash', 'Junk', 'Archive']`.
-Empty string represents INBOX (the Maildir root).
+Empty string represents INBOX (the Maildir root). Beside them stands whatever else the Maildir holds — Dovecot
+creates a folder for any IMAP client that asks, and Eigen lists it.
 
 ```
 eigen.mail/
@@ -95,11 +96,20 @@ eigen.mail/
     .Trash/
     .Junk/
     .Archive/
+    .Projects/              # a folder an IMAP client made
+    .Clients.Acme/          # nesting is the `.` delimiter, not a nested directory
 ```
 
-`mailboxDir()` maps names: empty/`INBOX` -> `Maildir/`, others -> `Maildir/.{name}`. Mailbox names are validated
-against path traversal and special characters. `canonicalMailbox()` in `mail-domain.ts` normalizes case-insensitive
-input to canonical form.
+`mailboxDir()` maps names: empty/`INBOX` -> `Maildir/`, others -> `Maildir/.{name}`, joining a `/`-delimited name
+with `.` so `Clients/Acme` and `Clients.Acme` are one directory. Mailbox names are validated against path traversal
+and special characters (`isValidMailboxPath`, [MAIL.md § Mailboxes](MAIL.md#mailboxes-and-the-naming-gotcha)).
+`canonicalMailbox()` in `mail-domain.ts` case-folds the six standard names and passes any other name through
+untouched, so a folder's own spelling is the one Eigen addresses it by.
+
+`mailboxesList()` enumerates the Maildir: the standard six first, then every other `.Folder` by path, each with
+its `total`/`unread`. A directory whose name fails validation is skipped silently — Dovecot accepts names this
+store cannot address, and one of them must not break the listing. A folder Eigen has never indexed is synced by
+that first listing, so its counts are real rather than zero.
 
 Mailbox membership is the only organization Eigen has — there are no labels.
 
@@ -143,10 +153,12 @@ the background with `.catch()`. Anything the background sync finds reaches the c
 
 ## File Watching
 
-`MaildirStore.watch()` sets up `fs.watch()` on `cur/` and `new/` for each standard mailbox. Changes trigger
-`syncMailbox()` which detects new messages, flag renames, and deletions, then reports them through `MailStoreEvents`
-so the frontend updates without page refresh. `unwatch()` closes all watchers and awaits in-flight syncs on
-`Mail.destruct()`.
+`MaildirStore.watch()` sets up `fs.watch()` on `cur/` and `new/` for every mailbox the enumeration finds — the
+same list `mailboxesList()` reports, so a watcher exists for each folder on disk and not only for the standard
+six. Changes trigger `syncMailbox()` which detects new messages, flag renames, and deletions, then reports them
+through `MailStoreEvents` so the frontend updates without page refresh. The Maildir root is watched too: an IMAP
+client can create a folder at any time, and each new `.Folder` picks up its own pair of watchers as it appears.
+`unwatch()` closes all watchers and awaits in-flight syncs on `Mail.destruct()`.
 
 ## Dovecot Compatibility
 
@@ -163,8 +175,10 @@ so the frontend updates without page refresh. `unwatch()` closes all watchers an
 
 ### Coexistence behavior
 
-- Extra IMAP-created folders exist on disk but are not indexed or shown in Eigen. Messages moved to custom folders
-  appear as "deleted" from Eigen's perspective; moving them back triggers re-detection.
+- An IMAP-created folder is listed, watched and openable in Eigen, under the name Dovecot gave it. A message moved
+  into one leaves its old mailbox and appears in that folder's list.
+- A folder whose name Eigen's validator refuses (an empty hierarchy segment, a character outside `A-Za-z0-9_- `)
+  stays reachable over IMAP and is left out of Eigen's listing.
 - Simultaneous flag renames by Dovecot and Eigen: one rename fails with ENOENT, next sync corrects.
 - Dovecot assigns UIDs on its next scan of `cur/`. Moves (which land directly in target `cur/`) cause UID
   reassignment, matching IMAP MOVE semantics (COPY + EXPUNGE).
@@ -186,7 +200,7 @@ namespace inbox {
 ```
 
 `separator = .` is what makes Dovecot's folder names line up with the on-disk `.Mailbox` layout, and the
-`special_use` blocks make clients see the same six mailboxes Eigen exposes. The rest of the file is TLS
+`special_use` blocks make clients label the six standard mailboxes the way Eigen does. The rest of the file is TLS
 (`ssl = required`, plaintext auth off), the `checkpassword` passdb, running IMAP workers as `vmail` (uid 1000,
 matching the API container), and the SASL listener Postfix uses for submission.
 

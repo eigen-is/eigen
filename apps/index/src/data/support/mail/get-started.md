@@ -7,7 +7,7 @@ tags: [mail, getting-started, email, inbox]
 related: [mail/read-and-reply, mail/compose-and-send, drive/get-started]
 crossSections: [getting-started]
 order: 10
-updated: 2026-06-08
+updated: 2026-09-20
 ---
 
 Mail is your email in Eigen. You read, write, and organize messages without leaving the browser. This page is a
@@ -31,6 +31,9 @@ The sidebar on the left holds your mailboxes. Click one to see the messages in i
 - **Archive** is for mail you want to keep out of the Inbox without deleting it.
 
 When a mailbox has unread messages, the count appears next to its name, like **Inbox (3)**.
+
+If you also read this account in another mail app and made folders of your own there, they appear below the six,
+under **Folders**. See [Email is missing or not syncing](/support/mail/email-missing-or-not-syncing).
 
 ## The message list
 

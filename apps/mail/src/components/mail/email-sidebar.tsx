@@ -1,5 +1,10 @@
-import { mailboxRouteSegment, SIDEBAR_MAILBOXES, specialMailboxFromFlags } from '@workspace/lib/constants/mailboxes';
-import { MAILBOX_ICONS } from '@workspace/lib/mailbox-icons';
+import {
+    mailboxDisplayName,
+    mailboxRouteSegment,
+    SIDEBAR_MAILBOXES,
+    specialMailboxFromFlags,
+} from '@workspace/lib/constants/mailboxes';
+import { CUSTOM_MAILBOX_ICON, MAILBOX_ICONS } from '@workspace/lib/mailbox-icons';
 import type { MaildirMailbox } from '@workspace/lib/types/mail';
 import { SidebarBody, SidebarItem, SidebarSection } from '@workspace/ui';
 import { StorageUsage } from '@workspace/ui/components/home';
@@ -38,6 +43,31 @@ type AppSidebarProps = {
     onMoveToFolder?: (emailIds: string[], folderId: string) => void;
 };
 
+function MailboxRow({
+    item,
+    condensed,
+    onMoveToFolder,
+}: {
+    item: SidebarMailbox;
+    condensed: boolean;
+    onMoveToFolder?: (emailIds: string[], folderId: string) => void;
+}) {
+    const label = item.unread > 0 ? `${item.name} (${item.unread})` : item.name;
+    if (onMoveToFolder) {
+        return (
+            <DroppableSidebarItem
+                icon={item.icon}
+                label={label}
+                to={item.href}
+                condensed={condensed}
+                acceptTypes={['email']}
+                onDrop={(data) => onMoveToFolder(data.ids, item.path)}
+            />
+        );
+    }
+    return <SidebarItem icon={item.icon} label={label} to={item.href} condensed={condensed} />;
+}
+
 export function EmailSidebar({
     condensed = false,
     mailboxes = [],
@@ -63,36 +93,43 @@ export function EmailSidebar({
         return SIDEBAR_MAILBOXES.flatMap((box) => bySpecialPath.get(box.path) ?? []);
     }, [mailboxes, isLoading, error]);
 
+    // Everything else the Maildir holds — a folder the user made in an IMAP client. Labeled by its full
+    // hierarchy with `/` for the Maildir++ `.`, so a nested folder reads as the path it is.
+    const customMailboxList = useMemo(() => {
+        if (isLoading || error) return [];
+        return mailboxes
+            .filter((mailbox) => !specialMailboxFromFlags(mailbox.flags))
+            .map((mailbox) => ({
+                path: mailbox.path,
+                name: mailboxDisplayName(mailbox.path),
+                icon: renderIcon(CUSTOM_MAILBOX_ICON),
+                href: mailboxHref(mailbox.path),
+                unread: mailbox.unread,
+            }));
+    }, [mailboxes, isLoading, error]);
+
     return (
         <SidebarBody>
             <EmailComposeButton condensed={condensed} />
 
             <SidebarSection condensed={condensed} loading={isLoading}>
-                {standardMailboxList.map((item) => {
-                    if (onMoveToFolder) {
-                        return (
-                            <DroppableSidebarItem
-                                key={item.path || item.name}
-                                icon={item.icon}
-                                label={item.unread > 0 ? `${item.name} (${item.unread})` : item.name}
-                                to={item.href}
-                                condensed={condensed}
-                                acceptTypes={['email']}
-                                onDrop={(data) => onMoveToFolder(data.ids, item.path)}
-                            />
-                        );
-                    }
-                    return (
-                        <SidebarItem
-                            key={item.path || item.name}
-                            icon={item.icon}
-                            label={item.unread > 0 ? `${item.name} (${item.unread})` : item.name}
-                            to={item.href}
-                            condensed={condensed}
-                        />
-                    );
-                })}
+                {standardMailboxList.map((item) => (
+                    <MailboxRow
+                        key={item.path || item.name}
+                        item={item}
+                        condensed={condensed}
+                        onMoveToFolder={onMoveToFolder}
+                    />
+                ))}
             </SidebarSection>
+
+            {customMailboxList.length > 0 && (
+                <SidebarSection condensed={condensed} title={condensed ? undefined : 'Folders'}>
+                    {customMailboxList.map((item) => (
+                        <MailboxRow key={item.path} item={item} condensed={condensed} onMoveToFolder={onMoveToFolder} />
+                    ))}
+                </SidebarSection>
+            )}
 
             {/* Storage usage indicator at the bottom of sidebar */}
             <StorageUsage className="mt-auto" condensed={condensed} />
