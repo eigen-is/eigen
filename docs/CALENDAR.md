@@ -192,15 +192,18 @@ the target sees a changed event. Moving a lone recurrence occurrence (an excepti
 
 `Calendar.importEvents()` groups the VEVENTs by UID and writes the masters in file order:
 
-- A UID that is empty, longer than 255 characters or carrying a control character → `failed`. It travels into etags, sync deltas and the uri of every override row, so it has to be storable.
+- More than `ICS_IMPORT_MAX_EVENTS` VEVENTs — masters and overrides together, because each one is a row → 413 before anything is written. One series fits ~37 000 `RECURRENCE-ID` VEVENTs inside `ICS_MAX_BYTES`, so a ceiling on masters alone bounds nothing.
+- A UID that is empty, longer than 255 characters or carrying a control character → `failed`. It travels into etags and sync deltas, so it has to be storable.
 - A UID any calendar of the Home already holds → `skipped`, so a re-import is a no-op and an invitation already linked never gets a twin.
-- Everything else is inserted as the importing user's own event under a fresh `uri` of `${randomUUID()}.ics` — the file's UID is its author's string, and two files that share one collide on the `(calendarId, uri)` unique index.
+- Everything else is inserted as the importing user's own event under a fresh `uri` of `${randomUUID()}.ics`, overrides included — the file's UID is its author's string (it may carry `/`, `..` or quotes), the uri is a CalDAV resource name, and two files that share a UID collide on the `(calendarId, uri)` unique index.
 - **`data.organizer` and `data.attendees` are dropped**, `METHOD` is ignored and reminders are capped at `ICS_IMPORT_MAX_REMINDERS`. A stored organizer locks the event (`isInvitationFromOthers`) and turns its delete into a decline; an attendee list on an organizer-less event sends a REQUEST on every edit and a CANCEL on delete to addresses the file's author chose, and is the row a forged iMIP REPLY matches by UID. An imported invitation is a plain event.
-- That UID's overrides then go through `syncExceptionEvents` (`calendar/exception-sync.ts`), the exception writer a CalDAV PUT uses. It takes one series' VEVENTs, so a file holding many series keeps every override on its own master.
-- An event the calendar refuses (a reversed interval, an unparseable RRULE) counts as `failed` and the file continues; a failing override leaves its master standing.
-- More than `ICS_IMPORT_MAX_EVENTS` masters → 413 before anything is written.
+- That UID's overrides are plain inserts against the master just written — a fresh master has no stored exceptions, so there is nothing to reconcile and the CalDAV full-replace path (`syncExceptionEvents` in `caldav/resource.ts`) stays out of it. The rows are the ones a PUT of the same file writes: `parentEventId`, the `recurrenceDate` key, the master's timezone when the override names none, and `status: 'cancelled'` for the rows `parseIcs` synthesizes from EXDATE.
+- An event the calendar refuses (a reversed interval, an unparseable RRULE) counts as `failed` and the file continues. A series is all or nothing: an override that fails takes its master and the series' earlier rows with it, through a savepoint per series.
+- The whole file is one `db.transaction`, so a crash mid-file rolls back the ctag bump with the rows and a retry is a clean re-import — without it a half-written master is `skipped` on the retry and its series keeps losing its overrides. The announcement happens after the commit.
 
-The masters of a file land under one ctag bump, one `calendar:event-created` broadcast and one `notifySharedCalendarUsers()`: `createEvent` does all three per call, and a thousand of each would trip the rate limiter. The two share `insertEvent()`, the row write, which stamps the ctag its caller bumped.
+A file lands under one ctag bump, one `calendar:event-created` broadcast and one `notifySharedCalendarUsers()`: `createEvent` does all three per call, and a thousand of each would trip the rate limiter. Import and create share `insertEvent()`, the row write, which stamps the ctag its caller bumped.
+
+Calendar data has no quota — nothing meters `calendar.db` the way Drive meters bytes — so repeated imports grow it unbounded.
 
 ## API Routes
 

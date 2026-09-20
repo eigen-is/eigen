@@ -9,9 +9,10 @@ export const ICS_PREVIEW_MAX_EVENTS = 200;
 export const ICS_PREVIEW_MAX_DESCRIPTION_CHARS = 10_000;
 export const ICS_PREVIEW_MAX_ATTENDEES = 100;
 
-// What one import may write. Every master is a row plus a recurrence expansion on every later range
-// query, and a file past this is a whole account's history rather than a calendar moved by hand.
+// What one import may write, counting every VEVENT of the file: a master is a row plus a recurrence
+// expansion on every later range query, an override is a row too, and a file past this is a whole
+// account's history rather than a calendar moved by hand.
 export const ICS_IMPORT_MAX_EVENTS = 1000;
-// An imported event keeps a handful of alarms: a file may carry dozens, and each one is a future
-// notification the importing user never asked for.
+// An imported event keeps a handful of alarms: a file may carry dozens, and each one is stored on the
+// row and written back out as a VALARM.
 export const ICS_IMPORT_MAX_REMINDERS = 5;

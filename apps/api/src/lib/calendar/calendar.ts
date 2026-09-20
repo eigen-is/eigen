@@ -27,7 +27,6 @@ import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import { actorDisplayName, type User } from '../user';
 import { CALENDAR_DB_CONFIG } from './db-config';
-import { syncExceptionEvents } from './exception-sync';
 import { composeRsvpReply } from './imip';
 import { propagateCancellation, propagateDecline, propagateInvitation, propagateRsvp } from './invite-propagation';
 import {
@@ -88,8 +87,7 @@ function validateEventInput(input: CreateEventArgs): void {
 }
 
 // A UID the home can key an event by. The file's own UID is kept so a re-import recognizes it, and it
-// travels into etags, sync deltas and the uri of every override row — so an unprintable or endless one
-// is refused rather than stored.
+// travels into etags and sync deltas — so an unprintable or endless one is refused rather than stored.
 const MAX_UID_LENGTH = 255;
 function isImportableUid(uid: string): boolean {
     if (!uid || uid.length > MAX_UID_LENGTH) return false;
@@ -320,6 +318,10 @@ export class Calendar {
         const cal = this.getCalendarById(calendarId);
         if (!cal) throw new ApiError(404, 'Calendar not found');
 
+        // Every VEVENT is a row, overrides included: one master with 37 000 RECURRENCE-IDs is the same
+        // write volume as 37 000 masters.
+        if (parsed.events.length > ICS_IMPORT_MAX_EVENTS) throw new ApiError(413, 'Too many events');
+
         const masters: ParsedEvent[] = [];
         const overridesByUid = new Map<string, ParsedEvent[]>();
         for (const event of parsed.events) {
@@ -331,64 +333,88 @@ export class Calendar {
             if (series) series.push(event);
             else overridesByUid.set(event.uid, [event]);
         }
-        if (masters.length > ICS_IMPORT_MAX_EVENTS) throw new ApiError(413, 'Too many events');
 
         const result: ImportEventsResult = { imported: 0, skipped: 0, failed: 0 };
-        // One ctag bump, one broadcast and one shared-calendar notification for the file: a thousand
-        // events through createEvent were a thousand of each.
-        this.incrementCtag(calendarId);
-        const newCtag = this.getCalendarById(calendarId)!.ctag;
+        // One transaction for the file: a crash mid-loop would otherwise leave masters behind that a
+        // retry skips, so a series would lose its overrides for good.
+        this.db.transaction((tx) => {
+            // One ctag bump, one broadcast and one shared-calendar notification for the file: a thousand
+            // events through createEvent were a thousand of each.
+            this.incrementCtag(calendarId);
+            const newCtag = this.getCalendarById(calendarId)!.ctag;
 
-        for (const parsedMaster of masters) {
-            const master = importable(parsedMaster);
-            if (!isImportableUid(master.uid)) {
-                result.failed++;
-                continue;
-            }
-            // Queried per event, so the loop's own writes count: a UID repeated in the file skips like a
-            // re-import, and a UID an invitation already linked never gets a twin.
-            if (this.getEventsByUid(master.uid).length) {
-                result.skipped++;
-                continue;
-            }
+            for (const parsedMaster of masters) {
+                const master = importable(parsedMaster);
+                if (!isImportableUid(master.uid)) {
+                    result.failed++;
+                    continue;
+                }
+                // Queried per event, so the loop's own writes count: a UID repeated in the file skips like a
+                // re-import, and a UID an invitation already linked never gets a twin.
+                if (this.getEventsByUid(master.uid).length) {
+                    result.skipped++;
+                    continue;
+                }
 
-            const args: CreateEventArgs = {
-                title: master.title,
-                description: master.description,
-                location: master.location,
-                startTime: master.startTime,
-                endTime: master.endTime,
-                allDay: master.allDay,
-                rrule: master.rrule,
-                timezone: master.timezone,
-                status: master.status,
-                sequence: master.sequence,
-                data: master.data,
-                uid: master.uid,
-                createByUserId: this.home.user.id,
-                // Never the file's UID: it is the author's string, and two files that share one collide
-                // on the (calendarId, uri) unique index.
-                uri: `${randomUUID()}.ics`,
-            };
+                const args: CreateEventArgs = {
+                    title: master.title,
+                    description: master.description,
+                    location: master.location,
+                    startTime: master.startTime,
+                    endTime: master.endTime,
+                    allDay: master.allDay,
+                    rrule: master.rrule,
+                    timezone: master.timezone,
+                    status: master.status,
+                    sequence: master.sequence,
+                    data: master.data,
+                    uid: master.uid,
+                    createByUserId: this.home.user.id,
+                    // Never the file's UID: it is the author's string, and two files that share one collide
+                    // on the (calendarId, uri) unique index.
+                    uri: `${randomUUID()}.ics`,
+                };
 
-            let event: CalendarEvent;
-            try {
-                validateEventInput(args);
-                event = this.insertEvent(calendarId, args, newCtag);
-            } catch {
-                result.failed++;
-                continue;
+                try {
+                    // A savepoint per series, so an override the calendar refuses takes its master's row
+                    // with it instead of leaving half a series behind.
+                    tx.transaction(() => {
+                        validateEventInput(args);
+                        const event = this.insertEvent(calendarId, args, newCtag);
+                        // A fresh master has no stored exceptions to reconcile against, so every override is
+                        // a plain insert: the row a CalDAV PUT writes, under a resource name of its own.
+                        for (const parsedOverride of overridesByUid.get(master.uid) ?? []) {
+                            const override = importable(parsedOverride);
+                            const overrideArgs: CreateEventArgs = {
+                                title: override.title,
+                                description: override.description,
+                                location: override.location,
+                                startTime: override.startTime,
+                                endTime: override.endTime,
+                                allDay: override.allDay,
+                                // The master's zone when the override names none, or it serializes in Z
+                                // form and its etag stops hashing like the create/update paths (audit #24).
+                                timezone: override.timezone ?? event.timezone,
+                                status: override.status,
+                                sequence: override.sequence,
+                                data: override.data,
+                                parentEventId: event.id,
+                                recurrenceDate: override.recurrenceDate,
+                                uid: event.uid,
+                                createByUserId: this.home.user.id,
+                                uri: `${randomUUID()}.ics`,
+                            };
+                            validateEventInput(overrideArgs);
+                            this.insertEvent(calendarId, overrideArgs, newCtag);
+                        }
+                    });
+                } catch {
+                    result.failed++;
+                    continue;
+                }
+                result.imported++;
             }
-            result.imported++;
-
-            const overrides = overridesByUid.get(master.uid);
-            if (!overrides) continue;
-            try {
-                syncExceptionEvents(this, calendarId, event, [master, ...overrides.map(importable)], this.home.user.id);
-            } catch {
-                // An override that collides (two VEVENTs on one occurrence) leaves its master standing.
-            }
-        }
+        });
 
         const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_CREATED, this.home.user.id);
         this.home.broadcast(sseEvent);

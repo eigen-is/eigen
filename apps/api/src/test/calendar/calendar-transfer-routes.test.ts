@@ -13,6 +13,7 @@ import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getMailDomain } from '../../lib/config/server-config';
+import { getHome } from '../../lib/home';
 import {
     app,
     assertJson,
@@ -75,17 +76,26 @@ describe('Calendar transfer routes', () => {
             }),
         });
 
+    const epoch = (iso: string) => Math.floor(new Date(iso).getTime() / 1000);
+
     const eventsInRange = async (user: TestUser, from: string, to: string): Promise<CalendarEventOccurrence[]> => {
         const res = await authedRequest(
             user.sessionToken,
-            `/calendar/${user.id}/event-range/${Math.floor(new Date(from).getTime() / 1000)}/${Math.floor(
-                new Date(to).getTime() / 1000,
-            )}`,
+            `/calendar/${user.id}/event-range/${epoch(from)}/${epoch(to)}`,
         );
         return assertJson<CalendarEventOccurrence[]>(res);
     };
 
     const april = (user: TestUser = alice) => eventsInRange(user, '2026-04-01T00:00:00Z', '2026-04-30T23:59:59Z');
+
+    // One calendar's occurrences, so an imported series and a CalDAV-PUT one can be compared side by side.
+    const calendarRange = async (calId: string, from: string, to: string): Promise<CalendarEventOccurrence[]> => {
+        const res = await authedRequest(
+            alice.sessionToken,
+            `/calendar/${alice.id}/calendars/${calId}/event-range/${epoch(from)}/${epoch(to)}`,
+        );
+        return assertJson<CalendarEventOccurrence[]>(res);
+    };
 
     const defaultCalendarOf = async (user: TestUser): Promise<CalendarItem> => {
         const res = await authedRequest(user.sessionToken, `/calendar/${user.id}/calendars`);
@@ -381,6 +391,139 @@ describe('Calendar transfer routes', () => {
         expect(findOrFail(seriesB, (e) => e.occurrenceDate === '2026-04-15').title).toBe('Standup B');
     });
 
+    test('a series of overrides is one broadcast, and every occurrence matches a CalDAV PUT of the same file', async () => {
+        const uid = `overrides-${randomUUID()}@other`;
+        const day = (offset: number) =>
+            new Date(Date.UTC(2026, 4, 1 + offset)).toISOString().slice(0, 10).replaceAll('-', '');
+        const file = feed(
+            vevent(uid, 'Daily', '20260501T090000Z', '20260501T093000Z', [
+                'RRULE:FREQ=DAILY;COUNT=55',
+                `EXDATE:${day(2)}T090000Z`,
+            ]),
+            ...Array.from({ length: 50 }, (_, i) =>
+                vevent(uid, `Moved ${i}`, `${day(i + 5)}T140000Z`, `${day(i + 5)}T150000Z`, [
+                    `RECURRENCE-ID:${day(i + 5)}T090000Z`,
+                ]),
+            ),
+        );
+
+        const sse = collectSSE(alice.id);
+        const result = await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file));
+        sse.stop();
+        expect(result).toEqual({ imported: 1, skipped: 0, failed: 0 });
+        expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENT_CREATED).length).toBe(1);
+
+        const imported = await calendarRange(calendarId, '2026-05-01T00:00:00Z', '2026-06-30T23:59:59Z');
+        const series = imported.filter((e) => e.uid === uid);
+        expect(series.length).toBe(54); // 55 occurrences, one dropped by the EXDATE
+        expect(series.some((e) => e.occurrenceDate === '2026-05-03')).toBe(false);
+        expect(findOrFail(series, (e) => e.occurrenceDate === '2026-05-06').title).toBe('Moved 0');
+
+        // The same file through a CalDAV PUT, the other writer of exception rows.
+        const put = await app.handle(
+            new Request(`http://localhost/dav/calendars/${alice.id}/${secondCalendarId}/${randomUUID()}.ics`, {
+                method: 'PUT',
+                headers: { Authorization: `Basic ${btoa(`${alice.email}:${PASSWORD}`)}`, 'Content-Type': ICS_MIME },
+                body: file,
+            }),
+        );
+        expect(put.status).toBe(201);
+
+        const throughCalDav = await calendarRange(secondCalendarId, '2026-05-01T00:00:00Z', '2026-06-30T23:59:59Z');
+        const shape = (events: CalendarEventOccurrence[]) =>
+            events.map((e) => `${e.occurrenceDate} ${e.title} ${new Date(e.startTime).toISOString()}`).sort();
+        expect(shape(series)).toEqual(shape(throughCalDav.filter((e) => e.uid === uid)));
+    });
+
+    test('imported overrides get a resource name of their own, never one built from the file UID', async () => {
+        const uid = `../../weird-${randomUUID()}@other`;
+        const file = feed(
+            vevent(uid, 'Traversal', '20260901T090000Z', '20260901T093000Z', ['RRULE:FREQ=DAILY;COUNT=3']),
+            vevent(uid, 'Traversal moved', '20260902T110000Z', '20260902T113000Z', ['RECURRENCE-ID:20260902T090000Z']),
+        );
+        expect(await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file))).toEqual({
+            imported: 1,
+            skipped: 0,
+            failed: 0,
+        });
+
+        const home = await getHome(alice.id);
+        const stored = home.calendar.getEventsByUid(uid);
+        expect(stored.length).toBe(2);
+        for (const row of stored) expect(row.uri).toMatch(/^[0-9a-f-]{36}\.ics$/);
+
+        const propfind = await app.handle(
+            new Request(`http://localhost/dav/calendars/${alice.id}/${calendarId}/`, {
+                method: 'PROPFIND',
+                headers: {
+                    Authorization: `Basic ${btoa(`${alice.email}:${PASSWORD}`)}`,
+                    'Content-Type': 'application/xml',
+                    Depth: '1',
+                },
+                body: '<?xml version="1.0" encoding="utf-8"?><D:propfind xmlns:D="DAV:"><D:prop><D:getetag/></D:prop></D:propfind>',
+            }),
+        );
+        expect(propfind.status).toBe(207);
+        const hrefs = [...(await propfind.text()).matchAll(/<D:href>([^<]*)<\/D:href>/g)].map((m) => m[1]);
+        expect(hrefs.length).toBeGreaterThan(0);
+        for (const href of hrefs) expect(href.startsWith(`/dav/calendars/${alice.id}/${calendarId}/`)).toBe(true);
+    });
+
+    test('a series whose override is invalid keeps none of its rows while the rest of the file imports', async () => {
+        const stamp = randomUUID();
+        const halfUid = `half-${stamp}@other`;
+        const wholeUid = `whole-${stamp}@other`;
+        const file = feed(
+            vevent(halfUid, 'Half series', '20260801T090000Z', '20260801T093000Z', ['RRULE:FREQ=DAILY;COUNT=5']),
+            vevent(halfUid, 'Fine override', '20260802T110000Z', '20260802T113000Z', [
+                'RECURRENCE-ID:20260802T090000Z',
+            ]),
+            vevent(halfUid, 'Backwards override', '20260803T120000Z', '20260803T100000Z', [
+                'RECURRENCE-ID:20260803T090000Z',
+            ]),
+            vevent(wholeUid, 'Whole event', '20260801T100000Z', '20260801T103000Z'),
+        );
+
+        expect(await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file))).toEqual({
+            imported: 1,
+            skipped: 0,
+            failed: 1,
+        });
+
+        const home = await getHome(alice.id);
+        expect(home.calendar.getEventsByUid(halfUid).length).toBe(0);
+        expect(home.calendar.getEventsByUid(wholeUid).length).toBe(1);
+    });
+
+    test('a crash mid-import leaves the calendar exactly as it was', async () => {
+        const stamp = randomUUID();
+        const file = feed(
+            ...Array.from({ length: 4 }, (_, i) =>
+                vevent(`crash-${i}-${stamp}@other`, `Crash ${i}`, '20261001T090000Z', '20261001T100000Z'),
+            ),
+        );
+
+        const home = await getHome(alice.id);
+        const ctagBefore = home.calendar.getCalendarById(calendarId)!.ctag;
+        const original = home.calendar.getEventsByUid.bind(home.calendar);
+        let calls = 0;
+        const spy = spyOn(home.calendar, 'getEventsByUid').mockImplementation((uid: string) => {
+            calls++;
+            if (calls === 3) throw new Error('storage went away');
+            return original(uid);
+        });
+
+        const sse = collectSSE(alice.id);
+        const res = await importRequest(alice, calendarId, file);
+        sse.stop();
+        spy.mockRestore();
+
+        expect(res.status).toBe(500);
+        expect(home.calendar.getCalendarById(calendarId)!.ctag).toBe(ctagBefore);
+        expect(home.calendar.getRawEvents(calendarId).some((e) => e.uid.includes(stamp))).toBe(false);
+        expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENT_CREATED).length).toBe(0);
+    });
+
     test('a file past the event ceiling is refused before anything is written', async () => {
         const stamp = randomUUID();
         const file = feed(
@@ -392,6 +535,23 @@ describe('Calendar transfer routes', () => {
         const res = await importRequest(alice, calendarId, file);
         expect(res.status).toBe(413);
         expect((await april()).some((e) => e.uid.includes(stamp))).toBe(false);
+    });
+
+    test('the ceiling counts every VEVENT: a file of one master and its overrides is refused too', async () => {
+        const uid = `flood-${randomUUID()}@other`;
+        const file = feed(
+            vevent(uid, 'Flood', '20261101T090000Z', '20261101T093000Z', [
+                `RRULE:FREQ=DAILY;COUNT=${ICS_IMPORT_MAX_EVENTS}`,
+            ]),
+            ...Array.from({ length: ICS_IMPORT_MAX_EVENTS }, (_, i) => {
+                const day = new Date(Date.UTC(2026, 10, 1 + i)).toISOString().slice(0, 10).replaceAll('-', '');
+                return vevent(uid, `Moved ${i}`, `${day}T140000Z`, `${day}T150000Z`, [`RECURRENCE-ID:${day}T090000Z`]);
+            }),
+        );
+
+        expect((await importRequest(alice, calendarId, file)).status).toBe(413);
+        const home = await getHome(alice.id);
+        expect(home.calendar.getEventsByUid(uid).length).toBe(0);
     });
 
     test('a thousand events are one calendar broadcast', async () => {
