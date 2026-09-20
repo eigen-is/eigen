@@ -1,11 +1,14 @@
 import { getDriveItemThumbnail } from '@workspace/lib/api';
 import { CANVAS_PREVIEW_WIDTH, getTextPreviewMode, type TextPreviewMode } from '@workspace/lib/constants';
 import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
+import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { droppedLine, remainingLine } from '@workspace/lib/contacts';
+import { formatDateTime } from '@workspace/lib/date';
 import { A4_WIDTH_PX } from '@workspace/lib/docs/eigendoc';
-import { useTextPreview, useVCardPreview } from '@workspace/lib/drive';
+import { useEmlPreview, useTextPreview, useVCardPreview } from '@workspace/lib/drive';
+import { NO_SUBJECT } from '@workspace/lib/mail';
 import type { Contact } from '@workspace/lib/types/contact';
-import { type DrivePath, isVCardFile } from '@workspace/lib/types/drive';
+import { type DrivePath, isEmlFile, isVCardFile } from '@workspace/lib/types/drive';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useElementSize } from '../../hooks/use-element-size';
@@ -25,6 +28,7 @@ export function DrivePreview({ path, onActivate, className }: DrivePreviewProps)
     const hasTextPreview = getTextPreviewMode(path.mimeType, path.name) !== null;
     // Same guard as the quick look: a file an import would refuse never gets a preview either.
     const hasVCardPreview = isVCardFile(path.mimeType, path.name) && path.size <= IMPORT_MAX_BYTES;
+    const hasEmlPreview = isEmlFile(path.mimeType, path.name) && path.size <= EML_MAX_BYTES;
     const { showThumbnail, thumbnailUrl } = getDriveItemThumbnail(path);
 
     const interactive = !!onActivate;
@@ -65,6 +69,8 @@ export function DrivePreview({ path, onActivate, className }: DrivePreviewProps)
                 </>
             ) : hasVCardPreview ? (
                 <VCardHero path={path} icon={presentation.icon} color={presentation.colorVar} />
+            ) : hasEmlPreview ? (
+                <EmlHero path={path} icon={presentation.icon} color={presentation.colorVar} />
             ) : hasTextPreview ? (
                 <HtmlPreview path={path} tintColor={presentation.colorVar} />
             ) : (
@@ -105,6 +111,32 @@ function VCardHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; c
             ))}
             {remaining > 0 && <p className="truncate text-xs text-muted-foreground">{remainingLine(remaining)}</p>}
             {data.dropped > 0 && <p className="truncate text-xs text-muted-foreground">{droppedLine(data.dropped)}</p>}
+        </div>
+    );
+}
+
+// The quick look reads the whole message; the hero shows what a mail list row shows, off the same query.
+function EmlHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; color: string }) {
+    const { data, isLoading } = useEmlPreview(path.ownerId, path.mountId, path.id, path.updatedAt, path.size);
+
+    // Loading reads as the empty tinted box, the same as a text hero with no body yet.
+    if (isLoading) return null;
+    if (!data) return <IconFallback icon={icon} color={color} />;
+
+    const sender = data.from?.value[0];
+    const senderName = sender?.name || sender?.address || 'Unknown';
+
+    return (
+        <div className="absolute inset-0 flex flex-col justify-center gap-2 overflow-hidden px-4 pt-8 pb-3">
+            <div className="flex min-w-0 items-center gap-3">
+                <UserAvatar name={senderName} email={sender?.address ?? ''} />
+                <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-foreground">{senderName}</p>
+                    {data.date && <p className="truncate text-xs text-muted-foreground">{formatDateTime(data.date)}</p>}
+                </div>
+            </div>
+            <p className="truncate text-sm text-foreground">{data.subject || NO_SUBJECT}</p>
+            {data.text && <p className="line-clamp-2 text-xs text-muted-foreground">{data.text}</p>}
         </div>
     );
 }

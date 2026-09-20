@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1494 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1500 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (160)
+## Components (161)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -135,6 +135,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `LabelFilterHeader` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/label-filter-header.tsx |
 | `LabelManager` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/label-manager.tsx |
 | `LoginPage` | `@workspace/ui/components/layout/pages` | packages/ui/src/components/layout/pages/login-page.tsx |
+| `MessageView` | `@workspace/ui/components/mail` | packages/ui/src/components/mail/message-view.tsx |
 | `ColorPicker` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker.tsx |
 | `ColorPickerButton` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker-button.tsx |
 | `FontPicker` | `@workspace/ui/components/media` | packages/ui/src/components/media/font-picker.tsx |
@@ -202,7 +203,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyGestureContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (273)
+## Hooks (275)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -338,6 +339,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useDuplicatePath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useEffectiveMembers` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `useEmailCollaborators` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
+| `useEmlPreview` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useEmptyTrash` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/trash.ts |
 | `useExportDocument` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-export-document.ts |
 | `useFileHistory` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-file-history.ts |
@@ -383,6 +385,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useImportMailFromDrive` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-transfer.ts |
 | `useImportMailFromUrl` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-transfer.ts |
 | `useMailboxes` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-mailboxes.ts |
+| `useMailEmlPreview` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-attachment-preview.ts |
 | `useMailTextPreview` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-attachment-preview.ts |
 | `useMailVCardPreview` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-attachment-preview.ts |
 | `useMoveEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-emails.ts |
@@ -837,7 +840,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (693)
+## Utilities & constants (696)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1127,6 +1130,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EIGEN_DOC_ICONS` | `@workspace/lib/eigendoc-icons` | packages/lib/src/core/eigendoc-icons.ts |
 | `FILE_ACTIONS` | `@workspace/lib/file-actions` | packages/lib/src/core/file-actions.ts |
 | `fileActionsFor` | `@workspace/lib/file-actions` | packages/lib/src/core/file-actions.ts |
+| `GUEST_DENIED_ACTIONS` | `@workspace/lib/file-actions` | packages/lib/src/core/file-actions.ts |
 | `getFileIconComponent` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
 | `getFilePresentation` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
 | `getPreviewMode` | `@workspace/lib/file-subject` | packages/lib/src/core/file-subject.ts |
@@ -1156,6 +1160,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `createDraftEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
 | `flattenAddresses` | `@workspace/lib/mail` | packages/lib/src/core/mail/addresses.ts |
 | `handleMailSSEvent` | `@workspace/lib/mail` | packages/lib/src/core/mail/sse-handlers.ts |
+| `NO_SUBJECT` | `@workspace/lib/mail` | packages/lib/src/core/mail/preview-lines.ts |
+| `remainingAttachmentsLine` | `@workspace/lib/mail` | packages/lib/src/core/mail/preview-lines.ts |
 | `CUSTOM_MAILBOX_ICON` | `@workspace/lib/mailbox-icons` | packages/lib/src/core/mailbox-icons.ts |
 | `MAILBOX_ICONS` | `@workspace/lib/mailbox-icons` | packages/lib/src/core/mailbox-icons.ts |
 | `CHAT_NOTIFICATION_TYPES` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |

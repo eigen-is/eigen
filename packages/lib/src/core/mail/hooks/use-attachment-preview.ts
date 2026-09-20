@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { mailApi, mailVCardPreviewRoute } from '@workspace/lib/api';
+import { mailApi, mailEmlPreviewRoute, mailVCardPreviewRoute } from '@workspace/lib/api';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import { AppError, retryWhenTransformBusy } from '../../api-error';
 import { emailKeys } from './keys';
@@ -30,6 +30,22 @@ export function useMailVCardPreview(ownerId: string, messageId: string, index: n
             // mailVCardPreviewRoute, not mailApi: a card's birthday is a date-only string, and the default
             // treaty's reviver would hand the renderer a Date (api.ts).
             const response = await mailVCardPreviewRoute(ownerId, messageId, index).get();
+            if (response.error) throw new AppError(response);
+            return response.data;
+        },
+        enabled: enabled && !!ownerId && !!messageId,
+        staleTime: STALE_TIME.FIVE_MINUTES,
+        retry: retryWhenTransformBusy,
+    });
+}
+
+export function useMailEmlPreview(ownerId: string, messageId: string, index: number, enabled: boolean) {
+    return useQuery({
+        queryKey: emailKeys.emlPreview(ownerId, messageId, index),
+        queryFn: async () => {
+            // mailEmlPreviewRoute, not mailApi: `date` is an ISO instant declared as a string, and the
+            // default treaty's reviver would hand the renderer a Date the type does not admit (api.ts).
+            const response = await mailEmlPreviewRoute(ownerId, messageId, index).get();
             if (response.error) throw new AppError(response);
             return response.data;
         },

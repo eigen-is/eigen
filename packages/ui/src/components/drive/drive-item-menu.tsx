@@ -1,6 +1,5 @@
 import { getDriveItemUrl, getDriveShareUrl, openMailComposeWith } from '@workspace/lib/api';
 import { copyToClipboard } from '@workspace/lib/clipboard';
-import { fileActionsFor } from '@workspace/lib/file-actions';
 import { useMailEnabled } from '@workspace/lib/public';
 import { type DrivePath, type ExportFormat, exportFormatsFor, isOpenable } from '@workspace/lib/types';
 import {
@@ -77,8 +76,6 @@ export function DriveItemMenuItems({
     // Which formats a type offers is the registry's answer, so this menu and the editors' File menu
     // draw the same rows and the export route gates on the same list.
     const exportFormats = exportFormatsFor(item.type);
-    // Read here too, so the separator above the registry rows appears only when there are any.
-    const fileActions = runner.subject ? fileActionsFor(runner.subject) : [];
     const accessible = !!item.acl?.length || item.visibility !== 'private';
 
     const { direct, label, isPending, toggle } = useWatchToggle(item.ownerId, item.mountId, item.id);
@@ -107,7 +104,8 @@ export function DriveItemMenuItems({
             )}
 
             {((canOpen && onItemOpen) || href) &&
-                (fileActions.length > 0 ||
+                // The separator above the registry rows appears only when the runner has any.
+                (runner.actions.length > 0 ||
                     exportFormats.length > 0 ||
                     !!onRename ||
                     !!onMoveTo ||

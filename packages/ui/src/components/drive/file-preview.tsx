@@ -1,7 +1,6 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { getDriveItemUrl, getDrivePreviewUrl } from '@workspace/lib/api';
 import { useTextPreview } from '@workspace/lib/drive';
-import { fileActionsFor } from '@workspace/lib/file-actions';
 import { getPreviewMode, subjectInfo } from '@workspace/lib/file-subject';
 import { useMailTextPreview } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -12,8 +11,10 @@ import { cn, IMAGE_CHECKERBOARD_STYLE } from '@workspace/ui/lib/utils';
 import { ArrowRight, ChevronLeft, ChevronRight, FolderDown, Loader2, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
+import { EmlPreviewContent, MailEmlPreviewContent } from './eml-preview-content';
 import { getFileIcon } from './file-presentation';
-import { MailVCardPreviewContent, PREVIEW_PANE_CLASS, VCardPreviewContent } from './vcard-preview-content';
+import { PREVIEW_PANE_CLASS } from './preview-pane';
+import { MailVCardPreviewContent, VCardPreviewContent } from './vcard-preview-content';
 
 type FilePreviewProps = {
     subject: FileSubject;
@@ -24,7 +25,8 @@ type FilePreviewProps = {
 };
 
 export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: FilePreviewProps) {
-    const runner = useFileActionRunner(subject, siblings);
+    // The overlay is Quick Look itself, so the registry's own row is the one it drops.
+    const runner = useFileActionRunner(subject, siblings, ['quick-look']);
     const { drive } = subject;
     const info = subjectInfo(subject);
     const previewMode = getPreviewMode(subject);
@@ -143,10 +145,13 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
                     {previewMode === 'vcard' && subject.mail && (
                         <MailVCardPreviewContent part={subject.mail} size={info.size} />
                     )}
-                    {/* The .eml and .ics renderers land with the rest of their quick looks; until then a
-                        message or a calendar shows the file card its bytes showed before it had a mode
-                        of its own. */}
-                    {(previewMode === 'fallback' || previewMode === 'eml' || previewMode === 'ics') && (
+                    {previewMode === 'eml' && drive && <EmlPreviewContent path={drive} />}
+                    {previewMode === 'eml' && subject.mail && (
+                        <MailEmlPreviewContent part={subject.mail} size={info.size} />
+                    )}
+                    {/* The .ics renderer lands with the rest of its quick look; until then a calendar
+                        shows the file card its bytes showed before it had a mode of its own. */}
+                    {(previewMode === 'fallback' || previewMode === 'ics') && (
                         <div className="flex flex-col items-center gap-4 text-white">
                             {getFileIcon(info.mimeType, drive?.type ?? 'file', info.name, {
                                 className: 'size-16 text-muted-foreground',
@@ -169,8 +174,7 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
                         Open
                     </FooterButton>
                 )}
-                {/* The overlay is Quick Look itself, so the registry's own row is the one it drops. */}
-                {fileActionsFor(subject, ['quick-look']).map((action) => (
+                {runner.actions.map((action) => (
                     <FooterActionButton key={action.id} onClick={() => runner.run(action)} disabled={runner.isPending}>
                         <action.icon className="size-3.5" />
                         {action.label}

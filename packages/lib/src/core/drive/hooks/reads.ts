@@ -1,7 +1,8 @@
 import { useQueries, useQuery } from '@tanstack/react-query';
-import { driveApi, vcardPreviewRoute } from '@workspace/lib/api';
+import { driveApi, emlPreviewRoute, vcardPreviewRoute } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
+import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
@@ -254,6 +255,27 @@ export function useVCardPreview(ownerId: string, mountId: string, pathId: string
             return response.data;
         },
         enabled: !!ownerId && !!mountId && !!pathId && size <= IMPORT_MAX_BYTES,
+        staleTime: Infinity,
+        retry: retryWhenTransformBusy,
+    });
+}
+
+// GET EML PREVIEW — the message a .eml holds, parsed and sanitized server-side (PREVIEWS.md). Keyed by
+// `updatedAt` like the cards above, so a new version is a new entry; the route itself answers
+// `private, no-cache`, so a browser that already holds a body revalidates it.
+export function useEmlPreview(ownerId: string, mountId: string, pathId: string, updatedAt: Date, size: number) {
+    return useQuery({
+        queryKey: driveKeys.emlPreview(ownerId, mountId, pathId, updatedAt),
+        queryFn: async () => {
+            // emlPreviewRoute, not driveApi: `date` is an ISO instant declared as a string, and the
+            // default treaty's reviver would hand the renderer a Date the type does not admit (api.ts).
+            const response = await emlPreviewRoute(ownerId, mountId, pathId).get({
+                query: { updatedAt: updatedAt.toISOString() },
+            });
+            if (response.error) throw new AppError(response);
+            return response.data;
+        },
+        enabled: !!ownerId && !!mountId && !!pathId && size <= EML_MAX_BYTES,
         staleTime: Infinity,
         retry: retryWhenTransformBusy,
     });

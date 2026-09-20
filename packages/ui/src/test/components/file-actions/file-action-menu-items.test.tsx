@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { fileActionsFor } from '@workspace/lib/file-actions';
 import { subjectFromMailAttachment } from '@workspace/lib/file-subject';
 import type { FileAction, FileSubject } from '@workspace/lib/types/file-subject';
 import { installHappyDom } from '../../happy-dom';
@@ -20,6 +21,8 @@ async function openMenu(props: { subject: FileSubject | null }) {
     const ran: FileAction[] = [];
     const runner = {
         subject: props.subject,
+        // The host's hook decides which rows a viewer gets; the menu draws what it is handed.
+        actions: props.subject ? fileActionsFor(props.subject) : [],
         run: (action: FileAction) => ran.push(action),
         openPicker: () => {},
         dialogs: null,
