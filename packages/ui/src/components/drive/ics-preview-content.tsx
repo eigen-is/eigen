@@ -15,28 +15,30 @@ import { PreviewPane } from './preview-pane';
 // The served events, whichever route served them. Drive and mail each have their own component, so
 // exactly one query hook runs per render and the overlay picks by the subject it holds.
 export function IcsPreviewContent({ path }: { path: DrivePath }) {
-    const { data, isLoading } = useIcsPreview(path.ownerId, path.mountId, path.id, path.updatedAt, path.size);
-    return <IcsEvents data={data} isLoading={isLoading} oversize={path.size > ICS_MAX_BYTES} />;
+    const { data, isPending, isError } = useIcsPreview(path.ownerId, path.mountId, path.id, path.updatedAt, path.size);
+    return <IcsEvents data={data} isPending={isPending} isError={isError} oversize={path.size > ICS_MAX_BYTES} />;
 }
 
 export function MailIcsPreviewContent({ part, size }: { part: MailPartRef; size: number }) {
     const oversize = size > ICS_MAX_BYTES;
-    const { data, isLoading } = useMailIcsPreview(part.ownerId, part.messageId, part.index, !oversize);
-    return <IcsEvents data={data} isLoading={isLoading} oversize={oversize} />;
+    const { data, isPending, isError } = useMailIcsPreview(part.ownerId, part.messageId, part.index, !oversize);
+    return <IcsEvents data={data} isPending={isPending} isError={isError} oversize={oversize} />;
 }
 
 // Both routes serve one shape, so one renderer reads it.
 function IcsEvents({
     data,
-    isLoading,
+    isPending,
+    isError,
     oversize,
 }: {
     data: IcsPreview | undefined;
-    isLoading: boolean;
+    isPending: boolean;
+    isError: boolean;
     oversize: boolean;
 }) {
     return (
-        <PreviewPane oversize={oversize} maxBytes={ICS_MAX_BYTES} isLoading={isLoading} unreadable={!data}>
+        <PreviewPane oversize={oversize} maxBytes={ICS_MAX_BYTES} isPending={isPending} unreadable={isError}>
             {data &&
                 (data.events.length === 0 ? (
                     <EmptyState message="No events in this file" />
@@ -48,6 +50,7 @@ function IcsEvents({
                             <EventDetailCard
                                 key={index}
                                 title={event.title}
+                                status={event.status}
                                 start={new Date(event.start)}
                                 end={new Date(event.end)}
                                 allDay={event.allDay}
@@ -57,6 +60,7 @@ function IcsEvents({
                                 description={event.description}
                                 organizer={event.organizer}
                                 attendees={event.attendees}
+                                droppedAttendees={event.droppedAttendees}
                                 className="border-b pb-8 last:border-b-0 last:pb-0"
                             />
                         ))}

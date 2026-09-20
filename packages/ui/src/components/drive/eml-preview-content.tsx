@@ -13,28 +13,30 @@ import { PreviewPane } from './preview-pane';
 // The served message, whichever route served it. Drive and mail each have their own component, so exactly
 // one query hook runs per render and the overlay picks by the subject it holds.
 export function EmlPreviewContent({ path }: { path: DrivePath }) {
-    const { data, isLoading } = useEmlPreview(path.ownerId, path.mountId, path.id, path.updatedAt, path.size);
-    return <EmlMessage data={data} isLoading={isLoading} oversize={path.size > EML_MAX_BYTES} />;
+    const { data, isPending, isError } = useEmlPreview(path.ownerId, path.mountId, path.id, path.updatedAt, path.size);
+    return <EmlMessage data={data} isPending={isPending} isError={isError} oversize={path.size > EML_MAX_BYTES} />;
 }
 
 export function MailEmlPreviewContent({ part, size }: { part: MailPartRef; size: number }) {
     const oversize = size > EML_MAX_BYTES;
-    const { data, isLoading } = useMailEmlPreview(part.ownerId, part.messageId, part.index, !oversize);
-    return <EmlMessage data={data} isLoading={isLoading} oversize={oversize} />;
+    const { data, isPending, isError } = useMailEmlPreview(part.ownerId, part.messageId, part.index, !oversize);
+    return <EmlMessage data={data} isPending={isPending} isError={isError} oversize={oversize} />;
 }
 
 // Both routes serve one shape, so one renderer reads it.
 function EmlMessage({
     data,
-    isLoading,
+    isPending,
+    isError,
     oversize,
 }: {
     data: EmlPreview | undefined;
-    isLoading: boolean;
+    isPending: boolean;
+    isError: boolean;
     oversize: boolean;
 }) {
     return (
-        <PreviewPane oversize={oversize} maxBytes={EML_MAX_BYTES} isLoading={isLoading} unreadable={!data}>
+        <PreviewPane oversize={oversize} maxBytes={EML_MAX_BYTES} isPending={isPending} unreadable={isError}>
             {data && (
                 <div className="p-8">
                     <MessageView
