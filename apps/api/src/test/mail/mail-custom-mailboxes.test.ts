@@ -220,29 +220,33 @@ describe.skipIf(isWindows)('A folder outside the standard six stays fresh withou
         seedNewFile(folder, `${Date.now()}.first`, makeEml('Filed before the first listing', email));
     });
 
-    test('no watcher picks up a message filed into it, and the next listing reports it', async () => {
+    test('listings inside the interval kick no second reconcile', async () => {
         expect((await mailboxWhenCounting(token, userId, 'Filed', 1)).total).toBe(1);
         // The reconcile that listing kicked reads the directory before the message below is written.
         await Bun.sleep(100);
 
         seedNewFile(folder, filedId, makeEml('Filed by an IMAP client', email));
-        await Bun.sleep(300);
 
-        // No watcher on this folder, so nothing has seen the file yet: this listing reports the index
-        // as it stands and kicks the reconcile that finds it.
-        const stale = findOrFail(await listMailboxes(token, userId), (box) => box.path === 'Filed');
-        expect(stale.total).toBe(1);
-
-        const settled = await mailboxWhenCounting(token, userId, 'Filed', 2);
-        expect(settled.total).toBe(2);
-        expect(settled.unread).toBe(2);
+        // No watcher on this folder, and its reconcile is due again only after a minute: every listing
+        // reports the index as it stands, and none of them rescans the folder.
+        for (let attempt = 0; attempt < 5; attempt++) {
+            expect(findOrFail(await listMailboxes(token, userId), (box) => box.path === 'Filed').total).toBe(1);
+            await Bun.sleep(50);
+        }
     });
 
-    test('a message filed into an already-indexed folder announces new mail', async () => {
+    test('opening the folder reconciles it regardless, and that message announces new mail', async () => {
+        let messages: EmailSummary[] = [];
+        for (let attempt = 0; attempt < 100; attempt++) {
+            messages = await assertJson<EmailSummary[]>(await authedRequest(token, `/mail/${userId}/mailbox/Filed`));
+            if (messages.some((message) => message.id === filedId)) break;
+            await Bun.sleep(20);
+        }
+        expect(messages.map((message) => message.id)).toContain(filedId);
         expect(await mailNotificationCount(token, userId)).toBe(1);
     });
 
-    test('opening the folder reconciles it, without a listing in between', async () => {
+    test('a folder opened again picks up what was filed while it was closed', async () => {
         const openedId = `${Date.now()}.opened`;
         seedNewFile(folder, openedId, makeEml('Filed while the folder was closed', email));
 

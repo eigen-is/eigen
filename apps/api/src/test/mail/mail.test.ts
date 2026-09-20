@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import { MaildirStore } from '../../lib/mail/maildir-store';
 // Static import of '../lib/core/mailer' would trigger server-config module evaluation
@@ -44,6 +45,14 @@ describe.skipIf(isWindows)('Mail', () => {
         const data = await assertJson<MaildirMailbox | false>(res);
         expect(data).not.toBe(false);
         expect((data as MaildirMailbox).path).toBe('Projects');
+
+        // A standard name answers in any case, under its canonical spelling.
+        const sent = await assertJson<MaildirMailbox | false>(
+            await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox-exists/sent`),
+        );
+        expect(sent).not.toBe(false);
+        expect((sent as MaildirMailbox).path).toBe(MAILBOX_SENT);
+        expect((sent as MaildirMailbox).flags).toContain('\\Sent');
     });
 
     test('mailbox-exists returns false for unknown mailbox', async () => {

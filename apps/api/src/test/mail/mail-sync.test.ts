@@ -1,10 +1,23 @@
+import { Database } from 'bun:sqlite';
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { MAILBOX_ARCHIVE, MAILBOX_INBOX_KEY } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary } from '@workspace/lib/types/mail';
+import type { Notification } from '@workspace/lib/types/notification';
 import type { SearchResponse } from '@workspace/lib/types/search';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { app, assertJson, authedRequest, collectSSE, createTestUser, ensureServer, TEST_DATA_DIR } from '../setup';
+import {
+    app,
+    assertJson,
+    authedRequest,
+    collectSSE,
+    createTestUser,
+    ensureServer,
+    findOrFail,
+    TEST_DATA_DIR,
+    type TestUser,
+} from '../setup';
 
 // createTestUser hits the auth DB directly, so the setup wizard (which creates the auth schema and
 // configures the org) must have run first. Under --parallel each file boots its own server; gate on it.
@@ -73,6 +86,45 @@ async function deliverEmail(to: string, subject: string, body: string): Promise<
         }),
     );
     if (res.status !== 200) throw new Error(`Delivery failed: ${res.status}`);
+}
+
+// Empties the index the way a lost mail.db does: the next sync rebuilds it from every file on disk.
+function clearIndex(userId: string): void {
+    const db = new Database(join(TEST_DATA_DIR, 'home', userId, 'eigen.mail', 'mail.db'));
+    try {
+        db.run('DELETE FROM emails');
+    } finally {
+        db.close();
+    }
+}
+
+async function mailNewRows(user: TestUser): Promise<Notification[]> {
+    const rows = await assertJson<Notification[]>(await authedRequest(user.sessionToken, `/notifications/${user.id}`));
+    return rows.filter((row) => row.tag === 'mail:new');
+}
+
+async function dismissMailNotifications(user: TestUser): Promise<void> {
+    for (const row of await mailNewRows(user)) {
+        const res = await authedRequest(user.sessionToken, `/notifications/${user.id}/${row.id}`, { method: 'DELETE' });
+        expect(res.status).toBe(200);
+    }
+}
+
+// The subject each mail:new broadcast carries. Announcements coalesce onto one row, so the broadcast
+// (the first of the window) and the row (the last one wins) together name both ends of the batch.
+async function announcedWhile(user: TestUser, act: () => Promise<void>): Promise<string[]> {
+    const sse = collectSSE(user.id);
+    await Bun.sleep(50);
+    await act();
+    await Bun.sleep(100);
+    sse.stop();
+    return sse.events.flatMap((event) =>
+        event.type === SSEventType.NOTIFICATION_CREATED && event.tag === 'mail:new' ? [event.body ?? ''] : [],
+    );
+}
+
+async function initHome(user: TestUser): Promise<void> {
+    expect((await authedRequest(user.sessionToken, `/home/${user.id}/size`)).status).toBe(200);
 }
 
 describe.skipIf(isWindows)('Mail sync (Step 3: non-blocking sync + batched cold-index inserts)', () => {
@@ -225,5 +277,74 @@ describe.skipIf(isWindows)('Mail sync (Step 3: non-blocking sync + batched cold-
             expect(mailRows.length).toBe(1);
             expect(mailRows[0].title).toContain('sender@example.com'.split('@')[0]);
         });
+    });
+});
+
+describe.skipIf(isWindows)('Only the delivered message is new', () => {
+    test('a first index announces the delivery alone, not the welcome mail beside it', async () => {
+        const userEmail = `mailcold-${Date.now()}@test.eigen.is`;
+        const user = await createTestUser(userEmail, 'testpassword123', 'Mail Cold Index Test');
+        // Writes the welcome mail into the inbox without indexing it (skipSync), so the delivery below
+        // is the sync that indexes them both.
+        await initHome(user);
+
+        const broadcast = await announcedWhile(user, () => deliverEmail(userEmail, 'The real arrival', 'body'));
+        expect(broadcast).toEqual(['The real arrival']);
+        expect((await mailNewRows(user)).map((row) => row.body)).toEqual(['The real arrival']);
+
+        // Silent, not unindexed: the welcome mail is listed alongside the delivery.
+        const inbox = await listBox(user.sessionToken, user.id, MAILBOX_INBOX_KEY, 50);
+        expect(inbox.map((message) => message.subject)).toContain('The real arrival');
+        expect(inbox.length).toBeGreaterThan(1);
+    });
+
+    test('a delivery after the index is lost re-announces nothing but itself', async () => {
+        const userEmail = `mailreindex-${Date.now()}@test.eigen.is`;
+        const user = await createTestUser(userEmail, 'testpassword123', 'Mail Reindex Test');
+        await initHome(user);
+
+        await deliverEmail(userEmail, 'Old one', 'a');
+        await deliverEmail(userEmail, 'Old two', 'b');
+        expect((await listBox(user.sessionToken, user.id, MAILBOX_INBOX_KEY, 50)).length).toBeGreaterThanOrEqual(2);
+
+        // A row still inside the coalesce window suppresses the next broadcast.
+        await dismissMailNotifications(user);
+
+        // Emptied with the delivery, so no watcher-driven sync reindexes the inbox in between.
+        const broadcast = await announcedWhile(user, () => {
+            clearIndex(user.id);
+            return deliverEmail(userEmail, 'After the loss', 'c');
+        });
+        expect(broadcast).toEqual(['After the loss']);
+        expect((await mailNewRows(user)).map((row) => row.body)).toEqual(['After the loss']);
+
+        const inbox = await listBox(user.sessionToken, user.id, MAILBOX_INBOX_KEY, 50);
+        expect(inbox.map((message) => message.subject)).toContain('Old one');
+        expect(inbox.map((message) => message.subject)).toContain('Old two');
+    });
+
+    test('a copy is not an arrival', async () => {
+        const userEmail = `mailcopy-${Date.now()}@test.eigen.is`;
+        const user = await createTestUser(userEmail, 'testpassword123', 'Mail Copy Test');
+        await initHome(user);
+
+        await deliverEmail(userEmail, 'The original', 'body');
+        const inbox = await listBox(user.sessionToken, user.id, MAILBOX_INBOX_KEY, 50);
+        const original = findOrFail(inbox, (message) => message.subject === 'The original');
+        await dismissMailNotifications(user);
+
+        const broadcast = await announcedWhile(user, async () => {
+            const res = await authedRequest(user.sessionToken, `/mail/${user.id}/message/copy`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ messageId: original.id, targetMailbox: MAILBOX_ARCHIVE }),
+            });
+            expect(res.status).toBe(200);
+        });
+
+        expect(broadcast).toEqual([]);
+        expect(await mailNewRows(user)).toEqual([]);
+        const archive = await listBox(user.sessionToken, user.id, MAILBOX_ARCHIVE, 50);
+        expect(archive.map((row) => row.subject)).toEqual(['The original']);
     });
 });

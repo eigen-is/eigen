@@ -89,7 +89,8 @@ export class Mail {
         });
         if (isNew) {
             const welcome = await welcomeMail(this.home.user.name, this.home.user.email);
-            if (welcome) await this.store.append('', welcome, { skipSync: true });
+            // Seeded, not delivered: the first sync indexes it without announcing new mail.
+            if (welcome) await this.store.append('', welcome, { skipSync: true, arrival: false });
         }
         this.store.watch();
         this.store.cleanupStaleDraftTemps().catch((err) => console.error('mail: stale draft temp cleanup failed', err));
@@ -117,7 +118,7 @@ export class Mail {
     }
 
     async mailboxExists(mailbox: string): Promise<MaildirMailbox | false> {
-        return this.store.mailboxExists(mailbox);
+        return this.store.mailboxExists(canonicalMailbox(mailbox));
     }
 
     async mailboxDeliver(message: Buffer): Promise<string> {
@@ -253,9 +254,10 @@ export class Mail {
             throw new ApiError(404, `Target mailbox '${targetMailbox}' not found`);
         }
 
-        // Copy the raw bytes, not a `.text()` round-trip — decoding would corrupt non-UTF-8 mail.
+        // Copy the raw bytes, not a `.text()` round-trip — decoding would corrupt non-UTF-8 mail. A copy
+        // of the user's own message is not mail arriving, so it announces nothing.
         const bytes = Buffer.from(await this.store.getRawMessage(messageId));
-        await this.store.append(targetMailbox, bytes);
+        await this.store.append(targetMailbox, bytes, { arrival: false });
     }
 
     async messageSetRead(messageId: string, read: boolean): Promise<void> {
