@@ -6,6 +6,7 @@ import { useMailTextPreview } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileSubject, MailPartRef } from '@workspace/lib/types/file-subject';
 import type { TextPreviewResult } from '@workspace/lib/types/preview';
+import { useDialogOpen } from '@workspace/ui/hooks/use-dialog-open';
 import { useFocusTrap } from '@workspace/ui/hooks/use-focus-trap';
 import { cn, IMAGE_CHECKERBOARD_STYLE } from '@workspace/ui/lib/utils';
 import { ArrowRight, ChevronLeft, ChevronRight, FolderDown, Loader2, X } from 'lucide-react';
@@ -41,11 +42,24 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
     const hasPrev = index > 0;
     const hasNext = index >= 0 && index < siblings.length - 1;
 
-    // Both listen on document and Radix stops nothing: ungated, one Escape would close the dialog and the overlay.
-    const keysEnabled = !runner.isDialogOpen;
+    // Focus stays in the overlay except while a dialog, portaled to body, holds it.
+    const overlayRef = useRef<HTMLDivElement>(null);
+    // Every layer the content can open above the overlay — a picker, the reader header's details
+    // popover — is a role="dialog" of its own, and each handles Escape itself; these listen on
+    // document and Radix stops nothing, so ungated one Escape would close both.
+    const keysEnabled = !useDialogOpen(overlayRef);
     useHotkey('Escape', () => onClose(), { enabled: keysEnabled });
-    // Space closes it again, the way it opened it (Finder's Quick Look).
-    useHotkey('Space', () => onClose(), { enabled: keysEnabled, preventDefault: true });
+    // Space closes it again, the way it opened it (Finder's Quick Look) — unless a control inside has
+    // focus, where Space is that control's own activation.
+    useHotkey(
+        'Space',
+        (event) => {
+            if (event.target instanceof HTMLElement && event.target.closest('button, a[href]')) return;
+            event.preventDefault();
+            onClose();
+        },
+        { enabled: keysEnabled },
+    );
     const goPrev = () => {
         if (hasPrev) onPrev();
     };
@@ -57,8 +71,8 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
     useHotkey('ArrowRight', goNext, { enabled: keysEnabled });
     useHotkey('ArrowDown', goNext, { enabled: keysEnabled });
 
-    // Focus stays in the overlay except while a dialog, portaled to body, holds it.
-    const overlayRef = useRef<HTMLDivElement>(null);
+    // The trap stands down only for a dialog that takes focus away; a popover portaled to body keeps
+    // its own Tab cycle, and the trap never sees those keys.
     useFocusTrap(overlayRef, !runner.isDialogOpen);
 
     const openUrl = drive ? getDriveItemUrl(drive) : undefined;
