@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { EIGEN_DOC_TYPE_INFO, isVCardFile, type YjsRootKind } from '../../types/drive';
+import { EIGEN_DOC_TYPE_INFO, isIcsFile, isVCardFile, type YjsRootKind } from '../../types/drive';
 
 // Scans each collab app's source for Y.Doc root-type access and asserts the
 // referenced names are declared in EIGEN_DOC_TYPE_INFO[type].yjsRoots. Catches
@@ -119,6 +119,22 @@ describe('EIGEN_DOC_TYPE_INFO declares roots the scan above cannot see', () => {
         const canvasRoots = { elements: 'map', frames: 'map', meta: 'map' } as const;
         expect(EIGEN_DOC_TYPE_INFO.slides.yjsRoots).toEqual(canvasRoots);
         expect(EIGEN_DOC_TYPE_INFO.vector.yjsRoots).toEqual(canvasRoots);
+    });
+});
+
+describe('isIcsFile', () => {
+    test('by extension regardless of mime', () => {
+        expect(isIcsFile('application/octet-stream', 'festival.ICS')).toBe(true);
+    });
+    // A calendar part carries no filename and names its purpose in the type's own parameters, so the
+    // parameters ride along — but a type that merely starts with the letters of one is another media type.
+    test('by mime, parameters and all', () => {
+        expect(isIcsFile('text/calendar', 'part')).toBe(true);
+        expect(isIcsFile('text/calendar; method=REQUEST; charset=utf-8', 'part')).toBe(true);
+    });
+    test('neither', () => {
+        expect(isIcsFile('text/calendarx', 'feed')).toBe(false);
+        expect(isIcsFile('text/plain', 'notes.txt')).toBe(false);
     });
 });
 

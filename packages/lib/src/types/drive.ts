@@ -372,11 +372,12 @@ export function isEmlFile(mimeType: string, name: string): boolean {
 // an invitation mail, a CalDAV resource.
 export const ICS_MIME = 'text/calendar';
 
-// Matched by prefix, because a calendar body names its purpose in the type's own parameters
-// (`text/calendar; method=REQUEST; charset=utf-8`), and a part of an invitation carries no filename at
-// all. The .ics extension counts on its own, as it does for the other two formats.
+// The media type with its own parameters, because a calendar body names its purpose in them
+// (`text/calendar; method=REQUEST; charset=utf-8`) and a part of an invitation carries no filename at
+// all — but a type that merely starts with those letters is another media type. The .ics extension
+// counts on its own, as it does for the other two formats.
 export function isIcsFile(mimeType: string, name: string): boolean {
-    return name.toLowerCase().endsWith('.ics') || mimeType.startsWith(ICS_MIME);
+    return name.toLowerCase().endsWith('.ics') || mimeType === ICS_MIME || mimeType.startsWith(`${ICS_MIME};`);
 }
 
 export type ImageDimensions = {
