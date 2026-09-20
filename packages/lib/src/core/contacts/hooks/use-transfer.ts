@@ -1,8 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { contactsApi, getContactsExportUrl, getContactsImportUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
-import type { ContactTransferSource, ImportContactsResult } from '@workspace/lib/types/contact';
-import { VCARD_MIMES } from '@workspace/lib/types/drive';
+import type { ImportContactsResult } from '@workspace/lib/types/contact';
+import { type DriveImportSource, VCARD_MIMES } from '@workspace/lib/types/drive';
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
@@ -116,7 +116,7 @@ export function useImportContactsFromDrive() {
     const ownerId = user?.id || '';
 
     return useMutation({
-        mutationFn: async (source: ContactTransferSource) => {
+        mutationFn: async (source: DriveImportSource) => {
             const response = await contactsApi({ ownerId })['import-from-drive'].post(source);
             if (response.error) throw new AppError(response);
             return response.data;

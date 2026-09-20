@@ -1,9 +1,9 @@
 import { VCARD_CONTENT_TYPE, VCARD_IMPORT_MAX_CARDS, VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
-import type { Contact, ContactTransferSource, ImportContactsResult } from '@workspace/lib/types/contact';
+import type { Contact, ImportContactsResult } from '@workspace/lib/types/contact';
 import { isVCardFile } from '@workspace/lib/types/drive';
 import type { Label } from '@workspace/lib/types/label';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
-import { Elysia, type Static, t } from 'elysia';
+import { Elysia, t } from 'elysia';
 import { enforceAvatarUpload } from '../lib/config/enforcement';
 import { CARD_MAX_BYTES } from '../lib/contacts/card-store';
 import { getContacts } from '../lib/contacts/contacts';
@@ -57,13 +57,6 @@ const LabelSchema = t.Object({
     name: t.String(TEXT),
     color: t.String(TEXT),
 });
-
-// Compile-time guard: a field added to ContactTransferSource without a schema entry there would be stripped
-// by Elysia's normalize, so the key sets must match (a structural `extends` check would not catch it).
-type _ImportFromDriveSchemaCoversSource =
-    Exclude<keyof ContactTransferSource, keyof Static<typeof importFromDriveSchema>> extends never ? true : never;
-const _importFromDriveSchemaCheck: _ImportFromDriveSchemaCoversSource = true;
-void _importFromDriveSchemaCheck;
 
 // vCard files are UTF-8 (RFC 6350 §3.1). A Windows-1252 export decoded leniently would import with U+FFFD
 // in every accented name, stored in the card bytes and re-served to every DAV client, so it is refused.

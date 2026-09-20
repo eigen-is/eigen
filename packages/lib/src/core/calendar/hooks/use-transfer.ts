@@ -2,7 +2,7 @@ import { type QueryClient, useMutation, useQueryClient } from '@tanstack/react-q
 import { calendarApi, getCalendarImportUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import type { ImportEventsResult } from '@workspace/lib/types/calendar';
-import { ICS_MIME } from '@workspace/lib/types/drive';
+import { type DriveImportSource, ICS_MIME } from '@workspace/lib/types/drive';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
 import { invalidateEventsImported } from './keys';
@@ -62,12 +62,7 @@ export function useImportCalendarFromDrive() {
     const ownerId = user?.id || '';
 
     return useMutation({
-        mutationFn: async (source: {
-            calendarId: string;
-            sourceOwnerId: string;
-            sourceMountId: string;
-            sourcePathId: string;
-        }) => {
+        mutationFn: async (source: DriveImportSource & { calendarId: string }) => {
             const response = await calendarApi({ ownerId })['import-from-drive'].post(source);
             if (response.error) throw new AppError(response);
             return response.data;

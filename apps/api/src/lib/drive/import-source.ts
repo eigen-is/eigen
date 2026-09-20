@@ -1,4 +1,4 @@
-import { isContainerType } from '@workspace/lib/types/drive';
+import { type DriveImportSource, isContainerType } from '@workspace/lib/types/drive';
 import { ApiError } from '../core';
 import { readBoundedStreamBytes } from '../core/http';
 import type { User } from '../user';
@@ -11,7 +11,7 @@ import { getSharedDrive } from './get-drive';
 // so the read itself carries the ceiling and a source that grew since is cancelled, not buffered whole.
 export async function readImportSourceBytes(
     user: User,
-    source: { sourceOwnerId: string; sourceMountId: string; sourcePathId: string },
+    source: DriveImportSource,
     opts: { accepts: (mimeType: string, name: string) => boolean; rejection: string; maxBytes: number },
 ): Promise<Uint8Array> {
     const drive = await getSharedDrive(source.sourceOwnerId, user);
