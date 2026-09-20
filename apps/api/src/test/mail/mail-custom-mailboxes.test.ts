@@ -1,9 +1,10 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { STANDARD_MAILBOXES } from '@workspace/lib/constants/mailboxes';
+import { MAILBOX_ARCHIVE, STANDARD_MAILBOXES } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
-import { assertJson, authedRequest, createTestUser, ensureServer, findOrFail, TEST_DATA_DIR } from '../setup';
+import type { Notification } from '@workspace/lib/types/notification';
+import { app, assertJson, authedRequest, createTestUser, ensureServer, findOrFail, TEST_DATA_DIR } from '../setup';
 
 const isWindows = process.platform === 'win32';
 
@@ -44,6 +45,26 @@ function seedNewFile(folder: string, uniqueId: string, eml: string): void {
     writeFileSync(join(folder, 'new', `${uniqueId},S=${Buffer.byteLength(eml, 'utf-8')}`), eml);
 }
 
+function listMailboxes(token: string, userId: string): Promise<MaildirMailbox[]> {
+    return authedRequest(token, `/mail/${userId}/mailboxes`).then((res) => assertJson<MaildirMailbox[]>(res));
+}
+
+// A listing never indexes, so a never-indexed folder reports its counts only once the background
+// index it kicks has landed.
+async function mailboxWhenIndexed(token: string, userId: string, path: string): Promise<MaildirMailbox> {
+    for (let attempt = 0; attempt < 100; attempt++) {
+        const box = findOrFail(await listMailboxes(token, userId), (mailbox) => mailbox.path === path);
+        if (box.total > 0) return box;
+        await Bun.sleep(20);
+    }
+    throw new Error(`Mailbox '${path}' was never indexed`);
+}
+
+async function mailNotificationCount(token: string, userId: string): Promise<number> {
+    const rows = await assertJson<Notification[]>(await authedRequest(token, `/notifications/${userId}`));
+    return rows.filter((row) => row.tag === 'mail:new').length;
+}
+
 describe.skipIf(isWindows)('Mailboxes outside the standard six', () => {
     let userId: string;
     let token: string;
@@ -68,32 +89,37 @@ describe.skipIf(isWindows)('Mailboxes outside the standard six', () => {
         seedMaildirFolder(userId, '.ctrl\u0001name');
     });
 
-    test('a folder an IMAP client created is listed with its own total and unread counts', async () => {
-        const boxes = await assertJson<MaildirMailbox[]>(await authedRequest(token, `/mail/${userId}/mailboxes`));
-        const projects = findOrFail(boxes, (box) => box.path === 'Projects');
+    test('a folder an IMAP client created is listed at once, and indexed in the background', async () => {
+        const first = await listMailboxes(token, userId);
+        expect(findOrFail(first, (box) => box.path === 'Projects').total).toBe(0);
+
+        const projects = await mailboxWhenIndexed(token, userId, 'Projects');
         expect(projects.total).toBe(1);
         expect(projects.unread).toBe(1);
-        expect(projects.name).toBe('Projects');
         expect(projects.flags).toEqual(['\\HasNoChildren']);
     });
 
+    test('a first index is discovery, so an old folder announces no new mail', async () => {
+        await mailboxWhenIndexed(token, userId, 'Projects');
+        expect(await mailNotificationCount(token, userId)).toBe(0);
+    });
+
     test('the standard six are listed once each, first and in their canonical order', async () => {
-        const boxes = await assertJson<MaildirMailbox[]>(await authedRequest(token, `/mail/${userId}/mailboxes`));
+        const boxes = await listMailboxes(token, userId);
         expect(boxes.slice(0, STANDARD_MAILBOXES.length).map((box) => box.path)).toEqual([...STANDARD_MAILBOXES]);
         const custom = boxes.slice(STANDARD_MAILBOXES.length).map((box) => box.path);
         expect(custom).toEqual(['Clients.Acme', 'My Stuff', 'Projects']);
     });
 
     test('a folder name Eigen refuses is skipped without failing the listing', async () => {
-        const boxes = await assertJson<MaildirMailbox[]>(await authedRequest(token, `/mail/${userId}/mailboxes`));
+        const boxes = await listMailboxes(token, userId);
         expect(boxes.some((box) => box.path.includes('..'))).toBe(false);
         expect(boxes.some((box) => box.path.includes('\u0001'))).toBe(false);
     });
 
     test('a nested folder is listed under its dotted path and lists its messages', async () => {
-        const boxes = await assertJson<MaildirMailbox[]>(await authedRequest(token, `/mail/${userId}/mailboxes`));
-        const acme = findOrFail(boxes, (box) => box.path === 'Clients.Acme');
-        expect(acme.name).toBe('Acme');
+        const boxes = await listMailboxes(token, userId);
+        expect(findOrFail(boxes, (box) => box.path === 'Clients.Acme').flags).toEqual(['\\HasNoChildren']);
 
         const messages = await assertJson<EmailSummary[]>(
             await authedRequest(token, `/mail/${userId}/mailbox/Clients.Acme`),
@@ -118,5 +144,55 @@ describe.skipIf(isWindows)('Mailboxes outside the standard six', () => {
         );
         expect(exists).not.toBe(false);
         expect((exists as MaildirMailbox).path).toBe('My Stuff');
+    });
+
+    test('a name that case-folds onto a standard mailbox addresses that one, not a second folder', async () => {
+        const res = await authedRequest(token, `/mail/${userId}/mailbox`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mailbox: MAILBOX_ARCHIVE.toLowerCase() }),
+        });
+        expect(res.status).toBe(409);
+
+        const boxes = await listMailboxes(token, userId);
+        expect(boxes.filter((box) => box.path.toLowerCase() === MAILBOX_ARCHIVE.toLowerCase())).toHaveLength(1);
+    });
+});
+
+describe.skipIf(isWindows)('A .INBOX folder is the Maildir root, not a mailbox of its own', () => {
+    let userId: string;
+    let token: string;
+    let email: string;
+
+    beforeAll(async () => {
+        email = `inboxalias-${Date.now()}@test.eigen.is`;
+        const user = await createTestUser(email, 'testpassword123', 'Inbox Alias Test');
+        userId = user.id;
+        token = user.sessionToken;
+        expect((await authedRequest(token, `/home/${userId}/size`)).status).toBe(200);
+
+        const eml = makeEml('Delivered to the real inbox', email);
+        const delivered = await app.handle(
+            new Request(`http://localhost/mail/deliver/${email}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'message/rfc822' },
+                body: new TextEncoder().encode(eml).buffer as ArrayBuffer,
+            }),
+        );
+        expect(delivered.status).toBe(200);
+
+        // Dovecot never makes this folder, but a restore or a stray client can leave one behind.
+        seedMaildirFolder(userId, '.INBOX');
+    });
+
+    test('listing twice leaves the inbox holding its message and lists no INBOX folder', async () => {
+        const first = await listMailboxes(token, userId);
+        expect(first.some((box) => box.path === 'INBOX')).toBe(false);
+
+        const second = await listMailboxes(token, userId);
+        expect(second.some((box) => box.path === 'INBOX')).toBe(false);
+
+        const inbox = await assertJson<EmailSummary[]>(await authedRequest(token, `/mail/${userId}/mailbox/inbox`));
+        expect(inbox.map((message) => message.subject)).toContain('Delivered to the real inbox');
     });
 });

@@ -122,6 +122,35 @@ describe.skipIf(isWindows)('Mail — draft sidecar', () => {
         expect(rows.find((r) => r.id === draft.id)?.subject).toBe('Full saved subject');
     });
 
+    test('a Drafts file whose id no sidecar can carry still lists', async () => {
+        const user = await createTestUser(
+            `draft-sidecar-alien-${Date.now()}@test.eigen.is`,
+            'testpassword123',
+            'Draft Sidecar Alien',
+        );
+        // Initialize the home: creates the Maildir tree before anything is seeded into it.
+        expect((await authedRequest(user.sessionToken, `/home/${user.id}/size`)).status).toBe(200);
+
+        // Another MDA's unique part. `+` is legal in a Maildir filename and refused as a draft id.
+        const uniqueId = `${Date.now()}.M1P2Q3+alien`;
+        const eml = [
+            'From: alien@example.com',
+            `To: ${user.email}`,
+            'Subject: Written by another MDA',
+            `Date: ${new Date().toUTCString()}`,
+            'MIME-Version: 1.0',
+            'Content-Type: text/plain; charset=utf-8',
+            '',
+            'body',
+        ].join('\r\n');
+        writeFileSync(
+            join(mailDir(user.id), 'Maildir', '.Drafts', 'cur', `${uniqueId},S=${Buffer.byteLength(eml)}:2,DS`),
+            eml,
+        );
+
+        expect((await listDrafts(user)).map((row) => row.id)).toContain(uniqueId);
+    });
+
     test('a fast save leaves the sidecar complete and no temp debris beside it', async () => {
         const user = await createTestUser(
             `draft-sidecar-atomic-${Date.now()}@test.eigen.is`,
