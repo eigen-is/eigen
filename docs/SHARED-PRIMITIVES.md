@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1518 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1523 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -490,7 +490,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (354)
+## Types (353)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -572,7 +572,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CommentEntry` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `Contact` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `ContactSuggestion` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
-| `ContactTransferSource` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `ConvertTarget` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `CreateContactInput` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `CreateEventInput` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
@@ -590,6 +589,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DriveCollabType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveContainerType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveContextType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DriveImportSource` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveItemRef` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DrivePath` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DrivePathDetails` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -638,8 +638,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `HomeSizeResponse` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `ImageDimensions` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `ImipMethod` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
-| `ImportContactsResult` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
-| `ImportEventsResult` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
+| `ImportCountsResult` | `@workspace/lib/types` | packages/lib/src/types/transfer.ts |
 | `ImportMailResult` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `InheritedAccessItem` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `InviteResult` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -849,7 +848,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (705)
+## Utilities & constants (711)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1067,8 +1066,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ICS_PREVIEW_MAX_ATTENDEES` | `@workspace/lib/constants` | packages/lib/src/constants/calendar.ts |
 | `ICS_PREVIEW_MAX_DESCRIPTION_CHARS` | `@workspace/lib/constants` | packages/lib/src/constants/calendar.ts |
 | `ICS_PREVIEW_MAX_EVENTS` | `@workspace/lib/constants` | packages/lib/src/constants/calendar.ts |
-| `IMPORT_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
-| `IMPORT_MAX_CARDS` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
 | `INDICATOR_RED` | `@workspace/lib/constants` | packages/lib/src/constants/comment-indicator.ts |
 | `isExiftoolExtension` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `isLightColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
@@ -1091,6 +1088,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MAX_PUBLIC_USERS_PER_BATCH` | `@workspace/lib/constants` | packages/lib/src/constants/public.ts |
 | `MAX_SEND_RECIPIENTS` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `MAX_SEND_REFERENCES` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
+| `NOT_A_CALENDAR_FILE` | `@workspace/lib/constants` | packages/lib/src/constants/transfer.ts |
+| `NOT_A_VCARD_FILE` | `@workspace/lib/constants` | packages/lib/src/constants/transfer.ts |
+| `NOT_AN_EMAIL_FILE` | `@workspace/lib/constants` | packages/lib/src/constants/transfer.ts |
+| `NOT_UTF8_FILE` | `@workspace/lib/constants` | packages/lib/src/constants/transfer.ts |
 | `S3_ABORT_INCOMPLETE_UPLOAD_DAYS` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
 | `S3_LIFECYCLE_RULE_ID` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
 | `S3_NONCURRENT_DAYS_DEFAULT` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
@@ -1104,11 +1105,13 @@ rather than inlining `queryClient.invalidateQueries`.
 | `TEXT_PREVIEW_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `userColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `VCARD_CONTENT_TYPE` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
+| `VCARD_IMPORT_MAX_CARDS` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
+| `VCARD_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
 | `VCARD_PREVIEW_MAX_CARDS` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
 | `XLSX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
-| `droppedLine` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/preview-lines.ts |
+| `droppedContactsLine` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/preview-lines.ts |
 | `handleContactsSSEvent` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/sse-handlers.ts |
-| `remainingLine` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/preview-lines.ts |
+| `remainingContactsLine` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/preview-lines.ts |
 | `escapeContentText` | `@workspace/lib/content-line` | packages/lib/src/core/content-line.ts |
 | `foldLine` | `@workspace/lib/content-line` | packages/lib/src/core/content-line.ts |
 | `isIllegalC0` | `@workspace/lib/content-line` | packages/lib/src/core/content-line.ts |
@@ -1205,6 +1208,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `parseCellKey` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `SHEET_DEFAULT_COL_WIDTH` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `SHEET_DEFAULT_ROW_HEIGHT` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
+| `reportImportCounts` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
+| `unreadableLine` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
 | `aclPrincipalsToResolve` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `CHATS_FOLDER_NAME` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `CLIENT_FILE_EVENT_TYPES` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
