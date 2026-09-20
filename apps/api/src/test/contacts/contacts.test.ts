@@ -726,7 +726,7 @@ describe('Contacts', () => {
     });
 });
 
-// enforceContactsIngest's mail half is an O(N) maildir walk; a metered device sync must not walk once per card.
+// enforceMailAndContactsQuota's mail half is an O(N) maildir walk; a metered device sync must not walk once per card.
 // makeContacts homes are deliberately unmetered (never registered, so atHome is false), so this pins the burst
 // cache against a real registered home where putCard's quota gate actually runs.
 describe('CardDAV quota burst cache', () => {
