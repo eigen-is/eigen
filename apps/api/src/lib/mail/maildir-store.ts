@@ -18,7 +18,7 @@ import type {
 import type { BunFile, FileSink } from 'bun';
 import { Semaphore } from '../../utils/semaphore';
 import { invalidateMailSize } from '../config/enforcement';
-import { ApiError, LocalFilesystem, PATHS } from '../core';
+import { ApiError, isSafePathSegment, LocalFilesystem, PATHS } from '../core';
 import type { Home } from '../home';
 import { parseEml, parseEmlBytes } from './mail-parse';
 import type { DraftMeta, MailFlag, MailSearchOptions, MailStore, MailStoreEvents } from './mail-store';
@@ -33,6 +33,17 @@ import {
 } from './mailutils';
 
 const STALE_DRAFT_TEMP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+// A mailbox is a user-visible folder name, so a hierarchy segment may hold interior spaces where a draft id
+// may not — but never the `.` Maildir++ delimiter, and never nothing at all.
+const MAILBOX_SEGMENT = /^[A-Za-z0-9_\- ]+$/;
+
+// A message id and a staged-attachment temp id both become a filename, so an id no `MailStore` minted is
+// refused rather than mapped onto one — two mapped ids would collide on one file.
+function safeFileId(id: string): string {
+    if (!isSafePathSegment(id)) throw new ApiError(400, `Invalid mail id: ${id}`);
+    return id;
+}
 
 export class MaildirStore implements MailStore {
     readonly basePath: string;
@@ -345,7 +356,7 @@ export class MaildirStore implements MailStore {
     }
 
     private getDraftMetaPath(draftId: string): string {
-        return path.join(this.getDraftMetaDir(), `${this.sanitizeTempId(draftId)}.json`);
+        return path.join(this.getDraftMetaDir(), `${safeFileId(draftId)}.json`);
     }
 
     private async ensureDraftMetaDir(): Promise<void> {
@@ -452,12 +463,8 @@ export class MaildirStore implements MailStore {
         }
     }
 
-    private sanitizeTempId(tempId: string): string {
-        return tempId.replace(/[^a-zA-Z0-9-_]/g, '_');
-    }
-
     private getDraftTempPath(tempId: string): string {
-        return path.join(this.getDraftTempDir(), this.sanitizeTempId(tempId));
+        return path.join(this.getDraftTempDir(), safeFileId(tempId));
     }
 
     private getDraftTempMetaPath(tempId: string): string {
@@ -611,12 +618,15 @@ export class MaildirStore implements MailStore {
         }
     }
 
+    // A nested folder is addressed by either delimiter — `Clients/Acme` and `Clients.Acme` are the one
+    // Maildir++ directory `.Clients.Acme`, which is also the form `mailboxesList` reports.
     private mailboxDir(mailbox: string): string {
         if (mailbox === MAILBOX_INBOX || mailbox === MAILBOX_INBOX_IMAP) return this.basePath;
-        if (/[^a-zA-Z0-9._\- /]/.test(mailbox) || mailbox.includes('..')) {
+        const segments = mailbox.split(/[./]/);
+        if (!segments.every((s) => MAILBOX_SEGMENT.test(s) && s.trim() === s)) {
             throw new ApiError(400, `Invalid mailbox name: ${mailbox}`);
         }
-        return `${this.basePath}/.${mailbox.replace('/', '.')}`;
+        return `${this.basePath}/.${segments.join('.')}`;
     }
 
     // -- Private helpers --

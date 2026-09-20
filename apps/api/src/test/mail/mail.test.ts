@@ -1,11 +1,16 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { existsSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import { MaildirStore } from '../../lib/mail/maildir-store';
 // Static import of '../lib/core/mailer' would trigger server-config module evaluation
 // before './setup' sets EIGEN_DATA_ROOT. Dynamic-import it inside the test instead.
-import { assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
+import { assertJson, authedRequest, findOrFail, getTestContext, TEST_DATA_DIR } from '../setup';
 
 const isWindows = process.platform === 'win32';
+
+const mailRootOf = (userId: string) => join(TEST_DATA_DIR, 'home', userId, 'eigen.mail');
+const maildirOf = (userId: string) => join(mailRootOf(userId), 'Maildir');
 
 describe.skipIf(isWindows)('Mail', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -404,6 +409,34 @@ describe.skipIf(isWindows)('Mail', () => {
             expect(res.status).not.toBe(200);
         });
 
+        test('create mailbox with an empty path segment is rejected', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mailbox: 'Projects//2026' }),
+            });
+            expect(res.status).toBe(400);
+        });
+
+        test('a nested mailbox is one Maildir++ folder, addressed by either delimiter', async () => {
+            const createRes = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mailbox: 'Clients/Acme/2026' }),
+            });
+            expect(createRes.status).toBe(200);
+
+            // `.Clients.Acme.2026` on disk, so the dotted path a Maildir++ listing reports resolves to it.
+            expect(existsSync(join(maildirOf(ctx.alice.user.id), '.Clients.Acme.2026'))).toBe(true);
+            const existsRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/mailbox-exists/Clients.Acme.2026`,
+            );
+            const data = await assertJson<MaildirMailbox | false>(existsRes);
+            expect(data).not.toBe(false);
+            expect((data as MaildirMailbox).path).toBe('Clients.Acme.2026');
+        });
+
         test('valid mailbox still works after rejected traversal attempts', async () => {
             const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox`, {
                 method: 'POST',
@@ -419,6 +452,43 @@ describe.skipIf(isWindows)('Mail', () => {
             const data = await assertJson<MaildirMailbox | false>(existsRes);
             expect(data).not.toBe(false);
             expect((data as MaildirMailbox).path).toBe('ValidAfterTraversal');
+        });
+    });
+
+    describe('Regression: client-chosen draft and attachment ids', () => {
+        const putDraftRaw = (body: unknown) =>
+            authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/draft`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+
+        test('a draft id that escapes the Drafts mailbox is rejected and writes nothing', async () => {
+            for (const id of ['../.Sent/cur/pwn', '../../.Sent/cur/pwn']) {
+                const res = await putDraftRaw({ mail: { id, subject: 'Traversal', text: 'body' } });
+                expect(res.status).toBe(400);
+            }
+
+            const entries = readdirSync(mailRootOf(ctx.alice.user.id), { recursive: true });
+            expect(entries.filter((e) => String(e).includes('pwn'))).toEqual([]);
+        });
+
+        test('the id the server mints is accepted back on the next save', async () => {
+            const created = await assertJson<EmailSummary>(
+                await putDraftRaw({ mail: { subject: 'Round trip', text: 'body' } }),
+            );
+            const updated = await assertJson<EmailSummary>(
+                await putDraftRaw({ mail: { id: created.id, subject: 'Round trip 2', text: 'body' } }),
+            );
+            expect(updated.id).toBe(created.id);
+        });
+
+        test('a staged-attachment temp id with a separator is rejected', async () => {
+            const res = await putDraftRaw({
+                mail: { subject: 'Temp traversal', text: 'body' },
+                tempAttachmentIds: ['../../.Sent/cur/pwn'],
+            });
+            expect(res.status).toBe(400);
         });
     });
 
