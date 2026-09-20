@@ -84,7 +84,7 @@ async function runImport(request: ImportTransformJob & { data: ArrayBuffer }): P
     }
 }
 
-// The bytes-sourced kinds read what they were handed: an upload to import, or the .vcf or .eml a
+// The bytes-sourced kinds read what they were handed: an upload to import, or the .vcf, .eml or .ics a
 // preview serves as a typed payload. Closed over the kind like every other dispatch here.
 async function runBytesRequest(request: BytesTransformJob & { data: ArrayBuffer }): Promise<DocumentTransformResponse> {
     switch (request.kind) {
@@ -105,6 +105,10 @@ async function buildBytesPreviewJson(request: BytesPreviewJob & { data: ArrayBuf
         case 'eml': {
             const { buildEmlPreviewPayload } = await import('../../preview/eml-preview');
             return JSON.stringify(buildEmlPreviewPayload(request.data));
+        }
+        case 'ics': {
+            const { buildIcsPreviewPayload } = await import('../../preview/ics-preview');
+            return JSON.stringify(buildIcsPreviewPayload(request.data));
         }
     }
 }

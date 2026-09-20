@@ -1,13 +1,14 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getBytesTextPreviewMode, TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants';
+import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
-import { type DrivePath, isCollabType, isEmlFile, isVCardFile } from '@workspace/lib/types/drive';
-import type { EmlPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
+import { type DrivePath, isCollabType, isEmlFile, isIcsFile, isVCardFile } from '@workspace/lib/types/drive';
+import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { ApiError } from '../core/errors';
 import { COLLAB_DOCUMENT_TYPES } from '../document/collab-types';
-import type { EmlPreviewJob, VCardPreviewJob } from '../document/transform/protocol';
+import type { EmlPreviewJob, IcsPreviewJob, VCardPreviewJob } from '../document/transform/protocol';
 import { runBytesTransformToText, runFileTransformToText } from '../document/transform/run-transform';
 import type { TransformPriority } from '../document/transform/runner';
 import { decodeCharset } from '../mail/mail-parser/decode';
@@ -15,6 +16,7 @@ import type { Mount } from '../mount';
 import { generateImagePreview } from '../shared/thumbnails';
 import { parseEmlPreview } from './eml-preview';
 import { isExiftoolCandidate } from './exiftool-preview';
+import { parseIcsPreview } from './ics-preview';
 import { generateDocumentPreview } from './preview-document';
 import { inlineSvgMediaRefs } from './svg-media-inline';
 import { generateTextPreview } from './text-preview';
@@ -48,6 +50,9 @@ export const VCARD_FORMAT = 'vcard-f1';
 // The same reasoning for the message a .eml previews as, and one more reason to bump it: the payload's
 // html is what a DOMPurify upgrade filters, so a cached body predates every sanitizer fix (PREVIEWS.md).
 export const EML_FORMAT = 'eml-f1';
+
+// And again for the events an .ics previews as.
+export const ICS_FORMAT = 'ics-f1';
 
 function textCacheName(drivePath: DrivePath, format: string): string {
     return `${drivePath.id}-${drivePath.updatedAt.getTime()}.${format}.json`;
@@ -426,4 +431,26 @@ export async function getEmlPreview(mount: Mount, drivePath: DrivePath): Promise
 // The same message from bytes the caller holds (a mail part): same Worker job, no cache.
 export async function getBytesEmlPreview(data: ArrayBuffer): Promise<EmlPreview> {
     return parseEmlPreview(await runBytesTransformToText(EML_PREVIEW_JOB, data, {}));
+}
+
+const ICS_PREVIEW_JOB: IcsPreviewJob = { kind: 'preview', documentType: 'ics' };
+
+// The preview parses the whole calendar like an import does, so it shares the import's ceiling.
+export function assertIcsPreviewable(fileName: string, contentType: string, size: number): void {
+    if (!isIcsFile(contentType, fileName)) throw new ApiError(400, 'Not a calendar file');
+    if (size > ICS_MAX_BYTES) throw new ApiError(413, 'File too large to preview');
+}
+
+// An .ics reads as the events it holds, never as its raw property lines. The payload is parsed in the
+// Worker from the file's own bytes and cached per file version like every other preview; the caller
+// admits the file's size before asking.
+export async function getIcsPreview(mount: Mount, drivePath: DrivePath): Promise<Served<IcsPreview> | null> {
+    return getOrCacheText(mount.previewsDir, drivePath, ICS_FORMAT, parseIcsPreview, (priority) =>
+        runFileTransformToText(mount, drivePath, ICS_PREVIEW_JOB, { priority }),
+    );
+}
+
+// The same events from bytes the caller holds (a mail part): same Worker job, no cache.
+export async function getBytesIcsPreview(data: ArrayBuffer): Promise<IcsPreview> {
+    return parseIcsPreview(await runBytesTransformToText(ICS_PREVIEW_JOB, data, {}));
 }

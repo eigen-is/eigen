@@ -16,11 +16,14 @@ import {
 import { readMailPart, serveMailPart } from '../lib/mail/serve-mail-part';
 import {
     assertEmlPreviewable,
+    assertIcsPreviewable,
     assertVCardPreviewable,
     EML_FORMAT,
     getBytesEmlPreview,
+    getBytesIcsPreview,
     getBytesTextPreview,
     getBytesVCardPreview,
+    ICS_FORMAT,
     VCARD_FORMAT,
 } from '../lib/preview/preview-cache';
 import { betterAuth } from './auth';
@@ -396,6 +399,27 @@ export const mailRouter = new Elysia({ name: 'mail' })
             assertEmlPreviewable(mailAttachmentName(att, params.index), att.contentType, att.size);
             // A copy, for the reason the cards route copies: the Worker detaches the buffer it gets.
             return getBytesEmlPreview(new Uint8Array(att.content).buffer);
+        },
+        { auth: true, params: AttachmentPreviewParamsSchema },
+    )
+    .get(
+        '/mail/:ownerId/message/:id/attachment/:index/preview/ics',
+        async ({ params, request, user, set }) => {
+            requireNonGuest(user);
+            requireSelf(params.ownerId, user.id);
+            const att = await readMailPart(
+                await getMailClient(user),
+                params.id,
+                params.index,
+                request,
+                set,
+                ICS_FORMAT,
+            );
+            if (!att) return status(304);
+
+            assertIcsPreviewable(mailAttachmentName(att, params.index), att.contentType, att.size);
+            // A copy, for the reason the cards route copies: the Worker detaches the buffer it gets.
+            return getBytesIcsPreview(new Uint8Array(att.content).buffer);
         },
         { auth: true, params: AttachmentPreviewParamsSchema },
     );
