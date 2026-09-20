@@ -35,7 +35,7 @@ import { grantAccessForReferences } from './access-grants';
 import { parseMail } from './mail-parser';
 import type { DraftMeta, DraftMetaAttachment, MailSearchOptions, MailStore } from './mail-store';
 import { createEmlContent, type EmlAttachment } from './mailfile';
-import { buildRecipientSummary, createUniqueMessageId } from './mailutils';
+import { createUniqueMessageId } from './mailutils';
 import { MAX_PERSONALISED_SEND_BYTES } from './recipients';
 import { draftToOutboundMail } from './sender';
 import { buildMailEvent } from './sse-events';
@@ -319,8 +319,7 @@ export class Mail {
         await this.store.writeDraftMeta(existingId, meta);
 
         const textShort = (email.text || '').slice(0, MAIL_PREVIEW_CHARS);
-        const recipients = buildRecipientSummary(email.to, email.cc);
-        this.store.updateDraftContent(existingId, meta.subject, email.text || '', recipients);
+        this.store.applyDraftMeta(existingId, meta);
 
         this.emit(SSEventType.MAIL_DRAFT_UPDATED, { messageId: existingId, mailbox: MAILBOX_DRAFTS });
 

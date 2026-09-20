@@ -59,10 +59,12 @@ This section describes `MaildirStore`, the only `MailStore` today; under a remot
 |---|---|---|
 | Messages, flags, mailbox membership | the `.eml` files and their Maildir names | yes |
 | `emails` rows, `emails_fts` | `mail.db` | yes, by `syncMailbox` |
-| A fast-saved draft's subject, preview and recipients | the `draft-meta/` sidecar and the row | no: the sync reads the `.eml` alone, so a rebuilt row shows the last full save; the sidecar still holds the truth and the composer overlays it |
+| A fast-saved draft's subject, preview and recipients | the `draft-meta/` sidecar | yes, by `syncMailbox`: a Drafts row rebuilt from the stale `.eml` gets the sidecar projected back over it |
 | Staged draft attachments | `draft-attachments/`, swept after 24 h | not indexed and not counted by the quota |
 
-Open against the standard contacts set, all in [ROADMAP.md](ROADMAP.md): Maildir writes do not fsync, the sidecar is not written atomically, a client-chosen draft id reaches a Maildir filename unvalidated, and staged attachments are outside the quota.
+The sidecar is written through `writeAtomic`, and a sidecar that does not parse reads as absent — the same as a missing one — so bytes a crash tore fall back to the `.eml` instead of failing the read. `applyDraftMeta` (`MaildirStore`) is the one projection of a sidecar onto its index row: the fast save applies it beside the sidecar write, and the Drafts sync re-applies it over each row it has just rebuilt.
+
+Open against the standard contacts set, all in [ROADMAP.md](ROADMAP.md): Maildir writes do not fsync, a client-chosen draft id reaches a Maildir filename unvalidated, and staged attachments are outside the quota.
 
 ## Parsing
 
@@ -175,7 +177,8 @@ are in [IMAP.md § File Watching](IMAP.md#file-watching).
 - **Fast save** — writes only the `DraftMeta` JSON sidecar + a light DB content update; skips the EML
   rebuild. Used when the kept set is exactly the set of parts the sidecar lists and the last full save is
   recent (`FULL_SAVE_INTERVAL_MS` = 5 min). This leaves the on-disk `.eml` stale until a full save
-  (external IMAP clients see old content).
+  (external IMAP clients see old content), so the sidecar is what the index and the composer read those
+  fields from.
 - **Full save** — rebuilds the RFC 5322 `.eml` (`createEmlContent`), baking Drive reference-pill HTML in.
 
 `messageGet` overlays the sidecar onto the parsed draft so the composer shows what the user typed, not the
