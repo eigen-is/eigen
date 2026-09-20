@@ -1,4 +1,5 @@
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
+import { ICS_MIME } from '@workspace/lib/types/drive';
 import type { Calendar } from '../calendar/calendar';
 import { storedRecurrenceKey } from '../calendar/recurrence';
 import type { CalendarEventRow } from '../calendar/types';
@@ -21,7 +22,7 @@ export function handleGet(masterEvent: CalendarEventRow, allEventsForUid: Calend
     return new Response(ics, {
         status: 200,
         headers: {
-            'Content-Type': 'text/calendar; charset=utf-8',
+            'Content-Type': `${ICS_MIME}; charset=utf-8`,
             ETag: `"${masterEvent.etag}"`,
         },
     });

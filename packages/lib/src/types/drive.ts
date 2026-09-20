@@ -368,6 +368,17 @@ export function isEmlFile(mimeType: string, name: string): boolean {
     return name.toLowerCase().endsWith('.eml') || mimeType === EML_MIME;
 }
 
+// The media type an iCalendar body is carried under, everywhere: a stored .ics file, a calendar part of
+// an invitation mail, a CalDAV resource.
+export const ICS_MIME = 'text/calendar';
+
+// Matched by prefix, because a calendar body names its purpose in the type's own parameters
+// (`text/calendar; method=REQUEST; charset=utf-8`), and a part of an invitation carries no filename at
+// all. The .ics extension counts on its own, as it does for the other two formats.
+export function isIcsFile(mimeType: string, name: string): boolean {
+    return name.toLowerCase().endsWith('.ics') || mimeType.startsWith(ICS_MIME);
+}
+
 export type ImageDimensions = {
     width: number;
     height: number;

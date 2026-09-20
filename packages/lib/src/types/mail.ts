@@ -1,4 +1,5 @@
 import type { ImipMethod } from './calendar';
+import { ICS_MIME } from './drive';
 import type { AttachmentReference } from './drive-reference';
 
 export type EmailAddress = {
@@ -50,7 +51,7 @@ export function mailAttachmentName(att: Pick<Attachment, 'filename'>, index: num
 
 // The one test for "belongs to the invite widget, not the chips": compose and the save can't disagree.
 export function isCalendarPart(att: Pick<Attachment, 'contentType'>): boolean {
-    return att.contentType.startsWith('text/calendar');
+    return att.contentType.startsWith(ICS_MIME);
 }
 
 export type ParsedMail = {
