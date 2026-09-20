@@ -145,9 +145,9 @@ racing `If-Match` PUTs serialize and the loser gets a typed precondition result 
 immutable: a PUT changing an existing resource's UID, or a UID already owned by another resource, → 412
 `CARDDAV:no-uid-conflict` (never a raw constraint 500). Oversize → 413 `CARDDAV:max-resource-size`
 (`CARD_MAX_BYTES` = 5 MiB). The client-chosen name becomes a filename, so `sanitizeCardUri` runs before any
-store call: NFC-normalized, leading alphanumeric, then only `A-Za-z0-9._@-` (excludes `/`, `..`, leading dots,
-control chars), ≤ 200 chars, must end `.vcf`; a case/NFC-colliding name can't alias one file. Anything else →
-400.
+store call: NFC-normalized, then `isSafePathSegment` (`lib/core/path-utils.ts`, the one rule every
+client-chosen segment takes — mail draft ids and calendar ids included) plus the `.vcf` suffix; a case/NFC-colliding
+name can't alias one file. Anything else → 400.
 
 ### The three REPORTs
 

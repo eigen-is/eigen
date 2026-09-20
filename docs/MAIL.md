@@ -62,7 +62,9 @@ This section describes `MaildirStore`, the only `MailStore` today; under a remot
 | A fast-saved draft's subject, preview and recipients | the `draft-meta/` sidecar and the row | no: the sync reads the `.eml` alone, so a rebuilt row shows the last full save; the sidecar still holds the truth and the composer overlays it |
 | Staged draft attachments | `draft-attachments/`, swept after 24 h | not indexed and not counted by the quota |
 
-Open against the standard contacts set, all in [ROADMAP.md](ROADMAP.md): Maildir writes do not fsync, the sidecar is not written atomically, a client-chosen draft id reaches a Maildir filename unvalidated, and staged attachments are outside the quota.
+**A client-chosen id is a path segment.** A draft id names a Maildir file, its `draft-meta/` sidecar and, for a staged part, its `draft-attachments/` entry, so `messageHandleDraft` rejects an id `isSafePathSegment` (`lib/core/path-utils.ts`) refuses with a 400 — in the domain, not only in the store, because an id Eigen did not mint is wrong under any `MailStore`. `MaildirStore` asks the same predicate where it builds those filenames, for the staged temp ids too: a refusal, never a character mapping, since two mapped ids would collide on one file. The predicate is the one CardDAV resource names and calendar ids take ([CONTACTS.md](CONTACTS.md)); every id the server mints — `createUniqueMessageId`, `crypto.randomUUID` — passes it.
+
+Open against the standard contacts set, all in [ROADMAP.md](ROADMAP.md): Maildir writes do not fsync, the sidecar is not written atomically, and staged attachments are outside the quota.
 
 ## Parsing
 
@@ -88,6 +90,8 @@ The mailbox list search box passes the URL `filterId` (`'inbox'`) **verbatim** t
 `Mail.search` re-canonicalizes it, so passing `''` would strip the filter and search every mailbox. The
 optimistic list patch sidesteps all of this by matching on message `id`, not the mailbox key. See
 [IMAP.md § Mailbox Structure](IMAP.md#mailbox-structure) for the on-disk `.Mailbox` layout.
+
+**A mailbox name is a folder name, not an id.** `mailboxDir` (`maildir-store.ts`) splits a path on either delimiter, `.` or `/`, and holds every segment to `A-Za-z0-9_- ` with no leading or trailing space and nothing empty — interior spaces because the name is user-visible, no `.` inside a segment because that is the Maildir++ delimiter, and no traversal because a segment holds no separator at all. Anything else is a 400. The segments are joined with `.`, so `Clients/Acme/2026` and `Clients.Acme.2026` are the one directory `.Clients.Acme.2026`, which is also the dotted form `mailboxesList` reports as `MaildirMailbox.path`. `''` stays the inbox and is the Maildir root itself.
 
 ## API routes
 
