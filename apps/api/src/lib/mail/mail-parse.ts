@@ -4,6 +4,11 @@ import DOMPurify from 'isomorphic-dompurify';
 import { parseMail } from './mail-parser';
 import { buildRecipientSummary } from './mailutils';
 
+// The rule for every surface that renders a message, stated once (the .eml preview forbids more on top of
+// it): `target` keeps an attachment pill out of the mail view, and a <form> DOMPurify would keep by default
+// can post the reader's input anywhere.
+export const READER_SANITIZE_CONFIG = { FORCE_BODY: true, ADD_ATTR: ['target'], FORBID_TAGS: ['form'] };
+
 // Throws on a genuine parse/read fault (unreadable .eml, disk EIO, malformed MIME). Callers
 // decide the policy: single-message reads (messageGet) let it propagate → Elysia 500; bulk
 // sweeps (syncMailbox) wrap it in a logged try/catch so one bad message can't abort the batch.
@@ -18,15 +23,7 @@ export async function parseEmlBytes(messageId: string, mailbox: string, bytes: B
     const parsedMail = parseMail(bytes);
 
     if (parsedMail.html) {
-        // ADD_ATTR keeps `target` on anchors so eigen-doc attachment pills (and any other
-        // sender-set target=_blank link) open in a new tab instead of replacing the mail view.
-        // FORBID_TAGS drops <form>: DOMPurify keeps it by default, and a form inside the mail view
-        // is a phishing surface (it can post the reader's input anywhere).
-        parsedMail.html = DOMPurify.sanitize(parsedMail.html, {
-            FORCE_BODY: true,
-            ADD_ATTR: ['target'],
-            FORBID_TAGS: ['form'],
-        });
+        parsedMail.html = DOMPurify.sanitize(parsedMail.html, READER_SANITIZE_CONFIG);
         parsedMail.html = parsedMail.html.replace(/\s+/g, ' ').trim();
     }
 

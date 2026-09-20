@@ -292,6 +292,7 @@ with `?`) cover navigation (`j`/`k`/`o`/`u`), actions (`e`/`#`/`s`/`r`/`a`/`f`/`
   HTML in `mail-parse.ts` (the `htmlToText`/`textToHtml` inputs are capped at 2 MB in `html.ts`, DOMPurify's isn't).
   `html-to-text` throws on pathologically nested HTML (tens of thousands of nested tags); that propagates out of
   `parseMail`, so that one email becomes unreadable rather than degrading.
+  Measured cost of the uncapped sanitize: ≈420 MB peak RSS per MB of HTML, so a 12 MiB `text/html` part peaks at 4.4 GB over 7 s; `inlineCidImages` (`mail-parser/html.ts`) is the other unbounded half of the same read, copying one cid's bytes per reference. The `.eml` preview bounds both on its own path (`EML_PREVIEW_MAX_HTML_BYTES`, [PREVIEWS.md](PREVIEWS.md)); the reader does not.
 - The summary/cold-index parse fully decodes + buffers attachment content it never reads (audit #12) —
   a `skipAttachmentContent` flag is deliberately unbuilt; add it only if a real large-mailbox profile
   justifies it (largely subsumed by the worker move).
