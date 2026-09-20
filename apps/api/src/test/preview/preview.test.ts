@@ -659,7 +659,9 @@ describe('eml preview route', () => {
 
         const res = await authedRequest(token, previewUrl(uploaded.id));
         expect(res.status).toBe(200);
-        expect(res.headers.get('cache-control')).toContain('max-age=');
+        // No max-age: the URL carries only updatedAt, so a browser would hold a body a sanitizer fix
+        // has since rewritten. The server-side cache still answers the revalidation.
+        expect(res.headers.get('cache-control')).toBe('private, no-cache');
         const data = await res.json();
         expect(data.subject).toBe('Engine notes');
         expect(data.from.value[0].address).toBe('ada@external.com');

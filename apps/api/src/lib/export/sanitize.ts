@@ -10,7 +10,7 @@ type SanitizeConfig = Parameters<typeof DOMPurify.sanitize>[1];
 type SanitizeOptions = SanitizeConfig & { allowedRefs?: ReadonlySet<string> };
 
 // Minimal structural view of the jsdom element passed to DOMPurify hooks.
-type AttrNode = {
+export type AttrNode = {
     tagName?: string;
     getAttribute(name: string): string | null;
     setAttribute(name: string, value: string): void;

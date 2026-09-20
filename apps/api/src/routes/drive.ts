@@ -381,9 +381,10 @@ export const driveRouter = new Elysia({ name: 'drive' })
 
             const result = await getEmlPreview(mount, path);
             if (!result) throw new ApiError(404, 'No preview available');
-            // Stale-while-revalidate and the long max-age work exactly as they do for a text preview.
+            // The one preview route without a max-age: the URL stamps the file, not the sanitizer that
+            // filtered the body, so an EML_FORMAT bump has to reach a browser that already has one.
             if (result.stale) set.headers['Cache-Control'] = 'no-store';
-            else setCacheHeaders(set, PREVIEW_MAX_AGE_SECONDS);
+            else set.headers['Cache-Control'] = 'private, no-cache';
             return result.value;
         },
         { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },

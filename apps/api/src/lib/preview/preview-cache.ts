@@ -36,7 +36,7 @@ function screenCacheName(drivePath: DrivePath, ext: 'webp' | 'svg'): string {
 // f4: merges and conditional formatting clip to the render window (spans, window-scoped
 //     aggregates, formula-rule ceiling).
 // f5: a deck previews as canvas compositor pages, not slide divs.
-const TEXT_FORMAT = 'f5';
+export const TEXT_FORMAT = 'f5';
 
 // A .vcf preview is a different artifact for the same path — contact cards, not a body — so it carries
 // its own format and neither kind ever reads the other's file as its stale predecessor. (pruneOldVersions
@@ -47,7 +47,8 @@ export const VCARD_FORMAT = 'vcard-f1';
 
 // The same reasoning for the message a .eml previews as, and one more reason to bump it: the payload's
 // html is what a DOMPurify upgrade filters, so a cached body predates every sanitizer fix (PREVIEWS.md).
-export const EML_FORMAT = 'eml-f1';
+// eml-f2: CSS is refused on the `url(` token, and a data: reference survives only as a raster image.
+export const EML_FORMAT = 'eml-f2';
 
 function textCacheName(drivePath: DrivePath, format: string): string {
     return `${drivePath.id}-${drivePath.updatedAt.getTime()}.${format}.json`;

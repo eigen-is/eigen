@@ -438,6 +438,19 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
         expect(cardsRevalidated.status).toBe(304);
     });
 
+    // The renderer's format tag rides in the ETag, so a renderer fix is not answered with a 304 on a part
+    // whose own bytes never changed — the same rule the .eml preview follows.
+    test('a text preview carries a different ETag than the bytes of the same part', async () => {
+        const preview = await authedRequest(ctx.alice.user.sessionToken, textPreviewUrl(5));
+        const bytes = await authedRequest(ctx.alice.user.sessionToken, downloadUrl(5, 'notes.txt'));
+
+        expect(preview.headers.get('etag')).not.toBe(bytes.headers.get('etag'));
+        const stale = await authedRequest(ctx.alice.user.sessionToken, textPreviewUrl(5), {
+            headers: { 'if-none-match': bytes.headers.get('etag') ?? '' },
+        });
+        expect(stale.status).toBe(200);
+    });
+
     test("another user's message is refused with 403 on both preview routes", async () => {
         const text = await authedRequest(ctx.bob.user.sessionToken, textPreviewUrl(5));
         expect(text.status).toBe(403);

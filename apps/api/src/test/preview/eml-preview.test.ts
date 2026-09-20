@@ -2,9 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import {
     EML_PREVIEW_MAX_ATTACHMENTS,
     EML_PREVIEW_MAX_HTML_BYTES,
-    EML_PREVIEW_MAX_INLINE_BYTES,
     EML_PREVIEW_MAX_TEXT_CHARS,
 } from '@workspace/lib/constants/mail';
+import DOMPurify from 'isomorphic-dompurify';
 import { ApiError } from '../../lib/core/errors';
 import { toTransferableText } from '../../lib/document/transform/protocol';
 import { buildEmlPreviewPayload } from '../../lib/preview/eml-preview';
@@ -100,6 +100,7 @@ describe('buildEmlPreviewPayload', () => {
                 [
                     `<img src="https://${HOSTILE}/a.png">`,
                     `<img srcset="https://${HOSTILE}/2x.png 2x">`,
+                    `<img srcset="data:image/png;base64,iVBORw0KGgo= 1x, https://${HOSTILE}/set.png 2x">`,
                     `<table background="https://${HOSTILE}/bg.png"><tr><td>cell</td></tr></table>`,
                     `<div style="background:url(https://${HOSTILE}/css.png)">styled</div>`,
                     `<div style="background:u\\72l(https://${HOSTILE}/escaped.png)">escaped</div>`,
@@ -153,6 +154,55 @@ describe('buildEmlPreviewPayload', () => {
         }
     });
 
+    // CSS does not need a closing paren to fetch: an unterminated `url(` at the end of a declaration, a
+    // sheet or a quoted string still yields the url to the parser, so the opening token is what is refused.
+    test('a url() that never closes, or closes on the wrong quote, is refused in both places CSS lives', () => {
+        const declarations = [
+            `background:url(https://${HOSTILE}/a`,
+            `background:url(https://${HOSTILE}/b`,
+            `cursor:url(https://${HOSTILE}/c.cur), pointer`,
+            `background:url(  https://${HOSTILE}/spaced.png)`,
+            `background:url('https://${HOSTILE}/quoted.png`,
+            `background:url("https://${HOSTILE}/mismatched.png')`,
+        ];
+        const payload = payloadOf(
+            htmlMessage(
+                [
+                    ...declarations.map((css, i) => `<div style="${css}">attr ${i}</div>`),
+                    ...declarations.map((css, i) => `<style>.sheet${i}{${css}}</style>`),
+                    `<style>@font-face{font-family:e;src:url(https://${HOSTILE}/f</style>`,
+                ].join('\n'),
+            ),
+        );
+
+        expect(payload.html).not.toContain(HOSTILE);
+        expect(payload.html).toContain('attr 0');
+    });
+
+    // A data: reference is kept for the inline images a message really carries; an SVG or an HTML one is a
+    // document tree of its own, and only the browser's SVG-as-image rules would stand between it and a fetch.
+    test('only a raster data: image survives, in an attribute and in CSS', () => {
+        const svg = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3C/svg%3E`;
+        const payload = payloadOf(
+            htmlMessage(
+                [
+                    `<img src="${svg}">`,
+                    '<img src="data:text/html,<b>x</b>">',
+                    `<div style="background:url(${svg})">svg css</div>`,
+                    `<style>.html{background:url(data:text/html,<b>x</b>)}</style>`,
+                    '<img src="data:image/png;base64,iVBORw0KGgo=">',
+                    `<div style="background:url( 'data:image/jpeg;base64,/9j/4AAQ' )">quoted css</div>`,
+                ].join('\n'),
+            ),
+        );
+
+        expect(payload.html).not.toContain('svg+xml');
+        expect(payload.html).not.toContain('text/html');
+        expect(payload.html).toContain('src="data:image/png;base64,iVBORw0KGgo="');
+        // The message keeps the images it really carries, however its CSS spells them.
+        expect(payload.html).toContain("url( 'data:image/jpeg;base64,/9j/4AAQ' )");
+    });
+
     test('every link opens in a new tab with no window handle, and only a clickable scheme survives', () => {
         const payload = payloadOf(
             htmlMessage(
@@ -185,30 +235,49 @@ describe('buildEmlPreviewPayload', () => {
 
     // inlineCidImages copies the image's bytes once per reference, so a body can name one small image
     // enough times to blow the payload up on its own.
-    test('one cid referenced hundreds of times leaves the payload under the inline budget', () => {
+    test('one cid referenced hundreds of times leaves the payload under the html ceiling', () => {
         const references = 200;
         const imageBytes = 64 * 1024;
         const payload = payloadOf(withInlineImage('<img src="cid:logo@eigen">'.repeat(references), imageBytes));
 
-        expect(references * imageBytes).toBeGreaterThan(EML_PREVIEW_MAX_INLINE_BYTES);
+        expect(references * imageBytes).toBeGreaterThan(EML_PREVIEW_MAX_HTML_BYTES);
         expect(payload.html).not.toContain('data:');
-        expect(Buffer.byteLength(JSON.stringify(payload))).toBeLessThan(EML_PREVIEW_MAX_INLINE_BYTES);
+        expect(Buffer.byteLength(JSON.stringify(payload))).toBeLessThan(EML_PREVIEW_MAX_HTML_BYTES);
     });
 
-    test('an inline image under the budget still shows', () => {
-        const payload = payloadOf(withInlineImage('<img src="cid:logo@eigen">', 1024));
+    test('an inline image under the ceiling still shows', () => {
+        const payload = payloadOf(withInlineImage('<img src="cid:logo@eigen">', 1024 * 1024));
 
         expect(payload.html).toContain('data:image/png;base64,');
     });
 
-    test('a body over the html ceiling is dropped, and the text body carries the message instead', () => {
-        const filler = `<p>${'word '.repeat(64)}</p>\r\n`;
-        const payload = payloadOf(
-            htmlMessage(filler.repeat(Math.ceil(EML_PREVIEW_MAX_HTML_BYTES / filler.length) + 512)),
-        );
+    // The ceiling is measured twice, so more inline bytes never show less of a message than fewer do.
+    test('a body over the ceiling only through its images keeps the message and drops the images', () => {
+        const payload = payloadOf(withInlineImage('<p>Logo: <img src="cid:logo@eigen"></p>', 3 * 1024 * 1024));
 
-        expect(payload.html).toBeNull();
-        expect(payload.text).toContain('word');
+        expect(payload.html).toContain('Logo:');
+        expect(payload.html).not.toContain('data:');
+    });
+
+    // A 12 MiB part costs 4.4 GB of RSS inside DOMPurify, so the ceiling binds the sanitizer's input, not its
+    // output. A hook of our own counts the nodes it walks: the builder's hooks are added and popped after it.
+    test('a body over the html ceiling is dropped before it is sanitized, and the text body carries the message', () => {
+        const filler = `<p>${'word '.repeat(64)}</p>\r\n`;
+        let nodesSanitized = 0;
+        DOMPurify.addHook('afterSanitizeAttributes', () => {
+            nodesSanitized += 1;
+        });
+        try {
+            const payload = payloadOf(
+                htmlMessage(filler.repeat(Math.ceil(EML_PREVIEW_MAX_HTML_BYTES / filler.length) + 512)),
+            );
+
+            expect(payload.html).toBeNull();
+            expect(payload.text).toContain('word');
+            expect(nodesSanitized).toBe(0);
+        } finally {
+            DOMPurify.removeHook('afterSanitizeAttributes');
+        }
     });
 
     test('a long text body is cut to the payload ceiling', () => {

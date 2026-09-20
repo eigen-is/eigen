@@ -21,6 +21,7 @@ import {
     getBytesEmlPreview,
     getBytesTextPreview,
     getBytesVCardPreview,
+    TEXT_FORMAT,
     VCARD_FORMAT,
 } from '../lib/preview/preview-cache';
 import { betterAuth } from './auth';
@@ -343,7 +344,14 @@ export const mailRouter = new Elysia({ name: 'mail' })
         async ({ params, request, user, set }) => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            const att = await readMailPart(await getMailClient(user), params.id, params.index, request, set);
+            const att = await readMailPart(
+                await getMailClient(user),
+                params.id,
+                params.index,
+                request,
+                set,
+                TEXT_FORMAT,
+            );
             if (!att) return status(304);
 
             const preview = await getBytesTextPreview(
