@@ -338,7 +338,7 @@ One scale, project-wide. Higher values are progressively rarer — if you reach 
 | Sheet canvas-internal overlays               | 8–30    | Selection, freeze handles, scrollbars, hint boxes — scoped under `cellArea` |
 | Portaled UI (dropdowns, popovers, dialogs)   | 50      | shadcn / Radix default — leave it alone                 |
 | Full-screen overlay                          | 100     | `FilePreview`, slides `PresentMode`                     |
-| Dialog above preview                         | 200     | `DialogContent` with `abovePreview` prop                |
+| Above the full-screen overlay                | 200     | `DialogContent` with `abovePreview` prop; `MessageView`'s header details popover, on the same prop, for the `.eml` quick look |
 | Toaster                                      | library | Sonner manages its own stack                            |
 
 Rules:
@@ -346,7 +346,7 @@ Rules:
 - **App-level components don't set z-index.** Use layout instead — flex sibling (slides pattern) or absolute inside a parent that establishes a stacking context (docs pattern with `position: relative overflow-hidden`). Side panels (comments, properties) belong here.
 - **`position: relative` alone does *not* establish a stacking context** — the element needs a `z-index` other than `auto` (or one of: `transform`, `opacity < 1`, `filter`, `isolation: isolate`, `will-change`). If you want to contain children's z-indices, add `isolation: isolate`.
 - **Don't override shadcn primitives' z-50.** If a portaled menu is being covered, fix the offending high z-index, don't escalate the menu.
-- **Anything > 50 needs a comment** explaining why (current exceptions are `FilePreview`, the slides `PresentMode` overlay and the `abovePreview` Dialog prop).
+- **Anything > 50 needs a comment** explaining why (current exceptions are `FilePreview`, the slides `PresentMode` overlay, the `abovePreview` Dialog prop and `MessageView`'s details popover under the same prop). A layer at 200 is a `role="dialog"` of its own, which is what `useDialogOpen(overlayRef)` reads so the overlay under it stands its own keys down.
 - **The sheet engine's `cellArea` is its own world** — overlays under it stay ≤ 30; portaled menus rely on shadcn's z-50 to land above.
 
 ## Opening Items and Links

@@ -1,7 +1,8 @@
 ---
 title: "Import events from a calendar file"
-description: "Bring events into a calendar from an .ics file, either from your computer or from a file already in Drive."
+description: "Bring events into one of your calendars from an .ics file in Drive, or one attached to a message, a chat message, or a card."
 type: how-to
+category: Basics
 tags: [calendar, import, ics]
 related: [calendar/get-started, calendar/external-invitations, drive/preview-a-file]
 order: 90
@@ -13,7 +14,7 @@ Most calendar programs can save events as an `.ics` file, the standard calendar 
 ## Import a file
 
 1. Put the file in [Drive](/drive), or find it as an attachment on an email, a chat message, or a card.
-2. Right-click it, or click its **⋮** button.
+2. In Drive, right-click the file or click its **⋮** button. For an attachment, right-click the chip, or press and hold it on a phone.
 3. Choose **Import to Calendar**.
 4. Pick the calendar the events go into, then click **Import**.
 
@@ -25,7 +26,7 @@ To read the file before you import it, select it and press **Space**, or choose 
 
 The dialog lists the calendars you own, with your default one already selected. Choose **New calendar** instead to make a fresh one for the file. Eigen names it after the file, and you can change the name before you import.
 
-A calendar someone shared with you is not in the list. You can only import into a calendar of your own.
+A calendar someone shared with you is not in the list. You can only import into a calendar of your own. That holds for a file in a team drive too: the events land in one of your own calendars, the same way an imported email lands in your own inbox.
 
 ## What comes across
 

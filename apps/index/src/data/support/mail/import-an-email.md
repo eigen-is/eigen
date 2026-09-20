@@ -14,7 +14,7 @@ An `.eml` file holds one email, and Mail can read it back. That works whether th
 ## Import a file
 
 1. Put the file in [Drive](/drive), or find it as an attachment on a message, a chat message, or a card.
-2. Right-click it, or click its **⋮** button.
+2. In Drive, right-click the file or click its **⋮** button. For an attachment, right-click the chip, or press and hold it on a phone.
 3. Choose **Import to Mail**.
 
 The message lands in your inbox as an unread message, with its original sender, date, subject, and attachments. It is a copy, so importing the same file twice gives you the message twice.
