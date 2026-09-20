@@ -27,6 +27,8 @@ import {
 } from './mailutils';
 
 const STALE_DRAFT_TEMP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+// The Maildir spec's own age: a `tmp/` file older than this is a crash leftover, never an in-flight write.
+const STALE_MAILDIR_TEMP_MAX_AGE_MS = 36 * 60 * 60 * 1000;
 // Every mail SSE event re-lists the mailboxes, so the reconcile a listing kicks for a folder outside
 // the standard six is due at most this often — a rescan of every folder per event is the whole cost.
 const BACKGROUND_RECONCILE_INTERVAL_MS = 60 * 1000;
@@ -544,18 +546,38 @@ export class MaildirStore implements MailStore {
     }
 
     async cleanupStaleDraftTemps(): Promise<void> {
-        if (!(await this.storage.dirExists(DRAFT_ATTACHMENTS_DIR))) return;
-        const now = Date.now();
-        for (const name of await this.storage.readdir(DRAFT_ATTACHMENTS_DIR)) {
-            const filePath = path.join(DRAFT_ATTACHMENTS_DIR, name);
-            try {
-                const stat = await this.storage.stat(filePath);
-                if (now - stat.mtimeMs > STALE_DRAFT_TEMP_MAX_AGE_MS) {
-                    await this.storage.unlink(filePath);
-                }
-            } catch {}
+        await this.cleanupStaleMaildirTemps();
+        if (await this.storage.dirExists(DRAFT_ATTACHMENTS_DIR)) {
+            const now = Date.now();
+            for (const name of await this.storage.readdir(DRAFT_ATTACHMENTS_DIR)) {
+                const filePath = path.join(DRAFT_ATTACHMENTS_DIR, name);
+                try {
+                    const stat = await this.storage.stat(filePath);
+                    if (now - stat.mtimeMs > STALE_DRAFT_TEMP_MAX_AGE_MS) {
+                        await this.storage.unlink(filePath);
+                    }
+                } catch {}
+            }
         }
         await this.recountStaged();
+    }
+
+    // A crash between a staged write and its rename leaves a file in a mailbox's `tmp/` that no name
+    // outside it points at; in standalone mode no Dovecot comes past to sweep it.
+    private async cleanupStaleMaildirTemps(): Promise<void> {
+        const now = Date.now();
+        for (const mailbox of await this.listMailboxPaths()) {
+            const tmpDir = path.join(this.mailboxDir(mailbox), PATHS.MAIL.TMP);
+            for (const name of await this.storage.list(tmpDir)) {
+                const filePath = path.join(tmpDir, name);
+                try {
+                    const stat = await this.storage.stat(filePath);
+                    if (now - stat.mtimeMs > STALE_MAILDIR_TEMP_MAX_AGE_MS) {
+                        await this.storage.unlink(filePath);
+                    }
+                } catch {}
+            }
+        }
     }
 
     // -- Maildir filesystem primitives --
@@ -572,7 +594,7 @@ export class MaildirStore implements MailStore {
         }
 
         const subscriptions = `${STANDARD_MAILBOXES.filter((m) => m !== MAILBOX_INBOX).join('\n')}\n`;
-        await this.storage.write(path.join(this.basePath, 'subscriptions'), subscriptions);
+        await this.storage.writeAtomic(path.join(this.basePath, 'subscriptions'), subscriptions);
     }
 
     private async mailboxDirExists(mailbox: string): Promise<boolean> {
@@ -598,13 +620,18 @@ export class MaildirStore implements MailStore {
 
     private async createMailboxDir(mailbox: string): Promise<void> {
         const mailboxPath = this.mailboxDir(mailbox);
+        const isInbox = mailbox === MAILBOX_INBOX;
         await this.storage.mkdir(mailboxPath);
         await this.storage.mkdir(path.join(mailboxPath, PATHS.MAIL.CUR));
         await this.storage.mkdir(path.join(mailboxPath, PATHS.MAIL.NEW));
         await this.storage.mkdir(path.join(mailboxPath, PATHS.MAIL.TMP));
-        if (mailbox !== MAILBOX_INBOX) {
+        if (!isInbox) {
             await this.storage.write(path.join(mailboxPath, 'maildirfolder'), '');
         }
+        await this.storage.syncDir(mailboxPath);
+        // The root's entry for the folder: a crash that loses it strands the index rows of a folder no
+        // enumeration reaches any more.
+        if (!isInbox) await this.storage.syncDir(this.basePath);
     }
 
     private async deliverAtomic(message: Buffer, mailbox: string, uniqueId: string): Promise<void> {
@@ -646,17 +673,21 @@ export class MaildirStore implements MailStore {
         const newPath = path.join(mailboxPath, PATHS.MAIL.NEW);
         if (!(await this.storage.dirExists(newPath))) return;
 
+        const curPath = path.join(mailboxPath, PATHS.MAIL.CUR);
+        let moved = 0;
         for (const fileName of await this.storage.readdir(newPath)) {
             if (fileName.startsWith('.')) continue;
             const src = path.join(newPath, fileName);
             const curName = fileName.includes(':') ? fileName : `${fileName}:2,`;
-            const dst = path.join(mailboxPath, PATHS.MAIL.CUR, curName);
             try {
-                await this.storage.renameDurable(src, dst);
+                await this.storage.rename(src, path.join(curPath, curName));
+                moved++;
             } catch (e: unknown) {
                 if (e instanceof Error && 'code' in e && e.code !== 'ENOENT') throw e;
             }
         }
+        // The guarantee is per directory, not per rename, so a cold sync of a large new/ pays one fsync.
+        if (moved > 0) await this.storage.syncDir(curPath);
     }
 
     private async listCurFiles(mailbox: string): Promise<string[]> {

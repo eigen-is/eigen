@@ -18,7 +18,9 @@
    single-user system and self-correcting on Dovecot's next scan. Each of those writes fsyncs the file it stages and
    the directories its rename touches ([MAIL.md § Files and index](MAIL.md#files-and-index)).
 4. **Standalone mode.** When Dovecot is not running, Eigen handles `new/` -> `cur/` moves itself. The sync engine
-   handles both modes transparently using ENOENT-safe renames.
+   handles both modes transparently using ENOENT-safe renames. Housekeeping is Eigen's too: a file a crash left in a
+   mailbox's `tmp/` is swept once it is 36 hours old, the age the Maildir spec gives
+   ([MAIL.md § Files and index](MAIL.md#files-and-index)).
 5. **Six standard mailboxes, plus whatever else is on disk.** Eigen creates the standard six and lists every other
    Maildir++ folder an IMAP client made beside them, under the name Dovecot gave it.
 
@@ -253,6 +255,4 @@ the field is left out.
 
 ## Not Yet Implemented
 
-- **Stale `tmp/` cleanup.** Per Maildir spec, files in `tmp/` older than 36 hours can be safely deleted. No
-  housekeeping code exists.
 - **Labels.** Mail has no labels at all; a message belongs to exactly one mailbox.

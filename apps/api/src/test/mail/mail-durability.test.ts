@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { fstatSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, fstatSync, readdirSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
 import { type FileHandle, open } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -13,6 +13,7 @@ import { createTestUser, ensureServer, TEST_DATA_DIR } from '../setup';
 // FileHandle.sync and fs.promises.rename are spied, and every synced fd is identified by its inode.
 
 let userId: string;
+let counter = 0;
 
 beforeAll(async () => {
     await ensureServer();
@@ -48,21 +49,24 @@ function makeEml(subject: string): Buffer {
     );
 }
 
-// Labels every sync and rename the operation performs: a directory by the name the caller gave its path,
-// anything else by kind. Inodes identify the directories because a file descriptor carries no path.
-async function record(dirs: Record<string, string>, fn: () => Promise<void>): Promise<string[]> {
-    const byIno = new Map<number, string>();
-    for (const [label, dir] of Object.entries(dirs)) byIno.set(statSync(dir).ino, label);
-
+async function syncProto(): Promise<{ sync: () => Promise<void> }> {
     const probe = await open(TEST_DATA_DIR, 'r');
-    const handleProto = Object.getPrototypeOf(probe) as { sync: () => Promise<void> };
+    const proto = Object.getPrototypeOf(probe) as { sync: () => Promise<void> };
     await probe.close();
+    return proto;
+}
 
-    const events: string[] = [];
+// Labels every sync, rename and unlink the operation performs: a directory by the name the caller gave its
+// path, anything else by kind. Inodes identify the directories because a file descriptor carries no path,
+// and they are resolved after the fact so a directory the operation itself creates can be labeled too.
+async function record(dirs: Record<string, string>, fn: () => Promise<void>): Promise<string[]> {
+    const handleProto = await syncProto();
+
+    const events: (string | number)[] = [];
     const realSync = handleProto.sync;
     const syncSpy = spyOn(handleProto, 'sync').mockImplementation(async function (this: FileHandle) {
         const stat = fstatSync(this.fd);
-        events.push(stat.isDirectory() ? (byIno.get(stat.ino) ?? 'other dir') : 'file');
+        events.push(stat.isDirectory() ? stat.ino : 'file');
         return realSync.call(this);
     });
     const realRename = fsPromises.rename;
@@ -70,14 +74,23 @@ async function record(dirs: Record<string, string>, fn: () => Promise<void>): Pr
         events.push('rename');
         return realRename(from, to);
     });
+    const realUnlink = fsPromises.unlink;
+    const unlinkSpy = spyOn(fsPromises, 'unlink').mockImplementation(async (target) => {
+        events.push('unlink');
+        return realUnlink(target);
+    });
 
     try {
         await fn();
     } finally {
         syncSpy.mockRestore();
         renameSpy.mockRestore();
+        unlinkSpy.mockRestore();
     }
-    return events;
+
+    const byIno = new Map<number, string>();
+    for (const [label, dir] of Object.entries(dirs)) byIno.set(statSync(dir).ino, label);
+    return events.map((event) => (typeof event === 'string' ? event : (byIno.get(event) ?? 'other dir')));
 }
 
 describe('Maildir write durability', () => {
@@ -135,7 +148,7 @@ describe('Maildir write durability', () => {
         expect(events).toEqual(['rename', 'trash', 'inbox']);
     });
 
-    test('a delete fsyncs the directory the message was unlinked from', async () => {
+    test('a delete fsyncs the directory after the unlink it made durable', async () => {
         const home = await getHome(userId);
         const messageId = await home.mail.mailboxDeliver(makeEml('Durable delete'));
         const dirs = { cur: join(boxDir(''), 'cur') };
@@ -144,6 +157,94 @@ describe('Maildir write durability', () => {
             await home.mail.messageDelete(messageId);
         });
 
-        expect(events).toEqual(['cur']);
+        expect(events).toEqual(['unlink', 'cur']);
+    });
+
+    test('new/ to cur/ fsyncs cur/ once for the whole batch', async () => {
+        // A cold sync of a large new/ would otherwise pay one directory fsync per message for the one
+        // directory every rename lands in.
+        const home = await getHome(userId);
+        await home.mail.mailboxCreate('Batched');
+        const dirs = { new: join(boxDir('Batched'), 'new'), cur: join(boxDir('Batched'), 'cur') };
+        for (const subject of ['One', 'Two', 'Three']) {
+            const body = makeEml(subject);
+            writeFileSync(join(dirs.new, `${Date.now()}.M${counter++}P1Q1.host,S=${body.byteLength}`), body);
+        }
+
+        const events = await record(dirs, async () => {
+            await home.mail.mailboxGet('Batched');
+        });
+
+        expect(events).toEqual(['rename', 'rename', 'rename', 'cur']);
+        expect(readdirSync(dirs.new)).toEqual([]);
+        expect(readdirSync(dirs.cur)).toHaveLength(3);
+    });
+
+    test('creating a mailbox fsyncs the folder and the Maildir root that gained it', async () => {
+        const home = await getHome(userId);
+        const dirs = { root: maildir(), box: boxDir('Created') };
+
+        const events = await record(dirs, async () => {
+            await home.mail.mailboxCreate('Created');
+        });
+
+        expect(events).toEqual(['box', 'root']);
+    });
+
+    test('a delivery survives a directory fsync the file system refuses', async () => {
+        // The message is already in new/ when a directory fsync fails, so failing the delivery would make
+        // the sending MTA retry a message that landed — every retry a duplicate.
+        const home = await getHome(userId);
+        const handleProto = await syncProto();
+        const realSync = handleProto.sync;
+        const spy = spyOn(handleProto, 'sync').mockImplementation(async function (this: FileHandle) {
+            if (fstatSync(this.fd).isDirectory()) throw new Error('EINVAL: fsync of a directory');
+            return realSync.call(this);
+        });
+
+        let messageId: string;
+        try {
+            messageId = await home.mail.mailboxDeliver(makeEml('Refused directory fsync'));
+        } finally {
+            spy.mockRestore();
+        }
+
+        expect(home.mail.messageGetSummary(messageId)?.subject).toBe('Refused directory fsync');
+    });
+
+    test('a failed file fsync fails the delivery and stages nothing', async () => {
+        const home = await getHome(userId);
+        const handleProto = await syncProto();
+        const realSync = handleProto.sync;
+        const spy = spyOn(handleProto, 'sync').mockImplementation(async function (this: FileHandle) {
+            if (!fstatSync(this.fd).isDirectory()) throw new Error('EIO: fsync of the staged message');
+            return realSync.call(this);
+        });
+
+        try {
+            await expect(home.mail.mailboxDeliver(makeEml('Doomed delivery'))).rejects.toThrow('EIO');
+        } finally {
+            spy.mockRestore();
+        }
+
+        expect(readdirSync(join(boxDir(''), 'tmp'))).toEqual([]);
+        expect(readdirSync(join(boxDir(''), 'new'))).toEqual([]);
+    });
+
+    test('a tmp/ file a crash left behind is swept after 36 hours', async () => {
+        const home = await getHome(userId);
+        const store = (home.mail as unknown as { store: { cleanupStaleDraftTemps: () => Promise<void> } }).store;
+        const tmpDir = join(boxDir(''), 'tmp');
+        const stale = join(tmpDir, 'stale.M1P1Q1.host,S=4');
+        const fresh = join(tmpDir, 'fresh.M1P1Q1.host,S=4');
+        writeFileSync(stale, 'body');
+        writeFileSync(fresh, 'body');
+        const old = new Date(Date.now() - 48 * 60 * 60 * 1000);
+        utimesSync(stale, old, old);
+
+        await store.cleanupStaleDraftTemps();
+
+        expect(existsSync(stale)).toBe(false);
+        expect(existsSync(fresh)).toBe(true);
     });
 });
