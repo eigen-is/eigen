@@ -186,6 +186,22 @@ exception children (`parentEventId` rows) along. It never runs the `deleteEvent`
 doesn't decline it for the organizer. For CalDAV: the source gets a tombstone for the master uri (clients drop it) and
 the target sees a changed event. Moving a lone recurrence occurrence (an exception row) is rejected.
 
+## Importing an `.ics`
+
+`POST /calendar/:ownerId/import?calendarId=` takes the file as the raw body; `POST /calendar/:ownerId/import-from-drive` takes the same `calendarId` plus the picked Drive file and reads its bytes server-side through `readImportSourceBytes`. Both are the contacts and mail import pair with a calendar target — same guards (`requireNonGuest` + `requireSelf`), same statuses — and both answer `ImportEventsResult` (`{imported, skipped, failed}`). The target is a calendar this Home owns: an unknown id and a calendar shared *with* the caller both answer 404, because writing into someone else's calendar crosses homes and only the relay may do that. "New calendar" in the picker is `useCreateCalendar` followed by an import, so the route carries no mode union. Bytes decode as UTF-8 and parse through `parseIcs`; a file that is not a calendar is a 400 with nothing written, one over `ICS_MAX_BYTES` a 413.
+
+`Calendar.importEvents()` groups the VEVENTs by UID and writes the masters in file order:
+
+- A UID that is empty, longer than 255 characters or carrying a control character → `failed`. It travels into etags, sync deltas and the uri of every override row, so it has to be storable.
+- A UID any calendar of the Home already holds → `skipped`, so a re-import is a no-op and an invitation already linked never gets a twin.
+- Everything else is inserted as the importing user's own event under a fresh `uri` of `${randomUUID()}.ics` — the file's UID is its author's string, and two files that share one collide on the `(calendarId, uri)` unique index.
+- **`data.organizer` and `data.attendees` are dropped**, `METHOD` is ignored and reminders are capped at `ICS_IMPORT_MAX_REMINDERS`. A stored organizer locks the event (`isInvitationFromOthers`) and turns its delete into a decline; an attendee list on an organizer-less event sends a REQUEST on every edit and a CANCEL on delete to addresses the file's author chose, and is the row a forged iMIP REPLY matches by UID. An imported invitation is a plain event.
+- That UID's overrides then go through `syncExceptionEvents` (`calendar/exception-sync.ts`), the exception writer a CalDAV PUT uses. It takes one series' VEVENTs, so a file holding many series keeps every override on its own master.
+- An event the calendar refuses (a reversed interval, an unparseable RRULE) counts as `failed` and the file continues; a failing override leaves its master standing.
+- More than `ICS_IMPORT_MAX_EVENTS` masters → 413 before anything is written.
+
+The masters of a file land under one ctag bump, one `calendar:event-created` broadcast and one `notifySharedCalendarUsers()`: `createEvent` does all three per call, and a thousand of each would trip the rate limiter. The two share `insertEvent()`, the row write, which stamps the ctag its caller bumped.
+
 ## API Routes
 
 `apps/api/src/routes/calendar.ts`, `ownerId` can be user ID or `team_{teamId}`:
@@ -207,6 +223,8 @@ GET    /calendar/:ownerId/shared                  (shared-with-me list, auto-syn
 PUT    /calendar/:ownerId/shared/:id              (local prefs)
 DELETE /calendar/:ownerId/shared/:id
 GET    /calendar/:ownerId/shared-with-me          (pull: what has owner shared with me?)
+POST   /calendar/:ownerId/import?calendarId=      (raw .ics body)
+POST   /calendar/:ownerId/import-from-drive       ({calendarId} + the Drive source)
 ```
 
 Team calendar settings (enable/disable, member permission) are managed via the team router, not the calendar router:
@@ -254,6 +272,8 @@ All hooks in `packages/lib/src/core/calendar/hooks/use-calendar.ts`:
 | `useUpdateSharedCalendar(ownerId)` | Update local prefs (color/visible)    |
 | `useDeleteSharedCalendar(ownerId)` | Remove shared calendar entry          |
 | `useRsvp(ownerId)`            | RSVP mutation (accept/decline/tentative)   |
+
+The two import hooks live beside them in `use-transfer.ts`: `useImportCalendarFromUrl` (bytes the browser holds) and `useImportCalendarFromDrive` (a picked Drive file), both taking the target `calendarId` in their mutation variables and reporting the three counts in one toast.
 
 **Query keys**: `calendarKeys` with `ownerId`-scoped hierarchy — `all > owner(ownerId) > calendars/events/shared`.
 SSE handler in `packages/lib/src/core/calendar/sse-handlers.ts` routes events to invalidation functions.

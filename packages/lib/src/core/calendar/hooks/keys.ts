@@ -42,6 +42,13 @@ export function invalidateEventCreated(queryClient: QueryClient, ownerId: string
     queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
 }
 
+// A whole file of events landed in one calendar: every range query is stale, and the calendar database
+// grew by as much as the file held.
+export function invalidateEventsImported(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
+    invalidateHomeSize(queryClient, ownerId);
+}
+
 export function invalidateEventUpdated(queryClient: QueryClient, ownerId: string): void {
     queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
 }
