@@ -5,6 +5,9 @@ import * as path from 'node:path';
 import type { BunFile } from 'bun';
 import { resolveWithinBase } from './path-utils';
 
+// Once per process: the mount is the same for every home, so a line per message would be the whole log.
+let warnedDirSyncUnsupported = false;
+
 export class LocalFilesystem {
     private baseDir: string;
 
@@ -25,13 +28,22 @@ export class LocalFilesystem {
     }
 
     // A rename (or an unlink) only reaches the platter once the directory holding the name is fsynced:
-    // without this a power loss resurrects the old name under an already-acknowledged write.
+    // without this a power loss resurrects the old name under an already-acknowledged write. It runs after
+    // the rename, so a file system that refuses it (NFS, CIFS, some FUSE mounts) must not fail an operation
+    // that already happened — a mail delivery answering 500 makes the MTA retry a message that landed.
     async syncDir(dirPath: string): Promise<void> {
-        const handle = await fsPromises.open(this.getFilePath(dirPath), 'r');
         try {
-            await handle.sync();
-        } finally {
-            await handle.close();
+            const handle = await fsPromises.open(this.getFilePath(dirPath), 'r');
+            try {
+                await handle.sync();
+            } finally {
+                await handle.close();
+            }
+        } catch (error) {
+            if (!warnedDirSyncUnsupported) {
+                warnedDirSyncUnsupported = true;
+                console.warn('Directory fsync failed; renames on this file system are not crash-safe:', error);
+            }
         }
     }
 
@@ -40,12 +52,18 @@ export class LocalFilesystem {
     async writeDurable(filePath: string, data: Buffer | Uint8Array | string): Promise<void> {
         const fullPath = this.getFilePath(filePath);
         fs.mkdirSync(path.dirname(fullPath), { recursive: true });
-        const handle = await fsPromises.open(fullPath, 'w');
         try {
-            await handle.writeFile(data);
-            await handle.sync();
-        } finally {
-            await handle.close();
+            const handle = await fsPromises.open(fullPath, 'w');
+            try {
+                await handle.writeFile(data);
+                await handle.sync();
+            } finally {
+                await handle.close();
+            }
+        } catch (error) {
+            // Nothing sweeps a partial staged file: no name outside the staging directory points at it.
+            await fsPromises.unlink(fullPath).catch(() => {});
+            throw error;
         }
     }
 
