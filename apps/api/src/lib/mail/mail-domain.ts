@@ -19,7 +19,7 @@ import {
 } from '@workspace/lib/types/mail';
 import { type SSEventMail, SSEventType } from '@workspace/lib/types/sse';
 import { processInboundImip, summarizeCalendarInvite } from '../calendar/imip';
-import { enforceMailAndContactsQuota, invalidateMailSize } from '../config/enforcement';
+import { enforceMailAndContactsQuota } from '../config/enforcement';
 import { isDemo } from '../config/env';
 import { isInternalAddress } from '../config/server-config';
 import { ApiError, isSafePathSegment } from '../core';
@@ -153,7 +153,6 @@ export class Mail {
         await enforceMailAndContactsQuota(this.home.user.id, bytes.byteLength);
 
         const id = await this.store.append('', bytes, { arrival: false });
-        invalidateMailSize(this.home.user.id);
         return { id };
     }
 

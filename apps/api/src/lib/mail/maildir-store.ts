@@ -11,7 +11,6 @@ import {
 import type { Attachment, DraftAttachmentUpload, Email, EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import type { BunFile, FileSink } from 'bun';
 import { Semaphore } from '../../utils/semaphore';
-import { invalidateMailSize } from '../config/enforcement';
 import { ApiError, isSafePathSegment, LocalFilesystem, PATHS } from '../core';
 import type { Home } from '../home';
 import { parseEml, parseEmlBytes } from './mail-parse';
@@ -66,6 +65,10 @@ export class MaildirStore implements MailStore {
     // Reconciliation (doSyncMailbox) must not straddle a mutation's fs+db pair, or its delete phase drops just-moved rows.
     private storeLock = new Semaphore(1);
     private watchers: FSWatcher[] = [];
+    // Running byte totals so size() answers from memory — the mail+contacts quota gate calls it on every
+    // metered write, and an index sum plus a staging walk per call would make an N-card device sync O(N²).
+    private indexBytes = 0;
+    private stagedBytes = 0;
 
     constructor(private home: Home) {
         this.basePath = PATHS.MAIL.MAILDIR;
@@ -82,6 +85,9 @@ export class MaildirStore implements MailStore {
         }
         this.db = new MailDB(this.home);
         await this.db.init();
+        // Seeded once from the index and the staging dir; every row and staged file adjusts it thereafter.
+        this.indexBytes = this.db.size();
+        await this.recountStaged();
         return isNew;
     }
 
@@ -119,7 +125,13 @@ export class MaildirStore implements MailStore {
     }
 
     async size(): Promise<number> {
-        return this.db.size() + (await readDraftStagingSize(this.home.fs));
+        return this.indexBytes + this.stagedBytes;
+    }
+
+    // The staging dir holds one compose session's attachments at most, so a re-walk per change costs
+    // nothing next to writing the attachment and — unlike a delta per partial write — cannot drift.
+    private async recountStaged(): Promise<void> {
+        this.stagedBytes = await readDraftStagingSize(this.home.fs);
     }
 
     search(opts: MailSearchOptions): EmailSummary[] {
@@ -227,7 +239,10 @@ export class MaildirStore implements MailStore {
             applyFlagsFromFilename(parsed, filename);
             parsed.filename = filename;
             parsed.mailbox = MAILBOX_DRAFTS;
+            // A full save rewrites the draft under its own id, so the row it replaces is credited back.
+            const replaced = this.db.getEmail(messageId)?.size ?? 0;
             this.db.addEmail(parsed);
+            this.indexBytes += parsed.size - replaced;
             return parsed;
         });
     }
@@ -239,8 +254,7 @@ export class MaildirStore implements MailStore {
 
             await this.deleteMessage(email.mailbox, email.filename);
             this.db.deleteEmail(messageId);
-            // Freed bytes must reach the next mail+contacts quota check, not a cached pre-delete figure.
-            invalidateMailSize(this.home.user.id);
+            this.indexBytes -= email.size;
         });
     }
 
@@ -349,7 +363,10 @@ export class MaildirStore implements MailStore {
                         console.warn(`syncMailbox: failed to parse ${fileName}:`, e instanceof Error ? e.message : e);
                 }
             }
+            // Upsert, so a chunk can re-home a row that already exists: credit what it replaces.
+            const replaced = this.db.sumSizes(parsed.map((p) => p.id));
             this.db.insertEmails(parsed);
+            this.indexBytes += parsed.reduce((sum, p) => sum + p.size, 0) - replaced;
             // A fast save leaves the .eml stale, so a row rebuilt from it carries the last full save.
             if (mailbox === MAILBOX_DRAFTS) {
                 for (const p of parsed) {
@@ -384,9 +401,10 @@ export class MaildirStore implements MailStore {
         }
 
         // Deleted messages (in DB but not on disk)
-        for (const [id] of dbById) {
+        for (const [id, record] of dbById) {
             if (!diskFiles.has(id)) {
                 this.db.deleteEmail(id);
+                this.indexBytes -= record.size;
                 this.events.deleted(id, mailbox);
             }
         }
@@ -462,8 +480,7 @@ export class MaildirStore implements MailStore {
             await this.cleanupDraftTemp(tempId);
             throw e;
         }
-        // Staged bytes are charged immediately, so the next quota check must not read a pre-upload figure.
-        invalidateMailSize(this.home.user.id);
+        await this.recountStaged();
         return { tempId, ...meta };
     }
 
@@ -523,7 +540,7 @@ export class MaildirStore implements MailStore {
                 await this.storage.unlink(metaPath);
             }
         } catch {}
-        invalidateMailSize(this.home.user.id);
+        await this.recountStaged();
     }
 
     async cleanupStaleDraftTemps(): Promise<void> {
@@ -535,10 +552,10 @@ export class MaildirStore implements MailStore {
                 const stat = await this.storage.stat(filePath);
                 if (now - stat.mtimeMs > STALE_DRAFT_TEMP_MAX_AGE_MS) {
                     await this.storage.unlink(filePath);
-                    invalidateMailSize(this.home.user.id);
                 }
             } catch {}
         }
+        await this.recountStaged();
     }
 
     // -- Maildir filesystem primitives --
@@ -595,10 +612,10 @@ export class MaildirStore implements MailStore {
         const mailboxPath = this.mailboxDir(mailbox);
 
         const tmpPath = path.join(mailboxPath, PATHS.MAIL.TMP, filename);
-        await this.storage.write(tmpPath, message);
+        await this.storage.writeDurable(tmpPath, message);
 
         const newPath = path.join(mailboxPath, PATHS.MAIL.NEW, filename);
-        await this.storage.rename(tmpPath, newPath);
+        await this.storage.renameDurable(tmpPath, newPath);
     }
 
     private async deliverToCur(
@@ -616,10 +633,10 @@ export class MaildirStore implements MailStore {
         const mailboxPath = this.mailboxDir(mailbox);
 
         const tmpPath = path.join(mailboxPath, PATHS.MAIL.TMP, filename);
-        await this.storage.write(tmpPath, message);
+        await this.storage.writeDurable(tmpPath, message);
 
         const curPath = path.join(mailboxPath, PATHS.MAIL.CUR, filename);
-        await this.storage.rename(tmpPath, curPath);
+        await this.storage.renameDurable(tmpPath, curPath);
 
         return { uniqueId: existingId, size, filename };
     }
@@ -635,7 +652,7 @@ export class MaildirStore implements MailStore {
             const curName = fileName.includes(':') ? fileName : `${fileName}:2,`;
             const dst = path.join(mailboxPath, PATHS.MAIL.CUR, curName);
             try {
-                await this.storage.rename(src, dst);
+                await this.storage.renameDurable(src, dst);
             } catch (e: unknown) {
                 if (e instanceof Error && 'code' in e && e.code !== 'ENOENT') throw e;
             }
@@ -654,20 +671,24 @@ export class MaildirStore implements MailStore {
     }
 
     private async moveMessage(fromMailbox: string, fromFilename: string, toMailbox: string): Promise<void> {
-        const srcPath = path.join(this.mailboxDir(fromMailbox), PATHS.MAIL.CUR, fromFilename);
+        const srcDir = path.join(this.mailboxDir(fromMailbox), PATHS.MAIL.CUR);
         const dstPath = path.join(this.mailboxDir(toMailbox), PATHS.MAIL.CUR, fromFilename);
-        await this.storage.rename(srcPath, dstPath);
+        await this.storage.renameDurable(path.join(srcDir, fromFilename), dstPath);
+        // Both ends are indexed here: the old name must not come back after the index says it moved.
+        await this.storage.syncDir(srcDir);
     }
 
     private async renameInCur(mailbox: string, oldFilename: string, newFilename: string): Promise<void> {
         const curPath = path.join(this.mailboxDir(mailbox), PATHS.MAIL.CUR);
-        await this.storage.rename(path.join(curPath, oldFilename), path.join(curPath, newFilename));
+        await this.storage.renameDurable(path.join(curPath, oldFilename), path.join(curPath, newFilename));
     }
 
     private async deleteMessage(mailbox: string, filename: string): Promise<void> {
-        const filePath = path.join(this.mailboxDir(mailbox), PATHS.MAIL.CUR, filename);
+        const curPath = path.join(this.mailboxDir(mailbox), PATHS.MAIL.CUR);
+        const filePath = path.join(curPath, filename);
         if (await this.storage.exists(filePath)) {
             await this.storage.unlink(filePath);
+            await this.storage.syncDir(curPath);
         }
     }
 

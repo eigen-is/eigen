@@ -24,6 +24,38 @@ export class LocalFilesystem {
         return await Bun.write(fullPath, data);
     }
 
+    // A rename (or an unlink) only reaches the platter once the directory holding the name is fsynced:
+    // without this a power loss resurrects the old name under an already-acknowledged write.
+    async syncDir(dirPath: string): Promise<void> {
+        const handle = await fsPromises.open(this.getFilePath(dirPath), 'r');
+        try {
+            await handle.sync();
+        } finally {
+            await handle.close();
+        }
+    }
+
+    // The bytes must be on the platter before any name points at them, so the Maildir paths stage into
+    // `tmp/` with this and publish with renameDurable.
+    async writeDurable(filePath: string, data: Buffer | Uint8Array | string): Promise<void> {
+        const fullPath = this.getFilePath(filePath);
+        fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+        const handle = await fsPromises.open(fullPath, 'w');
+        try {
+            await handle.writeFile(data);
+            await handle.sync();
+        } finally {
+            await handle.close();
+        }
+    }
+
+    // Publishes a staged file under its final name. The directory losing the old name is fsynced by the
+    // caller instead, which only a move between mailboxes needs.
+    async renameDurable(oldPath: string, newPath: string): Promise<void> {
+        await this.rename(oldPath, newPath);
+        await this.syncDir(path.dirname(newPath));
+    }
+
     // Durable, crash-safe write: stage a sibling temp file, fsync it, rename over the target so a
     // reader ever only sees the whole old file or the whole new one, then fsync the directory that
     // holds the rename — without it a power loss can resurrect the old file under an acknowledged
@@ -50,13 +82,7 @@ export class LocalFilesystem {
             await fsPromises.unlink(tempPath).catch(() => {});
             throw error;
         }
-        // fsync the directory entry the rename created (POSIX; darwin + linux are the only targets).
-        const dirHandle = await fsPromises.open(dir, 'r');
-        try {
-            await dirHandle.sync();
-        } finally {
-            await dirHandle.close();
-        }
+        await this.syncDir(path.dirname(filePath));
     }
 
     async delete(filePath: string): Promise<boolean> {
