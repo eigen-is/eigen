@@ -23,7 +23,7 @@ const emlPayload = {
     html: null,
     text: 'The engine weaves patterns.',
     attachments: [],
-    droppedAttachments: 0,
+    remainingAttachments: 0,
 };
 const payload = {
     cards: [
@@ -59,7 +59,7 @@ const icsPayload = {
             status: 'confirmed',
             organizer: null,
             attendees: [],
-            droppedAttendees: 0,
+            remainingAttendees: 0,
         },
     ],
     dropped: 0,

@@ -50,10 +50,12 @@ export const VCARD_FORMAT = 'vcard-f1';
 // The same reasoning for the message a .eml previews as, and one more reason to bump it: the payload's
 // html is what a DOMPurify upgrade filters, so a cached body predates every sanitizer fix (PREVIEWS.md).
 // eml-f2: CSS is refused on the `url(` token, and a data: reference survives only as a raster image.
-export const EML_FORMAT = 'eml-f2';
+// eml-f3: the parts past the cap are counted as `remainingAttachments`.
+export const EML_FORMAT = 'eml-f3';
 
 // And again for the events an .ics previews as.
-export const ICS_FORMAT = 'ics-f1';
+// ics-f2: `dropped` is the unreadable masters alone, and an event counts its `remainingAttendees`.
+export const ICS_FORMAT = 'ics-f2';
 
 function textCacheName(drivePath: DrivePath, format: string): string {
     return `${drivePath.id}-${drivePath.updatedAt.getTime()}.${format}.json`;

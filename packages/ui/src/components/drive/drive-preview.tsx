@@ -4,7 +4,7 @@ import { CANVAS_PREVIEW_WIDTH, getTextPreviewMode, type TextPreviewMode } from '
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
-import { droppedLine, remainingLine } from '@workspace/lib/contacts';
+import { droppedContactsLine, remainingContactsLine } from '@workspace/lib/contacts';
 import { formatDateTime } from '@workspace/lib/date';
 import { A4_WIDTH_PX } from '@workspace/lib/docs/eigendoc';
 import { useEmlPreview, useIcsPreview, useTextPreview, useVCardPreview } from '@workspace/lib/drive';
@@ -114,8 +114,12 @@ function VCardHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; c
             {contacts.map(({ contact }, index) => (
                 <VCardRow key={index} contact={contact} />
             ))}
-            {remaining > 0 && <p className="truncate text-xs text-muted-foreground">{remainingLine(remaining)}</p>}
-            {data.dropped > 0 && <p className="truncate text-xs text-muted-foreground">{droppedLine(data.dropped)}</p>}
+            {remaining > 0 && (
+                <p className="truncate text-xs text-muted-foreground">{remainingContactsLine(remaining)}</p>
+            )}
+            {data.dropped > 0 && (
+                <p className="truncate text-xs text-muted-foreground">{droppedContactsLine(data.dropped)}</p>
+            )}
         </div>
     );
 }

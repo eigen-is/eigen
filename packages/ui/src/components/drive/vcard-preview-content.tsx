@@ -1,5 +1,5 @@
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
-import { droppedLine, remainingLine } from '@workspace/lib/contacts';
+import { droppedContactsLine, remainingContactsLine } from '@workspace/lib/contacts';
 import { useVCardPreview } from '@workspace/lib/drive';
 import { useMailVCardPreview } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -37,8 +37,8 @@ function VCardCards({
     // Both counts, for the empty state: a file whose every readable card failed still says how many it
     // never opened.
     const counts = [
-        ...(remaining > 0 ? [remainingLine(remaining)] : []),
-        ...(data && data.dropped > 0 ? [droppedLine(data.dropped)] : []),
+        ...(remaining > 0 ? [remainingContactsLine(remaining)] : []),
+        ...(data && data.dropped > 0 ? [droppedContactsLine(data.dropped)] : []),
     ];
 
     return (
@@ -56,9 +56,11 @@ function VCardCards({
                                 className="border-b pb-8 last:border-b-0 last:pb-0"
                             />
                         ))}
-                        {remaining > 0 && <p className="text-sm text-muted-foreground">{remainingLine(remaining)}</p>}
+                        {remaining > 0 && (
+                            <p className="text-sm text-muted-foreground">{remainingContactsLine(remaining)}</p>
+                        )}
                         {data.dropped > 0 && (
-                            <p className="text-sm text-muted-foreground">{droppedLine(data.dropped)}</p>
+                            <p className="text-sm text-muted-foreground">{droppedContactsLine(data.dropped)}</p>
                         )}
                     </div>
                 ))}

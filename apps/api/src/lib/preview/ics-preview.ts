@@ -24,7 +24,8 @@ const isDatable = (date: Date): boolean => date.getUTCFullYear() >= 1 && date.ge
 
 function previewEvent(event: ParsedEvent): IcsPreviewEvent {
     // A CAL-ADDRESS is a URI and only a mailto: one names an address, which parseIcs strips the scheme
-    // off. Anything else the file spells reaches the card as an address it writes a `mailto:` link from.
+    // off. Anything else the file spells reaches the card as an address it writes a `mailto:` link from,
+    // so it is omitted — not one more guest the card promises to be hiding.
     const declared = event.data?.attendees ?? [];
     const attendees = declared.filter((attendee) => validateEmailAddress(attendee.email));
     const organizer = event.data?.organizer ?? null;
@@ -41,7 +42,7 @@ function previewEvent(event: ParsedEvent): IcsPreviewEvent {
         status: event.status,
         organizer: organizer && validateEmailAddress(organizer.email) ? organizer : null,
         attendees: attendees.slice(0, ICS_PREVIEW_MAX_ATTENDEES),
-        droppedAttendees: declared.length - Math.min(attendees.length, ICS_PREVIEW_MAX_ATTENDEES),
+        remainingAttendees: Math.max(attendees.length - ICS_PREVIEW_MAX_ATTENDEES, 0),
     };
 }
 
@@ -64,11 +65,12 @@ export function buildIcsPreviewPayload(data: ArrayBuffer): IcsPreview {
     const datable = masters.filter((event) => isDatable(event.startTime) && isDatable(event.endTime));
     datable.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
 
-    const events = datable.slice(0, ICS_PREVIEW_MAX_EVENTS).map(previewEvent);
+    // `dropped` is the masters the builder could not read, as it is in every preview payload; the ones
+    // merely past the cap are the consumer's own `total - dropped - events.length`.
     return {
         method: parsed.method,
-        events,
-        dropped: masters.length - events.length,
+        events: datable.slice(0, ICS_PREVIEW_MAX_EVENTS).map(previewEvent),
+        dropped: masters.length - datable.length,
         total: masters.length,
     };
 }

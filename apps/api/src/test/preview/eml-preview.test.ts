@@ -79,7 +79,7 @@ describe('buildEmlPreviewPayload', () => {
         expect(payload.date).toBe('2026-08-15T10:30:00.000Z');
         expect(payload.text).toContain('The numbers are in.');
         expect(payload.attachments).toEqual([]);
-        expect(payload.droppedAttachments).toBe(0);
+        expect(payload.remainingAttachments).toBe(0);
         expect(JSON.stringify(payload)).not.toContain('secret@example.com');
     });
 
@@ -318,7 +318,7 @@ describe('buildEmlPreviewPayload', () => {
         );
 
         expect(payload.attachments).toHaveLength(EML_PREVIEW_MAX_ATTACHMENTS);
-        expect(payload.droppedAttachments).toBe(7);
+        expect(payload.remainingAttachments).toBe(7);
         expect(payload.attachments[0]).toEqual({ filename: 'part-0.txt', contentType: 'text/plain', size: 6 });
         // No part bytes ride along: a preview reads a message, the byte routes serve its parts.
         expect(JSON.stringify(payload)).not.toContain('body 0');

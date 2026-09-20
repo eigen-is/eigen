@@ -102,7 +102,7 @@ describe('API date parsing', () => {
             html: null,
             text: 'The engine weaves patterns.',
             attachments: [],
-            droppedAttachments: 0,
+            remainingAttachments: 0,
         };
         // One Response per call: a body reads once, and both routes read the same preview.
         spyOn(globalThis, 'fetch')
@@ -136,7 +136,7 @@ describe('API date parsing', () => {
                     status: 'confirmed',
                     organizer: null,
                     attendees: [],
-                    droppedAttendees: 0,
+                    remainingAttendees: 0,
                 },
             ],
             dropped: 0,
