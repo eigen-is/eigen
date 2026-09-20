@@ -387,6 +387,34 @@ describe('Calendar transfer routes', () => {
         expect(findOrFail(seriesB, (e) => e.occurrenceDate === '2026-04-15').title).toBe('Standup B');
     });
 
+    // One occurrence is one exception row, whichever writer made it: a CalDAV PUT of a file with two
+    // VEVENTs for the same RECURRENCE-ID converges on the last one, so an import lands there in one pass.
+    test('two VEVENTs for one occurrence store one exception row, the last one', async () => {
+        const uid = `dupe-override-${randomUUID()}@other`;
+        const file = feed(
+            vevent(uid, 'Daily', '20260601T090000Z', '20260601T093000Z', ['RRULE:FREQ=DAILY;COUNT=3']),
+            vevent(uid, 'First write', '20260602T140000Z', '20260602T150000Z', ['RECURRENCE-ID:20260602T090000Z']),
+            vevent(uid, 'Last write', '20260602T160000Z', '20260602T170000Z', ['RECURRENCE-ID:20260602T090000Z']),
+        );
+
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
+            imported: 1,
+            skipped: 0,
+            failed: 0,
+        });
+
+        const home = await getHome(alice.id);
+        const rows = home.calendar.getRawEvents(calendarId).filter((e) => e.uid === uid && e.recurrenceDate);
+        expect(rows.length).toBe(1);
+        expect(rows[0]?.title).toBe('Last write');
+
+        const series = (await calendarRange(calendarId, '2026-06-01T00:00:00Z', '2026-06-05T23:59:59Z')).filter(
+            (e) => e.uid === uid,
+        );
+        expect(series.length).toBe(3);
+        expect(findOrFail(series, (e) => e.occurrenceDate === '2026-06-02').title).toBe('Last write');
+    });
+
     test('a series of overrides is one broadcast, and every occurrence matches a CalDAV PUT of the same file', async () => {
         const uid = `overrides-${randomUUID()}@other`;
         const day = (offset: number) =>

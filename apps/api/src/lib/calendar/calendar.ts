@@ -342,16 +342,18 @@ export class Calendar {
         // write volume as 37 000 masters.
         if (parsed.events.length > ICS_IMPORT_MAX_EVENTS) throw new ApiError(413, 'Too many events');
 
+        // One occurrence is one exception row: a file naming the same RECURRENCE-ID twice keeps the last
+        // VEVENT, where a repeated CalDAV PUT of it converges (caldav/resource.ts § syncExceptionEvents).
         const masters: ParsedEvent[] = [];
-        const overridesByUid = new Map<string, ParsedEvent[]>();
+        const overridesByUid = new Map<string, Map<string, ParsedEvent>>();
         for (const event of parsed.events) {
             if (!event.recurrenceDate) {
                 masters.push(event);
                 continue;
             }
             const series = overridesByUid.get(event.uid);
-            if (series) series.push(event);
-            else overridesByUid.set(event.uid, [event]);
+            if (series) series.set(event.recurrenceDate, event);
+            else overridesByUid.set(event.uid, new Map([[event.recurrenceDate, event]]));
         }
 
         const result: ImportCountsResult = { imported: 0, skipped: 0, failed: 0 };
@@ -403,7 +405,7 @@ export class Calendar {
                         const event = this.insertEvent(calendarId, args, newCtag);
                         // A fresh master has no stored exceptions to reconcile against, so every override is
                         // a plain insert: the row a CalDAV PUT writes, under a resource name of its own.
-                        for (const parsedOverride of overridesByUid.get(master.uid) ?? []) {
+                        for (const parsedOverride of overridesByUid.get(master.uid)?.values() ?? []) {
                             const override = importable(parsedOverride);
                             const overrideArgs: CreateEventArgs = {
                                 title: override.title,
@@ -776,8 +778,12 @@ export class Calendar {
         if (!existing || existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
 
         const invitation = isInvitationFromOthers(existing, this.home.user) ? existing.data : null;
-        if (user && invitation?.organizer) {
-            // Attendee deleting linked copy = decline
+        // Attendee deleting a linked copy = decline, and only an attendee has an RSVP to give: a file or a
+        // CalDAV client can hang any ORGANIZER on an event, so a user who is not on the list just deletes
+        // their row rather than telling a stranger they declined a meeting they were never invited to.
+        const declining =
+            user && invitation?.attendees?.some((a) => a.email.toLowerCase() === user.email.toLowerCase());
+        if (user && declining && invitation?.organizer) {
             const orgUserId = invitation.organizer.userId;
             // A CalDAV- or iMIP-parsed organizer is known by address only; with no Eigen id to relay to,
             // the decline takes the same REPLY path an external organizer takes.
@@ -787,8 +793,9 @@ export class Calendar {
             } else {
                 propagateDecline(orgUserId, invitation.organizerEventId!, user.email).catch(console.error);
             }
-        } else if (existing.data?.attendees?.length) {
-            // Organizer deleting = cancel for all attendees
+        } else if (!invitation && existing.data?.attendees?.length) {
+            // Organizer deleting = cancel for all attendees, which is what an event with no foreign
+            // organizer makes this user.
             propagateCancellation(this.home, existing).catch(console.error);
         }
 
