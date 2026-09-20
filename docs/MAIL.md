@@ -272,7 +272,7 @@ with `?`) cover navigation (`j`/`k`/`o`/`u`), actions (`e`/`#`/`s`/`r`/`a`/`f`/`
 - Primary-password protocol auth fails when 2FA is enabled (use an app password).
 - A second `MailStore` backend (JMAP/Stalwart) is proposed only — see
   [PROPOSAL_STALWART_MAIL.md](proposals/PROPOSAL_STALWART_MAIL.md).
-- Inbound mail only ever arrives through an MTA on localhost (`POST /mail/deliver/:to`), so a deployment whose mail lives at an external provider has no inbound path and no inbound iMIP. Running Eigen beside such a provider is proposed in [PROPOSAL_EXTERNAL_MAIL_PROVIDER.md](proposals/PROPOSAL_EXTERNAL_MAIL_PROVIDER.md).
+- Mail is hosted or absent: `MaildirStore` is the only `MailStore`, and inbound mail and inbound iMIP only ever arrive through an MTA on localhost (`POST /mail/deliver/:to`). A user whose mailbox lives at another provider has no Mail app and no inbound invitations. An IMAP-backed store for that case is proposed in [PROPOSAL_EXTERNAL_MAIL_PROVIDER.md](proposals/PROPOSAL_EXTERNAL_MAIL_PROVIDER.md).
 
 ## Where the code lives
 
