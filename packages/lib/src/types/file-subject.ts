@@ -43,7 +43,8 @@ export type FileActionId =
     | 'convert-to-sheet'
     | 'convert-to-document'
     | 'import-contacts'
-    | 'import-mail';
+    | 'import-mail'
+    | 'import-calendar';
 
 export type FileAction = {
     id: FileActionId;

@@ -16,6 +16,7 @@ import {
 import type { Attendee, CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { ConfirmDialog } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
+import { AttendeeList } from '@workspace/ui/components/calendar';
 import {
     Dialog,
     DialogContent,
@@ -26,7 +27,7 @@ import {
 } from '@workspace/ui/components/dialog';
 import { UsersRound } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { AttendeeEditor, AttendeeList } from './attendee-editor';
+import { AttendeeEditor } from './attendee-editor';
 import { buildEventTimes, useCalendarOptions } from './calendar-utils';
 import { EventFormFields } from './event-form-fields';
 import type { RecurringAction } from './recurring-action-dialog';

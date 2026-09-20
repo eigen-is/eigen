@@ -82,7 +82,9 @@ Route (thin handler)  →  SharedDrive (ACL wrapper)  →  Drive (business logic
 | **File actions**   | `packages/lib/src/core/file-actions.ts`               | `FILE_ACTIONS` + `fileActionsFor(subject, exclude?)` — the one registry of what may be done with a subject; a predicate reads the subject, never which menu is asking |
 | **File action runner** | `packages/ui/src/components/file-actions/use-file-action-runner.tsx` | `useFileActionRunner(subject, siblings?, exclude?)` performs a registry row, hands its host the rows to draw (`actions`, from `useFileActions` — the one place that hides a guest-denied row) and one `dialogs` node to mount, so a picker outlives the menu that opened it |
 | **Message view**   | `packages/ui/src/components/mail/message-view.tsx`    | `MessageView` — one message's header and body from data alone, drawn by the mail reader and by the `.eml` quick look. See [MAIL.md](MAIL.md) |
+| **Event detail card** | `packages/ui/src/components/calendar/event-detail-card.tsx` | `EventDetailCard` — one event read-only from data alone (when, recurrence, location, description, guests), drawn by the calendar app's detail dialog and by the `.ics` quick look. See [CALENDAR.md](CALENDAR.md) |
 | **Save to Drive**  | `packages/ui/src/components/drive/save-to-drive-picker.tsx` | `SaveToDrivePicker` — one "where does this go" dialog for every surface that puts a file into Drive: a Drive subject is copied server-side, a mail part is written from the message the server holds, and "Download instead" falls back to a staggered browser download |
+| **Import to Calendar** | `packages/ui/src/components/calendar/import-to-calendar-picker.tsx` | `ImportToCalendarPicker` — the target an `.ics` import needs and the other two do not: the Home's own calendars, or a new one named after the file, then the import itself. See [CALENDAR.md](CALENDAR.md) |
 
 ## Package boundaries
 

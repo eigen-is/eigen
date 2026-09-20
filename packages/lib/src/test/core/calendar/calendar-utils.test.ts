@@ -3,6 +3,7 @@ import {
     formatEventWhen,
     getEventsForDay,
     isInvitationFromOthers,
+    rruleToText,
     viewerTimeZone,
 } from '../../../core/calendar/calendar-utils';
 import type { CalendarEventOccurrence, EventData } from '../../../types/calendar';
@@ -138,5 +139,20 @@ describe('formatEventWhen', () => {
         expect(formatEventWhen(start, end, false, 'W. Europe Standard Time', 'Europe/Amsterdam')).toBe(
             formatEventWhen(start, end, false, null, 'Europe/Amsterdam'),
         );
+    });
+});
+
+describe('rruleToText', () => {
+    test('says a recurrence in words', () => {
+        expect(rruleToText('FREQ=WEEKLY;BYDAY=SU')).toBe('every week on Sunday');
+    });
+
+    test('an event that does not repeat has nothing to say', () => {
+        expect(rruleToText(null)).toBeNull();
+    });
+
+    // A file's own RRULE is untrusted input: the card prints it verbatim rather than nothing.
+    test('a rule rrule cannot read comes back as itself', () => {
+        expect(rruleToText('FREQ=NEVER')).toBe('FREQ=NEVER');
     });
 });

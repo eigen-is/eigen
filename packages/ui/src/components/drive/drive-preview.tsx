@@ -1,14 +1,16 @@
 import { getDriveItemThumbnail } from '@workspace/lib/api';
+import { formatEventWhen, remainingEventsLine, viewerTimeZone } from '@workspace/lib/calendar';
 import { CANVAS_PREVIEW_WIDTH, getTextPreviewMode, type TextPreviewMode } from '@workspace/lib/constants';
+import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { droppedLine, remainingLine } from '@workspace/lib/contacts';
 import { formatDateTime } from '@workspace/lib/date';
 import { A4_WIDTH_PX } from '@workspace/lib/docs/eigendoc';
-import { useEmlPreview, useTextPreview, useVCardPreview } from '@workspace/lib/drive';
+import { useEmlPreview, useIcsPreview, useTextPreview, useVCardPreview } from '@workspace/lib/drive';
 import { NO_SUBJECT } from '@workspace/lib/mail';
 import type { Contact } from '@workspace/lib/types/contact';
-import { type DrivePath, isEmlFile, isVCardFile } from '@workspace/lib/types/drive';
+import { type DrivePath, isEmlFile, isIcsFile, isVCardFile } from '@workspace/lib/types/drive';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useElementSize } from '../../hooks/use-element-size';
@@ -29,6 +31,7 @@ export function DrivePreview({ path, onActivate, className }: DrivePreviewProps)
     // Same guard as the quick look: a file an import would refuse never gets a preview either.
     const hasVCardPreview = isVCardFile(path.mimeType, path.name) && path.size <= IMPORT_MAX_BYTES;
     const hasEmlPreview = isEmlFile(path.mimeType, path.name) && path.size <= EML_MAX_BYTES;
+    const hasIcsPreview = isIcsFile(path.mimeType, path.name) && path.size <= ICS_MAX_BYTES;
     const { showThumbnail, thumbnailUrl } = getDriveItemThumbnail(path);
 
     const interactive = !!onActivate;
@@ -71,6 +74,8 @@ export function DrivePreview({ path, onActivate, className }: DrivePreviewProps)
                 <VCardHero path={path} icon={presentation.icon} color={presentation.colorVar} />
             ) : hasEmlPreview ? (
                 <EmlHero path={path} icon={presentation.icon} color={presentation.colorVar} />
+            ) : hasIcsPreview ? (
+                <IcsHero path={path} icon={presentation.icon} color={presentation.colorVar} />
             ) : hasTextPreview ? (
                 <HtmlPreview path={path} tintColor={presentation.colorVar} />
             ) : (
@@ -137,6 +142,41 @@ function EmlHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; col
             </div>
             <p className="truncate text-sm text-foreground">{data.subject || NO_SUBJECT}</p>
             {data.text && <p className="line-clamp-2 text-xs text-muted-foreground">{data.text}</p>}
+        </div>
+    );
+}
+
+// The quick look reads every event as a card; the hero shows the first three as one line each — the
+// title and when it happens — off the same query.
+function IcsHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; color: string }) {
+    const { data, isLoading } = useIcsPreview(path.ownerId, path.mountId, path.id, path.updatedAt, path.size);
+    const events = data?.events.slice(0, HERO_CARD_LIMIT) ?? [];
+
+    // Loading reads as the empty tinted box, the same as a text hero with no body yet.
+    if (isLoading) return null;
+    if (!data || events.length === 0) return <IconFallback icon={icon} color={color} />;
+
+    const remaining = data.total - events.length;
+
+    return (
+        <div className="absolute inset-0 flex flex-col justify-center gap-2 overflow-hidden px-4 pt-8 pb-3">
+            {events.map((event, index) => (
+                <div key={index} className="min-w-0">
+                    <p className="truncate text-sm font-medium text-foreground">{event.title}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                        {formatEventWhen(
+                            new Date(event.start),
+                            new Date(event.end),
+                            event.allDay,
+                            event.timezone,
+                            viewerTimeZone(),
+                        )}
+                    </p>
+                </div>
+            ))}
+            {remaining > 0 && (
+                <p className="truncate text-xs text-muted-foreground">{remainingEventsLine(remaining)}</p>
+            )}
         </div>
     );
 }

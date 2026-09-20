@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'bun:test';
+import { ICS_MAX_BYTES } from '../../constants/calendar';
 import { IMPORT_MAX_BYTES } from '../../constants/contact';
 import { EML_MAX_BYTES } from '../../constants/mail';
 import { DOCX_MIME, XLSX_MIME } from '../../constants/mime';
 import { fileActionsFor, GUEST_DENIED_ACTIONS } from '../../core/file-actions';
 import { subjectFromMailAttachment, subjectFromPath } from '../../core/file-subject';
-import { type DrivePath, type DrivePathType, EML_MIME } from '../../types/drive';
+import { type DrivePath, type DrivePathType, EML_MIME, ICS_MIME } from '../../types/drive';
 import type { FileActionId, FileSubject } from '../../types/file-subject';
 
 function path(p: Partial<DrivePath> & { name: string; type: DrivePathType }): DrivePath {
@@ -58,6 +59,10 @@ describe('fileActionsFor on a Drive item', () => {
             item: path({ name: 'engine notes.eml', type: 'file', mimeType: EML_MIME }),
             ids: ['quick-look', 'download', 'import-mail'],
         },
+        {
+            item: path({ name: 'festival.ics', type: 'file', mimeType: ICS_MIME }),
+            ids: ['quick-look', 'download', 'import-calendar'],
+        },
         // The convert gate is the extension alone, matching the server: a spreadsheet or a document
         // that lost its name — a mail part called `attachment-2` — offers no convert, because the
         // import refuses it.
@@ -76,6 +81,10 @@ describe('fileActionsFor on a Drive item', () => {
         },
         {
             item: path({ name: 'huge.eml', type: 'file', mimeType: EML_MIME, size: EML_MAX_BYTES + 1 }),
+            ids: ['quick-look', 'download'],
+        },
+        {
+            item: path({ name: 'huge.ics', type: 'file', mimeType: ICS_MIME, size: ICS_MAX_BYTES + 1 }),
             ids: ['quick-look', 'download'],
         },
     ];
@@ -112,6 +121,11 @@ describe('fileActionsFor on a Drive item', () => {
     test('an .eml imports to mail right up to the ceiling', () => {
         const atCeiling = path({ name: 'notes.eml', type: 'file', mimeType: EML_MIME, size: EML_MAX_BYTES });
         expect(idsFor(atCeiling)).toContain('import-mail');
+    });
+
+    test('an .ics imports to calendar right up to the ceiling', () => {
+        const atCeiling = path({ name: 'festival.ics', type: 'file', mimeType: ICS_MIME, size: ICS_MAX_BYTES });
+        expect(idsFor(atCeiling)).toContain('import-calendar');
     });
 
     test('exclude drops a row the registry approved', () => {
@@ -170,19 +184,27 @@ describe('fileActionsFor on an attachment subject', () => {
         const eml = mailSubject({ contentType: 'application/octet-stream', filename: 'fwd.eml', size: 2048 });
         expect(fileActionsFor(eml).map((action) => action.id)).toContain('import-mail');
     });
+
+    // An invitation's calendar part carries no filename at all, so the media type with its own
+    // parameters is all there is to go on.
+    test('a calendar part imports to calendar on its media type alone', () => {
+        const ics = mailSubject({ contentType: 'text/calendar; method=REQUEST; charset=utf-8', size: 2048 });
+        expect(fileActionsFor(ics).map((action) => action.id)).toContain('import-calendar');
+    });
 });
 
 // The import routes refuse a guest (requireNonGuest) and a registry predicate cannot see the user, so
 // the rows a guest may not run are named once here and excluded by the one caller that knows who is asking.
 describe('GUEST_DENIED_ACTIONS', () => {
     test('names every import row and nothing else', () => {
-        expect([...GUEST_DENIED_ACTIONS]).toEqual(['import-contacts', 'import-mail']);
+        expect([...GUEST_DENIED_ACTIONS]).toEqual(['import-contacts', 'import-mail', 'import-calendar']);
     });
 
-    test('excluding them leaves a .vcf and an .eml with what a guest may run', () => {
+    test('excluding them leaves a .vcf, an .eml and an .ics with what a guest may run', () => {
         const vcard = path({ name: 'team.vcf', type: 'file', mimeType: 'text/vcard' });
         const eml = path({ name: 'notes.eml', type: 'file', mimeType: EML_MIME });
-        for (const item of [vcard, eml]) {
+        const ics = path({ name: 'festival.ics', type: 'file', mimeType: ICS_MIME });
+        for (const item of [vcard, eml, ics]) {
             const ids = fileActionsFor(subjectFromPath(item), GUEST_DENIED_ACTIONS).map((action) => action.id);
             expect(ids).toEqual(['quick-look', 'download']);
         }

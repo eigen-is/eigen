@@ -22,13 +22,16 @@ The file opens in a preview over the message. Use the arrows at the top to step 
 the message, and press **Escape** to close it.
 
 Pictures, PDFs, video and sound play in the preview. Text and code files (such as `.txt`, `.md`, `.json`,
-`.yaml`), contact files and forwarded messages are shown there too: a `.vcf` reads as the contact cards it holds
-and an `.eml` as the message it holds, not as raw text. Anything else shows its name and an icon, with the same
+`.yaml`), contact files, forwarded messages and calendar files are shown there too: a `.vcf` reads as the contact
+cards it holds, an `.eml` as the message it holds and an `.ics` as the events it holds, not as raw text. An
+invitation attached to the message is a chip like any other, with the invitation card still under the message
+itself. Anything else shows its name and an icon, with the same
 buttons along the bottom. Text files over 1 MB show the file card instead.
 
 Along the bottom of the preview are the things you can do with the file: **Download**, **Save to Drive…**, and,
 depending on the file, **Convert to Sheet** for an `.xlsx` spreadsheet, **Convert to Document** for a `.docx`
-document, **Import to Contacts** for a `.vcf` contact file, or **Import to Mail** for an `.eml` message. On a
+document, **Import to Contacts** for a `.vcf` contact file, **Import to Mail** for an `.eml` message, or
+**Import to Calendar** for an `.ics` calendar file. On a
 message with more than one file the bar ends with **Save all**, followed by the number of files.
 
 ## Save one attachment

@@ -57,6 +57,17 @@ test('draws every row the registry allows, in its order', async () => {
     await cleanup();
 });
 
+// A calendar part carries no filename, so its media type is what the registry reads.
+test('an invitation part offers the calendar import', async () => {
+    const invite = subjectFromMailAttachment('owner-1', 'message-1', 1, {
+        contentType: 'text/calendar; method=REQUEST; charset=utf-8',
+        size: 2048,
+    });
+    const { labels, cleanup } = await openMenu({ subject: invite });
+    expect(labels).toEqual(['Quick preview', 'Download', 'Save to Drive…', 'Import to Calendar']);
+    await cleanup();
+});
+
 test('a clicked row runs its action', async () => {
     const { rows, ran, cleanup } = await openMenu({ subject });
     await act(async () => {

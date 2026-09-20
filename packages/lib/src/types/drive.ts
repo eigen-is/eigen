@@ -373,11 +373,17 @@ export function isEmlFile(mimeType: string, name: string): boolean {
 export const ICS_MIME = 'text/calendar';
 
 // The media type with its own parameters, because a calendar body names its purpose in them
-// (`text/calendar; method=REQUEST; charset=utf-8`) and a part of an invitation carries no filename at
-// all — but a type that merely starts with those letters is another media type. The .ics extension
-// counts on its own, as it does for the other two formats.
+// (`text/calendar; method=REQUEST; charset=utf-8`) — but a type that merely starts with those letters
+// is another media type. The one rule for "these bytes are iCalendar", so a stored file and a mail part
+// (isCalendarPart) can never disagree.
+export function isIcsMime(mimeType: string): boolean {
+    return mimeType === ICS_MIME || mimeType.startsWith(`${ICS_MIME};`);
+}
+
+// A part of an invitation carries no filename at all, so the media type is all there is to go on; the
+// .ics extension counts on its own, as it does for the other two formats.
 export function isIcsFile(mimeType: string, name: string): boolean {
-    return name.toLowerCase().endsWith('.ics') || mimeType === ICS_MIME || mimeType.startsWith(`${ICS_MIME};`);
+    return name.toLowerCase().endsWith('.ics') || isIcsMime(mimeType);
 }
 
 export type ImageDimensions = {

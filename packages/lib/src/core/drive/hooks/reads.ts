@@ -1,6 +1,7 @@
 import { useQueries, useQuery } from '@tanstack/react-query';
-import { driveApi, emlPreviewRoute, vcardPreviewRoute } from '@workspace/lib/api';
+import { driveApi, emlPreviewRoute, icsPreviewRoute, vcardPreviewRoute } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
+import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
@@ -276,6 +277,26 @@ export function useEmlPreview(ownerId: string, mountId: string, pathId: string, 
             return response.data;
         },
         enabled: !!ownerId && !!mountId && !!pathId && size <= EML_MAX_BYTES,
+        staleTime: Infinity,
+        retry: retryWhenTransformBusy,
+    });
+}
+
+// GET ICS PREVIEW — the events an .ics holds, parsed server-side (PREVIEWS.md). Keyed by `updatedAt`
+// like the two above, so a new version is a new entry.
+export function useIcsPreview(ownerId: string, mountId: string, pathId: string, updatedAt: Date, size: number) {
+    return useQuery({
+        queryKey: driveKeys.icsPreview(ownerId, mountId, pathId, updatedAt),
+        queryFn: async () => {
+            // icsPreviewRoute, not driveApi: an all-day bound is a bare YYYY-MM-DD and an event titled
+            // after a date is a string the card prints — the reviver would make a Date of either (api.ts).
+            const response = await icsPreviewRoute(ownerId, mountId, pathId).get({
+                query: { updatedAt: updatedAt.toISOString() },
+            });
+            if (response.error) throw new AppError(response);
+            return response.data;
+        },
+        enabled: !!ownerId && !!mountId && !!pathId && size <= ICS_MAX_BYTES,
         staleTime: Infinity,
         retry: retryWhenTransformBusy,
     });

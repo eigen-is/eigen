@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1506 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1518 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (161)
+## Components (164)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -73,6 +73,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `AttachmentDraftChips` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/attachment-draft-chips.tsx |
 | `ReferenceAttachmentChip` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/reference-attachment-chip.tsx |
 | `SimpleAttachmentChip` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/simple-attachment-chip.tsx |
+| `AttendeeList` | `@workspace/ui/components/calendar` | packages/ui/src/components/calendar/attendee-list.tsx |
+| `EventDetailCard` | `@workspace/ui/components/calendar` | packages/ui/src/components/calendar/event-detail-card.tsx |
+| `ImportToCalendarPicker` | `@workspace/ui/components/calendar` | packages/ui/src/components/calendar/import-to-calendar-picker.tsx |
 | `CardDialog` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-dialog.tsx |
 | `CardForm` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-form.tsx |
 | `CardFormDialog` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-form-dialog.tsx |
@@ -203,7 +206,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyGestureContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (277)
+## Hooks (279)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -347,6 +350,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useFileHistory` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-file-history.ts |
 | `useFolderContent` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useFolderLookup` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
+| `useIcsPreview` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useImportDocument` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-import-document.ts |
 | `useImportFromDrive` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-import-document.ts |
 | `useIsEffectiveOwner` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
@@ -388,6 +392,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useImportMailFromUrl` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-transfer.ts |
 | `useMailboxes` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-mailboxes.ts |
 | `useMailEmlPreview` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-attachment-preview.ts |
+| `useMailIcsPreview` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-attachment-preview.ts |
 | `useMailTextPreview` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-attachment-preview.ts |
 | `useMailVCardPreview` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-attachment-preview.ts |
 | `useMoveEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-emails.ts |
@@ -485,7 +490,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (353)
+## Types (354)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -800,6 +805,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SortHeaderProps` | `@workspace/ui` | packages/ui/src/components/sort-header.tsx |
 | `TooltipButtonProps` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/tooltip-button.tsx |
 | `AttachmentChipMenu` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/use-attachment-chip-menu.ts |
+| `EventDetailCardProps` | `@workspace/ui/components/calendar` | packages/ui/src/components/calendar/event-detail-card.tsx |
 | `ChatMessageInputHandle` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-message-input.tsx |
 | `SlashTargetContext` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-utils.ts |
 | `CursorPeerState` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/cursor-layer.tsx |
@@ -843,7 +849,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (699)
+## Utilities & constants (705)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -957,10 +963,13 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getMonthRange` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `getWeekRange` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `handleCalendarSSEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/sse-handlers.ts |
+| `ICS_METHOD_LABEL` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/preview-lines.ts |
 | `isFreeBusyEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `isInvitationFromOthers` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `occurrenceDateToString` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `parseOccurrenceDate` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `remainingEventsLine` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/preview-lines.ts |
+| `rruleToText` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `toLocalDateString` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `truncateRRule` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `viewerTimeZone` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
@@ -1241,6 +1250,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isExternalOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `isFolderType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isIcsFile` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `isIcsMime` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isImageMime` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isInlineEditable` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isOpenable` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -1505,6 +1515,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `formatDownloadLabel` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/file-menu.tsx |
 | `nextSortDir` | `@workspace/ui` | packages/ui/src/components/sort-header.tsx |
 | `attachmentKeyAt` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/simple-attachment-chip.tsx |
+| `ATTENDEE_STATUS_ICON` | `@workspace/ui/components/calendar` | packages/ui/src/components/calendar/attendee-list.tsx |
+| `ATTENDEE_STATUS_LABEL` | `@workspace/ui/components/calendar` | packages/ui/src/components/calendar/attendee-list.tsx |
 | `getAtSuggestQuery` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-utils.ts |
 | `getSlashTargetQuery` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-utils.ts |
 | `renderPresenceCaret` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/presence-label.tsx |

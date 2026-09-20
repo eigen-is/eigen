@@ -1,6 +1,5 @@
 import { useAuth } from '@workspace/lib/auth';
 import {
-    formatEventWhen,
     isInvitationFromOthers,
     occurrenceDateToString,
     parseOccurrenceDate,
@@ -9,11 +8,11 @@ import {
     useDeleteEvent,
     useRsvp,
     useUpdateEvent,
-    viewerTimeZone,
 } from '@workspace/lib/calendar';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { DeleteDialog } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
+import { EventDetailCard } from '@workspace/ui/components/calendar';
 import {
     Dialog,
     DialogContent,
@@ -23,24 +22,10 @@ import {
     DialogTitle,
 } from '@workspace/ui/components/dialog';
 import { UserName } from '@workspace/ui/components/user';
-import {
-    AlignLeft,
-    Calendar,
-    Check,
-    Clock,
-    HelpCircle,
-    MapPin,
-    Pencil,
-    Repeat,
-    Trash2,
-    UsersRound,
-    X as XIcon,
-} from 'lucide-react';
+import { Calendar, Check, HelpCircle, Pencil, Trash2, X as XIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { AttendeeList } from './attendee-editor';
 import { useSharedCalendarLabel } from './calendar-utils';
 import { EditEventDialog } from './edit-event-dialog';
-import { rruleToText } from './recurrence-picker';
 import type { RecurringAction } from './recurring-action-dialog';
 import { RecurringActionDialog } from './recurring-action-dialog';
 
@@ -176,8 +161,6 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
         }
     };
 
-    const recurrenceText = event.rrule ? rruleToText(event.rrule) : null;
-
     const handleRsvpScopeConfirm = (action: RecurringAction) => {
         if (!pendingRsvpStatus) return;
         const eventId = event.parentEventId || event.id;
@@ -218,53 +201,18 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                     </DialogHeader>
 
                     <div className="space-y-3">
-                        <div className="flex items-start gap-3 text-sm">
-                            <Clock className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                            <div>
-                                {formatEventWhen(
-                                    event.startTime,
-                                    event.endTime,
-                                    event.allDay,
-                                    event.timezone,
-                                    viewerTimeZone(),
-                                )}
-                                {event.timezone && (
-                                    <div className="text-xs text-muted-foreground">
-                                        {event.timezone.split('/').pop()?.replace(/_/g, ' ')} time zone
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        {recurrenceText && (
-                            <div className="flex items-start gap-3 text-sm">
-                                <Repeat className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                                <span className="capitalize">{recurrenceText}</span>
-                            </div>
-                        )}
-
-                        {event.location && (
-                            <div className="flex items-start gap-3 text-sm">
-                                <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                                <span>{event.location}</span>
-                            </div>
-                        )}
-
-                        {event.description && (
-                            <div className="flex items-start gap-3 text-sm">
-                                <AlignLeft className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                                <span className="whitespace-pre-wrap">{event.description}</span>
-                            </div>
-                        )}
-
-                        {attendees.length > 0 && (
-                            <div className="flex items-start gap-3 text-sm">
-                                <UsersRound className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                                <div className="flex-1">
-                                    <AttendeeList attendees={attendees} organizer={event.data?.organizer} />
-                                </div>
-                            </div>
-                        )}
+                        {/* The title is the dialog's own header, so the card draws everything but it. */}
+                        <EventDetailCard
+                            start={event.startTime}
+                            end={event.endTime}
+                            allDay={event.allDay}
+                            timezone={event.timezone}
+                            rrule={event.rrule}
+                            location={event.location}
+                            description={event.description}
+                            organizer={event.data?.organizer}
+                            attendees={attendees}
+                        />
 
                         {isLinkedEvent && myAttendeeStatus && (
                             <div className="pt-3 mt-3 border-t">
