@@ -331,7 +331,14 @@ stored exception — exception rows are internal and never appear as their own r
 - The series timezone is resolved per UID, from that UID's master VEVENT (the one without a
   RECURRENCE-ID). A CalDAV resource holds a single series, but a previewed or imported file holds every
   series a calendar has, each in its author's own zone — one file-wide series tz would key a second
-  series' UTC-`Z` overrides through the first one's
+  series' UTC-`Z` overrides through the first one's. An override no UID groups with — an exporter wrote
+  the UID on one side of the pair only — falls back to its own DTSTART zone and then to the first
+  master's, so a file that names a single series still keys through that series' zone
+- Each VEVENT is wrapped in an `ICAL.Event` constructed with `{ exceptions: [] }`. Handed an exception
+  list, ical.js skips the scan of every sibling VEVENT it otherwise runs to relate a series' overrides —
+  a scan per VEVENT, quadratic over a whole file (20,000 events: 17s, and a 5 MiB export minutes). This
+  parser relates overrides itself and reads only `uid`, `summary`, `startDate` and `endDate` off the
+  event, none of which consult its exceptions
 - `ATTENDEE` / `ORGANIZER` values are URIs, so their `mailto:` scheme is stripped case-insensitively
   (clients emit `MAILTO:` too). A surviving prefix would match no address in any comparison — the
   owner check, the attendee lookup, the RSVP fan-out

@@ -97,18 +97,27 @@ export function parseIcs(icsText: string): IcsParseResult {
     // VEVENT without a RECURRENCE-ID). A UTC-Z RECURRENCE-ID / EXDATE (Exchange clients; Eigen's own
     // tz-null exceptions) keys to a wall-clock date in THIS tz, not the exception's own (absent) tz
     // (audit #8). Keyed by UID because a CalDAV resource holds one series but a previewed or imported
-    // file holds every series a calendar has, each in its author's own zone.
+    // file holds every series a calendar has, each in its author's own zone. An override no UID groups
+    // with — an exporter wrote the UID on one side of the pair only — falls back to its own DTSTART tz
+    // and then to `fileTz`, the first master's: a file that names one series still keys through it.
     const seriesTzByUid = new Map<string, string | null>();
+    let fileTz: string | null = null;
     for (const vevent of vevents) {
         if (vevent.getFirstProperty('recurrence-id')) continue;
         const uid = String(vevent.getFirstPropertyValue('uid') ?? '');
-        if (!seriesTzByUid.has(uid)) seriesTzByUid.set(uid, propTzid(vevent.getFirstProperty('dtstart')));
+        const tz = propTzid(vevent.getFirstProperty('dtstart'));
+        if (!seriesTzByUid.has(uid)) seriesTzByUid.set(uid, tz);
+        fileTz ??= tz;
     }
 
     const results: ParsedEvent[] = [];
 
     for (const vevent of vevents) {
-        const event = new ICAL.Event(vevent);
+        // Handed an exception list, ICAL.Event skips the sibling scan it otherwise runs to relate every
+        // override in the file — a scan per VEVENT, quadratic over a calendar export. This function
+        // relates overrides itself (RECURRENCE-ID, per UID) and reads only uid/summary/startDate/endDate
+        // off the event, none of which consult its exceptions.
+        const event = new ICAL.Event(vevent, { exceptions: [] });
 
         const uid = event.uid || '';
         const title = event.summary || '';
@@ -168,7 +177,7 @@ export function parseIcs(icsText: string): IcsParseResult {
         if (recurrenceId) {
             const rid = recurrenceId.getFirstValue() as ICAL.Time | string | null;
             if (rid instanceof ICAL.Time) {
-                recurrenceDate = icalTimeToRecurrenceKey(rid, seriesTzByUid.get(uid) ?? tzid);
+                recurrenceDate = icalTimeToRecurrenceKey(rid, seriesTzByUid.get(uid) ?? tzid ?? fileTz);
                 if (!rid.isDate && rid.zone === ICAL.Timezone.utcTimezone) {
                     recurrenceInstant = rid.toJSDate();
                 }
