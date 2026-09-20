@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1481 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1485 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -202,7 +202,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyGestureContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (271)
+## Hooks (273)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -380,6 +380,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-emails.ts |
 | `useEmailById` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-emails.ts |
 | `useEmails` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-emails.ts |
+| `useImportMailFromDrive` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-transfer.ts |
+| `useImportMailFromUrl` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-transfer.ts |
 | `useMailboxes` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-mailboxes.ts |
 | `useMailTextPreview` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-attachment-preview.ts |
 | `useMailVCardPreview` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-attachment-preview.ts |
@@ -478,7 +480,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (349)
+## Types (350)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -627,6 +629,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ImageDimensions` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `ImipMethod` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `ImportContactsResult` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
+| `ImportMailResult` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `InheritedAccessItem` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `InviteResult` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `Label` | `@workspace/lib/types` | packages/lib/src/types/label.ts |
@@ -832,7 +835,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (685)
+## Utilities & constants (686)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -887,6 +890,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getMailAttachmentUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getMailComposeUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getMailDraftAttachmentUploadUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `getMailImportUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getMailMessageDownloadUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getPublicAvatarUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getSheetsAppUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |

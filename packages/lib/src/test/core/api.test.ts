@@ -102,8 +102,9 @@ describe('API date parsing', () => {
             attachments: [],
             droppedAttachments: 0,
         };
-        // A fresh Response per call: both routes read the same body.
-        spyOn(globalThis, 'fetch').mockImplementation(async () => Response.json(preview));
+        spyOn(globalThis, 'fetch')
+            .mockResolvedValueOnce(Response.json(preview))
+            .mockResolvedValueOnce(Response.json(preview));
 
         const drive = await emlPreviewRoute('owner-1', 'm1', 'p1').get({ query: {} });
         const mail = await mailEmlPreviewRoute('owner-1', 'msg-1', 0).get();
