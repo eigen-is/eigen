@@ -203,6 +203,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                     <div className="space-y-3">
                         {/* The title is the dialog's own header, so the card draws everything but it. */}
                         <EventDetailCard
+                            status={event.status}
                             start={event.startTime}
                             end={event.endTime}
                             allDay={event.allDay}
