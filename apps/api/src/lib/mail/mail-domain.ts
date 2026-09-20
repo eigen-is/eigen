@@ -151,7 +151,7 @@ export class Mail {
         }
         await enforceMailAndContactsQuota(this.home.user.id, bytes.byteLength);
 
-        const id = await this.store.append('', bytes);
+        const id = await this.store.append('', bytes, { arrival: false });
         invalidateMailSize(this.home.user.id);
         return { id };
     }

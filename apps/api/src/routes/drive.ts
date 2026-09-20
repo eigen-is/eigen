@@ -29,7 +29,7 @@ import {
 import { getThumbnail } from '../lib/shared/thumbnails';
 import { SNAPSHOT_NAME_FORMAT } from '../lib/versioning/timestamp';
 import { betterAuth } from './auth';
-import { clientFileEventBody, eigenDocTypeSchema } from './shared-schemas';
+import { clientFileEventBody, eigenDocTypeSchema, importFromDriveSchema } from './shared-schemas';
 
 // One cap for every free-text share note (collaborator email + access request), so a single
 // oversized body can't be persisted or mailed.
@@ -296,11 +296,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             return { success: true };
         },
         {
-            body: t.Object({
-                sourceOwnerId: t.String(),
-                sourceMountId: t.String(),
-                sourcePathId: t.String(),
-            }),
+            body: importFromDriveSchema,
             auth: true,
         },
     )

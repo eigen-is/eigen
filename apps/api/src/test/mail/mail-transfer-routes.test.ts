@@ -4,6 +4,7 @@ import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import type { CalendarEventOccurrence } from '@workspace/lib/types/calendar';
 import { type DrivePath, EML_MIME } from '@workspace/lib/types/drive';
 import type { Email, EmailSummary, ImportMailResult } from '@workspace/lib/types/mail';
+import type { Notification } from '@workspace/lib/types/notification';
 import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
@@ -11,11 +12,14 @@ import { getMailDomain } from '../../lib/config/server-config';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { getHome } from '../../lib/home';
 import {
+    app,
     assertJson,
     authedRequest,
     createTestUser,
     driveGet,
+    drivePost,
     driveUpload,
+    findOrFail,
     firstMountId,
     getTestContext,
     type TestUser,
@@ -71,6 +75,20 @@ describe('Mail transfer routes', () => {
         return assertJson<EmailSummary[]>(res);
     };
 
+    const newMailNotifications = async (user: TestUser): Promise<Notification[]> => {
+        const res = await authedRequest(user.sessionToken, `/notifications/${user.id}`);
+        return (await assertJson<Notification[]>(res)).filter((n) => n.tag === 'mail:new');
+    };
+
+    const deliver = (to: string, raw: string) =>
+        app.handle(
+            new Request(`http://localhost/mail/deliver/${to}`, {
+                method: 'POST',
+                headers: { 'Content-Type': EML_MIME },
+                body: raw,
+            }),
+        );
+
     const uploadEml = async (text: string, name = 'saved.eml'): Promise<DrivePath> => {
         const file = new File([new TextEncoder().encode(text)], name, { type: EML_MIME });
         return driveUpload(alice.sessionToken, alice.id, mountId, rootId, file);
@@ -115,6 +133,17 @@ describe('Mail transfer routes', () => {
         const downloadRes = await authedRequest(alice.sessionToken, `/mail/${alice.id}/message/${id}/download`);
         expect(downloadRes.status).toBe(200);
         expect(new Uint8Array(await downloadRes.arrayBuffer())).toEqual(new TextEncoder().encode(raw));
+    });
+
+    test('an import raises no new-mail notification, while a delivery still does', async () => {
+        const user = await createTestUser('eml-import-notify@test.eigen.is', PASSWORD, 'Eml Import Notify');
+
+        const { id } = await assertJson<ImportMailResult>(await importRequest(user, message('Imported quietly')));
+        expect((await inbox(user)).some((m) => m.id === id)).toBe(true);
+        expect(await newMailNotifications(user)).toEqual([]);
+
+        expect((await deliver(user.email, message('Delivered loudly'))).status).toBe(200);
+        expect((await newMailNotifications(user)).length).toBe(1);
     });
 
     test('an invitation inside an imported file creates no calendar event', async () => {
@@ -208,6 +237,24 @@ describe('Mail transfer routes', () => {
 
         const res = await importFromDrive(alice, uploaded);
         expect(res.status).toBe(400);
+    });
+
+    test('import-from-drive on a folder named like a message is 400', async () => {
+        const folder = await drivePost<DrivePath>(alice.sessionToken, alice.id, mountId, `folder/${rootId}`, {
+            folderName: `folder-${randomUUID()}.eml`,
+        });
+
+        const res = await importFromDrive(alice, folder);
+        expect(res.status).toBe(400);
+    });
+
+    test('import-from-drive is 413 when the file outgrew the size its row claims', async () => {
+        const uploaded = await uploadEml(message('Grew after the check'), `grew-${randomUUID()}.eml`);
+        const mount = findOrFail((await getHome(alice.id)).drive.getMounts(), (m) => m.id === mountId);
+        await mount.storage.write(await mount.getStorageKey(uploaded.id), Buffer.alloc(EML_MAX_BYTES + 1, 0x41));
+
+        const res = await importFromDrive(alice, uploaded);
+        expect(res.status).toBe(413);
     });
 
     test("import-from-drive on bob's unshared file is 403", async () => {

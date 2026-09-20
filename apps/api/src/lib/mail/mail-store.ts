@@ -73,7 +73,9 @@ export interface MailStore {
     getRawMessage(messageId: string): Promise<ArrayBuffer>;
     getAttachments(messageId: string): Promise<Attachment[]>;
     // skipSync: leave discovery to the next sync — welcome-mail seeding surfaces on first open.
-    append(mailbox: string, message: Buffer, opts?: { skipSync?: boolean }): Promise<string>;
+    // arrival: false for a message the user placed there, so it is indexed and broadcast but reaches
+    // `received` as not new — an import is not mail arriving.
+    append(mailbox: string, message: Buffer, opts?: { skipSync?: boolean; arrival?: boolean }): Promise<string>;
     // Writes raw draft bytes under existingId (or a fresh id), indexes them, returns the parsed result.
     saveDraft(raw: string, existingId?: string): Promise<Email>;
     delete(messageId: string): Promise<void>;

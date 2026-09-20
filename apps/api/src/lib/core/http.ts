@@ -44,7 +44,16 @@ export async function readBoundedBodyBytes(request: Request, maxBytes: number): 
     const len = request.headers.get('Content-Length');
     if (len !== null && Number(len) > maxBytes) return null;
     if (!request.body) return new Uint8Array();
-    const reader = request.body.getReader();
+    return readBoundedStreamBytes(request.body, maxBytes);
+}
+
+// The cap itself, over any byte source: a stored file whose recorded size may be stale reaches the heap
+// under the same ceiling a request body does. null means the cap was exceeded and the stream is cancelled.
+export async function readBoundedStreamBytes(
+    stream: ReadableStream<Uint8Array>,
+    maxBytes: number,
+): Promise<Uint8Array | null> {
+    const reader = stream.getReader();
     const chunks: Uint8Array[] = [];
     let total = 0;
     while (true) {

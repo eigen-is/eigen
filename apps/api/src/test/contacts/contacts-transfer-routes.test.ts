@@ -10,6 +10,7 @@ import {
     authedRequest,
     createTestUser,
     driveGet,
+    drivePost,
     driveUpload,
     firstMountId,
     getTestContext,
@@ -188,6 +189,15 @@ describe('Contacts transfer routes', () => {
         const res = await importFromDrive(alice, uploaded);
         expect(res.status).toBe(400);
         expect(await res.text()).toContain('UTF-8');
+    });
+
+    test('import-from-drive on a folder named like a vCard is 400', async () => {
+        const folder = await drivePost<DrivePath>(alice.sessionToken, alice.id, mountId, `folder/${rootId}`, {
+            folderName: `folder-${randomUUID()}.vcf`,
+        });
+
+        const res = await importFromDrive(alice, folder);
+        expect(res.status).toBe(400);
     });
 
     test("import-from-drive on bob's unshared file is 403", async () => {
