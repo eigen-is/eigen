@@ -91,7 +91,7 @@ export class Mail {
             const welcome = await welcomeMail(this.home.user.name, this.home.user.email);
             if (welcome) await this.store.append('', welcome, { skipSync: true });
         }
-        await this.store.watch();
+        this.store.watch();
         this.store.cleanupStaleDraftTemps().catch((err) => console.error('mail: stale draft temp cleanup failed', err));
     }
 

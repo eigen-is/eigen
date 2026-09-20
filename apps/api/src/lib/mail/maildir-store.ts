@@ -59,8 +59,6 @@ export class MaildirStore implements MailStore {
     // Reconciliation (doSyncMailbox) must not straddle a mutation's fs+db pair, or its delete phase drops just-moved rows.
     private storeLock = new Semaphore(1);
     private watchers: FSWatcher[] = [];
-    private watchedMailboxes = new Set<string>();
-    private indexedMailboxes = new Set<string>();
 
     constructor(private home: Home) {
         this.basePath = PATHS.MAIL.MAILDIR;
@@ -80,25 +78,10 @@ export class MaildirStore implements MailStore {
         return isNew;
     }
 
-    async watch(): Promise<void> {
-        await this.watchMailboxes();
-        // An IMAP client can create a folder at any time, so a new `.Folder` picks up watchers as it appears.
-        this.watchers.push(
-            this.storage.watch(this.basePath, () =>
-                this.watchMailboxes().catch((err) => console.error('maildir: mailbox watch refresh failed', err)),
-            ),
-        );
-    }
-
-    private async watchMailboxes(): Promise<void> {
-        const onDisk = await this.listMailboxPaths();
-        // A folder deleted and made again is a new directory, so forget the old one or it never gets watchers.
-        for (const mailbox of this.watchedMailboxes) {
-            if (!onDisk.includes(mailbox)) this.watchedMailboxes.delete(mailbox);
-        }
-        for (const mailbox of onDisk) {
-            if (this.watchedMailboxes.has(mailbox)) continue;
-            this.watchedMailboxes.add(mailbox);
+    // The standard six only: a watcher per folder would cost a home with hundreds of IMAP folders
+    // hundreds of handles against a per-user inotify limit every home shares.
+    watch(): void {
+        for (const mailbox of STANDARD_MAILBOXES) {
             const mailboxPath = this.mailboxDir(mailbox);
             for (const subdir of [PATHS.MAIL.CUR, PATHS.MAIL.NEW]) {
                 try {
@@ -116,8 +99,7 @@ export class MaildirStore implements MailStore {
     async unwatch(): Promise<void> {
         for (const watcher of this.watchers) watcher.close();
         this.watchers = [];
-        this.watchedMailboxes.clear();
-        // Let any in-flight mailbox sync (kicked fire-and-forget by the watcher) finish before
+        // Let any in-flight mailbox sync (kicked fire-and-forget by a watcher or a listing) finish before
         // the domain flushes drafts and the db closes — later sync phases would hit a closed db.
         await Promise.allSettled([...this.syncingMailboxes.values()]);
     }
@@ -142,12 +124,11 @@ export class MaildirStore implements MailStore {
     async mailboxesList(): Promise<MaildirMailbox[]> {
         const mailboxes: MaildirMailbox[] = [];
         for (const name of await this.listMailboxPaths()) {
-            // Counts come from the index: awaiting a sync here would re-index every empty folder on every
-            // list, and messageMoveToTrash lists on each trash action. The sync's own SSE events land the
-            // counts a first index changes.
-            if (this.db.getEmailsCount(name) === 0 && !this.indexedMailboxes.has(name)) {
-                this.indexedMailboxes.add(name);
-                this.syncMailbox(name).catch((err) => console.error('maildir: first mailbox index failed', err));
+            // Counts come from the index, never from a sync this waits on: messageMoveToTrash lists on each
+            // trash action. A folder outside the standard six has no watcher, so this is where it reconciles
+            // — in the background, with the next listing and the sync's own SSE events landing the counts.
+            if (!isStandardMailbox(name)) {
+                this.syncMailbox(name).catch((err) => console.error('maildir: background mailbox sync failed', err));
             }
             mailboxes.push(this.getMailboxInfo(name));
         }
@@ -560,7 +541,6 @@ export class MaildirStore implements MailStore {
         return this.storage.dirExists(this.mailboxDir(mailbox));
     }
 
-    // The one enumeration `mailboxesList` and `watch()` share, so the list and the watchers can't drift.
     // A `.Folder` whose name Eigen cannot address is skipped: Dovecot accepts names this store does not.
     private async listMailboxPaths(): Promise<string[]> {
         const standard: string[] = [];

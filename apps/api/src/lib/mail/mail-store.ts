@@ -54,7 +54,7 @@ export type MailStoreEvents = {
 export interface MailStore {
     // Resolves true when a fresh (empty) store was created.
     init(events: MailStoreEvents): Promise<boolean>;
-    watch(): Promise<void>;
+    watch(): void;
     unwatch(): Promise<void>;
     destruct(): Promise<void>;
     size(): Promise<number>;
