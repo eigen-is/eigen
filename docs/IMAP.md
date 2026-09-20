@@ -111,8 +111,8 @@ the one Eigen addresses it by.
 its `total`/`unread` read straight from the index. A directory whose name fails validation is skipped silently —
 Dovecot accepts names this store cannot address, and one of them must not break the listing. So is a directory
 whose name canonicalizes onto a standard mailbox (`.archive`, `.INBOX`): it is that mailbox under another
-spelling, not a folder of its own. A folder Eigen has never indexed is indexed in the background, once per
-process, and the sync's own SSE events land its counts — a listing itself never waits on a sync.
+spelling, not a folder of its own. Every folder outside the standard six is reconciled in the background by
+each listing, and the sync's own SSE events land its counts — a listing itself never waits on a sync.
 
 Mailbox membership is the only organization Eigen has — there are no labels.
 
@@ -154,18 +154,21 @@ Drafts get `D`+`S` flags. Skips `new/` because Eigen knows the final flags at cr
 Sync triggers: filesystem watcher events, Eigen's own writes (deliver, copy), and reads of a mailbox. **A read
 does not wait for the sync**: `listMessages` awaits `syncMailbox()` only when the mailbox has no rows yet (first
 open, so the user sees content immediately); otherwise it returns the DB rows straight away and fires the sync in
-the background with `.catch()`. `mailboxesList` never waits at all — it kicks the first index of a folder it has
-not kicked before and reports the index's counts. Anything the background sync finds reaches the client over SSE. See
+the background with `.catch()`. `mailboxesList` never waits at all — it kicks a background reconcile of each folder
+outside the standard six and reports the index's counts. Anything the background sync finds reaches the client over SSE. See
 [MAIL.md § Performance design](MAIL.md#performance-design).
 
 ## File Watching
 
-`MaildirStore.watch()` sets up `fs.watch()` on `cur/` and `new/` for every mailbox the enumeration finds — the
-same list `mailboxesList()` reports, so a watcher exists for each folder on disk and not only for the standard
-six. Changes trigger `syncMailbox()` which detects new messages, flag renames, and deletions, then reports them
-through `MailStoreEvents` so the frontend updates without page refresh. The Maildir root is watched too: an IMAP
-client can create a folder at any time, and each new `.Folder` picks up its own pair of watchers as it appears.
-`unwatch()` closes all watchers and awaits in-flight syncs on `Mail.destruct()`.
+`MaildirStore.watch()` sets up `fs.watch()` on `cur/` and `new/` for the standard six and nothing else — twelve
+handles per loaded home, whatever the folder count. A watcher per folder does not scale: a mailbox tree with
+hundreds of IMAP folders would cost hundreds of handles per home, against a per-user inotify limit every home on
+the host shares. Changes trigger `syncMailbox()` which detects new messages, flag renames, and deletions, then
+reports them through `MailStoreEvents` so the frontend updates without page refresh. A folder outside the standard
+six has no watcher and reconciles on two occasions instead: opening it, and the background reconcile every
+`mailboxesList()` kicks for it. So a message an IMAP client files into `Projects` is picked up by the next mailbox
+listing (the sidebar refetches on its stale time and on every mail SSE event) or by opening the folder, not within
+milliseconds of the write. `unwatch()` closes all watchers and awaits in-flight syncs on `Mail.destruct()`.
 
 ## Dovecot Compatibility
 
@@ -182,8 +185,8 @@ client can create a folder at any time, and each new `.Folder` picks up its own 
 
 ### Coexistence behavior
 
-- An IMAP-created folder is listed, watched and openable in Eigen, under the name Dovecot gave it. A message moved
-  into one leaves its old mailbox and appears in that folder's list.
+- An IMAP-created folder is listed and openable in Eigen, under the name Dovecot gave it. A message moved
+  into one leaves its old mailbox and appears in that folder's list on the next listing or open.
 - A folder whose name Eigen's validator refuses (an empty hierarchy segment, a character outside `A-Za-z0-9_- `)
   stays reachable over IMAP and is left out of Eigen's listing.
 - Simultaneous flag renames by Dovecot and Eigen: one rename fails with ENOENT, next sync corrects.

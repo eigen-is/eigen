@@ -49,15 +49,20 @@ function listMailboxes(token: string, userId: string): Promise<MaildirMailbox[]>
     return authedRequest(token, `/mail/${userId}/mailboxes`).then((res) => assertJson<MaildirMailbox[]>(res));
 }
 
-// A listing never indexes, so a never-indexed folder reports its counts only once the background
-// index it kicks has landed.
-async function mailboxWhenIndexed(token: string, userId: string, path: string): Promise<MaildirMailbox> {
+// A listing never indexes, so a folder reports its counts only once the background reconcile it
+// kicks has landed.
+async function mailboxWhenCounting(
+    token: string,
+    userId: string,
+    path: string,
+    total: number,
+): Promise<MaildirMailbox> {
     for (let attempt = 0; attempt < 100; attempt++) {
         const box = findOrFail(await listMailboxes(token, userId), (mailbox) => mailbox.path === path);
-        if (box.total > 0) return box;
+        if (box.total >= total) return box;
         await Bun.sleep(20);
     }
-    throw new Error(`Mailbox '${path}' was never indexed`);
+    throw new Error(`Mailbox '${path}' never reached ${total} messages`);
 }
 
 async function mailNotificationCount(token: string, userId: string): Promise<number> {
@@ -93,14 +98,14 @@ describe.skipIf(isWindows)('Mailboxes outside the standard six', () => {
         const first = await listMailboxes(token, userId);
         expect(findOrFail(first, (box) => box.path === 'Projects').total).toBe(0);
 
-        const projects = await mailboxWhenIndexed(token, userId, 'Projects');
+        const projects = await mailboxWhenCounting(token, userId, 'Projects', 1);
         expect(projects.total).toBe(1);
         expect(projects.unread).toBe(1);
         expect(projects.flags).toEqual(['\\HasNoChildren']);
     });
 
     test('a first index is discovery, so an old folder announces no new mail', async () => {
-        await mailboxWhenIndexed(token, userId, 'Projects');
+        await mailboxWhenCounting(token, userId, 'Projects', 1);
         expect(await mailNotificationCount(token, userId)).toBe(0);
     });
 
@@ -194,5 +199,60 @@ describe.skipIf(isWindows)('A .INBOX folder is the Maildir root, not a mailbox o
 
         const inbox = await assertJson<EmailSummary[]>(await authedRequest(token, `/mail/${userId}/mailbox/inbox`));
         expect(inbox.map((message) => message.subject)).toContain('Delivered to the real inbox');
+    });
+});
+
+describe.skipIf(isWindows)('A folder outside the standard six stays fresh without a watcher', () => {
+    let userId: string;
+    let token: string;
+    let email: string;
+    let folder: string;
+    const filedId = `${Date.now()}.filed`;
+
+    beforeAll(async () => {
+        email = `nowatcher-${Date.now()}@test.eigen.is`;
+        const user = await createTestUser(email, 'testpassword123', 'No Watcher Test');
+        userId = user.id;
+        token = user.sessionToken;
+        expect((await authedRequest(token, `/home/${userId}/size`)).status).toBe(200);
+
+        folder = seedMaildirFolder(userId, '.Filed');
+        seedNewFile(folder, `${Date.now()}.first`, makeEml('Filed before the first listing', email));
+    });
+
+    test('no watcher picks up a message filed into it, and the next listing reports it', async () => {
+        expect((await mailboxWhenCounting(token, userId, 'Filed', 1)).total).toBe(1);
+        // The reconcile that listing kicked reads the directory before the message below is written.
+        await Bun.sleep(100);
+
+        seedNewFile(folder, filedId, makeEml('Filed by an IMAP client', email));
+        await Bun.sleep(300);
+
+        // No watcher on this folder, so nothing has seen the file yet: this listing reports the index
+        // as it stands and kicks the reconcile that finds it.
+        const stale = findOrFail(await listMailboxes(token, userId), (box) => box.path === 'Filed');
+        expect(stale.total).toBe(1);
+
+        const settled = await mailboxWhenCounting(token, userId, 'Filed', 2);
+        expect(settled.total).toBe(2);
+        expect(settled.unread).toBe(2);
+    });
+
+    test('a message filed into an already-indexed folder announces new mail', async () => {
+        expect(await mailNotificationCount(token, userId)).toBe(1);
+    });
+
+    test('opening the folder reconciles it, without a listing in between', async () => {
+        const openedId = `${Date.now()}.opened`;
+        seedNewFile(folder, openedId, makeEml('Filed while the folder was closed', email));
+
+        let messages: EmailSummary[] = [];
+        for (let attempt = 0; attempt < 100; attempt++) {
+            messages = await assertJson<EmailSummary[]>(await authedRequest(token, `/mail/${userId}/mailbox/Filed`));
+            if (messages.some((message) => message.id === openedId)) break;
+            await Bun.sleep(20);
+        }
+        expect(messages.map((message) => message.id)).toContain(filedId);
+        expect(messages.map((message) => message.id)).toContain(openedId);
     });
 });
