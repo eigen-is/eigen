@@ -5,7 +5,7 @@ import {
     isExiftoolExtension,
     TEXT_PREVIEW_MAX_BYTES,
 } from '../constants/preview';
-import { type DrivePath, isCollabType, isImageMime, isVCardFile } from '../types/drive';
+import { type DrivePath, isCollabType, isEmlFile, isImageMime, isVCardFile } from '../types/drive';
 import type { FileSubject, MailPartRef, PreviewMode, SubjectInfo } from '../types/file-subject';
 import { type Attachment, mailAttachmentName } from '../types/mail';
 import {
@@ -72,7 +72,8 @@ function mailInfo(
 }
 
 // A Drive image is resized by /preview; any other <img> shows the original bytes, so only a browser-decodable
-// mime is an image. Text and vCard previews are served for Drive files and mail parts alike (PREVIEWS.md).
+// mime is an image. The text, vCard and message previews are served for Drive files and mail parts alike
+// (PREVIEWS.md).
 export function getPreviewMode(subject: FileSubject): PreviewMode {
     const { name, mimeType: mime, size } = subjectInfo(subject);
     const isImage = subject.drive ? isImageMime(mime) || isExiftoolExtension(name) : BROWSER_IMAGE_MIMES.has(mime);
@@ -81,6 +82,7 @@ export function getPreviewMode(subject: FileSubject): PreviewMode {
     if (mime.startsWith('audio/')) return 'audio';
     if (mime === 'application/pdf') return 'pdf';
     if (isVCardFile(mime, name)) return 'vcard';
+    if (isEmlFile(mime, name)) return 'eml';
     // The gate the preview routes run: a container renders from its Yjs body, everything else from its
     // bytes, and an eigen mime on loose bytes is only the uploader's or the sender's word.
     const container = subject.drive !== undefined && isCollabType(subject.drive.type);

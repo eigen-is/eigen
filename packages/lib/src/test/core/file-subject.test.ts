@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { TEXT_PREVIEW_MAX_BYTES } from '../../constants/preview';
+import { getBytesTextPreviewMode, getTextPreviewMode, TEXT_PREVIEW_MAX_BYTES } from '../../constants/preview';
 import {
     getDriveDownloadUrl,
     getDriveEmbedUrl,
@@ -8,7 +8,7 @@ import {
     getMailAttachmentUrl,
 } from '../../core/api';
 import { getPreviewMode, subjectFromMailAttachment, subjectFromPath, subjectInfo } from '../../core/file-subject';
-import type { DrivePath, DrivePathType } from '../../types/drive';
+import { type DrivePath, type DrivePathType, EML_MIME } from '../../types/drive';
 import type { FileSubject } from '../../types/file-subject';
 
 function path(p: Partial<DrivePath> & { name: string; type: DrivePathType }): DrivePath {
@@ -117,12 +117,22 @@ describe('getPreviewMode', () => {
         expect(getPreviewMode(mailSubject('shoot.cr2', 'application/octet-stream'))).toBe('fallback');
     });
 
-    test('the text and card previews answer for a Drive item and a mail part alike', () => {
+    test('the text, card and message previews answer for a Drive item and a mail part alike', () => {
         for (const subject of [driveSubject, mailSubject]) {
             expect(getPreviewMode(subject('notes.txt', 'text/plain'))).toBe('text');
             expect(getPreviewMode(subject('readme.md', 'text/markdown'))).toBe('text');
             expect(getPreviewMode(subject('team.vcf', 'text/vcard'))).toBe('vcard');
+            expect(getPreviewMode(subject('forwarded.eml', EML_MIME))).toBe('eml');
+            // An exporter that names the file but not the type is still a message.
+            expect(getPreviewMode(subject('forwarded.eml', 'application/octet-stream'))).toBe('eml');
         }
+    });
+
+    // A message reads as its headers and body, never as its raw MIME source: the text route answers for
+    // neither, so a path never carries two cached preview artifacts (pruneOldVersions is not format-scoped).
+    test('a message has no text mode to be rendered under', () => {
+        expect(getBytesTextPreviewMode(EML_MIME, 'forwarded.eml')).toBeNull();
+        expect(getTextPreviewMode(EML_MIME, 'forwarded.eml')).toBeNull();
     });
 
     // A mime is the uploader's or the sender's word; only a real container earns the document modes,

@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1467 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1477 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -478,7 +478,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (348)
+## Types (349)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -721,6 +721,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MailPartRef` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
 | `PreviewMode` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
 | `SubjectInfo` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
+| `EmlPreview` | `@workspace/lib/types/preview` | packages/lib/src/types/preview.ts |
 | `TextPreviewResult` | `@workspace/lib/types/preview` | packages/lib/src/types/preview.ts |
 | `VCardPreview` | `@workspace/lib/types/preview` | packages/lib/src/types/preview.ts |
 | `Snapshot` | `@workspace/lib/types/versioning` | packages/lib/src/types/versioning.ts |
@@ -831,7 +832,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (672)
+## Utilities & constants (681)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -851,6 +852,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DOCS_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `DRIVE_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `driveApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `emlPreviewRoute` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getAdminAppUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getBackupArtifactUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getBackupUploadUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
@@ -901,6 +903,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `INDEX_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `MAIL_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `mailApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `mailEmlPreviewRoute` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `mailVCardPreviewRoute` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `notificationApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `openDocument` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
@@ -1021,6 +1024,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EIGEN_STICKIES_COLORS` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EIGEN_STICKIES_INDICATOR_MAP` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EIGEN_STICKIES_INDICATOR_ROW` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
+| `EML_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
+| `EML_PREVIEW_MAX_ATTACHMENTS` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
+| `EML_PREVIEW_MAX_HTML_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
+| `EML_PREVIEW_MAX_INLINE_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
+| `EML_PREVIEW_MAX_TEXT_CHARS` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `emptyContact` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
 | `fontNameToCss` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `getBytesTextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
@@ -1185,6 +1193,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DRIVE_TYPE_VECTOR` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EIGEN_DOC_TYPE_INFO` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EIGEN_DOC_TYPES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `EML_MIME` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EMPTY_S3` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `exportFormatsFor` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `externalOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
@@ -1200,6 +1209,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isConvertTarget` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isDocumentType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isEmailDraft` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
+| `isEmlFile` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isExternalOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `isFolderType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isImageMime` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |

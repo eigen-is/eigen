@@ -1,3 +1,4 @@
+import { EML_MIME } from '@workspace/lib/types/drive';
 import { type PartHeaders, parseHeaders } from './headers';
 
 // Both caps reject the parse with a plain Error; the fuzz suite pins "reject, never hang".
@@ -11,7 +12,7 @@ export type MimePart = {
     children: MimePart[];
     // Raw, still transfer-encoded bytes; meaningless for multipart containers.
     body: Buffer;
-    // Inline message/rfc822 whose single child is the embedded message itself.
+    // Inline message (EML_MIME) whose single child is the embedded message itself.
     embedsMessage: boolean;
 };
 
@@ -57,7 +58,7 @@ export function splitMime(bytes: Buffer): MimePart {
         if (cut) return part;
         parent?.children.push(part);
 
-        if (contentType === 'message/rfc822' && isInlineMessage(headers)) {
+        if (contentType === EML_MIME && isInlineMessage(headers)) {
             part.embedsMessage = true;
             readPart(part, parentBoundary);
             return part;

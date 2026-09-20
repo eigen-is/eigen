@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
-import { api, contactsApi, mailVCardPreviewRoute, vcardPreviewRoute } from '../../core/api';
+import {
+    api,
+    contactsApi,
+    emlPreviewRoute,
+    mailEmlPreviewRoute,
+    mailVCardPreviewRoute,
+    vcardPreviewRoute,
+} from '../../core/api';
 
 afterEach(() => mock.restore());
 
@@ -81,6 +88,31 @@ describe('API date parsing', () => {
         expect(response.error).toBeNull();
         expect(response.data?.cards[0]?.contact.birthday).toBe('1990-01-01');
         expect(response.data?.cards[0]?.contact.birthday).not.toBeInstanceOf(Date);
+    });
+
+    test('keeps the .eml preview date an ISO string on both routes', async () => {
+        const preview = {
+            subject: 'Engine notes',
+            from: null,
+            to: null,
+            cc: null,
+            date: '2026-08-15T10:30:00.000Z',
+            html: null,
+            text: 'The engine weaves patterns.',
+            attachments: [],
+            droppedAttachments: 0,
+        };
+        // A fresh Response per call: both routes read the same body.
+        spyOn(globalThis, 'fetch').mockImplementation(async () => Response.json(preview));
+
+        const drive = await emlPreviewRoute('owner-1', 'm1', 'p1').get({ query: {} });
+        const mail = await mailEmlPreviewRoute('owner-1', 'msg-1', 0).get();
+
+        for (const response of [drive, mail]) {
+            expect(response.error).toBeNull();
+            expect(response.data?.date).toBe('2026-08-15T10:30:00.000Z');
+            expect(response.data?.date).not.toBeInstanceOf(Date);
+        }
     });
 
     test('keeps default Eden date revival for instant domains', async () => {

@@ -2,8 +2,9 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants/preview';
+import { EML_MIME } from '@workspace/lib/types/drive';
 import type { EmailSummary } from '@workspace/lib/types/mail';
-import type { TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
+import type { EmlPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
@@ -14,6 +15,7 @@ const isWindows = process.platform === 'win32';
 const SUBJECT = 'Attachment route fixture';
 const RANGED_BODY = '0123456789';
 const ODD_NAME = 'räp"ort.txt';
+const ATTACHED_SUBJECT = 'Attached message fixture';
 const OVERSIZE_SUBJECT = 'Oversize vCard fixture';
 const OVERSIZE_TEXT_SUBJECT = 'Oversize text fixture';
 const NOTES_BODY = 'First line.\r\n\r\nSecond paragraph.';
@@ -476,6 +478,115 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
             `/mail/${ctx.alice.user.id}/message/${bigId}/attachment/0/preview/text`,
         );
         expect(res.status).toBe(404);
+    });
+
+    // A forwarded message rides along as a message/rfc822 part, which is a part with its own bytes: it
+    // previews as the message it holds, through the renderer the Drive route ends in.
+    describe('an attached message', () => {
+        let attachedId: string;
+        const emlPreviewUrl = (index: number): string =>
+            `/mail/${ctx.alice.user.id}/message/${attachedId}/attachment/${index}/preview/eml`;
+
+        beforeAll(async () => {
+            const boundary = 'att-message';
+            const forwarded = [
+                'From: Ada Lovelace <ada@external.com>',
+                'To: alice@example.com',
+                'Subject: Engine notes',
+                'Date: Tue, 15 Aug 2026 10:30:00 +0000',
+                'MIME-Version: 1.0',
+                'Content-Type: text/html; charset=utf-8',
+                '',
+                '<p>The engine <img src="https://tracker.example/pixel.png"> weaves patterns.</p>',
+            ].join('\r\n');
+            const eml = [
+                'From: sender@external.com',
+                `To: ${ctx.alice.user.email}`,
+                `Subject: ${ATTACHED_SUBJECT}`,
+                'MIME-Version: 1.0',
+                `Content-Type: multipart/mixed; boundary="${boundary}"`,
+                '',
+                `--${boundary}`,
+                'Content-Type: text/plain; charset=utf-8',
+                '',
+                'Forwarding this.',
+                `--${boundary}`,
+                `Content-Type: ${EML_MIME}`,
+                'Content-Disposition: attachment; filename="forwarded.eml"',
+                '',
+                forwarded,
+                `--${boundary}`,
+                'Content-Type: text/plain; charset=utf-8',
+                'Content-Disposition: attachment; filename="note.txt"',
+                '',
+                'Not a message.',
+                `--${boundary}--`,
+            ].join('\r\n');
+
+            const deliverRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/mail/deliver/${ctx.alice.user.email}`,
+                { method: 'POST', body: new TextEncoder().encode(eml).buffer },
+            );
+            expect(deliverRes.status).toBe(200);
+
+            const listRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/mailbox/inbox`,
+            );
+            const list = await assertJson<EmailSummary[]>(listRes);
+            attachedId = findOrFail(list, (m) => m.subject === ATTACHED_SUBJECT).id;
+        });
+
+        test('previews as the message it holds, with a body that fetches nothing', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken, emlPreviewUrl(0));
+            const preview = await assertJson<EmlPreview>(res);
+
+            expect(preview.subject).toBe('Engine notes');
+            expect(preview.from?.value[0]?.address).toBe('ada@external.com');
+            expect(preview.date).toBe('2026-08-15T10:30:00.000Z');
+            expect(preview.html).toContain('weaves patterns');
+            expect(preview.html).not.toContain('tracker.example');
+        });
+
+        test('revalidates on every use and answers If-None-Match with 304', async () => {
+            const first = await authedRequest(ctx.alice.user.sessionToken, emlPreviewUrl(0));
+            expect(first.headers.get('cache-control')).toBe('private, no-cache');
+            const etag = first.headers.get('etag') ?? '';
+            expect(etag).not.toBe('');
+
+            const revalidated = await authedRequest(ctx.alice.user.sessionToken, emlPreviewUrl(0), {
+                headers: { 'if-none-match': etag },
+            });
+            expect(revalidated.status).toBe(304);
+            expect(revalidated.headers.get('etag')).toBe(etag);
+        });
+
+        // The renderer's format tag rides in the ETag, so a sanitizer or payload fix is not answered with
+        // a 304 on a message whose own bytes never changed.
+        test('carries a different ETag than the bytes of the same part', async () => {
+            const preview = await authedRequest(ctx.alice.user.sessionToken, emlPreviewUrl(0));
+            const bytes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/message/${attachedId}/attachment/0/forwarded.eml`,
+            );
+
+            expect(preview.headers.get('etag')).not.toBe(bytes.headers.get('etag'));
+            const stale = await authedRequest(ctx.alice.user.sessionToken, emlPreviewUrl(0), {
+                headers: { 'if-none-match': bytes.headers.get('etag') ?? '' },
+            });
+            expect(stale.status).toBe(200);
+        });
+
+        test('a part that is not a message is refused by the eml preview', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken, emlPreviewUrl(1));
+            expect(res.status).toBe(400);
+        });
+
+        test("another user's message is refused with 403", async () => {
+            const res = await authedRequest(ctx.bob.user.sessionToken, emlPreviewUrl(0));
+            expect(res.status).toBe(403);
+        });
     });
 
     test('a vCard part past the import ceiling is refused with 413', async () => {

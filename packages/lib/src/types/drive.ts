@@ -358,6 +358,16 @@ export function isVCardFile(mimeType: string, name: string): boolean {
     return name.toLowerCase().endsWith('.vcf') || VCARD_MIMES.some((m) => m === mimeType);
 }
 
+// The media type one whole message is carried under, everywhere: the download route, an attached message
+// part (mail-parser/split.ts), and a stored .eml file.
+export const EML_MIME = 'message/rfc822';
+
+// Mail clients that write a saved message to disk disagree on the MIME the way vCard exporters do
+// (Outlook drags out application/octet-stream), so the .eml extension counts on its own.
+export function isEmlFile(mimeType: string, name: string): boolean {
+    return name.toLowerCase().endsWith('.eml') || mimeType === EML_MIME;
+}
+
 export type ImageDimensions = {
     width: number;
     height: number;

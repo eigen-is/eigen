@@ -1,4 +1,5 @@
 import { MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
+import { EML_MIME } from '@workspace/lib/types/drive';
 import { mailAttachmentName, type NewDraft, type SentMailResult } from '@workspace/lib/types/mail';
 import { Elysia, type Static, status, t } from 'elysia';
 import { ApiError, contentDisposition, setCacheHeaders } from '../lib/core';
@@ -13,7 +14,15 @@ import {
     uploadDraftAttachment,
 } from '../lib/mail/mail';
 import { readMailPart, serveMailPart } from '../lib/mail/serve-mail-part';
-import { assertVCardPreviewable, getBytesTextPreview, getBytesVCardPreview } from '../lib/preview/preview-cache';
+import {
+    assertEmlPreviewable,
+    assertVCardPreviewable,
+    EML_FORMAT,
+    getBytesEmlPreview,
+    getBytesTextPreview,
+    getBytesVCardPreview,
+    VCARD_FORMAT,
+} from '../lib/preview/preview-cache';
 import { betterAuth } from './auth';
 import { attachmentReferenceSchema } from './shared-schemas';
 
@@ -138,7 +147,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             setCacheHeaders(set, 86400);
-            set.headers['Content-Type'] = 'message/rfc822';
+            set.headers['Content-Type'] = EML_MIME;
             set.headers['Content-Transfer-Encoding'] = 'binary';
             set.headers['Content-Disposition'] = contentDisposition('attachment', `${params.id}.eml`);
             return await (await getMailClient(user)).messageGetFile(params.id);
@@ -353,12 +362,40 @@ export const mailRouter = new Elysia({ name: 'mail' })
         async ({ params, request, user, set }) => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            const att = await readMailPart(await getMailClient(user), params.id, params.index, request, set);
+            const att = await readMailPart(
+                await getMailClient(user),
+                params.id,
+                params.index,
+                request,
+                set,
+                VCARD_FORMAT,
+            );
             if (!att) return status(304);
 
             assertVCardPreviewable(mailAttachmentName(att, params.index), att.contentType, att.size);
             // A copy: content is a view over the whole parsed message, and the Worker detaches the buffer it gets.
             return getBytesVCardPreview(new Uint8Array(att.content).buffer);
+        },
+        { auth: true, params: AttachmentPreviewParamsSchema },
+    )
+    .get(
+        '/mail/:ownerId/message/:id/attachment/:index/preview/eml',
+        async ({ params, request, user, set }) => {
+            requireNonGuest(user);
+            requireSelf(params.ownerId, user.id);
+            const att = await readMailPart(
+                await getMailClient(user),
+                params.id,
+                params.index,
+                request,
+                set,
+                EML_FORMAT,
+            );
+            if (!att) return status(304);
+
+            assertEmlPreviewable(mailAttachmentName(att, params.index), att.contentType, att.size);
+            // A copy, for the reason the cards route copies: the Worker detaches the buffer it gets.
+            return getBytesEmlPreview(new Uint8Array(att.content).buffer);
         },
         { auth: true, params: AttachmentPreviewParamsSchema },
     );
