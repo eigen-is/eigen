@@ -205,6 +205,44 @@ describe('buildIcsPreviewPayload', () => {
         expect(payload.events[0]?.organizer?.email).toBe('ada@external.com');
     });
 
+    // An ATTENDEE / ORGANIZER value is a URI and only a mailto: one names an address. The card writes
+    // `mailto:${email}` and resolves an avatar from it, so anything else the file spells is not an address.
+    test('an address that is not one is dropped rather than drawn', () => {
+        const payload = payloadOf(
+            vcal(
+                timed('uri@eigen', '20260601T100000Z', '20260601T110000Z', [
+                    'ORGANIZER;CN=Ada:javascript:alert(1)',
+                    `ATTENDEE:http://${HOSTILE}/x`,
+                    'ATTENDEE:mailto:bob@example.com',
+                ]),
+            ),
+        );
+
+        expect(payload.events[0]?.organizer).toBeNull();
+        expect(payload.events[0]?.attendees).toEqual([
+            { email: 'bob@example.com', status: 'pending', role: 'required' },
+        ]);
+        expect(payload.events[0]?.droppedAttendees).toBe(1);
+        expect(JSON.stringify(payload)).not.toContain(HOSTILE);
+    });
+
+    // toISOString spells a year outside 1–9999 as "+010007-06-07T…", which a card prints as "Invalid
+    // Date" — and the all-day slice of it ("+010007-06") is not even a date. A DTSTART of 99999999
+    // overflows there: month 99 and day 99 normalize into the year.
+    test('an event dated outside the ISO year range is counted, not listed', () => {
+        const payload = payloadOf(
+            vcal([
+                ...event('far-allday@eigen', ['DTSTART;VALUE=DATE:99999999', 'DTEND;VALUE=DATE:99999999']),
+                ...timed('far-timed@eigen', '99999999T000000Z', '99999999T010000Z'),
+                ...timed('sane@eigen', '20260601T100000Z', '20260601T110000Z'),
+            ]),
+        );
+
+        expect(payload.total).toBe(3);
+        expect(payload.dropped).toBe(2);
+        expect(payload.events.map((e) => e.uid)).toEqual(['sane@eigen']);
+    });
+
     // rrule iterates to the query window for a sub-daily recurrence, so the parser nulls it — and the
     // preview inherits that rather than handing the card a rule it would expand.
     test('a sub-daily recurrence builds fast and carries no rule', () => {
