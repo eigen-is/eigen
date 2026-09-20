@@ -125,6 +125,9 @@ export function isEmailDraft(email: Email | null | undefined): email is EmailDra
 // delivery. `failedRecipients` is present only when a partial failure occurred.
 export type SentMailResult = EmailDraft & { failedRecipients?: string[] };
 
+// What importing one `.eml` yields: the message it became, by the id every other mail route addresses.
+export type ImportMailResult = { id: string };
+
 export type NewDraft = {
     id?: string;
     subject?: string;

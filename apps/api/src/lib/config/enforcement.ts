@@ -116,10 +116,10 @@ export async function enforceAvatarUpload(userId: string, fileSize: number): Pro
     }
 }
 
-// A contact card about to be written: addBytes is the new card's size, creditBytes the size of the card it
-// replaces (subtracted from the projection, so a rewrite that shrinks a card is never refused). Same credit
-// convention as enforceMountQuota, for the mail+contacts half of the budget.
-export async function enforceContactsIngest(userId: string, addBytes: number, creditBytes = 0): Promise<void> {
+// Bytes about to be written into the mail+contacts half of the budget — a contact card, an imported
+// message: addBytes is what lands, creditBytes the size of what it replaces (subtracted from the
+// projection, so a rewrite that shrinks a card is never refused). Same credit convention as enforceMountQuota.
+export async function enforceMailAndContactsQuota(userId: string, addBytes: number, creditBytes = 0): Promise<void> {
     const { used, max } = await getMailAndContactsQuotaState(userId);
     if (used + addBytes - creditBytes > max) {
         throw new ApiError(507, 'Insufficient Storage');
