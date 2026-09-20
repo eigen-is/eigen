@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
-import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
+import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants/preview';
 import { DRIVE_MIME_SLIDES, EML_MIME, ICS_MIME } from '@workspace/lib/types/drive';
@@ -587,7 +587,7 @@ describe('vCard preview route', () => {
         const seed = await uploadVCard('seed-for-mount.vcf', bytes.toString());
         const home = await getHome(ownerId);
         const { mount } = await home.drive.resolveFile(mountId, seed.id);
-        const hugeId = await mount.createFile(rootId, 'huge.vcf', 'text/vcard', IMPORT_MAX_BYTES + 1, bytes);
+        const hugeId = await mount.createFile(rootId, 'huge.vcf', 'text/vcard', VCARD_MAX_BYTES + 1, bytes);
 
         const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${hugeId}/vcard-preview`);
         expect(res.status).toBe(413);

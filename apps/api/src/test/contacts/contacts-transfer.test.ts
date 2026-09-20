@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
-import { IMPORT_MAX_CARDS } from '@workspace/lib/constants/contact';
+import { VCARD_IMPORT_MAX_CARDS } from '@workspace/lib/constants/contact';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { getHome } from '../../lib/home';
@@ -16,7 +16,9 @@ afterAll(() => {
 });
 
 // The fixtures are built as text, LF-terminated, the way every desktop client writes an export — the
-// importer's own transcode/normalization is what the tests are pinning.
+// importer's own transcode/normalization is what the tests are pinning. The domain takes the file's
+// bytes, as the mail and calendar imports do.
+const fileBytes = (text: string) => new TextEncoder().encode(text);
 const card30 = (fn: string, email: string, uid?: string, extra: string[] = []) =>
     `${[
         'BEGIN:VCARD',
@@ -87,7 +89,7 @@ describe('Contacts import', () => {
             card30('Alan Turing', 'alan@example.com', randomUUID()) +
             card40('Ada Lovelace', 'ada@example.com', randomUUID());
 
-        expect(await contacts.importCards(text)).toEqual({ imported: 3, skipped: 0, failed: 0 });
+        expect(await contacts.importCards(fileBytes(text))).toEqual({ imported: 3, skipped: 0, failed: 0 });
 
         const book = await contacts.getContacts();
         expect(book.length).toBe(before + 3);
@@ -103,8 +105,8 @@ describe('Contacts import', () => {
             card30('Alan Turing', 'alan@example.com', randomUUID()) +
             card40('Ada Lovelace', 'ada@example.com', randomUUID());
 
-        expect(await contacts.importCards(text)).toEqual({ imported: 3, skipped: 0, failed: 0 });
-        expect(await contacts.importCards(text)).toEqual({ imported: 0, skipped: 3, failed: 0 });
+        expect(await contacts.importCards(fileBytes(text))).toEqual({ imported: 3, skipped: 0, failed: 0 });
+        expect(await contacts.importCards(fileBytes(text))).toEqual({ imported: 0, skipped: 3, failed: 0 });
     });
 
     test('same first email under a fresh UID is skipped, case and padding folded', async () => {
@@ -112,7 +114,7 @@ describe('Contacts import', () => {
         await contacts.addContact(validContact({ firstName: 'Grace', email: ['grace@example.com'] }));
 
         const again = card30('Grace Hopper', '  GRACE@Example.COM  ', randomUUID());
-        expect(await contacts.importCards(again)).toEqual({ imported: 0, skipped: 1, failed: 0 });
+        expect(await contacts.importCards(fileBytes(again))).toEqual({ imported: 0, skipped: 1, failed: 0 });
     });
 
     test('duplicate email inside one file imports once', async () => {
@@ -121,14 +123,14 @@ describe('Contacts import', () => {
             card30('Grace Hopper', 'grace@example.com', randomUUID()) +
             card30('Grace Hopper', 'grace@example.com', randomUUID());
 
-        expect(await contacts.importCards(text)).toEqual({ imported: 1, skipped: 1, failed: 0 });
+        expect(await contacts.importCards(fileBytes(text))).toEqual({ imported: 1, skipped: 1, failed: 0 });
     });
 
     test('a KIND:group card is skipped', async () => {
         const { contacts } = await makeContacts();
         const text = card30('Colleagues', 'group@example.com', randomUUID(), ['X-ADDRESSBOOKSERVER-KIND:group']);
 
-        expect(await contacts.importCards(text)).toEqual({ imported: 0, skipped: 1, failed: 0 });
+        expect(await contacts.importCards(fileBytes(text))).toEqual({ imported: 0, skipped: 1, failed: 0 });
     });
 
     test('a malformed card fails, the others import', async () => {
@@ -138,7 +140,7 @@ describe('Contacts import', () => {
             'BEGIN:VCARD\nVERSION:3.0\nthis line carries no colon\nEND:VCARD\n' +
             card30('Alan Turing', 'alan@example.com', randomUUID());
 
-        expect(await contacts.importCards(text)).toEqual({ imported: 2, skipped: 0, failed: 1 });
+        expect(await contacts.importCards(fileBytes(text))).toEqual({ imported: 2, skipped: 0, failed: 1 });
     });
 
     // 'too-large' is the other failure putCard returns rather than throws: the card parses, then loses at the
@@ -149,14 +151,14 @@ describe('Contacts import', () => {
             card30('Grace Hopper', 'grace@example.com', randomUUID()) +
             card30('Fat Card', 'fat@example.com', randomUUID(), [`NOTE:${'n'.repeat(6 * 1024 * 1024)}`]);
 
-        expect(await contacts.importCards(text)).toEqual({ imported: 1, skipped: 0, failed: 1 });
+        expect(await contacts.importCards(fileBytes(text))).toEqual({ imported: 1, skipped: 0, failed: 1 });
     });
 
     test('a card without UID imports with a minted UID', async () => {
         const { contacts } = await makeContacts();
         const before = new Set((await contacts.getContacts()).map((c) => c.id));
 
-        expect(await contacts.importCards(card30('Grace Hopper', 'grace@example.com'))).toEqual({
+        expect(await contacts.importCards(fileBytes(card30('Grace Hopper', 'grace@example.com')))).toEqual({
             imported: 1,
             skipped: 0,
             failed: 0,
@@ -170,7 +172,7 @@ describe('Contacts import', () => {
 
     test('text that is not a vCard file throws 400', async () => {
         const { contacts } = await makeContacts();
-        await expect(contacts.importCards('just some notes\n')).rejects.toMatchObject({ status: 400 });
+        await expect(contacts.importCards(fileBytes('just some notes\n'))).rejects.toMatchObject({ status: 400 });
     });
 
     test('a whole file broadcasts one batched event, not one per card', async () => {
@@ -180,23 +182,23 @@ describe('Contacts import', () => {
         ).join('');
         broadcasts.length = 0;
 
-        expect(await contacts.importCards(text)).toEqual({ imported: 25, skipped: 0, failed: 0 });
+        expect(await contacts.importCards(fileBytes(text))).toEqual({ imported: 25, skipped: 0, failed: 0 });
         expect(broadcasts.filter((e) => e.type === SSEventType.CONTACT_CREATED).length).toBe(0);
         expect(broadcasts.filter((e) => e.type === SSEventType.CONTACTS_CHANGED).length).toBe(1);
 
         // A re-import stores nothing, so there is nothing for the tabs to refetch.
         broadcasts.length = 0;
-        expect(await contacts.importCards(text)).toEqual({ imported: 0, skipped: 25, failed: 0 });
+        expect(await contacts.importCards(fileBytes(text))).toEqual({ imported: 0, skipped: 25, failed: 0 });
         expect(broadcasts.length).toBe(0);
     });
 
-    test('more than IMPORT_MAX_CARDS throws 413', async () => {
+    test('more than VCARD_IMPORT_MAX_CARDS throws 413', async () => {
         const { contacts } = await makeContacts();
-        const text = Array.from({ length: IMPORT_MAX_CARDS + 1 }, (_, i) =>
+        const text = Array.from({ length: VCARD_IMPORT_MAX_CARDS + 1 }, (_, i) =>
             card30(`Card${i} Many`, `many-${i}@example.com`, randomUUID()),
         ).join('');
 
-        await expect(contacts.importCards(text)).rejects.toMatchObject({ status: 413 });
+        await expect(contacts.importCards(fileBytes(text))).rejects.toMatchObject({ status: 413 });
     });
 });
 
@@ -221,7 +223,7 @@ describe('Contacts import quota', () => {
                 card30('Small Card', 'small@example.com', randomUUID()) +
                 card30('Fat Card', 'fat@example.com', randomUUID(), [`NOTE:${'n'.repeat(3 * MB)}`]);
 
-            await expect(home.contacts.importCards(text)).rejects.toMatchObject({
+            await expect(home.contacts.importCards(fileBytes(text))).rejects.toMatchObject({
                 status: 507,
                 message: 'Storage quota exceeded after importing 1 contacts',
             });

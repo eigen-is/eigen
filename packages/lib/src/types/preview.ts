@@ -20,7 +20,7 @@ export type VCardPreview = { cards: { contact: Contact; categories: string[] }[]
 // bytes, no `bcc`, no invite — a quick look reads a message, it does not act on it. `date` is an ISO instant
 // as a string, which is why both routes are read through the no-revival treaty (core/api.ts). `html` is
 // sanitized in the Worker and null when there is none or it is over the payload ceiling; `attachments` holds
-// the first EML_PREVIEW_MAX_ATTACHMENTS parts and `droppedAttachments` counts the rest.
+// the first EML_PREVIEW_MAX_ATTACHMENTS parts and `remainingAttachments` counts the rest.
 export type EmlPreview = {
     subject: string;
     from: AddressObject | null;
@@ -30,7 +30,7 @@ export type EmlPreview = {
     html: string | null;
     text: string | null;
     attachments: Pick<Attachment, 'filename' | 'contentType' | 'size'>[];
-    droppedAttachments: number;
+    remainingAttachments: number;
 };
 
 // One event of an `.ics` preview. `start` and `end` are strings, not Dates — an ISO instant, or a bare
@@ -44,11 +44,12 @@ export type IcsPreviewEvent = Pick<
     end: string;
     organizer: NonNullable<EventData['organizer']> | null;
     attendees: Attendee[];
-    droppedAttendees: number;
+    remainingAttendees: number;
 };
 
 // What an `.ics` preview serves: the events the file holds, masters only — an override or an excluded
 // occurrence is part of its series, not a row of its own. `events` holds the first
-// ICS_PREVIEW_MAX_EVENTS by start, `total` counts the masters the file holds and `dropped` the ones it
-// does not list. `method` is the file's own METHOD, so an invitation reads as one.
+// ICS_PREVIEW_MAX_EVENTS by start, `total` counts the masters the file holds and `dropped` the ones the
+// parser could not read; what is merely past the cap is the consumer's `total - dropped - events.length`.
+// `method` is the file's own METHOD, so an invitation reads as one.
 export type IcsPreview = { method?: ImipMethod; events: IcsPreviewEvent[]; dropped: number; total: number };

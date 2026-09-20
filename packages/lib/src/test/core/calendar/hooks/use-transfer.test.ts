@@ -3,7 +3,7 @@
 // invalidation are pinned here rather than in each caller.
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
-import type { ImportEventsResult } from '@workspace/lib/types/calendar';
+import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { calendarKeys } from '../../../../core/calendar/hooks/keys';
 import { installHappyDom } from '../../../happy-dom';
 
@@ -33,7 +33,7 @@ mock.module('sonner', () => ({
 }));
 
 // The Eden client, stubbed to the one call the drive-import path makes. Recipe: the mail transfer test.
-let driveImportResult: ImportEventsResult = { imported: 2, skipped: 1, failed: 0 };
+let driveImportResult: ImportCountsResult = { imported: 2, skipped: 1, failed: 0 };
 const driveImportBodies: unknown[] = [];
 const realApiModule = await import('../../../../core/api');
 mock.module('../../../../core/api', () => ({

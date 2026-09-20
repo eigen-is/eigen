@@ -762,3 +762,60 @@ describe('Calendar Invites', () => {
         });
     });
 });
+
+// A decline is an RSVP, and only an attendee has one to give. A file or a CalDAV client can hang any
+// ORGANIZER on an event the user wrote themselves; without the guard, deleting it mails a stranger a
+// REPLY saying the user declined a meeting they were never invited to.
+describe('Delete-as-decline is for attendees only', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let calendarId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        const res = await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/calendars`);
+        calendarId = findOrFail(await assertJson<CalendarItem[]>(res), (c) => c.isDefault).id;
+    });
+
+    // The client cannot declare itself an invitee (EventDataSchema strips organizer), so the linked copy is
+    // seeded through the domain, the way a CalDAV PUT or an import would leave one behind.
+    const seed = async (title: string, attendeeEmail: string) => {
+        const home = await getHome(ctx.bob.user.id);
+        return home.calendar.createEvent(calendarId, {
+            title,
+            startTime: new Date('2026-12-01T09:00:00Z'),
+            endTime: new Date('2026-12-01T10:00:00Z'),
+            allDay: false,
+            data: {
+                organizer: { userId: '', email: 'stranger@external.com', name: 'Stranger' },
+                organizerEventId: `stranger-${randomUUID()}`,
+                attendees: [{ email: attendeeEmail, status: 'pending', role: 'required' }],
+            },
+        });
+    };
+
+    const removeEvent = (id: string) =>
+        authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/calendars/${calendarId}/events/${id}`, {
+            method: 'DELETE',
+        });
+
+    const declinesTo = async (id: string): Promise<number> => {
+        const mailer = await import('../../lib/core/mailer');
+        const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        spy.mockClear();
+        expect((await removeEvent(id)).status).toBe(200);
+        await new Promise((r) => setTimeout(r, 50));
+        const count = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === 'stranger@external.com')).length;
+        spy.mockRestore();
+        return count;
+    };
+
+    test('deleting an event the user is not an attendee of mails the organizer nothing', async () => {
+        const event = await seed('Not my meeting', 'someone.else@external.com');
+        expect(await declinesTo(event.id)).toBe(0);
+    });
+
+    test('deleting one the user is an attendee of still declines, whatever case the file spells', async () => {
+        const event = await seed('My meeting', ctx.bob.user.email.toUpperCase());
+        expect(await declinesTo(event.id)).toBe(1);
+    });
+});

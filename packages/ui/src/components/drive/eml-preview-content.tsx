@@ -69,8 +69,8 @@ function PreviewAttachments({ data }: { data: EmlPreview }) {
                     />
                 ))}
             </div>
-            {data.droppedAttachments > 0 && (
-                <p className="text-sm text-muted-foreground">{remainingAttachmentsLine(data.droppedAttachments)}</p>
+            {data.remainingAttachments > 0 && (
+                <p className="text-sm text-muted-foreground">{remainingAttachmentsLine(data.remainingAttachments)}</p>
             )}
         </div>
     );

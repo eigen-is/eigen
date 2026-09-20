@@ -1,8 +1,8 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
-import type { ImportContactsResult } from '@workspace/lib/types/contact';
+import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { splitVCards } from '../../lib/vcard';
 import {
     app,
@@ -122,14 +122,14 @@ describe('Contacts transfer routes', () => {
             card('Barbara Liskov', 'barbara@vcard-routes.example');
 
         const res = await importRequest(alice, text);
-        expect(await assertJson<ImportContactsResult>(res)).toEqual({ imported: 2, skipped: 0, failed: 0 });
+        expect(await assertJson<ImportCountsResult>(res)).toEqual({ imported: 2, skipped: 0, failed: 0 });
     });
 
-    test('raw import over IMPORT_MAX_BYTES is 413 before the body is read', async () => {
+    test('raw import over VCARD_MAX_BYTES is 413 before the body is read', async () => {
         // The body is a fragment no importer would accept (a 400 if it were ever parsed), so a 413
         // can only come from the Content-Length check that runs first.
         const res = await importRequest(alice, new Blob([new TextEncoder().encode('BEGIN:VCARD\r\n')]), {
-            'Content-Length': String(IMPORT_MAX_BYTES + 1),
+            'Content-Length': String(VCARD_MAX_BYTES + 1),
         });
         expect(res.status).toBe(413);
     });
@@ -162,7 +162,7 @@ describe('Contacts transfer routes', () => {
         const uploaded = await driveUpload(alice.sessionToken, alice.id, mountId, rootId, file);
 
         const res = await importFromDrive(alice, uploaded);
-        expect(await assertJson<ImportContactsResult>(res)).toEqual({ imported: 2, skipped: 0, failed: 0 });
+        expect(await assertJson<ImportCountsResult>(res)).toEqual({ imported: 2, skipped: 0, failed: 0 });
     });
 
     test('import-from-drive on a .txt is 400', async () => {

@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
-import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
+import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants/preview';
 import { EML_MIME, ICS_MIME } from '@workspace/lib/types/drive';
 import type { EmailSummary } from '@workspace/lib/types/mail';
@@ -767,7 +767,7 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
 
     test('a vCard part past the import ceiling is refused with 413', async () => {
         const boundary = 'att-oversize';
-        const filler = 'NOTE:'.concat('x'.repeat(IMPORT_MAX_BYTES / 8), '\r\n');
+        const filler = 'NOTE:'.concat('x'.repeat(VCARD_MAX_BYTES / 8), '\r\n');
         const bigCard = ['BEGIN:VCARD', 'VERSION:3.0', 'FN:Too Big', filler.repeat(9), 'END:VCARD'].join('\r\n');
         const eml = [
             'From: sender@external.com',

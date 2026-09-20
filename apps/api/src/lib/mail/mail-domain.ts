@@ -1,5 +1,6 @@
 import { MAIL_PREVIEW_CHARS, MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
 import { canonicalMailbox, MAILBOX_DRAFTS, MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
+import { NOT_AN_EMAIL_FILE } from '@workspace/lib/constants/transfer';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import {
     type AddressObject,
@@ -144,11 +145,11 @@ export class Mail {
         try {
             parsed = parseMail(bytes);
         } catch {
-            throw new ApiError(400, 'Not an email file');
+            throw new ApiError(400, NOT_AN_EMAIL_FILE);
         }
         // Any bytes parse as a body; only an envelope header makes them a message.
         if (!parsed.from && !parsed.date && parsed.subject === undefined && !parsed.messageId) {
-            throw new ApiError(400, 'Not an email file');
+            throw new ApiError(400, NOT_AN_EMAIL_FILE);
         }
         await enforceMailAndContactsQuota(this.home.user.id, bytes.byteLength);
 

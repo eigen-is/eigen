@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import type { CalendarEventOccurrence } from '@workspace/lib/types/calendar';
@@ -229,6 +229,25 @@ describe('Mail transfer routes', () => {
         const { id } = await assertJson<ImportMailResult>(res);
 
         expect((await inbox(alice)).find((m) => m.id === id)?.subject).toBe(subject);
+    });
+
+    // The whole message parses and indexes before the route answers, so it exempts itself from the
+    // server-wide idle timeout the way the raw import and both contacts imports do.
+    test('import-from-drive exempts its request from the idle timeout', async () => {
+        const uploaded = await uploadEml(message(`Timeout ${randomUUID()}`));
+        // app.handle() runs with no server, so the route's `server?.timeout` is a no-op in tests: give the
+        // app a real one to observe the call, and take it away again.
+        const server = Bun.serve({ port: 0, fetch: () => new Response('') });
+        app.server = server;
+        const timeout = spyOn(server, 'timeout');
+        try {
+            expect((await importFromDrive(alice, uploaded)).status).toBe(200);
+            expect(timeout.mock.calls.map(([, seconds]) => seconds)).toEqual([0]);
+        } finally {
+            timeout.mockRestore();
+            app.server = null;
+            server.stop(true);
+        }
     });
 
     test('import-from-drive on a file that is not an .eml is 400', async () => {

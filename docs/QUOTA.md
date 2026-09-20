@@ -15,6 +15,8 @@
 These are separate because they have different growth patterns. An email-heavy user is not blocked from uploading
 files, and vice versa.
 
+Calendar data is **unmetered**: nothing counts `calendar.db` against either bucket, so an import, a CalDAV PUT and an inbound iMIP all write event rows no ceiling bounds ([ROADMAP.md](ROADMAP.md) — "Calendar data has no quota"). The per-file import ceiling (`ICS_IMPORT_MAX_EVENTS`) bounds one call, not a Home.
+
 ## Resolution
 
 `resolveUserQuotas(mountConfig, teamIds)` computes a user's effective quotas by gathering candidates from the

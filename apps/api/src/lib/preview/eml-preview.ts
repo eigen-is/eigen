@@ -124,7 +124,7 @@ export function buildEmlPreviewPayload(data: ArrayBuffer): EmlPreview {
         attachments: parsed.attachments
             .slice(0, EML_PREVIEW_MAX_ATTACHMENTS)
             .map(({ filename, contentType, size }) => ({ filename, contentType, size })),
-        droppedAttachments: Math.max(parsed.attachments.length - EML_PREVIEW_MAX_ATTACHMENTS, 0),
+        remainingAttachments: Math.max(parsed.attachments.length - EML_PREVIEW_MAX_ATTACHMENTS, 0),
     };
 }
 

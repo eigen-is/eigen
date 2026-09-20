@@ -1,28 +1,19 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { type QueryClient, useMutation, useQueryClient } from '@tanstack/react-query';
 import { contactsApi, getContactsExportUrl, getContactsImportUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
-import type { ContactTransferSource, ImportContactsResult } from '@workspace/lib/types/contact';
-import { VCARD_MIMES } from '@workspace/lib/types/drive';
+import { type DriveImportSource, VCARD_MIMES } from '@workspace/lib/types/drive';
+import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { useCallback, useState } from 'react';
-import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
 import { downloadBlob, filenameFromDisposition } from '../../download';
+import { reportImportCounts } from '../../transfer';
 import { invalidateContactList } from './keys';
 
-// One phrasing for both import paths: a file from the disk and a file from Drive report the same three
-// counts. Nothing imported and nothing skipped means the file held no contact this book could take —
-// unreadable cards say so, because the file did hold contacts and none of them landed.
-function reportImport(result: ImportContactsResult): void {
-    const { imported, skipped, failed } = result;
-    if (!imported && !skipped) {
-        if (failed) toast.error(`${failed} contact${failed === 1 ? '' : 's'} could not be read`);
-        else toast.error('No contacts found in this file');
-        return;
-    }
-    const parts = [`Imported ${imported} contact${imported === 1 ? '' : 's'}`];
-    if (skipped) parts.push(`skipped ${skipped} duplicate${skipped === 1 ? '' : 's'}`);
-    if (failed) parts.push(`${failed} unreadable`);
-    toast.success(parts.join(', '));
+// One landing place for every import path: the cards are in the book, so the open list refreshes, and
+// the counts are reported in the wording every counted import shares.
+function reportImport(queryClient: QueryClient, ownerId: string, result: ImportCountsResult): void {
+    invalidateContactList(queryClient, ownerId);
+    reportImportCounts(result, 'contact');
 }
 
 // The export answers with the file itself, so it goes through raw fetch rather than Eden — same shape as
@@ -63,7 +54,7 @@ export function useExportContacts() {
 
 // The file travels as the raw body, not multipart: the route reads one vCard stream. Mirrors
 // useImportDocument.
-async function postImport(ownerId: string, file: Blob): Promise<ImportContactsResult> {
+async function postImport(ownerId: string, file: Blob): Promise<ImportCountsResult> {
     const response = await fetch(getContactsImportUrl(ownerId), {
         method: 'POST',
         headers: { 'content-type': VCARD_MIMES[0] },
@@ -80,11 +71,8 @@ export function useImportContacts() {
     const ownerId = user?.id || '';
 
     return useMutation({
-        mutationFn: (file: File): Promise<ImportContactsResult> => postImport(ownerId, file),
-        onSuccess: (result) => {
-            invalidateContactList(queryClient, ownerId);
-            reportImport(result);
-        },
+        mutationFn: (file: File): Promise<ImportCountsResult> => postImport(ownerId, file),
+        onSuccess: (result) => reportImport(queryClient, ownerId, result),
         onError: onMutationError,
     });
 }
@@ -97,15 +85,12 @@ export function useImportContactsFromUrl() {
     const ownerId = user?.id || '';
 
     return useMutation({
-        mutationFn: async ({ url }: { url: string }): Promise<ImportContactsResult> => {
+        mutationFn: async ({ url }: { url: string }): Promise<ImportCountsResult> => {
             const response = await fetch(url, { credentials: 'include' });
             if (!response.ok) throw new Error(await response.text());
             return postImport(ownerId, await response.blob());
         },
-        onSuccess: (result) => {
-            invalidateContactList(queryClient, ownerId);
-            reportImport(result);
-        },
+        onSuccess: (result) => reportImport(queryClient, ownerId, result),
         onError: onMutationError,
     });
 }
@@ -116,15 +101,12 @@ export function useImportContactsFromDrive() {
     const ownerId = user?.id || '';
 
     return useMutation({
-        mutationFn: async (source: ContactTransferSource) => {
+        mutationFn: async (source: DriveImportSource) => {
             const response = await contactsApi({ ownerId })['import-from-drive'].post(source);
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: (result) => {
-            invalidateContactList(queryClient, ownerId);
-            reportImport(result);
-        },
+        onSuccess: (result) => reportImport(queryClient, ownerId, result),
         onError: onMutationError,
     });
 }

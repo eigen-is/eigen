@@ -4,7 +4,7 @@ import { triggerDownload } from '@workspace/lib/download';
 import { useConvertDocument } from '@workspace/lib/drive';
 import { subjectInfo } from '@workspace/lib/file-subject';
 import { useImportMailFromDrive, useImportMailFromUrl } from '@workspace/lib/mail';
-import type { ConvertTarget, DrivePath } from '@workspace/lib/types/drive';
+import type { ConvertTarget, DriveImportSource, DrivePath } from '@workspace/lib/types/drive';
 import type { FileAction, FileActionId, FileSubject } from '@workspace/lib/types/file-subject';
 import { type ReactNode, useState } from 'react';
 import { ImportToCalendarPicker } from '../calendar/import-to-calendar-picker';
@@ -29,9 +29,6 @@ export type FileActionRunner = {
 
 // A convert on a subject with nothing in Drive to convert saves first; the label names the row that asked.
 type PickerState = { subjects: FileSubject[]; convert?: { targetType: ConvertTarget; label: string } };
-
-// What every import-from-drive route takes: the file to read, not where it lands.
-type DriveSource = { sourceOwnerId: string; sourceMountId: string; sourcePathId: string };
 
 // A host whose subject is state (the right-clicked chip or row) passes null while there is none;
 // `exclude` drops a row the host draws itself (the overlay is Quick Look, so it drops that one).
@@ -74,7 +71,7 @@ export function useFileActionRunner(
 
     // Every import reads the same way: a file at a Drive location is copied server-side, anything else
     // hands the route the bytes behind its download URL. Only the pair of hooks differs per format.
-    const runImport = (fromDrive: (source: DriveSource) => void, fromUrl: (input: { url: string }) => void) => {
+    const runImport = (fromDrive: (source: DriveImportSource) => void, fromUrl: (input: { url: string }) => void) => {
         if (!subject) return;
         const { drive } = subject;
         if (drive) {
