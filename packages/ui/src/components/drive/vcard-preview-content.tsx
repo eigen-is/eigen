@@ -12,24 +12,32 @@ import { PreviewPane } from './preview-pane';
 // The served cards, whichever route served them. Drive and mail each have their own component, so exactly
 // one query hook runs per render and the overlay picks by the subject it holds.
 export function VCardPreviewContent({ path }: { path: DrivePath }) {
-    const { data, isLoading } = useVCardPreview(path.ownerId, path.mountId, path.id, path.updatedAt, path.size);
-    return <VCardCards data={data} isLoading={isLoading} oversize={path.size > VCARD_MAX_BYTES} />;
+    const { data, isPending, isError } = useVCardPreview(
+        path.ownerId,
+        path.mountId,
+        path.id,
+        path.updatedAt,
+        path.size,
+    );
+    return <VCardCards data={data} isPending={isPending} isError={isError} oversize={path.size > VCARD_MAX_BYTES} />;
 }
 
 export function MailVCardPreviewContent({ part, size }: { part: MailPartRef; size: number }) {
     const oversize = size > VCARD_MAX_BYTES;
-    const { data, isLoading } = useMailVCardPreview(part.ownerId, part.messageId, part.index, !oversize);
-    return <VCardCards data={data} isLoading={isLoading} oversize={oversize} />;
+    const { data, isPending, isError } = useMailVCardPreview(part.ownerId, part.messageId, part.index, !oversize);
+    return <VCardCards data={data} isPending={isPending} isError={isError} oversize={oversize} />;
 }
 
 // Both routes serve one shape, so one renderer reads it.
 function VCardCards({
     data,
-    isLoading,
+    isPending,
+    isError,
     oversize,
 }: {
     data: VCardPreview | undefined;
-    isLoading: boolean;
+    isPending: boolean;
+    isError: boolean;
     oversize: boolean;
 }) {
     // The cards the file holds that this preview shows no card for — the unreadable ones get their own line.
@@ -42,7 +50,7 @@ function VCardCards({
     ];
 
     return (
-        <PreviewPane oversize={oversize} maxBytes={VCARD_MAX_BYTES} isLoading={isLoading} unreadable={!data}>
+        <PreviewPane oversize={oversize} maxBytes={VCARD_MAX_BYTES} isPending={isPending} unreadable={isError}>
             {data &&
                 (data.cards.length === 0 ? (
                     <EmptyState message="No contacts in this file" hint={counts.join(' · ') || undefined} />

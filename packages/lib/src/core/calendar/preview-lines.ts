@@ -1,8 +1,18 @@
 import type { ImipMethod } from '../../types/calendar';
+import { unreadableLine } from '../transfer';
 
-// The counted line an `.ics` preview ends on when the file holds more events than the payload lists.
+// The two counted lines an `.ics` preview ends on, spelled once for the quick look and the drive hero.
+export function droppedEventsLine(dropped: number): string {
+    return unreadableLine(dropped, 'event');
+}
+
 export function remainingEventsLine(remaining: number): string {
     return `and ${remaining} more event${remaining === 1 ? '' : 's'}`;
+}
+
+// The counted line an event's guest list ends on when the event holds more guests than the payload lists.
+export function remainingGuestsLine(remaining: number): string {
+    return `and ${remaining} more guest${remaining === 1 ? '' : 's'}`;
 }
 
 // What a file's own METHOD makes it: the banner a quick look shows above the events, so an invitation

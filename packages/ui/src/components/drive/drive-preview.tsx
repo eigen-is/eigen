@@ -1,5 +1,5 @@
 import { getDriveItemThumbnail } from '@workspace/lib/api';
-import { formatEventWhen, remainingEventsLine, viewerTimeZone } from '@workspace/lib/calendar';
+import { droppedEventsLine, formatEventWhen, remainingEventsLine, viewerTimeZone } from '@workspace/lib/calendar';
 import { CANVAS_PREVIEW_WIDTH, getTextPreviewMode, type TextPreviewMode } from '@workspace/lib/constants';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
@@ -160,7 +160,8 @@ function IcsHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; col
     if (isLoading) return null;
     if (!data || events.length === 0) return <IconFallback icon={icon} color={color} />;
 
-    const remaining = data.total - events.length;
+    // The masters the file holds that this hero shows no line for — the unreadable ones get their own line.
+    const remaining = data.total - data.dropped - events.length;
 
     return (
         <div className="absolute inset-0 flex flex-col justify-center gap-2 overflow-hidden px-4 pt-8 pb-3">
@@ -180,6 +181,9 @@ function IcsHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; col
             ))}
             {remaining > 0 && (
                 <p className="truncate text-xs text-muted-foreground">{remainingEventsLine(remaining)}</p>
+            )}
+            {data.dropped > 0 && (
+                <p className="truncate text-xs text-muted-foreground">{droppedEventsLine(data.dropped)}</p>
             )}
         </div>
     );

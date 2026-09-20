@@ -6,7 +6,7 @@ import {
     TEXT_PREVIEW_MAX_BYTES,
 } from '../constants/preview';
 import { type DrivePath, isCollabType, isEmlFile, isIcsFile, isImageMime, isVCardFile } from '../types/drive';
-import type { FileSubject, MailPartRef, PreviewMode, SubjectInfo } from '../types/file-subject';
+import type { FileImportSource, FileSubject, MailPartRef, PreviewMode, SubjectInfo } from '../types/file-subject';
 import { type Attachment, mailAttachmentName } from '../types/mail';
 import {
     getDriveDownloadUrl,
@@ -69,6 +69,18 @@ function mailInfo(
         embedUrl: getMailAttachmentEmbedUrl(ownerId, messageId, index, name),
         downloadUrl: getMailAttachmentUrl(ownerId, messageId, index, name),
     };
+}
+
+// Where an import route reads this file: a file at a Drive location is copied server-side, anything else
+// hands the route the bytes behind its download URL. Null for a subject with no bytes at all (a folder,
+// an Eigen container), which no import row applies to.
+export function importSourceOf(subject: FileSubject): FileImportSource | null {
+    const { downloadUrl } = subjectInfo(subject);
+    if (!downloadUrl) return null;
+    const { drive } = subject;
+    return drive
+        ? { drive: { sourceOwnerId: drive.ownerId, sourceMountId: drive.mountId, sourcePathId: drive.id } }
+        : { url: downloadUrl };
 }
 
 // A Drive image is resized by /preview; any other <img> shows the original bytes, so only a browser-decodable

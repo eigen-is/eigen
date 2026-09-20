@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { type RefObject, useSyncExternalStore } from 'react';
 
 // Is a modal open? Every one carries role="dialog" (Radix dialogs, alert dialogs and popovers; the
 // hand-rolled overlays under `useFocusTrap`), so the DOM is the one source. The gate every
@@ -9,6 +9,9 @@ import { useSyncExternalStore } from 'react';
 // Presence rather than focus: a dialog opened from a context menu has no trigger left to return focus
 // to, so its close lands focus on <body> without an event, and a focus-based gate would stick shut.
 // Radix keeps a closing dialog mounted as data-state="closed" for its exit animation.
+//
+// `except` is for an overlay that is a dialog itself and asks about the layers above it: the file
+// preview reads its own keys off this gate, so the popover its content mounts stands them down.
 const OPEN_DIALOG = '[role="dialog"]:not([data-state="closed"]), [role="alertdialog"]:not([data-state="closed"])';
 
 // One observer for every subscriber, alive only while one is mounted.
@@ -32,9 +35,12 @@ function subscribe(onChange: () => void): () => void {
     };
 }
 
-const getSnapshot = () => document.querySelector(OPEN_DIALOG) !== null;
 const getServerSnapshot = () => false;
 
-export function useDialogOpen(): boolean {
+export function useDialogOpen(except?: RefObject<HTMLElement | null>): boolean {
+    const getSnapshot = () => {
+        for (const dialog of document.querySelectorAll(OPEN_DIALOG)) if (dialog !== except?.current) return true;
+        return false;
+    };
     return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }
