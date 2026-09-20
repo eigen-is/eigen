@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import type { Address, Contact, CreateContactInput, ImportContactsResult } from '@workspace/lib/types/contact';
+import type { Address, Contact, CreateContactInput } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { SSEventType } from '@workspace/lib/types/sse';
+import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { Semaphore } from '../../utils/semaphore';
@@ -918,7 +919,7 @@ export class Contacts {
         return transfer.exportCards(this, ids);
     }
 
-    public async importCards(text: string): Promise<ImportContactsResult> {
+    public async importCards(text: string): Promise<ImportCountsResult> {
         return transfer.importCards(this, text);
     }
 

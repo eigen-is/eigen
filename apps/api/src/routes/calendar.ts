@@ -5,9 +5,9 @@ import type {
     CalendarItem,
     CalendarShare,
     FreeBusyBlock,
-    ImportEventsResult,
 } from '@workspace/lib/types/calendar';
 import { isIcsFile } from '@workspace/lib/types/drive';
+import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { type IcsParseResult, parseIcs } from '../lib/caldav/ical-parse';
@@ -383,7 +383,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
     // not a target: that write crosses homes, which only the relay may do.
     .post(
         '/calendar/:ownerId/import',
-        async ({ params, query, request, user, server }): Promise<ImportEventsResult> => {
+        async ({ params, query, request, user, server }): Promise<ImportCountsResult> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             // A file of a thousand events writes a row apiece before this answers — longer than any
@@ -399,7 +399,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
 
     .post(
         '/calendar/:ownerId/import-from-drive',
-        async ({ params, body, user }): Promise<ImportEventsResult> => {
+        async ({ params, body, user }): Promise<ImportCountsResult> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             const bytes = await readImportSourceBytes(user, body, {

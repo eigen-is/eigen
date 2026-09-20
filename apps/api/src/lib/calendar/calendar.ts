@@ -12,11 +12,11 @@ import type {
     CalendarItem,
     CalendarShare,
     EventData,
-    ImportEventsResult,
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
 import { isExternalOwnerId, parseOwnerId } from '@workspace/lib/types/owner';
 import { SSEventType } from '@workspace/lib/types/sse';
+import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { and, count, eq, gt, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { RRule } from 'rrule';
@@ -314,7 +314,7 @@ export class Calendar {
     // file's ORGANIZER and ATTENDEE lists are dropped, because a stored organizer reads as someone
     // else's invitation (the updateEvent guard locks it, delete becomes a decline) and an attendee list
     // mails the file author's addresses on every later edit.
-    public importEvents(calendarId: string, parsed: IcsParseResult): ImportEventsResult {
+    public importEvents(calendarId: string, parsed: IcsParseResult): ImportCountsResult {
         const cal = this.getCalendarById(calendarId);
         if (!cal) throw new ApiError(404, 'Calendar not found');
 
@@ -334,7 +334,7 @@ export class Calendar {
             else overridesByUid.set(event.uid, [event]);
         }
 
-        const result: ImportEventsResult = { imported: 0, skipped: 0, failed: 0 };
+        const result: ImportCountsResult = { imported: 0, skipped: 0, failed: 0 };
         // One transaction for the file: a crash mid-loop would otherwise leave masters behind that a
         // retry skips, so a series would lose its overrides for good.
         this.db.transaction((tx) => {

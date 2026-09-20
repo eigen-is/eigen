@@ -1,7 +1,8 @@
 import { VCARD_CONTENT_TYPE, VCARD_IMPORT_MAX_CARDS, VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
-import type { Contact, ImportContactsResult } from '@workspace/lib/types/contact';
+import type { Contact } from '@workspace/lib/types/contact';
 import { isVCardFile } from '@workspace/lib/types/drive';
 import type { Label } from '@workspace/lib/types/label';
+import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { enforceAvatarUpload } from '../lib/config/enforcement';
@@ -231,7 +232,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
     )
     .post(
         '/contacts/:ownerId/import',
-        async ({ params, request, user, server }): Promise<ImportContactsResult> => {
+        async ({ params, request, user, server }): Promise<ImportCountsResult> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             // A whole book replays card by card through the CardDAV write seam, answering nothing until the
@@ -245,7 +246,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
     )
     .post(
         '/contacts/:ownerId/import-from-drive',
-        async ({ params, body, request, user, server }): Promise<ImportContactsResult> => {
+        async ({ params, body, request, user, server }): Promise<ImportCountsResult> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             // Same idle-timeout exemption as the raw import route: silent until the last card lands.

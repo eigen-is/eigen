@@ -1,8 +1,8 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
-import type { ImportContactsResult } from '@workspace/lib/types/contact';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { splitVCards } from '../../lib/vcard';
 import {
     app,
@@ -122,7 +122,7 @@ describe('Contacts transfer routes', () => {
             card('Barbara Liskov', 'barbara@vcard-routes.example');
 
         const res = await importRequest(alice, text);
-        expect(await assertJson<ImportContactsResult>(res)).toEqual({ imported: 2, skipped: 0, failed: 0 });
+        expect(await assertJson<ImportCountsResult>(res)).toEqual({ imported: 2, skipped: 0, failed: 0 });
     });
 
     test('raw import over VCARD_MAX_BYTES is 413 before the body is read', async () => {
@@ -162,7 +162,7 @@ describe('Contacts transfer routes', () => {
         const uploaded = await driveUpload(alice.sessionToken, alice.id, mountId, rootId, file);
 
         const res = await importFromDrive(alice, uploaded);
-        expect(await assertJson<ImportContactsResult>(res)).toEqual({ imported: 2, skipped: 0, failed: 0 });
+        expect(await assertJson<ImportCountsResult>(res)).toEqual({ imported: 2, skipped: 0, failed: 0 });
     });
 
     test('import-from-drive on a .txt is 400', async () => {

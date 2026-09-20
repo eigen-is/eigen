@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { VCARD_IMPORT_MAX_CARDS } from '@workspace/lib/constants/contact';
-import type { ImportContactsResult } from '@workspace/lib/types/contact';
+import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { eq } from 'drizzle-orm';
 import { ApiError } from '../core';
 import { makeLine, parseVCard, serializeVCardLines, splitVCards, transcodeTo30, VCardError } from '../vcard';
@@ -49,7 +49,7 @@ function withMintedUid(parsed: ParsedCard): string {
 // running Set means a file that repeats an address imports it once. A card that fails on its own content
 // (unparseable, refused by the PUT) is counted and the file continues; only the shared storage quota stops
 // the run, because every later card would be refused the same way.
-export async function importCards(contacts: Contacts, text: string): Promise<ImportContactsResult> {
+export async function importCards(contacts: Contacts, text: string): Promise<ImportCountsResult> {
     let cards: string[];
     try {
         cards = splitVCards(text);
@@ -66,7 +66,7 @@ export async function importCards(contacts: Contacts, text: string): Promise<Imp
         }
     }
 
-    const result: ImportContactsResult = { imported: 0, skipped: 0, failed: 0 };
+    const result: ImportCountsResult = { imported: 0, skipped: 0, failed: 0 };
     // One list-level event for the whole file instead of one per card (a thousand cards were a thousand broadcasts).
     await contacts.withBatchedEvents(async () => {
         for (const card of cards) {

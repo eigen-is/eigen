@@ -1,14 +1,10 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { ICS_IMPORT_MAX_EVENTS, ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
-import type {
-    CalendarEvent,
-    CalendarEventOccurrence,
-    CalendarItem,
-    ImportEventsResult,
-} from '@workspace/lib/types/calendar';
+import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { type DrivePath, EML_MIME, ICS_MIME } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
+import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
@@ -143,7 +139,7 @@ describe('Calendar transfer routes', () => {
             vevent(`plain-3-${stamp}@other`, 'Demo', '20260404T090000Z', '20260404T100000Z'),
         );
 
-        const result = await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file));
+        const result = await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file));
         expect(result).toEqual({ imported: 3, skipped: 0, failed: 0 });
 
         const listed = await april();
@@ -191,12 +187,12 @@ describe('Calendar transfer routes', () => {
             vevent(`twice-2-${stamp}@other`, 'Again', '20260405T110000Z', '20260405T120000Z'),
         );
 
-        expect(await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file))).toEqual({
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
             imported: 2,
             skipped: 0,
             failed: 0,
         });
-        expect(await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file))).toEqual({
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
             imported: 0,
             skipped: 2,
             failed: 0,
@@ -208,12 +204,12 @@ describe('Calendar transfer routes', () => {
         const stamp = randomUUID();
         const file = feed(vevent(`elsewhere-${stamp}@other`, 'Only once', '20260406T090000Z', '20260406T100000Z'));
 
-        expect(await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file))).toEqual({
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
             imported: 1,
             skipped: 0,
             failed: 0,
         });
-        expect(await assertJson<ImportEventsResult>(await importRequest(alice, secondCalendarId, file))).toEqual({
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, secondCalendarId, file))).toEqual({
             imported: 0,
             skipped: 1,
             failed: 0,
@@ -244,7 +240,7 @@ describe('Calendar transfer routes', () => {
             'END:VCALENDAR',
         ].join('\r\n');
 
-        expect(await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file))).toEqual({
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
             imported: 1,
             skipped: 0,
             failed: 0,
@@ -337,7 +333,7 @@ describe('Calendar transfer routes', () => {
             vevent(`fine-2-${stamp}@other`, 'Fine two', '20260409T130000Z', '20260409T140000Z'),
         );
 
-        expect(await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file))).toEqual({
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
             imported: 2,
             skipped: 0,
             failed: 1,
@@ -354,7 +350,7 @@ describe('Calendar transfer routes', () => {
             vevent(`forward-${stamp}@other`, 'Forwards', '20260410T140000Z', '20260410T150000Z'),
         );
 
-        expect(await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file))).toEqual({
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
             imported: 1,
             skipped: 0,
             failed: 1,
@@ -373,7 +369,7 @@ describe('Calendar transfer routes', () => {
             vevent(uidB, 'Standup B moved', '20260416T140000Z', '20260416T143000Z', ['RECURRENCE-ID:20260416T100000Z']),
         );
 
-        expect(await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file))).toEqual({
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
             imported: 2,
             skipped: 0,
             failed: 0,
@@ -408,7 +404,7 @@ describe('Calendar transfer routes', () => {
         );
 
         const sse = collectSSE(alice.id);
-        const result = await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file));
+        const result = await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file));
         sse.stop();
         expect(result).toEqual({ imported: 1, skipped: 0, failed: 0 });
         expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENT_CREATED).length).toBe(1);
@@ -441,7 +437,7 @@ describe('Calendar transfer routes', () => {
             vevent(uid, 'Traversal', '20260901T090000Z', '20260901T093000Z', ['RRULE:FREQ=DAILY;COUNT=3']),
             vevent(uid, 'Traversal moved', '20260902T110000Z', '20260902T113000Z', ['RECURRENCE-ID:20260902T090000Z']),
         );
-        expect(await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file))).toEqual({
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
             imported: 1,
             skipped: 0,
             failed: 0,
@@ -484,7 +480,7 @@ describe('Calendar transfer routes', () => {
             vevent(wholeUid, 'Whole event', '20260801T100000Z', '20260801T103000Z'),
         );
 
-        expect(await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file))).toEqual({
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
             imported: 1,
             skipped: 0,
             failed: 1,
@@ -564,7 +560,7 @@ describe('Calendar transfer routes', () => {
 
         const sse = collectSSE(alice.id);
         const started = Date.now();
-        const result = await assertJson<ImportEventsResult>(await importRequest(alice, calendarId, file));
+        const result = await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file));
         const elapsed = Date.now() - started;
         sse.stop();
 
@@ -686,7 +682,7 @@ describe('Calendar transfer routes', () => {
             feed(vevent(`drive-${stamp}@other`, 'From Drive', '20260425T090000Z', '20260425T100000Z')),
         );
 
-        const result = await assertJson<ImportEventsResult>(await importFromDrive(alice, calendarId, uploaded));
+        const result = await assertJson<ImportCountsResult>(await importFromDrive(alice, calendarId, uploaded));
         expect(result).toEqual({ imported: 1, skipped: 0, failed: 0 });
         expect((await april()).some((e) => e.uid === `drive-${stamp}@other`)).toBe(true);
     });

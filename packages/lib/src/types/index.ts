@@ -15,5 +15,6 @@ export * from './public';
 export * from './search';
 export * from './settings';
 export * from './sse';
+export * from './transfer';
 export * from './util';
 export * from './waitlist';

@@ -48,7 +48,3 @@ export type ContactSuggestion = {
     // Only set for kind: 'team' — the team the member was matched from.
     teamId?: string;
 };
-
-// What one vCard import file did: a card is imported, skipped as a duplicate (UID or first email) or as a
-// group, or failed on its own content. The three always sum to the number of cards in the file.
-export type ImportContactsResult = { imported: number; skipped: number; failed: number };
