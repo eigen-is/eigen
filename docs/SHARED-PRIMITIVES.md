@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1500 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1506 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -203,7 +203,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyGestureContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (275)
+## Hooks (277)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -261,6 +261,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useDeleteEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useDeleteSharedCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useEvents` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
+| `useImportCalendarFromDrive` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-transfer.ts |
+| `useImportCalendarFromUrl` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-transfer.ts |
 | `useMoveEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useRsvp` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useSharedCalendars` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
@@ -483,7 +485,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (352)
+## Types (353)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -632,6 +634,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ImageDimensions` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `ImipMethod` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `ImportContactsResult` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
+| `ImportEventsResult` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `ImportMailResult` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `InheritedAccessItem` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `InviteResult` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -840,7 +843,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (696)
+## Utilities & constants (699)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -865,6 +868,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getBackupArtifactUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getBackupUploadUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getCalendarAppUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `getCalendarImportUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getChangelogUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getChatAppUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getCollabAccessUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
@@ -1048,6 +1052,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getFontFamily` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `getFontName` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `getTextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
+| `ICS_IMPORT_MAX_EVENTS` | `@workspace/lib/constants` | packages/lib/src/constants/calendar.ts |
+| `ICS_IMPORT_MAX_REMINDERS` | `@workspace/lib/constants` | packages/lib/src/constants/calendar.ts |
 | `ICS_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/calendar.ts |
 | `ICS_PREVIEW_MAX_ATTENDEES` | `@workspace/lib/constants` | packages/lib/src/constants/calendar.ts |
 | `ICS_PREVIEW_MAX_DESCRIPTION_CHARS` | `@workspace/lib/constants` | packages/lib/src/constants/calendar.ts |
