@@ -25,7 +25,7 @@ import { type SSEventMail, SSEventType } from '@workspace/lib/types/sse';
 import { processInboundImip, summarizeCalendarInvite } from '../calendar/imip';
 import { isDemo } from '../config/env';
 import { isInternalAddress } from '../config/server-config';
-import { ApiError } from '../core';
+import { ApiError, isSafePathSegment } from '../core';
 import { renderAttachmentLinksText, renderAttachmentPills } from '../core/mail-template';
 import { type OutboundMail, sendMail } from '../core/mailer';
 import type { Home } from '../home';
@@ -46,6 +46,15 @@ const FULL_SAVE_INTERVAL_MS = 5 * 60 * 1000;
 function canonicalMailbox(name: string): string {
     if (name === MAILBOX_INBOX || name.toLowerCase() === MAILBOX_INBOX_KEY) return MAILBOX_INBOX;
     return STANDARD_MAILBOXES.find((m) => m.toLowerCase() === name.toLowerCase()) ?? name;
+}
+
+// A draft id names a file under every store — a Maildir message and its sidecar here — so a client-chosen one
+// is validated in the domain, where a second MailStore inherits the guarantee. Blank normalizes to undefined,
+// or `?? createUniqueMessageId()` bakes a `Message-ID: <@domain>` into the EML.
+function draftIdOf(email: NewDraft | EmailDraft): string | undefined {
+    const id = email.id?.trim() || undefined;
+    if (id && !isSafePathSegment(id)) throw new ApiError(400, `Invalid draft id: ${id}`);
+    return id;
 }
 
 function appendReferenceLinks(html: string, refs: AttachmentReference[], recipientEmail?: string): string {
@@ -259,7 +268,7 @@ export class Mail {
     // -- Draft & Send --
 
     async messageHandleDraft(email: NewDraft | EmailDraft, options: DraftUpdateOptions = {}): Promise<EmailDraft> {
-        const existingId = email.id?.trim() || undefined;
+        const existingId = draftIdOf(email);
         const hasNewTemps = !!options.tempAttachmentIds?.length;
 
         // Fast path: when a draft with attachments already exists on disk and no attachment
@@ -546,9 +555,8 @@ export class Mail {
         mailToSend: NewDraft | EmailDraft,
         options?: { grantAccessRefIds?: string[] },
     ): Promise<SentMailResult> {
-        // Full EML rebuild so attachment content is available for SMTP; a blank id must normalize to
-        // undefined or `?? createUniqueMessageId()` bakes a `Message-ID: <@domain>` into the EML.
-        const mail = await this.draftFullSave(mailToSend, mailToSend.id?.trim() || undefined, {});
+        // Full EML rebuild so attachment content is available for SMTP.
+        const mail = await this.draftFullSave(mailToSend, draftIdOf(mailToSend), {});
         const message = draftToOutboundMail(mail, this.home.user.email);
         const allRecipients = [...message.to, ...(message.cc ?? []), ...(message.bcc ?? [])];
 

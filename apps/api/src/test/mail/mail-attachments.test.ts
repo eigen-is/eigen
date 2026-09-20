@@ -5,6 +5,10 @@ import { assertJson, authedRequest, getTestContext, putDraft, uploadDraftAttachm
 
 const isWindows = process.platform === 'win32';
 
+// The store names the sidecar after the draft id, which a client only ever gets from the server.
+const sidecarPath = (ownerId: string, draftId: string) =>
+    join(process.env['EIGEN_DATA_ROOT']!, 'home', ownerId, 'eigen.mail', 'draft-meta', `${draftId}.json`);
+
 describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
@@ -504,16 +508,8 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
             { tempAttachmentIds: [uploaded.tempId] },
         );
 
-        // Rewrite the sidecar in the shape it had before parts carried an index. The store names the
-        // file after the sanitized draft id.
-        const metaPath = join(
-            process.env['EIGEN_DATA_ROOT']!,
-            'home',
-            ownerId,
-            'eigen.mail',
-            'draft-meta',
-            `${first.id.replace(/[^a-zA-Z0-9-_]/g, '_')}.json`,
-        );
+        // Rewrite the sidecar in the shape it had before parts carried an index.
+        const metaPath = sidecarPath(ownerId, first.id);
         const meta = JSON.parse(readFileSync(metaPath, 'utf8')) as { attachments: Array<{ index?: number }> };
         for (const a of meta.attachments) delete a.index;
         writeFileSync(metaPath, JSON.stringify(meta));
@@ -552,14 +548,7 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
 
         // The sidecar is plain JSON on disk, so a hand-edited or truncated one can name a part with
         // anything at all. Nothing but a number can be matched against a keep list.
-        const metaPath = join(
-            process.env['EIGEN_DATA_ROOT']!,
-            'home',
-            ownerId,
-            'eigen.mail',
-            'draft-meta',
-            `${first.id.replace(/[^a-zA-Z0-9-_]/g, '_')}.json`,
-        );
+        const metaPath = sidecarPath(ownerId, first.id);
         const meta = JSON.parse(readFileSync(metaPath, 'utf8')) as { attachments: Array<{ index: number | null }> };
         for (const a of meta.attachments) a.index = null;
         writeFileSync(metaPath, JSON.stringify(meta));
