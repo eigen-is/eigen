@@ -4,13 +4,13 @@
 // PUT/GET handlers and diffs what round-trips — against the app-facing occurrence expansion
 // (event-range) and against a re-parse of the served .ics. Sibling nets: occurrence keying (#8)
 // in calendar-timezone.test.ts, iMIP instance scoping (#A/#B/#H) in ical-imip.test.ts.
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
 import { parseIcs } from '../../lib/caldav/ical-parse';
 import { serializeEventForImip } from '../../lib/caldav/ical-serialize';
 import { getHome } from '../../lib/home';
-import { app, assertJson, authedRequest, getTestContext } from '../setup';
+import { app, assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
 
 const VTZ_NY = [
     'BEGIN:VTIMEZONE',
@@ -474,6 +474,262 @@ describe('CalDAV round-trip fidelity', () => {
             expect(ics).not.toContain('EXDATE');
             // The unkeyable override falls back to its own startTime (pre-#C shape) rather than 500ing.
             expect(ics).toContain('RECURRENCE-ID;TZID=America/New_York:20260610T060000');
+        });
+    });
+
+    // Apple Calendar and Thunderbird write ORGANIZER:mailto:<the account's own address> on every event
+    // they create with guests. That is an organizer-side event, not an invitation from someone else, so
+    // the linked-copy guard must leave it editable — by its own client and by the web app.
+    describe('ORGANIZER = the calendar owner', () => {
+        const UID = 'rt-own-organizer@eigen';
+        const GUEST = 'own-org-guest@external.com';
+        const SECOND_GUEST = 'own-org-guest-two@external.com';
+
+        const ownEventIcs = (summary: string, start: string, end: string, guests: string[]) =>
+            vcal(
+                [
+                    'BEGIN:VEVENT',
+                    `UID:${UID}`,
+                    `DTSTART:${start}`,
+                    `DTEND:${end}`,
+                    `SUMMARY:${summary}`,
+                    // Mixed case on purpose: an address is case-insensitive, and clients echo what the user typed.
+                    `ORGANIZER;CN=Alice Test:mailto:${ctx.alice.user.email.toUpperCase()}`,
+                    `ATTENDEE;PARTSTAT=ACCEPTED;CN=Alice Test:mailto:${ctx.alice.user.email}`,
+                    ...guests.map((g) => `ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION:mailto:${g}`),
+                    'END:VEVENT',
+                ].join('\r\n'),
+            );
+
+        async function ownOccurrence(): Promise<CalendarEventOccurrence> {
+            const occs = await getOccurrences('2026-05-01T00:00:00Z', '2026-06-01T00:00:00Z');
+            return findOrFail(occs, (o) => o.uid === UID);
+        }
+
+        test("a client's own later PUT changes title, time and attendees", async () => {
+            const created = await putIcs(
+                'rt-own-organizer.ics',
+                ownEventIcs('Design review', '20260512T090000Z', '20260512T100000Z', [GUEST]),
+            );
+            expect(created.status).toBe(201);
+
+            const changed = await putIcs(
+                'rt-own-organizer.ics',
+                ownEventIcs('Design review (moved)', '20260512T140000Z', '20260512T150000Z', [GUEST, SECOND_GUEST]),
+            );
+            expect(changed.status).toBe(204);
+
+            const occ = await ownOccurrence();
+            expect(occ.title).toBe('Design review (moved)'); // pre-fix: 'Design review'
+            expect(new Date(occ.startTime).toISOString()).toBe('2026-05-12T14:00:00.000Z');
+            expect(occ.data?.attendees?.map((a) => a.email)).toContain(SECOND_GUEST);
+
+            const ics = await getIcs('rt-own-organizer.ics');
+            expect(ics).toContain('SUMMARY:Design review (moved)');
+        });
+
+        test('the web route edits it and fans out to the guests as organizer', async () => {
+            const mailer = await import('../../lib/core/mailer');
+            const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+            spy.mockClear();
+
+            const occ = await ownOccurrence();
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${userId}/calendars/${calendarId}/events/${occ.id}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: 'Design review (web)' }),
+                },
+            );
+            const updated = await assertJson<CalendarEvent>(res);
+            await new Promise((r) => setTimeout(r, 300)); // let the fire-and-forget fan-out run
+
+            expect(updated.title).toBe('Design review (web)'); // pre-fix: the edit was dropped
+            expect(updated.sequence).toBeGreaterThan(occ.sequence);
+            const updates = spy.mock.calls.filter((c) => c[0].subject === 'Updated invitation: Design review (web)');
+            expect(updates.flatMap((c) => c[0].to.map((t) => t.address))).toContain(GUEST);
+            spy.mockRestore();
+        });
+
+        test('a web edit keeps the ORGANIZER and the guests the client wrote', async () => {
+            const mailer = await import('../../lib/core/mailer');
+            const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+
+            const occ = await ownOccurrence();
+            // The edit dialog posts the whole event.data back with its attendee list; EventDataSchema
+            // has no organizer, so the payload the route sees carries attendees only.
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${userId}/calendars/${calendarId}/events/${occ.id}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Design review (web)',
+                        data: { ...occ.data, attendees: occ.data?.attendees },
+                    }),
+                },
+            );
+            expect(res.status).toBe(200);
+            await new Promise((r) => setTimeout(r, 300));
+            spy.mockRestore();
+
+            const served = parseIcs(await getIcs('rt-own-organizer.ics')).events[0];
+            expect(served.data?.organizer?.email.toLowerCase()).toBe(ctx.alice.user.email); // pre-fix: undefined
+            expect(served.data?.attendees?.map((a) => a.email)).toEqual(expect.arrayContaining([GUEST, SECOND_GUEST]));
+        });
+
+        test('a CalDAV PUT without ORGANIZER removes it — the protocol stays a full-resource replace', async () => {
+            const uri = 'rt-organizer-dropped.ics';
+            const ics = (organizer: boolean) =>
+                vcal(
+                    [
+                        'BEGIN:VEVENT',
+                        'UID:rt-organizer-dropped@eigen',
+                        'DTSTART:20260518T090000Z',
+                        'DTEND:20260518T100000Z',
+                        'SUMMARY:Solo block',
+                        ...(organizer ? [`ORGANIZER;CN=Alice Test:mailto:${ctx.alice.user.email}`] : []),
+                        `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${GUEST}`,
+                        'END:VEVENT',
+                    ].join('\r\n'),
+                );
+
+            expect((await putIcs(uri, ics(true))).status).toBe(201);
+            expect(parseIcs(await getIcs(uri)).events[0].data?.organizer?.email).toBe(ctx.alice.user.email);
+
+            expect((await putIcs(uri, ics(false))).status).toBe(204);
+            expect(parseIcs(await getIcs(uri)).events[0].data?.organizer).toBeUndefined();
+        });
+
+        test('an upper-case MAILTO: scheme names the same owner, and the same guest', async () => {
+            const uri = 'rt-organizer-uppercase.ics';
+            const ics = (summary: string) =>
+                vcal(
+                    [
+                        'BEGIN:VEVENT',
+                        'UID:rt-organizer-uppercase@eigen',
+                        'DTSTART:20260519T090000Z',
+                        'DTEND:20260519T100000Z',
+                        `SUMMARY:${summary}`,
+                        // RFC 5545 values carry a URI: its scheme is case-insensitive and clients emit both.
+                        `ORGANIZER;CN=Alice Test:MAILTO:${ctx.alice.user.email}`,
+                        `ATTENDEE;PARTSTAT=NEEDS-ACTION:MAILTO:${GUEST}`,
+                        'END:VEVENT',
+                    ].join('\r\n'),
+                );
+
+            expect((await putIcs(uri, ics('Budget'))).status).toBe(201);
+            expect((await putIcs(uri, ics('Budget (moved)'))).status).toBe(204);
+
+            const occs = await getOccurrences('2026-05-01T00:00:00Z', '2026-06-01T00:00:00Z');
+            const occ = findOrFail(occs, (o) => o.uid === 'rt-organizer-uppercase@eigen');
+            expect(occ.title).toBe('Budget (moved)'); // pre-fix: 'Budget' — the row read as an invitation
+            expect(occ.data?.organizer?.email).toBe(ctx.alice.user.email);
+            expect(occ.data?.attendees?.map((a) => a.email)).toEqual([GUEST]);
+        });
+
+        test('a CalDAV PUT mails the guests nothing — invitations fan out from the web route only', async () => {
+            const mailer = await import('../../lib/core/mailer');
+            const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+            spy.mockClear();
+
+            const uri = 'rt-organizer-silent.ics';
+            const ics = (summary: string) =>
+                vcal(
+                    [
+                        'BEGIN:VEVENT',
+                        'UID:rt-organizer-silent@eigen',
+                        'DTSTART:20260520T090000Z',
+                        'DTEND:20260520T100000Z',
+                        `SUMMARY:${summary}`,
+                        `ORGANIZER;CN=Alice Test:mailto:${ctx.alice.user.email}`,
+                        `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${GUEST}`,
+                        'END:VEVENT',
+                    ].join('\r\n'),
+                );
+
+            expect((await putIcs(uri, ics('Quiet sync'))).status).toBe(201);
+            expect((await putIcs(uri, ics('Quiet sync (moved)'))).status).toBe(204);
+            await new Promise((r) => setTimeout(r, 300));
+
+            expect(spy.mock.calls.map((c) => c[0].subject)).toEqual([]);
+            spy.mockRestore();
+        });
+
+        test('the web route deletes it without composing a decline', async () => {
+            const mailer = await import('../../lib/core/mailer');
+            const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+            spy.mockClear();
+
+            const occ = await ownOccurrence();
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${userId}/calendars/${calendarId}/events/${occ.id}`,
+                { method: 'DELETE' },
+            );
+            expect(res.status).toBe(200);
+            await new Promise((r) => setTimeout(r, 300));
+
+            const gone = await app.handle(
+                new Request(`http://localhost/dav/calendars/${userId}/${calendarId}/rt-own-organizer.ics`, {
+                    method: 'GET',
+                    headers: { Authorization: basicAuth(ctx.alice.user.email) },
+                }),
+            );
+            expect(gone.status).toBe(404);
+            // The organizer deleting cancels for the guests; a decline REPLY would mean the row was
+            // read as someone else's invitation.
+            const subjects = spy.mock.calls.map((c) => c[0].subject);
+            expect(subjects).toContain('Canceled: Design review (web)'); // pre-fix: 'Declined: …'
+            expect(subjects.some((s) => s.startsWith('Declined:'))).toBe(false);
+            spy.mockRestore();
+        });
+
+        test("control: an event organized by someone else stays locked against the client's PUT", async () => {
+            const foreignIcs = (summary: string) =>
+                vcal(
+                    [
+                        'BEGIN:VEVENT',
+                        'UID:rt-foreign-organizer@eigen',
+                        'DTSTART:20260514T090000Z',
+                        'DTEND:20260514T100000Z',
+                        `SUMMARY:${summary}`,
+                        'ORGANIZER;CN=External Org:mailto:ext-organizer@external.com',
+                        `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${ctx.alice.user.email}`,
+                        'END:VEVENT',
+                    ].join('\r\n'),
+                );
+            expect((await putIcs('rt-foreign-organizer.ics', foreignIcs('Partner sync'))).status).toBe(201);
+            expect((await putIcs('rt-foreign-organizer.ics', foreignIcs('Partner sync (hijacked)'))).status).toBe(204);
+
+            const occs = await getOccurrences('2026-05-01T00:00:00Z', '2026-06-01T00:00:00Z');
+            const occ = findOrFail(occs, (o) => o.uid === 'rt-foreign-organizer@eigen');
+            expect(occ.title).toBe('Partner sync');
+        });
+
+        // A CalDAV-parsed organizer is known by address only (no Eigen user id), so the decline takes the
+        // same iMIP REPLY path an external organizer takes — in-app propagation has nothing to address.
+        test('deleting that foreign-organizer event from the web replies with a decline', async () => {
+            const mailer = await import('../../lib/core/mailer');
+            const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+            spy.mockClear();
+
+            const occs = await getOccurrences('2026-05-01T00:00:00Z', '2026-06-01T00:00:00Z');
+            const occ = findOrFail(occs, (o) => o.uid === 'rt-foreign-organizer@eigen');
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${userId}/calendars/${calendarId}/events/${occ.id}`,
+                { method: 'DELETE' },
+            );
+            expect(res.status).toBe(200);
+            await new Promise((r) => setTimeout(r, 300));
+
+            const declines = spy.mock.calls.filter((c) => c[0].subject === 'Declined: Partner sync');
+            expect(declines.flatMap((c) => c[0].to.map((t) => t.address))).toEqual(['ext-organizer@external.com']);
+            spy.mockRestore();
         });
     });
 

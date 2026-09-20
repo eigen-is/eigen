@@ -53,6 +53,13 @@ function icalTimeToInstant(t: ICAL.Time, tzid: string | null): Date {
     return new Date(Date.UTC(t.year, t.month - 1, t.day, t.hour, t.minute, t.second));
 }
 
+// The address behind an ATTENDEE / ORGANIZER value. A CAL-ADDRESS is a URI, so its scheme is
+// case-insensitive (RFC 3986) and clients emit both `mailto:` and `MAILTO:` — a surviving prefix
+// matches no address anywhere, and the row reads as someone else's invitation.
+function calAddress(raw: unknown): string {
+    return (typeof raw === 'string' ? raw : String(raw ?? '')).trim().replace(/^mailto:\s*/i, '');
+}
+
 // The wall-clock day a RECURRENCE-ID / EXDATE keys to. Occurrence expansion and keying work in
 // wall-clock space (occurrenceDateToString, expandRecurrence), so an exception must be stored under
 // the same wall-clock date to attach to the right instance. `tz` is the timezone the series is
@@ -168,8 +175,7 @@ export function parseIcs(icsText: string): IcsParseResult {
 
         const attendeeProps = vevent.getAllProperties('attendee');
         const attendees: Attendee[] = attendeeProps.map((prop) => {
-            const rawValue = prop.getFirstValue();
-            const email = (typeof rawValue === 'string' ? rawValue : String(rawValue ?? '')).replace('mailto:', '');
+            const email = calAddress(prop.getFirstValue());
             const cnRaw = prop.getParameter('cn') || email;
             const cn: string = Array.isArray(cnRaw) ? (cnRaw[0] ?? email) : cnRaw;
             const partstatRaw = prop.getParameter('partstat') || 'NEEDS-ACTION';
@@ -201,8 +207,7 @@ export function parseIcs(icsText: string): IcsParseResult {
         const organizerProp = vevent.getFirstProperty('organizer');
         let organizer: EventData['organizer'] | undefined;
         if (organizerProp) {
-            const orgRaw = organizerProp.getFirstValue();
-            const orgEmail = (typeof orgRaw === 'string' ? orgRaw : String(orgRaw ?? '')).replace('mailto:', '');
+            const orgEmail = calAddress(organizerProp.getFirstValue());
             const orgCnRaw = organizerProp.getParameter('cn') || orgEmail;
             const orgCn: string = Array.isArray(orgCnRaw) ? (orgCnRaw[0] ?? orgEmail) : orgCnRaw;
             organizer = {

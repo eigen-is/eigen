@@ -2,7 +2,7 @@
 // which re-exports React-query hooks) so the API stays free of React in its module graph.
 
 import { randomUUID } from 'node:crypto';
-import { occurrenceDateToString, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
+import { isInvitationFromOthers, occurrenceDateToString, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import type {
     Attendee,
@@ -477,7 +477,7 @@ export class Calendar {
         if (!existing || existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
 
         // Linked event guard: attendees can only change local fields (reminders, color)
-        if (existing.data?.organizer) {
+        if (isInvitationFromOthers(existing, this.home.user)) {
             const localData: EventData = { ...existing.data };
             if (input.data) {
                 localData.reminders = input.data.reminders ?? localData.reminders;
@@ -495,7 +495,18 @@ export class Calendar {
         const allDay = input.allDay ?? existing.allDay;
         const status = input.status ?? existing.status;
         const sequence = input.sequence ?? existing.sequence;
-        const data = input.data !== undefined ? input.data : existing.data;
+        const inputData = input.data !== undefined ? input.data : existing.data;
+        // organizer and organizerEventId are server-owned and absent from the HTTP schema, so an HTTP
+        // edit (the call that carries `user`) keeps the stored pair instead of erasing it. A CalDAV PUT
+        // stays a full-resource replace: a payload without ORGANIZER removes it.
+        const data =
+            user && inputData
+                ? {
+                      ...inputData,
+                      organizer: existing.data?.organizer,
+                      organizerEventId: existing.data?.organizerEventId,
+                  }
+                : inputData;
 
         // Same interval invariant as createEvent, on the resolved (possibly dragged) times.
         if (endTime < startTime) throw new ApiError(400, 'Event end time cannot be before start time');
@@ -577,7 +588,7 @@ export class Calendar {
         // reminders/color above) must NOT bump SEQUENCE or send iMIP — doing so spoofs the attendee as
         // organizer AND outruns the organizer's SEQUENCE, so the RFC 5546 replay guard later drops the
         // organizer's real updates. Mirror the attendee discriminator at the top of updateEvent.
-        if (user && !existing.data?.organizer && updated.data?.attendees?.length) {
+        if (user && !isInvitationFromOthers(existing, this.home.user) && updated.data?.attendees?.length) {
             this.incrementSequence(id);
             const withSequence = this.getEventById(id)!;
             propagateInvitation(this.home, withSequence, user, oldAttendees, withSequence.data!.attendees!).catch(
@@ -596,14 +607,17 @@ export class Calendar {
         // 404 (not 403) on calendar mismatch so a share on one calendar can't oracle event ids in another.
         if (!existing || existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
 
-        if (user && existing.data?.organizer) {
+        const invitation = isInvitationFromOthers(existing, this.home.user) ? existing.data : null;
+        if (user && invitation?.organizer) {
             // Attendee deleting linked copy = decline
-            const orgUserId = existing.data.organizer.userId;
-            if (isExternalOwnerId(orgUserId)) {
+            const orgUserId = invitation.organizer.userId;
+            // A CalDAV- or iMIP-parsed organizer is known by address only; with no Eigen id to relay to,
+            // the decline takes the same REPLY path an external organizer takes.
+            if (!orgUserId || isExternalOwnerId(orgUserId)) {
                 const mail = composeRsvpReply(existing, user.email, user.name ?? user.email, 'declined');
                 sendMail(mail).catch(console.error);
             } else {
-                propagateDecline(orgUserId, existing.data.organizerEventId!, user.email).catch(console.error);
+                propagateDecline(orgUserId, invitation.organizerEventId!, user.email).catch(console.error);
             }
         } else if (existing.data?.attendees?.length) {
             // Organizer deleting = cancel for all attendees
@@ -1500,7 +1514,9 @@ export class Calendar {
     ): void {
         const event = this.getEventById(eventId);
         if (!event) throw new ApiError(404, 'Event not found');
-        if (!event.data?.organizer) throw new ApiError(400, 'Not a linked event');
+        if (!event.data?.organizer || !isInvitationFromOthers(event, this.home.user)) {
+            throw new ApiError(400, 'Not a linked event');
+        }
 
         const isAttendee = event.data.attendees?.some((a) => a.email.toLowerCase() === user.email.toLowerCase());
         if (!isAttendee) throw new ApiError(403, 'Not an attendee');
