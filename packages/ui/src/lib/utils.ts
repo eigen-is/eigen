@@ -19,8 +19,3 @@ export const IMAGE_CHECKERBOARD_STYLE = {
     backgroundColor: 'var(--muted)',
     backgroundSize: '16px 16px',
 } as const;
-
-export function ucfirst(str: string): string {
-    if (!str || str.length === 0) return str;
-    return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
-}

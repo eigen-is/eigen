@@ -1,7 +1,7 @@
 import { EIGEN_ACCENT_COLORS } from '@workspace/lib/constants/colors';
 import { sql } from 'drizzle-orm';
+import { isSafePathSegment } from '../core';
 import type { LocalFilesystem } from '../core/local-filesystem';
-import { isSafePathSegment } from '../core/path-utils';
 import type { ParsedCard } from '../vcard/types';
 import type * as schema from './schema';
 
@@ -15,8 +15,8 @@ export function cardPath(uri: string): string {
     return `${CARDS_DIR}/${uri}`;
 }
 
-// A client-chosen resource name that is safe as both a filename and a DAV href: the shared segment rule
-// (`lib/core/path-utils.ts`) plus the `.vcf` suffix CardDAV resources carry.
+// Safe as both a filename and a DAV href: the shared segment rule plus the `.vcf` suffix a CardDAV
+// resource carries.
 export function sanitizeCardUri(raw: string): string | null {
     const uri = raw.normalize('NFC');
     return uri.endsWith('.vcf') && isSafePathSegment(uri) ? uri : null;

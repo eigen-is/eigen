@@ -1,5 +1,5 @@
 import type { CalendarItem } from '@workspace/lib/types/calendar';
-import { isSafePathSegment } from '../core/path-utils';
+import { isSafePathSegment } from '../core';
 import { calendarHomeHref, encodePathSegment } from '../dav/href';
 import type { PropfindRequest } from '../dav/propfind';
 import {
@@ -21,8 +21,8 @@ export const calendarHref = (ownerId: string, calendarId: string) => `/dav/calen
 export const eventHref = (ownerId: string, calendarId: string, uri: string) =>
     `${calendarHref(ownerId, calendarId)}${encodePathSegment(uri)}`;
 
-// A client-chosen calendar id (MKCALENDAR) that is safe to emit raw into an href: calendarHref does not encode
-// it, so it takes the shared segment rule (`lib/core/path-utils.ts`), NFC-normalized. Returns null on reject.
+// A client-chosen calendar id (MKCALENDAR) goes raw into an href — calendarHref does not encode it — so it
+// takes the shared segment rule over the NFC form. Null on reject.
 export function sanitizeCalendarId(raw: string): string | null {
     const id = raw.normalize('NFC');
     return isSafePathSegment(id) ? id : null;

@@ -39,7 +39,7 @@ describe('Mail usage', () => {
 
     beforeAll(async () => {
         await ensureServer();
-        const user = await createTestUser('mailsize@test.eigen.is', 'testpassword123', 'Mail Size');
+        const user = await createTestUser(`mailsize-${Date.now()}@test.eigen.is`, 'testpassword123', 'Mail Size');
         userId = user.id;
         // The welcome mail is appended with skipSync, so the index only learns about it on the first
         // sync — one list on the empty DB blocks on that, leaving the deltas below to these messages.
@@ -81,7 +81,7 @@ describe('Staged draft attachment usage', () => {
 
     beforeAll(async () => {
         await ensureServer();
-        const user = await createTestUser('draftstage@test.eigen.is', 'testpassword123', 'Draft Stage');
+        const user = await createTestUser(`draftstage-${Date.now()}@test.eigen.is`, 'testpassword123', 'Draft Stage');
         userId = user.id;
         token = user.sessionToken;
         stagingDir = join(TEST_DATA_DIR, 'home', userId, 'eigen.mail', 'draft-attachments');
