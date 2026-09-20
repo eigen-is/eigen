@@ -213,10 +213,10 @@ export class MaildirStore implements MailStore {
         return parsed.attachments;
     }
 
-    async append(mailbox: string, message: Buffer, opts?: { skipSync?: boolean }): Promise<string> {
+    async append(mailbox: string, message: Buffer, opts?: { skipSync?: boolean; arrival?: boolean }): Promise<string> {
         // Lock covers only the delivery — the follow-up sync takes the lock itself.
         const { uniqueId } = await this.storeLock.run(() => this.deliverAtomic(message, mailbox));
-        if (!opts?.skipSync) await this.syncMailbox(mailbox, { arrival: true });
+        if (!opts?.skipSync) await this.syncMailbox(mailbox, { arrival: opts?.arrival ?? true });
         return uniqueId;
     }
 
@@ -299,7 +299,7 @@ export class MaildirStore implements MailStore {
         const running = this.syncingMailboxes.get(mailbox);
         if (running) return running;
 
-        const promise = this.storeLock.run(() => this.doSyncMailbox(mailbox, opts?.arrival ?? false));
+        const promise = this.storeLock.run(() => this.doSyncMailbox(mailbox, opts?.arrival));
         this.syncingMailboxes.set(mailbox, promise);
         try {
             await promise;
@@ -308,7 +308,7 @@ export class MaildirStore implements MailStore {
         }
     }
 
-    private async doSyncMailbox(mailbox: string, arrival: boolean): Promise<void> {
+    private async doSyncMailbox(mailbox: string, arrival?: boolean): Promise<void> {
         await this.moveNewToCur(mailbox);
 
         const diskFiles = new Map<string, string>();
@@ -320,10 +320,11 @@ export class MaildirStore implements MailStore {
 
         const dbRecords = this.db.getAllEmails(mailbox);
         const dbById = new Map(dbRecords.map((r) => [r.id, r]));
-        // A mailbox with no rows yet is being indexed for the first time — an old IMAP folder, or a home
-        // whose mail.db was lost. Its files were already there, so they are discovered, not delivered, and
-        // must not raise a new-mail notification each. A sync that follows Eigen's own delivery still does.
-        const arrived = arrival || dbRecords.length > 0;
+        // The caller knows whether its own write was an arrival; a watcher-driven sync does not, and reads
+        // it from the index: a mailbox with no rows yet is being indexed for the first time — an old IMAP
+        // folder, or a home whose mail.db was lost — so its files were discovered, not delivered, and must
+        // not raise a new-mail notification each.
+        const arrived = arrival ?? dbRecords.length > 0;
 
         // New messages (on disk but not in DB): parse in chunks, then bulk-insert each chunk in
         // one transaction — with `addEmail` at ~71% of a 92s cold sync of 100k messages, batching

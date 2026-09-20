@@ -10,7 +10,7 @@ import { getContacts } from '../lib/contacts/contacts';
 import { requireNonGuest, requireSelf } from '../lib/core/access';
 import { ApiError } from '../lib/core/errors';
 import { contentDisposition, readBoundedBodyBytes, setCacheHeaders } from '../lib/core/http';
-import { getSharedDrive } from '../lib/drive';
+import { readImportSourceBytes } from '../lib/drive';
 import { parseVCardLines, unescapeText } from '../lib/vcard';
 import { betterAuth } from './auth';
 import { importFromDriveSchema } from './shared-schemas';
@@ -257,15 +257,11 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             requireSelf(params.ownerId, user.id);
             // Same idle-timeout exemption as the raw import route: silent until the last card lands.
             server?.timeout(request, 0);
-            // The source can live in any drive the user may read — SharedDrive is what checks that.
-            const sourceDrive = await getSharedDrive(body.sourceOwnerId, user);
-            const source = await sourceDrive.getPath(body.sourceMountId, body.sourcePathId);
-            if (!source) throw new ApiError(404, 'Source file not found');
-            if (!isVCardFile(source.mimeType, source.name)) throw new ApiError(400, 'Not a vCard file');
-            if (source.size > IMPORT_MAX_BYTES) throw new ApiError(413, 'Upload too large');
-            const file = await sourceDrive.downloadFile(body.sourceMountId, body.sourcePathId);
-            if (!file) throw new ApiError(404, 'Source file not found');
-            const bytes = new Uint8Array(await file.arrayBuffer());
+            const bytes = await readImportSourceBytes(user, body, {
+                accepts: isVCardFile,
+                rejection: 'Not a vCard file',
+                maxBytes: IMPORT_MAX_BYTES,
+            });
             return await (await getContacts(user)).importCards(decodeVCardFile(bytes));
         },
         {

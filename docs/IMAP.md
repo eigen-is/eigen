@@ -144,7 +144,8 @@ Drafts get `D`+`S` flags. Skips `new/` because Eigen knows the final flags at cr
      win. A message that fails to parse is logged and skipped so one bad `.eml` can't drop the rest of the chunk.
      A sync of a mailbox with no rows yet is a **cold index**: the files were already on disk, so the events
      carry `isNew: false` and an old IMAP folder announces no new mail. The sync that follows Eigen's own
-     delivery says otherwise (`append`), so a real arrival still notifies.
+     delivery says otherwise (`append`), so a real arrival still notifies — unless the caller passes
+     `arrival: false`, which an import does: a file the user put in the mailbox is not mail arriving.
    - **Flag changes** (on disk with different filename than DB): update DB flags + filename, report `flagsChanged`
      (`MAIL_FLAGS_CHANGED`).
    - **Deleted messages** (in DB, not on disk): delete from DB, report `deleted` (`MAIL_DELETED`).

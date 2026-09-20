@@ -35,6 +35,7 @@
 | **Versioning**        | `apps/api/src/lib/versioning/`               | Opt-in file-level snapshots in `<container>/versions/`; snapshot/restore mechanics + locking in [STORAGE.md § File Versioning](STORAGE.md#file-versioning) |
 | **Backup / restore**  | `apps/api/src/lib/backup/` + `apps/api/src/routes/backup.ts` | Per-home backup + restore, admin-only under `/admin/backup/*`; one primitive (`snapshotHome`), and a restore deletes nothing. See [BACKUP.md](BACKUP.md) |
 | **Copy / move**       | `apps/api/src/lib/drive/copy-across.ts`      | Move stays in-mount; copy picks the same-storage fast path or the cross-mount bridge. See [STORAGE.md § Copy / Move](STORAGE.md#copy--move) |
+| **Import from Drive** | `apps/api/src/lib/drive/import-source.ts`    | `readImportSourceBytes(user, body, { accepts, rejection, maxBytes })` — the one reader behind every `import-from-drive` route (mail, contacts): resolves the source through `getSharedDrive` (404 missing), 400s a folder/Eigen container or a type the caller's predicate rejects, 413s the row size and again on the bytes, which are read under a running cap rather than an unbounded `arrayBuffer()` |
 | **File history + watch** | `apps/api/src/lib/drive/history.ts`       | `FileHistory` on `Mount` (`file_events` + `path_watchers`) — typed events, read-gated watcher notifications, `drive:file-history-updated` SSE. See [FILE-HISTORY.md](FILE-HISTORY.md) |
 
 ### Drive Architecture
