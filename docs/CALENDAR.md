@@ -328,6 +328,10 @@ stored exception — exception rows are internal and never appear as their own r
 - RECURRENCE-ID / EXDATE → `recurrenceDate` keys are wall-clock dates: TZID-form values key on their
   own wall components (RFC 5545 canonical), UTC-`Z` values convert the instant to the SERIES timezone,
   floating/DATE values keep their raw components
+- The series timezone is resolved per UID, from that UID's master VEVENT (the one without a
+  RECURRENCE-ID). A CalDAV resource holds a single series, but a previewed or imported file holds every
+  series a calendar has, each in its author's own zone — one file-wide series tz would key a second
+  series' UTC-`Z` overrides through the first one's
 - `ATTENDEE` / `ORGANIZER` values are URIs, so their `mailto:` scheme is stripped case-insensitively
   (clients emit `MAILTO:` too). A surviving prefix would match no address in any comparison — the
   owner check, the attendee lookup, the RSVP fan-out
@@ -350,7 +354,8 @@ the round-trip is symmetric.
 Regression nets: `caldav.test.ts` (protocol), `caldav-roundtrip.test.ts` (serialization/parse
 round-trips, TZ-pinned floating tests), `vtimezone.test.ts` (generator vs Intl),
 `calendar-timezone.test.ts` (occurrence keying), `ical-imip.test.ts` (iMIP scoping),
-`caldav-client-sync.test.ts` (client-faithful sync flows against web-created events).
+`caldav-client-sync.test.ts` (client-faithful sync flows against web-created events),
+`ical-parse.test.ts` (multi-series files, the shape a preview and an import feed the parser).
 
 ### Known limits of the regenerate model
 
