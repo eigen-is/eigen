@@ -4,6 +4,7 @@ import {
     ICS_PREVIEW_MAX_EVENTS,
 } from '@workspace/lib/constants/calendar';
 import type { IcsPreview, IcsPreviewEvent } from '@workspace/lib/types/preview';
+import { validateEmailAddress } from '@workspace/lib/validation';
 import { type IcsParseResult, type ParsedEvent, parseIcs } from '../caldav/ical-parse';
 import { ApiError } from '../core/errors';
 
@@ -16,8 +17,17 @@ export const parseIcsPreview = (body: string): IcsPreview => JSON.parse(body);
 const dateString = (date: Date, allDay: boolean): string =>
     allDay ? date.toISOString().slice(0, 10) : date.toISOString();
 
+// toISOString spells a year outside 1–9999 with a sign and six digits ("+010007-06-07T…"), and the
+// all-day slice of that is not a date at all — a DTSTART of 99999999 normalizes its month and day into
+// the year. The card would print "Invalid Date", so the event is counted rather than listed.
+const isDatable = (date: Date): boolean => date.getUTCFullYear() >= 1 && date.getUTCFullYear() <= 9999;
+
 function previewEvent(event: ParsedEvent): IcsPreviewEvent {
-    const attendees = event.data?.attendees ?? [];
+    // A CAL-ADDRESS is a URI and only a mailto: one names an address, which parseIcs strips the scheme
+    // off. Anything else the file spells reaches the card as an address it writes a `mailto:` link from.
+    const declared = event.data?.attendees ?? [];
+    const attendees = declared.filter((attendee) => validateEmailAddress(attendee.email));
+    const organizer = event.data?.organizer ?? null;
     return {
         uid: event.uid,
         title: event.title,
@@ -29,18 +39,15 @@ function previewEvent(event: ParsedEvent): IcsPreviewEvent {
         timezone: event.timezone,
         rrule: event.rrule,
         status: event.status,
-        organizer: event.data?.organizer ?? null,
+        organizer: organizer && validateEmailAddress(organizer.email) ? organizer : null,
         attendees: attendees.slice(0, ICS_PREVIEW_MAX_ATTENDEES),
-        droppedAttendees: Math.max(attendees.length - ICS_PREVIEW_MAX_ATTENDEES, 0),
+        droppedAttendees: declared.length - Math.min(attendees.length, ICS_PREVIEW_MAX_ATTENDEES),
     };
 }
 
 // File bytes → the events an .ics preview serves. Runs inside the transform Worker (worker.ts owns
 // execution; the main-thread orchestration lives in preview-cache.ts). This module must not reach the
 // Mount or the transform seam — the Worker imports it.
-//
-// The payload makes no request when it renders: parseIcs keeps what the event columns model, so an
-// ATTACH, a URL and a directory reference never leave this function.
 export function buildIcsPreviewPayload(data: ArrayBuffer): IcsPreview {
     let parsed: IcsParseResult;
     try {
@@ -54,12 +61,14 @@ export function buildIcsPreviewPayload(data: ArrayBuffer): IcsPreview {
     // Masters only: an override VEVENT and the synthetic cancelled row an EXDATE becomes are parts of
     // their series, which the master's own rrule already says.
     const masters = parsed.events.filter((event) => event.recurrenceDate === null);
-    masters.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+    const datable = masters.filter((event) => isDatable(event.startTime) && isDatable(event.endTime));
+    datable.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
 
+    const events = datable.slice(0, ICS_PREVIEW_MAX_EVENTS).map(previewEvent);
     return {
         method: parsed.method,
-        events: masters.slice(0, ICS_PREVIEW_MAX_EVENTS).map(previewEvent),
-        dropped: Math.max(masters.length - ICS_PREVIEW_MAX_EVENTS, 0),
+        events,
+        dropped: masters.length - events.length,
         total: masters.length,
     };
 }

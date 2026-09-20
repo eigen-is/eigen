@@ -61,3 +61,64 @@ describe('parseIcs over a multi-series file', () => {
         expect(events.find((event) => event.uid === 'orphan@eigen')?.recurrenceDate).toBe('2026-03-09');
     });
 });
+
+// A UID is required, and an override carries its master's — but exporters skip it, and then the pair no
+// longer groups. A weekly series at 09:00 Auckland whose second occurrence is moved: the UTC-Z
+// RECURRENCE-ID is 2 January in UTC and 3 January in Auckland, so a file the two VEVENTs of which no
+// longer find each other keys the override a day early.
+describe('parseIcs over a file whose UIDs do not line up', () => {
+    const shape = (masterUid: string[], overrideUid: string[]) =>
+        vcal([
+            'BEGIN:VEVENT',
+            ...masterUid,
+            'DTSTART;TZID=Pacific/Auckland:20250101T090000',
+            'DTEND;TZID=Pacific/Auckland:20250101T100000',
+            'RRULE:FREQ=WEEKLY',
+            'SUMMARY:Standup',
+            'END:VEVENT',
+            'BEGIN:VEVENT',
+            ...overrideUid,
+            'RECURRENCE-ID:20250102T200000Z',
+            'DTSTART:20250102T220000Z',
+            'DTEND:20250102T230000Z',
+            'SUMMARY:Standup moved',
+            'END:VEVENT',
+        ]);
+
+    const overrideKey = (text: string) =>
+        parseIcs(text).events.find((event) => event.recurrenceDate !== null)?.recurrenceDate;
+
+    test('an override keys through the file master zone when its master carries no UID', () => {
+        expect(overrideKey(shape([], ['UID:series@eigen']))).toBe('2025-01-03');
+    });
+
+    test('an override with no UID of its own keys through the file master zone', () => {
+        expect(overrideKey(shape(['UID:series@eigen'], []))).toBe('2025-01-03');
+    });
+});
+
+describe('parseIcs over a calendar export', () => {
+    // ICAL.Event walks every sibling VEVENT to relate the overrides of the series it is given, unless it
+    // is handed the exceptions itself — which makes parsing a whole file quadratic in its event count.
+    // The same parser runs on the API thread for a CalDAV PUT and holds the one transform Worker for a
+    // preview, so a calendar a user exported must not cost minutes.
+    test('twenty thousand events parse in linear time', () => {
+        const lines: string[] = [];
+        for (let i = 0; i < 20_000; i++) {
+            lines.push(
+                'BEGIN:VEVENT',
+                `UID:bulk-${i}@eigen`,
+                'DTSTART:20260601T100000Z',
+                'DTEND:20260601T110000Z',
+                `SUMMARY:Event ${i}`,
+                'END:VEVENT',
+            );
+        }
+
+        const startedAt = performance.now();
+        const { events } = parseIcs(vcal(lines));
+
+        expect(events).toHaveLength(20_000);
+        expect(performance.now() - startedAt).toBeLessThan(5000);
+    });
+});
