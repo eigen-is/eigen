@@ -42,7 +42,8 @@ export type FileActionId =
     | 'save-to-drive'
     | 'convert-to-sheet'
     | 'convert-to-document'
-    | 'import-contacts';
+    | 'import-contacts'
+    | 'import-mail';
 
 export type FileAction = {
     id: FileActionId;
@@ -50,4 +51,7 @@ export type FileAction = {
     icon: LucideIcon;
     // Derived facts first: most rows decide on those alone and never look at what holds the file.
     applies: (info: SubjectInfo, subject: FileSubject) => boolean;
+    // The route behind the row refuses a guest, so the row is hidden for one. `applies` cannot answer
+    // this: it is handed the file, never the user.
+    guestDenied?: true;
 };

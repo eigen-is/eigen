@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { IMPORT_MAX_BYTES } from '../../constants/contact';
+import { EML_MAX_BYTES } from '../../constants/mail';
 import { DOCX_MIME, XLSX_MIME } from '../../constants/mime';
-import { fileActionsFor } from '../../core/file-actions';
+import { fileActionsFor, GUEST_DENIED_ACTIONS } from '../../core/file-actions';
 import { subjectFromMailAttachment, subjectFromPath } from '../../core/file-subject';
-import type { DrivePath, DrivePathType } from '../../types/drive';
+import { type DrivePath, type DrivePathType, EML_MIME } from '../../types/drive';
 import type { FileActionId, FileSubject } from '../../types/file-subject';
 
 function path(p: Partial<DrivePath> & { name: string; type: DrivePathType }): DrivePath {
@@ -53,6 +54,10 @@ describe('fileActionsFor on a Drive item', () => {
             item: path({ name: 'team.vcf', type: 'file', mimeType: 'text/vcard' }),
             ids: ['quick-look', 'download', 'import-contacts'],
         },
+        {
+            item: path({ name: 'engine notes.eml', type: 'file', mimeType: EML_MIME }),
+            ids: ['quick-look', 'download', 'import-mail'],
+        },
         // The convert gate is the extension alone, matching the server: a spreadsheet or a document
         // that lost its name — a mail part called `attachment-2` — offers no convert, because the
         // import refuses it.
@@ -67,6 +72,10 @@ describe('fileActionsFor on a Drive item', () => {
         // Over the import ceiling the row is gone: the route answers a bigger vCard with a 413.
         {
             item: path({ name: 'huge.vcf', type: 'file', mimeType: 'text/vcard', size: IMPORT_MAX_BYTES + 1 }),
+            ids: ['quick-look', 'download'],
+        },
+        {
+            item: path({ name: 'huge.eml', type: 'file', mimeType: EML_MIME, size: EML_MAX_BYTES + 1 }),
             ids: ['quick-look', 'download'],
         },
     ];
@@ -98,6 +107,11 @@ describe('fileActionsFor on a Drive item', () => {
         ]);
         expect(fileActionsFor(subjectFromPath(xlsx, true)).map((action) => action.id)).toContain('convert-to-sheet');
         expect(fileActionsFor(subjectFromPath(docx, true)).map((action) => action.id)).toContain('convert-to-document');
+    });
+
+    test('an .eml imports to mail right up to the ceiling', () => {
+        const atCeiling = path({ name: 'notes.eml', type: 'file', mimeType: EML_MIME, size: EML_MAX_BYTES });
+        expect(idsFor(atCeiling)).toContain('import-mail');
     });
 
     test('exclude drops a row the registry approved', () => {
@@ -150,5 +164,27 @@ describe('fileActionsFor on an attachment subject', () => {
     test('a vCard part imports to contacts on its name alone', () => {
         const vcard = mailSubject({ contentType: 'application/octet-stream', filename: 'team.vcf', size: 2048 });
         expect(fileActionsFor(vcard).map((action) => action.id)).toContain('import-contacts');
+    });
+
+    test('an attached message imports to mail on its name alone', () => {
+        const eml = mailSubject({ contentType: 'application/octet-stream', filename: 'fwd.eml', size: 2048 });
+        expect(fileActionsFor(eml).map((action) => action.id)).toContain('import-mail');
+    });
+});
+
+// The import routes refuse a guest (requireNonGuest) and a registry predicate cannot see the user, so
+// the rows a guest may not run are named once here and excluded by the one caller that knows who is asking.
+describe('GUEST_DENIED_ACTIONS', () => {
+    test('names every import row and nothing else', () => {
+        expect([...GUEST_DENIED_ACTIONS]).toEqual(['import-contacts', 'import-mail']);
+    });
+
+    test('excluding them leaves a .vcf and an .eml with what a guest may run', () => {
+        const vcard = path({ name: 'team.vcf', type: 'file', mimeType: 'text/vcard' });
+        const eml = path({ name: 'notes.eml', type: 'file', mimeType: EML_MIME });
+        for (const item of [vcard, eml]) {
+            const ids = fileActionsFor(subjectFromPath(item), GUEST_DENIED_ACTIONS).map((action) => action.id);
+            expect(ids).toEqual(['quick-look', 'download']);
+        }
     });
 });
