@@ -204,6 +204,17 @@ export function occurrenceDateToString(value: unknown): string {
     return String(value).substring(0, 10);
 }
 
+// A recurrence in words, for every surface that describes one it does not edit. A file's own RRULE is
+// untrusted input, so a rule rrule cannot read is printed verbatim rather than swallowed.
+export function rruleToText(rrule: string | null): string | null {
+    if (!rrule) return null;
+    try {
+        return RRule.fromString(rrule).toText();
+    } catch {
+        return rrule;
+    }
+}
+
 export function truncateRRule(rruleStr: string, beforeDate: Date): string {
     const options = RRule.parseString(rruleStr);
     const until = new Date(beforeDate);

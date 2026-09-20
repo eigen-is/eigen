@@ -7,6 +7,7 @@ import { useImportMailFromDrive, useImportMailFromUrl } from '@workspace/lib/mai
 import type { ConvertTarget, DrivePath } from '@workspace/lib/types/drive';
 import type { FileAction, FileActionId, FileSubject } from '@workspace/lib/types/file-subject';
 import { type ReactNode, useState } from 'react';
+import { ImportToCalendarPicker } from '../calendar/import-to-calendar-picker';
 import { ProgressDialog } from '../drive/progress-dialog';
 import { SaveToDrivePicker } from '../drive/save-to-drive-picker';
 import { usePreview } from '../preview-provider/preview-context';
@@ -49,6 +50,7 @@ export function useFileActionRunner(
     // Open is its own flag: the closed picker keeps its subjects so its title holds through the exit animation.
     const [picker, setPicker] = useState<PickerState>({ subjects: [] });
     const [pickerOpen, setPickerOpen] = useState(false);
+    const [calendarPickerOpen, setCalendarPickerOpen] = useState(false);
 
     const openPicker = (subjects: FileSubject[], convert?: PickerState['convert']) => {
         if (subjects.length === 0) return;
@@ -110,6 +112,11 @@ export function useFileActionRunner(
             case 'import-mail':
                 runImport(importMailFromDrive.mutate, importMailFromUrl.mutate);
                 return;
+            // Unlike its siblings this import needs a target first, so the row opens the picker and
+            // the picker runs the import it chose a calendar for.
+            case 'import-calendar':
+                setCalendarPickerOpen(true);
+                return;
         }
     };
 
@@ -131,6 +138,11 @@ export function useFileActionRunner(
                         if (picker.convert) for (const path of paths) convertPath(path, picker.convert.targetType);
                     }}
                 />
+                <ImportToCalendarPicker
+                    subject={subject}
+                    open={calendarPickerOpen}
+                    onClose={() => setCalendarPickerOpen(false)}
+                />
                 <ProgressDialog
                     open={convertDocument.isPending}
                     title={
@@ -141,7 +153,7 @@ export function useFileActionRunner(
                 />
             </>
         ),
-        isDialogOpen: pickerOpen || convertDocument.isPending,
+        isDialogOpen: pickerOpen || calendarPickerOpen || convertDocument.isPending,
         isPending:
             convertDocument.isPending ||
             importContactsFromDrive.isPending ||

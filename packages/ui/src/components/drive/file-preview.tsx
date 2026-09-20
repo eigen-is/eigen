@@ -13,6 +13,7 @@ import { useRef, useState } from 'react';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
 import { EmlPreviewContent, MailEmlPreviewContent } from './eml-preview-content';
 import { getFileIcon } from './file-presentation';
+import { IcsPreviewContent, MailIcsPreviewContent } from './ics-preview-content';
 import { PREVIEW_PANE_CLASS } from './preview-pane';
 import { MailVCardPreviewContent, VCardPreviewContent } from './vcard-preview-content';
 
@@ -149,9 +150,11 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
                     {previewMode === 'eml' && subject.mail && (
                         <MailEmlPreviewContent part={subject.mail} size={info.size} />
                     )}
-                    {/* The .ics renderer lands with the rest of its quick look; until then a calendar
-                        shows the file card its bytes showed before it had a mode of its own. */}
-                    {(previewMode === 'fallback' || previewMode === 'ics') && (
+                    {previewMode === 'ics' && drive && <IcsPreviewContent path={drive} />}
+                    {previewMode === 'ics' && subject.mail && (
+                        <MailIcsPreviewContent part={subject.mail} size={info.size} />
+                    )}
+                    {previewMode === 'fallback' && (
                         <div className="flex flex-col items-center gap-4 text-white">
                             {getFileIcon(info.mimeType, drive?.type ?? 'file', info.name, {
                                 className: 'size-16 text-muted-foreground',

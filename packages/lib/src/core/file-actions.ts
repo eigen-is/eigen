@@ -1,7 +1,8 @@
-import { BookUser, Download, Eye, FileText, FolderDown, MailPlus, Sheet } from 'lucide-react';
+import { BookUser, CalendarPlus, Download, Eye, FileText, FolderDown, MailPlus, Sheet } from 'lucide-react';
+import { ICS_MAX_BYTES } from '../constants/calendar';
 import { IMPORT_MAX_BYTES } from '../constants/contact';
 import { EML_MAX_BYTES } from '../constants/mail';
-import { isEmlFile, isFolderType, isVCardFile } from '../types/drive';
+import { isEmlFile, isFolderType, isIcsFile, isVCardFile } from '../types/drive';
 import type { FileAction, FileActionId, FileSubject } from '../types/file-subject';
 import { subjectInfo } from './file-subject';
 
@@ -52,6 +53,13 @@ export const FILE_ACTIONS: readonly FileAction[] = [
         label: 'Import to Mail',
         icon: MailPlus,
         applies: (info) => !!info.downloadUrl && isEmlFile(info.mimeType, info.name) && info.size <= EML_MAX_BYTES,
+        guestDenied: true,
+    },
+    {
+        id: 'import-calendar',
+        label: 'Import to Calendar',
+        icon: CalendarPlus,
+        applies: (info) => !!info.downloadUrl && isIcsFile(info.mimeType, info.name) && info.size <= ICS_MAX_BYTES,
         guestDenied: true,
     },
 ];

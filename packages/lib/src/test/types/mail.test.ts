@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { isIcsMime } from '../../types/drive';
 import { isCalendarPart, mailAttachmentName } from '../../types/mail';
 
 describe('mailAttachmentName', () => {
@@ -41,5 +42,14 @@ describe('isCalendarPart', () => {
         expect(isCalendarPart({ contentType: 'application/pdf' })).toBe(false);
         expect(isCalendarPart({ contentType: 'text/plain' })).toBe(false);
         expect(isCalendarPart({ contentType: 'application/ics' })).toBe(false);
+    });
+
+    // The same rule a stored .ics answers to (isIcsFile), so a part and a file can never disagree on
+    // what iCalendar is: a media type that merely starts with those letters is another type.
+    test('a type that merely starts with the letters is another media type', () => {
+        expect(isCalendarPart({ contentType: 'text/calendarium' })).toBe(false);
+        expect(isIcsMime('text/calendar')).toBe(true);
+        expect(isIcsMime('text/calendar; method=REQUEST')).toBe(true);
+        expect(isIcsMime('text/calendarium')).toBe(false);
     });
 });

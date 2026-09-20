@@ -43,9 +43,33 @@ const payload = {
     dropped: 0,
     total: 1,
 };
+const icsPayload = {
+    method: 'REQUEST',
+    events: [
+        {
+            uid: 'uid-1',
+            title: '2026-09-20',
+            description: null,
+            location: null,
+            start: '2026-09-20',
+            end: '2026-09-21',
+            allDay: true,
+            timezone: null,
+            rrule: null,
+            status: 'confirmed',
+            organizer: null,
+            attendees: [],
+            droppedAttendees: 0,
+        },
+    ],
+    dropped: 0,
+    total: 1,
+};
 g.fetch = async (input: string | URL | Request) => {
     const url = input instanceof Request ? input.url : String(input);
-    return Response.json(url.includes('eml-preview') ? emlPayload : payload);
+    if (url.includes('eml-preview')) return Response.json(emlPayload);
+    if (url.includes('ics-preview')) return Response.json(icsPayload);
+    return Response.json(payload);
 };
 
 afterAll(() => {
@@ -103,5 +127,19 @@ describe('useEmlPreview', () => {
         expect(date).toBe('2026-08-15T10:30:00.000Z');
         expect(date).not.toBeInstanceOf(Date);
         expect(result.data?.subject).toBe('Engine notes');
+    });
+});
+
+describe('useIcsPreview', () => {
+    test('serves an all-day bound, and a date-shaped title, as the strings they are', async () => {
+        const { useIcsPreview } = await import('../../../../core/drive/hooks/reads');
+        const result = await settled(() => useIcsPreview('owner-1', 'm1', 'p1', new Date(1), 1024));
+
+        const event = result.data?.events[0];
+        const start: string | undefined = event?.start;
+        expect(start).toBe('2026-09-20');
+        expect(start).not.toBeInstanceOf(Date);
+        expect(event?.title).toBe('2026-09-20');
+        expect(event?.title).not.toBeInstanceOf(Date);
     });
 });

@@ -1,3 +1,4 @@
+import { rruleToText } from '@workspace/lib/calendar';
 import { formatMonth } from '@workspace/lib/date';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { useMemo } from 'react';
@@ -76,15 +77,7 @@ export function RecurrencePicker({ value, onChange, startDate, disabled }: Recur
 
     const currentValue = value || 'none';
 
-    const rruleText = useMemo(() => {
-        if (!value) return null;
-        try {
-            const rule = RRule.fromString(value);
-            return rule.toText();
-        } catch {
-            return value;
-        }
-    }, [value]);
+    const rruleText = useMemo(() => rruleToText(value), [value]);
 
     const matchedPreset = presets.find((p) => p.value === currentValue);
     const selectValue = matchedPreset ? currentValue : 'custom';
@@ -117,14 +110,4 @@ export function RecurrencePicker({ value, onChange, startDate, disabled }: Recur
             </Select>
         </div>
     );
-}
-
-export function rruleToText(rrule: string | null): string | null {
-    if (!rrule) return null;
-    try {
-        const rule = RRule.fromString(rrule);
-        return rule.toText();
-    } catch {
-        return rrule;
-    }
 }

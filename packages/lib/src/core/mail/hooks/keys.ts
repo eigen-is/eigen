@@ -21,6 +21,8 @@ export const emailKeys = {
         [...emailKeys.previews(ownerId, messageId), 'vcard', index] as const,
     emlPreview: (ownerId: string, messageId: string, index: number) =>
         [...emailKeys.previews(ownerId, messageId), 'eml', index] as const,
+    icsPreview: (ownerId: string, messageId: string, index: number) =>
+        [...emailKeys.previews(ownerId, messageId), 'ics', index] as const,
 };
 
 export const mailboxKeys = {
