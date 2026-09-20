@@ -2,10 +2,10 @@ import { openDocument } from '@workspace/lib/api';
 import { useImportContactsFromDrive, useImportContactsFromUrl } from '@workspace/lib/contacts';
 import { triggerDownload } from '@workspace/lib/download';
 import { useConvertDocument } from '@workspace/lib/drive';
-import { subjectInfo } from '@workspace/lib/file-subject';
+import { importSourceOf, subjectInfo } from '@workspace/lib/file-subject';
 import { useImportMailFromDrive, useImportMailFromUrl } from '@workspace/lib/mail';
 import type { ConvertTarget, DrivePath } from '@workspace/lib/types/drive';
-import type { FileAction, FileActionId, FileSubject } from '@workspace/lib/types/file-subject';
+import type { DriveImportSource, FileAction, FileActionId, FileSubject } from '@workspace/lib/types/file-subject';
 import { type ReactNode, useState } from 'react';
 import { ImportToCalendarPicker } from '../calendar/import-to-calendar-picker';
 import { ProgressDialog } from '../drive/progress-dialog';
@@ -27,11 +27,9 @@ export type FileActionRunner = {
     isPending: boolean;
 };
 
-// A convert on a subject with nothing in Drive to convert saves first; the label names the row that asked.
+// What a row that opens a picker acts on, snapshotted: a host whose subject is state has none left by
+// the time the picker is confirmed. A convert saves first, and its label names the row that asked.
 type PickerState = { subjects: FileSubject[]; convert?: { targetType: ConvertTarget; label: string } };
-
-// What every import-from-drive route takes: the file to read, not where it lands.
-type DriveSource = { sourceOwnerId: string; sourceMountId: string; sourcePathId: string };
 
 // A host whose subject is state (the right-clicked chip or row) passes null while there is none;
 // `exclude` drops a row the host draws itself (the overlay is Quick Look, so it drops that one).
@@ -72,18 +70,14 @@ export function useFileActionRunner(
         else convertPath(subject.drive, targetType);
     };
 
-    // Every import reads the same way: a file at a Drive location is copied server-side, anything else
-    // hands the route the bytes behind its download URL. Only the pair of hooks differs per format.
-    const runImport = (fromDrive: (source: DriveSource) => void, fromUrl: (input: { url: string }) => void) => {
+    // Where the bytes come from is one derivation, shared with the calendar picker; only the pair of
+    // hooks differs per format.
+    const runImport = (fromDrive: (source: DriveImportSource) => void, fromUrl: (input: { url: string }) => void) => {
         if (!subject) return;
-        const { drive } = subject;
-        if (drive) {
-            fromDrive({ sourceOwnerId: drive.ownerId, sourceMountId: drive.mountId, sourcePathId: drive.id });
-            return;
-        }
-        const { downloadUrl } = subjectInfo(subject);
-        if (!downloadUrl) return;
-        fromUrl({ url: downloadUrl });
+        const source = importSourceOf(subject);
+        if (!source) return;
+        if (source.drive) fromDrive(source.drive);
+        else fromUrl({ url: source.url });
     };
 
     const run = (action: FileAction) => {
@@ -113,8 +107,10 @@ export function useFileActionRunner(
                 runImport(importMailFromDrive.mutate, importMailFromUrl.mutate);
                 return;
             // Unlike its siblings this import needs a target first, so the row opens the picker and
-            // the picker runs the import it chose a calendar for.
+            // the picker runs the import it chose a calendar for. Snapshotted like a save: the menu
+            // that drew the row is already closed by the time the picker is confirmed.
             case 'import-calendar':
+                setPicker({ subjects: [subject] });
                 setCalendarPickerOpen(true);
                 return;
         }
@@ -139,7 +135,7 @@ export function useFileActionRunner(
                     }}
                 />
                 <ImportToCalendarPicker
-                    subject={subject}
+                    subject={picker.subjects[0] ?? null}
                     open={calendarPickerOpen}
                     onClose={() => setCalendarPickerOpen(false)}
                 />

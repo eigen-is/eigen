@@ -6,10 +6,10 @@ import {
     useImportCalendarFromUrl,
 } from '@workspace/lib/calendar';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
-import { subjectInfo } from '@workspace/lib/file-subject';
+import { importSourceOf, subjectInfo } from '@workspace/lib/file-subject';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import { Loader2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useDialogPending } from '../../hooks/use-dialog-pending';
 import { Button } from '../button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../dialog';
@@ -20,6 +20,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 
 // The option that stands for "somewhere that does not exist yet"; no calendar id can collide with it.
 const NEW_CALENDAR = 'new';
+// No target chosen yet, because the calendars have not arrived: the Select shows its placeholder.
+const NO_TARGET = '';
 
 type ImportToCalendarPickerProps = {
     subject: FileSubject | null;
@@ -38,8 +40,13 @@ export function ImportToCalendarPicker({ subject, open, onClose }: ImportToCalen
     const createCalendar = useCreateCalendar(ownerId);
     const importFromDrive = useImportCalendarFromDrive();
     const importFromUrl = useImportCalendarFromUrl();
-    const [target, setTarget] = useState(NEW_CALENDAR);
+    const [target, setTarget] = useState(NO_TARGET);
     const [name, setName] = useState('');
+    // Applied once, when the calendars first arrive: a refetch must not overwrite what the user chose or typed.
+    const defaultsApplied = useRef(false);
+    // A failed import leaves the dialog open for a retry, which must import into the calendar the first
+    // attempt created rather than make a second one of the same name.
+    const createdCalendarId = useRef<string | null>(null);
     const { pending, run, handleOpenChange } = useDialogPending((next) => {
         if (!next) onClose();
     });
@@ -49,37 +56,39 @@ export function ImportToCalendarPicker({ subject, open, onClose }: ImportToCalen
     const defaultTarget = calendars?.find((cal) => cal.isDefault)?.id ?? calendars?.[0]?.id ?? NEW_CALENDAR;
 
     useEffect(() => {
-        if (!open) return;
+        if (!open) {
+            defaultsApplied.current = false;
+            createdCalendarId.current = null;
+            return;
+        }
+        if (defaultsApplied.current || !calendars) return;
+        defaultsApplied.current = true;
         setTarget(defaultTarget);
         setName(defaultName);
-    }, [open, defaultTarget, defaultName]);
+    }, [open, calendars, defaultTarget, defaultName]);
 
     const isNew = target === NEW_CALENDAR;
 
     const handleSubmit = () =>
         run(async () => {
             if (!subject) return;
+            const source = importSourceOf(subject);
+            if (!source) return;
             let calendarId = target;
             if (isNew) {
-                const created = await createCalendar.mutateAsync({
-                    name: name.trim(),
-                    color: EIGEN_ACCENT_COLORS_SHUFFLED[(calendars?.length ?? 0) % EIGEN_ACCENT_COLORS_SHUFFLED.length]
-                        .value,
-                });
-                calendarId = created.id;
+                if (!createdCalendarId.current) {
+                    const created = await createCalendar.mutateAsync({
+                        name: name.trim(),
+                        color: EIGEN_ACCENT_COLORS_SHUFFLED[
+                            (calendars?.length ?? 0) % EIGEN_ACCENT_COLORS_SHUFFLED.length
+                        ].value,
+                    });
+                    createdCalendarId.current = created.id;
+                }
+                calendarId = createdCalendarId.current;
             }
-            const { drive } = subject;
-            if (drive) {
-                await importFromDrive.mutateAsync({
-                    calendarId,
-                    sourceOwnerId: drive.ownerId,
-                    sourceMountId: drive.mountId,
-                    sourcePathId: drive.id,
-                });
-                return;
-            }
-            const { downloadUrl } = subjectInfo(subject);
-            if (downloadUrl) await importFromUrl.mutateAsync({ url: downloadUrl, calendarId });
+            if (source.drive) await importFromDrive.mutateAsync({ calendarId, ...source.drive });
+            else await importFromUrl.mutateAsync({ url: source.url, calendarId });
         });
 
     return (
@@ -93,9 +102,9 @@ export function ImportToCalendarPicker({ subject, open, onClose }: ImportToCalen
                 </DialogHeader>
 
                 <div className="space-y-3">
-                    <Select value={target} onValueChange={setTarget}>
+                    <Select value={target} onValueChange={setTarget} disabled={!calendars}>
                         <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select calendar" />
+                            <SelectValue placeholder={calendars ? 'Select calendar' : 'Loading calendars…'} />
                         </SelectTrigger>
                         <SelectContent>
                             {calendars?.map((cal) => (
@@ -132,7 +141,7 @@ export function ImportToCalendarPicker({ subject, open, onClose }: ImportToCalen
                     <Button variant="outline" onClick={onClose} disabled={pending}>
                         Cancel
                     </Button>
-                    <Button onClick={handleSubmit} disabled={pending || (isNew && !name.trim())}>
+                    <Button onClick={handleSubmit} disabled={pending || !target || (isNew && !name.trim())}>
                         {pending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                         Import
                     </Button>
