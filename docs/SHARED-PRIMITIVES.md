@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1523 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1527 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -490,7 +490,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (353)
+## Types (354)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -730,6 +730,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `AttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
 | `FileAction` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
 | `FileActionId` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
+| `FileImportSource` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
 | `FileSubject` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
 | `MailPartRef` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
 | `PreviewMode` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
@@ -848,7 +849,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (711)
+## Utilities & constants (714)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -952,6 +953,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `backgroundCss` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
 | `DEFAULT_FILL_COLOR` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
 | `getBackgroundStyle` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
+| `droppedEventsLine` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/preview-lines.ts |
 | `formatEventTime` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `formatEventWhen` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `formatFreeBusyTitle` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
@@ -968,6 +970,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `occurrenceDateToString` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `parseOccurrenceDate` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `remainingEventsLine` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/preview-lines.ts |
+| `remainingGuestsLine` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/preview-lines.ts |
 | `rruleToText` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `toLocalDateString` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `truncateRRule` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
@@ -1152,6 +1155,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getFileIconComponent` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
 | `getFilePresentation` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
 | `getPreviewMode` | `@workspace/lib/file-subject` | packages/lib/src/core/file-subject.ts |
+| `importSourceOf` | `@workspace/lib/file-subject` | packages/lib/src/core/file-subject.ts |
 | `subjectFromMailAttachment` | `@workspace/lib/file-subject` | packages/lib/src/core/file-subject.ts |
 | `subjectFromPath` | `@workspace/lib/file-subject` | packages/lib/src/core/file-subject.ts |
 | `subjectInfo` | `@workspace/lib/file-subject` | packages/lib/src/core/file-subject.ts |
