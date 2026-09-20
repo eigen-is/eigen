@@ -1,4 +1,5 @@
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
+import { NOT_A_CALENDAR_FILE } from '@workspace/lib/constants/transfer';
 import type {
     CalendarEvent,
     CalendarEventOccurrence,
@@ -10,7 +11,6 @@ import { isIcsFile } from '@workspace/lib/types/drive';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
-import { type IcsParseResult, parseIcs } from '../lib/caldav/ical-parse';
 import { checkCalendarAccess, resolveCalendar, syncTeamCalendars } from '../lib/calendar/get-calendar';
 import { storedRecurrenceKey } from '../lib/calendar/recurrence';
 import { ApiError } from '../lib/core';
@@ -122,16 +122,6 @@ const ImportFromDriveIcsSchema = t.Object({
 });
 
 const ImportQuerySchema = t.Object({ calendarId: t.String({ minLength: 1 }) });
-
-// iCalendar is UTF-8 (RFC 5545 §3.1), the encoding the preview builder decodes with too. A file in
-// another encoding, or bytes that are not a calendar at all, is refused before anything is written.
-function parseIcsFile(bytes: Uint8Array): IcsParseResult {
-    try {
-        return parseIcs(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
-    } catch {
-        throw new ApiError(400, 'Not a calendar file');
-    }
-}
 
 // Calendar routes allow cross-owner access (shared calendars, team calendars).
 // Access control is enforced by resolveCalendar() (own/team calendars) or
@@ -391,24 +381,26 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             server?.timeout(request, 0);
             const bytes = await readBoundedBodyBytes(request, ICS_MAX_BYTES);
             if (bytes === null) throw new ApiError(413, 'Upload too large');
-            const home = await getHome(user.id);
-            return home.calendar.importEvents(query.calendarId, parseIcsFile(bytes));
+            const cal = await resolveCalendar(user, user.id);
+            return cal.importEvents(query.calendarId, bytes);
         },
         { query: ImportQuerySchema, auth: true, parse: 'none' },
     )
 
     .post(
         '/calendar/:ownerId/import-from-drive',
-        async ({ params, body, user }): Promise<ImportCountsResult> => {
+        async ({ params, body, request, user, server }): Promise<ImportCountsResult> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
+            // Same idle-timeout exemption as the raw import route: silent until the last event lands.
+            server?.timeout(request, 0);
             const bytes = await readImportSourceBytes(user, body, {
                 accepts: isIcsFile,
-                rejection: 'Not a calendar file',
+                rejection: NOT_A_CALENDAR_FILE,
                 maxBytes: ICS_MAX_BYTES,
             });
-            const home = await getHome(user.id);
-            return home.calendar.importEvents(body.calendarId, parseIcsFile(bytes));
+            const cal = await resolveCalendar(user, user.id);
+            return cal.importEvents(body.calendarId, bytes);
         },
         {
             body: ImportFromDriveIcsSchema,

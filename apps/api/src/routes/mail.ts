@@ -1,4 +1,5 @@
 import { EML_MAX_BYTES, MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
+import { NOT_AN_EMAIL_FILE } from '@workspace/lib/constants/transfer';
 import { EML_MIME, isEmlFile } from '@workspace/lib/types/drive';
 import {
     type ImportMailResult,
@@ -449,12 +450,14 @@ export const mailRouter = new Elysia({ name: 'mail' })
     )
     .post(
         '/mail/:ownerId/import-from-drive',
-        async ({ params, body, user }): Promise<ImportMailResult> => {
+        async ({ params, body, request, user, server }): Promise<ImportMailResult> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
+            // Same idle-timeout exemption as the raw import route: silent until the message is indexed.
+            server?.timeout(request, 0);
             const bytes = await readImportSourceBytes(user, body, {
                 accepts: isEmlFile,
-                rejection: 'Not an email file',
+                rejection: NOT_AN_EMAIL_FILE,
                 maxBytes: EML_MAX_BYTES,
             });
             return await (await getMailClient(user)).messageImport(Buffer.from(bytes));

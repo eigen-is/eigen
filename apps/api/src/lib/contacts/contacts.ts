@@ -919,8 +919,8 @@ export class Contacts {
         return transfer.exportCards(this, ids);
     }
 
-    public async importCards(text: string): Promise<ImportCountsResult> {
-        return transfer.importCards(this, text);
+    public async importCards(bytes: Uint8Array): Promise<ImportCountsResult> {
+        return transfer.importCards(this, bytes);
     }
 
     async destruct(): Promise<void> {

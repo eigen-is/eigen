@@ -667,6 +667,39 @@ describe('Calendar transfer routes', () => {
         expect((await april()).length).toBe(before);
     });
 
+    // iCalendar is UTF-8 (RFC 5545 §3.1), the same fact a vCard import answers on: the file is refused for
+    // its encoding, not lumped in with bytes that are no calendar at all.
+    test('a raw import that is not UTF-8 says so, like a vCard import does', async () => {
+        const before = (await april()).length;
+        // 0xE9 is "é" in Windows-1252 and an invalid UTF-8 byte — the shape of an older client's export.
+        const head = new TextEncoder().encode(
+            'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:latin1@other\r\nSUMMARY:Caf',
+        );
+        const tail = new TextEncoder().encode(
+            '\r\nDTSTART:20260427T090000Z\r\nDTEND:20260427T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n',
+        );
+
+        const res = await importRequest(alice, calendarId, new Blob([new Uint8Array([...head, 0xe9, ...tail])]));
+        expect(res.status).toBe(400);
+        expect(await res.text()).toContain('UTF-8');
+        expect((await april()).length).toBe(before);
+    });
+
+    test('import-from-drive on a file that is not UTF-8 is refused the same way', async () => {
+        const head = new TextEncoder().encode(
+            'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:latin1-drive@other\r\nSUMMARY:Caf',
+        );
+        const tail = new TextEncoder().encode(
+            '\r\nDTSTART:20260427T090000Z\r\nDTEND:20260427T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n',
+        );
+        const file = new File([new Uint8Array([...head, 0xe9, ...tail])], 'latin1.ics', { type: ICS_MIME });
+        const uploaded = await driveUpload(alice.sessionToken, alice.id, mountId, rootId, file);
+
+        const res = await importFromDrive(alice, calendarId, uploaded);
+        expect(res.status).toBe(400);
+        expect(await res.text()).toContain('UTF-8');
+    });
+
     test('a body over ICS_MAX_BYTES is 413 before the body is read', async () => {
         // The body is not a calendar (a 400 if it were ever parsed), so a 413 can only come from the
         // Content-Length check that runs first.
@@ -685,6 +718,27 @@ describe('Calendar transfer routes', () => {
         const result = await assertJson<ImportCountsResult>(await importFromDrive(alice, calendarId, uploaded));
         expect(result).toEqual({ imported: 1, skipped: 0, failed: 0 });
         expect((await april()).some((e) => e.uid === `drive-${stamp}@other`)).toBe(true);
+    });
+
+    // A file of a thousand events writes a row apiece before the route answers, so it exempts itself from
+    // the server-wide idle timeout the way the raw import and both contacts imports do.
+    test('import-from-drive exempts its request from the idle timeout', async () => {
+        const uploaded = await uploadIcs(
+            feed(vevent(`timeout-${randomUUID()}@other`, 'Long run', '20260428T090000Z', '20260428T100000Z')),
+        );
+        // app.handle() runs with no server, so the route's `server?.timeout` is a no-op in tests: give the
+        // app a real one to observe the call, and take it away again.
+        const server = Bun.serve({ port: 0, fetch: () => new Response('') });
+        app.server = server;
+        const timeout = spyOn(server, 'timeout');
+        try {
+            expect((await importFromDrive(alice, calendarId, uploaded)).status).toBe(200);
+            expect(timeout.mock.calls.map(([, seconds]) => seconds)).toEqual([0]);
+        } finally {
+            timeout.mockRestore();
+            app.server = null;
+            server.stop(true);
+        }
     });
 
     test('import-from-drive on a file that is not an .ics is 400', async () => {

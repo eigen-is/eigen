@@ -1,4 +1,5 @@
 import { VCARD_CONTENT_TYPE, VCARD_IMPORT_MAX_CARDS, VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
+import { NOT_A_VCARD_FILE } from '@workspace/lib/constants/transfer';
 import type { Contact } from '@workspace/lib/types/contact';
 import { isVCardFile } from '@workspace/lib/types/drive';
 import type { Label } from '@workspace/lib/types/label';
@@ -58,16 +59,6 @@ const LabelSchema = t.Object({
     name: t.String(TEXT),
     color: t.String(TEXT),
 });
-
-// vCard files are UTF-8 (RFC 6350 §3.1). A Windows-1252 export decoded leniently would import with U+FFFD
-// in every accented name, stored in the card bytes and re-served to every DAV client, so it is refused.
-function decodeVCardFile(bytes: Uint8Array): string {
-    try {
-        return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-    } catch {
-        throw new ApiError(400, 'File is not UTF-8 encoded');
-    }
-}
 
 // All contacts routes require ownerId === user.id (contacts are personal-only, no shared access)
 export const contactsRouter = new Elysia({ name: 'contacts' })
@@ -240,7 +231,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             server?.timeout(request, 0);
             const bytes = await readBoundedBodyBytes(request, VCARD_MAX_BYTES);
             if (bytes === null) throw new ApiError(413, 'Upload too large');
-            return await (await getContacts(user)).importCards(decodeVCardFile(bytes));
+            return await (await getContacts(user)).importCards(bytes);
         },
         { auth: true, parse: 'none' },
     )
@@ -253,10 +244,10 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             server?.timeout(request, 0);
             const bytes = await readImportSourceBytes(user, body, {
                 accepts: isVCardFile,
-                rejection: 'Not a vCard file',
+                rejection: NOT_A_VCARD_FILE,
                 maxBytes: VCARD_MAX_BYTES,
             });
-            return await (await getContacts(user)).importCards(decodeVCardFile(bytes));
+            return await (await getContacts(user)).importCards(bytes);
         },
         {
             body: importFromDriveSchema,

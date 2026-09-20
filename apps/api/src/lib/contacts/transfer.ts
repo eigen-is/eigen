@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { VCARD_IMPORT_MAX_CARDS } from '@workspace/lib/constants/contact';
+import { NOT_A_VCARD_FILE, NOT_UTF8_FILE } from '@workspace/lib/constants/transfer';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { eq } from 'drizzle-orm';
 import { ApiError } from '../core';
@@ -44,17 +45,27 @@ function withMintedUid(parsed: ParsedCard): string {
     return serializeVCardLines(lines);
 }
 
-// Replay a multi-card file into the book. Duplicates skip, never merge: a card whose UID is
-// already in the book, or whose first email already belongs to a contact, is counted and passed over — the
-// running Set means a file that repeats an address imports it once. A card that fails on its own content
-// (unparseable, refused by the PUT) is counted and the file continues; only the shared storage quota stops
-// the run, because every later card would be refused the same way.
-export async function importCards(contacts: Contacts, text: string): Promise<ImportCountsResult> {
+// Replay a multi-card file into the book, bytes in: the decode and the parse are the domain's, as the
+// mail and calendar imports' are. vCard files are UTF-8 (RFC 6350 §3.1) — decoded leniently a
+// Windows-1252 export would import with U+FFFD in every accented name, stored in the card bytes and
+// re-served to every DAV client. Duplicates skip, never merge: a card whose UID is already in the book,
+// or whose first email already belongs to a contact, is counted and passed over — the running Set means
+// a file that repeats an address imports it once. A card that fails on its own content (unparseable,
+// refused by the PUT) is counted and the file continues; only the shared storage quota stops the run,
+// because every later card would be refused the same way.
+export async function importCards(contacts: Contacts, bytes: Uint8Array): Promise<ImportCountsResult> {
+    let text: string;
+    try {
+        text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    } catch {
+        throw new ApiError(400, NOT_UTF8_FILE);
+    }
+
     let cards: string[];
     try {
         cards = splitVCards(text);
     } catch (e) {
-        if (e instanceof VCardError) throw new ApiError(400, 'Not a vCard file');
+        if (e instanceof VCardError) throw new ApiError(400, NOT_A_VCARD_FILE);
         throw e;
     }
     if (cards.length > VCARD_IMPORT_MAX_CARDS) throw new ApiError(413, 'Too many cards');

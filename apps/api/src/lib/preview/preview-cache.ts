@@ -4,6 +4,7 @@ import { getBytesTextPreviewMode, TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
+import { NOT_A_CALENDAR_FILE, NOT_A_VCARD_FILE, NOT_AN_EMAIL_FILE } from '@workspace/lib/constants/transfer';
 import { type DrivePath, isCollabType, isEmlFile, isIcsFile, isVCardFile } from '@workspace/lib/types/drive';
 import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { ApiError } from '../core/errors';
@@ -396,7 +397,7 @@ const VCARD_PREVIEW_JOB: VCardPreviewJob = { kind: 'preview', documentType: 'vca
 
 // The preview parses the whole file like an import does, so it shares the import's ceiling.
 export function assertVCardPreviewable(fileName: string, contentType: string, size: number): void {
-    if (!isVCardFile(contentType, fileName)) throw new ApiError(400, 'Not a vCard file');
+    if (!isVCardFile(contentType, fileName)) throw new ApiError(400, NOT_A_VCARD_FILE);
     if (size > VCARD_MAX_BYTES) throw new ApiError(413, 'File too large to preview');
 }
 
@@ -418,7 +419,7 @@ const EML_PREVIEW_JOB: EmlPreviewJob = { kind: 'preview', documentType: 'eml' };
 
 // The preview parses the whole message like an import does, so it shares the import's ceiling.
 export function assertEmlPreviewable(fileName: string, contentType: string, size: number): void {
-    if (!isEmlFile(contentType, fileName)) throw new ApiError(400, 'Not an email file');
+    if (!isEmlFile(contentType, fileName)) throw new ApiError(400, NOT_AN_EMAIL_FILE);
     if (size > EML_MAX_BYTES) throw new ApiError(413, 'File too large to preview');
 }
 
@@ -440,7 +441,7 @@ const ICS_PREVIEW_JOB: IcsPreviewJob = { kind: 'preview', documentType: 'ics' };
 
 // The preview parses the whole calendar like an import does, so it shares the import's ceiling.
 export function assertIcsPreviewable(fileName: string, contentType: string, size: number): void {
-    if (!isIcsFile(contentType, fileName)) throw new ApiError(400, 'Not a calendar file');
+    if (!isIcsFile(contentType, fileName)) throw new ApiError(400, NOT_A_CALENDAR_FILE);
     if (size > ICS_MAX_BYTES) throw new ApiError(413, 'File too large to preview');
 }
 
