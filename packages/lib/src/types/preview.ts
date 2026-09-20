@@ -1,4 +1,5 @@
 import type { TextPreviewMode } from '../constants/preview';
+import type { Attendee, CalendarEvent, EventData, ImipMethod } from './calendar';
 import type { Contact } from './contact';
 import type { AddressObject, Attachment } from './mail';
 
@@ -31,3 +32,26 @@ export type EmlPreview = {
     attachments: Pick<Attachment, 'filename' | 'contentType' | 'size'>[];
     droppedAttachments: number;
 };
+
+// One event of an `.ics` preview: what `EventDetailCard` draws, and nothing relative to now — the payload
+// is cached per file version, so it must not depend on the clock (the card describes the recurrence from
+// `rrule` itself). `start` and `end` are strings, not Dates: an ISO instant, or a bare `YYYY-MM-DD` for an
+// all-day event with the exclusive end the calendar domain stores — which is why both routes are read
+// through the no-revival treaty (core/api.ts). `attendees` holds the first ICS_PREVIEW_MAX_ATTENDEES and
+// `droppedAttendees` counts the rest.
+export type IcsPreviewEvent = Pick<
+    CalendarEvent,
+    'uid' | 'title' | 'description' | 'location' | 'allDay' | 'timezone' | 'rrule' | 'status'
+> & {
+    start: string;
+    end: string;
+    organizer: NonNullable<EventData['organizer']> | null;
+    attendees: Attendee[];
+    droppedAttendees: number;
+};
+
+// What an `.ics` preview serves: the events the file holds, masters only — an override or an excluded
+// occurrence is part of its series, not a row of its own. `events` holds the first
+// ICS_PREVIEW_MAX_EVENTS by start, `dropped` counts the rest and `total` the masters the file holds.
+// `method` is the file's own METHOD, so an invitation reads as one.
+export type IcsPreview = { method?: ImipMethod; events: IcsPreviewEvent[]; dropped: number; total: number };
