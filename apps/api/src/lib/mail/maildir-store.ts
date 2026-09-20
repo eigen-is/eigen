@@ -7,14 +7,7 @@ import {
     mailboxListFlags,
     STANDARD_MAILBOXES,
 } from '@workspace/lib/constants/mailboxes';
-import type {
-    Attachment,
-    DraftAttachmentUpload,
-    Email,
-    EmailSummary,
-    MaildirMailbox,
-    RecipientSummary,
-} from '@workspace/lib/types/mail';
+import type { Attachment, DraftAttachmentUpload, Email, EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import type { BunFile, FileSink } from 'bun';
 import { Semaphore } from '../../utils/semaphore';
 import { invalidateMailSize } from '../config/enforcement';
@@ -26,6 +19,7 @@ import MailDB from './maildb';
 import {
     applyFlagsFromFilename,
     buildMaildirFilename,
+    buildRecipientSummary,
     createUniqueMessageId,
     getMailIDfromFileName,
     parseFlagsFromFilename,
@@ -245,8 +239,8 @@ export class MaildirStore implements MailStore {
         });
     }
 
-    updateDraftContent(id: string, subject: string, text: string, recipients?: RecipientSummary): void {
-        this.db.updateDraftContent(id, subject, text, recipients);
+    applyDraftMeta(draftId: string, meta: DraftMeta): void {
+        this.db.updateDraftContent(draftId, meta.subject, meta.text, buildRecipientSummary(meta.to, meta.cc));
     }
 
     // -- Sync --
@@ -307,6 +301,14 @@ export class MaildirStore implements MailStore {
                 }
             }
             this.db.insertEmails(parsed);
+            // A fast save leaves the .eml stale, so a row rebuilt from it carries the last full save's
+            // summary. The sidecar holds the truth for those fields — project it back over the row.
+            if (mailbox === MAILBOX_DRAFTS) {
+                for (const p of parsed) {
+                    const meta = await this.readDraftMeta(p.id);
+                    if (meta) this.applyDraftMeta(p.id, meta);
+                }
+            }
             for (const p of parsed) this.events.received(p, true);
         }
 
@@ -357,13 +359,18 @@ export class MaildirStore implements MailStore {
 
     async writeDraftMeta(draftId: string, meta: DraftMeta): Promise<void> {
         await this.ensureDraftMetaDir();
-        await this.storage.write(this.getDraftMetaPath(draftId), JSON.stringify(meta));
+        await this.storage.writeAtomic(this.getDraftMetaPath(draftId), JSON.stringify(meta));
     }
 
     async readDraftMeta(draftId: string): Promise<DraftMeta | null> {
         const metaPath = this.getDraftMetaPath(draftId);
         if (!(await this.storage.exists(metaPath))) return null;
-        return this.storage.file(metaPath).json();
+        try {
+            return await this.storage.file(metaPath).json();
+        } catch {
+            // Torn bytes from a crash: absent, so the caller falls back to the .eml.
+            return null;
+        }
     }
 
     async deleteDraftMeta(draftId: string): Promise<void> {

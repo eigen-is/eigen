@@ -6,7 +6,6 @@ import type {
     Email,
     EmailSummary,
     MaildirMailbox,
-    RecipientSummary,
 } from '@workspace/lib/types/mail';
 import type { FileSink } from 'bun';
 
@@ -80,9 +79,12 @@ export interface MailStore {
     delete(messageId: string): Promise<void>;
     move(messageId: string, targetMailbox: string): Promise<void>;
     setFlags(messageId: string, changes: Partial<Record<MailFlag, boolean>>): Promise<void>;
-    updateDraftContent(id: string, subject: string, text: string, recipients?: RecipientSummary): void;
+    // The one projection of a sidecar onto its index row: the fast save applies it beside the sidecar
+    // write, and the Drafts sync re-applies it over a row rebuilt from the .eml that save left stale.
+    applyDraftMeta(draftId: string, meta: DraftMeta): void;
 
     writeDraftMeta(draftId: string, meta: DraftMeta): Promise<void>;
+    // A missing sidecar and one a crash tore both read as null; the caller falls back to the .eml.
     readDraftMeta(draftId: string): Promise<DraftMeta | null>;
     deleteDraftMeta(draftId: string): Promise<void>;
     listDraftMetaIds(): Promise<string[]>;
