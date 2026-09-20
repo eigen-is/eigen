@@ -63,22 +63,28 @@ const BY_FLAG = new Map<string, SpecialMailbox>(Object.values(SPECIAL_MAILBOXES)
 
 const STANDARD_BY_NAME = new Set<string>(STANDARD_MAILBOXES);
 
-// Whether a mailbox name is one of the standard six, spelled canonically. Everything else is a folder
-// the user (or their IMAP client) made, whose name Eigen neither case-folds nor rewrites.
-export function isStandardMailbox(mailbox: string): boolean {
-    return STANDARD_BY_NAME.has(mailbox);
+// The one name a mailbox answers to: the standard six case-fold onto their canonical spelling and `INBOX`
+// onto the inbox's empty name, while a folder the user (or their IMAP client) made keeps its own spelling.
+export function canonicalMailbox(mailbox: string): string {
+    if (mailbox === MAILBOX_INBOX || mailbox.toLowerCase() === MAILBOX_INBOX_KEY) return MAILBOX_INBOX;
+    return STANDARD_MAILBOXES.find((m) => m.toLowerCase() === mailbox.toLowerCase()) ?? mailbox;
 }
 
-// The `/box/:filterId` segment, and the mailbox part of a list query key: a standard mailbox lowercased,
-// with the canonical empty inbox spelled out. A folder outside the standard set travels verbatim — the
-// server case-folds only the standard names, so `Projects` lowercased would address no mailbox at all.
+// Whether a name addresses one of the standard six. A `.archive` or `.INBOX` directory is Archive and the
+// Maildir root under another spelling, never a folder of its own.
+export function isStandardMailbox(mailbox: string): boolean {
+    return STANDARD_BY_NAME.has(canonicalMailbox(mailbox));
+}
+
+// The `/box/:filterId` segment and the mailbox part of a list query key. A custom folder travels verbatim:
+// the server case-folds only the standard names, so `Projects` lowercased would address no mailbox at all.
 export function mailboxRouteSegment(mailbox: string): string {
     if (mailbox === MAILBOX_INBOX) return MAILBOX_INBOX_KEY;
     return isStandardMailbox(mailbox) ? mailbox.toLowerCase() : mailbox;
 }
 
-// What the UI calls a folder outside the standard set (which goes by its `SpecialMailbox.label`): the
-// full hierarchy, with the Maildir++ `.` delimiter shown as the `/` a reader takes for nesting.
+// A custom folder's label — a standard one goes by its `SpecialMailbox.label`. The `.` delimiter is shown
+// as the `/` a reader takes for nesting.
 export function mailboxDisplayName(mailbox: string): string {
     return mailbox.replaceAll('.', '/');
 }

@@ -5,11 +5,8 @@ export const emailKeys = {
     all: ['emails'] as const,
     owner: (ownerId: string) => [...emailKeys.all, ownerId] as const,
     lists: (ownerId: string) => [...emailKeys.owner(ownerId), 'list'] as const,
-    // Normalize the mailbox so every spelling of a box maps to one key. toLowerCase() reconciles the
-    // lowercase sidebar URLs (/box/sent) with the canonical-case SSE events ('Sent'); the ''→'inbox'
-    // step reconciles the server-canonical inbox ('') that rides on EmailSummary.mailbox with the
-    // 'inbox' the route mounts under. Without it, invalidating list(ownerId, '') on a move/undo INTO
-    // the inbox would miss the open {mailbox:'inbox'} query and the row wouldn't reappear.
+    // Through `mailboxRouteSegment`, so a canonical-case SSE event ('Sent', or '' for the inbox) and the
+    // sidebar URL it belongs to (/box/sent, /box/inbox) land on the one key.
     list: (ownerId: string, mailbox: string) =>
         [...emailKeys.lists(ownerId), { mailbox: mailboxRouteSegment(mailbox) }] as const,
     details: (ownerId: string) => [...emailKeys.owner(ownerId), 'detail'] as const,
