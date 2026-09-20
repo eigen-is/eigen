@@ -51,7 +51,8 @@ Different file types open in different ways:
 - **Images, PDFs, videos, and audio** open in the preview overlay in Drive.
 - **Text and code files** (such as `.md`, `.txt`, `.json`) open in a text editor in the browser.
 - **Contact files** (`.vcf`) open in the preview overlay as contact cards, not as text. You can [import them to Contacts](/support/contacts/import-contacts) from there.
-- **Saved emails** (`.eml`) open in the preview overlay as the message they hold, not as text. You can [put them back in your inbox](/support/mail/download-an-email) from there.
+- **Saved emails** (`.eml`) open in the preview overlay as the message they hold, not as text. You can [put them back in your inbox](/support/mail/import-an-email) from there.
+- **Calendar files** (`.ics`) open in the preview overlay as the events they hold, not as text. You can [import them to Calendar](/support/calendar/import-events) from there.
 
 If you want to open any file in a new browser tab rather than the default behavior, right-click it and
 choose **Open in new tab**.

@@ -156,7 +156,7 @@ occurrence-by-occurrence from dtstart to the query window on the single shared e
 
 `timezone` is nullable: only the create/edit dialogs always store one, so API-, CalDAV- and iMIP-created events routinely carry `null` (all-day events store `null` by design). `formatEventWhen` therefore takes the fallback zone as a required argument instead of defaulting to UTC, because the right answer differs per surface:
 
-- **Browser** (`event-detail-dialog.tsx`, `calendar-invite-widget.tsx`) passes `viewerTimeZone()` — the runtime's own zone, which is exactly what the month/week grid lays events out in (`formatTime` reads `getHours`, `getEventsForDay` reads `getDate`). Any other choice makes the detail dialog name a different clock time than the slot the grid drew.
+- **Browser** (`EventDetailCard`, `calendar-invite-widget.tsx`) passes `viewerTimeZone()` — the runtime's own zone, which is exactly what the month/week grid lays events out in (`formatTime` reads `getHours`, `getEventsForDay` reads `getDate`). Any other choice makes the detail dialog name a different clock time than the slot the grid drew.
 - **API** (`imip.ts`) has no viewer and must not borrow the server's zone, so invitation mail renders a zone-less timed event in UTC and appends `(UTC)`. An event with a stored zone renders in that zone, unlabelled; the attached `.ics` carries the TZID either way.
 
 All-day events take neither fallback: `formatEventWhen` pins them to UTC, because their bounds are midnight UTC and the date portion is the answer (the same UTC buckets `getEventsForDay` sorts them into). A stored TZID that `Intl` rejects (Outlook's `W. Europe Standard Time`, pre-normalization rows) takes the same fallback as no zone at all — it is the case `normalizeTimezone` now writes as `null` at ingestion.
@@ -201,6 +201,8 @@ the target sees a changed event. Moving a lone recurrence occurrence (an excepti
 - More than `ICS_IMPORT_MAX_EVENTS` masters → 413 before anything is written.
 
 The masters of a file land under one ctag bump, one `calendar:event-created` broadcast and one `notifySharedCalendarUsers()`: `createEvent` does all three per call, and a thousand of each would trip the rate limiter. The two share `insertEvent()`, the row write, which stamps the ctag its caller bumped.
+
+**Where a user starts an import.** Anywhere an `.ics` is a file: a Drive row, a mail attachment chip, a chat or card attachment, and the quick look's own footer. The registry row is `import-calendar` ("Import to Calendar", `packages/lib/src/core/file-actions.ts`), offered for a downloadable `.ics` under `ICS_MAX_BYTES` and hidden for a guest, whose import the route refuses. Unlike the contacts and mail rows it cannot just run: it needs a target, so `useFileActionRunner` opens `ImportToCalendarPicker` (`packages/ui/src/components/calendar/import-to-calendar-picker.tsx`), which lists the Home's OWN calendars through `useCalendars` — a calendar shared with the viewer is not a target, and asking only for the owned ones is what keeps one out of the list — preselects the default one, and offers **New calendar** with a name field defaulting to the file name without its extension. The picker owns the whole action: it runs `useCreateCalendar` first when the target is a new calendar, then `useImportCalendarFromDrive` for a Drive subject or `useImportCalendarFromUrl` for anything else, stays open with the hook's error toast on failure (`useDialogPending`) and closes on success. A create that succeeds before an import that fails leaves the new calendar behind, empty.
 
 ## API Routes
 
@@ -401,5 +403,9 @@ Both follow from storing columns and re-synthesizing the resource on GET, and bo
 - **`apps/api/src/lib/caldav/`** — the protocol layer: router, REPORT handlers, `ical-serialize.ts`,
   `ical-parse.ts`, `vtimezone.ts`, `resource.ts`.
 - **`apps/api/src/routes/calendar.ts`** — thin route bindings.
-- **`packages/lib/src/core/calendar/`** — FE hooks + SSE handlers; shared types in
-  `packages/lib/src/types/calendar.ts`.
+- **`packages/lib/src/core/calendar/`** — FE hooks + SSE handlers, `calendar-utils.ts` (`formatEventWhen`,
+  `rruleToText`, `viewerTimeZone`) and `preview-lines.ts` (the counted line and the method labels an `.ics`
+  quick look shows); shared types in `packages/lib/src/types/calendar.ts`.
+- **`packages/ui/src/components/calendar/`** — what draws an event outside the calendar app too:
+  `EventDetailCard` (one event, read-only, from data alone — the detail dialog's body and the `.ics` quick
+  look's card, [PREVIEWS.md](PREVIEWS.md)), `AttendeeList` beside it, and `ImportToCalendarPicker`.
