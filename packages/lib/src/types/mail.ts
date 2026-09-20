@@ -49,7 +49,7 @@ export function mailAttachmentName(att: Pick<Attachment, 'filename'>, index: num
     return name || `attachment-${index + 1}`;
 }
 
-// The one test for "belongs to the invite widget, not the chips": compose and the save can't disagree.
+// The one test for "this part is an invitation": the reader's invite widget and the iMIP paths ask it.
 export function isCalendarPart(att: Pick<Attachment, 'contentType'>): boolean {
     return isIcsMime(att.contentType);
 }

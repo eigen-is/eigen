@@ -39,17 +39,17 @@ describe('mergeServerAttachments', () => {
         att('b.pdf', 'application/pdf', 2),
     ];
 
-    test('chips carry raw indexes when a calendar part precedes real attachments', () => {
+    test('a calendar part gets a chip like every other part', () => {
         const { localNext } = mergeServerAttachments([], [], parsed);
-        expect(localNext.map((c) => c.filename)).toEqual(['a.pdf', 'b.pdf']);
-        expect(localNext.map((c) => c.index)).toEqual([1, 2]);
+        expect(localNext.map((c) => c.filename)).toEqual(['invite.ics', 'a.pdf', 'b.pdf']);
+        expect(localNext.map((c) => c.index)).toEqual([0, 1, 2]);
     });
 
     test('removing a chip keeps the surviving attachment its raw index', () => {
         const { localNext } = mergeServerAttachments([], [], parsed);
-        // The reducer removes a chip by position; the survivor's index is what reaches the save.
-        const afterRemove = localNext.filter((_, i) => i !== 0);
-        expect(afterRemove.map((c) => c.index)).toEqual([2]);
+        // The reducer removes a chip by position; the survivors' indexes are what reach the save.
+        const afterRemove = localNext.filter((_, i) => i !== 1);
+        expect(afterRemove.map((c) => c.index)).toEqual([0, 2]);
     });
 
     test('a filename-less part reconciles against the chip named by mailAttachmentName', () => {
@@ -63,16 +63,15 @@ describe('mergeServerAttachments', () => {
         expect(localNext.map((c) => c.key)).toEqual(['local-0']);
     });
 
-    test('an uploaded invite settles instead of staying in flight', () => {
+    test('an uploaded invite settles onto the part the save embedded', () => {
         const local: AttachmentMeta[] = [
             { key: 'local-0', tempId: 't1', filename: 'invite.ics', size: 10, contentType: 'text/calendar' },
         ];
-        // The server embedded it as a hidden calendar part. Matching only the chipped parts would
-        // leave the chip carrying a tempId the server has already consumed, and every later save
-        // would re-send it.
+        // The chip keeps its key and loses the tempId the server has already consumed, so no later
+        // save re-sends it.
         const { serverActual, localNext } = mergeServerAttachments(local, [], [att('invite.ics', 'text/calendar', 0)]);
-        expect(serverActual).toEqual([]);
-        expect(localNext).toEqual([]);
+        expect(serverActual.map((c) => [c.filename, c.index])).toEqual([['invite.ics', 0]]);
+        expect(localNext.map((c) => [c.key, c.tempId])).toEqual([['local-0', undefined]]);
     });
 
     test('chips take the index the server gave each part, not its position in the answer', () => {
@@ -84,13 +83,13 @@ describe('mergeServerAttachments', () => {
 });
 
 describe('initFields', () => {
-    test('an invite an IMAP client left on the draft is no compose chip', () => {
+    test('an invite on the draft opens as a removable chip', () => {
         const fields = initFields(
             savedDraft([att('invite.ics', 'text/calendar', 0), att('menu.pdf', 'application/pdf', 1)]),
         );
-        expect(fields.attachments.map((a) => a.filename)).toEqual(['menu.pdf']);
+        expect(fields.attachments.map((a) => a.filename)).toEqual(['invite.ics', 'menu.pdf']);
         // The keep list the save sends is built from these indexes, so they stay raw EML positions.
-        expect(fields.attachments.map((a) => a.index)).toEqual([1]);
+        expect(fields.attachments.map((a) => a.index)).toEqual([0, 1]);
     });
 
     test('a draft without an invite keeps every part', () => {

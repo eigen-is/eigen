@@ -348,54 +348,90 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         expect(second.attachments.map((a) => a.filename)).toEqual(['beta.txt']);
     });
 
-    test('a draft carrying an invite still takes the fast path', async () => {
-        const invite = new File(['BEGIN:VCALENDAR\r\nEND:VCALENDAR'], 'invite.ics', { type: 'text/calendar' });
-        const doc = new File(['agenda-bytes'], 'agenda.txt', { type: 'text/plain' });
-        const uploadedInvite = await uploadDraftAttachment(ctx.alice.user.sessionToken, ctx.alice.user.id, invite);
-        const uploadedDoc = await uploadDraftAttachment(ctx.alice.user.sessionToken, ctx.alice.user.id, doc);
+    test('a draft that keeps its invite chip takes the fast path', async () => {
+        const token = ctx.alice.user.sessionToken;
+        const ownerId = ctx.alice.user.id;
+        const to = { value: [{ address: 'bob@test.eigen.is', name: 'Bob' }], text: 'Bob <bob@test.eigen.is>' };
+        const stage = async (name: string, type: string, body: string) =>
+            (await uploadDraftAttachment(token, ownerId, new File([body], name, { type }))).tempId;
+        const invite = await stage('invite.ics', 'text/calendar', 'BEGIN:VCALENDAR\r\nEND:VCALENDAR');
+        const doc = await stage('agenda.txt', 'text/plain', 'agenda-bytes');
 
         const first = await putDraft(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            {
-                subject: 'Invite draft',
-                to: {
-                    value: [{ address: 'bob@test.eigen.is', name: 'Bob' }],
-                    text: 'Bob <bob@test.eigen.is>',
-                },
-                text: 'v1',
-                html: '<p>v1</p>',
-            },
-            { tempAttachmentIds: [uploadedInvite.tempId, uploadedDoc.tempId] },
+            token,
+            ownerId,
+            { subject: 'Invite draft', to, text: 'v1', html: '<p>v1</p>' },
+            { tempAttachmentIds: [invite, doc] },
         );
-        expect(first.attachments.length).toBe(2);
+        expect(first.attachments.map((a) => a.filename)).toEqual(['invite.ics', 'agenda.txt']);
 
-        // The composer hides the invite, so its keep list names the raw index of the one chip it shows.
-        await putDraft(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            { id: first.id, subject: 'Invite draft updated', to: first.to, text: 'v2', html: '<p>v2</p>' },
-            { keepAttachmentIndexes: [1] },
+        // The sidecar lists the calendar part like any other, so keeping both chips matches its set.
+        const second = await putDraft(
+            token,
+            ownerId,
+            { id: first.id, subject: 'Invite draft updated', to: first.to, text: 'v1', html: '<p>v1</p>' },
+            { keepAttachmentIndexes: [0, 1] },
         );
+        expect(second.attachments.map((a) => a.filename)).toEqual(['invite.ics', 'agenda.txt']);
+        expect(second.subject).toBe('Invite draft updated');
 
-        // A full save would have rebuilt the EML without the calendar part; the fast path leaves it alone.
-        const getRes = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/mail/${ctx.alice.user.id}/message/${first.id}`,
-        );
-        const fetched = await assertJson<{ html: string; attachments: Array<{ contentType: string }> }>(getRes);
-        expect(fetched.html).toContain('v2');
-        expect(fetched.attachments.map((a) => a.contentType.split(';')[0])).toEqual(['text/calendar', 'text/plain']);
+        // A fast save leaves the EML stale, so the old subject on disk is what proves it ran.
+        const raw = await (await authedRequest(token, `/mail/${ownerId}/message/${first.id}/download`)).text();
+        expect(raw).not.toContain('Invite draft updated');
     });
 
-    test('a user-attached invite survives a full save and the send', async () => {
+    test('removing the invite chip drops the calendar part for good', async () => {
         const token = ctx.alice.user.sessionToken;
         const ownerId = ctx.alice.user.id;
         const to = { value: [{ address: 'bob@test.eigen.is', name: 'Bob' }], text: 'Bob <bob@test.eigen.is>' };
         const stage = async (name: string, type: string, body: string) =>
             (await uploadDraftAttachment(token, ownerId, new File([body], name, { type }))).tempId;
         const invite = await stage('meeting.ics', 'text/calendar', 'BEGIN:VCALENDAR\r\nEND:VCALENDAR');
-        const doc = await stage('notes.txt', 'text/plain', 'notes-bytes');
+        const doc = await stage('notes.pdf', 'application/pdf', 'notes-bytes');
+
+        const first = await putDraft(
+            token,
+            ownerId,
+            { subject: 'Drop the invite', to, text: 'v1', html: '<p>v1</p>' },
+            { tempAttachmentIds: [invite, doc] },
+        );
+        const listed = await assertJson<{ attachments: Array<{ filename?: string }> }>(
+            await authedRequest(token, `/mail/${ownerId}/message/${first.id}`),
+        );
+        expect(listed.attachments.map((a) => a.filename)).toEqual(['meeting.ics', 'notes.pdf']);
+
+        // The user removes the .ics chip: the keep list names the one survivor.
+        const second = await putDraft(
+            token,
+            ownerId,
+            { id: first.id, subject: 'Drop the invite', to: first.to, text: 'v2', html: '<p>v2</p>' },
+            { keepAttachmentIndexes: [1] },
+        );
+        expect(second.attachments.map((a) => a.filename)).toEqual(['notes.pdf']);
+
+        // The rebuild renumbered the survivor to 0; the next save must not bring the invite back.
+        const third = await putDraft(
+            token,
+            ownerId,
+            { id: first.id, subject: 'Drop the invite', to: first.to, text: 'v3', html: '<p>v3</p>' },
+            { keepAttachmentIndexes: [0] },
+        );
+        expect(third.attachments.map((a) => a.filename)).toEqual(['notes.pdf']);
+
+        const fetched = await assertJson<{ attachments: Array<{ filename?: string }> }>(
+            await authedRequest(token, `/mail/${ownerId}/message/${first.id}`),
+        );
+        expect(fetched.attachments.map((a) => a.filename)).toEqual(['notes.pdf']);
+    });
+
+    test('a sent message carries an attached invite exactly once', async () => {
+        const token = ctx.alice.user.sessionToken;
+        const ownerId = ctx.alice.user.id;
+        const to = { value: [{ address: 'bob@test.eigen.is', name: 'Bob' }], text: 'Bob <bob@test.eigen.is>' };
+        const stage = async (name: string, type: string, body: string) =>
+            (await uploadDraftAttachment(token, ownerId, new File([body], name, { type }))).tempId;
+        const invite = await stage('ride-along.ics', 'text/calendar', 'BEGIN:VCALENDAR\r\nEND:VCALENDAR');
+        const doc = await stage('minutes.txt', 'text/plain', 'minutes-bytes');
 
         const first = await putDraft(
             token,
@@ -403,42 +439,24 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
             { subject: 'Invite ride-along', to, text: 'v1', html: '<p>v1</p>' },
             { tempAttachmentIds: [invite, doc] },
         );
-        expect(first.attachments.map((a) => a.filename)).toEqual(['meeting.ics', 'notes.txt']);
 
-        // Body-only save: the composer chips the named part only, so the invite is never in a keep list.
-        await putDraft(
-            token,
-            ownerId,
-            { id: first.id, subject: 'Invite ride-along', to: first.to, text: 'v2', html: '<p>v2</p>' },
-            { keepAttachmentIndexes: [1] },
-        );
-
-        const forceRes = await authedRequest(token, `/mail/${ownerId}/message/draft`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                mail: { id: first.id, subject: 'Invite ride-along', to: first.to, text: 'v3', html: '<p>v3</p>' },
-                keepAttachmentIndexes: [1],
-                forceFullSave: true,
-            }),
-        });
-        const rebuilt = await assertJson<{ attachments: Array<{ filename?: string }> }>(forceRes);
-        expect(rebuilt.attachments.map((a) => a.filename)).toEqual(['meeting.ics', 'notes.txt']);
-
-        // The send rebuilds with no keep list at all.
         const sendRes = await authedRequest(token, `/mail/${ownerId}/message/send`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                mail: { id: first.id, subject: 'Invite ride-along', to: first.to, text: 'v3', html: '<p>v3</p>' },
+                mail: { id: first.id, subject: 'Invite ride-along', to: first.to, text: 'v1', html: '<p>v1</p>' },
             }),
         });
         expect(sendRes.status).toBe(200);
 
-        const sent = await assertJson<{ attachments: Array<{ filename?: string }> }>(
+        const sent = await assertJson<{ mailbox: string; attachments: Array<{ filename?: string }> }>(
             await authedRequest(token, `/mail/${ownerId}/message/${first.id}`),
         );
-        expect(sent.attachments.map((a) => a.filename)).toEqual(['meeting.ics', 'notes.txt']);
+        expect(sent.mailbox).toBe('Sent');
+        expect(sent.attachments.map((a) => a.filename)).toEqual(['ride-along.ics', 'minutes.txt']);
+
+        const raw = await (await authedRequest(token, `/mail/${ownerId}/message/${first.id}/download`)).text();
+        expect(raw.match(/text\/calendar/gi)?.length).toBe(1);
     });
 
     test('a fast save hands every kept part back with its raw index', async () => {
@@ -459,26 +477,26 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         );
         expect(first.attachments.map((a) => a.index)).toEqual([0, 1, 2]);
 
-        // Body-only save: the composer's two chips are the named parts at 0 and 2, so the fast path
-        // has to hand them back under those numbers rather than under their position in its answer.
+        // Body-only save with every chip kept: the fast path hands each part back under the number
+        // the parser gave it rather than under its position in the answer.
         const second = await putDraft(
             token,
             ownerId,
             { id: first.id, subject: 'Index drift', to: first.to, text: 'v2', html: '<p>v2</p>' },
-            { keepAttachmentIndexes: [0, 2] },
+            { keepAttachmentIndexes: [0, 1, 2] },
         );
         expect(second.attachments.map((a) => [a.filename, a.index])).toEqual([
             ['doc.txt', 0],
+            ['invite.ics', 1],
             ['report.pdf', 2],
         ]);
 
-        // The user removes doc.txt, so the keep list is the surviving chip's own index. The invite,
-        // which has no chip to remove, rides the rebuild.
+        // The user removes doc.txt, so the keep list is the two surviving chips' own indexes.
         const third = await putDraft(
             token,
             ownerId,
             { id: first.id, subject: 'Index drift', to: first.to, text: 'v3', html: '<p>v3</p>' },
-            { keepAttachmentIndexes: [2] },
+            { keepAttachmentIndexes: [1, 2] },
         );
         expect(third.attachments.map((a) => a.filename)).toEqual(['invite.ics', 'report.pdf']);
 
