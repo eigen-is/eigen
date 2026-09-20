@@ -53,7 +53,7 @@ defined and migrated in v1, but nothing in the FE or BE reads or writes them.
 
 ## Files and index
 
-Mail follows the contract contacts and calendar follow: standard files are the truth and SQLite is an index that rebuilds from them ([CONTACTS.md](CONTACTS.md) states the same for `cards/*.vcf`). What differs is the writer count. Contacts and calendar files are written by the API process alone; the Maildir is also written by Dovecot, out of process, which is why this store has `fs.watch` handles and a full readdir diff where contacts has a pending-write journal and a stat-only reconcile. The three share the primitives (`LocalFilesystem.writeAtomic`, `Semaphore(1)`, `ManagedDatabase`) and not a store class.
+This section describes `MaildirStore`, the only `MailStore` today; under a remote backend ([PROPOSAL_EXTERNAL_MAIL_PROVIDER.md](proposals/PROPOSAL_EXTERNAL_MAIL_PROVIDER.md)) the provider holds the truth and `mail.db` is a cache of it. Mail follows the contract contacts and calendar follow: standard files are the truth and SQLite is an index that rebuilds from them ([CONTACTS.md](CONTACTS.md) states the same for `cards/*.vcf`). What differs is the writer count. Contacts and calendar files are written by the API process alone; the Maildir is also written by Dovecot, out of process, which is why this store has `fs.watch` handles and a full readdir diff where contacts has a pending-write journal and a stat-only reconcile. The three share the primitives (`LocalFilesystem.writeAtomic`, `Semaphore(1)`, `ManagedDatabase`) and not a store class.
 
 | | Lives in | Rebuilds from the files |
 |---|---|---|
