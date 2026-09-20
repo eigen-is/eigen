@@ -1,10 +1,9 @@
 import * as path from 'node:path';
 import { ApiError } from './errors';
 
-// The one rule for a client-chosen name that becomes a path segment — a CardDAV resource name, a calendar id,
-// a mail draft id: a leading alphanumeric then `A-Za-z0-9._@-`, which excludes `/`, `..`, leading dots, spaces
-// and control characters, capped at 200 chars so `writeAtomic`'s `.`-prefixed temp name stays under NAME_MAX.
-// ASCII-only, so a value that passes is byte-identical in every Unicode normal form.
+// The one rule for a client-chosen name that becomes a path segment: no `/`, no `..`, no leading dot, no
+// control character, ASCII-only so it is byte-identical in every Unicode normal form, and short enough that
+// `writeAtomic`'s `.`-prefixed temp name stays under NAME_MAX.
 const SAFE_PATH_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._@-]*$/;
 
 export function isSafePathSegment(value: string): boolean {

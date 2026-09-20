@@ -31,24 +31,20 @@ const STALE_DRAFT_TEMP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 // Sibling of the Maildir tree (not inside it) so Dovecot IMAP doesn't see it as a folder.
 const DRAFT_ATTACHMENTS_DIR = 'draft-attachments';
 
-// Staged draft attachments count toward the mail half of the quota, so the live store (MaildirStore.size)
-// and the admin's file-level sizing (pullHomeSize) charge them through this one walk.
+// Staged attachments are charged to the mail quota, and both surfaces that report it walk them here.
 export function readDraftStagingSize(homeFs: LocalFilesystem): Promise<number> {
     return homeFs.dirSize(path.join(PATHS.MAIL.ROOT, DRAFT_ATTACHMENTS_DIR));
 }
 
-// A mailbox is a user-visible folder name, so a hierarchy segment may hold interior spaces where a draft id
-// may not — but never the `.` Maildir++ delimiter, and never nothing at all.
+// A mailbox name is user-visible, so a segment may hold interior spaces — but never the `.` Maildir++
+// delimiter, and never nothing at all.
 const MAILBOX_SEGMENT = /^[A-Za-z0-9_\- ]+$/;
 
-// The one rule for a mailbox path: `mailboxDir` turns a passing name into a directory, and the disk
-// enumeration skips a Dovecot folder that fails it rather than reporting a name Eigen cannot address.
 function isValidMailboxPath(mailbox: string): boolean {
     return mailbox.split(/[./]/).every((segment) => MAILBOX_SEGMENT.test(segment) && segment.trim() === segment);
 }
 
-// A message id and a staged-attachment temp id both become a filename, so an id no `MailStore` minted is
-// refused rather than mapped onto one — two mapped ids would collide on one file.
+// Refused, never mapped onto a safe name: two mapped ids would collide on one file.
 function safeFileId(id: string): string {
     if (!isSafePathSegment(id)) throw new ApiError(400, `Invalid mail id: ${id}`);
     return id;
@@ -64,6 +60,7 @@ export class MaildirStore implements MailStore {
     private storeLock = new Semaphore(1);
     private watchers: FSWatcher[] = [];
     private watchedMailboxes = new Set<string>();
+    private indexedMailboxes = new Set<string>();
 
     constructor(private home: Home) {
         this.basePath = PATHS.MAIL.MAILDIR;
@@ -85,8 +82,7 @@ export class MaildirStore implements MailStore {
 
     async watch(): Promise<void> {
         await this.watchMailboxes();
-        // An IMAP client can create a folder at any time, so the Maildir root is watched too and each
-        // new `.Folder` picks up its own watchers as it appears.
+        // An IMAP client can create a folder at any time, so a new `.Folder` picks up watchers as it appears.
         this.watchers.push(
             this.storage.watch(this.basePath, () =>
                 this.watchMailboxes().catch((err) => console.error('maildir: mailbox watch refresh failed', err)),
@@ -95,7 +91,12 @@ export class MaildirStore implements MailStore {
     }
 
     private async watchMailboxes(): Promise<void> {
-        for (const mailbox of await this.listMailboxPaths()) {
+        const onDisk = await this.listMailboxPaths();
+        // A folder deleted and made again is a new directory, so forget the old one or it never gets watchers.
+        for (const mailbox of this.watchedMailboxes) {
+            if (!onDisk.includes(mailbox)) this.watchedMailboxes.delete(mailbox);
+        }
+        for (const mailbox of onDisk) {
             if (this.watchedMailboxes.has(mailbox)) continue;
             this.watchedMailboxes.add(mailbox);
             const mailboxPath = this.mailboxDir(mailbox);
@@ -141,9 +142,13 @@ export class MaildirStore implements MailStore {
     async mailboxesList(): Promise<MaildirMailbox[]> {
         const mailboxes: MaildirMailbox[] = [];
         for (const name of await this.listMailboxPaths()) {
-            // A folder Eigen has never indexed — an IMAP client's, or one that predates this home's
-            // mail.db — has no rows to count, so its first listing indexes it, as a first open does.
-            if (this.db.getEmailsCount(name) === 0) await this.syncMailbox(name);
+            // Counts come from the index: awaiting a sync here would re-index every empty folder on every
+            // list, and messageMoveToTrash lists on each trash action. The sync's own SSE events land the
+            // counts a first index changes.
+            if (this.db.getEmailsCount(name) === 0 && !this.indexedMailboxes.has(name)) {
+                this.indexedMailboxes.add(name);
+                this.syncMailbox(name).catch((err) => console.error('maildir: first mailbox index failed', err));
+            }
             mailboxes.push(this.getMailboxInfo(name));
         }
         return mailboxes;
@@ -211,7 +216,7 @@ export class MaildirStore implements MailStore {
     async append(mailbox: string, message: Buffer, opts?: { skipSync?: boolean }): Promise<string> {
         // Lock covers only the delivery — the follow-up sync takes the lock itself.
         const { uniqueId } = await this.storeLock.run(() => this.deliverAtomic(message, mailbox));
-        if (!opts?.skipSync) await this.syncMailbox(mailbox);
+        if (!opts?.skipSync) await this.syncMailbox(mailbox, { arrival: true });
         return uniqueId;
     }
 
@@ -287,14 +292,14 @@ export class MaildirStore implements MailStore {
 
     // -- Sync --
 
-    private async syncMailbox(mailbox: string): Promise<void> {
+    private async syncMailbox(mailbox: string, opts?: { arrival?: boolean }): Promise<void> {
         // Don't start a sync once teardown has begun — the watcher can fire one fire-and-forget
         // (watch()) and doSyncMailbox's later phases would query a closed db (see destruct).
         if (this.home.destructing) return;
         const running = this.syncingMailboxes.get(mailbox);
         if (running) return running;
 
-        const promise = this.storeLock.run(() => this.doSyncMailbox(mailbox));
+        const promise = this.storeLock.run(() => this.doSyncMailbox(mailbox, opts?.arrival ?? false));
         this.syncingMailboxes.set(mailbox, promise);
         try {
             await promise;
@@ -303,7 +308,7 @@ export class MaildirStore implements MailStore {
         }
     }
 
-    private async doSyncMailbox(mailbox: string): Promise<void> {
+    private async doSyncMailbox(mailbox: string, arrival: boolean): Promise<void> {
         await this.moveNewToCur(mailbox);
 
         const diskFiles = new Map<string, string>();
@@ -315,6 +320,10 @@ export class MaildirStore implements MailStore {
 
         const dbRecords = this.db.getAllEmails(mailbox);
         const dbById = new Map(dbRecords.map((r) => [r.id, r]));
+        // A mailbox with no rows yet is being indexed for the first time — an old IMAP folder, or a home
+        // whose mail.db was lost. Its files were already there, so they are discovered, not delivered, and
+        // must not raise a new-mail notification each. A sync that follows Eigen's own delivery still does.
+        const arrived = arrival || dbRecords.length > 0;
 
         // New messages (on disk but not in DB): parse in chunks, then bulk-insert each chunk in
         // one transaction — with `addEmail` at ~71% of a 92s cold sync of 100k messages, batching
@@ -343,15 +352,14 @@ export class MaildirStore implements MailStore {
                 }
             }
             this.db.insertEmails(parsed);
-            // A fast save leaves the .eml stale, so a row rebuilt from it carries the last full save's
-            // summary. The sidecar holds the truth for those fields — project it back over the row.
+            // A fast save leaves the .eml stale, so a row rebuilt from it carries the last full save.
             if (mailbox === MAILBOX_DRAFTS) {
                 for (const p of parsed) {
                     const meta = await this.readDraftMeta(p.id);
                     if (meta) this.applyDraftMeta(p.id, meta);
                 }
             }
-            for (const p of parsed) this.events.received(p, true);
+            for (const p of parsed) this.events.received(p, arrived);
         }
 
         // Flag changes (on disk with different filename)
@@ -392,25 +400,20 @@ export class MaildirStore implements MailStore {
         return path.join(this.getDraftMetaDir(), `${safeFileId(draftId)}.json`);
     }
 
-    private async ensureDraftMetaDir(): Promise<void> {
-        const dir = this.getDraftMetaDir();
-        if (!(await this.storage.dirExists(dir))) {
-            await this.storage.mkdir(dir);
-        }
-    }
-
     async writeDraftMeta(draftId: string, meta: DraftMeta): Promise<void> {
-        await this.ensureDraftMetaDir();
         await this.storage.writeAtomic(this.getDraftMetaPath(draftId), JSON.stringify(meta));
     }
 
     async readDraftMeta(draftId: string): Promise<DraftMeta | null> {
+        // The Drafts sync reads ids off disk, where another MDA's filename can hold characters no id Eigen
+        // writes a sidecar under ever has: no sidecar can exist for one, and one file must not fail the sync.
+        if (!isSafePathSegment(draftId)) return null;
         const metaPath = this.getDraftMetaPath(draftId);
         if (!(await this.storage.exists(metaPath))) return null;
         try {
             return await this.storage.file(metaPath).json();
         } catch {
-            // Torn bytes from a crash: absent, so the caller falls back to the .eml.
+            // Torn bytes from a crash read as absent, so the caller falls back to the .eml.
             return null;
         }
     }
@@ -491,19 +494,14 @@ export class MaildirStore implements MailStore {
         };
     }
 
-    private getDraftTempDir(): string {
-        return DRAFT_ATTACHMENTS_DIR;
-    }
-
     private async ensureDraftTempDir(): Promise<void> {
-        const dir = this.getDraftTempDir();
-        if (!(await this.storage.dirExists(dir))) {
-            await this.storage.mkdir(dir);
+        if (!(await this.storage.dirExists(DRAFT_ATTACHMENTS_DIR))) {
+            await this.storage.mkdir(DRAFT_ATTACHMENTS_DIR);
         }
     }
 
     private getDraftTempPath(tempId: string): string {
-        return path.join(this.getDraftTempDir(), safeFileId(tempId));
+        return path.join(DRAFT_ATTACHMENTS_DIR, safeFileId(tempId));
     }
 
     private getDraftTempMetaPath(tempId: string): string {
@@ -527,11 +525,10 @@ export class MaildirStore implements MailStore {
     }
 
     async cleanupStaleDraftTemps(): Promise<void> {
-        const dir = this.getDraftTempDir();
-        if (!(await this.storage.dirExists(dir))) return;
+        if (!(await this.storage.dirExists(DRAFT_ATTACHMENTS_DIR))) return;
         const now = Date.now();
-        for (const name of await this.storage.readdir(dir)) {
-            const filePath = path.join(dir, name);
+        for (const name of await this.storage.readdir(DRAFT_ATTACHMENTS_DIR)) {
+            const filePath = path.join(DRAFT_ATTACHMENTS_DIR, name);
             try {
                 const stat = await this.storage.stat(filePath);
                 if (now - stat.mtimeMs > STALE_DRAFT_TEMP_MAX_AGE_MS) {
@@ -563,9 +560,8 @@ export class MaildirStore implements MailStore {
         return this.storage.dirExists(this.mailboxDir(mailbox));
     }
 
-    // Every mailbox on disk, and the one enumeration `mailboxesList` and `watch()` share: the standard
-    // ones in their canonical order, then whatever else the Maildir holds, by path. A `.Folder` whose
-    // name Eigen cannot address is skipped, never an error — Dovecot accepts names this store does not.
+    // The one enumeration `mailboxesList` and `watch()` share, so the list and the watchers can't drift.
+    // A `.Folder` whose name Eigen cannot address is skipped: Dovecot accepts names this store does not.
     private async listMailboxPaths(): Promise<string[]> {
         const standard: string[] = [];
         for (const name of STANDARD_MAILBOXES) {
@@ -678,8 +674,7 @@ export class MaildirStore implements MailStore {
         }
     }
 
-    // A nested folder is addressed by either delimiter — `Clients/Acme` and `Clients.Acme` are the one
-    // Maildir++ directory `.Clients.Acme`, which is also the form `mailboxesList` reports.
+    // Either delimiter addresses one directory: `Clients/Acme` and `Clients.Acme` are both `.Clients.Acme`.
     private mailboxDir(mailbox: string): string {
         if (mailbox === MAILBOX_INBOX || mailbox === MAILBOX_INBOX_IMAP) return this.basePath;
         if (!isValidMailboxPath(mailbox)) throw new ApiError(400, `Invalid mailbox name: ${mailbox}`);
@@ -696,8 +691,6 @@ export class MaildirStore implements MailStore {
     private getMailboxInfo(mailboxName: string): MaildirMailbox {
         return {
             path: mailboxName,
-            name: mailboxName ? mailboxName.split('.').pop() || mailboxName : MAILBOX_INBOX_IMAP,
-            delimiter: '.',
             flags: mailboxListFlags(mailboxName),
             total: this.db.getEmailsCount(mailboxName),
             unread: this.db.getEmailsCountUnread(mailboxName),

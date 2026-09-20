@@ -4,9 +4,9 @@ import { join } from 'node:path';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { SearchResponse } from '@workspace/lib/types/search';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { app, assertJson, authedRequest, collectSSE, ensureServer, TEST_DATA_DIR } from '../setup';
+import { app, assertJson, authedRequest, collectSSE, createTestUser, ensureServer, TEST_DATA_DIR } from '../setup';
 
-// createTestUser below hits the auth DB directly, so the setup wizard (which creates the auth schema and
+// createTestUser hits the auth DB directly, so the setup wizard (which creates the auth schema and
 // configures the org) must have run first. Under --parallel each file boots its own server; gate on it.
 beforeAll(async () => {
     await ensureServer();
@@ -50,16 +50,6 @@ function seedUnreadableCurEntry(userId: string, mailbox: string, uniqueId: strin
     mkdirSync(join(curDir(userId, mailbox), `${uniqueId},S=10:2,S`));
 }
 
-async function createTestUser(email: string, name: string): Promise<{ id: string; sessionToken: string }> {
-    const { auth } = await import('../../lib/auth/auth');
-    const signUp = await auth.api.signUpEmail({ body: { email, password: 'testpassword123', name } });
-    const signIn = await auth.api.signInEmail({ returnHeaders: true, body: { email, password: 'testpassword123' } });
-    const setCookie = signIn.headers.get('set-cookie') || '';
-    const match = setCookie.match(/better-auth\.session_token=([^;]+)/);
-    if (!match) throw new Error(`Session token not found in set-cookie header: ${setCookie}`);
-    return { id: signUp.user.id, sessionToken: match[1] };
-}
-
 async function createMailbox(token: string, ownerId: string, mailbox: string): Promise<void> {
     const res = await authedRequest(token, `/mail/${ownerId}/mailbox`, {
         method: 'POST',
@@ -91,7 +81,7 @@ describe.skipIf(isWindows)('Mail sync (Step 3: non-blocking sync + batched cold-
 
     beforeAll(async () => {
         const userEmail = `mailsync-${Date.now()}@test.eigen.is`;
-        const user = await createTestUser(userEmail, 'Mail Sync Test');
+        const user = await createTestUser(userEmail, 'testpassword123', 'Mail Sync Test');
         userId = user.id;
         token = user.sessionToken;
         // Initialize the home — delivers welcome mail (skipSync) and creates the Maildir tree.
@@ -204,7 +194,7 @@ describe.skipIf(isWindows)('Mail sync (Step 3: non-blocking sync + batched cold-
 
         beforeAll(async () => {
             coalesceEmail = `mailsync-coalesce-${Date.now()}@test.eigen.is`;
-            const user = await createTestUser(coalesceEmail, 'Mail Sync Coalesce Test');
+            const user = await createTestUser(coalesceEmail, 'testpassword123', 'Mail Sync Coalesce Test');
             coalesceUserId = user.id;
             coalesceToken = user.sessionToken;
             const sizeRes = await authedRequest(coalesceToken, `/home/${coalesceUserId}/size`);

@@ -103,13 +103,16 @@ eigen.mail/
 `mailboxDir()` maps names: empty/`INBOX` -> `Maildir/`, others -> `Maildir/.{name}`, joining a `/`-delimited name
 with `.` so `Clients/Acme` and `Clients.Acme` are one directory. Mailbox names are validated against path traversal
 and special characters (`isValidMailboxPath`, [MAIL.md § Mailboxes](MAIL.md#mailboxes-and-the-naming-gotcha)).
-`canonicalMailbox()` in `mail-domain.ts` case-folds the six standard names and passes any other name through
-untouched, so a folder's own spelling is the one Eigen addresses it by.
+`canonicalMailbox()` (`packages/lib/src/constants/mailboxes.ts`) case-folds the six standard names — `INBOX` in
+any case onto the empty inbox name — and passes any other name through untouched, so a folder's own spelling is
+the one Eigen addresses it by.
 
 `mailboxesList()` enumerates the Maildir: the standard six first, then every other `.Folder` by path, each with
-its `total`/`unread`. A directory whose name fails validation is skipped silently — Dovecot accepts names this
-store cannot address, and one of them must not break the listing. A folder Eigen has never indexed is synced by
-that first listing, so its counts are real rather than zero.
+its `total`/`unread` read straight from the index. A directory whose name fails validation is skipped silently —
+Dovecot accepts names this store cannot address, and one of them must not break the listing. So is a directory
+whose name canonicalizes onto a standard mailbox (`.archive`, `.INBOX`): it is that mailbox under another
+spelling, not a folder of its own. A folder Eigen has never indexed is indexed in the background, once per
+process, and the sync's own SSE events land its counts — a listing itself never waits on a sync.
 
 Mailbox membership is the only organization Eigen has — there are no labels.
 
@@ -139,6 +142,9 @@ Drafts get `D`+`S` flags. Skips `new/` because Eigen knows the final flags at cr
      `insertEmails` upsert transaction, then its `received` events fire (`MAIL_RECEIVED` +
      `home.notifications`). One transaction and one SSE burst per chunk, not per message — this is the cold-index
      win. A message that fails to parse is logged and skipped so one bad `.eml` can't drop the rest of the chunk.
+     A sync of a mailbox with no rows yet is a **cold index**: the files were already on disk, so the events
+     carry `isNew: false` and an old IMAP folder announces no new mail. The sync that follows Eigen's own
+     delivery says otherwise (`append`), so a real arrival still notifies.
    - **Flag changes** (on disk with different filename than DB): update DB flags + filename, report `flagsChanged`
      (`MAIL_FLAGS_CHANGED`).
    - **Deleted messages** (in DB, not on disk): delete from DB, report `deleted` (`MAIL_DELETED`).
@@ -148,7 +154,8 @@ Drafts get `D`+`S` flags. Skips `new/` because Eigen knows the final flags at cr
 Sync triggers: filesystem watcher events, Eigen's own writes (deliver, copy), and reads of a mailbox. **A read
 does not wait for the sync**: `listMessages` awaits `syncMailbox()` only when the mailbox has no rows yet (first
 open, so the user sees content immediately); otherwise it returns the DB rows straight away and fires the sync in
-the background with `.catch()`. Anything the background sync finds reaches the client over SSE. See
+the background with `.catch()`. `mailboxesList` never waits at all — it kicks the first index of a folder it has
+not kicked before and reports the index's counts. Anything the background sync finds reaches the client over SSE. See
 [MAIL.md § Performance design](MAIL.md#performance-design).
 
 ## File Watching

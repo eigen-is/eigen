@@ -169,18 +169,16 @@ export default class MailDB {
     // `text` is the full draft body, but emails.textShort stores a truncated preview for
     // list views — the same shape as received mail. The FTS5 trigger on emails picks up
     // whatever lands in textShort, so drafts get indexed at preview granularity.
-    updateDraftContent(id: string, subject: string, text: string, recipients?: RecipientSummary): void {
+    updateDraftContent(id: string, subject: string, text: string, recipients: RecipientSummary): void {
         this.db
             .update(schema.emails)
             .set({
                 subject,
                 textShort: text.slice(0, MAIL_PREVIEW_CHARS),
                 updatedAt: new Date(),
-                ...(recipients && {
-                    toShort: recipients.toShort,
-                    toAddress: recipients.toAddress,
-                    recipientsAll: recipients.recipientsAll,
-                }),
+                toShort: recipients.toShort,
+                toAddress: recipients.toAddress,
+                recipientsAll: recipients.recipientsAll,
             })
             .where(eq(schema.emails.id, id))
             .run();

@@ -104,8 +104,6 @@ export type Email = ParsedMail &
 
 export type MaildirMailbox = {
     path: string;
-    name: string;
-    delimiter: string;
     flags: string[];
     total: number;
     unread: number;

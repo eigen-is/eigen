@@ -43,7 +43,7 @@ afterAll(() => rmSync(TEST_DIR, { recursive: true, force: true }));
 
 describe('mail.db schema', () => {
     test('a fresh home gets no label tables', async () => {
-        const user = await createTestUser('mail-schema@test.eigen.is', 'testpassword123', 'Mail Schema');
+        const user = await createTestUser(`mail-schema-${Date.now()}@test.eigen.is`, 'testpassword123', 'Mail Schema');
         const { getHome } = await import('../../lib/home');
         const home = await getHome(user.id);
 

@@ -1,11 +1,5 @@
 import { MAIL_PREVIEW_CHARS, MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
-import {
-    MAILBOX_DRAFTS,
-    MAILBOX_INBOX,
-    MAILBOX_INBOX_KEY,
-    MAILBOX_SENT,
-    STANDARD_MAILBOXES,
-} from '@workspace/lib/constants/mailboxes';
+import { canonicalMailbox, MAILBOX_DRAFTS, MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import {
     type AddressObject,
@@ -43,14 +37,7 @@ import { welcomeMail } from './welcome';
 
 const FULL_SAVE_INTERVAL_MS = 5 * 60 * 1000;
 
-function canonicalMailbox(name: string): string {
-    if (name === MAILBOX_INBOX || name.toLowerCase() === MAILBOX_INBOX_KEY) return MAILBOX_INBOX;
-    return STANDARD_MAILBOXES.find((m) => m.toLowerCase() === name.toLowerCase()) ?? name;
-}
-
-// A draft id names a file under every store — a Maildir message and its sidecar here — so a client-chosen one
-// is validated in the domain, where a second MailStore inherits the guarantee. Blank normalizes to undefined,
-// or `?? createUniqueMessageId()` bakes a `Message-ID: <@domain>` into the EML.
+// A blank id normalizes to undefined, so `?? createUniqueMessageId()` bakes a `Message-ID: <@domain>` into the EML.
 function draftIdOf(email: NewDraft | EmailDraft): string | undefined {
     const id = email.id?.trim() || undefined;
     if (id && !isSafePathSegment(id)) throw new ApiError(400, `Invalid draft id: ${id}`);
@@ -123,7 +110,7 @@ export class Mail {
     }
 
     async mailboxCreate(mailbox: string): Promise<void> {
-        return this.store.mailboxCreate(mailbox);
+        return this.store.mailboxCreate(canonicalMailbox(mailbox));
     }
 
     async mailboxExists(mailbox: string): Promise<MaildirMailbox | false> {

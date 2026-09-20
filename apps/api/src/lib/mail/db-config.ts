@@ -102,8 +102,8 @@ export const MAIL_DB_CONFIG: DatabaseConfig<typeof schema> = {
             `),
         },
         {
-            // Mailbox membership is the only organization mail has, so the label tables v1 created
-            // never gained a reader. Child first, and message rows are untouched.
+            // Mailbox membership is the only organization mail has, so the label tables never gained a
+            // reader. Child table first: the implicit DELETE behind DROP TABLE trips the foreign key.
             version: 5,
             up: (db) =>
                 db.exec(`
