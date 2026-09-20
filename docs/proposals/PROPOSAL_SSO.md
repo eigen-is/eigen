@@ -3,7 +3,7 @@
 > **TLDR**: Let an organization that already runs an identity provider (Keycloak, Authentik,
 > Microsoft Entra, Okta, Google Workspace, Zitadel…) log into Eigen with it, instead of a separate
 > Eigen password. Use better-auth's `sso` plugin (`@better-auth/sso`, versioned in lockstep with
-> the installed `better-auth@1.5.6`), which lets providers be **registered at runtime** — so
+> the installed `better-auth@1.7.3`), which lets providers be **registered at runtime** — so
 > configuration lives in the admin app, not in env files. Providers map by **email domain** and
 > **JIT-provision** users on first login. Almost everything is plugin wiring: org membership and
 > share reconciliation already run from the `user.create.after` hook for *any* new user, and the
@@ -39,8 +39,7 @@
 - **Group / claim → team mapping.** v1 gives every SSO user plain `member` in the default org.
   Mapping IdP groups onto Eigen teams is a richer follow-up (`organizationProvisioning.getRole`
   is the seam for it).
-- **Consumer social login** (personal Google/GitHub/Apple). That's `socialProviders` — trivial to
-  add later, but a different audience from "my organization's SSO".
+- **Consumer social login** (personal Google/GitHub/Apple). That's `socialProviders` — trivial to add later, but a different audience from "my organization's SSO". **One exception worth weighing before building any of this:** a self-hoster whose users all live on one Google Workspace or Microsoft 365 domain needs none of the runtime-registration machinery. `socialProviders` plus a domain check on the `hd` / tenant claim gives them the same sign-in with no admin CRUD, no provider table and no auth-schema migration. That is the common self-hosting shape, and it is the identity half of [PROPOSAL_EXTERNAL_MAIL_PROVIDER.md](PROPOSAL_EXTERNAL_MAIL_PROVIDER.md); this proposal's full plugin route is for deployments with an IdP that isn't one of those two. `socialProviders` is also the only route that can request the provider's mail scopes and keep the resulting tokens, which the pull-based mail backend in that proposal depends on.
 - **Changing the collaboration or data model.** This touches authentication only.
 
 ## Why now — foundation verified (2026-07-06)
@@ -71,9 +70,9 @@ The auth foundation already fits; all of the following was re-verified against s
   `{issuer}/.well-known/openid-configuration`, so `oidcConfig` needs only
   `clientId`/`clientSecret`. Plugin options: `provisionUser`, `provisionUserOnEveryLogin`,
   `organizationProvisioning: { disabled, defaultRole, getRole }`, `defaultSSO`. The package is
-  **not yet installed** — add `@better-auth/sso@1.5.6` (same lockstep versioning as the
-  already-used `@better-auth/api-key@1.5.6`). Implementer note: the public docs track the latest
-  release; confirm the exact option surface against the pinned 1.5.6 typings when wiring.
+  **not yet installed** — add `@better-auth/sso@1.7.3` (same lockstep versioning as the
+  already-used `@better-auth/api-key@1.7.3`). Implementer note: the public docs track the latest
+  release; confirm the exact option surface against the pinned 1.7.3 typings when wiring.
 
 So the login path is plugin wiring plus admin/login UI. No Home-bootstrap extraction is needed —
 an earlier draft of this proposal assumed the waitlist bootstrapped Homes; it does not.
@@ -165,7 +164,7 @@ Two small items:
   at the provider's registered domain links to that account; anything else is rejected (not a
   silent second account — duplicate identities with one email would confuse shares and mail).
   better-auth implements this via its domain-verification / `account.accountLinking` machinery —
-  configure it, don't hand-roll; verify the exact 1.5.6 behavior (auto-link on verified domain)
+  configure it, don't hand-roll; verify the exact 1.7.3 behavior (auto-link on verified domain)
   in a test before shipping.
 - **Sessions/sign-out**: an SSO login produces a normal better-auth session cookie; sign-out
   revokes the Eigen session only. No IdP single-logout in v1.
@@ -192,10 +191,10 @@ No Yjs or drive-format impact.
 
 | Layer | File | Change |
 |---|---|---|
-| Dependency | `../../apps/api/package.json` | Add `@better-auth/sso@1.5.6` (lockstep with `better-auth`). |
+| Dependency | `../../apps/api/package.json` | Add `@better-auth/sso@1.7.3` (lockstep with `better-auth`). |
 | Auth config | `../../apps/api/src/lib/auth/auth.ts` | Add `sso({ organizationProvisioning: { disabled: true } })` to `plugins`; add new tables to both Drizzle schema maps. |
 | Auth schema | `../../apps/api/auth-schema.ts` (+ `drizzle-kit push`) | Additive SSO provider table(s), CLI-generated. |
-| Endpoint gate | auth router in `../../apps/api/src` | Deny better-auth's built-in `POST /auth/sso/register` unless it's verified admin-gated in 1.5.6. |
+| Endpoint gate | auth router in `../../apps/api/src` | Deny better-auth's built-in `POST /auth/sso/register` unless it's verified admin-gated in 1.7.3. |
 | Admin routes | `../../apps/api/src/routes/settings.ts` (or sibling, `requireAdmin`-gated, no `:ownerId` — server-wide carve-out) | List/create/delete SSO providers via `auth.api.registerSSOProvider` + provider-table reads; client secrets write-only in responses. |
 | Admin UI | `../../apps/admin` (new Authentication → SSO page) | Provider list + add/remove form (OIDC fields: providerId, issuer, domain, clientId, clientSecret). |
 | Login UI | `../../apps/space/src/routes/login.tsx` | "Sign in with {provider}" — either an explicit button per provider or domain-detection from the typed email; calls the plugin's SSO sign-in endpoint. |
