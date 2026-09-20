@@ -72,8 +72,8 @@ attendees RSVP → status propagates back to organizer. All server-side, no emai
 **Linked events**: Regular events in the attendee's calendar with `organizerEventId`/`organizerUserId` columns set
 (indexed for fast lookup). Same `uid` as organizer's event (CalDAV requirement). `data.organizer` is also set with
 `{ userId, email, name? }` and `data.organizerEventId`. DB-level detection: `organizerEventId IS NOT NULL` (used by
-`findLinkedEvent`). Application-level detection: `event.data.organizer` is present (used by `updateEvent` guard and
-`deleteEvent` decline logic).
+`findLinkedEvent`). Application-level detection: `isInvitationFromOthers(event, home.user)` (used by the `updateEvent`
+guard and `deleteEvent` decline logic).
 
 **Propagation** (`invite-propagation.ts`):
 - Create/update with attendees: diff old vs new → add/remove/update linked copies + SSE notifications
@@ -99,11 +99,7 @@ All handled by `Calendar.rsvp()`. Per-occurrence data is stored as recurrence ex
 incoming rrule does not extend beyond any local truncation the attendee made. This prevents "delete this and following"
 from being undone by an organizer edit.
 
-**Linked event guard**: Attendees can only change `data.reminders` and `data.color` on linked copies. Title, time,
-description, location, rrule changes are blocked by `updateEvent()`. Detection: `event.data.organizer` is present
-(not the DB column `organizerEventId`). The edit dialog mirrors the guard on the same condition
-(`EventFormFields`' `detailsDisabled`) so those fields are disabled rather than silently dropped on save; the
-calendar select stays live, because moving a linked copy goes through `moveEvent()`.
+**Linked event guard**: Attendees can only change `data.reminders` and `data.color` on linked copies. Title, time, description, location, rrule changes are blocked by `updateEvent()`. Detection is `isInvitationFromOthers()` from `@workspace/lib/calendar` (not the DB column `organizerEventId`): a stored organizer is someone else's only when its `userId` differs from the Home's owner id *and* its address differs from the Home user's address, compared case-insensitively. A stored organizer on its own means nothing — Apple Calendar and Thunderbird write `ORGANIZER:mailto:<the account's own address>` on every event they create with guests, and that event is the owner's own: editable by that client, by the web app and by the API, and its delete cancels for the guests instead of declining. One rule, every caller: the `updateEvent` guard and its invitation fan-out, `deleteEvent`, `rsvp()`, the inbound iMIP `REPLY` lookup and the calendar app's detail and edit dialogs. The edit dialog mirrors the guard (`EventFormFields`' `detailsDisabled`) so those fields are disabled rather than silently dropped on save; the calendar select stays live, because moving a linked copy goes through `moveEvent()`. In a shared calendar the viewer does not own, only the owner id is available — an address comparison would be against the wrong Home.
 
 **SSE events**: `calendar:invite-received`, `calendar:invite-updated`, `calendar:invite-cancelled`, `calendar:invite-rsvp`.
 
@@ -356,7 +352,6 @@ round-trips, TZ-pinned floating tests), `vtimezone.test.ts` (generator vs Intl),
 Both follow from storing columns and re-synthesizing the resource on GET, and both are addressed in [PROPOSAL_CALENDAR_ICS_FILES.md](proposals/PROPOSAL_CALENDAR_ICS_FILES.md):
 
 - **The round-trip is lossy.** `parseIcs` keeps what the columns model and `eventsToIcs` writes only that back, so a client's `VALARM` details, `ATTACH`, `RDATE`, `CATEGORIES`, `X-` properties and `RANGE=THISANDFUTURE` do not survive a PUT followed by a GET, and a sub-daily `RRULE` comes back as a single event.
-- **Any `ORGANIZER` locks the row.** `updateEvent` treats a row with `data.organizer` as an attendee-side linked copy and accepts only reminders and color, and `parseIcs` sets `data.organizer` from any `ORGANIZER` property, the user's own address included. An event with invitees created in Apple Calendar is therefore locked against that client's own later PUTs ([ROADMAP.md](ROADMAP.md), the `.ics` files row, phase −1).
 - **No UID-conflict check on PUT.** A UID already stored under another uri in the same calendar creates a second row; CardDAV answers the same case with `no-uid-conflict`.
 
 ## Where the code lives

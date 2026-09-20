@@ -1,5 +1,5 @@
 import { RRule } from 'rrule';
-import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '../../types/calendar';
+import type { CalendarEventOccurrence, CalendarItem, EventData, SharedCalendar } from '../../types/calendar';
 import { formatDayMonth, formatTime } from '../date';
 
 export type ViewMode = 'month' | 'week';
@@ -169,9 +169,22 @@ export function formatFreeBusyTitle(endTime: Date): string {
     return `Busy until ${formatTime(endTime)}`;
 }
 
+// The one answer to "is this row an invitation from someone else?". CalDAV clients write
+// ORGANIZER:mailto:<own address> on every event they create with guests, so a stored organizer alone
+// says nothing — only an organizer other than the Home that holds the event makes it an attendee copy.
+export function isInvitationFromOthers(
+    event: { data?: EventData | null },
+    owner: { id?: string; email?: string },
+): boolean {
+    const organizer = event.data?.organizer;
+    if (!organizer) return false;
+    if (organizer.userId && organizer.userId === owner.id) return false;
+    return !owner.email || organizer.email.toLowerCase() !== owner.email.toLowerCase();
+}
+
 export function getInviteStatus(event: CalendarEventOccurrence, userEmail?: string): 'pending' | 'declined' | null {
-    if (!event.data?.organizer || !userEmail) return null;
-    const attendee = event.data.attendees?.find((a) => a.email.toLowerCase() === userEmail.toLowerCase());
+    if (!userEmail || !isInvitationFromOthers(event, { email: userEmail })) return null;
+    const attendee = event.data?.attendees?.find((a) => a.email.toLowerCase() === userEmail.toLowerCase());
     if (!attendee) return null;
     if (attendee.status === 'declined') return 'declined';
     if (attendee.status === 'pending') return 'pending';

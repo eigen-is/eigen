@@ -1,5 +1,6 @@
 import { useAuth } from '@workspace/lib/auth';
 import {
+    isInvitationFromOthers,
     occurrenceDateToString,
     parseOccurrenceDate,
     toLocalDateString,
@@ -131,7 +132,10 @@ export function EditEventDialog({
     if (!event) return null;
 
     const isRecurring = !!event.rrule;
-    const isLinkedEvent = !!event.data?.organizer;
+    const isLinkedEvent = isInvitationFromOthers(event, {
+        id: eventOwnerId,
+        email: eventOwnerId === user?.id ? user.email : undefined,
+    });
 
     // A cross-Home move recreates the event in the other Home and deletes the source — which fires
     // deleteEvent's iMIP side effects and can't carry exception children. Warn honestly before that

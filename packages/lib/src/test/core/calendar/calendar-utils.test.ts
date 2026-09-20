@@ -1,6 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { formatEventWhen, getEventsForDay, viewerTimeZone } from '../../../core/calendar/calendar-utils';
-import type { CalendarEventOccurrence } from '../../../types/calendar';
+import {
+    formatEventWhen,
+    getEventsForDay,
+    isInvitationFromOthers,
+    viewerTimeZone,
+} from '../../../core/calendar/calendar-utils';
+import type { CalendarEventOccurrence, EventData } from '../../../types/calendar';
 
 function occurrence(occurrenceDate: string, startTime: Date, endTime: Date): CalendarEventOccurrence {
     return {
@@ -70,6 +75,27 @@ describe('getEventsForDay', () => {
         const occ = [occurrence('2025-03-31', new Date('2025-03-30T22:30:00Z'), new Date('2025-03-30T23:00:00Z'))];
         expect(getEventsForDay(occ, new Date(2025, 2, 30))).toEqual([]);
         expect(getEventsForDay(occ, new Date(2025, 2, 31)).map((e) => e.occurrenceDate)).toEqual(['2025-03-31']);
+    });
+});
+
+describe('isInvitationFromOthers', () => {
+    const withOrganizer = (organizer: NonNullable<EventData['organizer']>) => ({ data: { organizer } });
+
+    test('an organizer with the owner address is the owner, whatever its case', () => {
+        const event = withOrganizer({ userId: '', email: 'Alice@Example.com', name: 'Alice' });
+        expect(isInvitationFromOthers(event, { id: 'alice-id', email: 'alice@example.com' })).toBe(false);
+    });
+
+    test("an organizer carrying the owner's user id is the owner", () => {
+        const event = withOrganizer({ userId: 'team_7', email: 'someone@example.com' });
+        // A team Home has no address of its own, so the id is the only handle.
+        expect(isInvitationFromOthers(event, { id: 'team_7', email: '' })).toBe(false);
+    });
+
+    test('another address is an invitation, and an event without an organizer never is', () => {
+        const event = withOrganizer({ userId: 'bob-id', email: 'bob@example.com' });
+        expect(isInvitationFromOthers(event, { id: 'alice-id', email: 'alice@example.com' })).toBe(true);
+        expect(isInvitationFromOthers({ data: null }, { id: 'alice-id', email: 'alice@example.com' })).toBe(false);
     });
 });
 

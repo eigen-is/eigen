@@ -1,6 +1,7 @@
 import { useAuth } from '@workspace/lib/auth';
 import {
     formatEventWhen,
+    isInvitationFromOthers,
     occurrenceDateToString,
     parseOccurrenceDate,
     truncateRRule,
@@ -76,7 +77,12 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const calendarName = calendar?.name || (sharedCalendar ? sharedCalendarLabel(sharedCalendar) : null);
     const isShared = !!sharedCalendar;
     const canEdit = !isShared || sharedCalendar?.permission === 'write';
-    const isLinkedEvent = !!event.data?.organizer;
+    // An ORGANIZER equal to the calendar owner is an event they organize, not an invitation to them;
+    // the owner's address is known only when the owner is the viewer.
+    const isLinkedEvent = isInvitationFromOthers(event, {
+        id: eventOwnerId,
+        email: eventOwnerId === user?.id ? user.email : undefined,
+    });
     const myAttendeeStatus = event.data?.attendees?.find(
         (a) => a.email.toLowerCase() === user?.email?.toLowerCase(),
     )?.status;
