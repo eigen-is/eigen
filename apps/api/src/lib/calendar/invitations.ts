@@ -180,6 +180,14 @@ function invitationInput(payload: ReceiveInvitationPayload): CreateEventArgs {
 
 // A REQUEST relayed from the organizer's Home. Null when it was dropped, so the sender can say so.
 export async function receiveInvitation(calendar: Calendar, payload: ReceiveInvitationPayload): Promise<string | null> {
+    // A Home is never its own organizer: adopting such a message would make its own event a linked copy of
+    // itself. A team Home inviting its members states the team's id, which is not the member Home's own.
+    if (payload.organizerUserId === calendar.home.user.id) {
+        console.info(
+            `calendar: dropped a relayed invitation for ${payload.uid} — this Home is named as its own organizer`,
+        );
+        return null;
+    }
     const link: InvitationLink = {
         organizerEmail: payload.data.organizer?.email.toLowerCase() ?? '',
         organizerEventId: payload.organizerEventId,

@@ -197,6 +197,32 @@ describe('relayed invitation', () => {
         expect(await calendar.getEventsByUid(UID)).toHaveLength(1);
     });
 
+    // A Home is never its own organizer. Adopting such a payload would turn its own event into a linked
+    // copy of itself, after which every CalDAV PUT on it is reduced to alarms — the hole the iMIP
+    // transport already closes on its own sender.
+    test('a payload naming this Home as the organizer is dropped', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const id = (await calendar.getCalendars())[0].id;
+        expect((await calendar.putResource(id, 'mine.ics', stored(harness.user.email), NO_PRECONDITIONS)).ok).toBe(
+            true,
+        );
+
+        const self = payload();
+        const sent = await calendar.receiveInvitation({
+            ...self,
+            data: { ...self.data, organizer: { userId: harness.user.id, email: harness.user.email, name: 'Me' } },
+            createByUserId: harness.user.id,
+            organizerUserId: harness.user.id,
+        });
+
+        expect(sent).toBeNull();
+        const rows = await calendar.getEventsByUid(UID);
+        expect(rows).toHaveLength(1);
+        expect(rows[0].data?.organizerEventId).toBeUndefined();
+        expect(rows[0].title).toBe('Quarterly review (mine)');
+    });
+
     test('the organizer an event in another calendar names adopts it in place', async () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;
