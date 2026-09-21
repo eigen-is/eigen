@@ -89,10 +89,15 @@ export async function enforceAvatarUpload(userId: string, fileSize: number): Pro
     }
 }
 
+// How a user at a full budget still edits and cleans up: a rewrite of something already stored passes
+// whatever the budget says, and overshoots it by at most this much per write.
+const HOME_DATA_EDIT_GRACE_BYTES = 1024;
+
 // Bytes about to be written into the data half of the budget — a contact card, an imported message, a
-// calendar resource: addBytes is what lands, creditBytes the size of what it replaces (subtracted from the
-// projection, so a rewrite that shrinks a card is never refused). Same credit convention as enforceMountQuota.
+// calendar resource: addBytes is what lands, creditBytes the size of what it replaces (0 for a create).
+// Same credit convention as enforceMountQuota.
 export async function enforceHomeDataQuota(ownerId: string, addBytes: number, creditBytes = 0): Promise<void> {
+    if (creditBytes > 0 && addBytes - creditBytes <= HOME_DATA_EDIT_GRACE_BYTES) return;
     const { used, max } = await getHomeDataQuotaState(ownerId);
     if (used + addBytes - creditBytes > max) {
         throw new ApiError(507, 'Insufficient Storage');

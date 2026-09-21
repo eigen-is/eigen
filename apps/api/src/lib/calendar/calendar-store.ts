@@ -221,17 +221,15 @@ export async function writeResource(
     uri: string,
     resource: ICAL.Component,
     existing: { id: string; size: number } | null,
-    removal = false,
 ): Promise<{ etag: string; text: string }> {
     const id = existing?.id ?? randomUUID();
     const projection = projectRows(calendarId, id, resource);
     const text = serializeResource(resource);
     const bytes = new TextEncoder().encode(text);
     // Both ceilings hold on the bytes that would land, before any write intent is recorded, so a refusal
-    // leaves nothing for a drain to chase.
+    // leaves nothing for a drain to chase. The stored resource's size is the credit the edit grace reads.
     if (bytes.byteLength > EVENT_MAX_BYTES) throw new ApiError(413, 'Event is too large');
-    // Taking an occurrence away is how a user gets back under a full budget, so the budget never refuses it.
-    if (calendar.meteredIngest && !removal) {
+    if (calendar.meteredIngest) {
         await enforceHomeDataQuota(calendar.home.user.id, bytes.byteLength, existing?.size ?? 0);
     }
     const etag = computeResourceEtag(bytes);
