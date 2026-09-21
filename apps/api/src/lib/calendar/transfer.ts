@@ -151,8 +151,7 @@ export async function importEvents(
                     ifMatch: null,
                     ifNoneMatch: '*',
                     actor,
-                    importedOrganizer,
-                    uidUniqueInHome: true,
+                    import: { organizer: importedOrganizer },
                 });
             } catch {
                 // One series' write failing is that series' failure; a retry finishes the file.

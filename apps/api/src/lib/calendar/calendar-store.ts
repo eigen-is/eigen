@@ -356,9 +356,9 @@ export type PutResourceOptions = {
     ifMatch: string | null;
     ifNoneMatch: string | null;
     actor?: string | null;
-    importedOrganizer?: string | null;
-    // An import files one UID once per Home, where a device syncs one calendar and owns only that one.
-    uidUniqueInHome?: boolean;
+    // Set by a whole-file import alone: it files one UID once per Home, where a device syncs one calendar
+    // and owns only that one, and it carries the ORGANIZER address it took out of the file.
+    import?: { organizer: string | null };
 };
 
 // Preconditions, the UID rules, re-stamping and the linked-copy restriction are all decided here, inside
@@ -368,7 +368,7 @@ export async function putResource(
     calendarId: string,
     uri: string,
     body: string,
-    pre: PutResourceOptions,
+    options: PutResourceOptions,
 ): Promise<PutResourceResult> {
     if (sanitizeCalendarId(calendarId) !== calendarId) return { ok: false, error: 'invalid' };
     if (sanitizeEventUri(uri) !== uri) return { ok: false, error: 'invalid' };
@@ -404,10 +404,10 @@ export async function putResource(
             .where(and(eq(schema.resources.calendarId, calendarId), eq(schema.resources.uriKey, uriKeyOf(uri))))
             .get();
         const currentEtag = existing ? `"${existing.etag}"` : null;
-        if (pre.ifNoneMatch !== null && matchesIfNoneMatch(pre.ifNoneMatch, currentEtag)) {
+        if (options.ifNoneMatch !== null && matchesIfNoneMatch(options.ifNoneMatch, currentEtag)) {
             return { ok: false, error: 'precondition' };
         }
-        if (pre.ifMatch !== null && !matchesIfMatch(pre.ifMatch, currentEtag)) {
+        if (options.ifMatch !== null && !matchesIfMatch(options.ifMatch, currentEtag)) {
             return { ok: false, error: 'precondition' };
         }
 
@@ -417,7 +417,7 @@ export async function putResource(
             .select({ id: schema.resources.id, uri: schema.resources.uri })
             .from(schema.resources)
             .where(
-                pre.uidUniqueInHome
+                options.import
                     ? eq(schema.resources.uid, uid)
                     : and(eq(schema.resources.calendarId, calendarId), eq(schema.resources.uid, uid)),
             )
@@ -441,8 +441,8 @@ export async function putResource(
             // Nothing the body says about an Eigen line is trusted: the stamps come back from the stored
             // resource, and only a resource nobody wrote before takes the caller's own stamps.
             restampResource(incoming, stored, {
-                createByUserId: stored ? undefined : (pre.actor ?? undefined),
-                importedOrganizer: stored ? undefined : (pre.importedOrganizer ?? undefined),
+                createByUserId: stored ? undefined : (options.actor ?? undefined),
+                importedOrganizer: stored ? undefined : (options.import?.organizer ?? undefined),
             });
             resource = incoming;
         }

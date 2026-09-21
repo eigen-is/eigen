@@ -440,10 +440,10 @@ export class Calendar {
         calendarId: string,
         uri: string,
         body: string,
-        pre: PutResourceOptions,
+        options: PutResourceOptions,
     ): Promise<PutResourceResult> {
         const ctagBefore = this.calendarRow(calendarId)?.ctag;
-        const result = await store.putResource(this, calendarId, uri, body, pre);
+        const result = await store.putResource(this, calendarId, uri, body, options);
         // A PUT of what is already stored commits nothing, so there is nothing to tell the clients about.
         if (result.ok && this.calendarRow(calendarId)?.ctag !== ctagBefore) {
             this.announce(
