@@ -403,9 +403,8 @@ export async function moveEvent(
                     .run();
             });
         } catch (e) {
-            // A live process rolls its own rename back, or the resource is in a calendar no row names and
-            // the one it left still claims it. Both keys settle it when even that fails, source first: the
-            // row the drain drops there is what frees the event ids the target file carries.
+            // A live process rolls its own rename back; if even that fails, both keys settle the pair —
+            // source first, because the row dropped there frees the event ids the target file carries.
             try {
                 await calendar.storage.moveDurable(
                     resourcePath(targetCalendarId, targetUri),
