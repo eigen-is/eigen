@@ -873,6 +873,50 @@ describe('Calendar transfer routes', () => {
         expect((await home.calendar.getEventsByUid(wholeUid)).length).toBe(1);
     });
 
+    // One resource is one series, so a VTIMEZONE the file defines once is copied into every series that
+    // names it: a small file can ask for many times its own size in stored bytes. The run stops at its
+    // budget, says how far it got, and a retry carries on from there.
+    test('an import that would store many times the file it was given stops at its byte budget', async () => {
+        const stamp = randomUUID();
+        const events = 50;
+        const zone = [
+            'BEGIN:VTIMEZONE',
+            'TZID:Fat/Zone',
+            `X-LIC-LOCATION:${'a'.repeat(1024 * 1024)}`,
+            'BEGIN:STANDARD',
+            'DTSTART:19700101T000000',
+            'TZOFFSETFROM:+0000',
+            'TZOFFSETTO:+0000',
+            'TZNAME:FAT',
+            'END:STANDARD',
+            'END:VTIMEZONE',
+        ];
+        const file = vcal(
+            zone,
+            ...Array.from({ length: events }, (_, i) => [
+                'BEGIN:VEVENT',
+                `UID:fat-${i}-${stamp}@other`,
+                `SUMMARY:Fat ${i}`,
+                'DTSTART;TZID=Fat/Zone:20260419T090000',
+                'DTEND;TZID=Fat/Zone:20260419T100000',
+                'END:VEVENT',
+            ]),
+        );
+        expect(file.length).toBeLessThan(ICS_MAX_BYTES);
+
+        const res = await importRequest(alice, calendarId, file);
+        expect(res.status).toBe(413);
+        expect(await res.text()).toContain('after importing');
+
+        const landed = (await april()).filter((e) => e.uid.includes(stamp)).length;
+        expect(landed).toBeGreaterThan(0);
+        expect(landed).toBeLessThan(events);
+
+        // What landed stays landed: the retry skips it by UID and writes the rest.
+        const retry = await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file));
+        expect(retry).toEqual({ imported: events - landed, skipped: landed, failed: 0 });
+    }, 60_000);
+
     test('a file past the event ceiling is refused before anything is written', async () => {
         const stamp = randomUUID();
         const file = vcal(

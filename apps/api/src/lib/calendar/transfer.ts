@@ -6,6 +6,7 @@ import {
     ApiError,
     decodeUtf8Strict,
     ICS_IMPORT_MAX_EVENTS,
+    ICS_IMPORT_MAX_WRITTEN_BYTES,
     NOT_A_CALENDAR_FILE,
     NOT_UTF8_FILE,
     type PutResourceResult,
@@ -126,6 +127,7 @@ export async function importEvents(
 
     const actor = calendar.home.user.id;
     const result: ImportCountsResult = { imported: 0, skipped: 0, failed: 0 };
+    let written = 0;
     // One list-level event for the whole file instead of one per series.
     await calendar.withBatchedEvents(async () => {
         for (const [uid, group] of series) {
@@ -160,9 +162,10 @@ export async function importEvents(
             for (const override of group.overrides) resource.addSubcomponent(override);
 
             // A fresh name every time: a UID is not a safe filename, and If-None-Match: * keeps the write a create.
+            const body = serializeResource(resource);
             let put: PutResourceResult;
             try {
-                put = await calendar.putResource(calendarId, `${randomUUID()}.ics`, serializeResource(resource), {
+                put = await calendar.putResource(calendarId, `${randomUUID()}.ics`, body, {
                     ifMatch: null,
                     ifNoneMatch: '*',
                     actor,
@@ -175,6 +178,10 @@ export async function importEvents(
             }
             if (put.ok) {
                 result.imported++;
+                written += Buffer.byteLength(body);
+                if (written > ICS_IMPORT_MAX_WRITTEN_BYTES) {
+                    throw new ApiError(413, `Import too large after importing ${result.imported} events`);
+                }
             } else if (put.error === 'uid-conflict') {
                 result.skipped++;
             } else if (put.error === 'quota') {
