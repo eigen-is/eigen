@@ -82,7 +82,6 @@ export async function propagateCalendarShare(
                 ownerId: ownerHome.user.id,
                 calendarId: calendar.id,
                 name: calendar.name,
-                color: calendar.color,
                 permission,
                 actorEmail: ownerHome.user.email,
                 actorName: ownerHome.user.name,

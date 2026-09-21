@@ -1,5 +1,4 @@
-import type { CalendarItem } from '@workspace/lib/types/calendar';
-import { isSafePathSegment } from '../core';
+import type { CalendarCollection } from '../calendar/resource-store';
 import { calendarHomeHref, encodePathSegment, principalHref } from '../dav/href';
 import { type PropfindRequest, selectProps } from '../dav/propfind';
 import { multistatusResponse, principalProps, propstatOk, response } from '../dav/xml';
@@ -12,13 +11,6 @@ import { calendarCollectionProps, currentUserPrincipalProp, homeCollectionProps 
 export const calendarHref = (ownerId: string, calendarId: string) => `/dav/calendars/${ownerId}/${calendarId}/`;
 export const eventHref = (ownerId: string, calendarId: string, uri: string) =>
     `${calendarHref(ownerId, calendarId)}${encodePathSegment(uri)}`;
-
-// A client-chosen calendar id (MKCALENDAR) goes raw into an href — calendarHref does not encode it — so it
-// takes the shared segment rule over the NFC form. Null on reject.
-export function sanitizeCalendarId(raw: string): string | null {
-    const id = raw.normalize('NFC');
-    return isSafePathSegment(id) ? id : null;
-}
 
 // PROPFIND /dav/ — returns current-user-principal
 export function handleRootPropfind(userId: string): Response {
@@ -33,7 +25,7 @@ export function handlePrincipalPropfind(userId: string): Response {
 // PROPFIND /dav/calendars/{ownerId}/ — list calendars (Depth: 0 or 1)
 export function handleCalendarHomePropfind(
     ownerId: string,
-    calendars: CalendarItem[],
+    calendars: CalendarCollection[],
     depth: string,
     request: PropfindRequest,
     brief: boolean,

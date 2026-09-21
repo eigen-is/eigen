@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { getHome } from '../../lib/home';
 import { davRequest } from '../dav-test-helpers';
-import { assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
+import { assertJson, authedRequest, eventually, findOrFail, getTestContext } from '../setup';
 
 describe('Calendar Timezone', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -33,6 +33,14 @@ describe('Calendar Timezone', () => {
     async function getEvents(token: string, ownerId: string, from: number, to: number) {
         const res = await authedRequest(token, `/calendar/${ownerId}/event-range/${from}/${to}`);
         return assertJson<CalendarEventOccurrence[]>(res);
+    }
+
+    // The invitation fan-out is fire-and-forget: Bob's Home writes its own file after Alice's call answered.
+    function bobEvent(from: number, to: number, predicate: (e: CalendarEventOccurrence) => boolean) {
+        return eventually(
+            async () => (await getEvents(ctx.bob.user.sessionToken, ctx.bob.user.id, from, to)).find(predicate),
+            "the invitation to reach Bob's calendar",
+        );
     }
 
     describe('Timezone storage', () => {
@@ -433,8 +441,7 @@ describe('Calendar Timezone', () => {
             const from = Math.floor(new Date('2026-03-16T00:00:00Z').getTime() / 1000);
             const to = Math.floor(new Date('2026-04-14T00:00:00Z').getTime() / 1000);
 
-            const bobEvents = await getEvents(ctx.bob.user.sessionToken, ctx.bob.user.id, from, to);
-            const linked = findOrFail(bobEvents, (e) => e.title === 'TZ Invite Weekly');
+            const linked = await bobEvent(from, to, (e) => e.title === 'TZ Invite Weekly');
             expect(linked.timezone).toBe('Europe/Amsterdam');
         });
 
@@ -459,6 +466,7 @@ describe('Calendar Timezone', () => {
             const to = Math.floor(new Date('2026-04-14T00:00:00Z').getTime() / 1000);
 
             // Bob's expanded occurrences should also respect the timezone
+            await bobEvent(from, to, (e) => e.title === 'TZ Invite DST Check');
             const bobEvents = await getEvents(ctx.bob.user.sessionToken, ctx.bob.user.id, from, to);
             const occurrences = bobEvents.filter((e: CalendarEventOccurrence) => e.title === 'TZ Invite DST Check');
 
@@ -493,8 +501,8 @@ describe('Calendar Timezone', () => {
             // RSVP for a post-DST occurrence (April 6, 2026 is a Monday)
             const bobFrom = Math.floor(new Date('2026-03-16T00:00:00Z').getTime() / 1000);
             const bobTo = Math.floor(new Date('2026-04-14T00:00:00Z').getTime() / 1000);
+            const linkedParent = await bobEvent(bobFrom, bobTo, (e) => e.title === 'TZ RSVP Test');
             const bobEvents = await getEvents(ctx.bob.user.sessionToken, ctx.bob.user.id, bobFrom, bobTo);
-            const linkedParent = findOrFail(bobEvents, (e) => e.title === 'TZ RSVP Test');
 
             // Find a post-DST occurrence (after March 29)
             const postDSTOcc = bobEvents.find(
@@ -897,10 +905,7 @@ describe('Calendar Timezone', () => {
             });
             const from = Math.floor(new Date('2026-06-01T00:00:00Z').getTime() / 1000);
             const to = Math.floor(new Date('2026-06-08T00:00:00Z').getTime() / 1000);
-            const linked = findOrFail(
-                await getEvents(ctx.bob.user.sessionToken, ctx.bob.user.id, from, to),
-                (e) => e.title === 'Rekey Series',
-            );
+            const linked = await bobEvent(from, to, (e) => e.title === 'Rekey Series');
 
             const rsvp = async (recurrenceDate: string) =>
                 assertJson(

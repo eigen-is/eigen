@@ -52,6 +52,9 @@ export async function propagateInvitation(
                     timezone: event.timezone,
                     status: event.status,
                     sequence: event.sequence,
+                    // The revision the organizer's own copy carries, so the attendee can order this
+                    // message against the next one (RFC 5546 § 2.1.5) — the fan-out is unordered.
+                    dtstamp: event.updatedAt,
                     data: {
                         organizer: { userId: organizerHome.user.id, email: user.email, name: user.name },
                         organizerEventId: event.id,
@@ -120,6 +123,7 @@ export async function propagateInvitation(
                     timezone: event.timezone,
                     status: event.status,
                     sequence: event.sequence,
+                    dtstamp: event.updatedAt,
                     attendees: newAttendees,
                 },
             });

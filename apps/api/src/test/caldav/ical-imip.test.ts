@@ -869,7 +869,7 @@ describe('Calendar timezone read-side degrade (audit P1-7b)', () => {
 
     const organizerId = 'external_outlook@external.com';
 
-    async function receivePoisonedInvite(uid: string): Promise<string> {
+    async function receivePoisonedInvite(uid: string): Promise<string | null> {
         const home = await getHome(ctx.charlie.user.id);
         return home.calendar.receiveInvitation({
             uid,
@@ -936,9 +936,8 @@ describe('Calendar timezone read-side degrade (audit P1-7b)', () => {
         );
         expect(res.status).toBe(207);
         const xml = await res.text();
-        // @ is pchar-legal (RFC 3986), so the client-chosen uri's @ is emitted raw in the href, never as %40.
-        expect(xml).toContain(`${uid}.ics`);
-        expect(xml).not.toContain(`${encodeURIComponent(uid)}.ics`);
+        // An Eigen-minted resource name is a uuid, so the UID travels in the body, not in the href.
+        expect(xml).toContain(`UID:${uid}`);
         // The bad zone serializes like a no-timezone event (absolute UTC), not as a bogus TZID param.
         expect(xml).not.toContain('W. Europe Standard Time');
         expect(xml).toContain('DTSTART:20260910T090000Z');
@@ -1475,8 +1474,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
         expect(exception!.recurrenceDate).toBe('2026-04-08'); // pre-fix: '2026-04-09' (UTC date)
     });
 
-    // receiveInvitationException mirrors receiveInvitationUpdate's RFC 5546 replay guard —
-    // a stale/replayed occurrence REQUEST must not overwrite a newer exception.
+    // An occurrence REQUEST is ordered by the same rule the series takes: a stale one never wins.
     test('a replayed single-occurrence REQUEST with a stale SEQUENCE does not overwrite a newer exception', async () => {
         const UID = 'audit-imip-replay@ext';
         const home = await getHome(ctx.alice.user.id);
@@ -1799,9 +1797,13 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
         ].join('\r\n');
         await processInboundImip(home, icsMail(withMethod('REPLY', reply), 'REPLY', ATT));
 
-        const exception = (await home.calendar.getEventsByUid(event.uid)).find((e) => e.parentEventId);
+        const rows = await home.calendar.getEventsByUid(event.uid);
+        const exception = rows.find((e) => e.parentEventId);
         expect(exception!.status).toBe('cancelled'); // pre-fix: 'confirmed' — deleted occurrence resurrected
-        expect(exception!.data?.attendees?.[0].status).toBe('declined'); // PARTSTAT is still recorded
+        // A deleted occurrence is an EXDATE and carries no attendee list, so the reply records nothing
+        // — least of all on the series the attendee did not answer for.
+        expect(exception!.data).toBeNull();
+        expect(rows.find((e) => !e.parentEventId)!.data?.attendees?.[0].status).toBe('pending');
     });
 
     // Someone can be invited to a single occurrence only: the exception row carries its own attendee
@@ -1980,5 +1982,127 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
         );
         expect(exception!.status).toBe('cancelled');
         expect(exception!.sequence).toBe(5);
+    });
+});
+
+// An invitee address that forwards back to the organizer delivers the organizer's own REQUEST to their own
+// Home: acting on it would stamp their own event as somebody else's copy, after which every CalDAV PUT on
+// it is reduced to alarms.
+describe('iMIP inbound self-addressed messages', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+    });
+
+    const selfMail = (ics: string, method: ImipMethod, from: string) => ({
+        attachments: [
+            {
+                contentType: 'text/calendar',
+                filename: 'invite.ics',
+                content: Buffer.from(ics),
+                index: 0,
+                size: ics.length,
+                calendarMethod: method,
+            },
+        ],
+        from: { value: [{ address: from, name: 'Self' }], text: '' } as AddressObject,
+        authenticationResults: [arHeaderValue(from.split('@')[1])],
+    });
+
+    test('a REQUEST from the recipient themselves does not seize their own event', async () => {
+        const uid = `self-request-${Date.now()}@corp.example`;
+        const home = await getHome(ctx.charlie.user.id);
+        const calendarId = findOrFail(await home.calendar.getCalendars(), (c) => c.isDefault).id;
+        await home.calendar.createEvent(calendarId, {
+            title: 'My own meeting',
+            startTime: new Date('2026-09-01T09:00:00Z'),
+            endTime: new Date('2026-09-01T10:00:00Z'),
+            allDay: false,
+            uid,
+            data: {
+                organizer: { userId: ctx.charlie.user.id, email: ctx.charlie.user.email, name: 'Charlie' },
+                attendees: [{ email: 'guest@external.com', status: 'pending', role: 'required' }],
+            },
+        });
+
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REQUEST',
+            'BEGIN:VEVENT',
+            `UID:${uid}`,
+            'SUMMARY:Seized',
+            'DTSTART:20260901T090000Z',
+            'DTEND:20260901T100000Z',
+            'SEQUENCE:7',
+            `ORGANIZER;CN=Self:mailto:${ctx.charlie.user.email}`,
+            'ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:someone@external.com',
+            'DTSTAMP:20260801T000000Z',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        await processInboundImip(home, selfMail(ics, 'REQUEST', ctx.charlie.user.email.toUpperCase()));
+
+        const rows = await home.calendar.getEventsByUid(uid);
+        expect(rows).toHaveLength(1);
+        expect(rows[0].title).toBe('My own meeting');
+        expect(rows[0].data?.organizerEventId).toBeUndefined();
+    });
+
+    test('a CANCEL from the recipient themselves does not delete their own event', async () => {
+        const uid = `self-cancel-${Date.now()}@corp.example`;
+        const home = await getHome(ctx.charlie.user.id);
+        const calendarId = findOrFail(await home.calendar.getCalendars(), (c) => c.isDefault).id;
+        await home.calendar.createEvent(calendarId, {
+            title: 'Still mine',
+            startTime: new Date('2026-09-02T09:00:00Z'),
+            endTime: new Date('2026-09-02T10:00:00Z'),
+            allDay: false,
+            uid,
+            data: { organizer: { userId: ctx.charlie.user.id, email: ctx.charlie.user.email, name: 'Charlie' } },
+        });
+        // The link a CANCEL binds to, as an earlier self-addressed REQUEST would have left it.
+        await home.calendar.receiveInvitation({
+            uid: `${uid}-linked`,
+            title: 'Still mine',
+            description: null,
+            location: null,
+            startTime: new Date('2026-09-02T09:00:00Z'),
+            endTime: new Date('2026-09-02T10:00:00Z'),
+            allDay: false,
+            rrule: null,
+            timezone: null,
+            status: 'confirmed',
+            sequence: 0,
+            data: {
+                organizer: { userId: '', email: ctx.charlie.user.email, name: 'Charlie' },
+                organizerEventId: `${uid}-linked`,
+            },
+            createByUserId: ctx.charlie.user.id,
+            organizerEventId: `${uid}-linked`,
+            organizerUserId: `external_${ctx.charlie.user.email}`,
+        });
+
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:CANCEL',
+            'BEGIN:VEVENT',
+            `UID:${uid}-linked`,
+            'SUMMARY:Still mine',
+            'DTSTART:20260902T090000Z',
+            'DTEND:20260902T100000Z',
+            'SEQUENCE:1',
+            `ORGANIZER;CN=Self:mailto:${ctx.charlie.user.email}`,
+            'DTSTAMP:20260801T000000Z',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        await processInboundImip(home, selfMail(ics, 'CANCEL', ctx.charlie.user.email));
+
+        expect(await home.calendar.getEventsByUid(`${uid}-linked`)).toHaveLength(1);
     });
 });

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import type { InvalidReason } from '../../lib/core';
 import { davDeleteResponse, davPutResponse } from '../../lib/dav/write-result';
 
 // The store result → HTTP mapping both DAV write surfaces share. CardDAV drives it through the route in
@@ -69,6 +70,28 @@ describe('davPutResponse', () => {
         );
         expect(detailed.status).toBe(400);
         expect(await detailed.text()).toBe('UID is required');
+    });
+
+    test('a body with no parent collection answers 409, never a 400', () => {
+        expect(davPutResponse({ ok: false, error: 'no-collection' }, 'C', CALENDAR, 'x.ics').status).toBe(409);
+    });
+
+    test('a refused body names the precondition it broke, in the answering protocol', async () => {
+        const preconditions: [InvalidReason, string][] = [
+            ['data', 'valid-calendar-data'],
+            ['object', 'valid-calendar-object-resource'],
+            ['component', 'supported-calendar-component'],
+        ];
+        for (const [reason, element] of preconditions) {
+            const res = davPutResponse({ ok: false, error: 'invalid', reason }, 'C', CALENDAR, 'x.ics');
+            expect(res.status).toBe(403);
+            expect(await res.text()).toContain(`<C:${element}/>`);
+        }
+
+        // CardDAV has one element for every body it will not store.
+        const card = davPutResponse({ ok: false, error: 'invalid', reason: 'object' }, 'CARD', BOOK, 'x.vcf');
+        expect(card.status).toBe(403);
+        expect(await card.text()).toContain('<CARD:valid-address-data/>');
     });
 
     test('the CalDAV parameters emit the same preconditions in the C namespace and calendar hrefs', async () => {

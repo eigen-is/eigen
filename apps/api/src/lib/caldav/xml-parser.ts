@@ -31,10 +31,56 @@ const parser = new XMLParser({
 
 export type ReportType = 'calendar-query' | 'calendar-multiget' | 'sync-collection';
 
+// One <comp-filter> as fast-xml-parser hands it over: its name, whether it asks for the component to be
+// absent, what it nests, and the window it bounds.
+type CompFilter = {
+    '@_name'?: string;
+    'is-not-defined'?: unknown;
+    'comp-filter'?: CompFilter | CompFilter[];
+    'time-range'?: { '@_start'?: string; '@_end'?: string };
+};
+
+function compFilters(node: CompFilter | undefined): CompFilter[] {
+    const nested = node?.['comp-filter'];
+    if (!nested) return [];
+    return Array.isArray(nested) ? nested : [nested];
+}
+
+function named(filters: CompFilter[], name: string): CompFilter | undefined {
+    return filters.find((filter) => String(filter['@_name'] ?? '').toUpperCase() === name);
+}
+
+// What a calendar-query selects. Eigen stores VEVENTs, so only VCALENDAR > VEVENT can match anything: a
+// VTODO, VJOURNAL or VFREEBUSY filter matches nothing at all rather than every event in the collection,
+// and so does a VEVENT filter that asks for the component to be absent. A prop-filter, param-filter or
+// text-match the index cannot evaluate is ignored: they are mandatory grammar (RFC 4791 § 9.7) and every
+// client that looks an event up by UID sends one, so refusing them refuses the whole collection.
+function readFilter(filter: CompFilter | undefined): {
+    matchesEvents: boolean;
+    timeRange?: { start: Date; end: Date };
+} {
+    if (!filter) return { matchesEvents: true };
+    const vcalendar = named(compFilters(filter), 'VCALENDAR');
+    if (!vcalendar) return { matchesEvents: compFilters(filter).length === 0 };
+
+    const components = compFilters(vcalendar);
+    if (!components.length) return { matchesEvents: true };
+    const vevent = named(components, 'VEVENT');
+    if (!vevent || vevent['is-not-defined'] !== undefined) return { matchesEvents: false };
+
+    // The VEVENT's own window only: a range on a nested VALARM filter bounds the alarms, not the events.
+    const range = vevent['time-range'];
+    const start = range?.['@_start'] ? parseCalDavDate(range['@_start']) : undefined;
+    const end = range?.['@_end'] ? parseCalDavDate(range['@_end']) : undefined;
+    // Only a fully-valid range is honored; a malformed bound drops the range (→ full listing) rather
+    // than feeding Invalid Date into rrule.between.
+    return { matchesEvents: true, timeRange: start && end ? { start, end } : undefined };
+}
+
 // Discriminated union, the CardDAV twin's shape (carddav xml-parser.ts): each report type carries only the
 // fields it uses, so a handler taking Extract<ReportRequest, {type}> can't read a field meant for another.
 export type ReportRequest =
-    | { type: 'calendar-query'; timeRange?: { start: Date; end: Date }; wantsData: boolean }
+    | { type: 'calendar-query'; matchesEvents: boolean; timeRange?: { start: Date; end: Date }; wantsData: boolean }
     | { type: 'calendar-multiget'; hrefs: string[]; wantsData: boolean }
     | { type: 'sync-collection'; syncToken?: string; wantsData: boolean };
 
@@ -66,16 +112,5 @@ export function parseReport(xml: string): ReportRequest {
         return { type, syncToken: syncToken ? String(syncToken) : undefined, wantsData };
     }
 
-    // calendar-query: only the VEVENT time-range filter is read.
-    const veventFilter = root['filter']?.['comp-filter']?.['comp-filter'] || {};
-    const timeRange = veventFilter['time-range'];
-    let parsedTimeRange: { start: Date; end: Date } | undefined;
-    if (timeRange) {
-        const start = timeRange['@_start'] ? parseCalDavDate(timeRange['@_start']) : undefined;
-        const end = timeRange['@_end'] ? parseCalDavDate(timeRange['@_end']) : undefined;
-        // Only honor a fully-valid range; a malformed bound drops the range (→ full listing) rather
-        // than feeding Invalid Date into rrule.between.
-        if (start && end) parsedTimeRange = { start, end };
-    }
-    return { type, timeRange: parsedTimeRange, wantsData };
+    return { type, ...readFilter(root['filter']), wantsData };
 }

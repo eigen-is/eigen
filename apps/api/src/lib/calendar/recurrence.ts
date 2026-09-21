@@ -2,91 +2,20 @@
 import { occurrenceDateToString, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
 import type { CalendarEvent, CalendarEventOccurrence } from '@workspace/lib/types/calendar';
 import { RRule } from 'rrule';
-import { isOutOfRangeRecurrenceStart, isSubDailyRrule, MAX_OCCURRENCES } from './recurrence-limits';
-import { normalizeTimezone } from './timezone';
+import { isOutOfRangeRecurrenceStart, isSubDailyRrule, MAX_OCCURRENCES } from '../ical/recurrence-limits';
+import { localToUtc, wallClockDate } from '../ical/wall-clock';
 
-type LocalComponents = { year: number; month: number; day: number; hour: number; minute: number; second: number };
-
-const intlCache = new Map<string, Intl.DateTimeFormat>();
-
-function getIntlFormatter(tz: string): Intl.DateTimeFormat {
-    let fmt = intlCache.get(tz);
-    if (!fmt) {
-        // Degrade a pre-existing poisoned TZID to UTC instead of throwing RangeError (heals already-broken rows).
-        const safeZone = normalizeTimezone(tz) ?? 'UTC';
-        fmt = new Intl.DateTimeFormat('en-GB', {
-            timeZone: safeZone,
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false,
-        });
-        intlCache.set(tz, fmt);
-    }
-    return fmt;
-}
-
-export function utcToLocal(date: Date, tz: string): LocalComponents {
-    const fmt = getIntlFormatter(tz);
-    const parts = fmt.formatToParts(date);
-    const get = (type: Intl.DateTimeFormatPartTypes) => parseInt(parts.find((p) => p.type === type)!.value, 10);
-    return {
-        year: get('year'),
-        month: get('month'),
-        day: get('day'),
-        hour: get('hour') % 24,
-        minute: get('minute'),
-        second: get('second'),
-    };
-}
-
-export function localToUtc(
-    tz: string,
-    year: number,
-    month: number,
-    day: number,
-    hour: number,
-    minute: number,
-    second: number,
-): Date {
-    const targetMs = Date.UTC(year, month - 1, day, hour, minute, second);
-    const offsetAt = (ms: number): number => {
-        const local = utcToLocal(new Date(ms), tz);
-        return Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second) - ms;
-    };
-
-    let resolved = targetMs - offsetAt(targetMs);
-    if (resolved + offsetAt(resolved) !== targetMs) {
-        // The first guess landed the other side of a transition: solve again with the offset in effect there.
-        const corrected = targetMs - offsetAt(resolved);
-        // A wall time the spring-forward gap skips resolves with the pre-transition offset — the later instant.
-        if (corrected + offsetAt(corrected) !== targetMs) return new Date(Math.max(resolved, corrected));
-        resolved = corrected;
-    }
-
-    // RFC 5545: an ambiguous fall-back time resolves to the first (pre-transition) occurrence
-    const earlier = resolved - 3600_000;
-    return new Date(earlier + offsetAt(earlier) === targetMs ? earlier : resolved);
-}
-
-// Convert a real UTC instant to the Date whose UTC fields hold its wall-clock time in tz — the space
-// rrule expands in, since rrule's own tzid handling is broken.
-function wallClockDate(date: Date, tz: string): Date {
-    const local = utcToLocal(date, tz);
-    return new Date(Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second));
-}
+// What the index does with a stored series: expand it over a window, and bound an organizer's rule by
+// what the attendee kept. The wall-clock arithmetic itself belongs to the format layer.
 
 export function expandRecurrence(event: CalendarEvent, rangeStart: Date, rangeEnd: Date): CalendarEventOccurrence[] {
     if (!event.rrule) return [];
 
     const durationMs = event.endTime.getTime() - event.startTime.getTime();
 
-    // Defense in depth: only a legacy stored row can still hold a sub-daily rrule or an out-of-range
-    // dtstart (the write and ICS boundaries now reject/strip them). Never feed one to rrule.between —
-    // it would iterate to the window and hang. Surface just the base occurrence if it falls in the
+    // Defense in depth: only an untrusted file can still carry a sub-daily rrule or an out-of-range
+    // dtstart (the write and ICS boundaries reject/strip them). Never feed one to rrule.between — it
+    // would iterate to the window and hang. Surface just the base occurrence if it falls in the
     // window (treat as a single event, matching the ingest-time degrade).
     if (isSubDailyRrule(event.rrule) || isOutOfRangeRecurrenceStart(event.startTime)) {
         if (event.startTime >= rangeStart && event.startTime <= rangeEnd) {
@@ -152,16 +81,6 @@ export function expandRecurrence(event: CalendarEvent, rangeStart: Date, rangeEn
     }));
 }
 
-// The wall-date key a stored recurrenceDate resolves to, or null when it can't name an occurrence.
-// Rows written before the route validated the format can hold a full ISO datetime (truncates to its
-// date part) or arbitrary text (inert: cancels/substitutes nothing). Every reader of stored keys
-// must resolve them through this — and never feed a raw one to RRule.between, which throws on
-// invalid dates.
-export function storedRecurrenceKey(recurrenceDate: string): string | null {
-    const key = recurrenceDate.substring(0, 10);
-    return Number.isNaN(Date.parse(`${key}T00:00:00Z`)) ? null : key;
-}
-
 export function constrainRRule(incoming: string | null, local: string | null): string | null {
     if (!incoming || !local) return incoming;
     const localUntil = RRule.parseString(local).until ?? null;
@@ -169,76 +88,4 @@ export function constrainRRule(incoming: string | null, local: string | null): s
     const incomingUntil = RRule.parseString(incoming).until ?? null;
     if (incomingUntil && incomingUntil <= localUntil) return incoming;
     return truncateRRule(incoming, new Date(localUntil.getTime() + 86400_000));
-}
-
-export function computeOccurrenceTimes(
-    parent: CalendarEvent,
-    recurrenceDate: string,
-): { startTime: Date; endTime: Date } {
-    const durationMs = parent.endTime.getTime() - parent.startTime.getTime();
-    const tz = parent.timezone;
-    const occDate = new Date(`${recurrenceDate}T00:00:00Z`);
-
-    // Skip a sub-daily rrule or out-of-range dtstart (only a legacy stored row can hold one) — it
-    // would iterate to the day window and hang; fall through to the time-of-day fallback below.
-    if (parent.rrule && !isSubDailyRrule(parent.rrule) && !isOutOfRangeRecurrenceStart(parent.startTime)) {
-        if (tz) {
-            // Timezone-aware: expand in wall-clock space, convert back to UTC
-            const rule = new RRule({
-                ...RRule.parseString(parent.rrule),
-                dtstart: wallClockDate(parent.startTime, tz),
-            });
-            const dayStart = new Date(occDate);
-            const dayEnd = new Date(occDate);
-            dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
-            const matches = rule.between(dayStart, dayEnd, true, (_d, len) => len < MAX_OCCURRENCES);
-            if (matches.length > 0) {
-                const match = matches[0];
-                const startTime = localToUtc(
-                    tz,
-                    match.getUTCFullYear(),
-                    match.getUTCMonth() + 1,
-                    match.getUTCDate(),
-                    match.getUTCHours(),
-                    match.getUTCMinutes(),
-                    match.getUTCSeconds(),
-                );
-                return { startTime, endTime: new Date(startTime.getTime() + durationMs) };
-            }
-        } else {
-            const rule = new RRule({ ...RRule.parseString(parent.rrule), dtstart: parent.startTime });
-            const dayStart = new Date(occDate);
-            const dayEnd = new Date(occDate);
-            dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
-            const matches = rule.between(dayStart, dayEnd, true, (_d, len) => len < MAX_OCCURRENCES);
-            if (matches.length > 0) {
-                const startTime = matches[0];
-                return { startTime, endTime: new Date(startTime.getTime() + durationMs) };
-            }
-        }
-    }
-
-    // Fallback: place dtstart's time-of-day onto the occurrence date
-    if (tz) {
-        const local = utcToLocal(parent.startTime, tz);
-        const occDateParts = occDate.toISOString().substring(0, 10).split('-');
-        const startTime = localToUtc(
-            tz,
-            parseInt(occDateParts[0], 10),
-            parseInt(occDateParts[1], 10),
-            parseInt(occDateParts[2], 10),
-            local.hour,
-            local.minute,
-            local.second,
-        );
-        return { startTime, endTime: new Date(startTime.getTime() + durationMs) };
-    }
-
-    const startTime = new Date(
-        occDate.getTime() +
-            parent.startTime.getUTCHours() * 3600_000 +
-            parent.startTime.getUTCMinutes() * 60_000 +
-            parent.startTime.getUTCSeconds() * 1000,
-    );
-    return { startTime, endTime: new Date(startTime.getTime() + durationMs) };
 }

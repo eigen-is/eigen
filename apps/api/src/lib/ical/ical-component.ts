@@ -7,11 +7,10 @@ import { randomUUID } from 'node:crypto';
 import { stripControlChars, stripLineBreaks } from '@workspace/lib/content-line';
 import type { Attendee, CalendarEvent, ImipMethod, Reminder, UpdateEventInput } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
-import { computeOccurrenceTimes, localToUtc, storedRecurrenceKey, utcToLocal } from '../calendar/recurrence';
-import { normalizeTimezone } from '../calendar/timezone';
 import {
     calAddress,
     EIGEN,
+    type ExclusionStamp,
     icalTimeToInstant,
     icalTimeToRecurrenceKey,
     isEigenName,
@@ -19,17 +18,25 @@ import {
     propTzid,
     readExclusionStamps,
     readStamp,
+    readTimestamp,
     recurrenceKeyOf,
     sequenceOf,
     seriesTimezones,
     uidOf,
+    utcStampString,
 } from './ical-parse';
+import { normalizeTimezone } from './timezone';
 import { buildVTimezone } from './vtimezone';
+import { computeOccurrenceTimes, localToUtc, storedRecurrenceKey, utcToLocal } from './wall-clock';
 
 const PRODID = '-//Eigen//CalDAV//EN';
 
-export type WriteContext = { now: Date; actorIsOrganizer: boolean };
-export type EventPatch = Omit<UpdateEventInput, 'calendarId' | 'id'>;
+// `dtstamp` is the instant the scheduling message this write applies was stamped with; a local edit states
+// none and the clock stands in.
+export type WriteContext = { now: Date; actorIsOrganizer: boolean; dtstamp?: Date | null };
+// `sequence` is the one field no HTTP save submits: the invitation receivers carry the organizer's
+// revision number, and it wins over the bump rule.
+export type EventPatch = Omit<UpdateEventInput, 'calendarId' | 'id'> & { sequence?: number };
 export type TrustedStamps = {
     createByUserId?: string | null;
     organizerEventId?: string | null;
@@ -179,11 +186,14 @@ function exdateProperty(master: CalendarEvent, key: string, tzid: string | null)
     return timeProperty('exdate', occurrenceInstant(master, key), tzid, master.allDay);
 }
 
-function exclusionStamp(key: string, id: string, sequence: number): ICAL.Property {
+function exclusionStamp(key: string, id: string, sequence: number, dtstamp: Date | null): ICAL.Property {
     const prop = new ICAL.Property(EIGEN.exdate);
     prop.setValue(key);
     prop.setParameter(EIGEN.eventId, id);
     prop.setParameter(EIGEN.sequence, String(sequence));
+    // A cancelled occurrence keeps no VEVENT of its own, so the message that cancelled it leaves its
+    // revision stamp here for the RFC 5546 ordering rule to compare the next message against.
+    if (dtstamp) prop.setParameter(EIGEN.dtstamp, utcStampString(dtstamp));
     return prop;
 }
 
@@ -252,9 +262,28 @@ function exdateKeys(vevent: ICAL.Component, seriesTz: string | null): Set<string
     return keys;
 }
 
-function touch(vevent: ICAL.Component, ctx: WriteContext, scheduling: boolean): void {
+const STAMP_HORIZON_MS = 24 * 60 * 60 * 1000;
+
+// A message stamped far ahead of the receiver's clock would outrank every genuine update that follows it at
+// the same SEQUENCE, so the revision a receiver stores is bounded by its own clock (RFC 5546 § 2.1.5).
+export function clampStamp(dtstamp: Date | null | undefined, now: Date): Date | null {
+    if (!dtstamp) return null;
+    return dtstamp.getTime() > now.getTime() + STAMP_HORIZON_MS ? now : dtstamp;
+}
+
+// A submitted sequence is the organizer's own revision number, which an attendee copy mirrors rather
+// than computes; without one the three-way bump rule decides.
+function touch(vevent: ICAL.Component, ctx: WriteContext, scheduling: boolean, sequence?: number): void {
     setProperty(vevent, utcStamp('last-modified', ctx.now));
-    setProperty(vevent, utcStamp('dtstamp', ctx.now));
+    // DTSTAMP on a copy of somebody else's event is the organizer's own revision stamp, which the next
+    // message is ordered against: only a message moves it, never the attendee's local edit.
+    if (ctx.dtstamp || readStamp(vevent, EIGEN.organizerEvent) === null) {
+        setProperty(vevent, utcStamp('dtstamp', clampStamp(ctx.dtstamp, ctx.now) ?? ctx.now));
+    }
+    if (sequence !== undefined) {
+        vevent.updatePropertyWithValue('sequence', sequence);
+        return;
+    }
     if (!scheduling || !ctx.actorIsOrganizer || vevent.getAllProperties('attendee').length === 0) return;
     vevent.updatePropertyWithValue('sequence', sequenceOf(vevent) + 1);
 }
@@ -389,7 +418,7 @@ function buildVEvent(event: CalendarEvent, options: BuildOptions = {}): ICAL.Com
     addStamp(vevent, EIGEN.organizerUser, organizer?.userId);
     addStamp(vevent, EIGEN.color, event.data?.color);
     for (const { key, exclusion } of excluded) {
-        vevent.addProperty(exclusionStamp(key, exclusion.id, exclusion.sequence));
+        vevent.addProperty(exclusionStamp(key, exclusion.id, exclusion.sequence, null));
     }
 
     const recipient = organizer?.email ?? '';
@@ -605,20 +634,48 @@ export function patchEvent(
         if (data.reminders) changed = patchReminders(vevent, data.reminders) || changed;
     }
 
+    if (patch.sequence !== undefined && sequenceOf(vevent) !== patch.sequence) changed = true;
+
     if (!changed) return false;
     if (patch.timezone !== undefined) syncVTimezones(resource);
-    touch(vevent, ctx, scheduling);
+    touch(vevent, ctx, scheduling, patch.sequence);
     return true;
 }
 
-// Add or replace the override for one occurrence. A second override of the same key replaces the first.
+// Add or replace the override for one occurrence. A second override of the same key replaces the first,
+// and an occurrence the series excluded comes back: an EXDATE left beside the override would keep it
+// out of the expansion and project a second, cancelled row for the same key.
 export function putOverride(resource: ICAL.Component, master: CalendarEvent, override: CalendarEvent): void {
     const key = override.recurrenceDate ? storedRecurrenceKey(override.recurrenceDate) : null;
     if (!key) throw new Error('putOverride: the override names no occurrence');
     const existing = findVEvent(resource, key);
     if (existing) resource.removeSubcomponent(existing);
+    const vevent = masterVEvent(resource);
+    if (vevent) dropExclusion(vevent, key);
     resource.addSubcomponent(buildVEvent(override, { master }));
     syncVTimezones(resource);
+}
+
+// Drop one occurrence's EXDATE value and the stamp beside it, whatever form the client wrote them in.
+function dropExclusion(vevent: ICAL.Component, recurrenceKey: string): boolean {
+    const seriesTz = propTzid(vevent.getFirstProperty('dtstart'));
+    let removed = false;
+    for (const prop of vevent.getAllProperties('exdate')) {
+        const values = prop.getValues();
+        const kept = values.filter(
+            (v) => !(v instanceof ICAL.Time) || icalTimeToRecurrenceKey(v, seriesTz) !== recurrenceKey,
+        );
+        if (kept.length === values.length) continue;
+        removed = true;
+        if (kept.length) prop.setValues(kept);
+        else vevent.removeProperty(prop);
+    }
+    for (const stamp of vevent.getAllProperties(EIGEN.exdate)) {
+        if (storedRecurrenceKey(String(stamp.getFirstValue() ?? '')) !== recurrenceKey) continue;
+        vevent.removeProperty(stamp);
+        removed = true;
+    }
+    return removed;
 }
 
 // Cancel one occurrence: an EXDATE on the master plus the stamp carrying the exclusion row's id and the
@@ -646,7 +703,7 @@ export function addExclusion(
     for (const stamp of vevent.getAllProperties(EIGEN.exdate)) {
         if (storedRecurrenceKey(String(stamp.getFirstValue() ?? '')) === key) vevent.removeProperty(stamp);
     }
-    vevent.addProperty(exclusionStamp(key, exclusion.id, exclusion.sequence));
+    vevent.addProperty(exclusionStamp(key, exclusion.id, exclusion.sequence, clampStamp(ctx.dtstamp, ctx.now)));
     syncVTimezones(resource);
     touch(vevent, ctx, true);
 }
@@ -654,25 +711,72 @@ export function addExclusion(
 export function removeExclusion(resource: ICAL.Component, recurrenceKey: string, ctx: WriteContext): void {
     const vevent = masterVEvent(resource);
     if (!vevent) throw new Error('removeExclusion: the resource holds no master VEVENT');
-    const seriesTz = propTzid(vevent.getFirstProperty('dtstart'));
+    if (dropExclusion(vevent, recurrenceKey)) touch(vevent, ctx, true);
+}
 
-    let removed = false;
-    for (const prop of vevent.getAllProperties('exdate')) {
-        const values = prop.getValues();
-        const kept = values.filter(
-            (v) => !(v instanceof ICAL.Time) || icalTimeToRecurrenceKey(v, seriesTz) !== recurrenceKey,
-        );
-        if (kept.length === values.length) continue;
-        removed = true;
-        if (kept.length) prop.setValues(kept);
-        else vevent.removeProperty(prop);
+// What one revision of an event is known by: the sender's SEQUENCE and the instant it stamped.
+export type Revision = { sequence: number; dtstamp?: Date | null };
+
+// RFC 5546 § 2.1.5: a receiver orders messages on SEQUENCE first and DTSTAMP second, and one that arrived
+// behind a newer message — a greylisted mail, an unordered fan-out — is not applied. DTSTAMP has a
+// second's resolution, so two revisions inside one second are indistinguishable and an equal stamp is
+// applied as the redelivery it is: the patch then finds nothing to change. With no stamp on either side
+// an equal SEQUENCE has nothing to order it by and the message is applied for the same reason; only a
+// strictly lower SEQUENCE loses.
+export function isNewerRevision(incoming: Revision, stored: Revision | null): boolean {
+    if (!stored) return true;
+    if (incoming.sequence !== stored.sequence) return incoming.sequence > stored.sequence;
+    if (!incoming.dtstamp || !stored.dtstamp) return true;
+    return incoming.dtstamp.getTime() >= stored.dtstamp.getTime();
+}
+
+// The revision a stored resource holds for one occurrence, or for the series itself with a null key. A
+// cancelled occurrence keeps no VEVENT, so its revision is the stamp beside its EXDATE — or the series'
+// own number when a client wrote that EXDATE itself.
+export function storedRevision(resource: ICAL.Component, recurrenceKey: string | null): Revision | null {
+    const vevent = findVEvent(resource, recurrenceKey);
+    if (vevent) return { sequence: sequenceOf(vevent), dtstamp: readTimestamp(vevent, 'dtstamp') };
+    if (recurrenceKey === null) return null;
+    const master = masterVEvent(resource);
+    if (!master || !exdateKeys(master, propTzid(master.getFirstProperty('dtstart'))).has(recurrenceKey)) return null;
+    const stamp = readExclusionStamps(master).get(recurrenceKey);
+    return { sequence: stamp?.sequence ?? sequenceOf(master), dtstamp: stamp?.dtstamp ?? null };
+}
+
+// Who a stored resource nobody linked says its organizer is: the address it was imported with, else the
+// ORGANIZER the file carries. The inbound-REQUEST rule matches a verified sender against this.
+export function storedOrganizerAddress(resource: ICAL.Component): string | null {
+    const vevent = masterVEvent(resource);
+    if (!vevent) return null;
+    const imported = readStamp(vevent, EIGEN.importedOrganizer);
+    if (imported) return imported.toLowerCase();
+    const organizer = vevent.getFirstProperty('organizer');
+    const address = organizer ? calAddress(organizer.getFirstValue()).toLowerCase() : '';
+    return address || null;
+}
+
+// Stamp a stored resource as the attendee-side copy of somebody else's event. The link comes from trusted
+// message fields only — the relay envelope, or `external_<address>` for a DKIM-aligned iMIP sender.
+export function stampInvitationLink(
+    resource: ICAL.Component,
+    link: { organizerEventId: string; organizerUserId: string },
+): void {
+    for (const vevent of resource.getAllSubcomponents('vevent')) {
+        vevent.removeAllProperties(EIGEN.organizerEvent);
+        vevent.removeAllProperties(EIGEN.organizerUser);
+        vevent.addProperty(rawProperty(EIGEN.organizerEvent, link.organizerEventId));
+        vevent.addProperty(rawProperty(EIGEN.organizerUser, link.organizerUserId));
     }
-    for (const stamp of vevent.getAllProperties(EIGEN.exdate)) {
-        if (storedRecurrenceKey(String(stamp.getFirstValue() ?? '')) !== recurrenceKey) continue;
-        vevent.removeProperty(stamp);
-        removed = true;
+}
+
+// A file whose row ids another resource already holds is a copy of it: every other Eigen line stays, and
+// the ids — the master's, the overrides', and the ones the exclusion stamps carry — are minted fresh.
+export function remintEventIds(resource: ICAL.Component): void {
+    for (const vevent of resource.getAllSubcomponents('vevent')) {
+        vevent.removeAllProperties(EIGEN.eventId);
+        vevent.addProperty(rawProperty(EIGEN.eventId, randomUUID()));
+        for (const stamp of vevent.getAllProperties(EIGEN.exdate)) stamp.setParameter(EIGEN.eventId, randomUUID());
     }
-    if (removed) touch(vevent, ctx, true);
 }
 
 // Every `X-EIGEN-*` property and parameter, at every level. Export, iMIP and the relay all run through
@@ -709,7 +813,7 @@ export function restampResource(
     const storedVEvents = stored?.getAllSubcomponents('vevent') ?? [];
     const storedZones = seriesTimezones(storedVEvents);
     const storedByKey = new Map<string, ICAL.Component>();
-    const storedStamps = new Map<string, { id: string; sequence: number }>();
+    const storedStamps = new Map<string, ExclusionStamp>();
     for (const vevent of storedVEvents) {
         const uid = uidOf(vevent);
         const key = recurrenceKeyOf(vevent, storedZones.get(uid) ?? null);
@@ -750,7 +854,9 @@ export function restampResource(
 
         for (const key of exdateKeys(vevent, seriesTz)) {
             const prior = storedStamps.get(`${uid}|${key}`);
-            vevent.addProperty(exclusionStamp(key, claim(prior?.id), prior?.sequence ?? sequenceOf(vevent)));
+            vevent.addProperty(
+                exclusionStamp(key, claim(prior?.id), prior?.sequence ?? sequenceOf(vevent), prior?.dtstamp ?? null),
+            );
         }
     }
 }

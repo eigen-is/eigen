@@ -25,12 +25,18 @@ export function computeResourceEtag(bytes: Uint8Array): string {
     return new Bun.CryptoHasher('sha256').update(bytes).digest('hex');
 }
 
+// Why a body is refused, in the terms both DAV protocols have a precondition element for: bytes that do
+// not parse, an object that breaks the resource rules, a component the collection does not hold.
+export type InvalidReason = 'data' | 'object' | 'component';
+
 // A client-caused failure is a value here, not a throw: only genuine IO errors bubble past this seam.
+// A null etag is a write the server did not store verbatim: it has no validator to hand back (RFC 4791 § 5.3.4).
 export type PutResourceResult =
-    | { ok: true; etag: string; created: boolean }
+    | { ok: true; etag: string | null; created: boolean }
     | {
           ok: false;
-          error: 'precondition' | 'uid-conflict' | 'invalid' | 'too-large' | 'quota';
+          error: 'precondition' | 'uid-conflict' | 'invalid' | 'no-collection' | 'too-large' | 'quota';
+          reason?: InvalidReason;
           message?: string;
           conflictUri?: string;
       };
@@ -157,6 +163,36 @@ export function dedupeByUid<T>(
         kept.push(item);
     }
     return kept;
+}
+
+// A bulk write (a whole-file import, a device sync) broadcasts ONE list-level event for the per-resource
+// events it held back, instead of one per resource — a thousand cards were a thousand broadcasts. The flush
+// runs even when the body throws: what landed before it still has to reach the tabs.
+export class BroadcastBatch {
+    private depth = 0;
+    private held = false;
+
+    constructor(private readonly flush: () => void) {}
+
+    // True when the caller's event was held for the batch, false when it is the caller's to broadcast now.
+    hold(): boolean {
+        if (this.depth === 0) return false;
+        this.held = true;
+        return true;
+    }
+
+    async run<T>(fn: () => Promise<T>): Promise<T> {
+        this.depth++;
+        try {
+            return await fn();
+        } finally {
+            this.depth--;
+            if (this.depth === 0 && this.held) {
+                this.held = false;
+                this.flush();
+            }
+        }
+    }
 }
 
 // One slot, so a file write and its index commit stay a pair; a torn write's key stays dirty until a drain settles it.

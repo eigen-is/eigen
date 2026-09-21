@@ -1,6 +1,6 @@
 import Elysia from 'elysia';
 import { authenticateBasic } from '../auth/protocol-auth';
-import { EVENT_MAX_BYTES } from '../calendar/calendar';
+import { EVENT_MAX_BYTES } from '../calendar/resource-store';
 import { requireSelf } from '../core/access';
 import { readBoundedBody } from '../core/http';
 import { parseCollectionPath } from '../dav/href';
@@ -43,7 +43,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         const body = await readBoundedBody(request, DAV_BODY_MAX_BYTES);
         if (body === null) return new Response('Payload Too Large', { status: 413 });
         const home = await getHome(params.ownerId);
-        const calendars = await home.calendar.getCalendars();
+        const calendars = await home.calendar.getCollections();
         const depth = request.headers.get('Depth') || '0';
         return handleCalendarHomePropfind(params.ownerId, calendars, depth, parsePropfind(body), wantsBrief(request));
     })
@@ -63,21 +63,21 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         const depth = request.headers.get('Depth') || '0';
 
         if (!parsed.collection) {
-            return handleCalendarHomePropfind(params.ownerId, await home.calendar.getCalendars(), depth, req, brief);
+            return handleCalendarHomePropfind(params.ownerId, await home.calendar.getCollections(), depth, req, brief);
         }
 
-        const calendar = await home.calendar.getCalendarById(parsed.collection);
+        const calendar = await home.calendar.getCollection(parsed.collection);
         if (!calendar) return new Response('Not Found', { status: 404 });
 
-        // A resource segment is a single-event PROPFIND — the event's own href + etag, 404 if the uri is unknown.
+        // A resource segment is a single-resource PROPFIND — its own href + etag, 404 if the uri is unknown.
         if (parsed.resource) {
-            const event = await home.calendar.getEventByUri(parsed.collection, parsed.resource);
-            if (!event) return new Response('Not Found', { status: 404 });
-            return handleEventPropfind(params.ownerId, parsed.collection, event.uri, event.etag, req, brief);
+            const resource = await home.calendar.getResourceMeta(parsed.collection, parsed.resource);
+            if (!resource) return new Response('Not Found', { status: 404 });
+            return handleEventPropfind(params.ownerId, parsed.collection, resource.uri, resource.etag, req, brief);
         }
 
-        const events = depth === '1' ? await home.calendar.getRawEvents(parsed.collection) : [];
-        return handleCalendarPropfind(params.ownerId, calendar, events, depth, req, brief);
+        const resources = depth === '1' ? await home.calendar.listResources(parsed.collection) : [];
+        return handleCalendarPropfind(params.ownerId, calendar, resources, depth, req, brief);
     })
 
     // GET .ics resource
@@ -96,11 +96,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         }
 
         const home = await getHome(params.ownerId);
-        const event = await home.calendar.getEventByUri(parsed.collection, parsed.resource);
-        if (!event) return new Response('Not Found', { status: 404 });
-
-        const allEvents = await home.calendar.getRawEventsByUid(parsed.collection, event.uid);
-        return handleGet(event, allEvents);
+        return handleGet(home.calendar, parsed.collection, parsed.resource);
     })
 
     // PUT .ics resource
@@ -154,12 +150,12 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         if (!parsed.ok || !parsed.collection) return new Response('Bad Request', { status: 400 });
 
         const home = await getHome(params.ownerId);
-        const calendarItem = await home.calendar.getCalendarById(parsed.collection);
-        if (!calendarItem) return new Response('Not Found', { status: 404 });
+        const collection = await home.calendar.getCollection(parsed.collection);
+        if (!collection) return new Response('Not Found', { status: 404 });
 
         const body = await readBoundedBody(request, DAV_BODY_MAX_BYTES);
         if (body === null) return new Response('Payload Too Large', { status: 413 });
-        return handleReport(home.calendar, parsed.collection, calendarItem, params.ownerId, body);
+        return handleReport(home.calendar, parsed.collection, collection, params.ownerId, body);
     })
 
     // MKCALENDAR — creates a calendar at the client-chosen URL (one path segment, no resource part).

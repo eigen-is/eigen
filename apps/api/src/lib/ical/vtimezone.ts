@@ -1,7 +1,7 @@
 // RFC 5545 §3.6.5 — build a VTIMEZONE from Intl offset data so serialized TZIDs carry a definition.
 // The zone's UTC transitions are discovered by probing Intl offsets, then compressed to two RRULE
 // observances when the DST rule is regular, else emitted one observance per transition.
-import { utcToLocal } from '../calendar/recurrence';
+import { utcToLocal } from './wall-clock';
 
 const WEEKDAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
 const DAY_MS = 86_400_000;

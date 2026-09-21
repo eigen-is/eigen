@@ -357,6 +357,26 @@ describe('SEQUENCE', () => {
         expect(Number(masterOf(resource).getFirstPropertyValue('sequence'))).toBe(2);
     });
 
+    // An attendee copy mirrors the organizer's revision instead of computing one: the RFC 5546 replay
+    // guard compares the stored number against the next message's.
+    test('a submitted sequence is written as given, whatever the bump rule would say', () => {
+        const resource = parseResource(KITCHEN_SINK);
+        patchEvent(resource, null, { ...timesPatch, sequence: 9 }, { ...CTX, actorIsOrganizer: false });
+        expect(Number(masterOf(resource).getFirstPropertyValue('sequence'))).toBe(9);
+    });
+
+    test('a submitted sequence wins over the organizer bump', () => {
+        const resource = parseResource(KITCHEN_SINK);
+        patchEvent(resource, null, { ...timesPatch, sequence: 4 }, CTX);
+        expect(Number(masterOf(resource).getFirstPropertyValue('sequence'))).toBe(4);
+    });
+
+    test('a sequence alone is a change worth writing', () => {
+        const resource = parseResource(KITCHEN_SINK);
+        expect(patchEvent(resource, null, { sequence: 7 }, { ...CTX, actorIsOrganizer: false })).toBe(true);
+        expect(Number(masterOf(resource).getFirstPropertyValue('sequence'))).toBe(7);
+    });
+
     test('bumps on an attendee-set change and never moves CREATED', () => {
         const resource = parseResource(KITCHEN_SINK);
         patchEvent(
@@ -950,6 +970,20 @@ describe('structural edits', () => {
 
         expect(masterOf(resource).getAllProperties('exdate')).toHaveLength(0);
         expect(masterOf(resource).getAllProperties('x-eigen-exdate')).toHaveLength(0);
+    });
+
+    // Re-instating a cancelled occurrence: an EXDATE left beside the new override would keep the
+    // occurrence excluded and project a second, cancelled row for the same key.
+    test('putOverride drops the exclusion of the key it overrides', () => {
+        const resource = buildResource([MASTER, EXCLUSION]);
+        putOverride(resource, MASTER, { ...OVERRIDE, recurrenceDate: EXCLUSION.recurrenceDate });
+
+        const master = masterOf(resource);
+        expect(master.getAllProperties('exdate')).toHaveLength(0);
+        expect(master.getAllProperties('x-eigen-exdate')).toHaveLength(0);
+        expect(
+            projectResource(resource).events.filter((e) => e.recurrenceDate === EXCLUSION.recurrenceDate),
+        ).toHaveLength(1);
     });
 
     test('putOverride replaces an existing override of the same key', () => {

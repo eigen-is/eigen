@@ -10,7 +10,7 @@ import type ICAL from 'ical.js';
 import { getHome } from '../../lib/home';
 import { parseIcs, parseResource, serializeEventForImip } from '../../lib/ical';
 import { basicAuth, davRequest } from '../dav-test-helpers';
-import { app, assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
+import { app, assertJson, authedRequest, eventually, findOrFail, getTestContext } from '../setup';
 
 const VTZ_NY = [
     'BEGIN:VTIMEZONE',
@@ -111,6 +111,86 @@ describe('CalDAV round-trip fidelity', () => {
         const ids = [...matches].map((m) => m[1]).filter(Boolean);
         expect(ids.length).toBeGreaterThan(0);
         calendarId = ids[0];
+    });
+
+    // The whole seam end to end: a client writes a kitchen sink, the web app renames it through the REST
+    // route, and the client reads its own bytes back with nothing but the title (and the stamps a write
+    // always moves) changed.
+    describe('a web edit of a client-written event', () => {
+        // The organizer is the calendar owner: an event somebody else organizes is an invitation, and the
+        // attendee guard would refuse the rename outright.
+        const kitchen = () =>
+            [
+                'BEGIN:VEVENT',
+                'UID:rt-kitchen@client',
+                'DTSTAMP:20260101T000000Z',
+                'CREATED:20251201T090000Z',
+                'LAST-MODIFIED:20251215T090000Z',
+                'SEQUENCE:2',
+                'SUMMARY:Kitchen sink',
+                'DESCRIPTION:has a ; semicolon and a , comma',
+                'DTSTART;TZID=America/New_York:20260415T120000',
+                'DTEND;TZID=America/New_York:20260415T130000',
+                'RRULE:FREQ=WEEKLY;COUNT=10',
+                'RDATE;TZID=America/New_York:20260501T120000',
+                'GEO:52.37;4.89',
+                'CATEGORIES:work,travel',
+                'ATTACH;FMTTYPE=text/plain;VALUE=URI:https://example.com/agenda.txt',
+                'X-APPLE-STRUCTURED-LOCATION;VALUE=URI;X-ADDRESS="Herengracht 1\\nAmsterdam";X-APPLE-RADIUS=49;X-TITLE=Office:geo:52.37,4.89',
+                `ORGANIZER;CN=Alice:mailto:${ctx.alice.user.email}`,
+                'ATTENDEE;CUTYPE=ROOM;ROLE=OPT-PARTICIPANT;PARTSTAT=ACCEPTED;CN=Room 42:mailto:room42@x.com',
+                'BEGIN:VALARM',
+                'ACTION:AUDIO',
+                'TRIGGER;RELATED=END:-PT10M',
+                'ATTACH;FMTTYPE=audio/basic:ftp://example.com/pub/sounds/bell-01.aud',
+                'END:VALARM',
+                'END:VEVENT',
+            ].join('\r\n');
+
+        // Every property in jCal form, keyed by name: ical.js reorders parameters and rewrites escapes,
+        // so only name + parameters + values decide equality.
+        const snapshot = (comp: ICAL.Component): Record<string, unknown[]> => {
+            const out: Record<string, unknown[]> = {};
+            for (const prop of comp.getAllProperties()) (out[prop.name] ??= []).push(prop.toJSON());
+            for (const sub of comp.getAllSubcomponents()) (out[`${sub.name}/`] ??= []).push(snapshot(sub));
+            return out;
+        };
+
+        const veventOf = (ics: string): ICAL.Component =>
+            parseResource(ics)
+                .getAllSubcomponents('vevent')
+                .find((v) => v.getFirstPropertyValue('uid') === 'rt-kitchen@client')!;
+
+        test('everything the client wrote survives, and only the title moves', async () => {
+            expect((await putIcs('rt-kitchen.ics', vcal(VTZ_NY, kitchen()))).status).toBe(201);
+            const before = snapshot(veventOf(await getIcs('rt-kitchen.ics')));
+
+            const home = await getHome(userId);
+            const stored = findOrFail(
+                await home.calendar.getRawEvents(calendarId),
+                (e) => e.uid === 'rt-kitchen@client',
+            );
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${userId}/calendars/${calendarId}/events/${stored.id}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: 'Kitchen sink, renamed' }),
+                },
+            );
+            expect(res.status).toBe(200);
+
+            const after = snapshot(veventOf(await getIcs('rt-kitchen.ics')));
+            // A title is not a significant change (RFC 5545 §3.8.7.4), so even SEQUENCE holds still.
+            const moved = ['summary', 'last-modified', 'dtstamp'];
+            for (const name of new Set([...Object.keys(before), ...Object.keys(after)])) {
+                if (moved.includes(name)) continue;
+                expect({ [name]: after[name] }).toEqual({ [name]: before[name] });
+            }
+            expect(after['summary']).toEqual([['summary', {}, 'text', 'Kitchen sink, renamed']]);
+            expect(after['sequence']).toEqual(before['sequence']);
+        });
     });
 
     describe('EXDATE forms', () => {
@@ -316,10 +396,9 @@ describe('CalDAV round-trip fidelity', () => {
             expect(ics).not.toContain('STATUS:CANCELLED');
         });
 
-        // The full-replace prune presumes the payload represents the whole resource. A degenerate
-        // master-less PUT (no VEVENT without a RECURRENCE-ID) proves nothing about the exceptions
-        // it omits, so it must not delete them.
-        test('a master-less PUT does not prune stored exceptions', async () => {
+        // A PUT replaces the whole resource, so a payload without a master stores a resource without
+        // one: the file the client sent IS the resource, and nothing of the old one is kept back.
+        test('a master-less PUT replaces the whole resource', async () => {
             const withOverride = vcal(
                 [
                     'BEGIN:VEVENT',
@@ -354,10 +433,10 @@ describe('CalDAV round-trip fidelity', () => {
             );
             expect((await putIcs('rt-lone.ics', loneOverride)).status).toBe(204);
 
-            const calendar = (await getHome(userId)).calendar;
-            const masterRow = (await calendar.getEventByUri(calendarId, 'rt-lone.ics'))!;
-            // Both rows survive: the override (updated by the PUT) and the canceled EXDATE row.
-            expect(await calendar.getExceptionsForParent(masterRow.id)).toHaveLength(2);
+            const ics = await getIcs('rt-lone.ics');
+            expect(ics).toContain('SUMMARY:Lone series (moved again)');
+            expect(ics).not.toContain('RRULE:FREQ=WEEKLY');
+            expect(ics.split('BEGIN:VEVENT')).toHaveLength(2);
         });
 
         test('control: TEXT escaping and long-line folding survive the round-trip', async () => {
@@ -447,7 +526,7 @@ describe('CalDAV round-trip fidelity', () => {
             expect(ics).toContain('RECURRENCE-ID;TZID=America/New_York:20260604T230000');
         });
 
-        test('unparseable recurrenceDate keys are inert: the resource still serves', async () => {
+        test('an occurrence key the file cannot name is refused at the write boundary', async () => {
             const calendar = (await getHome(userId)).calendar;
             const master = await calendar.createEvent(calendarId, {
                 title: 'Garbage key series',
@@ -460,34 +539,25 @@ describe('CalDAV round-trip fidelity', () => {
                 uri: 'legacy-garbage.ics',
                 createByUserId: userId,
             });
-            await calendar.createEvent(calendarId, {
-                title: 'Garbage key series',
-                startTime: new Date('2026-06-03T03:00:00Z'),
-                endTime: new Date('2026-06-03T03:50:00Z'),
-                allDay: false,
-                parentEventId: master.id,
-                recurrenceDate: 'not-a-date',
-                status: 'cancelled',
-                uid: master.uid,
-                createByUserId: userId,
-            });
-            await calendar.createEvent(calendarId, {
-                title: 'Garbage key series (moved)',
-                startTime: new Date('2026-06-10T10:00:00Z'),
-                endTime: new Date('2026-06-10T10:50:00Z'),
-                allDay: false,
-                timezone: 'America/New_York',
-                parentEventId: master.id,
-                recurrenceDate: 'also!garbage',
-                uid: master.uid,
-                createByUserId: userId,
-            });
 
-            const ics = await getIcs('legacy-garbage.ics'); // pre-fix: 500
-            // The unkeyable cancellation cancels nothing (matches expansion) — no EXDATE emitted.
+            // A RECURRENCE-ID and an EXDATE are both written from this key, so a series can never hold
+            // an occurrence nobody can name.
+            await expect(
+                calendar.createEvent(calendarId, {
+                    title: 'Garbage key series',
+                    startTime: new Date('2026-06-03T03:00:00Z'),
+                    endTime: new Date('2026-06-03T03:50:00Z'),
+                    allDay: false,
+                    parentEventId: master.id,
+                    recurrenceDate: 'not-a-date',
+                    status: 'cancelled',
+                    uid: master.uid,
+                    createByUserId: userId,
+                }),
+            ).rejects.toThrow('Invalid occurrence date');
+
+            const ics = await getIcs('legacy-garbage.ics');
             expect(ics).not.toContain('EXDATE');
-            // The unkeyable override falls back to its own startTime (pre-#C shape) rather than 500ing.
-            expect(ics).toContain('RECURRENCE-ID;TZID=America/New_York:20260610T060000');
         });
     });
 
@@ -558,11 +628,15 @@ describe('CalDAV round-trip fidelity', () => {
                 },
             );
             const updated = await assertJson<CalendarEvent>(res);
-            await new Promise((r) => setTimeout(r, 300)); // let the fire-and-forget fan-out run
+            const updates = await eventually(async () => {
+                const sent = spy.mock.calls.filter((c) => c[0].subject === 'Updated invitation: Design review (web)');
+                return sent.length ? sent : undefined;
+            }, 'the update mail to the guests');
 
             expect(updated.title).toBe('Design review (web)'); // pre-fix: the edit was dropped
-            expect(updated.sequence).toBeGreaterThan(occ.sequence);
-            const updates = spy.mock.calls.filter((c) => c[0].subject === 'Updated invitation: Design review (web)');
+            // A title is not a scheduling change (RFC 5546), so SEQUENCE holds while the guests are
+            // still told about it.
+            expect(updated.sequence).toBe(occ.sequence);
             expect(updates.flatMap((c) => c[0].to.map((t) => t.address))).toContain(GUEST);
             spy.mockRestore();
         });
@@ -587,7 +661,10 @@ describe('CalDAV round-trip fidelity', () => {
                 },
             );
             expect(res.status).toBe(200);
-            await new Promise((r) => setTimeout(r, 300));
+            await eventually(
+                async () => spy.mock.calls.some((c) => c[0].subject?.startsWith('Updated invitation:')) || undefined,
+                'the update mail to the guests',
+            );
             spy.mockRestore();
 
             const served = parseIcs(await getIcs('rt-own-organizer.ics')).events[0];
@@ -696,9 +773,28 @@ describe('CalDAV round-trip fidelity', () => {
 
             expect((await putIcs(uri, ics('Quiet sync'))).status).toBe(201);
             expect((await putIcs(uri, ics('Quiet sync (moved)'))).status).toBe(204);
-            await new Promise((r) => setTimeout(r, 300));
 
-            expect(spy.mock.calls.map((c) => c[0].subject)).toEqual([]);
+            // A device sync mails nobody, so there is nothing of its own to wait for. The control is a web
+            // edit of the same event, made second: it mails the guest through the path a PUT must not take.
+            const occs = await getOccurrences('2026-05-01T00:00:00Z', '2026-06-01T00:00:00Z');
+            const occ = findOrFail(occs, (o) => o.uid === 'rt-organizer-silent@eigen');
+            const web = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${userId}/calendars/${calendarId}/events/${occ.id}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: 'Quiet sync (web)' }),
+                },
+            );
+            expect(web.status).toBe(200);
+            await eventually(
+                async () =>
+                    spy.mock.calls.some((c) => c[0].subject === 'Updated invitation: Quiet sync (web)') || undefined,
+                "the web edit's update mail to the guest",
+            );
+
+            expect(spy.mock.calls.map((c) => c[0].subject)).toEqual(['Updated invitation: Quiet sync (web)']);
             spy.mockRestore();
         });
 
@@ -714,24 +810,28 @@ describe('CalDAV round-trip fidelity', () => {
                 { method: 'DELETE' },
             );
             expect(res.status).toBe(200);
-            await new Promise((r) => setTimeout(r, 300));
-
-            const gone = await app.handle(
+            const read = await app.handle(
                 new Request(`http://localhost/dav/calendars/${userId}/${calendarId}/rt-own-organizer.ics`, {
                     method: 'GET',
                     headers: { Authorization: basicAuth(ctx.alice.user.email) },
                 }),
             );
-            expect(gone.status).toBe(404);
-            // The organizer deleting cancels for the guests; a decline REPLY would mean the row was
-            // read as someone else's invitation.
-            const subjects = spy.mock.calls.map((c) => c[0].subject);
-            expect(subjects).toContain('Canceled: Design review (web)'); // pre-fix: 'Declined: …'
-            expect(subjects.some((s) => s.startsWith('Declined:'))).toBe(false);
+            expect(read.status).toBe(404);
+
+            // The organizer deleting cancels for the guests: that mail is the control this fan-out does owe,
+            // and a decline REPLY beside it would mean the row was read as someone else's invitation.
+            await eventually(
+                async () => spy.mock.calls.some((c) => c[0].subject === 'Canceled: Design review (web)') || undefined,
+                'the cancellation mail to the guests', // pre-fix: 'Declined: …' instead
+            );
+            expect(spy.mock.calls.map((c) => c[0].subject).some((s) => s.startsWith('Declined:'))).toBe(false);
             spy.mockRestore();
         });
 
-        test("control: an event organized by someone else stays locked against the client's PUT", async () => {
+        // The PUT path follows the organizer stamp the server writes, and a resource a client created
+        // carries none: the ORGANIZER address it names is its own to rewrite. The web edit lock is the
+        // separate, address-based rule the decline below still takes.
+        test("control: an ORGANIZER address of its own does not lock a client's resource", async () => {
             const foreignIcs = (summary: string) =>
                 vcal(
                     [
@@ -750,7 +850,47 @@ describe('CalDAV round-trip fidelity', () => {
 
             const occs = await getOccurrences('2026-05-01T00:00:00Z', '2026-06-01T00:00:00Z');
             const occ = findOrFail(occs, (o) => o.uid === 'rt-foreign-organizer@eigen');
-            expect(occ.title).toBe('Partner sync');
+            expect(occ.title).toBe('Partner sync (hijacked)');
+        });
+
+        // Transports stay projected (R17 6a): a message leaves with the event's fields, never with the
+        // lines the store keeps for itself, whatever the stored resource carries.
+        test('no outgoing iMIP message carries an X-EIGEN- line', async () => {
+            const mailer = await import('../../lib/core/mailer');
+            const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+            spy.mockClear();
+
+            const created = await assertJson<CalendarEvent>(
+                await authedRequest(ctx.alice.user.sessionToken, `/calendar/${userId}/calendars/${calendarId}/events`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Stamped locally',
+                        startTime: '2026-05-20T09:00:00.000Z',
+                        endTime: '2026-05-20T10:00:00.000Z',
+                        allDay: false,
+                        data: {
+                            color: '#ff8800',
+                            attendees: [{ email: 'guest@external.com', status: 'pending', role: 'required' }],
+                        },
+                    }),
+                }),
+            );
+            // The stored file does carry them — that is what makes the assertion below worth making.
+            expect(await getIcs(created.uri)).toContain('X-EIGEN-');
+
+            await eventually(
+                async () => spy.mock.calls.some((c) => c[0].icalEvent?.content) || undefined,
+                'the outgoing invitation',
+            );
+            const bodies = spy.mock.calls.flatMap((call) => [
+                call[0].icalEvent?.content ?? '',
+                call[0].text ?? '',
+                call[0].html ?? '',
+            ]);
+            expect(bodies.some((body) => body.includes('BEGIN:VEVENT'))).toBe(true);
+            expect(bodies.some((body) => body.includes('X-EIGEN'))).toBe(false);
+            spy.mockRestore();
         });
 
         // A CalDAV-parsed organizer is known by address only (no Eigen user id), so the decline takes the
@@ -768,9 +908,10 @@ describe('CalDAV round-trip fidelity', () => {
                 { method: 'DELETE' },
             );
             expect(res.status).toBe(200);
-            await new Promise((r) => setTimeout(r, 300));
-
-            const declines = spy.mock.calls.filter((c) => c[0].subject === 'Declined: Partner sync');
+            const declines = await eventually(async () => {
+                const sent = spy.mock.calls.filter((c) => c[0].subject === 'Declined: Partner sync (hijacked)');
+                return sent.length ? sent : undefined;
+            }, 'the decline reply to the organizer');
             expect(declines.flatMap((c) => c[0].to.map((t) => t.address))).toEqual(['ext-organizer@external.com']);
             spy.mockRestore();
         });

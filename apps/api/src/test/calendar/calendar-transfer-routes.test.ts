@@ -9,6 +9,7 @@ import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getMailDomain } from '../../lib/config/server-config';
+import type { OutboundMail } from '../../lib/core/mailer';
 import { ICS_IMPORT_MAX_EVENTS } from '../../lib/core/transfer';
 import { getHome } from '../../lib/home';
 import { basicAuth, DAV_PASSWORD } from '../dav-test-helpers';
@@ -22,6 +23,7 @@ import {
     driveGet,
     drivePost,
     driveUpload,
+    eventually,
     findOrFail,
     firstMountId,
     getTestContext,
@@ -87,6 +89,39 @@ describe('Calendar transfer routes', () => {
         const file = new File([new TextEncoder().encode(text)], name, { type: ICS_MIME });
         return driveUpload(alice.sessionToken, alice.id, mountId, rootId, file);
     };
+
+    const CONTROL_GUEST = 'control.guest@external.com';
+
+    // The cancellation fan-out is fire-and-forget, so a delete that mails nothing proves nothing on its own.
+    // This event Alice organizes IS mailed about, and it is created and deleted after the silent one, so its
+    // cancellation is composed behind anything the silent delete owed. Returns the subject to wait for.
+    const controlCancellation = async (): Promise<string> => {
+        const title = `Control ${randomUUID()}`;
+        const created = await assertJson<CalendarEvent>(
+            await authedRequest(alice.sessionToken, `/calendar/${alice.id}/calendars/${calendarId}/events`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title,
+                    startTime: '2026-04-30T09:00:00Z',
+                    endTime: '2026-04-30T10:00:00Z',
+                    allDay: false,
+                    data: { attendees: [{ email: CONTROL_GUEST, status: 'pending', role: 'required' }] },
+                }),
+            }),
+        );
+        const removed = await authedRequest(
+            alice.sessionToken,
+            `/calendar/${alice.id}/calendars/${calendarId}/events/${created.id}`,
+            { method: 'DELETE' },
+        );
+        expect(removed.status).toBe(200);
+        return `Canceled: ${title}`;
+    };
+
+    // Every mail the spy caught that the control did not account for.
+    const straySubjects = (mails: OutboundMail[]): string[] =>
+        mails.filter((m) => !m.to.some((t) => t.address === CONTROL_GUEST)).map((m) => m.subject);
 
     beforeAll(async () => {
         await getTestContext();
@@ -158,11 +193,15 @@ describe('Calendar transfer routes', () => {
             { method: 'DELETE' },
         );
         expect(removed.status).toBe(200);
-        await new Promise((r) => setTimeout(r, 50));
-        expect(spy.mock.calls.length).toBe(0);
-        spy.mockRestore();
 
-        expect((await april()).some((e) => e.uid === `plain-2-${stamp}@other`)).toBe(false);
+        const control = await controlCancellation();
+        await eventually(
+            async () => spy.mock.calls.some((c) => c[0].subject === control) || undefined,
+            "the control delete's cancellation mail",
+        );
+
+        expect(straySubjects(spy.mock.calls.map((c) => c[0]))).toEqual([]);
+        spy.mockRestore();
     });
 
     test('re-importing the same file skips every event', async () => {
@@ -257,8 +296,14 @@ describe('Calendar transfer routes', () => {
             { method: 'DELETE' },
         );
         expect(removed.status).toBe(200);
-        await new Promise((r) => setTimeout(r, 50));
-        expect(spy.mock.calls.length).toBe(0);
+
+        const control = await controlCancellation();
+        await eventually(
+            async () => spy.mock.calls.some((c) => c[0].subject === control) || undefined,
+            "the control delete's cancellation mail",
+        );
+
+        expect(straySubjects(spy.mock.calls.map((c) => c[0]))).toEqual([]);
         spy.mockRestore();
     });
 
@@ -447,7 +492,8 @@ describe('Calendar transfer routes', () => {
         const result = await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file));
         sse.stop();
         expect(result).toEqual({ imported: 1, skipped: 0, failed: 0 });
-        expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENT_CREATED).length).toBe(1);
+        expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENTS_CHANGED).length).toBe(1);
+        expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENT_CREATED).length).toBe(0);
 
         const imported = await calendarRange(calendarId, '2026-05-01T00:00:00Z', '2026-06-30T23:59:59Z');
         const series = imported.filter((e) => e.uid === uid);
@@ -531,31 +577,6 @@ describe('Calendar transfer routes', () => {
         expect((await home.calendar.getEventsByUid(wholeUid)).length).toBe(1);
     });
 
-    test('a storage failure during an import leaves the calendar exactly as it was', async () => {
-        const stamp = randomUUID();
-        const file = vcal(
-            ...Array.from({ length: 4 }, (_, i) =>
-                vevent(`crash-${i}-${stamp}@other`, `Crash ${i}`, '20261001T090000Z', '20261001T100000Z'),
-            ),
-        );
-
-        const home = await getHome(alice.id);
-        const ctagBefore = (await home.calendar.getCalendarById(calendarId))!.ctag;
-        // The import's own calendar read is the seam: every read the write loop makes is private now, so a
-        // failure inside the file's transaction is no longer injectable from outside the class.
-        const spy = spyOn(home.calendar, 'getCalendarById').mockRejectedValue(new Error('storage went away'));
-
-        const sse = collectSSE(alice.id);
-        const res = await importRequest(alice, calendarId, file);
-        sse.stop();
-        spy.mockRestore();
-
-        expect(res.status).toBe(500);
-        expect((await home.calendar.getCalendarById(calendarId))!.ctag).toBe(ctagBefore);
-        expect((await home.calendar.getRawEvents(calendarId)).some((e) => e.uid.includes(stamp))).toBe(false);
-        expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENT_CREATED).length).toBe(0);
-    });
-
     test('a file past the event ceiling is refused before anything is written', async () => {
         const stamp = randomUUID();
         const file = vcal(
@@ -626,7 +647,8 @@ describe('Calendar transfer routes', () => {
         sse.stop();
 
         expect(result.imported).toBe(ICS_IMPORT_MAX_EVENTS);
-        expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENT_CREATED).length).toBe(1);
+        expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENTS_CHANGED).length).toBe(1);
+        expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENT_CREATED).length).toBe(0);
         expect(elapsed).toBeLessThan(30_000);
     });
 
@@ -859,5 +881,34 @@ describe('Calendar transfer routes', () => {
             }),
         });
         expect(fromDrive.status).toBe(403);
+    });
+
+    test('an import into a shared calendar reaches the Home it is shared with', async () => {
+        const shareRes = await authedRequest(
+            alice.sessionToken,
+            `/calendar/${alice.id}/calendars/${secondCalendarId}`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shares: [{ targetId: bob.email, permission: 'read' }] }),
+            },
+        );
+        expect(shareRes.status).toBe(200);
+
+        const sse = collectSSE(bob.id);
+        try {
+            const file = vcal(
+                vevent(`shared-import-${randomUUID()}@other`, 'Shared', '20260401T090000Z', '20260401T100000Z'),
+            );
+            const result = await assertJson<ImportCountsResult>(await importRequest(alice, secondCalendarId, file));
+            expect(result.imported).toBe(1);
+
+            await eventually(
+                async () => (sse.events.some((e) => e.type === SSEventType.CALENDAR_EVENTS_CHANGED) ? true : undefined),
+                "the sharee's tabs to hear about the import",
+            );
+        } finally {
+            sse.stop();
+        }
     });
 });

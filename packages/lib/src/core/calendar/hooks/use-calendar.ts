@@ -18,9 +18,7 @@ import {
     invalidateCalendarCreated,
     invalidateCalendarDeleted,
     invalidateCalendarUpdated,
-    invalidateEventCreated,
-    invalidateEventDeleted,
-    invalidateEventUpdated,
+    invalidateEventList,
     invalidateSharedCalendarUpdated,
 } from './keys';
 
@@ -107,7 +105,7 @@ export function useCreateEvent(ownerId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateEventCreated(queryClient, ownerId),
+        onSuccess: () => invalidateEventList(queryClient, ownerId),
         onError: onMutationError,
     });
 }
@@ -121,7 +119,7 @@ export function useUpdateEvent(ownerId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateEventUpdated(queryClient, ownerId),
+        onSuccess: () => invalidateEventList(queryClient, ownerId),
         onError: onMutationError,
     });
 }
@@ -135,7 +133,7 @@ export function useDeleteEvent(ownerId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateEventDeleted(queryClient, ownerId),
+        onSuccess: () => invalidateEventList(queryClient, ownerId),
         onError: onMutationError,
     });
 }
@@ -160,7 +158,7 @@ export function useMoveEvent(ownerId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateEventUpdated(queryClient, ownerId),
+        onSuccess: () => invalidateEventList(queryClient, ownerId),
         onError: onMutationError,
     });
 }
@@ -302,7 +300,7 @@ export function useRsvp(ownerId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateEventUpdated(queryClient, ownerId),
+        onSuccess: () => invalidateEventList(queryClient, ownerId),
         onError: onMutationError,
     });
 }

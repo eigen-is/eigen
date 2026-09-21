@@ -1,8 +1,9 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
+import { SSEventType } from '@workspace/lib/types/sse';
 import { getHome } from '../../lib/home';
-import { assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
+import { assertJson, authedRequest, collectSSE, eventually, findOrFail, getTestContext } from '../setup';
 
 describe('Calendar Invites', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -47,6 +48,26 @@ describe('Calendar Invites', () => {
         return assertJson<CalendarEventOccurrence[]>(eventsRes);
     }
 
+    // The fan-out is fire-and-forget: Bob's Home writes its own file after Alice's call answered.
+    function bobEvent(predicate: (e: CalendarEventOccurrence) => boolean) {
+        return eventually(async () => (await getBobEvents()).find(predicate), "the invitation to reach Bob's calendar");
+    }
+
+    async function aliceEvents() {
+        const from = Math.floor(Date.now() / 1000) - 86400;
+        const to = Math.floor(Date.now() / 1000) + 86400 * 7;
+        return assertJson<CalendarEventOccurrence[]>(
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/event-range/${from}/${to}`,
+            ),
+        );
+    }
+
+    function aliceEvent(predicate: (e: CalendarEventOccurrence) => boolean) {
+        return eventually(async () => (await aliceEvents()).find(predicate), "the reply to reach Alice's calendar");
+    }
+
     describe('Invite propagation', () => {
         let inviteEvent: CalendarEvent;
 
@@ -57,8 +78,7 @@ describe('Calendar Invites', () => {
             expect(inviteEvent.data!.attendees![0].email).toBe(ctx.bob.user.email);
             expect(inviteEvent.sequence).toBe(0);
 
-            const bobEvents = await getBobEvents();
-            const linked = findOrFail(bobEvents, (e) => e.title === 'Team Standup');
+            const linked = await bobEvent((e) => e.title === 'Team Standup');
             expect(linked.data!.organizer!.userId).toBe(ctx.alice.user.id);
             expect(linked.data!.organizer!.email).toBe(ctx.alice.user.email);
             expect(linked.data!.organizerEventId).toBe(inviteEvent.id);
@@ -71,8 +91,7 @@ describe('Calendar Invites', () => {
         });
 
         test('attendee RSVP accepted', async () => {
-            const bobEvents = await getBobEvents();
-            const linked = findOrFail(bobEvents, (e) => e.title === 'Team Standup');
+            const linked = await bobEvent((e) => e.title === 'Team Standup');
 
             const bobCalsRes = await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/calendars`);
             const bobCalId = findOrFail(await assertJson<CalendarItem[]>(bobCalsRes), (c) => c.isDefault).id;
@@ -89,13 +108,7 @@ describe('Calendar Invites', () => {
             expect(res.status).toBe(200);
 
             // Check organizer's event reflects the RSVP
-            const aliceRes = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/event-range/${Math.floor(Date.now() / 1000) - 86400}/${Math.floor(Date.now() / 1000) + 86400 * 7}`,
-            );
-            const aliceEvents = await assertJson<CalendarEventOccurrence[]>(aliceRes);
-            const orgEvent = findOrFail(aliceEvents, (e) => e.title === 'Team Standup');
-            expect(orgEvent.data!.attendees![0].status).toBe('accepted');
+            await aliceEvent((e) => e.title === 'Team Standup' && e.data?.attendees?.[0].status === 'accepted');
         });
 
         test('RSVP on non-linked event fails', async () => {
@@ -112,8 +125,7 @@ describe('Calendar Invites', () => {
         });
 
         test('RSVP by non-attendee fails', async () => {
-            const bobEvents = await getBobEvents();
-            const linked = findOrFail(bobEvents, (e) => e.title === 'Team Standup');
+            const linked = await bobEvent((e) => e.title === 'Team Standup');
             const bobCalsRes = await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/calendars`);
             const bobCalId = findOrFail(await assertJson<CalendarItem[]>(bobCalsRes), (c) => c.isDefault).id;
 
@@ -150,18 +162,14 @@ describe('Calendar Invites', () => {
             );
             expect(updateRes.status).toBe(200);
 
-            // Wait for async propagation
-            await new Promise((r) => setTimeout(r, 100));
-
-            const bobEvents = await getBobEvents();
-            const linked = bobEvents.find((e: CalendarEventOccurrence) => e.title === 'Planning Session v2');
-            expect(linked).toBeDefined();
+            await bobEvent((e) => e.title === 'Planning Session v2');
         });
     });
 
     describe('Cancellation', () => {
         test('organizer delete cancels attendee copies', async () => {
             const event = await createEventWithAttendees('Doomed Meeting', [{ email: ctx.bob.user.email }]);
+            await bobEvent((e) => e.title === 'Doomed Meeting');
 
             // Delete it
             const delRes = await authedRequest(
@@ -173,19 +181,16 @@ describe('Calendar Invites', () => {
             );
             expect(delRes.status).toBe(200);
 
-            // Wait for async propagation
-            await new Promise((r) => setTimeout(r, 100));
-
-            const bobEvents = await getBobEvents();
-            const linked = bobEvents.find((e: CalendarEventOccurrence) => e.title === 'Doomed Meeting');
-            expect(linked).toBeUndefined();
+            await eventually(
+                async () => ((await getBobEvents()).some((e) => e.title === 'Doomed Meeting') ? undefined : true),
+                "Bob's linked copy to be canceled",
+            );
         });
 
         test('attendee delete declines on organizer', async () => {
             await createEventWithAttendees('Optional Meeting', [{ email: ctx.bob.user.email }]);
 
-            const bobEvents = await getBobEvents();
-            const linked = findOrFail(bobEvents, (e) => e.title === 'Optional Meeting');
+            const linked = await bobEvent((e) => e.title === 'Optional Meeting');
 
             const bobCalsRes = await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/calendars`);
             const bobCalId = findOrFail(await assertJson<CalendarItem[]>(bobCalsRes), (c) => c.isDefault).id;
@@ -199,33 +204,65 @@ describe('Calendar Invites', () => {
             );
             expect(delRes.status).toBe(200);
 
-            // Wait for async propagation
-            await new Promise((r) => setTimeout(r, 100));
-
             // Organizer should see declined status
-            const from = Math.floor(Date.now() / 1000) - 86400;
-            const to = Math.floor(Date.now() / 1000) + 86400 * 7;
-            const aliceRes = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/event-range/${from}/${to}`,
-            );
-            const aliceEvents = await assertJson<CalendarEventOccurrence[]>(aliceRes);
-            const orgEvent = findOrFail(aliceEvents, (e) => e.title === 'Optional Meeting');
-            expect(orgEvent.data!.attendees![0].status).toBe('declined');
+            await aliceEvent((e) => e.title === 'Optional Meeting' && e.data?.attendees?.[0].status === 'declined');
         });
     });
 
-    // A re-received invite whose uri a local delete already tombstoned must sync as a fresh 200, not a lone
-    // 404 (which deletes the live event on the client), and its row must carry a non-null eventCtag or the
-    // sync delta (>eventCtag) never surfaces it at all. Driven at the domain level, like the linked-event
-    // seeding in calendar.test.ts — the REST layer has no re-invite-after-delete flow to exercise it.
+    // Cancelling one occurrence writes the attendee's own calendar, so every Home that calendar is shared
+    // with owes an announcement — the attendee's own tabs already hear it as CALENDAR_INVITE_CANCELLED.
+    test('cancelling one occurrence of a linked series reaches the Homes the calendar is shared with', async () => {
+        const home = await getHome(ctx.alice.user.id);
+        const shared = await home.calendar.createCalendar({ name: 'Shared invites', color: '#aabbcc' });
+        await home.calendar.updateCalendar(shared.id, {
+            shares: [{ targetId: ctx.charlie.user.email, permission: 'read' }],
+        });
+
+        const orgEventId = `ext-occurrence-${randomUUID()}`;
+        const orgUserId = 'external_org@example.com';
+        await home.calendar.createEvent(shared.id, {
+            title: 'Weekly Sync',
+            startTime: new Date('2026-07-06T09:00:00Z'),
+            endTime: new Date('2026-07-06T10:00:00Z'),
+            allDay: false,
+            rrule: 'FREQ=WEEKLY;COUNT=5',
+            data: {
+                organizer: { userId: orgUserId, email: 'org@example.com', name: 'Org' },
+                organizerEventId: orgEventId,
+                attendees: [{ email: ctx.alice.user.email, status: 'accepted', role: 'required' }],
+            },
+        });
+
+        const sse = collectSSE(ctx.charlie.user.id);
+        // collectSSE subscribes on the home it opens, and this await settles behind that subscription.
+        await getHome(ctx.charlie.user.id);
+        try {
+            await home.calendar.cancelInvitationOccurrence(
+                orgEventId,
+                orgUserId,
+                '2026-07-13',
+                new Date('2026-07-13T09:00:00Z'),
+                { sequence: 1, dtstamp: new Date() },
+            );
+
+            await eventually(
+                async () => (sse.events.some((e) => e.type === SSEventType.CALENDAR_EVENT_UPDATED) ? true : undefined),
+                "the sharee's tabs to hear about the cancelled occurrence",
+            );
+        } finally {
+            sse.stop();
+        }
+    });
+
+    // A re-received invite lands under a fresh name, so one sync delta carries the deleted resource as a
+    // 404 and the new one as a 200 — never one href as both. Driven at the domain level, like the linked-
+    // event seeding in calendar.test.ts: the REST layer has no re-invite-after-delete flow to exercise it.
     describe('Re-received invitation after local delete', () => {
         test('syncs once as a 200 with a non-null eventCtag and no 404 tombstone', async () => {
             const bobHome = await getHome(ctx.bob.user.id);
             const cal = bobHome.calendar;
             const defaultCal = findOrFail(await cal.getCalendars(), (c) => c.isDefault);
             const uid = `reinvite-${randomUUID()}`;
-            const uri = `${uid}.ics`;
             const payload = {
                 uid,
                 title: 'Re-received Invite',
@@ -248,21 +285,23 @@ describe('Calendar Invites', () => {
             };
 
             const firstId = await cal.receiveInvitation(payload);
+            const firstUri = findOrFail(await cal.listResources(defaultCal.id), (r) => r.uid === uid).uri;
             // The client's sync token, captured after the first receive and before the delete + re-receive.
             const preCtag = (await cal.getCalendarById(defaultCal.id))!.ctag;
 
-            await cal.deleteEvent(defaultCal.id, firstId); // Bob deletes his linked copy → tombstones the uri
+            await cal.deleteEvent(defaultCal.id, firstId!); // Bob deletes his linked copy → tombstones the uri
             const secondId = await cal.receiveInvitation(payload); // Alice re-sends the same invite
             expect(secondId).not.toBe(firstId);
 
-            const changed = (await cal.getChangedEventsSince(defaultCal.id, preCtag)).filter((e) => e.uri === uri);
-            const deleted = (await cal.getDeletedEventsSince(defaultCal.id, preCtag)).filter((d) => d.uri === uri);
+            const changed = (await cal.getChangedResourcesSince(defaultCal.id, preCtag)).filter((r) => r.uid === uid);
+            const deleted = await cal.getDeletedResourcesSince(defaultCal.id, preCtag);
             expect(changed).toHaveLength(1);
-            expect(changed[0].eventCtag).not.toBeNull();
-            expect(deleted).toHaveLength(0);
+            expect(changed[0].uri).not.toBe(firstUri);
+            expect(deleted.map((d) => d.uri)).toContain(firstUri);
+            expect(deleted.some((d) => d.uri === changed[0].uri)).toBe(false);
         });
 
-        test('a colliding (calendarId, uri) insert fails without a phantom ctag bump', async () => {
+        test('a second link on one UID is dropped, and never a second master', async () => {
             const bobHome = await getHome(ctx.bob.user.id);
             const cal = bobHome.calendar;
             const defaultCal = findOrFail(await cal.getCalendars(), (c) => c.isDefault);
@@ -290,17 +329,17 @@ describe('Calendar Invites', () => {
             await cal.receiveInvitation(payload);
             const preCtag = (await cal.getCalendarById(defaultCal.id))!.ctag;
 
-            // The same uid (→ same uri) under a different organizer key slips past the linked-event dedupe and
-            // collides on the (calendarId, uri) unique index. The failure must not leave a phantom ctag bump —
-            // every client would poll an empty delta for it.
-            await expect(
-                cal.receiveInvitation({
-                    ...payload,
-                    organizerEventId: `org-b-${uid}`,
-                    organizerUserId: ctx.charlie.user.id,
-                }),
-            ).rejects.toThrow();
+            // The same uid under another organizer key slips past the linked-event dedupe; the calendar
+            // already holds that UID, so the invitation is dropped instead of throwing on the unique
+            // index, and it leaves no phantom ctag bump for every client to poll an empty delta for.
+            const second = await cal.receiveInvitation({
+                ...payload,
+                organizerEventId: `org-b-${uid}`,
+                organizerUserId: ctx.charlie.user.id,
+            });
+            expect(second).toBeNull();
             expect((await cal.getCalendarById(defaultCal.id))!.ctag).toBe(preCtag);
+            expect(await cal.getEventsByUid(uid)).toHaveLength(1);
         });
     });
 
@@ -308,8 +347,7 @@ describe('Calendar Invites', () => {
         test('attendee cannot change title/time on linked event', async () => {
             await createEventWithAttendees('Protected Event', [{ email: ctx.bob.user.email }]);
 
-            const bobEvents = await getBobEvents();
-            const linked = findOrFail(bobEvents, (e) => e.title === 'Protected Event');
+            const linked = await bobEvent((e) => e.title === 'Protected Event');
             const bobCalsRes = await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/calendars`);
             const bobCalId = findOrFail(await assertJson<CalendarItem[]>(bobCalsRes), (c) => c.isDefault).id;
 
@@ -335,23 +373,14 @@ describe('Calendar Invites', () => {
                 { email: ctx.bob.user.email },
             ]);
 
-            // Alice should not get a linked copy — only Bob
-            const aliceFrom = Math.floor(Date.now() / 1000) - 86400;
-            const aliceTo = Math.floor(Date.now() / 1000) + 86400 * 7;
-            const aliceRes = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/event-range/${aliceFrom}/${aliceTo}`,
-            );
-            const aliceEvents = await assertJson<CalendarEventOccurrence[]>(aliceRes);
-            const selfInviteCopies = aliceEvents.filter(
-                (e: CalendarEventOccurrence) => e.title === 'Self-Invite Test' && e.data?.organizer,
+            // Bob should have a linked copy
+            await bobEvent((e) => e.title === 'Self-Invite Test');
+
+            // Alice should not get one — only Bob
+            const selfInviteCopies = (await aliceEvents()).filter(
+                (e) => e.title === 'Self-Invite Test' && e.data?.organizer,
             );
             expect(selfInviteCopies).toHaveLength(0);
-
-            // Bob should have a linked copy
-            const bobEvents = await getBobEvents();
-            const bobLinked = bobEvents.find((e: CalendarEventOccurrence) => e.title === 'Self-Invite Test');
-            expect(bobLinked).toBeDefined();
         });
     });
 
@@ -398,6 +427,20 @@ describe('Calendar Invites', () => {
             return assertJson<CalendarEventOccurrence[]>(res);
         }
 
+        function bobOccurrence(predicate: (e: CalendarEventOccurrence) => boolean) {
+            return eventually(
+                async () => (await getEventsInRange(ctx.bob.user.sessionToken, ctx.bob.user.id)).find(predicate),
+                "the series to reach Bob's calendar",
+            );
+        }
+
+        function aliceOccurrence(predicate: (e: CalendarEventOccurrence) => boolean) {
+            return eventually(
+                async () => (await getEventsInRange(ctx.alice.user.sessionToken, ctx.alice.user.id)).find(predicate),
+                "the reply to reach Alice's calendar",
+            );
+        }
+
         async function rsvpAs(bobLinkedId: string, body: Record<string, unknown>) {
             const calId = await getBobCalId();
             return authedRequest(
@@ -413,10 +456,7 @@ describe('Calendar Invites', () => {
 
         test('RSVP scope=this accepts a single occurrence', async () => {
             await createRecurringInvite('Weekly Scoped RSVP');
-            await new Promise((r) => setTimeout(r, 100));
-
-            const bobEvents = await getEventsInRange(ctx.bob.user.sessionToken, ctx.bob.user.id);
-            const linked = findOrFail(bobEvents, (e) => e.title === 'Weekly Scoped RSVP');
+            const linked = await bobOccurrence((e) => e.title === 'Weekly Scoped RSVP');
 
             const res = await rsvpAs(linked.id, {
                 status: 'accepted',
@@ -425,13 +465,15 @@ describe('Calendar Invites', () => {
             });
             expect(res.status).toBe(200);
 
-            await new Promise((r) => setTimeout(r, 100));
-
             // Organizer should see accepted for that occurrence, pending for others
+            await aliceOccurrence(
+                (e) =>
+                    e.title === 'Weekly Scoped RSVP' &&
+                    e.occurrenceDate === linked.occurrenceDate &&
+                    e.data?.attendees?.[0].status === 'accepted',
+            );
             const aliceEvents = await getEventsInRange(ctx.alice.user.sessionToken, ctx.alice.user.id);
             const aliceOccs = aliceEvents.filter((e: CalendarEventOccurrence) => e.title === 'Weekly Scoped RSVP');
-            const acceptedOcc = findOrFail(aliceOccs, (e) => e.occurrenceDate === linked.occurrenceDate);
-            expect(acceptedOcc.data!.attendees![0].status).toBe('accepted');
             const otherOccs = aliceOccs.filter(
                 (e: CalendarEventOccurrence) => e.occurrenceDate !== linked.occurrenceDate,
             );
@@ -443,16 +485,12 @@ describe('Calendar Invites', () => {
 
         test('RSVP scope=all accepts all occurrences', async () => {
             await createRecurringInvite('Weekly All RSVP');
-            await new Promise((r) => setTimeout(r, 100));
-
-            const bobEvents = await getEventsInRange(ctx.bob.user.sessionToken, ctx.bob.user.id);
-            const linked = findOrFail(bobEvents, (e) => e.title === 'Weekly All RSVP');
+            const linked = await bobOccurrence((e) => e.title === 'Weekly All RSVP');
 
             const res = await rsvpAs(linked.id, { status: 'accepted' });
             expect(res.status).toBe(200);
 
-            await new Promise((r) => setTimeout(r, 100));
-
+            await aliceOccurrence((e) => e.title === 'Weekly All RSVP' && e.data?.attendees?.[0].status === 'accepted');
             const aliceEvents = await getEventsInRange(ctx.alice.user.sessionToken, ctx.alice.user.id);
             const aliceOccs = aliceEvents.filter((e: CalendarEventOccurrence) => e.title === 'Weekly All RSVP');
             expect(aliceOccs.every((e: CalendarEventOccurrence) => e.data!.attendees![0].status === 'accepted')).toBe(
@@ -462,10 +500,7 @@ describe('Calendar Invites', () => {
 
         test('delete scope=this removes one occurrence from attendee, declines on organizer', async () => {
             await createRecurringInvite('Weekly Del This');
-            await new Promise((r) => setTimeout(r, 100));
-
-            let bobEvents = await getEventsInRange(ctx.bob.user.sessionToken, ctx.bob.user.id);
-            const linked = findOrFail(bobEvents, (e) => e.title === 'Weekly Del This');
+            const linked = await bobOccurrence((e) => e.title === 'Weekly Del This');
             const targetDate = linked.occurrenceDate;
 
             const res = await rsvpAs(linked.id, {
@@ -476,31 +511,30 @@ describe('Calendar Invites', () => {
             });
             expect(res.status).toBe(200);
 
-            await new Promise((r) => setTimeout(r, 100));
-
             // Bob no longer sees that occurrence
-            bobEvents = await getEventsInRange(ctx.bob.user.sessionToken, ctx.bob.user.id);
+            const bobEvents = await getEventsInRange(ctx.bob.user.sessionToken, ctx.bob.user.id);
             const bobOccs = bobEvents.filter((e: CalendarEventOccurrence) => e.title === 'Weekly Del This');
             expect(bobOccs.find((e: CalendarEventOccurrence) => e.occurrenceDate === targetDate)).toBeUndefined();
             expect(bobOccs.length).toBe(4); // 5 - 1
 
             // Organizer sees declined for that date
-            const aliceEvents = await getEventsInRange(ctx.alice.user.sessionToken, ctx.alice.user.id);
-            const aliceOccs = aliceEvents.filter((e: CalendarEventOccurrence) => e.title === 'Weekly Del This');
-            const declinedOcc = findOrFail(aliceOccs, (e) => e.occurrenceDate === targetDate);
-            expect(declinedOcc.data!.attendees![0].status).toBe('declined');
+            await aliceOccurrence(
+                (e) =>
+                    e.title === 'Weekly Del This' &&
+                    e.occurrenceDate === targetDate &&
+                    e.data?.attendees?.[0].status === 'declined',
+            );
         });
 
         test('delete scope=this-and-following removes future from attendee, declines series on organizer', async () => {
             await createRecurringInvite('Weekly Del Following');
-            await new Promise((r) => setTimeout(r, 100));
+            const linked = await bobOccurrence((e) => e.title === 'Weekly Del Following' && !e.parentEventId);
 
             let bobEvents = await getEventsInRange(ctx.bob.user.sessionToken, ctx.bob.user.id);
             const bobOccs = bobEvents.filter((e: CalendarEventOccurrence) => e.title === 'Weekly Del Following');
             expect(bobOccs.length).toBe(5);
             // Delete from 2nd occurrence onward
             const secondOcc = bobOccs[1];
-            const linked = findOrFail(bobEvents, (e) => e.title === 'Weekly Del Following' && !e.parentEventId);
 
             const res = await rsvpAs(linked.id, {
                 status: 'declined',
@@ -510,8 +544,6 @@ describe('Calendar Invites', () => {
             });
             expect(res.status).toBe(200);
 
-            await new Promise((r) => setTimeout(r, 100));
-
             // Bob sees only the first occurrence
             bobEvents = await getEventsInRange(ctx.bob.user.sessionToken, ctx.bob.user.id);
             const remaining = bobEvents.filter((e: CalendarEventOccurrence) => e.title === 'Weekly Del Following');
@@ -519,28 +551,26 @@ describe('Calendar Invites', () => {
             expect(remaining[0].occurrenceDate).toBe(bobOccs[0].occurrenceDate);
 
             // Organizer sees declined
-            const aliceEvents = await getEventsInRange(ctx.alice.user.sessionToken, ctx.alice.user.id);
-            const orgEvent = findOrFail(aliceEvents, (e) => e.title === 'Weekly Del Following');
-            expect(orgEvent.data!.attendees![0].status).toBe('declined');
+            await aliceOccurrence(
+                (e) => e.title === 'Weekly Del Following' && e.data?.attendees?.[0].status === 'declined',
+            );
         });
 
         test('organizer truncate does not extend attendee past their own truncation', async () => {
             const event = await createRecurringInvite('Weekly Constrain');
-            await new Promise((r) => setTimeout(r, 100));
+            const linked = await bobOccurrence((e) => e.title === 'Weekly Constrain' && !e.parentEventId);
 
             let bobEvents = await getEventsInRange(ctx.bob.user.sessionToken, ctx.bob.user.id);
             const bobOccs = bobEvents.filter((e: CalendarEventOccurrence) => e.title === 'Weekly Constrain');
             expect(bobOccs.length).toBe(5);
 
             // Bob deletes from 2nd occurrence onward (keeps 1)
-            const linked = findOrFail(bobOccs, (e) => !e.parentEventId);
             await rsvpAs(linked.id, {
                 status: 'declined',
                 scope: 'this-and-following',
                 recurrenceDate: bobOccs[1].occurrenceDate,
                 remove: true,
             });
-            await new Promise((r) => setTimeout(r, 100));
 
             bobEvents = await getEventsInRange(ctx.bob.user.sessionToken, ctx.bob.user.id);
             expect(bobEvents.filter((e: CalendarEventOccurrence) => e.title === 'Weekly Constrain').length).toBe(1);
@@ -559,7 +589,8 @@ describe('Calendar Invites', () => {
                 },
             );
             expect(aliceRes.status).toBe(200);
-            await new Promise((r) => setTimeout(r, 100));
+            // The update has landed on Bob's copy once it carries the organizer's new revision.
+            await bobOccurrence((e) => e.title === 'Weekly Constrain' && !e.parentEventId && e.sequence === 1);
 
             // Bob should still see only 1 occurrence — not re-expanded
             bobEvents = await getEventsInRange(ctx.bob.user.sessionToken, ctx.bob.user.id);
@@ -574,6 +605,7 @@ describe('Calendar Invites', () => {
     // bumped SEQUENCE then outran the organizer's, the organizer's next real update was dropped by the
     // RFC 5546 replay guard (silent data-desync).
     describe('#9 attendee edit does not fan out', () => {
+        const CAROL = 'carol.external@example.org';
         let bobCalId: string;
         let linkedId: string;
 
@@ -585,13 +617,11 @@ describe('Calendar Invites', () => {
             );
         }
 
-        async function untilBob(predicate: (e: CalendarEventOccurrence) => boolean) {
-            for (let i = 0; i < 60; i++) {
-                const found = (await rangeFor(ctx.bob.user.sessionToken, ctx.bob.user.id)).find(predicate);
-                if (found) return found;
-                await new Promise((r) => setTimeout(r, 50));
-            }
-            return undefined;
+        function untilBob(predicate: (e: CalendarEventOccurrence) => boolean) {
+            return eventually(
+                async () => (await rangeFor(ctx.bob.user.sessionToken, ctx.bob.user.id)).find(predicate),
+                "the fan-out to reach Bob's calendar",
+            );
         }
 
         beforeAll(async () => {
@@ -618,16 +648,15 @@ describe('Calendar Invites', () => {
                         data: {
                             attendees: [
                                 { email: ctx.bob.user.email, status: 'pending', role: 'required' },
-                                { email: 'carol.external@example.org', status: 'pending', role: 'required' },
+                                { email: CAROL, status: 'pending', role: 'required' },
                             ],
                         },
                     }),
                 },
             );
             const linked = await untilBob((e) => e.title === 'Fanout Meeting');
-            expect(linked).toBeDefined();
-            linkedId = linked!.id;
-            expect(linked!.sequence).toBe(0);
+            linkedId = linked.id;
+            expect(linked.sequence).toBe(0);
         });
 
         test('Bob toggling a reminder does not bump SEQUENCE or send a spoofed iMIP update', async () => {
@@ -645,11 +674,31 @@ describe('Calendar Invites', () => {
                 },
             );
             const updated = await assertJson<CalendarEvent>(res);
-            await new Promise((r) => setTimeout(r, 300)); // let any fire-and-forget fan-out run
+
+            // The fan-out is fire-and-forget, so absence only counts behind a mail that IS expected: the
+            // organizer's own edit, made second, mails Carol through the very path Bob's edit must not take.
+            const orig = findOrFail(
+                await rangeFor(ctx.alice.user.sessionToken, ctx.alice.user.id),
+                (e) => e.title === 'Fanout Meeting',
+            );
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${orig.id}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ location: 'Room A' }),
+                },
+            );
+            const toCarol = () => spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === CAROL));
+            await eventually(
+                async () => toCarol().some((c) => c[0].from?.address === ctx.alice.user.email) || undefined,
+                "the organizer's own update to reach Carol",
+            );
 
             expect(updated.sequence).toBe(0); // pre-fix: 1
-            const updateMails = spy.mock.calls.filter((c) => c[0].subject === 'Updated invitation: Fanout Meeting');
-            expect(updateMails).toHaveLength(0); // pre-fix: an iMIP update to Carol, ORGANIZER=Bob
+            // pre-fix: a second one, ORGANIZER=Bob, composed before the organizer's own
+            expect(toCarol()).toHaveLength(1);
             spy.mockRestore();
         });
 
@@ -667,8 +716,8 @@ describe('Calendar Invites', () => {
                     body: JSON.stringify({ title: 'Fanout Meeting V2' }),
                 },
             );
-            const renamed = await untilBob((e) => e.id === linkedId && e.title === 'Fanout Meeting V2');
-            expect(renamed).toBeDefined(); // pre-fix: dropped by the replay guard (Bob's SEQUENCE had outrun the organizer's)
+            // pre-fix: dropped by the replay guard (Bob's SEQUENCE had outrun the organizer's)
+            await untilBob((e) => e.id === linkedId && e.title === 'Fanout Meeting V2');
         });
     });
 
@@ -734,13 +783,17 @@ describe('Calendar Invites', () => {
                     }),
                 },
             );
-            const bobEvents = await assertJson<CalendarEventOccurrence[]>(
-                await authedRequest(
-                    ctx.bob.user.sessionToken,
-                    `/calendar/${ctx.bob.user.id}/event-range/${from}/${to}`,
-                ),
-            );
-            linkedMasterId = findOrFail(bobEvents, (e) => e.title === 'Etag Audit').id;
+            linkedMasterId = (
+                await eventually(async () => {
+                    const events = await assertJson<CalendarEventOccurrence[]>(
+                        await authedRequest(
+                            ctx.bob.user.sessionToken,
+                            `/calendar/${ctx.bob.user.id}/event-range/${from}/${to}`,
+                        ),
+                    );
+                    return events.find((e) => e.title === 'Etag Audit');
+                }, "the invitation to reach Bob's calendar")
+            ).id;
 
             await rsvpThis('accepted');
             const occ1 = await findExceptionOccurrence();
@@ -761,6 +814,22 @@ describe('Calendar Invites', () => {
             expect(after.etag).not.toBe(before.etag);
         });
     });
+
+    // Transports stay projected (R17 6a): the receiving Home builds its own file from the payload's
+    // fields, so no `X-EIGEN-` line ever crosses a home boundary.
+    test('a relay invitation carries no X-EIGEN- line', async () => {
+        const relay = await import('../../lib/home/home-relay');
+        const spy = spyOn(relay, 'sendToHome');
+        spy.mockClear();
+
+        await createEventWithAttendees('Projected Payload', [{ email: ctx.bob.user.email }]);
+        await bobEvent((e) => e.title === 'Projected Payload');
+
+        const messages = spy.mock.calls.map((call) => JSON.stringify(call[1]));
+        expect(messages.some((message) => message.includes('calendar:invitation'))).toBe(true);
+        expect(messages.some((message) => message.toUpperCase().includes('X-EIGEN'))).toBe(false);
+        spy.mockRestore();
+    });
 });
 
 // A decline is an RSVP, and only an attendee has one to give. A file or a CalDAV client can hang any
@@ -776,9 +845,14 @@ describe('Delete-as-decline is for attendees only', () => {
         calendarId = findOrFail(await assertJson<CalendarItem[]>(res), (c) => c.isDefault).id;
     });
 
+    const STRANGER = 'stranger@external.com';
+    // The control's own organizer: a second delete whose decline IS expected, so absence is measured
+    // against a mail that arrived rather than against nothing at all.
+    const CONTROL = 'control@external.com';
+
     // The client cannot declare itself an invitee (EventDataSchema strips organizer), so the linked copy is
     // seeded through the domain, the way a CalDAV PUT or an import would leave one behind.
-    const seed = async (title: string, attendeeEmail: string) => {
+    const seed = async (title: string, attendeeEmail: string, organizer = STRANGER) => {
         const home = await getHome(ctx.bob.user.id);
         return home.calendar.createEvent(calendarId, {
             title,
@@ -786,7 +860,7 @@ describe('Delete-as-decline is for attendees only', () => {
             endTime: new Date('2026-12-01T10:00:00Z'),
             allDay: false,
             data: {
-                organizer: { userId: '', email: 'stranger@external.com', name: 'Stranger' },
+                organizer: { userId: '', email: organizer, name: 'Stranger' },
                 organizerEventId: `stranger-${randomUUID()}`,
                 attendees: [{ email: attendeeEmail, status: 'pending', role: 'required' }],
             },
@@ -802,9 +876,16 @@ describe('Delete-as-decline is for attendees only', () => {
         const mailer = await import('../../lib/core/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
         spy.mockClear();
+        const mailsTo = (address: string) =>
+            spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === address)).length;
+
         expect((await removeEvent(id)).status).toBe(200);
-        await new Promise((r) => setTimeout(r, 50));
-        const count = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === 'stranger@external.com')).length;
+        // Deleted second, so its decline is composed behind whatever the first delete owed.
+        const control = await seed('Control meeting', ctx.bob.user.email, CONTROL);
+        expect((await removeEvent(control.id)).status).toBe(200);
+        await eventually(async () => mailsTo(CONTROL) || undefined, "the control delete's decline");
+
+        const count = mailsTo(STRANGER);
         spy.mockRestore();
         return count;
     };

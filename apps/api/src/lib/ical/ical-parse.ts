@@ -6,9 +6,9 @@
 import type { Attendee, EventData, Reminder } from '@workspace/lib/types/calendar';
 import { IMIP_METHODS, type ImipMethod } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
-import { localToUtc, storedRecurrenceKey, utcToLocal } from '../calendar/recurrence';
-import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../calendar/recurrence-limits';
-import { normalizeTimezone } from '../calendar/timezone';
+import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from './recurrence-limits';
+import { normalizeTimezone } from './timezone';
+import { localToUtc, storedRecurrenceKey, utcToLocal } from './wall-clock';
 
 // Every line Eigen owns inside a VEVENT. One source of truth, because a reader, the builder, the
 // re-stamp and the strip all have to spell them the same way. Lowercase: ical.js lowercases names.
@@ -20,12 +20,13 @@ export const EIGEN = {
     color: 'x-eigen-color',
     exdate: 'x-eigen-exdate',
     sequence: 'x-eigen-seq',
+    dtstamp: 'x-eigen-dtstamp',
     importedOrganizer: 'x-eigen-imported-organizer',
 } as const;
 
 export type EigenName = (typeof EIGEN)[keyof typeof EIGEN];
 
-export type ExclusionStamp = { id: string; sequence: number };
+export type ExclusionStamp = { id: string; sequence: number; dtstamp: Date | null };
 
 const EIGEN_PREFIX = 'x-eigen-';
 
@@ -163,6 +164,21 @@ export function readTimestamp(vevent: ICAL.Component, name: string): Date | null
     return value instanceof ICAL.Time ? value.toJSDate() : null;
 }
 
+// A UTC timestamp Eigen writes as a parameter, in the form DTSTAMP itself takes. Anything else reads as
+// absent, so a stamp a stranger wrote cannot produce an Invalid Date.
+const UTC_STAMP = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/;
+
+export function utcStampString(instant: Date): string {
+    return `${instant.toISOString().replace(/[-:]/g, '').slice(0, 15)}Z`;
+}
+
+export function parseUtcStamp(raw: unknown): Date | null {
+    const match = typeof raw === 'string' ? UTC_STAMP.exec(raw) : null;
+    if (!match) return null;
+    const [, year, month, day, hour, minute, second] = match;
+    return new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}Z`);
+}
+
 // The exclusion stamps of a VEVENT, by recurrence key. A stamp whose key, id or sequence will not
 // parse is absent rather than fatal: the body it came from is untrusted.
 export function readExclusionStamps(vevent: ICAL.Component): Map<string, ExclusionStamp> {
@@ -172,7 +188,7 @@ export function readExclusionStamps(vevent: ICAL.Component): Map<string, Exclusi
         const id = prop.getFirstParameter(EIGEN.eventId);
         const sequence = Number(prop.getFirstParameter(EIGEN.sequence));
         if (!key || !id || !Number.isFinite(sequence)) continue;
-        stamps.set(key, { id, sequence });
+        stamps.set(key, { id, sequence, dtstamp: parseUtcStamp(prop.getFirstParameter(EIGEN.dtstamp)) });
     }
     return stamps;
 }
@@ -189,6 +205,9 @@ export type ParsedEvent = {
     timezone: string | null;
     status: 'confirmed' | 'tentative' | 'cancelled';
     sequence: number;
+    // When the sender stamped this revision. RFC 5546 § 2.1.5 breaks a SEQUENCE tie with it, so a receiver
+    // needs it to order two messages an organizer sent without bumping the number.
+    dtstamp: Date | null;
     recurrenceDate: string | null;
     // Absolute instant of a UTC-Z RECURRENCE-ID, preserved only when the wall-clock key had to be
     // derived from a series tz. An inbound iMIP single-VEVENT has no master here to supply that tz, so
@@ -362,6 +381,7 @@ function readResource(comp: ICAL.Component): ReadResult {
             ) as ParsedEvent['status'];
 
             const sequence = sequenceOf(vevent);
+            const dtstamp = readTimestamp(vevent, 'dtstamp');
 
             const recurrenceId = vevent.getFirstProperty('recurrence-id');
             let recurrenceDate: string | null = null;
@@ -413,6 +433,7 @@ function readResource(comp: ICAL.Component): ReadResult {
                     timezone: tzid,
                     status,
                     sequence,
+                    dtstamp,
                     recurrenceDate,
                     recurrenceInstant,
                     data,
@@ -472,6 +493,7 @@ function readResource(comp: ICAL.Component): ReadResult {
                                 timezone: tzid,
                                 status: 'cancelled',
                                 sequence,
+                                dtstamp,
                                 recurrenceDate: exDateStr,
                                 recurrenceInstant: null,
                                 data: null,

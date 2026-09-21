@@ -1,20 +1,32 @@
-import type { CalendarItem } from '@workspace/lib/types/calendar';
 import { ICS_CONTENT_TYPE } from '@workspace/lib/types/drive';
 import type { Calendar } from '../calendar/calendar';
-import type { CalendarEventRow } from '../calendar/types';
+import type { ResourceRow } from '../calendar/calendar-store';
+import type { CalendarCollection } from '../calendar/resource-store';
+import { uriKeyOf } from '../core';
 import { MULTIGET_HREF_LIMIT, resolveMultigetHrefs } from '../dav/href';
-import { invalidSyncToken } from '../dav/sync-token';
-import { memberProps, multistatusResponse, notFoundRow, propstatOk, removedRow, response } from '../dav/xml';
-import { eventsToIcs } from '../ical';
+import { formatSyncToken, invalidSyncToken, parseSyncToken } from '../dav/sync-token';
+import {
+    memberProps,
+    multistatusResponse,
+    notFoundRow,
+    propstatNotFound,
+    propstatOk,
+    removedRow,
+    response,
+} from '../dav/xml';
 import { calendarHref, eventHref } from './discovery';
-import { calendarDataProp, formatSyncToken, parseSyncToken } from './xml-builder';
+import { calendarDataProp } from './xml-builder';
 import { parseReport, type ReportRequest } from './xml-parser';
+
+// How many bytes of calendar data one REPORT serves. Past it a row still appears, with its etag and a 404
+// for the data the client then multigets (RFC 4918 § 9.1): a truncated collection loses events silently.
+export const REPORT_DATA_BUDGET_BYTES = 33_554_432;
 
 // REPORT on /dav/calendars/:ownerId/:calendarId/
 export async function handleReport(
     calendar: Calendar,
     calendarId: string,
-    calendarItem: CalendarItem,
+    collection: CalendarCollection,
     ownerId: string,
     body: string,
 ): Promise<Response> {
@@ -26,14 +38,46 @@ export async function handleReport(
         return new Response('Bad Request: invalid REPORT', { status: 400 });
     }
 
+    const budget = { left: REPORT_DATA_BUDGET_BYTES };
     switch (report.type) {
         case 'calendar-query':
-            return handleCalendarQuery(calendar, calendarId, ownerId, report);
+            return handleCalendarQuery(calendar, calendarId, ownerId, report, budget);
         case 'calendar-multiget':
-            return handleCalendarMultiget(calendar, calendarId, ownerId, report);
+            return handleCalendarMultiget(calendar, calendarId, ownerId, report, budget);
         case 'sync-collection':
-            return handleSyncCollection(calendar, calendarId, calendarItem, ownerId, report);
+            return handleSyncCollection(calendar, calendarId, collection, ownerId, report, budget);
     }
+}
+
+// What one REPORT may still spend on resource bodies.
+type DataBudget = { left: number };
+
+// A row that serves the body quotes the etag of the bytes it read, never the index row's: the two must
+// describe one revision.
+async function resourceRow(
+    calendar: Calendar,
+    calendarId: string,
+    ownerId: string,
+    resource: ResourceRow,
+    wantsData: boolean,
+    budget: DataBudget,
+): Promise<string> {
+    const href = eventHref(ownerId, calendarId, resource.uri);
+    if (!wantsData) return response(href, [propstatOk(memberProps(resource.etag, ICS_CONTENT_TYPE))]);
+    if (resource.size > budget.left) {
+        return response(href, [
+            propstatOk(memberProps(resource.etag, ICS_CONTENT_TYPE)),
+            propstatNotFound(['<C:calendar-data/>']),
+        ]);
+    }
+
+    const served = await calendar.getResource(calendarId, resource.uri);
+    // The row is there and the file is not: the drain tombstones it, and this response says it is gone.
+    if (!served) return notFoundRow(href);
+    budget.left -= served.bytes.length;
+    const props = memberProps(served.etag, ICS_CONTENT_TYPE);
+    props.push(calendarDataProp(new TextDecoder().decode(served.bytes)));
+    return response(href, [propstatOk(props)]);
 }
 
 async function handleCalendarQuery(
@@ -41,17 +85,20 @@ async function handleCalendarQuery(
     calendarId: string,
     ownerId: string,
     report: Extract<ReportRequest, { type: 'calendar-query' }>,
+    budget: DataBudget,
 ): Promise<Response> {
-    // Only the time-range filter is applied; other prop-filters are intentionally ignored. A CalDAV client
-    // re-filters the returned set, so a superset response is safe (RFC 4791 calendar-query).
-    let events: CalendarEventRow[];
-    if (report.timeRange) {
-        events = await calendar.getRawEventsInRange(calendarId, report.timeRange.start, report.timeRange.end);
-    } else {
-        events = await calendar.getRawEvents(calendarId);
-    }
+    // A filter naming a component Eigen does not store matches nothing. The one superset served here is
+    // the time-range's: a resource whose recurrence the index cannot expand rides along (R16 5b).
+    if (!report.matchesEvents) return multistatusResponse([]);
+    const resources = report.timeRange
+        ? await calendar.getResourcesInRange(calendarId, report.timeRange.start, report.timeRange.end)
+        : await calendar.listResources(calendarId);
 
-    return multistatusResponse(buildEventResponses(events, ownerId, calendarId, report.wantsData));
+    const responses: string[] = [];
+    for (const resource of resources) {
+        responses.push(await resourceRow(calendar, calendarId, ownerId, resource, report.wantsData, budget));
+    }
+    return multistatusResponse(responses);
 }
 
 async function handleCalendarMultiget(
@@ -59,118 +106,66 @@ async function handleCalendarMultiget(
     calendarId: string,
     ownerId: string,
     report: Extract<ReportRequest, { type: 'calendar-multiget' }>,
+    budget: DataBudget,
 ): Promise<Response> {
     if (report.hrefs.length > MULTIGET_HREF_LIMIT) return new Response('Too many hrefs', { status: 400 });
 
-    // Event uris are matched exactly: unlike cards they have no charset restriction and no folded key.
-    const resolved = resolveMultigetHrefs(report.hrefs, calendarHref(ownerId, calendarId), (uri) => uri);
-
-    const uris = resolved.map((r) => r.uri).filter((u): u is string => u !== null);
-    const events = await calendar.getEventsByUris(calendarId, uris);
-
-    // uid→all-events map for grouping exceptions with their master — only the UIDs the client asked for.
-    const requestedUids = [...new Set(events.map((e) => e.uid))];
-    const relatedEvents = await calendar.getRawEventsByUids(calendarId, requestedUids);
-    const eventsByUid = new Map<string, CalendarEventRow[]>();
-    for (const e of relatedEvents) {
-        const group = eventsByUid.get(e.uid) ?? [];
-        eventsByUid.set(e.uid, group);
-        group.push(e);
-    }
-    // A master and its exceptions share one uri; a uri present only as an exception yields no standalone row.
-    const foundUris = new Set(events.map((e) => e.uri));
-    const masterByUri = new Map(events.filter((e) => !e.parentEventId).map((e) => [e.uri, e]));
+    // Resources fold by uri key, so two spellings of one name name one resource — as a GET resolves it.
+    const resolved = resolveMultigetHrefs(report.hrefs, calendarHref(ownerId, calendarId), uriKeyOf);
+    const found = new Map(
+        (
+            await calendar.getResourcesByUris(
+                calendarId,
+                resolved.map((r) => r.uri).filter((u) => u !== null),
+            )
+        ).map((resource) => [uriKeyOf(resource.uri), resource] as const),
+    );
 
     const responses: string[] = [];
     for (const { uri, href } of resolved) {
-        if (uri && foundUris.has(uri)) {
-            const master = masterByUri.get(uri);
-            if (!master) continue; // uri exists only as an exception (part of a master .ics) — no own row
-            const props = memberProps(master.etag, ICS_CONTENT_TYPE);
-            if (report.wantsData) {
-                const group = eventsByUid.get(master.uid) ?? [master];
-                props.push(calendarDataProp(eventsToIcs(group)));
-            }
-            responses.push(response(eventHref(ownerId, calendarId, master.uri), [propstatOk(props)]));
-        } else {
-            // Missing but in-collection → 404 on the event href; unresolvable → 404 echoing the original href.
-            const row = uri ? eventHref(ownerId, calendarId, uri) : href;
-            responses.push(notFoundRow(row));
+        const resource = uri ? found.get(uriKeyOf(uri)) : undefined;
+        if (!resource) {
+            // Missing but in-collection → 404 on the resource href; unresolvable → 404 echoing the original.
+            responses.push(notFoundRow(uri ? eventHref(ownerId, calendarId, uri) : href));
+            continue;
         }
+        responses.push(await resourceRow(calendar, calendarId, ownerId, resource, report.wantsData, budget));
     }
-
     return multistatusResponse(responses);
 }
 
 async function handleSyncCollection(
     calendar: Calendar,
     calendarId: string,
-    calendarItem: CalendarItem,
+    collection: CalendarCollection,
     ownerId: string,
     report: Extract<ReportRequest, { type: 'sync-collection' }>,
+    budget: DataBudget,
 ): Promise<Response> {
-    const currentCtag = calendarItem.ctag;
     const responses: string[] = [];
 
     if (!report.syncToken) {
-        // Initial sync — return all events
-        const events = await calendar.getRawEvents(calendarId);
-        responses.push(...buildEventResponses(events, ownerId, calendarId, report.wantsData));
+        // Initial sync — the whole collection as 200 rows.
+        for (const resource of await calendar.listResources(calendarId)) {
+            responses.push(await resourceRow(calendar, calendarId, ownerId, resource, report.wantsData, budget));
+        }
     } else {
-        // Incremental sync — read the since-ctag from the token.
         const token = parseSyncToken(report.syncToken);
         if (!token) return invalidSyncToken();
-        // A token ahead of the calendar (post-restore/rebuild) can't be honored either: an empty delta plus
-        // a LOWER token would stall the client forever, blind to every change until the ctag catches back up.
-        if (token.since > currentCtag) return invalidSyncToken();
+        // A stale generation or a ctag ahead of the collection both force a clean resync: an empty delta
+        // under a LOWER token would stall that client permanently.
+        if (token.gen !== collection.syncGen || token.since > collection.ctag) return invalidSyncToken();
 
-        // Changed events
-        const changed = await calendar.getChangedEventsSince(calendarId, token.since);
-        for (const event of changed) {
-            if (event.parentEventId) continue;
-            responses.push(
-                response(eventHref(ownerId, calendarId, event.uri), [
-                    propstatOk(memberProps(event.etag, ICS_CONTENT_TYPE)),
-                ]),
-            );
+        for (const resource of await calendar.getChangedResourcesSince(calendarId, token.since)) {
+            responses.push(await resourceRow(calendar, calendarId, ownerId, resource, report.wantsData, budget));
         }
-
-        // Deleted events
-        const deleted = await calendar.getDeletedEventsSince(calendarId, token.since);
-        for (const d of deleted) {
-            responses.push(removedRow(eventHref(ownerId, calendarId, d.uri)));
+        // One tombstone row per uri: the tombstone primary key and the commit's tombstone-clear together
+        // guarantee no href is both a 200 and a 404 in one response (RFC 6578).
+        for (const removed of await calendar.getDeletedResourcesSince(calendarId, token.since)) {
+            responses.push(removedRow(eventHref(ownerId, calendarId, removed.uri)));
         }
     }
 
-    // Build response with sync-token appended after responses (required by RFC 6578)
-    return multistatusResponse(responses, `<D:sync-token>${formatSyncToken(currentCtag)}</D:sync-token>`);
-}
-
-function buildEventResponses(
-    events: CalendarEventRow[],
-    ownerId: string,
-    calendarId: string,
-    includeData: boolean,
-): string[] {
-    // Build uid→events map so master events can include their exceptions in the ICS
-    const eventsByUid = new Map<string, CalendarEventRow[]>();
-    for (const e of events) {
-        const group = eventsByUid.get(e.uid) ?? [];
-        eventsByUid.set(e.uid, group);
-        group.push(e);
-    }
-
-    const responses: string[] = [];
-
-    for (const event of events) {
-        if (event.parentEventId) continue; // Skip exceptions
-        const props = memberProps(event.etag, ICS_CONTENT_TYPE);
-        if (includeData) {
-            const group = eventsByUid.get(event.uid) ?? [event];
-            props.push(calendarDataProp(eventsToIcs(group)));
-        }
-        responses.push(response(eventHref(ownerId, calendarId, event.uri), [propstatOk(props)]));
-    }
-
-    return responses;
+    // RFC 6578: the current token is appended after the responses.
+    return multistatusResponse(responses, `<D:sync-token>${formatSyncToken(collection)}</D:sync-token>`);
 }

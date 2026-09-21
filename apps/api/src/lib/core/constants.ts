@@ -38,6 +38,9 @@ export const PATHS = {
     CALENDAR: {
         ROOT: CALENDAR_ROOT,
         DB: `${CALENDAR_ROOT}/calendar.db`,
+        // The fixed parent of every calendar directory, so a client-chosen calendar id can never be a
+        // sibling of calendar.db and a future sibling directory is not mistaken for a calendar.
+        CALENDARS: 'calendars',
     },
     NOTIFICATIONS: {
         DB: 'eigen.notifications/notifications.db',

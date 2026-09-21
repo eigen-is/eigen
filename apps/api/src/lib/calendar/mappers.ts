@@ -1,46 +1,17 @@
-import { createHash } from 'node:crypto';
-import type { CalendarEvent, CalendarItem, EventData, SharedCalendar } from '@workspace/lib/types/calendar';
+import type { CalendarEvent, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import type * as schema from './schema';
-import type { CalendarEventRow } from './types';
 
-export function computeEtag(event: {
-    title: string;
-    description?: string | null;
-    location?: string | null;
-    startTime: Date;
-    endTime: Date;
-    allDay: boolean;
-    rrule?: string | null;
-    timezone?: string | null;
-    status: string;
-    data?: EventData | null;
-    updatedAt?: Date | null;
-}): string {
-    const hash = createHash('md5');
-    hash.update(
-        JSON.stringify({
-            title: event.title,
-            description: event.description,
-            location: event.location,
-            startTime: event.startTime,
-            endTime: event.endTime,
-            allDay: event.allDay,
-            rrule: event.rrule,
-            timezone: event.timezone,
-            status: event.status,
-            data: event.data,
-            updatedAt: event.updatedAt,
-        }),
-    );
-    return hash.digest('hex');
-}
-
-export function dbEventToCalendarEvent(row: typeof schema.events.$inferSelect): CalendarEvent {
+// The file facts an event row does not carry itself: one resource owns the name and the content hash, and
+// every row it projects to reads them from there rather than keeping a copy that can drift.
+export function dbEventToCalendarEvent(
+    row: typeof schema.events.$inferSelect,
+    resource: { uri: string; etag: string },
+): CalendarEvent {
     return {
         id: row.id,
         calendarId: row.calendarId,
         uid: row.uid,
-        uri: row.uri,
+        uri: resource.uri,
         title: row.title,
         description: row.description ?? null,
         location: row.location ?? null,
@@ -53,7 +24,7 @@ export function dbEventToCalendarEvent(row: typeof schema.events.$inferSelect): 
         recurrenceDate: row.recurrenceDate ?? null,
         status: row.status as CalendarEvent['status'],
         sequence: row.sequence,
-        etag: row.etag,
+        etag: resource.etag,
         data: row.data ?? null,
         createByUserId: row.createByUserId ?? null,
         createdAt: row.createdAt,
@@ -61,11 +32,14 @@ export function dbEventToCalendarEvent(row: typeof schema.events.$inferSelect): 
     };
 }
 
-export function dbEventToCalendarEventRow(row: typeof schema.events.$inferSelect): CalendarEventRow {
-    return {
-        ...dbEventToCalendarEvent(row),
-        eventCtag: row.eventCtag ?? null,
-    };
+// An event row and the file it was projected from — what every read of a stored event answers with.
+export type JoinedEvent = {
+    events: typeof schema.events.$inferSelect;
+    resources: typeof schema.resources.$inferSelect;
+};
+
+export function toEvent(row: JoinedEvent): CalendarEvent {
+    return dbEventToCalendarEvent(row.events, row.resources);
 }
 
 export function dbCalendarToCalendarItem(row: typeof schema.calendars.$inferSelect): CalendarItem {
