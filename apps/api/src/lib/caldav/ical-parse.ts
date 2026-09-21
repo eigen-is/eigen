@@ -177,7 +177,10 @@ export function parseIcs(icsText: string): IcsParseResult {
         if (recurrenceId) {
             const rid = recurrenceId.getFirstValue() as ICAL.Time | string | null;
             if (rid instanceof ICAL.Time) {
-                recurrenceDate = icalTimeToRecurrenceKey(rid, seriesTzByUid.get(uid) ?? tzid ?? fileTz);
+                // A master that named no TZID keeps its series in UTC: only a UID the file holds no master
+                // for falls back to this VEVENT's own zone and then to the file's first master's.
+                const seriesTz = seriesTzByUid.has(uid) ? (seriesTzByUid.get(uid) ?? null) : (tzid ?? fileTz);
+                recurrenceDate = icalTimeToRecurrenceKey(rid, seriesTz);
                 if (!rid.isDate && rid.zone === ICAL.Timezone.utcTimezone) {
                     recurrenceInstant = rid.toJSDate();
                 }

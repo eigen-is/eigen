@@ -97,6 +97,42 @@ describe('parseIcs over a file whose UIDs do not line up', () => {
     });
 });
 
+// A master that names no TZID keeps its series in UTC, which is not the same fact as "this file names no
+// master for that UID": the file's first master's zone is the fallback for the second case only.
+describe('parseIcs over a UTC series in a file that also holds a zoned one', () => {
+    test('a UTC-Z override of a UTC series keys to its UTC day, not the file master zone', () => {
+        const { events } = parseIcs(
+            vcal([
+                'BEGIN:VEVENT',
+                'UID:tokyo@eigen',
+                'DTSTART;TZID=Asia/Tokyo:20260302T090000',
+                'DTEND;TZID=Asia/Tokyo:20260302T100000',
+                'RRULE:FREQ=WEEKLY',
+                'SUMMARY:Tokyo standup',
+                'END:VEVENT',
+                'BEGIN:VEVENT',
+                'UID:utc@eigen',
+                'DTSTART:20260302T220000Z',
+                'DTEND:20260302T230000Z',
+                'RRULE:FREQ=WEEKLY',
+                'SUMMARY:Late call',
+                'END:VEVENT',
+                'BEGIN:VEVENT',
+                'UID:utc@eigen',
+                'RECURRENCE-ID:20260309T220000Z',
+                'DTSTART:20260309T230000Z',
+                'DTEND:20260310T000000Z',
+                'SUMMARY:Late call moved',
+                'END:VEVENT',
+            ]),
+        );
+
+        // 9 March 22:00Z is 10 March in Tokyo: keyed through that zone the exception attaches to no
+        // occurrence the series has.
+        expect(events.find((event) => event.recurrenceDate !== null)?.recurrenceDate).toBe('2026-03-09');
+    });
+});
+
 // RFC 5545 §3.6.1 lets an event state its length as a DURATION instead of a DTEND, which Apple and
 // Outlook both emit — an end derived from DTSTART alone turns a three-hour meeting into an hour and a
 // three-day trip into one day.
