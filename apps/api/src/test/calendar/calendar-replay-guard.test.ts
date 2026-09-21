@@ -283,6 +283,26 @@ describe('inbound message ordering', () => {
         expect((await exceptionOf(calendar))?.status).toBe('cancelled');
     });
 
+    // A cancelled occurrence keeps its revision beside its EXDATE, in the file, so a rewrite of the
+    // resource for an unrelated reason leaves nothing for an older message to slip through.
+    test('a REQUEST redelivered behind the CANCEL that dropped the occurrence survives a rewrite', async () => {
+        const { calendar } = await seeded();
+
+        await calendar.receiveImipRequest(parsedOf(occurrence('Moved once', 2, '20260401T100000Z')), ORG);
+        await calendar.cancelInvitationOccurrence(UID, ORG_USER, '2026-05-02', new Date('2026-05-02T09:00:00Z'), {
+            sequence: 2,
+            dtstamp: new Date('2026-04-01T11:00:00Z'),
+        });
+        expect((await exceptionOf(calendar))?.status).toBe('cancelled');
+
+        // An unrelated series update rewrites the resource, and with it every row it projects.
+        await calendar.receiveImipRequest(parsedOf(request('Title B', 2, '20260401T130000Z')), ORG);
+
+        await calendar.receiveImipRequest(parsedOf(occurrence('Moved once', 2, '20260401T100000Z')), ORG);
+
+        expect((await exceptionOf(calendar))?.status).toBe('cancelled');
+    });
+
     test('a CANCEL redelivered behind the REQUEST that reinstated the occurrence does not re-cancel it', async () => {
         const { calendar } = await seeded();
 
