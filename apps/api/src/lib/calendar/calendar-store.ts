@@ -409,6 +409,11 @@ export async function putResource(
         if (projection.skipped || projection.duplicateMaster) {
             return { ok: false, error: 'invalid', reason: 'object', message: 'invalid iCalendar data' };
         }
+        // The interval invariant the REST write holds, so both surfaces answer alike. A zero-length event
+        // is legal (RFC 5545 §3.6.1) and common; one that ends before it starts is nobody's real event.
+        if (projection.rows.some((row) => row.endTime < row.startTime)) {
+            return { ok: false, error: 'invalid', reason: 'data', message: 'event ends before it starts' };
+        }
 
         const text = serializeResource(resource);
 

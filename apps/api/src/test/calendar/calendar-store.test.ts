@@ -657,6 +657,26 @@ describe('calendar file store', () => {
         expect(readdirSync(join(calendarsDirOf(harness.dir), calendarId))).toHaveLength(0);
     });
 
+    test('a resource that ends before it starts is refused, where a zero-length one is stored', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        const bounds = (uid: string, lines: string[]) =>
+            vcal(['BEGIN:VEVENT', `UID:${uid}`, ...lines, 'SUMMARY:Bounded', 'END:VEVENT']);
+
+        for (const [uid, lines] of [
+            ['reversed@eigen', ['DTSTART:20260401T110000Z', 'DTEND:20260401T100000Z']],
+            ['negative@eigen', ['DTSTART:20260401T110000Z', 'DURATION:-PT1H']],
+        ] as const) {
+            const result = await put(harness.instance, calendarId, 'bounds.ics', bounds(uid, [...lines]));
+            expect(result).toMatchObject({ ok: false, error: 'invalid', reason: 'data' });
+        }
+
+        // RFC 5545 §3.6.1 allows DTEND = DTSTART, and clients in the wild write it.
+        const zero = bounds('zero@eigen', ['DTSTART:20260401T100000Z', 'DTEND:20260401T100000Z']);
+        expect((await put(harness.instance, calendarId, 'zero.ics', zero)).ok).toBe(true);
+        expect((await harness.instance.listResources(calendarId)).map((r) => r.uri)).toEqual(['zero.ics']);
+    });
+
     test('a name a file system cannot hold is refused, never rewritten', async () => {
         const harness = await makeCalendar();
         const calendarId = await defaultCalendarId(harness);
