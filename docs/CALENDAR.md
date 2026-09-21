@@ -292,7 +292,7 @@ A rule the index stripped stays in the file, and the resource is flagged `hasUni
 - **Browser** (`EventDetailCard`, `calendar-invite-widget.tsx`) passes `viewerTimeZone()` — the runtime's own zone, which is what the month/week grid lays events out in. Any other choice makes the detail dialog name a different clock time than the slot the grid drew.
 - **API** (`imip.ts`) has no viewer and must not borrow the server's zone, so invitation mail renders a zone-less timed event in UTC and appends `(UTC)`. An event with a stored zone renders in that zone, unlabelled; the attached `.ics` carries the TZID either way.
 
-All-day events take neither fallback: `formatEventWhen` pins them to UTC, because their bounds are midnight UTC and the date portion is the answer. A stored TZID `Intl` rejects (Outlook's `W. Europe Standard Time`) takes the same fallback as no zone at all — the case `normalizeTimezone` writes as `null` at ingestion.
+All-day events take neither fallback: `formatEventWhen` pins them to UTC, because their bounds are midnight UTC and the date portion is the answer. A stored TZID `Intl` rejects takes the same fallback as no zone at all — the case `normalizeTimezone` writes as `null` at ingestion, after resolving a Windows zone name (Outlook's `W. Europe Standard Time`) through the CLDR `windowsZones` table beside it.
 
 ## Quotas
 

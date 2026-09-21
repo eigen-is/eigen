@@ -1,6 +1,7 @@
 import { RRule } from 'rrule';
 import type { CalendarEventOccurrence, CalendarItem, EventData, SharedCalendar } from '../../types/calendar';
 import { dateFormatter, formatDayMonth, formatTime } from '../date';
+import { WINDOWS_ZONES } from './windows-zones';
 
 export type ViewMode = 'month' | 'week';
 
@@ -99,8 +100,10 @@ export function viewerTimeZone(): string {
 // The one zone oracle: every stored timezone, every parsed TZID and every labelled event resolves here.
 // Constructing the formatter IS the check — Intl throws RangeError on a zone it does not know — so a zone
 // it rejects degrades to null, which is what "no timezone" (floating) already means, and rows stored before
-// this guard existed heal the same way at read time. The answer per zone, so a file of 10,000 events pays
-// the construction once. Bounded and dropped whole past the cap, because the zone is a string the file chose.
+// this guard existed heal the same way at read time. A Windows zone name resolves to its IANA zone first:
+// Intl knows none of them, and dropping one expands an Outlook series in UTC, which breaks its wall time at
+// the next DST change. The answer per zone, so a file of 10,000 events pays the construction once. Bounded
+// and dropped whole past the cap, because the zone is a string the file chose.
 const ZONE_ANSWERS = new Map<string, string | null>();
 const MAX_ZONE_ANSWERS = 64;
 
@@ -110,10 +113,11 @@ export function normalizeTimezone(timezone: string | null | undefined): string |
     const remembered = ZONE_ANSWERS.get(timezone);
     if (remembered !== undefined) return remembered;
 
+    const candidate = WINDOWS_ZONES.get(timezone) ?? timezone;
     let answer: string | null;
     try {
-        dateFormatter({ timeZone: timezone });
-        answer = timezone;
+        dateFormatter({ timeZone: candidate });
+        answer = candidate;
     } catch {
         answer = null;
     }

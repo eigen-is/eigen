@@ -7,6 +7,7 @@ import {
     rruleToText,
     viewerTimeZone,
 } from '../../../core/calendar/calendar-utils';
+import { WINDOWS_ZONES } from '../../../core/calendar/windows-zones';
 import type { CalendarEventOccurrence, EventData } from '../../../types/calendar';
 
 function occurrence(occurrenceDate: string, startTime: Date, endTime: Date): CalendarEventOccurrence {
@@ -167,6 +168,16 @@ describe('normalizeTimezone', () => {
         expect(normalizeTimezone('Not/A_Zone')).toBeNull();
         expect(normalizeTimezone(null)).toBeNull();
         expect(normalizeTimezone('')).toBeNull();
+    });
+
+    test('a Windows zone name resolves to the IANA zone CLDR names for it', () => {
+        expect(normalizeTimezone('W. Europe Standard Time')).toBe('Europe/Berlin');
+        expect(normalizeTimezone('Pacific Standard Time')).toBe('America/Los_Angeles');
+        expect(normalizeTimezone('AUS Eastern Standard Time')).toBe('Australia/Sydney');
+    });
+
+    test('every zone the Windows table names is one Intl knows', () => {
+        expect([...WINDOWS_ZONES.keys()].filter((name) => normalizeTimezone(name) === null)).toEqual([]);
     });
 
     test('a file naming hundreds of zones still answers each of them correctly', () => {
