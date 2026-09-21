@@ -1,7 +1,10 @@
 import type { VCardPreview } from '@workspace/lib/types/preview';
 import { ApiError } from '../core/errors';
-import { decodeUtf8Strict, VCARD_IMPORT_MAX_CARDS, VCARD_PREVIEW_MAX_CARDS } from '../core/transfer';
+import { decodeUtf8Strict, VCARD_IMPORT_MAX_CARDS } from '../core/transfer';
 import { parsedCardToContact, parseVCard, splitVCards, transcodeTo30 } from '../vcard';
+
+// A quick look reads, it doesn't scroll a whole address book: past this the preview serves counts only.
+export const VCARD_PREVIEW_MAX_CARDS = 200;
 
 export const parseVCardPreview = (body: string): VCardPreview => JSON.parse(body);
 

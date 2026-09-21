@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { ApiError } from '../../lib/core/errors';
-import { VCARD_IMPORT_MAX_CARDS, VCARD_PREVIEW_MAX_CARDS } from '../../lib/core/transfer';
+import { VCARD_IMPORT_MAX_CARDS } from '../../lib/core/transfer';
 import { toTransferableBuffer, toTransferableText } from '../../lib/document/transform/protocol';
-import { buildVCardPreviewPayload } from '../../lib/preview/vcard-preview';
+import { buildVCardPreviewPayload, VCARD_PREVIEW_MAX_CARDS } from '../../lib/preview/vcard-preview';
 
 // The payload the quick look and the drive hero both read. Every value in it came from an untrusted
 // file, so the only reference that survives is an inline PHOTO turned into a data: URI — a

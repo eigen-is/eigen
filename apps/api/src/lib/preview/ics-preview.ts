@@ -1,14 +1,15 @@
 import type { IcsPreview, IcsPreviewEvent } from '@workspace/lib/types/preview';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { ApiError } from '../core/errors';
-import {
-    decodeUtf8Strict,
-    ICS_PREVIEW_MAX_ATTENDEES,
-    ICS_PREVIEW_MAX_DESCRIPTION_CHARS,
-    ICS_PREVIEW_MAX_EVENTS,
-} from '../core/transfer';
+import { decodeUtf8Strict } from '../core/transfer';
 import { parseIcs } from '../ical';
 import type { IcsParseResult, ParsedEvent } from '../ical/ical-parse';
+
+// What one `.ics` preview may carry. A calendar export is a year of a team's meetings and an event's
+// description is a whole agenda, so the builder is where the payload is bounded.
+export const ICS_PREVIEW_MAX_EVENTS = 200;
+export const ICS_PREVIEW_MAX_DESCRIPTION_CHARS = 10_000;
+export const ICS_PREVIEW_MAX_ATTENDEES = 100;
 
 export const parseIcsPreview = (body: string): IcsPreview => JSON.parse(body);
 
