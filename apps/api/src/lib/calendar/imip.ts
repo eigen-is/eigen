@@ -62,11 +62,22 @@ function withOrganizer(event: CalendarEvent, organizer: Organizer): CalendarEven
     return { ...event, data: { ...event.data, organizer } };
 }
 
-function icalEvent(event: CalendarEvent, method: 'REQUEST' | 'REPLY' | 'CANCEL'): OutboundICalEvent {
-    return { method, content: serializeEventForImip(event, method) };
+// `series` is the master of an event that is one occurrence of it, so the body can name the occurrence
+// it replaces (RECURRENCE-ID) instead of reading as a message about the whole series.
+function icalEvent(
+    event: CalendarEvent,
+    method: 'REQUEST' | 'REPLY' | 'CANCEL',
+    series?: CalendarEvent,
+): OutboundICalEvent {
+    return { method, content: serializeEventForImip(event, method, series) };
 }
 
-export function composeInviteEmail(event: CalendarEvent, organizer: Organizer, attendees: Attendee[]): OutboundMail {
+export function composeInviteEmail(
+    event: CalendarEvent,
+    organizer: Organizer,
+    attendees: Attendee[],
+    series?: CalendarEvent,
+): OutboundMail {
     const footer = `Invitation from ${organizer.name || organizer.email}`;
     return {
         from: { name: organizer.name ?? '', address: organizer.email },
@@ -74,11 +85,16 @@ export function composeInviteEmail(event: CalendarEvent, organizer: Organizer, a
         subject: `Invitation: ${event.title}`,
         text: buildEventSummary(event),
         html: buildEventHtml(event, footer),
-        icalEvent: icalEvent(withOrganizer(event, organizer), 'REQUEST'),
+        icalEvent: icalEvent(withOrganizer(event, organizer), 'REQUEST', series),
     };
 }
 
-export function composeUpdateEmail(event: CalendarEvent, organizer: Organizer, attendees: Attendee[]): OutboundMail {
+export function composeUpdateEmail(
+    event: CalendarEvent,
+    organizer: Organizer,
+    attendees: Attendee[],
+    series?: CalendarEvent,
+): OutboundMail {
     const footer = `Invitation from ${organizer.name || organizer.email}`;
     return {
         from: { name: organizer.name ?? '', address: organizer.email },
@@ -86,11 +102,16 @@ export function composeUpdateEmail(event: CalendarEvent, organizer: Organizer, a
         subject: `Updated invitation: ${event.title}`,
         text: buildEventSummary(event),
         html: buildEventHtml(event, footer, 'This event has been updated'),
-        icalEvent: icalEvent(withOrganizer(event, organizer), 'REQUEST'),
+        icalEvent: icalEvent(withOrganizer(event, organizer), 'REQUEST', series),
     };
 }
 
-export function composeCancelEmail(event: CalendarEvent, organizer: Organizer, attendees: Attendee[]): OutboundMail {
+export function composeCancelEmail(
+    event: CalendarEvent,
+    organizer: Organizer,
+    attendees: Attendee[],
+    series?: CalendarEvent,
+): OutboundMail {
     const footer = `Invitation from ${organizer.name || organizer.email}`;
     return {
         from: { name: organizer.name ?? '', address: organizer.email },
@@ -98,7 +119,7 @@ export function composeCancelEmail(event: CalendarEvent, organizer: Organizer, a
         subject: `Canceled: ${event.title}`,
         text: `This event has been canceled:\n\n${buildEventSummary(event)}`,
         html: buildEventHtml(event, footer, 'This event has been canceled'),
-        icalEvent: icalEvent(withOrganizer(event, organizer), 'CANCEL'),
+        icalEvent: icalEvent(withOrganizer(event, organizer), 'CANCEL', series),
     };
 }
 

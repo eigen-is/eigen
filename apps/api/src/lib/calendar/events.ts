@@ -101,10 +101,29 @@ export async function createEvent(
     const created = await calendar.gate.run(() => writeEvent(calendar, calendarId, input));
 
     calendar.announce(calendarId, SSEventType.CALENDAR_EVENT_CREATED);
-    if (user && created.data?.attendees?.length) {
-        propagateInvitation(calendar.home, created, user, [], created.data.attendees).catch(console.error);
-    }
+    if (user) propagateWrite(calendar, created, user, []).catch(console.error);
     return created;
+}
+
+// The fan-out a write owes the guests. An override is ONE occurrence of its series: the series states
+// the guest list, and its id is what every message names — a cancelled override then asks the guests to
+// drop that occurrence rather than to update it.
+async function propagateWrite(
+    calendar: Calendar,
+    event: CalendarEvent,
+    user: User,
+    oldAttendees: Attendee[],
+): Promise<void> {
+    const series = event.parentEventId ? eventById(calendar, event.parentEventId) : null;
+    const attendees = event.data?.attendees ?? series?.data?.attendees;
+    if (!attendees?.length) return;
+    // Only the organizer fans out: a guest's own edit bumping SEQUENCE would outrun the organizer's updates.
+    if (isInvitationFromOthers(series ?? event, calendar.home.user.email)) return;
+    if (series && event.status === 'cancelled') {
+        await propagateCancellation(calendar.home, event, series);
+        return;
+    }
+    await propagateInvitation(calendar.home, event, user, oldAttendees, attendees, series ?? undefined);
 }
 
 // The locked core every writer of a NEW event shares: the checks that decide WHICH file is written run in it.
@@ -188,15 +207,12 @@ export async function updateEvent(
     input: UpdateEventArgs,
     user?: User,
 ): Promise<CalendarEvent> {
-    const { updated, oldAttendees, linked } = await calendar.gate.run(() =>
+    const { updated, oldAttendees } = await calendar.gate.run(() =>
         patchStoredEvent(calendar, calendarId, id, input, user),
     );
     calendar.announce(calendarId, SSEventType.CALENDAR_EVENT_UPDATED);
 
-    // Only the organizer fans out: an attendee's own edit bumping SEQUENCE would outrun the organizer's updates.
-    if (user && !linked && updated.data?.attendees?.length) {
-        propagateInvitation(calendar.home, updated, user, oldAttendees, updated.data.attendees).catch(console.error);
-    }
+    if (user) propagateWrite(calendar, updated, user, oldAttendees).catch(console.error);
     return updated;
 }
 
@@ -207,7 +223,7 @@ async function patchStoredEvent(
     id: string,
     input: UpdateEventArgs,
     user?: User,
-): Promise<{ updated: CalendarEvent; oldAttendees: Attendee[]; linked: boolean }> {
+): Promise<{ updated: CalendarEvent; oldAttendees: Attendee[] }> {
     const existing = eventById(calendar, id);
     // 404 (not 403) on calendar mismatch so a share on one calendar can't oracle event ids in another.
     if (!existing || existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
@@ -277,7 +293,7 @@ async function patchStoredEvent(
         writeContext(!!user && !linked),
     );
 
-    return { updated: eventById(calendar, id)!, oldAttendees, linked };
+    return { updated: eventById(calendar, id)!, oldAttendees };
 }
 
 export async function deleteEvent(calendar: Calendar, calendarId: string, id: string, user?: User): Promise<void> {

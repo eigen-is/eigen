@@ -10,13 +10,28 @@ import { getUserByEmail } from '../user/';
 import { composeCancelEmail, composeInviteEmail, composeUpdateEmail } from './imip';
 import { buildCalendarEvent } from './sse-events';
 
+// Which occurrence a removal drops, and the revision its receiver orders it against; undefined for a
+// message about the whole series.
+function occurrenceRevision(
+    event: CalendarEvent,
+    recurrenceDate: string | null,
+): { recurrenceDate: string; sequence: number; dtstamp: Date } | undefined {
+    return recurrenceDate ? { recurrenceDate, sequence: event.sequence, dtstamp: event.updatedAt } : undefined;
+}
+
+// `series` is set when `event` is one occurrence of it. Every message then names the SERIES' event id
+// plus the occurrence key, so a guest's receiver attaches it to their linked series as an exception —
+// the exact shape an iMIP REQUEST carrying a RECURRENCE-ID has (docs/CALENDAR.md § Invitations).
 export async function propagateInvitation(
     organizerHome: Home,
     event: CalendarEvent,
     user: User,
     oldAttendees: Attendee[],
     newAttendees: Attendee[],
+    series?: CalendarEvent,
 ): Promise<void> {
+    const organizerEventId = series?.id ?? event.id;
+    const recurrenceDate = series ? event.recurrenceDate : null;
     const oldEmails = new Set(oldAttendees.map((a) => a.email.toLowerCase()));
     const newEmails = new Set(newAttendees.map((a) => a.email.toLowerCase()));
 
@@ -34,7 +49,7 @@ export async function propagateInvitation(
                 await addRegistryEntry(organizerHome.user.id, attendee.email);
                 // Send iMIP invite email to external attendee
                 const organizer = { userId: user.id, email: user.email, name: user.name };
-                const mail = composeInviteEmail(event, organizer, [attendee]);
+                const mail = composeInviteEmail(event, organizer, [attendee], series);
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP invite:', err));
                 continue;
             }
@@ -42,6 +57,7 @@ export async function propagateInvitation(
                 type: 'calendar:invitation',
                 payload: {
                     uid: event.uid,
+                    recurrenceDate,
                     title: event.title,
                     description: event.description,
                     location: event.location,
@@ -57,17 +73,17 @@ export async function propagateInvitation(
                     dtstamp: event.updatedAt,
                     data: {
                         organizer: { userId: organizerHome.user.id, email: user.email, name: user.name },
-                        organizerEventId: event.id,
+                        organizerEventId,
                         attendees: newAttendees,
                     },
                     createByUserId: user.id,
-                    organizerEventId: event.id,
+                    organizerEventId,
                     organizerUserId: organizerHome.user.id,
                 },
             });
             if (getServerSettings().notifications.email.userOnCalendarInvite) {
                 const organizer = { userId: user.id, email: user.email, name: user.name };
-                const mail = composeInviteEmail(event, organizer, [attendee]);
+                const mail = composeInviteEmail(event, organizer, [attendee], series);
                 // Local Eigen recipient already has the event in-app via sendToHome above.
                 // Drop the iMIP attachment so processInboundImip doesn't fire a second update.
                 mail.icalEvent = undefined;
@@ -84,14 +100,15 @@ export async function propagateInvitation(
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || targetUser.role === 'guest') {
                 const organizer = { userId: user.id, email: user.email, name: user.name };
-                const mail = composeCancelEmail(event, organizer, [attendee]);
+                const mail = composeCancelEmail(event, organizer, [attendee], series);
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP cancel:', err));
                 continue;
             }
             await sendToHome(targetUser.id, {
                 type: 'calendar:invitation-removal',
-                orgEventId: event.id,
+                orgEventId: organizerEventId,
                 orgUserId: organizerHome.user.id,
+                occurrence: occurrenceRevision(event, recurrenceDate),
             });
         } catch (error) {
             console.error('Failed to cancel invitation:', error);
@@ -104,15 +121,16 @@ export async function propagateInvitation(
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || targetUser.role === 'guest') {
                 const organizer = { userId: user.id, email: user.email, name: user.name };
-                const mail = composeUpdateEmail(event, organizer, [attendee]);
+                const mail = composeUpdateEmail(event, organizer, [attendee], series);
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP update:', err));
                 continue;
             }
             await sendToHome(targetUser.id, {
                 type: 'calendar:invitation-update',
-                orgEventId: event.id,
+                orgEventId: organizerEventId,
                 orgUserId: organizerHome.user.id,
                 payload: {
+                    recurrenceDate,
                     title: event.title,
                     description: event.description,
                     location: event.location,
@@ -153,8 +171,15 @@ export async function propagateRsvp(
     });
 }
 
-export async function propagateCancellation(organizerHome: Home, event: CalendarEvent): Promise<void> {
-    const attendees = event.data?.attendees || [];
+// `series` is set when only ONE of its occurrences is cancelled: the guest list and the id every message
+// names are the series', and the occurrence key says which instance the guests drop.
+export async function propagateCancellation(
+    organizerHome: Home,
+    event: CalendarEvent,
+    series?: CalendarEvent,
+): Promise<void> {
+    const attendees = (series ?? event).data?.attendees || [];
+    const occurrence = occurrenceRevision(event, series ? event.recurrenceDate : null);
     for (const attendee of attendees) {
         try {
             const targetUser = await getUserByEmail(attendee.email);
@@ -164,14 +189,15 @@ export async function propagateCancellation(organizerHome: Home, event: Calendar
                     email: organizerHome.user.email,
                     name: organizerHome.user.name,
                 };
-                const mail = composeCancelEmail(event, organizer, [attendee]);
+                const mail = composeCancelEmail(event, organizer, [attendee], series);
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP cancel:', err));
                 continue;
             }
             await sendToHome(targetUser.id, {
                 type: 'calendar:invitation-removal',
-                orgEventId: event.id,
+                orgEventId: series?.id ?? event.id,
                 orgUserId: organizerHome.user.id,
+                occurrence,
             });
         } catch (error) {
             console.error('Failed to propagate cancellation:', error);

@@ -487,11 +487,13 @@ function shapeForImip(vevent: ICAL.Component, event: CalendarEvent, method: Imip
     );
 }
 
-export function serializeEventForImip(event: CalendarEvent, method: ImipMethod): string {
+// `series` is the master of an event that is one occurrence of it: RECURRENCE-ID names the ORIGINAL
+// instant, which only the series' own recurrence knows once the override has been moved.
+export function serializeEventForImip(event: CalendarEvent, method: ImipMethod, series?: CalendarEvent): string {
     const vcalendar = newVCalendar();
     vcalendar.addPropertyWithValue('method', method);
     for (const vtimezone of vtimezoneComponents([event])) vcalendar.addSubcomponent(vtimezone);
-    const vevent = buildVEvent(event);
+    const vevent = buildVEvent(event, { master: series });
     shapeForImip(vevent, event, method);
     vcalendar.addSubcomponent(vevent);
     // Nothing that leaves the Home carries an Eigen stamp.
