@@ -4,7 +4,7 @@ description: "Bring events into one of your calendars from an .ics file in Drive
 type: how-to
 category: Basics
 tags: [calendar, import, ics]
-related: [calendar/get-started, calendar/external-invitations, drive/preview-a-file]
+related: [calendar/get-started, calendar/export-events, calendar/external-invitations, drive/preview-a-file]
 order: 90
 updated: 2026-09-21
 ---
@@ -24,9 +24,9 @@ To read the file before you import it, select it and press **Space**, or choose 
 
 ## Choose the calendar
 
-The dialog lists the calendars you own, with your default one already selected. Choose **New calendar** instead to make a fresh one for the file. Eigen names it after the file, and you can change the name before you import. If nothing ends up going in, because every event in the file was already in your calendar, the new calendar is removed again.
+The dialog lists your own calendars under **My Calendars**, with your default one already selected. Any team calendar you can edit is listed below it under **Team Calendars**, so a schedule the whole team needs can go straight where everyone sees it. Choose **New calendar** instead to make a fresh one for the file. Eigen names it after the file, and you can change the name before you import. A new calendar is always one of your own. If nothing ends up going in, because every event in the file was already in your calendar, the new calendar is removed again.
 
-A calendar someone shared with you is not in the list. You can only import into a calendar of your own. That holds for a file in a team drive too: the events land in one of your own calendars, the same way an imported email lands in your own inbox.
+A calendar someone shared with you from their own account is not in the list, and neither is a team calendar you can only read.
 
 ## What comes across
 
@@ -39,11 +39,11 @@ Two things are deliberately left behind, so an imported file never sends mail on
 - **The organizer and the guest list.** An imported event is your own event, not an invitation from someone else. You can open it and invite people yourself.
 - **The file's purpose.** An invitation file and a cancellation file both import as plain events. To accept a real invitation, open the email it came with instead. See [Respond to an invitation](/support/calendar/respond-to-invitation).
 
-An event you already have is skipped rather than imported twice. Eigen matches on the identifier the event carries, across every calendar you own, so re-importing the same file adds nothing and an invitation you already accepted never gets a twin.
+An event you already have is skipped rather than imported twice. Eigen matches on the identifier the event carries, across every calendar in the same account, so re-importing the same file adds nothing. Importing it into a second calendar of yours adds nothing either, because an event lives in one place per account. An invitation you already accepted never gets a twin. A team is its own account, so a file you have already imported for yourself still lands in a team calendar.
 
 ## Limits
 
-- A file can be up to 5 MB, and can hold up to 1000 events. A bigger file is refused as a whole, so split it before you import.
+- A file can be up to 5 MB and can hold up to 10,000 events, whichever it reaches first. A bigger file is refused as a whole, so split it before you import.
 - The file has to be saved as UTF-8, which is what every current calendar program writes.
 
 ## If nothing is imported

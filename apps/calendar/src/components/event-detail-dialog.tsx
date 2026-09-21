@@ -1,4 +1,4 @@
-import { useAuth } from '@workspace/lib/auth';
+import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import {
     isInvitationFromOthers,
     occurrenceDateToString,
@@ -6,9 +6,12 @@ import {
     truncateRRule,
     useCreateEvent,
     useDeleteEvent,
+    useExportCalendar,
     useRsvp,
+    useSharedCalendarLabel,
     useUpdateEvent,
 } from '@workspace/lib/calendar';
+import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { DeleteDialog } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -22,9 +25,8 @@ import {
     DialogTitle,
 } from '@workspace/ui/components/dialog';
 import { UserName } from '@workspace/ui/components/user';
-import { Calendar, Check, HelpCircle, Pencil, Trash2, X as XIcon } from 'lucide-react';
+import { Calendar, Check, Download, HelpCircle, Pencil, Trash2, X as XIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { useSharedCalendarLabel } from './calendar-utils';
 import { EditEventDialog } from './edit-event-dialog';
 import type { RecurringAction } from './recurring-action-dialog';
 import { RecurringActionDialog } from './recurring-action-dialog';
@@ -51,6 +53,8 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const createEvent = useCreateEvent(eventOwnerId);
     const updateEvent = useUpdateEvent(eventOwnerId);
     const rsvp = useRsvp(user?.id || '');
+    const { exportCalendar, isExporting } = useExportCalendar();
+    const isGuest = useIsGuest();
     const sharedCalendars = useMemo(() => (sharedCalendar ? [sharedCalendar] : []), [sharedCalendar]);
     const sharedCalendarLabel = useSharedCalendarLabel(sharedCalendars);
 
@@ -62,6 +66,9 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const calendarName = calendar?.name || (sharedCalendar ? sharedCalendarLabel(sharedCalendar) : null);
     const isShared = !!sharedCalendar;
     const canEdit = !isShared || sharedCalendar?.permission === 'write';
+    // The export reads the event's own home, and only this home and a team's are reachable: a calendar
+    // shared out of another user's home is refused by the route, so it offers nothing here.
+    const canExport = !isGuest && (!sharedCalendar || parseOwnerId(sharedCalendar.ownerUserId).type === 'team');
     // An ORGANIZER equal to the calendar owner is an event they organize, not an invitation to them;
     // the owner's address is known only when the owner is the viewer.
     const isLinkedEvent = isInvitationFromOthers(event, eventOwnerId === user?.id ? user.email : undefined);
@@ -274,14 +281,35 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                     </div>
 
                     <DialogFooter>
-                        {canEdit && (
+                        {(canEdit || canExport) && (
                             <div className="flex gap-1 mr-auto">
-                                <Button variant="ghost" size="icon" onClick={() => setEditOpen(true)}>
-                                    <Pencil className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="icon" onClick={handleDeleteClick}>
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
+                                {canEdit && (
+                                    <>
+                                        <Button variant="ghost" size="icon" onClick={() => setEditOpen(true)}>
+                                            <Pencil className="h-4 w-4" />
+                                        </Button>
+                                        <Button variant="ghost" size="icon" onClick={handleDeleteClick}>
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </>
+                                )}
+                                {canExport && (
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        title="Export event"
+                                        aria-label="Export event"
+                                        disabled={isExporting}
+                                        // An occurrence is drawn from its series, so the series is what leaves.
+                                        onClick={() =>
+                                            void exportCalendar(eventOwnerId, event.calendarId, [
+                                                event.parentEventId || event.id,
+                                            ])
+                                        }
+                                    >
+                                        <Download className="h-4 w-4" />
+                                    </Button>
+                                )}
                             </div>
                         )}
                         <Button variant="outline" onClick={() => onOpenChange(false)}>

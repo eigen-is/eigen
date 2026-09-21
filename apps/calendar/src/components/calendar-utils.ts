@@ -1,8 +1,7 @@
-import { usePublicUsers } from '@workspace/lib/public';
-import { parseOwnerId } from '@workspace/lib/types';
+import { useSharedCalendarLabel } from '@workspace/lib/calendar';
 import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { cn } from '@workspace/ui/lib/utils';
-import { useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
 
 export type CalendarOption = {
     id: string;
@@ -32,32 +31,6 @@ export function eventPillStateClasses(
             inviteStatus === 'pending' &&
             'border border-dashed border-current bg-transparent !text-foreground',
         inviteStatus === 'declined' && 'opacity-40',
-    );
-}
-
-// The one place that decides what a shared calendar is called. Batched, so a team the viewer isn't
-// a member of still gets a name; an unresolved one keeps the calendar's own name, never `team_<id>`.
-export function useSharedCalendarLabel(sharedCalendars: SharedCalendar[]): (sc: SharedCalendar) => string {
-    const teamOwnerIds = useMemo(
-        () => [
-            ...new Set(
-                sharedCalendars
-                    .filter((sc) => parseOwnerId(sc.ownerUserId).type === 'team')
-                    .map((sc) => sc.ownerUserId),
-            ),
-        ],
-        [sharedCalendars],
-    );
-    const teams = usePublicUsers(teamOwnerIds);
-
-    return useCallback(
-        (sc: SharedCalendar) => {
-            if (parseOwnerId(sc.ownerUserId).type === 'team') {
-                return teams[sc.ownerUserId]?.name?.trim() || sc.calendarName;
-            }
-            return sc.calendarName;
-        },
-        [teams],
     );
 }
 
