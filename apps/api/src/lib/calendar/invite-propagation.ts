@@ -203,6 +203,12 @@ export async function propagateDecline(
     organizerUserId: string,
     organizerEventId: string,
     attendeeEmail: string,
+    recurrenceDate?: string,
 ): Promise<void> {
-    await propagateRsvp(organizerUserId, organizerEventId, attendeeEmail, 'declined');
+    await propagateRsvp(organizerUserId, organizerEventId, attendeeEmail, 'declined', recurrenceDate);
+}
+
+// The occurrence a linked copy answers for: a copy that IS one occurrence of a series the guest does not hold. An exception answers through the master it hangs on.
+export function answeredOccurrence(event: CalendarEvent): string | undefined {
+    return event.parentEventId ? undefined : (event.recurrenceDate ?? undefined);
 }

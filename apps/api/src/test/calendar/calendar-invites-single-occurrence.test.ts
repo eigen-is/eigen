@@ -90,13 +90,23 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
         return assertJson<CalendarEvent>(res);
     }
 
-    async function bobOccurrences(uid: string): Promise<CalendarEventOccurrence[]> {
+    async function occurrencesOf(token: string, ownerId: string, uid: string): Promise<CalendarEventOccurrence[]> {
         const from = Math.floor(Date.parse('2028-02-01T00:00:00Z') / 1000);
         const to = Math.floor(Date.parse('2028-05-01T00:00:00Z') / 1000);
         const all = await assertJson<CalendarEventOccurrence[]>(
-            await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/event-range/${from}/${to}`),
+            await authedRequest(token, `/calendar/${ownerId}/event-range/${from}/${to}`),
         );
         return all.filter((e) => e.uid === uid).sort((a, b) => a.occurrenceDate.localeCompare(b.occurrenceDate));
+    }
+
+    const bobOccurrences = (uid: string) => occurrencesOf(ctx.bob.user.sessionToken, ctx.bob.user.id, uid);
+    const aliceOccurrences = (uid: string) => occurrencesOf(ctx.alice.user.sessionToken, ctx.alice.user.id, uid);
+
+    function untilAlice(uid: string, predicate: (occurrence: CalendarEventOccurrence) => boolean) {
+        return eventually(async () => {
+            const one = (await aliceOccurrences(uid)).find((e) => e.occurrenceDate === TARGET);
+            return one && predicate(one) ? one : undefined;
+        }, "the guest's answer to reach Alice's override");
     }
 
     function untilBob(uid: string, predicate: (occurrences: CalendarEventOccurrence[]) => boolean) {
@@ -167,6 +177,48 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
 
         const occurrences = await untilBob(series.uid, (occ) => occ.length === 0);
         expect(occurrences).toHaveLength(0);
+    });
+
+    // The copy IS the occurrence, so the answer it carries is about that occurrence and lands on the
+    // organizer's override for it, never on the guestless master.
+    test("the guest's answer to the single occurrence reaches the organizer's override", async () => {
+        const series = await createSeries('Single Occurrence Accept');
+        await editOccurrence(series.id, TARGET, { title: 'Just This One' });
+        const copy = await untilBob(series.uid, (occ) => occ.length === 1);
+
+        const res = await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/calendar/${ctx.bob.user.id}/calendars/${bobCalendarId}/events/${copy[0].id}/rsvp`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'accepted' }),
+            },
+        );
+        expect(res.status).toBe(200);
+
+        const answered = await untilAlice(series.uid, (e) => e.data?.attendees?.[0]?.status === 'accepted');
+        expect(answered.title).toBe('Just This One');
+        // The series itself stays guestless: nothing was said about the other occurrences.
+        for (const other of (await aliceOccurrences(series.uid)).filter((e) => e.occurrenceDate !== TARGET)) {
+            expect(other.data?.attendees ?? []).toHaveLength(0);
+        }
+    });
+
+    test("the guest's delete of the single occurrence declines it on the organizer's override", async () => {
+        const series = await createSeries('Single Occurrence Decline');
+        await editOccurrence(series.id, TARGET, { title: 'Not For Me' });
+        const copy = await untilBob(series.uid, (occ) => occ.length === 1);
+
+        const res = await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/calendar/${ctx.bob.user.id}/calendars/${bobCalendarId}/events/${copy[0].id}`,
+            { method: 'DELETE' },
+        );
+        expect(res.status).toBe(200);
+
+        const answered = await untilAlice(series.uid, (e) => e.data?.attendees?.[0]?.status === 'declined');
+        expect(answered.title).toBe('Not For Me');
     });
 
     test('an invitation to the whole series replaces the single occurrence instead of twinning it', async () => {

@@ -17,7 +17,7 @@ import type { Calendar } from './calendar';
 import * as store from './calendar-store';
 import { eventForFile, validateEventInput } from './event-input';
 import { composeRsvpReply } from './imip';
-import { propagateCancellation, propagateDecline, propagateInvitation } from './invite-propagation';
+import { answeredOccurrence, propagateCancellation, propagateDecline, propagateInvitation } from './invite-propagation';
 import { toEvent } from './mappers';
 import { gateKey, resourcePath } from './resource-store';
 import * as schema from './schema';
@@ -311,7 +311,9 @@ export async function deleteEvent(calendar: Calendar, calendarId: string, id: st
             const mail = composeRsvpReply(existing, user.email, user.name ?? user.email, 'declined');
             sendMail(mail).catch(console.error);
         } else {
-            propagateDecline(orgUserId, invitation.organizerEventId!, user.email).catch(console.error);
+            propagateDecline(orgUserId, invitation.organizerEventId!, user.email, answeredOccurrence(existing)).catch(
+                console.error,
+            );
         }
     } else if (!invitation && existing.data?.attendees?.length) {
         // An event with no foreign organizer makes this user its organizer, and an organizer's delete cancels.
