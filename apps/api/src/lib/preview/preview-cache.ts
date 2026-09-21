@@ -56,7 +56,9 @@ export const VCARD_FORMAT = 'vcard-f1';
 // body predates every sanitizer fix (PREVIEWS.md).
 // eml-f2: CSS is refused on the `url(` token, and a data: reference survives only as a raster image.
 // eml-f3: the parts past the cap are counted as `remainingAttachments`.
-export const EML_FORMAT = 'eml-f3';
+// eml-f4: CSS is read again as the color-scheme deletion a viewer makes would leave it, and a repeated
+//         To:/Cc: keeps every recipient.
+export const EML_FORMAT = 'eml-f4';
 
 // ics-f2: `dropped` is the unreadable masters alone, and an event counts its `remainingAttendees`.
 export const ICS_FORMAT = 'ics-f2';

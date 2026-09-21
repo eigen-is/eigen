@@ -51,10 +51,25 @@ const INLINE_IMAGE = new RegExp(`^\\s*${RASTER_DATA_URI}`, 'i');
 const CSS_REMOTE_URL = new RegExp(`url\\((?!\\s*(?:['"]\\s*)?${RASTER_DATA_URI})`, 'i');
 const DATA_URI = /data:[^\s"'<>)]+/g;
 
+// A viewer renders on a canvas of its own and drops the color-scheme rules that disagree with it
+// (ShadowContent, packages/ui), one scheme or the other. Deleting such a block rejoins whatever it was
+// written between — `ur@media (prefers-color-scheme: dark){}l(https://…)` carries no token until it is
+// gone — so the text each of those two deletions would leave behind is read as its own CSS.
+const schemeMediaBlock = (scheme: string) =>
+    new RegExp(
+        String.raw`@media\s*\([^)]*prefers-color-scheme:\s*${scheme}[^)]*\)\s*\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}`,
+        'gi',
+    );
+const SCHEME_MEDIA_BLOCKS = [schemeMediaBlock('dark'), schemeMediaBlock('light')];
+
 // Both refusals read a token, never a pair: a CSS escape spells `url(` invisibly to a regex (`u\72l(`), and
 // an unterminated `url(` fetches without ever closing.
-function cssFetches(css: string): boolean {
+function fetchTokens(css: string): boolean {
     return CSS_FETCHES.test(css) || CSS_REMOTE_URL.test(css);
+}
+
+function cssFetches(css: string): boolean {
+    return fetchTokens(css) || SCHEME_MEDIA_BLOCKS.some((block) => fetchTokens(css.replace(block, '')));
 }
 
 function restrictNode(node: AttrNode): void {

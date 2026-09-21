@@ -206,6 +206,32 @@ describe('buildEmlPreviewPayload', () => {
         expect(payload.html).toContain('attr 0');
     });
 
+    // A client renders on a canvas of its own and drops the color-scheme rules that disagree with it
+    // (ShadowContent, packages/ui), which rejoins a token split across such a block: neither half of
+    // `ur@media (prefers-color-scheme: dark){}l(` is a token the raw text carries, and the deletion leaves
+    // `url(`. The refusal reads the text such a deletion would leave behind as well as the raw text.
+    test('a fetch token split across a prefers-color-scheme block is refused, whichever scheme it names', () => {
+        const declarations = [
+            `background:ur@media (prefers-color-scheme: dark){}l(https://${HOSTILE}/dark-pixel.png)`,
+            `background:ur@media (prefers-color-scheme: light){}l(https://${HOSTILE}/light-pixel.png)`,
+        ];
+        const payload = payloadOf(
+            htmlMessage(
+                [
+                    ...declarations.map((css, i) => `<div style="${css}">attr ${i}</div>`),
+                    ...declarations.map((css) => `<style>p{${css}}</style>`),
+                    `<style>@imp@media (prefers-color-scheme: dark){}ort "https://${HOSTILE}/dark.css";</style>`,
+                    `<style>@imp@media (prefers-color-scheme: light){}ort "https://${HOSTILE}/light.css";</style>`,
+                    '<p>hello</p>',
+                ].join('\n'),
+            ),
+        );
+
+        expect(payload.html).not.toContain(HOSTILE);
+        // The CSS is all that is refused: the message still reads.
+        expect(payload.html).toContain('hello');
+    });
+
     // A data: reference is kept for the inline images a message really carries; an SVG or an HTML one is a
     // document tree of its own, and only the browser's SVG-as-image rules would stand between it and a fetch.
     test('only a raster data: image survives, in an attribute and in CSS', () => {
