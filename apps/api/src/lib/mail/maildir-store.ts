@@ -13,7 +13,7 @@ import type { BunFile, FileSink } from 'bun';
 import { Semaphore } from '../../utils/semaphore';
 import { ApiError, isSafePathSegment, LocalFilesystem, PATHS } from '../core';
 import type { Home } from '../home';
-import { parseEml, parseEmlBytes } from './mail-parse';
+import { parseEml, parseEmlBytes, parseEmlForReader } from './mail-parse';
 import type { DraftMeta, MailFlag, MailSearchOptions, MailStore, MailStoreEvents } from './mail-store';
 import MailDB from './maildb';
 import {
@@ -209,7 +209,11 @@ export class MaildirStore implements MailStore {
         const cached = this.db.getEmail(messageId);
         if (!cached) return null;
 
-        const parsed = await this.readAndParse(messageId, cached.mailbox, cached.filename);
+        const parsed = await parseEmlForReader(
+            messageId,
+            cached.mailbox,
+            this.getMessageFile(cached.mailbox, cached.filename),
+        );
         applyFlagsFromFilename(parsed, cached.filename);
         return { ...parsed, ...cached };
     }
@@ -223,7 +227,7 @@ export class MaildirStore implements MailStore {
     async getAttachments(messageId: string): Promise<Attachment[]> {
         const email = this.db.getEmail(messageId);
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
-        const parsed = await this.readAndParse(messageId, email.mailbox, email.filename);
+        const parsed = await parseEml(messageId, email.mailbox, this.getMessageFile(email.mailbox, email.filename));
         return parsed.attachments;
     }
 
@@ -750,11 +754,6 @@ export class MaildirStore implements MailStore {
     }
 
     // -- Private helpers --
-
-    // A parse/read fault propagates from parseEml — callers must not treat it as "not found".
-    private async readAndParse(messageId: string, mailbox: string, filename: string): Promise<Email> {
-        return parseEml(messageId, mailbox, this.getMessageFile(mailbox, filename));
-    }
 
     private getMailboxInfo(mailboxName: string): MaildirMailbox {
         return {
