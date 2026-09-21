@@ -70,9 +70,11 @@ export function localToUtc(
         resolved = corrected;
     }
 
-    // RFC 5545: an ambiguous fall-back time resolves to the first (pre-transition) occurrence
-    const earlier = resolved - 3600_000;
-    return new Date(earlier + offsetAt(earlier) === targetMs ? earlier : resolved);
+    // RFC 5545: an ambiguous fall-back time resolves to the first (pre-transition) occurrence. The step back
+    // is the day's own shift, not an hour: Lord Howe moves 30 minutes and Troll two.
+    const shift = offsetAt(resolved - 86400_000) - offsetAt(resolved + 86400_000);
+    const earlier = resolved - shift;
+    return new Date(shift > 0 && earlier + offsetAt(earlier) === targetMs ? earlier : resolved);
 }
 
 // Convert a real UTC instant to the Date whose UTC fields hold its wall-clock time in tz — the space
