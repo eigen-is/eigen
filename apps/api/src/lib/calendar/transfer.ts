@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import ICAL from 'ical.js';
 import {
     ApiError,
@@ -195,34 +195,26 @@ export async function importEvents(
 // ---- Export ----
 
 // The resource uris of `ids` — an exclusion or an override names the series it belongs to — or every
-// resource of the calendar. Ordered by the earliest start each file holds, so a reader meets the events
-// in the order a calendar draws them.
+// resource of the calendar. Ordered by the earliest start among the rows asked for, so a reader meets the
+// events in the order a calendar draws them.
 function exportedUris(calendar: Calendar, calendarId: string, ids?: string[]): string[] {
     const rows = calendar.db
         .select({ id: schema.events.id, uri: schema.resources.uri, startTime: schema.events.startTime })
         .from(schema.events)
         .innerJoin(schema.resources, eq(schema.events.resourceId, schema.resources.id))
-        .where(eq(schema.events.calendarId, calendarId))
+        .where(and(eq(schema.events.calendarId, calendarId), ids ? inArray(schema.events.id, ids) : undefined))
         .all();
 
     const starts = new Map<string, number>();
+    const found = new Set<string>();
     for (const row of rows) {
         const start = row.startTime.getTime();
         starts.set(row.uri, Math.min(starts.get(row.uri) ?? start, start));
+        found.add(row.id);
     }
+    if (ids?.some((id) => !found.has(id))) throw new ApiError(404, 'Event not found');
 
-    let uris = [...starts.keys()];
-    if (ids) {
-        const uriById = new Map(rows.map((row) => [row.id, row.uri]));
-        const wanted = new Set<string>();
-        for (const id of ids) {
-            const uri = uriById.get(id);
-            if (!uri) throw new ApiError(404, 'Event not found');
-            wanted.add(uri);
-        }
-        uris = uris.filter((uri) => wanted.has(uri));
-    }
-    return uris.sort((a, b) => (starts.get(a) ?? 0) - (starts.get(b) ?? 0));
+    return [...starts.keys()].sort((a, b) => (starts.get(a) ?? 0) - (starts.get(b) ?? 0));
 }
 
 // One VCALENDAR, never a concatenation of objects: many readers take only the first object of a stream.
