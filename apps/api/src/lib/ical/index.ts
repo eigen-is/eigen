@@ -4,6 +4,7 @@ export {
     eventsToIcs,
     patchEvent,
     putOverride,
+    remintEventIds,
     removeExclusion,
     restampResource,
     serializeEventForImip,

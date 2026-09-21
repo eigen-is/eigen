@@ -12,13 +12,12 @@ export function davPutResponse(
 ): Response {
     const href = (name: string) => `${collectionHref}${encodePathSegment(name)}`;
     if (result.ok) {
+        // A body the server rewrote before storing it has no validator to carry: the client must re-read.
+        const validator: Record<string, string> = result.etag ? { ETag: `"${result.etag}"` } : {};
         if (result.created) {
-            return new Response(null, {
-                status: 201,
-                headers: { ETag: `"${result.etag}"`, Location: href(uri) },
-            });
+            return new Response(null, { status: 201, headers: { ...validator, Location: href(uri) } });
         }
-        return new Response(null, { status: 204, headers: { ETag: `"${result.etag}"` } });
+        return new Response(null, { status: 204, headers: validator });
     }
     if (result.error === 'precondition') return new Response('Precondition Failed', { status: 412 });
     // 409, not 403: the user can retire the other resource and resubmit (RFC 4918 § 16).

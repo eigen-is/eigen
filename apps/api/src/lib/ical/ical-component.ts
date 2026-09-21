@@ -675,6 +675,16 @@ export function removeExclusion(resource: ICAL.Component, recurrenceKey: string,
     if (removed) touch(vevent, ctx, true);
 }
 
+// A file whose row ids another resource already holds is a copy of it: every other Eigen line stays, and
+// the ids — the master's, the overrides', and the ones the exclusion stamps carry — are minted fresh.
+export function remintEventIds(resource: ICAL.Component): void {
+    for (const vevent of resource.getAllSubcomponents('vevent')) {
+        vevent.removeAllProperties(EIGEN.eventId);
+        vevent.addProperty(rawProperty(EIGEN.eventId, randomUUID()));
+        for (const stamp of vevent.getAllProperties(EIGEN.exdate)) stamp.setParameter(EIGEN.eventId, randomUUID());
+    }
+}
+
 // Every `X-EIGEN-*` property and parameter, at every level. Export, iMIP and the relay all run through
 // this, and so does an incoming body before it is re-stamped.
 export function stripEigenStamps(comp: ICAL.Component): void {

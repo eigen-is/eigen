@@ -26,8 +26,9 @@ export function computeResourceEtag(bytes: Uint8Array): string {
 }
 
 // A client-caused failure is a value here, not a throw: only genuine IO errors bubble past this seam.
+// A null etag is a write the server did not store verbatim: it has no validator to hand back (RFC 4791 § 5.3.4).
 export type PutResourceResult =
-    | { ok: true; etag: string; created: boolean }
+    | { ok: true; etag: string | null; created: boolean }
     | {
           ok: false;
           error: 'precondition' | 'uid-conflict' | 'invalid' | 'too-large' | 'quota';

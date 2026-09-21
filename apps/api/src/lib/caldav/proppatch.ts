@@ -1,9 +1,10 @@
 import { XMLParser } from 'fast-xml-parser';
 import type { Calendar } from '../calendar/calendar';
+import { sanitizeCalendarId } from '../calendar/resource-store';
 import { ApiError } from '../core';
 import { multistatusResponse, propstatOk, response } from '../dav/xml';
 import { isXmlNode, type XmlNode } from '../dav/xml-node';
-import { calendarHref, sanitizeCalendarId } from './discovery';
+import { calendarHref } from './discovery';
 
 // removeNSPrefix strips the D:/C:/ICAL: prefixes, so property lookups below stay unprefixed — no fallback needed.
 const parser = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true });
@@ -36,8 +37,6 @@ export async function handleMkcalendar(
 ): Promise<Response> {
     const id = sanitizeCalendarId(calendarId);
     if (!id) return new Response('Bad Request', { status: 400 });
-    // MKCALENDAR on an existing collection is a precondition failure (RFC 5689 / WebDAV MKCOL semantics).
-    if (await calendar.getCalendarById(id)) return new Response('Method Not Allowed', { status: 405 });
 
     let props: { name?: string; color?: string } = {};
     if (body?.trim()) {
@@ -51,7 +50,16 @@ export async function handleMkcalendar(
         }
     }
 
-    await calendar.createCalendar({ id, name: props.name ?? id, color: props.color ?? '#4285f4' });
+    try {
+        await calendar.createCalendar({ id, name: props.name ?? id, color: props.color ?? '#4285f4' });
+    } catch (error) {
+        // MKCALENDAR over a collection that exists — under this name or a case variant of it, since one
+        // directory is one calendar — is a precondition failure (RFC 5689 / WebDAV MKCOL semantics).
+        if (error instanceof ApiError && error.status === 409) {
+            return new Response('Method Not Allowed', { status: 405 });
+        }
+        throw error;
+    }
     return new Response(null, { status: 201, headers: { Location: calendarHref(ownerId, id) } });
 }
 

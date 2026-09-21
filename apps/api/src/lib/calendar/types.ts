@@ -1,8 +1,5 @@
 import type { Attendee, CalendarEvent, EventData } from '@workspace/lib/types/calendar';
 
-// Internal type extending the shared CalendarEvent with CalDAV-only storage fields
-export type CalendarEventRow = CalendarEvent & { eventCtag: number | null };
-
 export type ReceiveInvitationPayload = {
     uid: string;
     title: string;
