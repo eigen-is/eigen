@@ -370,8 +370,9 @@ stored exception — exception rows are internal and never appear as their own r
   attendee (RFC 5546)
 - An end instant the stored zone's wall clock cannot name — the second pass through a repeated hour —
   is written as a UTC `DTEND` beside the TZID `DTSTART` (RFC 5545 allows it), so the duration survives
-- A timezone edit brings the VTIMEZONE the new TZID needs and drops one nothing references any more; a
-  definition a property still names is the client's own and is never rewritten
+- Every edit that can name a zone — a timezone patch, an override, an `EXDATE` — brings the VTIMEZONE
+  the new TZID needs, ahead of the VEVENTs that reference it, and drops one nothing references any
+  more; a definition a property still names is the client's own and is never rewritten
 
 **Parsing** (`ical-parse.ts`):
 
@@ -380,7 +381,10 @@ stored exception — exception rows are internal and never appear as their own r
   builder computes its wall times with, and the zone the stored `timezone` column expands the series in
   — so identical bytes name one instant and a repeated hour resolves to its first pass (RFC 5545). A
   UTC `Z` value is exact; only a TZID Intl rejects resolves through the file's own VTIMEZONE; and a
-  genuinely floating datetime maps its wall components via `Date.UTC`, never through the server's zone
+  genuinely floating datetime maps its wall components via `Date.UTC`, never through the server's zone.
+  An ambiguous wall time reads as its first occurrence (RFC 5545 §3.3.5), so a START in the second pass
+  through the repeated hour reads back an hour early, where an END there stays exact through the UTC
+  `DTEND` the builder writes
 - RECURRENCE-ID / EXDATE → `recurrenceDate` keys are wall-clock dates: TZID-form values key on their
   own wall components (RFC 5545 canonical), UTC-`Z` values convert the instant to the SERIES timezone,
   floating/DATE values keep their raw components

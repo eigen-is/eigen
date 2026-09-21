@@ -321,9 +321,13 @@ function syncVTimezones(resource: ICAL.Component): void {
     if (!years.length) return;
 
     const { minYear, maxYear } = timezoneHorizon(years, hasRrule);
-    for (const tzid of referenced) {
-        if (normalizeTimezone(tzid)) resource.addSubcomponent(vtimezoneComponent(tzid, minYear, maxYear));
-    }
+    const added = [...referenced].filter((tzid) => normalizeTimezone(tzid));
+    if (!added.length) return;
+
+    // A client reads the file top to bottom, so a TZID it meets before its definition is a floating
+    // wall time to it: the new blocks go in front, and re-adding the VEVENTs moves them back behind.
+    for (const tzid of added) resource.addSubcomponent(vtimezoneComponent(tzid, minYear, maxYear));
+    for (const vevent of vevents) resource.addSubcomponent(vevent);
 }
 
 type BuildOptions = { master?: CalendarEvent; exclusions?: CalendarEvent[] };
@@ -614,6 +618,7 @@ export function putOverride(resource: ICAL.Component, master: CalendarEvent, ove
     const existing = findVEvent(resource, key);
     if (existing) resource.removeSubcomponent(existing);
     resource.addSubcomponent(buildVEvent(override, { master }));
+    syncVTimezones(resource);
 }
 
 // Cancel one occurrence: an EXDATE on the master plus the stamp carrying the exclusion row's id and the
@@ -642,6 +647,7 @@ export function addExclusion(
         if (storedRecurrenceKey(String(stamp.getFirstValue() ?? '')) === key) vevent.removeProperty(stamp);
     }
     vevent.addProperty(exclusionStamp(key, exclusion.id, exclusion.sequence));
+    syncVTimezones(resource);
     touch(vevent, ctx, true);
 }
 

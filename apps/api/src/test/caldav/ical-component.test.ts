@@ -521,7 +521,7 @@ describe('stamp trust', () => {
         expect(ids).toContain('evt-override');
     });
 
-    test('a body carrying twenty thousand EXDATEs re-stamps in well under a second', () => {
+    test('a body carrying twenty thousand EXDATEs re-stamps in under a second and a half', () => {
         const exdates: string[] = [];
         for (let day = 0; day < 20_000; day++) {
             const when = new Date(Date.UTC(2026, 3, 29) + day * 86400_000);
@@ -843,6 +843,37 @@ describe('timezone fidelity', () => {
             .getAllSubcomponents('vtimezone')
             .find((v) => String(v.getFirstPropertyValue('tzid')) === 'Europe/Amsterdam')!;
         expect(kept.toJSON()).toEqual(before);
+    });
+
+    // A client reads the file top to bottom: a TZID it has not met yet is a floating wall time to it.
+    test('a VTIMEZONE a patch brings precedes every VEVENT', () => {
+        const resource = parseResource(KITCHEN_SINK);
+        patchEvent(resource, '2026-04-22', { timezone: 'America/New_York' }, CTX);
+
+        const text = serializeResource(resource);
+        expect(text.lastIndexOf('BEGIN:VTIMEZONE')).toBeLessThan(text.indexOf('BEGIN:VEVENT'));
+    });
+
+    test('an override in a zone the file does not define brings its VTIMEZONE', () => {
+        const resource = parseResource(vcal(VTZ_AMS, clientSeries()));
+        const before = resource.getAllSubcomponents('vtimezone')[0].toJSON();
+
+        putOverride(resource, MASTER, { ...OVERRIDE, timezone: 'America/New_York' });
+
+        expect(tzidsOf(resource).sort()).toEqual(['America/New_York', 'Europe/Amsterdam']);
+        const kept = resource
+            .getAllSubcomponents('vtimezone')
+            .find((v) => String(v.getFirstPropertyValue('tzid')) === 'Europe/Amsterdam')!;
+        expect(kept.toJSON()).toEqual(before);
+    });
+
+    test('an EXDATE in a zone the file does not define brings its VTIMEZONE', () => {
+        const resource = parseResource(vcal(VTZ_AMS, clientSeries()));
+        const master = { ...MASTER, timezone: 'America/New_York' };
+
+        addExclusion(resource, master, { ...EXCLUSION, recurrenceDate: '2026-04-22' }, CTX);
+
+        expect(tzidsOf(resource).sort()).toEqual(['America/New_York', 'Europe/Amsterdam']);
     });
 });
 
