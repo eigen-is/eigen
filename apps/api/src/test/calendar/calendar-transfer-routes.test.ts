@@ -416,7 +416,7 @@ describe('Calendar transfer routes', () => {
         });
 
         const home = await getHome(alice.id);
-        const rows = home.calendar.getRawEvents(calendarId).filter((e) => e.uid === uid && e.recurrenceDate);
+        const rows = (await home.calendar.getRawEvents(calendarId)).filter((e) => e.uid === uid && e.recurrenceDate);
         expect(rows.length).toBe(1);
         expect(rows[0]?.title).toBe('Last write');
 
@@ -484,7 +484,7 @@ describe('Calendar transfer routes', () => {
         });
 
         const home = await getHome(alice.id);
-        const stored = home.calendar.getEventsByUid(uid);
+        const stored = await home.calendar.getEventsByUid(uid);
         expect(stored.length).toBe(2);
         for (const row of stored) expect(row.uri).toMatch(/^[0-9a-f-]{36}\.ics$/);
 
@@ -527,11 +527,11 @@ describe('Calendar transfer routes', () => {
         });
 
         const home = await getHome(alice.id);
-        expect(home.calendar.getEventsByUid(halfUid).length).toBe(0);
-        expect(home.calendar.getEventsByUid(wholeUid).length).toBe(1);
+        expect((await home.calendar.getEventsByUid(halfUid)).length).toBe(0);
+        expect((await home.calendar.getEventsByUid(wholeUid)).length).toBe(1);
     });
 
-    test('a crash mid-import leaves the calendar exactly as it was', async () => {
+    test('a storage failure during an import leaves the calendar exactly as it was', async () => {
         const stamp = randomUUID();
         const file = vcal(
             ...Array.from({ length: 4 }, (_, i) =>
@@ -540,14 +540,10 @@ describe('Calendar transfer routes', () => {
         );
 
         const home = await getHome(alice.id);
-        const ctagBefore = home.calendar.getCalendarById(calendarId)!.ctag;
-        const original = home.calendar.getEventsByUid.bind(home.calendar);
-        let calls = 0;
-        const spy = spyOn(home.calendar, 'getEventsByUid').mockImplementation((uid: string) => {
-            calls++;
-            if (calls === 3) throw new Error('storage went away');
-            return original(uid);
-        });
+        const ctagBefore = (await home.calendar.getCalendarById(calendarId))!.ctag;
+        // The import's own calendar read is the seam: every read the write loop makes is private now, so a
+        // failure inside the file's transaction is no longer injectable from outside the class.
+        const spy = spyOn(home.calendar, 'getCalendarById').mockRejectedValue(new Error('storage went away'));
 
         const sse = collectSSE(alice.id);
         const res = await importRequest(alice, calendarId, file);
@@ -555,8 +551,8 @@ describe('Calendar transfer routes', () => {
         spy.mockRestore();
 
         expect(res.status).toBe(500);
-        expect(home.calendar.getCalendarById(calendarId)!.ctag).toBe(ctagBefore);
-        expect(home.calendar.getRawEvents(calendarId).some((e) => e.uid.includes(stamp))).toBe(false);
+        expect((await home.calendar.getCalendarById(calendarId))!.ctag).toBe(ctagBefore);
+        expect((await home.calendar.getRawEvents(calendarId)).some((e) => e.uid.includes(stamp))).toBe(false);
         expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENT_CREATED).length).toBe(0);
     });
 
@@ -612,7 +608,7 @@ describe('Calendar transfer routes', () => {
 
         expect((await importRequest(alice, calendarId, file)).status).toBe(413);
         const home = await getHome(alice.id);
-        expect(home.calendar.getEventsByUid(uid).length).toBe(0);
+        expect((await home.calendar.getEventsByUid(uid)).length).toBe(0);
     });
 
     test('a thousand events are one calendar broadcast', async () => {

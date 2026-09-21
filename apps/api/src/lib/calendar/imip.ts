@@ -192,10 +192,10 @@ export function summarizeCalendarInvite(attachment: Attachment): CalendarInvite 
     }
 }
 
-export function processInboundImip(
+export async function processInboundImip(
     home: Home,
     mail: { attachments: Attachment[]; from?: AddressObject; authenticationResults?: string[] },
-): void {
+): Promise<void> {
     const calAttachment = extractCalendarAttachment(mail);
     if (!calAttachment) return;
 
@@ -225,7 +225,7 @@ export function processInboundImip(
         if (parsed.endTime < parsed.startTime) parsed.endTime = parsed.startTime;
 
         if (method === 'REQUEST') {
-            const existing = calendar.getEventsByUid(parsed.uid);
+            const existing = await calendar.getEventsByUid(parsed.uid);
             const linked = existing.find((e) => e.data?.organizer && e.data?.organizerEventId);
 
             const orgEventId = linked?.data?.organizerEventId;
@@ -237,7 +237,7 @@ export function processInboundImip(
                     // Single-occurrence move (Google/Outlook "this event" edit): attach an exception to
                     // the linked series. A full-event update here would null the master's rrule and move
                     // its start, collapsing the whole series (audit #A).
-                    calendar.receiveInvitationException(orgEventId, orgUserId, {
+                    await calendar.receiveInvitationException(orgEventId, orgUserId, {
                         recurrenceDate: parsed.recurrenceDate,
                         recurrenceInstant: parsed.recurrenceInstant,
                         title: parsed.title,
@@ -252,7 +252,7 @@ export function processInboundImip(
                         attendees: parsed.data?.attendees,
                     });
                 } else {
-                    calendar.receiveInvitationUpdate(orgEventId, orgUserId, {
+                    await calendar.receiveInvitationUpdate(orgEventId, orgUserId, {
                         title: parsed.title,
                         description: parsed.description,
                         location: parsed.location,
@@ -296,7 +296,7 @@ export function processInboundImip(
                     organizerEventId: parsed.uid,
                     organizerUserId: externalOwnerId(organizerEmail),
                 };
-                calendar.receiveInvitation(payload);
+                await calendar.receiveInvitation(payload);
             }
         } else if (method === 'CANCEL') {
             // CANCEL is an organizer action too — same sender binding as REQUEST.
@@ -305,7 +305,7 @@ export function processInboundImip(
             if (parsed.recurrenceDate) {
                 // Canceling one occurrence must cancel that instance only — removeInvitation would
                 // delete the attendee's entire linked series (audit #B).
-                calendar.cancelInvitationOccurrence(
+                await calendar.cancelInvitationOccurrence(
                     parsed.uid,
                     externalOwnerId(organizerEmail),
                     parsed.recurrenceDate,
@@ -313,14 +313,14 @@ export function processInboundImip(
                     parsed.sequence,
                 );
             } else {
-                calendar.removeInvitation(parsed.uid, externalOwnerId(organizerEmail));
+                await calendar.removeInvitation(parsed.uid, externalOwnerId(organizerEmail));
             }
         } else if (method === 'REPLY') {
             // Find the organizer's own MASTER (not a linked copy) by UID. Exceptions share the uid, so a
             // REPLY must never bind to an exception row directly.
-            const ownerEvent = calendar
-                .getEventsByUid(parsed.uid)
-                .find((e) => !isInvitationFromOthers(e, home.user.email) && !e.parentEventId);
+            const ownerEvent = (await calendar.getEventsByUid(parsed.uid)).find(
+                (e) => !isInvitationFromOthers(e, home.user.email) && !e.parentEventId,
+            );
             if (ownerEvent && parsed.data?.attendees) {
                 for (const attendee of parsed.data.attendees) {
                     // A REPLY may only set the PARTSTAT of the attendee who actually sent it.
@@ -331,7 +331,7 @@ export function processInboundImip(
                         // rsvpForOccurrence self-guards on membership (exception-aware: someone can be
                         // invited to a single occurrence only) and, with restoreCancelled=false, never
                         // resurrects an occurrence the organizer deleted.
-                        calendar.rsvpForOccurrence(
+                        await calendar.rsvpForOccurrence(
                             ownerEvent.id,
                             attendee.email,
                             attendee.status,
@@ -345,7 +345,7 @@ export function processInboundImip(
                             (a) => a.email.toLowerCase() === attendee.email.toLowerCase(),
                         );
                         if (!invited) continue;
-                        calendar.updateAttendeeStatus(ownerEvent.id, attendee.email, attendee.status);
+                        await calendar.updateAttendeeStatus(ownerEvent.id, attendee.email, attendee.status);
                     }
                 }
             }

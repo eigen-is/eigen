@@ -738,7 +738,9 @@ describe('Calendar Timezone', () => {
 
             // The exceptions are stored under the wall-clock date, not the UTC date of the instant.
             const home = await getHome(ctx.alice.user.id);
-            const stored = home.calendar.getRawEvents(aliceCalendarId).filter((e) => e.uid === UID && e.parentEventId);
+            const stored = (await home.calendar.getRawEvents(aliceCalendarId)).filter(
+                (e) => e.uid === UID && e.parentEventId,
+            );
             const modified = findOrFail(stored, (e) => e.title === 'Moved occurrence');
             const cancelledDates = stored.filter((e) => e.status === 'cancelled').map((e) => e.recurrenceDate);
             expect(modified.recurrenceDate).toBe('2026-01-15'); // pre-fix: '2026-01-16' (UTC date)
@@ -800,7 +802,7 @@ describe('Calendar Timezone', () => {
 
             const home = await getHome(ctx.alice.user.id);
             const exc = findOrFail(
-                home.calendar.getRawEvents(aliceCalendarId).filter((e) => e.uid === UID && e.parentEventId),
+                (await home.calendar.getRawEvents(aliceCalendarId)).filter((e) => e.uid === UID && e.parentEventId),
                 (e) => e.title === 'DST Moved',
             );
             expect(exc.recurrenceDate).toBe('2026-11-02'); // pre-fix: '2026-11-03' (UTC date, offset had shifted)
@@ -861,7 +863,9 @@ describe('Calendar Timezone', () => {
             expect(put2.status).toBe(204);
 
             const home = await getHome(ctx.alice.user.id);
-            const stored = home.calendar.getRawEvents(aliceCalendarId).filter((e) => e.uid === UID && e.parentEventId);
+            const stored = (await home.calendar.getRawEvents(aliceCalendarId)).filter(
+                (e) => e.uid === UID && e.parentEventId,
+            );
             const moved = findOrFail(stored, (e) => e.title === 'Moved via Z-form');
             // Keyed on the SERIES (master TZID) wall-clock date, not the UTC date of the Z-form instant.
             expect(moved.recurrenceDate).toBe('2026-01-22'); // pre-fix: '2026-01-23' (UTC date)
@@ -921,7 +925,9 @@ describe('Calendar Timezone', () => {
             // What the FE sends on the next RSVP for this same occurrence:
             await rsvp(rendered[0].occurrenceDate);
             const home = await getHome(ctx.bob.user.id);
-            const exceptions = home.calendar.getRawEvents(bobCalendarId).filter((e) => e.parentEventId === linked.id);
+            const exceptions = (await home.calendar.getRawEvents(bobCalendarId)).filter(
+                (e) => e.parentEventId === linked.id,
+            );
             expect(exceptions).toHaveLength(1); // pre-fix: 2 rows for one occurrence
         });
     });

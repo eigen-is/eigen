@@ -957,7 +957,7 @@ describe('Calendar timezone read-side degrade (audit P1-7b)', () => {
         );
         expect(res.status).toBe(200);
         const home = await getHome(ctx.charlie.user.id);
-        expect(home.calendar.getRawEvents(calendarId).some((e) => e.uid === uid)).toBe(false);
+        expect((await home.calendar.getRawEvents(calendarId)).some((e) => e.uid === uid)).toBe(false);
     });
 });
 
@@ -1330,9 +1330,9 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
                 'END:VEVENT',
             ].join('\r\n'),
         );
-        processInboundImip(home, icsMail(fullRequest, 'REQUEST'));
+        await processInboundImip(home, icsMail(fullRequest, 'REQUEST'));
 
-        const before = home.calendar.getEventsByUid(UID);
+        const before = await home.calendar.getEventsByUid(UID);
         expect(before).toHaveLength(1);
         expect(before[0].rrule).toContain('WEEKLY');
 
@@ -1352,9 +1352,9 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
                 'END:VEVENT',
             ].join('\r\n'),
         );
-        processInboundImip(home, icsMail(exceptionOnly, 'REQUEST'));
+        await processInboundImip(home, icsMail(exceptionOnly, 'REQUEST'));
 
-        const after = home.calendar.getEventsByUid(UID);
+        const after = await home.calendar.getEventsByUid(UID);
         const master = after.find((e) => !e.parentEventId);
         expect(master).toBeDefined();
         expect(master!.rrule).toContain('WEEKLY'); // pre-fix: null — series collapsed
@@ -1386,8 +1386,8 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
                 'END:VEVENT',
             ].join('\r\n'),
         );
-        processInboundImip(home, icsMail(fullRequest, 'REQUEST'));
-        expect(home.calendar.getEventsByUid(UID)).toHaveLength(1);
+        await processInboundImip(home, icsMail(fullRequest, 'REQUEST'));
+        expect(await home.calendar.getEventsByUid(UID)).toHaveLength(1);
 
         const cancelOne = withMethod(
             'CANCEL',
@@ -1405,9 +1405,9 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
                 'END:VEVENT',
             ].join('\r\n'),
         );
-        processInboundImip(home, icsMail(cancelOne, 'CANCEL'));
+        await processInboundImip(home, icsMail(cancelOne, 'CANCEL'));
 
-        const after = home.calendar.getEventsByUid(UID);
+        const after = await home.calendar.getEventsByUid(UID);
         const master = after.find((e) => !e.parentEventId && e.rrule);
         expect(master).toBeDefined(); // pre-fix: whole series deleted
         expect(master!.rrule).toContain('WEEKLY');
@@ -1443,8 +1443,8 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
                 'END:VEVENT',
             ].join('\r\n'),
         );
-        processInboundImip(home, icsMail(fullRequest, 'REQUEST'));
-        expect(home.calendar.getEventsByUid(UID)).toHaveLength(1);
+        await processInboundImip(home, icsMail(fullRequest, 'REQUEST'));
+        expect(await home.calendar.getEventsByUid(UID)).toHaveLength(1);
 
         // Apr 8 21:00 NY = Apr 9 01:00Z. No VTIMEZONE, no TZID: only the linked tz supplies the wall date.
         const exceptionOnly = [
@@ -1465,9 +1465,9 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'END:VEVENT',
             'END:VCALENDAR',
         ].join('\r\n');
-        processInboundImip(home, icsMail(exceptionOnly, 'REQUEST'));
+        await processInboundImip(home, icsMail(exceptionOnly, 'REQUEST'));
 
-        const after = home.calendar.getEventsByUid(UID);
+        const after = await home.calendar.getEventsByUid(UID);
         expect(after.find((e) => !e.parentEventId)!.rrule).toContain('WEEKLY');
         const exception = after.find((e) => e.parentEventId);
         expect(exception).toBeDefined();
@@ -1497,7 +1497,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
                 'END:VEVENT',
             ].join('\r\n'),
         );
-        processInboundImip(home, icsMail(fullRequest, 'REQUEST'));
+        await processInboundImip(home, icsMail(fullRequest, 'REQUEST'));
 
         const excReq = (summary: string, start: string, end: string, seq: number) =>
             withMethod(
@@ -1518,16 +1518,19 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             );
 
         // Newer move (SEQUENCE 5): the occurrence is rescheduled to 15:00 (19:00Z).
-        processInboundImip(home, icsMail(excReq('Moved to 3pm', '20260408T150000', '20260408T160000', 5), 'REQUEST'));
+        await processInboundImip(
+            home,
+            icsMail(excReq('Moved to 3pm', '20260408T150000', '20260408T160000', 5), 'REQUEST'),
+        );
         // Stale replay (SEQUENCE 3) carrying a different time must be ignored.
-        processInboundImip(
+        await processInboundImip(
             home,
             icsMail(excReq('Stale move to 9am', '20260408T090000', '20260408T100000', 3), 'REQUEST'),
         );
 
-        const exception = home.calendar
-            .getEventsByUid(UID)
-            .find((e) => e.parentEventId && e.recurrenceDate === '2026-04-08');
+        const exception = (await home.calendar.getEventsByUid(UID)).find(
+            (e) => e.parentEventId && e.recurrenceDate === '2026-04-08',
+        );
         expect(exception).toBeDefined();
         expect(exception!.title).toBe('Moved to 3pm'); // pre-fix: 'Stale move to 9am' (replay clobbered it)
         expect(exception!.sequence).toBe(5); // pre-fix: 3
@@ -1553,7 +1556,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'DTSTAMP:20260101T000000Z',
             'END:VEVENT',
         ].join('\r\n');
-        processInboundImip(home, icsMail(withMethod('REQUEST', master), 'REQUEST'));
+        await processInboundImip(home, icsMail(withMethod('REQUEST', master), 'REQUEST'));
 
         const cancelOne = withMethod(
             'CANCEL',
@@ -1571,7 +1574,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
                 'END:VEVENT',
             ].join('\r\n'),
         );
-        processInboundImip(home, icsMail(cancelOne, 'CANCEL'));
+        await processInboundImip(home, icsMail(cancelOne, 'CANCEL'));
 
         // The organizer re-instates the occurrence (moved to 11:00) with a newer SEQUENCE.
         const reinstate = [
@@ -1587,16 +1590,16 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'DTSTAMP:20260103T000000Z',
             'END:VEVENT',
         ].join('\r\n');
-        processInboundImip(home, icsMail(withMethod('REQUEST', reinstate), 'REQUEST'));
+        await processInboundImip(home, icsMail(withMethod('REQUEST', reinstate), 'REQUEST'));
 
-        const findException = () =>
-            home.calendar.getEventsByUid(UID).find((e) => e.parentEventId && e.recurrenceDate === '2026-04-08');
-        expect(findException()!.status).toBe('confirmed');
+        const findException = async () =>
+            (await home.calendar.getEventsByUid(UID)).find((e) => e.parentEventId && e.recurrenceDate === '2026-04-08');
+        expect((await findException())!.status).toBe('confirmed');
 
         // The original CANCEL (SEQUENCE 1) is redelivered: stale against the stored exception
         // (SEQUENCE 2), so it must be ignored.
-        processInboundImip(home, icsMail(cancelOne, 'CANCEL'));
-        expect(findException()!.status).toBe('confirmed'); // pre-fix: 'cancelled' — wrong state sticks
+        await processInboundImip(home, icsMail(cancelOne, 'CANCEL'));
+        expect((await findException())!.status).toBe('confirmed'); // pre-fix: 'cancelled' — wrong state sticks
     });
 
     // The guard is strictly `<`, unlike the REQUEST path's `<=`: clients may cancel an occurrence
@@ -1618,7 +1621,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'DTSTAMP:20260101T000000Z',
             'END:VEVENT',
         ].join('\r\n');
-        processInboundImip(home, icsMail(withMethod('REQUEST', master), 'REQUEST'));
+        await processInboundImip(home, icsMail(withMethod('REQUEST', master), 'REQUEST'));
 
         // Move the occurrence (SEQUENCE 1), then cancel it WITHOUT bumping (still SEQUENCE 1).
         const move = [
@@ -1634,7 +1637,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'DTSTAMP:20260102T000000Z',
             'END:VEVENT',
         ].join('\r\n');
-        processInboundImip(home, icsMail(withMethod('REQUEST', move), 'REQUEST'));
+        await processInboundImip(home, icsMail(withMethod('REQUEST', move), 'REQUEST'));
 
         const cancelSameSeq = [
             'BEGIN:VEVENT',
@@ -1649,11 +1652,11 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'DTSTAMP:20260103T000000Z',
             'END:VEVENT',
         ].join('\r\n');
-        processInboundImip(home, icsMail(withMethod('CANCEL', cancelSameSeq), 'CANCEL'));
+        await processInboundImip(home, icsMail(withMethod('CANCEL', cancelSameSeq), 'CANCEL'));
 
-        const exception = home.calendar
-            .getEventsByUid(UID)
-            .find((e) => e.parentEventId && e.recurrenceDate === '2026-04-08');
+        const exception = (await home.calendar.getEventsByUid(UID)).find(
+            (e) => e.parentEventId && e.recurrenceDate === '2026-04-08',
+        );
         expect(exception!.status).toBe('cancelled');
     });
 
@@ -1676,7 +1679,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'DTSTAMP:20260101T000000Z',
             'END:VEVENT',
         ].join('\r\n');
-        processInboundImip(home, icsMail(withMethod('REQUEST', master), 'REQUEST'));
+        await processInboundImip(home, icsMail(withMethod('REQUEST', master), 'REQUEST'));
 
         const cancelNewer = [
             'BEGIN:VEVENT',
@@ -1691,7 +1694,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'DTSTAMP:20260102T000000Z',
             'END:VEVENT',
         ].join('\r\n');
-        processInboundImip(home, icsMail(withMethod('CANCEL', cancelNewer), 'CANCEL'));
+        await processInboundImip(home, icsMail(withMethod('CANCEL', cancelNewer), 'CANCEL'));
 
         // A stale occurrence move (SEQUENCE 3) is redelivered after the newer CANCEL — ignore it.
         const staleMove = [
@@ -1707,11 +1710,11 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'DTSTAMP:20260103T000000Z',
             'END:VEVENT',
         ].join('\r\n');
-        processInboundImip(home, icsMail(withMethod('REQUEST', staleMove), 'REQUEST'));
+        await processInboundImip(home, icsMail(withMethod('REQUEST', staleMove), 'REQUEST'));
 
-        const exception = home.calendar
-            .getEventsByUid(UID)
-            .find((e) => e.parentEventId && e.recurrenceDate === '2026-04-08');
+        const exception = (await home.calendar.getEventsByUid(UID)).find(
+            (e) => e.parentEventId && e.recurrenceDate === '2026-04-08',
+        );
         expect(exception!.status).toBe('cancelled'); // pre-fix: 'confirmed' — stale REQUEST resurrected it
     });
 
@@ -1720,8 +1723,8 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
     test('a REPLY with a RECURRENCE-ID scopes the PARTSTAT to that occurrence', async () => {
         const ATT = 'occurrence.decliner@external.com';
         const home = await getHome(ctx.alice.user.id);
-        const calendarId = home.calendar.getCalendars().find((c) => c.isDefault)!.id;
-        const event = home.calendar.createEvent(calendarId, {
+        const calendarId = (await home.calendar.getCalendars()).find((c) => c.isDefault)!.id;
+        const event = await home.calendar.createEvent(calendarId, {
             title: 'Own Weekly',
             startTime: new Date('2026-04-01T14:00:00.000Z'), // 10:00 America/New_York
             endTime: new Date('2026-04-01T15:00:00.000Z'),
@@ -1743,9 +1746,9 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'DTSTAMP:20260102T000000Z',
             'END:VEVENT',
         ].join('\r\n');
-        processInboundImip(home, icsMail(withMethod('REPLY', reply), 'REPLY', ATT));
+        await processInboundImip(home, icsMail(withMethod('REPLY', reply), 'REPLY', ATT));
 
-        const rows = home.calendar.getEventsByUid(event.uid);
+        const rows = await home.calendar.getEventsByUid(event.uid);
         const master = rows.find((e) => !e.parentEventId);
         expect(master!.data?.attendees?.[0].status).toBe('pending'); // pre-fix: 'declined' — whole series
         const exception = rows.find((e) => e.parentEventId);
@@ -1759,8 +1762,8 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
     test('a REPLY to an organizer-deleted occurrence does not resurrect it', async () => {
         const ATT = 'occurrence.replier@external.com';
         const home = await getHome(ctx.alice.user.id);
-        const calendarId = home.calendar.getCalendars().find((c) => c.isDefault)!.id;
-        const event = home.calendar.createEvent(calendarId, {
+        const calendarId = (await home.calendar.getCalendars()).find((c) => c.isDefault)!.id;
+        const event = await home.calendar.createEvent(calendarId, {
             title: 'Own Weekly Deleted',
             startTime: new Date('2026-04-01T14:00:00.000Z'), // 10:00 America/New_York
             endTime: new Date('2026-04-01T15:00:00.000Z'),
@@ -1770,7 +1773,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             data: { attendees: [{ email: ATT, name: 'Occurrence Replier', status: 'pending', role: 'required' }] },
         });
         // The organizer deletes the Apr 8 occurrence (the FE stores a canceled exception).
-        home.calendar.createEvent(calendarId, {
+        await home.calendar.createEvent(calendarId, {
             title: 'Own Weekly Deleted',
             startTime: new Date('2026-04-08T14:00:00.000Z'),
             endTime: new Date('2026-04-08T15:00:00.000Z'),
@@ -1794,9 +1797,9 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'DTSTAMP:20260102T000000Z',
             'END:VEVENT',
         ].join('\r\n');
-        processInboundImip(home, icsMail(withMethod('REPLY', reply), 'REPLY', ATT));
+        await processInboundImip(home, icsMail(withMethod('REPLY', reply), 'REPLY', ATT));
 
-        const exception = home.calendar.getEventsByUid(event.uid).find((e) => e.parentEventId);
+        const exception = (await home.calendar.getEventsByUid(event.uid)).find((e) => e.parentEventId);
         expect(exception!.status).toBe('cancelled'); // pre-fix: 'confirmed' — deleted occurrence resurrected
         expect(exception!.data?.attendees?.[0].status).toBe('declined'); // PARTSTAT is still recorded
     });
@@ -1806,8 +1809,8 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
     test("an occurrence-only invitee's REPLY lands on that occurrence", async () => {
         const OCC = 'occurrence.only@external.com';
         const home = await getHome(ctx.alice.user.id);
-        const calendarId = home.calendar.getCalendars().find((c) => c.isDefault)!.id;
-        const event = home.calendar.createEvent(calendarId, {
+        const calendarId = (await home.calendar.getCalendars()).find((c) => c.isDefault)!.id;
+        const event = await home.calendar.createEvent(calendarId, {
             title: 'Own Weekly Guest',
             startTime: new Date('2026-04-01T14:00:00.000Z'), // 10:00 America/New_York
             endTime: new Date('2026-04-01T15:00:00.000Z'),
@@ -1817,7 +1820,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             data: { attendees: [{ email: 'regular@external.com', status: 'pending', role: 'required' }] },
         });
         // The organizer invites OCC to the Apr 8 instance only (exception with its own attendee list).
-        home.calendar.createEvent(calendarId, {
+        await home.calendar.createEvent(calendarId, {
             title: 'Own Weekly Guest',
             startTime: new Date('2026-04-08T14:00:00.000Z'),
             endTime: new Date('2026-04-08T15:00:00.000Z'),
@@ -1841,9 +1844,9 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'DTSTAMP:20260102T000000Z',
             'END:VEVENT',
         ].join('\r\n');
-        processInboundImip(home, icsMail(withMethod('REPLY', reply), 'REPLY', OCC));
+        await processInboundImip(home, icsMail(withMethod('REPLY', reply), 'REPLY', OCC));
 
-        const exception = home.calendar.getEventsByUid(event.uid).find((e) => e.parentEventId);
+        const exception = (await home.calendar.getEventsByUid(event.uid)).find((e) => e.parentEventId);
         expect(exception!.data?.attendees?.[0].status).toBe('accepted'); // pre-fix: 'pending' — REPLY dropped
         expect(exception!.status).toBe('confirmed');
     });
@@ -1852,8 +1855,8 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
     test('an uninvited occurrence REPLY does not materialise an exception row', async () => {
         const STRANGER = 'stranger@external.com';
         const home = await getHome(ctx.alice.user.id);
-        const calendarId = home.calendar.getCalendars().find((c) => c.isDefault)!.id;
-        const event = home.calendar.createEvent(calendarId, {
+        const calendarId = (await home.calendar.getCalendars()).find((c) => c.isDefault)!.id;
+        const event = await home.calendar.createEvent(calendarId, {
             title: 'Own Weekly Private',
             startTime: new Date('2026-04-01T14:00:00.000Z'), // 10:00 America/New_York
             endTime: new Date('2026-04-01T15:00:00.000Z'),
@@ -1875,9 +1878,9 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'DTSTAMP:20260102T000000Z',
             'END:VEVENT',
         ].join('\r\n');
-        processInboundImip(home, icsMail(withMethod('REPLY', reply), 'REPLY', STRANGER));
+        await processInboundImip(home, icsMail(withMethod('REPLY', reply), 'REPLY', STRANGER));
 
-        expect(home.calendar.getEventsByUid(event.uid).find((e) => e.parentEventId)).toBeUndefined();
+        expect((await home.calendar.getEventsByUid(event.uid)).find((e) => e.parentEventId)).toBeUndefined();
     });
 
     // Pins the UPDATE-path sequence stamp in removeOccurrence: a CANCEL of an already-moved occurrence
@@ -1899,7 +1902,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'DTSTAMP:20260101T000000Z',
             'END:VEVENT',
         ].join('\r\n');
-        processInboundImip(home, icsMail(withMethod('REQUEST', master), 'REQUEST'));
+        await processInboundImip(home, icsMail(withMethod('REQUEST', master), 'REQUEST'));
 
         const excVevent = (lines: string[], seq: number, dtstamp: string) =>
             [
@@ -1915,7 +1918,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             ].join('\r\n');
 
         // Move the occurrence (SEQUENCE 1) — creates the exception row.
-        processInboundImip(
+        await processInboundImip(
             home,
             icsMail(
                 withMethod(
@@ -1934,7 +1937,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             ),
         );
         // Cancel it with SEQUENCE 5 — must stamp 5 on the EXISTING exception.
-        processInboundImip(
+        await processInboundImip(
             home,
             icsMail(
                 withMethod(
@@ -1953,7 +1956,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             ),
         );
         // A stale move (SEQUENCE 3) is redelivered — must stay canceled.
-        processInboundImip(
+        await processInboundImip(
             home,
             icsMail(
                 withMethod(
@@ -1972,9 +1975,9 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             ),
         );
 
-        const exception = home.calendar
-            .getEventsByUid(UID)
-            .find((e) => e.parentEventId && e.recurrenceDate === '2026-04-08');
+        const exception = (await home.calendar.getEventsByUid(UID)).find(
+            (e) => e.parentEventId && e.recurrenceDate === '2026-04-08',
+        );
         expect(exception!.status).toBe('cancelled');
         expect(exception!.sequence).toBe(5);
     });

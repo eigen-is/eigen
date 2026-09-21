@@ -741,7 +741,7 @@ async function main(): Promise<void> {
     }
 
     // --- Calendar: team events (createByUserId, no invite fan-out — the team calendar is shared). ---
-    const defaultCalendar = teamHome.calendar.getCalendars().find((c) => c.isDefault);
+    const defaultCalendar = (await teamHome.calendar.getCalendars()).find((c) => c.isDefault);
     if (!defaultCalendar) throw new Error('Team default calendar missing');
     const now = new Date();
     // Anchor the festival on a weekend: the first Saturday at least ~3 weeks out (so it lands 20-26
@@ -781,7 +781,7 @@ async function main(): Promise<void> {
             attendees,
             organizer: { userId: organizer.id, email: organizer.email, name: organizer.name },
         };
-        teamHome.calendar.createEvent(defaultCalendar.id, {
+        await teamHome.calendar.createEvent(defaultCalendar.id, {
             title: event.title,
             startTime: start,
             endTime: end,

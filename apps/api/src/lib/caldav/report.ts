@@ -11,13 +11,13 @@ import { calendarDataProp, formatSyncToken, parseSyncToken } from './xml-builder
 import { parseReport, type ReportRequest } from './xml-parser';
 
 // REPORT on /dav/calendars/:ownerId/:calendarId/
-export function handleReport(
+export async function handleReport(
     calendar: Calendar,
     calendarId: string,
     calendarItem: CalendarItem,
     ownerId: string,
     body: string,
-): Response {
+): Promise<Response> {
     let report: ReportRequest;
     try {
         report = parseReport(body);
@@ -36,41 +36,41 @@ export function handleReport(
     }
 }
 
-function handleCalendarQuery(
+async function handleCalendarQuery(
     calendar: Calendar,
     calendarId: string,
     ownerId: string,
     report: Extract<ReportRequest, { type: 'calendar-query' }>,
-): Response {
+): Promise<Response> {
     // Only the time-range filter is applied; other prop-filters are intentionally ignored. A CalDAV client
     // re-filters the returned set, so a superset response is safe (RFC 4791 calendar-query).
     let events: CalendarEventRow[];
     if (report.timeRange) {
-        events = calendar.getRawEventsInRange(calendarId, report.timeRange.start, report.timeRange.end);
+        events = await calendar.getRawEventsInRange(calendarId, report.timeRange.start, report.timeRange.end);
     } else {
-        events = calendar.getRawEvents(calendarId);
+        events = await calendar.getRawEvents(calendarId);
     }
 
     return multistatusResponse(buildEventResponses(events, ownerId, calendarId, report.wantsData));
 }
 
-function handleCalendarMultiget(
+async function handleCalendarMultiget(
     calendar: Calendar,
     calendarId: string,
     ownerId: string,
     report: Extract<ReportRequest, { type: 'calendar-multiget' }>,
-): Response {
+): Promise<Response> {
     if (report.hrefs.length > MULTIGET_HREF_LIMIT) return new Response('Too many hrefs', { status: 400 });
 
     // Event uris are matched exactly: unlike cards they have no charset restriction and no folded key.
     const resolved = resolveMultigetHrefs(report.hrefs, calendarHref(ownerId, calendarId), (uri) => uri);
 
     const uris = resolved.map((r) => r.uri).filter((u): u is string => u !== null);
-    const events = calendar.getEventsByUris(calendarId, uris);
+    const events = await calendar.getEventsByUris(calendarId, uris);
 
     // uid→all-events map for grouping exceptions with their master — only the UIDs the client asked for.
     const requestedUids = [...new Set(events.map((e) => e.uid))];
-    const relatedEvents = calendar.getRawEventsByUids(calendarId, requestedUids);
+    const relatedEvents = await calendar.getRawEventsByUids(calendarId, requestedUids);
     const eventsByUid = new Map<string, CalendarEventRow[]>();
     for (const e of relatedEvents) {
         const group = eventsByUid.get(e.uid) ?? [];
@@ -102,19 +102,19 @@ function handleCalendarMultiget(
     return multistatusResponse(responses);
 }
 
-function handleSyncCollection(
+async function handleSyncCollection(
     calendar: Calendar,
     calendarId: string,
     calendarItem: CalendarItem,
     ownerId: string,
     report: Extract<ReportRequest, { type: 'sync-collection' }>,
-): Response {
+): Promise<Response> {
     const currentCtag = calendarItem.ctag;
     const responses: string[] = [];
 
     if (!report.syncToken) {
         // Initial sync — return all events
-        const events = calendar.getRawEvents(calendarId);
+        const events = await calendar.getRawEvents(calendarId);
         responses.push(...buildEventResponses(events, ownerId, calendarId, report.wantsData));
     } else {
         // Incremental sync — read the since-ctag from the token.
@@ -125,7 +125,7 @@ function handleSyncCollection(
         if (token.since > currentCtag) return invalidSyncToken();
 
         // Changed events
-        const changed = calendar.getChangedEventsSince(calendarId, token.since);
+        const changed = await calendar.getChangedEventsSince(calendarId, token.since);
         for (const event of changed) {
             if (event.parentEventId) continue;
             responses.push(
@@ -136,7 +136,7 @@ function handleSyncCollection(
         }
 
         // Deleted events
-        const deleted = calendar.getDeletedEventsSince(calendarId, token.since);
+        const deleted = await calendar.getDeletedEventsSince(calendarId, token.since);
         for (const d of deleted) {
             responses.push(removedRow(eventHref(ownerId, calendarId, d.uri)));
         }

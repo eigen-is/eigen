@@ -223,7 +223,7 @@ describe('Calendar Invites', () => {
         test('syncs once as a 200 with a non-null eventCtag and no 404 tombstone', async () => {
             const bobHome = await getHome(ctx.bob.user.id);
             const cal = bobHome.calendar;
-            const defaultCal = findOrFail(cal.getCalendars(), (c) => c.isDefault);
+            const defaultCal = findOrFail(await cal.getCalendars(), (c) => c.isDefault);
             const uid = `reinvite-${randomUUID()}`;
             const uri = `${uid}.ics`;
             const payload = {
@@ -247,16 +247,16 @@ describe('Calendar Invites', () => {
                 organizerUserId: ctx.alice.user.id,
             };
 
-            const firstId = cal.receiveInvitation(payload);
+            const firstId = await cal.receiveInvitation(payload);
             // The client's sync token, captured after the first receive and before the delete + re-receive.
-            const preCtag = cal.getCalendarById(defaultCal.id)!.ctag;
+            const preCtag = (await cal.getCalendarById(defaultCal.id))!.ctag;
 
-            cal.deleteEvent(defaultCal.id, firstId); // Bob deletes his linked copy → tombstones the uri
-            const secondId = cal.receiveInvitation(payload); // Alice re-sends the same invite
+            await cal.deleteEvent(defaultCal.id, firstId); // Bob deletes his linked copy → tombstones the uri
+            const secondId = await cal.receiveInvitation(payload); // Alice re-sends the same invite
             expect(secondId).not.toBe(firstId);
 
-            const changed = cal.getChangedEventsSince(defaultCal.id, preCtag).filter((e) => e.uri === uri);
-            const deleted = cal.getDeletedEventsSince(defaultCal.id, preCtag).filter((d) => d.uri === uri);
+            const changed = (await cal.getChangedEventsSince(defaultCal.id, preCtag)).filter((e) => e.uri === uri);
+            const deleted = (await cal.getDeletedEventsSince(defaultCal.id, preCtag)).filter((d) => d.uri === uri);
             expect(changed).toHaveLength(1);
             expect(changed[0].eventCtag).not.toBeNull();
             expect(deleted).toHaveLength(0);
@@ -265,7 +265,7 @@ describe('Calendar Invites', () => {
         test('a colliding (calendarId, uri) insert fails without a phantom ctag bump', async () => {
             const bobHome = await getHome(ctx.bob.user.id);
             const cal = bobHome.calendar;
-            const defaultCal = findOrFail(cal.getCalendars(), (c) => c.isDefault);
+            const defaultCal = findOrFail(await cal.getCalendars(), (c) => c.isDefault);
             const uid = `collide-${randomUUID()}`;
             const payload = {
                 uid,
@@ -287,20 +287,20 @@ describe('Calendar Invites', () => {
                 organizerEventId: `org-a-${uid}`,
                 organizerUserId: ctx.alice.user.id,
             };
-            cal.receiveInvitation(payload);
-            const preCtag = cal.getCalendarById(defaultCal.id)!.ctag;
+            await cal.receiveInvitation(payload);
+            const preCtag = (await cal.getCalendarById(defaultCal.id))!.ctag;
 
             // The same uid (→ same uri) under a different organizer key slips past the linked-event dedupe and
             // collides on the (calendarId, uri) unique index. The failure must not leave a phantom ctag bump —
             // every client would poll an empty delta for it.
-            expect(() =>
+            await expect(
                 cal.receiveInvitation({
                     ...payload,
                     organizerEventId: `org-b-${uid}`,
                     organizerUserId: ctx.charlie.user.id,
                 }),
-            ).toThrow();
-            expect(cal.getCalendarById(defaultCal.id)!.ctag).toBe(preCtag);
+            ).rejects.toThrow();
+            expect((await cal.getCalendarById(defaultCal.id))!.ctag).toBe(preCtag);
         });
     });
 
