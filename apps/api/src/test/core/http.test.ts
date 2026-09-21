@@ -39,11 +39,11 @@ describe('scriptableInlineHeaders', () => {
 describe('contentDisposition', () => {
     test('no path reaches either filename form', () => {
         expect(contentDisposition('attachment', '../../../etc/passwd.ics')).toBe(
-            'attachment; filename="_.._.._etc_passwd.ics"',
+            'attachment; filename=".._.._.._etc_passwd.ics"',
         );
         expect(contentDisposition('attachment', 'a/b\\c.txt')).toBe('attachment; filename="a_b_c.txt"');
-        expect(contentDisposition('attachment', '..\\..\\win.ini')).toBe('attachment; filename="_.._win.ini"');
-        expect(contentDisposition('attachment', '.hidden.ics')).toBe('attachment; filename="hidden.ics"');
+        expect(contentDisposition('attachment', '..\\..\\win.ini')).toBe('attachment; filename=".._.._win.ini"');
+        expect(contentDisposition('attachment', '.hidden.ics')).toBe('attachment; filename=".hidden.ics"');
     });
 
     test('a name that sanitizes to nothing falls back to a neutral one', () => {

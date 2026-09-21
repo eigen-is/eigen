@@ -137,15 +137,12 @@ export async function rangeResponse(
 }
 
 export function contentDisposition(type: 'attachment' | 'inline', fileName: string): string {
-    // Every caller builds this from user text — a SUMMARY, an FN, a stored name — and a client writes what
-    // it says to disk, so no separator, control character or leading dot survives into either form. A
-    // caller clamping by length also cuts between a surrogate pair, and a lone surrogate is a string no
-    // percent-encoder can spell.
+    // A client writes this name to disk: no separator or control character survives, and a clamped name may end in a lone surrogate.
     const name =
         fileName
             .toWellFormed()
             .replace(/[/\\]|\p{Cc}/gu, '_')
-            .replace(/^\.+/, '') || 'download';
+            .replace(/^\.+$/, '') || 'download';
     const ascii = name.replace(/[^\x20-\x7E]/g, '_');
     if (ascii === name) {
         return `${type}; filename="${ascii.replace(/"/g, '_')}"`;

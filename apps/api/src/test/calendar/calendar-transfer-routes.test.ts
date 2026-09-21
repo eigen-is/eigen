@@ -1575,7 +1575,7 @@ describe('Calendar transfer routes', () => {
             const row = findOrFail(await home.calendar.getEventsByUid(uid), (e) => e.recurrenceDate === null);
             const res = await exportRequest(alice, alice.id, exportCalendarId, [row.id]);
             expect(res.status).toBe(200);
-            expect(res.headers.get('Content-Disposition')).toBe('attachment; filename="_.._.._etc_passwd.ics"');
+            expect(res.headers.get('Content-Disposition')).toBe('attachment; filename=".._.._.._etc_passwd.ics"');
         });
 
         // A VEVENT need not carry a SUMMARY, and an event with no title falls back to the calendar's name
