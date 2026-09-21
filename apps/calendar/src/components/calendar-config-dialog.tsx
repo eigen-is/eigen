@@ -1,6 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuth } from '@workspace/lib/auth';
 import { useCreateCalendar, useDeleteCalendar, useUpdateCalendar } from '@workspace/lib/calendar';
+import { CALENDAR_NAME_MAX_LENGTH } from '@workspace/lib/constants/calendar';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import type { CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
 import { DeleteDialog } from '@workspace/ui';
@@ -24,7 +25,7 @@ import { z } from 'zod';
 import { CalendarShareEditor } from './calendar-share-editor';
 
 const calendarFormSchema = z.object({
-    name: z.string().min(1, 'Calendar name is required.'),
+    name: z.string().min(1, 'Calendar name is required.').max(CALENDAR_NAME_MAX_LENGTH, 'Calendar name is too long.'),
     color: z.string().min(1, 'Color is required.'),
 });
 

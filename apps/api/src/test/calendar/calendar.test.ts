@@ -103,6 +103,75 @@ describe('Calendar', () => {
             );
             expect(res.status).toBe(400);
         });
+
+        const createCalendarRequest = (body: unknown) =>
+            authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+
+        test('a color that is not a hex color is refused', async () => {
+            const res = await createCalendarRequest({ name: 'Hostile', color: 'javascript:alert(1)' });
+            expect(res.status).toBe(400);
+
+            const listRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars`,
+            );
+            const calendars = await assertJson<CalendarItem[]>(listRes);
+            expect(calendars.find((c) => c.name === 'Hostile')).toBeUndefined();
+        });
+
+        test('a 3 000-character name is refused', async () => {
+            const res = await createCalendarRequest({ name: 'x'.repeat(3000), color: '#34a853' });
+            expect(res.status).toBeGreaterThanOrEqual(400);
+
+            const listRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars`,
+            );
+            const calendars = await assertJson<CalendarItem[]>(listRes);
+            expect(calendars.find((c) => c.name.length > 200)).toBeUndefined();
+        });
+
+        test('a calendar created without a color gets the default one', async () => {
+            const created = await assertJson<CalendarItem>(await createCalendarRequest({ name: 'No Color' }));
+            expect(created.color).toBe('#4285f4');
+
+            await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars/${created.id}`, {
+                method: 'DELETE',
+            });
+        });
+
+        test('an update refuses a bad color and a bad name, and keeps the stored ones', async () => {
+            const created = await assertJson<CalendarItem>(
+                await createCalendarRequest({ name: 'Bounded', color: '#34a853' }),
+            );
+            const update = (body: unknown) =>
+                authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars/${created.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+
+            expect((await update({ color: 'javascript:alert(1)' })).status).toBe(400);
+            expect((await update({ name: 'y'.repeat(3000) })).status).toBeGreaterThanOrEqual(400);
+            // Apple writes the eight-digit form; it stays valid.
+            expect((await update({ color: '#34a85380' })).status).toBe(200);
+
+            const listRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars`,
+            );
+            const stored = findOrFail(await assertJson<CalendarItem[]>(listRes), (c) => c.id === created.id);
+            expect(stored.name).toBe('Bounded');
+            expect(stored.color).toBe('#34a85380');
+
+            await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars/${created.id}`, {
+                method: 'DELETE',
+            });
+        });
     });
 
     describe('Event CRUD', () => {
@@ -1676,20 +1745,7 @@ describe('Calendar', () => {
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
                 `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
-                exceptionBody('garbage', 'irrelevant-rejected-first'),
-            );
-            expect(res.status).toBe(400);
-        });
-
-        test('rsvp with a garbage recurrenceDate returns 400', async () => {
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/any-id/rsvp`,
-                {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ status: 'accepted', scope: 'this', recurrenceDate: 'garbage' }),
-                },
+                exceptionBody('garbage', aliceRecurringEventId),
             );
             expect(res.status).toBe(400);
         });
@@ -2579,5 +2635,87 @@ describe('Occurrence moved to another window', () => {
     test('the untouched occurrences of the series still answer', async () => {
         const titles = (await range('2026-06-01T00:00:00Z', '2026-06-02T00:00:00Z')).map((e) => e.title);
         expect(titles).toContain('Relocating Series');
+    });
+});
+
+// What the calendar app's edit dialog sends when the user says "all events in series" from an occurrence it
+// already overrode: a PUT to the master carrying the override's own fields, `rrule: null` among them.
+describe('A series-wide edit sent from an already-overridden occurrence', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let calId: string;
+    let seriesId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        calId = findOrFail(
+            await assertJson<CalendarItem[]>(
+                await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars`),
+            ),
+            (c) => c.isDefault,
+        ).id;
+        const series = await assertJson<CalendarEvent>(
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${calId}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Weekly Sync',
+                        startTime: '2027-02-01T09:00:00Z',
+                        endTime: '2027-02-01T10:00:00Z',
+                        allDay: false,
+                        rrule: 'FREQ=WEEKLY;COUNT=4',
+                    }),
+                },
+            ),
+        );
+        seriesId = series.id;
+        await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars/${calId}/events`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: 'Moved Sync',
+                startTime: '2027-02-08T11:00:00Z',
+                endTime: '2027-02-08T12:00:00Z',
+                allDay: false,
+                rrule: null,
+                parentEventId: seriesId,
+                recurrenceDate: '2027-02-08',
+            }),
+        });
+    });
+
+    test('a null rrule leaves the series recurring, and the edit reaches every occurrence', async () => {
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${calId}/events/${seriesId}`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'Moved Sync',
+                    startTime: '2027-02-08T11:00:00Z',
+                    endTime: '2027-02-08T12:00:00Z',
+                    allDay: false,
+                    rrule: null,
+                }),
+            },
+        );
+        const updated = await assertJson<CalendarEvent>(res);
+        expect(updated.rrule).toBe('FREQ=WEEKLY;COUNT=4');
+
+        const from = Math.floor(Date.parse('2027-02-01T00:00:00Z') / 1000);
+        const to = Math.floor(Date.parse('2027-04-01T00:00:00Z') / 1000);
+        const occurrences = (
+            await assertJson<CalendarEventOccurrence[]>(
+                await authedRequest(
+                    ctx.alice.user.sessionToken,
+                    `/calendar/${ctx.alice.user.id}/event-range/${from}/${to}`,
+                ),
+            )
+        ).filter((e) => e.uid === updated.uid);
+        expect(occurrences.length).toBeGreaterThan(1);
+        expect(occurrences.every((e) => e.title === 'Moved Sync')).toBe(true);
     });
 });

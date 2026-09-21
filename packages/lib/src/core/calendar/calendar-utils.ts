@@ -1,4 +1,5 @@
 import { RRule } from 'rrule';
+import { DEFAULT_CALENDAR_COLOR } from '../../constants/calendar';
 import type { CalendarEventOccurrence, CalendarItem, EventData, SharedCalendar } from '../../types/calendar';
 import { dateFormatter, formatDayMonth, formatTime } from '../date';
 import { WINDOWS_ZONES } from './windows-zones';
@@ -177,7 +178,7 @@ export function getCalendarColor(
         const sc = sharedCalendars.find((s) => s.calendarId === event.calendarId);
         if (sc) return sc.color || sc.calendarColor;
     }
-    return '#4285f4';
+    return DEFAULT_CALENDAR_COLOR;
 }
 
 export function isFreeBusyEvent(event: CalendarEventOccurrence): boolean {
@@ -186,6 +187,12 @@ export function isFreeBusyEvent(event: CalendarEventOccurrence): boolean {
 
 export function formatFreeBusyTitle(endTime: Date): string {
     return `Busy until ${formatTime(endTime)}`;
+}
+
+// The one answer to "does this row belong to a series?". A master and every occurrence expanded from it
+// carry the rule; an override carries none of its own and is recognized by its link to the master instead.
+export function isSeriesOccurrence(event: { rrule: string | null; parentEventId: string | null }): boolean {
+    return !!event.rrule || !!event.parentEventId;
 }
 
 // The one answer to "is this row an invitation from someone else?". CalDAV clients write

@@ -1,8 +1,8 @@
 import type { CalendarCollection } from '../calendar/resource-store';
 import { calendarHomeHref, encodePathSegment, principalHref } from '../dav/href';
 import { type PropfindRequest, selectProps } from '../dav/propfind';
-import { multistatusResponse, principalProps, propstatOk, response } from '../dav/xml';
-import { calendarCollectionProps, currentUserPrincipalProp, homeCollectionProps } from './xml-builder';
+import { currentUserPrincipalProp, multistatusResponse, principalProps, propstatOk, response } from '../dav/xml';
+import { calendarCollectionProps, homeCollectionProps } from './xml-builder';
 
 // The two href shapes every CalDAV surface emits (discovery, PROPFIND rows, REPORT rows, the PUT/MKCALENDAR
 // Location header), so the path shape and the escaping rule live in one place. The resource name is client-chosen,

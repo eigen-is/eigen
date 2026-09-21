@@ -2,7 +2,6 @@ import type { CalendarItem } from '@workspace/lib/types/calendar';
 import { and, eq } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import {
-    isSafePathSegment,
     type LocalFilesystem,
     PATHS,
     type ResourceScan,
@@ -32,8 +31,7 @@ export function resourcePath(calendarId: string, uri: string): string {
 // A client-chosen calendar id is a directory name and goes raw into an href, so it takes the shared segment
 // rule over the NFC form. Null on reject.
 export function sanitizeCalendarId(raw: string): string | null {
-    const id = raw.normalize('NFC');
-    return isSafePathSegment(id) ? id : null;
+    return sanitizeResourceUri(raw, '');
 }
 
 export function sanitizeEventUri(raw: string): string | null {

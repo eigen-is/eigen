@@ -1,6 +1,8 @@
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import {
     isInvitationFromOthers,
+    isSeriesOccurrence,
+    isTransferableCalendarHome,
     occurrenceDateToString,
     parseOccurrenceDate,
     truncateRRule,
@@ -11,7 +13,6 @@ import {
     useSharedCalendarLabel,
     useUpdateEvent,
 } from '@workspace/lib/calendar';
-import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { DeleteDialog } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -44,8 +45,6 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const eventOwnerId = sharedCalendar?.ownerUserId || user?.id || '';
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [showRecurringDeleteDialog, setShowRecurringDeleteDialog] = useState(false);
-    const [showRecurringDeleteConfirm, setShowRecurringDeleteConfirm] = useState(false);
-    const [pendingDeleteAction, setPendingDeleteAction] = useState<RecurringAction | null>(null);
     const [showRsvpScopeDialog, setShowRsvpScopeDialog] = useState(false);
     const [pendingRsvpStatus, setPendingRsvpStatus] = useState<'accepted' | 'declined' | 'tentative' | null>(null);
     const [editOpen, setEditOpen] = useState(false);
@@ -62,13 +61,11 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
 
     const isRecurring = !!event.rrule;
     const isException = !!event.parentEventId;
-    const isPartOfSeries = isRecurring || isException;
+    const isPartOfSeries = isSeriesOccurrence(event);
     const calendarName = calendar?.name || (sharedCalendar ? sharedCalendarLabel(sharedCalendar) : null);
     const isShared = !!sharedCalendar;
     const canEdit = !isShared || sharedCalendar?.permission === 'write';
-    // The export reads the event's own home, and only this home and a team's are reachable: a calendar
-    // shared out of another user's home is refused by the route, so it offers nothing here.
-    const canExport = !isGuest && (!sharedCalendar || parseOwnerId(sharedCalendar.ownerUserId).type === 'team');
+    const canExport = !isGuest && isTransferableCalendarHome(eventOwnerId, user?.id ?? '');
     // An ORGANIZER equal to the calendar owner is an event they organize, not an invitation to them;
     // the owner's address is known only when the owner is the viewer.
     const isLinkedEvent = isInvitationFromOthers(event, eventOwnerId === user?.id ? user.email : undefined);
@@ -154,18 +151,6 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
         }
     };
 
-    const handleRecurringDeleteAction = (action: RecurringAction) => {
-        setPendingDeleteAction(action);
-        setShowRecurringDeleteDialog(false);
-        setShowRecurringDeleteConfirm(true);
-    };
-
-    const handleRecurringDeleteConfirm = async () => {
-        if (pendingDeleteAction) {
-            await handleDelete(pendingDeleteAction);
-        }
-    };
-
     const handleRsvpScopeConfirm = (action: RecurringAction) => {
         if (!pendingRsvpStatus) return;
         const eventId = event.parentEventId || event.id;
@@ -187,14 +172,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     return (
         <>
             <Dialog
-                open={
-                    open &&
-                    !showDeleteDialog &&
-                    !showRecurringDeleteDialog &&
-                    !showRecurringDeleteConfirm &&
-                    !editOpen &&
-                    !showRsvpScopeDialog
-                }
+                open={open && !showDeleteDialog && !showRecurringDeleteDialog && !editOpen && !showRsvpScopeDialog}
                 onOpenChange={onOpenChange}
             >
                 <DialogContent size="md" onOpenAutoFocus={(e) => e.preventDefault()}>
@@ -332,19 +310,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                 open={showRecurringDeleteDialog}
                 onOpenChange={setShowRecurringDeleteDialog}
                 title="Delete recurring event"
-                onConfirm={handleRecurringDeleteAction}
-            />
-
-            <DeleteDialog
-                open={showRecurringDeleteConfirm}
-                onOpenChange={(o) => {
-                    setShowRecurringDeleteConfirm(o);
-                    if (!o) setPendingDeleteAction(null);
-                }}
-                title="Delete Event"
-                description="Are you sure you want to delete this event?"
-                itemName={event.title}
-                onDelete={handleRecurringDeleteConfirm}
+                onConfirm={handleDelete}
             />
 
             <RecurringActionDialog

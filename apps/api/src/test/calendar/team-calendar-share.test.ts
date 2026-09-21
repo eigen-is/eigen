@@ -7,8 +7,9 @@ import type {
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
 import { getServerConfig } from '../../lib/config/server-config';
+import { getHome } from '../../lib/home';
 import * as relay from '../../lib/home/home-relay';
-import { assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
+import { addMember, assertJson, authedRequest, createTeam, findOrFail, getTestContext } from '../setup';
 
 describe('Team Calendar Share (push to existing members)', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -154,8 +155,8 @@ describe('Team Calendar Share (push to existing members)', () => {
         const teamCalendars = await assertJson<CalendarItem[]>(teamCalRes);
         const teamCalId = teamCalendars[0].id;
 
-        // Set shares on team calendar to grant write to the team
-        await authedRequest(ctx.bob.user.sessionToken, `/calendar/team_${teamId}/calendars/${teamCalId}`, {
+        // Set shares on team calendar to grant write to the team (Alice is org admin)
+        await authedRequest(ctx.alice.user.sessionToken, `/calendar/team_${teamId}/calendars/${teamCalId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -372,8 +373,8 @@ describe('Regression: Team calendar permission enforcement', () => {
     });
 
     test('upgrading to write permission allows event creation', async () => {
-        // Set write permission on the team calendar
-        await authedRequest(ctx.bob.user.sessionToken, `/calendar/team_${permTeamId}/calendars/${permTeamCalId}`, {
+        // Set write permission on the team calendar (Alice is org admin)
+        await authedRequest(ctx.alice.user.sessionToken, `/calendar/team_${permTeamId}/calendars/${permTeamCalId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -411,8 +412,8 @@ describe('Regression: Team calendar permission enforcement', () => {
     });
 
     test('downgrading back to read revokes write access', async () => {
-        // Set back to read permission
-        await authedRequest(ctx.bob.user.sessionToken, `/calendar/team_${permTeamId}/calendars/${permTeamCalId}`, {
+        // Set back to read permission (Alice is org admin)
+        await authedRequest(ctx.alice.user.sessionToken, `/calendar/team_${permTeamId}/calendars/${permTeamCalId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -437,5 +438,107 @@ describe('Regression: Team calendar permission enforcement', () => {
             },
         );
         expect(createRes.status).toBe(403);
+    });
+});
+
+describe('Team calendar administration', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let adminTeamId: string;
+    let adminTeamCalId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        const orgId = getServerConfig()!.orgId;
+        await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ organizationId: orgId }),
+        });
+        adminTeamId = await createTeam(ctx, orgId, 'Calendar Administration Team');
+        await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(adminTeamId)}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ calendar: { enabled: true } }),
+        });
+        await addMember(ctx, adminTeamId, ctx.bob.user.id);
+        const res = await authedRequest(ctx.bob.user.sessionToken, `/calendar/${teamOwnerId(adminTeamId)}/calendars`);
+        adminTeamCalId = (await assertJson<CalendarItem[]>(res))[0].id;
+    });
+
+    test('a plain member cannot grant himself write on the team calendar', async () => {
+        const res = await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/calendar/${teamOwnerId(adminTeamId)}/calendars/${adminTeamCalId}`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shares: [{ targetId: teamOwnerId(adminTeamId), permission: 'write' }] }),
+            },
+        );
+        expect(res.status).toBe(403);
+
+        const sharedRes = await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/shared`);
+        const shared = await assertJson<SharedCalendar[]>(sharedRes);
+        const teamCal = findOrFail(shared, (s) => s.calendarId === adminTeamCalId);
+        expect(teamCal.permission).toBe('read');
+    });
+
+    test('a plain member cannot create a calendar in the team home', async () => {
+        const res = await authedRequest(ctx.bob.user.sessionToken, `/calendar/${teamOwnerId(adminTeamId)}/calendars`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: 'Bob Sneaks In', color: '#ff0000' }),
+        });
+        expect(res.status).toBe(403);
+    });
+
+    test('a plain member cannot delete a team calendar', async () => {
+        const teamCal = await getHome(teamOwnerId(adminTeamId));
+        const extra = await teamCal.calendar.createCalendar({ name: 'Team Retros', color: '#34a853' });
+
+        const res = await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/calendar/${teamOwnerId(adminTeamId)}/calendars/${extra.id}`,
+            { method: 'DELETE' },
+        );
+        expect(res.status).toBe(403);
+
+        const listRes = await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/calendar/${teamOwnerId(adminTeamId)}/calendars`,
+        );
+        const calendars = await assertJson<CalendarItem[]>(listRes);
+        expect(calendars.some((c) => c.id === extra.id)).toBe(true);
+    });
+
+    test('an org admin administers the team calendar', async () => {
+        const createRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${teamOwnerId(adminTeamId)}/calendars`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'Team Offsites', color: '#4285f4' }),
+            },
+        );
+        const created = await assertJson<CalendarItem>(createRes);
+
+        const shareRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${teamOwnerId(adminTeamId)}/calendars/${created.id}`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shares: [{ targetId: teamOwnerId(adminTeamId), permission: 'write' }] }),
+            },
+        );
+        expect(shareRes.status).toBe(200);
+
+        const deleteRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${teamOwnerId(adminTeamId)}/calendars/${created.id}`,
+            { method: 'DELETE' },
+        );
+        expect(deleteRes.status).toBe(200);
     });
 });

@@ -15,6 +15,15 @@ const PRECONDITIONS: Record<'C' | 'CARD', Record<InvalidReason, string>> = {
     CARD: { data: 'valid-address-data', object: 'valid-address-data', component: 'valid-address-data' },
 };
 
+// A GET of one stored resource: the bytes verbatim, with the content hash as a quoted ETag. The copy into an
+// ArrayBuffer-backed view is what the Response BodyInit type takes — storage.bytes() may be SharedArrayBuffer-backed.
+export function davResourceResponse(bytes: Uint8Array, etag: string, contentType: string): Response {
+    return new Response(new Uint8Array(bytes), {
+        status: 200,
+        headers: { 'Content-Type': contentType, ETag: `"${etag}"` },
+    });
+}
+
 // CardDAV (RFC 6352 § 6.3.2.1) and CalDAV (RFC 4791 § 5.3.2.1) share these preconditions, so one mapping serves both.
 export function davPutResponse(
     result: PutResourceResult,

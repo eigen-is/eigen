@@ -1,4 +1,5 @@
 import { toLocalDateString } from '@workspace/lib/calendar';
+import type { CalendarOption } from '@workspace/lib/types/calendar';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
@@ -6,7 +7,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@workspace/ui/components/textarea';
 import { AlignLeft, Calendar, Clock, MapPin } from 'lucide-react';
 import type { ReactNode } from 'react';
-import type { CalendarOption } from './calendar-utils';
 import { RecurrencePicker } from './recurrence-picker';
 import { addMinutes, roundToNext15Minutes, TimeSelect, timeToMinutes, toTimeString } from './time-select';
 

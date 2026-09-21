@@ -1,18 +1,15 @@
-import { XMLParser } from 'fast-xml-parser';
 import type { Calendar } from '../calendar/calendar';
 import { sanitizeCalendarId } from '../calendar/resource-store';
 import { ApiError } from '../core';
 import { multistatusResponse, propstatOk, response } from '../dav/xml';
 import { isXmlNode, type XmlNode } from '../dav/xml-node';
 import { calendarHref } from './discovery';
+import { caldavXmlParser } from './xml-parser';
 
-// removeNSPrefix strips the D:/C:/ICAL: prefixes, so property lookups below stay unprefixed — no fallback needed.
-const parser = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true });
-
-// A prop element is either the bare text (fxp coerces purely numeric text to a number) or, when it carried an
-// attribute (e.g. xml:lang), an object with the value under '#text'. Return the string form; null when absent.
+// A prop element is either the bare text or, when it carried an attribute (e.g. xml:lang), an object with
+// the value under '#text'. Return the string form; null when absent.
 function textOf(value: unknown): string | null {
-    if (typeof value === 'string' || typeof value === 'number') return String(value);
+    if (typeof value === 'string') return value;
     if (isXmlNode(value) && '#text' in value) return String(value['#text']);
     return null;
 }
@@ -41,7 +38,7 @@ export async function handleMkcalendar(
     let props: { name?: string; color?: string } = {};
     if (body?.trim()) {
         try {
-            const parsed = parser.parse(body);
+            const parsed = caldavXmlParser.parse(body);
             const mkcal = parsed['mkcalendar'] || {};
             const set = mkcal['set'] || {};
             props = extractCalendarProps(set['prop'] || {});
@@ -51,13 +48,14 @@ export async function handleMkcalendar(
     }
 
     try {
-        await calendar.createCalendar({ id, name: props.name ?? id, color: props.color ?? '#4285f4' });
+        await calendar.createCalendar({ id, name: props.name ?? id, color: props.color });
     } catch (error) {
+        if (!(error instanceof ApiError)) throw error;
         // MKCALENDAR over a collection that exists — under this name or a case variant of it, since one
         // directory is one calendar — is a precondition failure (RFC 5689 / WebDAV MKCOL semantics).
-        if (error instanceof ApiError && error.status === 409) {
-            return new Response('Method Not Allowed', { status: 405 });
-        }
+        if (error.status === 409) return new Response('Method Not Allowed', { status: 405 });
+        // A property value the domain refuses is WebDAV's 403 on a property the server will not set.
+        if (error.status === 400) return new Response('Forbidden', { status: 403 });
         throw error;
     }
     return new Response(null, { status: 201, headers: { Location: calendarHref(ownerId, id) } });
@@ -93,7 +91,7 @@ export async function handleProppatch(
 
     if (body?.trim()) {
         try {
-            const parsed = parser.parse(body);
+            const parsed = caldavXmlParser.parse(body);
             const propertyupdate = parsed['propertyupdate'] || {};
             const set = propertyupdate['set'] || {};
             const props = extractCalendarProps(set['prop'] || {});
@@ -112,7 +110,15 @@ export async function handleProppatch(
     }
 
     if (Object.keys(updates).length > 0) {
-        await calendar.updateCalendar(calendarId, updates);
+        try {
+            await calendar.updateCalendar(calendarId, updates);
+        } catch (error) {
+            // A property value the domain refuses is WebDAV's 403 on a property the server will not set.
+            if (error instanceof ApiError && error.status === 400) {
+                return new Response('Forbidden', { status: 403 });
+            }
+            throw error;
+        }
     }
 
     return multistatusResponse([response(calendarHref(ownerId, calendarId), [propstatOk(updatedProps)])]);

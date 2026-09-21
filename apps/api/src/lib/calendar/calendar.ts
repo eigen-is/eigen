@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { CALENDAR_NAME_MAX_LENGTH, DEFAULT_CALENDAR_COLOR } from '@workspace/lib/constants/calendar';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import type {
     Attendee,
@@ -60,6 +61,19 @@ import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload
 
 function getCalendarDatabase(home: Home): Promise<ManagedDatabase<typeof schema>> {
     return home.getLocalDatabase(CALENDAR_DB_CONFIG, PATHS.CALENDAR.DB);
+}
+
+// Apple writes the eight-digit form, so all three hex lengths are valid.
+const CALENDAR_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+
+// The one rule for what a calendar may be called and colored: REST, MKCALENDAR and PROPPATCH all land here.
+function validateCalendarProps(props: { name?: string; color?: string }): void {
+    if (props.name !== undefined && props.name.trim().length > CALENDAR_NAME_MAX_LENGTH) {
+        throw new ApiError(400, `Calendar name is longer than ${CALENDAR_NAME_MAX_LENGTH} characters`);
+    }
+    if (props.color !== undefined && !CALENDAR_COLOR.test(props.color)) {
+        throw new ApiError(400, 'Calendar color must be a hex color');
+    }
 }
 
 export class Calendar {
@@ -301,10 +315,11 @@ export class Calendar {
     // A calendar id is a directory name, so it is unique case-insensitively: two rows would reconcile one directory.
     public async createCalendar(input: {
         name: string;
-        color: string;
+        color?: string;
         id?: string;
         isDefault?: boolean;
     }): Promise<CalendarItem> {
+        validateCalendarProps(input);
         const id = input.id ?? randomUUID();
         if (sanitizeCalendarId(id) !== id) throw new ApiError(400, 'Invalid calendar name');
 
@@ -322,7 +337,7 @@ export class Calendar {
                 .values({
                     id,
                     name: input.name.trim(),
-                    color: input.color,
+                    color: input.color ?? DEFAULT_CALENDAR_COLOR,
                     isDefault: input.isDefault ?? false,
                     ctag: 0,
                     shares: null,
@@ -353,6 +368,7 @@ export class Calendar {
             shares?: CalendarShare[] | null;
         },
     ): Promise<CalendarItem> {
+        validateCalendarProps(input);
         const existing = this.calendarById(id);
         if (!existing) throw new ApiError(404, 'Calendar not found');
 

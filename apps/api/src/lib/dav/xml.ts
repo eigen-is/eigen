@@ -63,6 +63,12 @@ export function memberRowProps(etag: string, contentType: string): PropMap {
     ]);
 }
 
+// The one property a client asks /dav/ for before it knows anything else, and the one both protocols'
+// home collections carry.
+export function currentUserPrincipalProp(userId: string): string {
+    return `<D:current-user-principal><D:href>${principalHref(userId)}</D:href></D:current-user-principal>`;
+}
+
 export function principalProps(userId: string): string[] {
     return [
         `<D:resourcetype><D:collection/><D:principal/></D:resourcetype>`,

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { and, eq, inArray } from 'drizzle-orm';
 import ICAL from 'ical.js';
@@ -6,7 +7,6 @@ import {
     ApiError,
     decodeUtf8Strict,
     ICS_IMPORT_MAX_EVENTS,
-    ICS_IMPORT_MAX_WRITTEN_BYTES,
     NOT_A_CALENDAR_FILE,
     NOT_UTF8_FILE,
     type PutResourceResult,
@@ -23,6 +23,11 @@ import * as schema from './schema';
 // § Importing an .ics). The file is the truth on both sides — the import moves components, so every line
 // the author wrote lands as written and scheduling is the only thing taken out of it, and the export
 // hands back the stored bytes minus the lines Eigen owns.
+
+// What one import may store. A series is one resource, so a VTIMEZONE the file defines once is copied into
+// every series that names it and a file well inside its own ceiling can ask for many times its size on
+// disk. Past this the run stops the way a quota stop does; a retry continues, since what landed skips by UID.
+const ICS_IMPORT_MAX_WRITTEN_BYTES = 8 * ICS_MAX_BYTES;
 
 // A `.ics` may be a stream of several VCALENDAR objects (RFC 5545 §3.4), which ICAL.parse answers with an
 // array of jCal arrays rather than one.

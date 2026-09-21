@@ -770,7 +770,9 @@ export async function rsvp(
     };
 
     if (scope === 'this' && input.recurrenceDate) {
-        const recurrenceDate = input.recurrenceDate;
+        // A full ISO datetime is an old client naming one occurrence; anything unkeyable names none.
+        const recurrenceDate = storedRecurrenceKey(input.recurrenceDate);
+        if (!recurrenceDate) throw new ApiError(400, 'Invalid recurrenceDate');
         const status = input.remove ? 'declined' : input.status;
         if (input.remove) {
             await calendar.gate.run(() => removeOccurrence(calendar, eventId, recurrenceDate));

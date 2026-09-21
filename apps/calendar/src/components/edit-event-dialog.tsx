@@ -1,10 +1,12 @@
 import { useAuth } from '@workspace/lib/auth';
 import {
     isInvitationFromOthers,
+    isSeriesOccurrence,
     occurrenceDateToString,
     parseOccurrenceDate,
     toLocalDateString,
     truncateRRule,
+    useCalendarOptions,
     useCalendars,
     useCreateEvent,
     useDeleteEvent,
@@ -28,7 +30,7 @@ import {
 import { UsersRound } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { AttendeeEditor } from './attendee-editor';
-import { buildEventTimes, useCalendarOptions } from './calendar-utils';
+import { buildEventTimes } from './calendar-utils';
 import { EventFormFields } from './event-form-fields';
 import type { RecurringAction } from './recurring-action-dialog';
 import { RecurringActionDialog } from './recurring-action-dialog';
@@ -133,7 +135,14 @@ export function EditEventDialog({
     if (!event) return null;
 
     const isRecurring = !!event.rrule;
+    // An override of one occurrence carries no rule of its own, so it has no series rule to truncate and
+    // no rule to send back: without this it read as a single event and saved over the whole series unasked.
+    const isOverride = !!event.parentEventId;
+    const isPartOfSeries = isSeriesOccurrence(event);
     const isLinkedEvent = isInvitationFromOthers(event, eventOwnerId === user?.id ? user.email : undefined);
+    // Every detail of an invitation from someone else is read-only; only which calendar holds the copy is
+    // the viewer's, so that move is the one thing there is to save.
+    const canSave = !isLinkedEvent || calendarChanged;
 
     // A cross-Home move recreates the event in the other Home and deletes the source — which fires
     // deleteEvent's iMIP side effects and can't carry exception children. Warn honestly before that
@@ -149,7 +158,7 @@ export function EditEventDialog({
         if (!title.trim()) return;
         if (crossHomeMove && moveLossReasons.length > 0) {
             setShowMoveConfirm(true);
-        } else if (isRecurring && !calendarChanged) {
+        } else if (isPartOfSeries && !calendarChanged) {
             setShowRecurringDialog(true);
         } else {
             doSave('all');
@@ -168,7 +177,7 @@ export function EditEventDialog({
             allDay,
             description: description.trim() || null,
             location: location.trim() || null,
-            rrule: rruleString,
+            rrule: isOverride ? undefined : rruleString,
             timezone,
             data: Object.values(data).some((v) => v !== undefined) ? data : null,
         };
@@ -301,11 +310,13 @@ export function EditEventDialog({
 
                     <DialogFooter>
                         <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-                            Cancel
+                            {canSave ? 'Cancel' : 'Close'}
                         </Button>
-                        <Button onClick={handleSaveClick} disabled={saving || !title.trim()}>
-                            {saving ? 'Saving...' : 'Save'}
-                        </Button>
+                        {canSave && (
+                            <Button onClick={handleSaveClick} disabled={saving || !title.trim()}>
+                                {saving ? 'Saving...' : 'Save'}
+                            </Button>
+                        )}
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -315,6 +326,7 @@ export function EditEventDialog({
                 onOpenChange={setShowRecurringDialog}
                 title="Edit recurring event"
                 onConfirm={doSave}
+                options={isOverride ? ['this', 'all'] : undefined}
             />
 
             <ConfirmDialog

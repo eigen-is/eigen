@@ -1,14 +1,4 @@
-import { useSharedCalendarLabel } from '@workspace/lib/calendar';
-import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { cn } from '@workspace/ui/lib/utils';
-import { useMemo } from 'react';
-
-export type CalendarOption = {
-    id: string;
-    name: string;
-    color: string;
-    ownerId: string;
-};
 
 export type EventPillVariant = 'block' | 'dot';
 
@@ -32,29 +22,6 @@ export function eventPillStateClasses(
             'border border-dashed border-current bg-transparent !text-foreground',
         inviteStatus === 'declined' && 'opacity-40',
     );
-}
-
-export function useCalendarOptions(
-    ownerId: string,
-    calendars: CalendarItem[],
-    sharedCalendars: SharedCalendar[],
-): CalendarOption[] {
-    const label = useSharedCalendarLabel(sharedCalendars);
-
-    return useMemo(() => {
-        const options: CalendarOption[] = calendars.map((c) => ({ id: c.id, name: c.name, color: c.color, ownerId }));
-        for (const sc of sharedCalendars) {
-            if (sc.permission === 'write') {
-                options.push({
-                    id: sc.calendarId,
-                    name: label(sc),
-                    color: sc.color || sc.calendarColor,
-                    ownerId: sc.ownerUserId,
-                });
-            }
-        }
-        return options;
-    }, [calendars, sharedCalendars, ownerId, label]);
 }
 
 // All-day events store midnight-UTC bounds with an exclusive end (day after the last day); timed events keep

@@ -39,6 +39,15 @@ export type CalendarItem = {
     updatedAt: Date;
 };
 
+// One calendar a viewer may write in, own or shared, with the home it lives in: two homes can hold an id
+// apiece, so a chooser needs both to name a target.
+export type CalendarOption = {
+    id: string;
+    name: string;
+    color: string;
+    ownerId: string;
+};
+
 export type CalendarEvent = {
     id: string;
     calendarId: string;
