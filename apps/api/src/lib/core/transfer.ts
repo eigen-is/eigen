@@ -35,9 +35,6 @@ export const VCARD_PREVIEW_MAX_CARDS = 200;
 // expansion on every later range query, an override is a row too, and a file past this is a whole
 // account's history rather than a calendar moved by hand.
 export const ICS_IMPORT_MAX_EVENTS = 1000;
-// An imported event keeps a handful of alarms: a file may carry dozens, and each one is stored on the
-// row and written back out as a VALARM.
-export const ICS_IMPORT_MAX_REMINDERS = 5;
 
 // What one `.ics` preview may carry. A calendar export is a year of a team's meetings and an event's
 // description is a whole agenda, so the builder is where the payload is bounded.
