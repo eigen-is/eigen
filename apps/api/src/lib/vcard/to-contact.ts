@@ -15,7 +15,7 @@ function cardAvatar(photo: ParsedCardPhoto | null): string | undefined {
 // A parsed card as the app renders a contact, for a file that is only being previewed: nothing is stored,
 // so the server-assigned fields are the empty sentinels emptyContact uses. Categories come back beside the
 // contact because they are label NAMES, and `labels` holds label ids. X-EIGEN-ID is dropped on purpose —
-// a self-link is the server's to grant (docs/CONTACTS.md § Caveats, self-link), never a claim a file makes.
+// a self-link is the server's to grant (docs/CONTACTS.md § Caveats & decisions), never a claim a file makes.
 export function parsedCardToContact(card: ParsedCard): { contact: Contact; categories: string[] } {
     return {
         contact: {

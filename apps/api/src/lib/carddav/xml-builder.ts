@@ -6,8 +6,7 @@ import type { PropMap } from '../dav/propfind';
 import { formatSyncToken } from '../dav/sync-token';
 import { currentUserPrincipalProp, ownershipEntries } from '../dav/xml';
 
-// The addressbook-specific property blocks, and nothing else: the XML envelope, the member props, the
-// sync-token grammar and the PROPFIND core are the shared DAV layer's, imported from lib/dav/ where they live.
+// Addressbook-specific property blocks only; the envelope, member props, sync-token and PROPFIND core live in lib/dav/.
 
 // Addressbook home collection — the parent of the single book. Mirrors the CalDAV homeCollectionProps.
 export function addressbookHomeProps(userId: string): PropMap {
@@ -23,9 +22,7 @@ export function addressbookHomeProps(userId: string): PropMap {
     ]);
 }
 
-// The one fixed book named "Contacts". supported-report-set advertises exactly the REPORTs that exist (no
-// expand-property); the sync-token carries the rebuild generation so a rebuilt book forces a full resync
-// instead of stalling clients on a stale counter.
+// The sync-token carries the rebuild generation, so a rebuilt book forces a full resync instead of stalling clients.
 export function addressbookCollectionProps(book: CardBook, ownerId: string): PropMap {
     return new Map([
         ['resourcetype', `<D:resourcetype><D:collection/><CARD:addressbook/></D:resourcetype>`],
@@ -45,8 +42,6 @@ export function addressbookCollectionProps(book: CardBook, ownerId: string): Pro
     ]);
 }
 
-// The card body inside a REPORT response — the stored vCard bytes (or the partial-retrieval projection of
-// them), XML-escaped, in a CARD:address-data element.
 export function addressDataProp(vcf: string): string {
     return `<CARD:address-data>${escapeXml(vcf)}</CARD:address-data>`;
 }

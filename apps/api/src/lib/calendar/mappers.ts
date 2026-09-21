@@ -1,8 +1,7 @@
 import type { CalendarEvent, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import type * as schema from './schema';
 
-// The file facts an event row does not carry itself: one resource owns the name and the content hash, and
-// every row it projects to reads them from there rather than keeping a copy that can drift.
+// The name and the hash live on the resource, so a projected row reads them there instead of keeping a copy that can drift.
 function dbEventToCalendarEvent(
     row: typeof schema.events.$inferSelect,
     resource: { uri: string; etag: string },

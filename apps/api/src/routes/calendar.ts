@@ -32,9 +32,7 @@ import { getMemberships, type User } from '../lib/user';
 import { betterAuth } from './auth';
 import { importFromDriveSchema } from './shared-schemas';
 
-// Field bounds in front of the ceiling the write seam enforces on the assembled event: generous enough that
-// no real event meets them, tight enough that no single value can be the whole event. Free text is capped at
-// the event ceiling itself — a value that cannot fit in an event is never worth parsing.
+// Field bounds in front of the event ceiling: no single value can be a whole event, and free text caps at the ceiling itself.
 const TEXT = { maxLength: 512 };
 const FREE_TEXT = { maxLength: EVENT_MAX_BYTES };
 const NAME = { maxLength: CALENDAR_NAME_MAX_LENGTH };
@@ -112,8 +110,6 @@ const UpdateSharedCalendarSchema = t.Object({
     visible: t.Optional(t.Boolean()),
 });
 
-// The calendar an import writes into, beside the Drive file it reads — the same source fields the
-// contacts and mail import-from-drive routes take.
 const ImportFromDriveIcsSchema = t.Object({
     ...importFromDriveSchema.properties,
     calendarId: t.String({ ...TEXT, minLength: 1 }),
@@ -121,11 +117,7 @@ const ImportFromDriveIcsSchema = t.Object({
 
 const ImportQuerySchema = t.Object({ calendarId: t.String({ ...TEXT, minLength: 1 }) });
 
-// The Home a transfer runs against, once the caller may read (an export) or write (an import) the calendar
-// they named. A team home is the only Home here that is not the caller's own: any other owner is refused
-// rather than resolved, because the file would be read out of that Home, or written into it, and only the
-// relay crosses homes. Free-busy may learn when a calendar is busy, never what it says, so it is no read
-// here either.
+// A team home is the only foreign Home a transfer may touch — only the relay crosses homes — and free-busy is no read here.
 async function resolveTransferCalendar(user: User, ownerId: string, calendarId: string, need: 'read' | 'write') {
     if (parseOwnerId(ownerId).type !== 'team') requireSelf(ownerId, user.id);
     const { permission } = await checkCalendarAccess(user, ownerId, calendarId);
@@ -135,9 +127,7 @@ async function resolveTransferCalendar(user: User, ownerId: string, calendarId: 
     return resolveCalendar(user, ownerId);
 }
 
-// The Home whose calendar collection the caller may change, as opposed to its events. A team home's
-// calendars are administered from the Admin app, by the org admin who enables the calendar in the first
-// place; a member's write share on a team calendar is event-level.
+// A team home's calendar collection is admin-only: a member's write share on a team calendar is event-level.
 async function resolveAdministeredCalendar(user: User, ownerId: string) {
     const parsed = parseOwnerId(ownerId);
     if (parsed.type !== 'team') return resolveCalendar(user, ownerId);
@@ -145,11 +135,7 @@ async function resolveAdministeredCalendar(user: User, ownerId: string) {
     return (await getHome(ownerId)).calendar;
 }
 
-// Calendar routes allow cross-owner access (shared calendars, team calendars).
-// Access control is enforced by resolveCalendar() (own/team calendars) or
-// checkCalendarAccess() (event-scoped, may include cross-user shared calendars).
-// Cross-user reads/writes never touch the foreign Calendar instance directly —
-// they go through the relay functions in `home-relay.ts` (the sharding seam).
+// These routes carry a foreign `:ownerId`, and a foreign home is only ever reached through `home-relay.ts`.
 export const calendarRouter = new Elysia({ name: 'calendar' })
     .use(betterAuth)
 
@@ -196,9 +182,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
     )
 
     // --- Events ---
-    // Multi-calendar event-range stays on `resolveCalendar` because it aggregates over every
-    // calendar the caller owns (or the team home owns). Cross-user shared events are not
-    // included here — they're fetched via the calId-scoped event-range below.
+    // Aggregates the owner's own calendars only: cross-user shared events come from the calId-scoped route below.
     .get(
         '/calendar/:ownerId/event-range/:from/:to',
         async ({ params, user }): Promise<CalendarEventOccurrence[]> => {
@@ -214,8 +198,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
 
     .get(
         '/calendar/:ownerId/calendars/:calId/event-range/:from/:to',
-        // Union return is intentional: free-busy callers get the redacted FreeBusyBlock shape (privacy
-        // boundary below), everyone else the full events. The explicit annotation stabilises the Eden type.
+        // The explicit union annotation stabilises the Eden type: a free-busy caller gets the redacted shape.
         async ({ params, user }): Promise<CalendarEventOccurrence[] | FreeBusyBlock[]> => {
             requireNonGuest(user);
             const { permission } = await checkCalendarAccess(user, params.ownerId, params.calId);
@@ -226,8 +209,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
                 new Date(params.to * 1000),
             );
             if (permission === 'free-busy') {
-                // Exclude canceled events: their existence + time must not leak into another
-                // user's free/busy view, and excluding them makes the status cast below valid.
+                // A cancelled event's existence must not leak into a free/busy view, and dropping it makes the cast valid.
                 return events
                     .filter((e) => e.status !== 'cancelled')
                     .map(
@@ -281,9 +263,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
         { auth: true },
     )
 
-    // Atomic cross-calendar move — write on both source (:calId) and target calendar required. Server-owned
-    // so it preserves the organizer link + timezone + data a client can't re-send (EventDataSchema strips
-    // organizer) and never fires deleteEvent's decline. Both calendars belong to :ownerId's Home.
+    // Server-owned so the move keeps the organizer link, timezone and data a client cannot re-send, and declines nothing.
     .put(
         '/calendar/:ownerId/calendars/:calId/events/:id/move',
         async ({ params, body, user }): Promise<CalendarEvent> => {
@@ -330,9 +310,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
         { auth: true },
     )
 
-    // Pull calendars that ownerId has shared with the calling user.
-    // ownerId is NOT the caller — it's the calendar owner being queried.
-    // Response is filtered to only include shares matching the caller's email/teams.
+    // `:ownerId` is the queried calendar owner, not the caller, and the answer holds only the caller's own shares.
     .get(
         '/calendar/:ownerId/shared-with-me',
         async ({
@@ -347,8 +325,6 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
     )
 
     // --- Shared calendars ---
-    // Lazy-syncs team calendars into the user's shared_calendars table on each read,
-    // then returns all shared calendars (both team and individually shared).
     .get(
         '/calendar/:ownerId/shared',
         async ({ params, user }): Promise<SharedCalendar[]> => {
@@ -383,17 +359,14 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
     )
 
     // --- Export ---
-    // One calendar, or the events `ids` name inside it, as one `.ics`. Read access is enough: own calendars
-    // and the team home's, which a member reads without a share of their own.
+    // Read access is enough: a team member exports the team home's calendar without a share of their own.
     .post(
         '/calendar/:ownerId/export',
         async ({ params, body, user, set }): Promise<string> => {
             requireNonGuest(user);
             const cal = await resolveTransferCalendar(user, params.ownerId, body.calendarId, 'read');
             const text = await cal.exportEvents(body.calendarId, body.ids);
-            // A one-event export is named after the event itself, a whole calendar after the calendar.
-            // contentDisposition takes the path and the control characters out of it; the clamp keeps one
-            // absurd title from filling the header.
+            // The clamp keeps one absurd title out of the header; contentDisposition strips path and control characters.
             const only = body.ids?.length === 1 ? await cal.getEventById(body.calendarId, body.ids[0]) : null;
             const name = only?.title || (cal.calendarRow(body.calendarId)?.name ?? '');
             set.headers['Content-Type'] = ICS_CONTENT_TYPE;
@@ -414,15 +387,12 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
     )
 
     // --- Import ---
-    // A whole `.ics` into one calendar of the caller's own Home, or of a team home they may write in —
-    // the same access `createEvent` takes.
     .post(
         '/calendar/:ownerId/import',
         async ({ params, query, request, user, server }): Promise<ImportCountsResult> => {
             requireNonGuest(user);
             const cal = await resolveTransferCalendar(user, params.ownerId, query.calendarId, 'write');
-            // A file of a thousand events writes a row apiece before this answers — longer than any
-            // server-wide idleTimeout, so exempt this request.
+            // A thousand-event file writes a row apiece before this answers, longer than any server-wide idleTimeout.
             server?.timeout(request, 0);
             const bytes = await readBoundedBodyBytes(request, ICS_MAX_BYTES);
             if (bytes === null) throw new ApiError(413, 'Upload too large');

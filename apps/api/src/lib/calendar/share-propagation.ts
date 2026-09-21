@@ -17,8 +17,7 @@ export async function notifySharedCalendarUsers(
 
     const userIds = new Set<string>();
 
-    // Named users only: a team's members re-sync the team's calendars on their own, which costs nothing
-    // here, while resolving every member on every share change does.
+    // Named users only: team members re-sync team calendars themselves, and resolving every member on every share change costs more.
     for (const share of shares) {
         if (parseOwnerId(share.targetId).type !== 'user') continue;
         const user = await getUserByEmail(share.targetId);

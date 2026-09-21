@@ -11,9 +11,7 @@ import { dbRowToSharedCalendar } from './mappers';
 import * as schema from './schema';
 import { buildCalendarEvent } from './sse-events';
 
-// Sharing over the Calendar facade: the `shared_calendars` rows this Home keeps for somebody else's
-// calendars, and the permission its own `calendars.shares` grant. Rows only, so none of it takes the
-// write gate (docs/CALENDAR.md § Sharing).
+// Rows only, so no sharing write takes the file write gate (docs/CALENDAR.md § Sharing).
 
 export function getSharedCalendars(calendar: Calendar): SharedCalendar[] {
     return calendar.db.select().from(schema.sharedCalendars).all().map(dbRowToSharedCalendar);
@@ -130,8 +128,7 @@ export function removeShare(
     });
 }
 
-// The silent half of receiveShare: the share reconciliation brings an entry in line without telling the
-// user a second time about a calendar they already have.
+// The silent half of receiveShare: reconciliation brings an entry in line without notifying the user again.
 export function ensureSharedEntry(
     calendar: Calendar,
     ownerUserId: string,

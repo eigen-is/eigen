@@ -505,42 +505,40 @@ describe('Calendar Timezone', () => {
             const bobEvents = await getEvents(ctx.bob.user.sessionToken, ctx.bob.user.id, bobFrom, bobTo);
 
             // Find a post-DST occurrence (after March 29)
-            const postDSTOcc = bobEvents.find(
-                (e: CalendarEventOccurrence) =>
-                    e.title === 'TZ RSVP Test' && new Date(e.startTime) > new Date('2026-03-29T00:00:00Z'),
+            const postDSTOcc = findOrFail(
+                bobEvents,
+                (e) => e.title === 'TZ RSVP Test' && new Date(e.startTime) > new Date('2026-03-29T00:00:00Z'),
             );
 
-            if (postDSTOcc) {
-                // RSVP for this occurrence
-                const rsvpRes = await authedRequest(
-                    ctx.bob.user.sessionToken,
-                    `/calendar/${ctx.bob.user.id}/calendars/${bobCalendarId}/events/${linkedParent.id}/rsvp`,
-                    {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            status: 'accepted',
-                            scope: 'this',
-                            recurrenceDate: postDSTOcc.occurrenceDate,
-                        }),
-                    },
-                );
-                expect(rsvpRes.status).toBe(200);
+            // RSVP for this occurrence
+            const rsvpRes = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/calendars/${bobCalendarId}/events/${linkedParent.id}/rsvp`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        status: 'accepted',
+                        scope: 'this',
+                        recurrenceDate: postDSTOcc.occurrenceDate,
+                    }),
+                },
+            );
+            expect(rsvpRes.status).toBe(200);
 
-                // Verify the exception was created with correct times
-                const afterEvents = await getEvents(ctx.bob.user.sessionToken, ctx.bob.user.id, bobFrom, bobTo);
-                const exception = findOrFail(
-                    afterEvents,
-                    (e) => e.title === 'TZ RSVP Test' && e.occurrenceDate === postDSTOcc.occurrenceDate,
-                );
+            // Verify the exception was created with correct times
+            const afterEvents = await getEvents(ctx.bob.user.sessionToken, ctx.bob.user.id, bobFrom, bobTo);
+            const exception = findOrFail(
+                afterEvents,
+                (e) => e.title === 'TZ RSVP Test' && e.occurrenceDate === postDSTOcc.occurrenceDate,
+            );
 
-                // The exception's start time should match the post-DST occurrence time
-                const excDate = new Date(exception.startTime);
-                expect(excDate.getUTCDay()).toBe(1); // Monday
-                // Post-DST: 23:30 CEST = 21:30 UTC
-                expect(excDate.getUTCHours()).toBe(21);
-                expect(excDate.getUTCMinutes()).toBe(30);
-            }
+            // The exception's start time should match the post-DST occurrence time
+            const excDate = new Date(exception.startTime);
+            expect(excDate.getUTCDay()).toBe(1); // Monday
+            // Post-DST: 23:30 CEST = 21:30 UTC
+            expect(excDate.getUTCHours()).toBe(21);
+            expect(excDate.getUTCMinutes()).toBe(30);
         });
 
         test('cancel occurrence of timezone-aware recurring event', async () => {
@@ -560,38 +558,32 @@ describe('Calendar Timezone', () => {
 
             const events = await getEvents(ctx.alice.user.sessionToken, ctx.alice.user.id, from, to);
             const occurrences = events.filter((e: CalendarEventOccurrence) => e.title === 'TZ Cancel Occ');
-            const postDSTOcc = occurrences.find(
-                (e: CalendarEventOccurrence) => new Date(e.startTime) > new Date('2026-03-29T00:00:00Z'),
+            const postDSTOcc = findOrFail(occurrences, (e) => new Date(e.startTime) > new Date('2026-03-29T00:00:00Z'));
+
+            // Cancel the post-DST occurrence
+            await createEvent(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceCalendarId, {
+                title: 'TZ Cancel Occ',
+                startTime: postDSTOcc.startTime,
+                endTime: postDSTOcc.endTime,
+                allDay: false,
+                parentEventId: event.id,
+                recurrenceDate: postDSTOcc.occurrenceDate,
+                status: 'cancelled',
+            });
+
+            // Verify it's gone
+            const afterEvents = await getEvents(ctx.alice.user.sessionToken, ctx.alice.user.id, from, to);
+            const afterOccs = afterEvents.filter(
+                (e: CalendarEventOccurrence) =>
+                    e.title === 'TZ Cancel Occ' && e.occurrenceDate === postDSTOcc.occurrenceDate && !e.parentEventId,
             );
+            expect(afterOccs.length).toBe(0);
 
-            if (postDSTOcc) {
-                // Cancel the post-DST occurrence
-                await createEvent(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceCalendarId, {
-                    title: 'TZ Cancel Occ',
-                    startTime: postDSTOcc.startTime,
-                    endTime: postDSTOcc.endTime,
-                    allDay: false,
-                    parentEventId: event.id,
-                    recurrenceDate: postDSTOcc.occurrenceDate,
-                    status: 'cancelled',
-                });
-
-                // Verify it's gone
-                const afterEvents = await getEvents(ctx.alice.user.sessionToken, ctx.alice.user.id, from, to);
-                const afterOccs = afterEvents.filter(
-                    (e: CalendarEventOccurrence) =>
-                        e.title === 'TZ Cancel Occ' &&
-                        e.occurrenceDate === postDSTOcc.occurrenceDate &&
-                        !e.parentEventId,
-                );
-                expect(afterOccs.length).toBe(0);
-
-                // Other occurrences still present
-                const remainingOccs = afterEvents.filter(
-                    (e: CalendarEventOccurrence) => e.title === 'TZ Cancel Occ' && !e.parentEventId,
-                );
-                expect(remainingOccs.length).toBe(occurrences.length - 1);
-            }
+            // Other occurrences still present
+            const remainingOccs = afterEvents.filter(
+                (e: CalendarEventOccurrence) => e.title === 'TZ Cancel Occ' && !e.parentEventId,
+            );
+            expect(remainingOccs.length).toBe(occurrences.length - 1);
         });
     });
 

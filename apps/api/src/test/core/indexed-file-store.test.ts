@@ -6,10 +6,8 @@ import {
     computeResourceEtag,
     dedupeByUid,
     diffFileStats,
-    listResourceUris,
     nextSyncGen,
     type ResourceScan,
-    type ResourceStat,
     sanitizeResourceUri,
     statResourceDir,
     uriKeyOf,
@@ -146,29 +144,29 @@ describe('resource file helpers', () => {
         expect(Number.isInteger(mtime)).toBe(true);
         expect(new Uint8Array(await store.file(`${DIR}/card.vcf`).arrayBuffer())).toEqual(bytes);
     });
+});
 
-    test('listResourceUris sorts, keys and warn-skips a non-conforming name', async () => {
+describe('statResourceDir', () => {
+    test('sorts, keys and warn-skips a non-conforming name', async () => {
         const { store, base } = nextStore();
         await store.mkdir(DIR);
         for (const name of ['b.vcf', 'A.vcf', 'stray.txt']) {
             writeFileSync(join(base, DIR, name), 'x');
         }
 
-        let entries: { uri: string; key: string }[] = [];
+        let scan: ResourceScan = { files: new Map(), skipped: new Set() };
         const warnings = await captureWarnings(async () => {
-            entries = await listResourceUris(store, DIR, SUFFIX);
+            scan = await statResourceDir(store, DIR, SUFFIX);
         });
 
         // Sorted, so a tie-break over the listing resolves the same way every pass.
-        expect(entries).toEqual([
-            { uri: 'A.vcf', key: 'a.vcf' },
-            { uri: 'b.vcf', key: 'b.vcf' },
+        expect([...scan.files].map(([key, file]) => [key, file.uri])).toEqual([
+            ['a.vcf', 'A.vcf'],
+            ['b.vcf', 'b.vcf'],
         ]);
         expect(warnings.some((w) => w.includes('stray.txt'))).toBe(true);
     });
-});
 
-describe('statResourceDir', () => {
     test('keys every listed resource by its folded uri and carries the rounded stat', async () => {
         const { store, base } = nextStore();
         await store.mkdir(DIR);
@@ -220,7 +218,7 @@ describe('statResourceDir', () => {
 });
 
 describe('diffFileStats', () => {
-    const scanOf = (files: Record<string, ResourceStat>, skipped: string[] = []): ResourceScan => ({
+    const scanOf = (files: Record<string, { mtime: number; size: number }>, skipped: string[] = []): ResourceScan => ({
         files: new Map(Object.entries(files).map(([key, stat]) => [key, { uri: key, ...stat }])),
         skipped: new Set(skipped),
     });

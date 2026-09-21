@@ -23,9 +23,7 @@ import { gateKey, resourcePath } from './resource-store';
 import * as schema from './schema';
 import type { CreateEventArgs } from './types';
 
-// Event mutation over the Calendar facade: create, update, delete and move, plus the locked internals
-// every other sibling writes an event through. A function named for the gate it takes holds it; one
-// documented as locked expects its caller to.
+// Event mutation over the Calendar facade; a function documented as locked expects its caller to hold the gate.
 
 export function eventById(calendar: Calendar, id: string): CalendarEvent | null {
     const row = calendar.joinedEvents().where(eq(schema.events.id, id)).get();
@@ -68,8 +66,7 @@ async function editResource(
     await store.writeResource(calendar, resource.calendarId, resource.uri, component, resource);
 }
 
-// The edit every writer but the two exclusion paths makes: one stored VEVENT patched in place.
-// Caller holds the gate and has already resolved the resource it means.
+// Caller holds the gate and has already resolved the resource this patch means.
 export async function patchResource(
     calendar: Calendar,
     resource: typeof schema.resources.$inferSelect,
@@ -86,8 +83,7 @@ export function writeContext(actorIsOrganizer: boolean, dtstamp?: Date | null): 
     return { now: new Date(), actorIsOrganizer, dtstamp };
 }
 
-// A resource carrying the organizer link is somebody else's event, so the local user never writes it as its
-// organizer: a SEQUENCE bump here would outrank the organizer's next message at the same revision.
+// A resource carrying the organizer link is somebody else's: a SEQUENCE bump here would outrank the organizer's next message.
 function actorIsOrganizer(event: CalendarEvent): boolean {
     return !event.data?.organizerEventId;
 }
@@ -111,9 +107,7 @@ export async function createEvent(
     return created;
 }
 
-// The fan-out a write owes the guests. An override is ONE occurrence of its series: the series states
-// the guest list, and its id is what every message names — a cancelled override then asks the guests to
-// drop that occurrence rather than to update it.
+// An override is one occurrence of its series: the series states the guest list, and its id is what every message names.
 async function propagateWrite(
     calendar: Calendar,
     event: CalendarEvent,
@@ -121,12 +115,9 @@ async function propagateWrite(
     oldAttendees: Attendee[],
 ): Promise<void> {
     const series = event.parentEventId ? eventById(calendar, event.parentEventId) : null;
-    // What the guests already hold: the series' list when the override states none of its own, so an
-    // occurrence edit reads as an update of that occurrence and a name missing from it cancels that
-    // instance for whoever was dropped.
+    // The guests hold the series' list when the override states none of its own, so a name missing from it cancels that instance.
     const held = oldAttendees.length ? oldAttendees : (series?.data?.attendees ?? []);
-    // A cancelled occurrence rides as an EXDATE and keeps no guest list, so the ones it drops are the
-    // ones who held it.
+    // A cancelled occurrence rides as an EXDATE and keeps no guest list, so the ones it drops are the ones who held it.
     const attendees = event.data?.attendees ?? (series ? held : []);
     // A write that names nobody and replaced nobody owes the guests nothing; emptying the list cancels.
     if (!attendees.length && !held.length) return;
@@ -279,9 +270,7 @@ async function patchStoredEvent(
     const resource = resourceOf(calendar, id);
     if (!resource) throw new ApiError(404, 'Event not found');
 
-    // A save form restates WHEN the event is on every edit, so the patch carries only the bounds that
-    // really moved — against the row, the one reading that knows the end of an event stating a DURATION
-    // or no end at all.
+    // A save form restates the times on every edit, so only the bounds that really moved reach the patch.
     const startMoved = input.startTime !== undefined && input.startTime.getTime() !== existing.startTime.getTime();
     const endMoved = input.endTime !== undefined && input.endTime.getTime() !== existing.endTime.getTime();
     const allDayMoved = input.allDay !== undefined && input.allDay !== existing.allDay;
@@ -343,9 +332,7 @@ async function eraseStoredEvent(calendar: Calendar, calendarId: string, id: stri
     if (existing.parentEventId) {
         // A synthetic exclusion row carries no data of its own, so the link is the master's to state.
         const parent = eventById(calendar, existing.parentEventId)!;
-        // Deleting one occurrence is a write of its master's file, never a delete of the resource: a live
-        // override is that occurrence, so it goes; the cancelled row standing for a dropped one is the
-        // exclusion itself, and deleting it puts the occurrence back.
+        // Deleting one occurrence writes the master's file: a cancelled row is the exclusion itself, so deleting it puts the occurrence back.
         await editResource(calendar, resource, (component) => {
             const key = existing.recurrenceDate ? storedRecurrenceKey(existing.recurrenceDate) : null;
             if (!key) return;
@@ -378,8 +365,7 @@ export async function moveEvent(
         if (uidHolder(calendar, targetCalendarId, resource.uid)) {
             throw new ApiError(409, 'The target calendar already holds this event');
         }
-        // A name the target already uses becomes a fresh one; a client sees a delete plus a create either
-        // way. A file no row of the target holds counts as used too, or the rename would destroy it.
+        // A name the target already uses becomes a fresh one; a file no row holds counts as used too, or the rename destroys it.
         const taken =
             !!store.resourceRowOf(calendar, targetCalendarId, resource.uri) ||
             (await calendar.storage.exists(resourcePath(targetCalendarId, resource.uri)));
@@ -417,8 +403,7 @@ export async function moveEvent(
                     .run();
             });
         } catch (e) {
-            // A live process rolls its own rename back; if even that fails, both keys settle the pair —
-            // source first, because the row dropped there frees the event ids the target file carries.
+            // A live process rolls its own rename back; if even that fails, both keys settle the pair on the next drain.
             try {
                 await calendar.storage.moveDurable(
                     resourcePath(targetCalendarId, targetUri),

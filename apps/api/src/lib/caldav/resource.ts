@@ -3,8 +3,7 @@ import type { Calendar } from '../calendar/calendar';
 import { davDeleteResponse, davPutResponse, davResourceResponse } from '../dav/write-result';
 import { calendarHref } from './discovery';
 
-// The CalDAV resource handlers: a thin adapter over the calendar file store, which owns the preconditions,
-// the UID rules, re-stamping and the ceiling. See docs/CALENDAR.md § DAV surface.
+// A thin adapter: the calendar file store owns the preconditions, the UID rules and the ceiling (docs/CALENDAR.md § CalDAV surface).
 
 // GET /dav/calendars/:ownerId/:calendarId/:uri — the file IS the resource. A uri the index doesn't know is a 404.
 export async function handleGet(calendar: Calendar, calendarId: string, uri: string): Promise<Response> {

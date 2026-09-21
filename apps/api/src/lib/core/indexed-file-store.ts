@@ -25,12 +25,10 @@ export function computeResourceEtag(bytes: Uint8Array): string {
     return new Bun.CryptoHasher('sha256').update(bytes).digest('hex');
 }
 
-// Why a body is refused, in the terms both DAV protocols have a precondition element for: bytes that do
-// not parse, an object that breaks the resource rules, a component the collection does not hold.
+// The terms both DAV protocols carry a precondition element for: bytes that do not parse, a broken object, a foreign component.
 export type InvalidReason = 'data' | 'object' | 'component';
 
-// A client-caused failure is a value here, not a throw: only genuine IO errors bubble past this seam.
-// A null etag is a write the server did not store verbatim: it has no validator to hand back (RFC 4791 § 5.3.4).
+// A client-caused failure is a value, not a throw; a null etag is a write not stored verbatim, which has no validator to hand back (RFC 4791 § 5.3.4).
 export type PutResourceResult =
     | { ok: true; etag: string | null; created: boolean }
     | {
@@ -44,7 +42,7 @@ export type PutResourceResult =
 export type DeleteResourceResult = { ok: true } | { ok: false; error: 'not-found' | 'precondition' };
 
 // The mtime is rounded here, once, so a writer and every later pass compare the same number.
-export type ResourceStat = { mtime: number; size: number };
+type ResourceStat = { mtime: number; size: number };
 
 export async function statResourceFile(storage: LocalFilesystem, filePath: string): Promise<ResourceStat> {
     const stat = await storage.stat(filePath);
@@ -71,7 +69,7 @@ export async function readResourceFile(storage: LocalFilesystem, filePath: strin
 }
 
 // Sorted, because callers tie-break on this order — a key collision must resolve the same way every pass.
-export async function listResourceUris(
+async function listResourceUris(
     storage: LocalFilesystem,
     dir: string,
     suffix: string,
@@ -101,12 +99,10 @@ export async function listResourceUris(
 
 export type ResourceFile = ResourceStat & { uri: string };
 
-// What one pass over a resource directory sees. A stat that failed is transient IO, not a removal, so the
-// key is remembered separately and the diff below refuses to call it vanished.
+// A failed stat is transient IO, not a removal, so its key is kept apart and the diff never calls it vanished.
 export type ResourceScan = { files: Map<string, ResourceFile>; skipped: Set<string> };
 
-// One stat per file is a syscall round trip, and this pass runs over every resource on every Home open, so
-// they go out in flight together. The answers are collected by position, so the scan keeps its sorted order.
+// One stat per file is a syscall round trip and this pass runs over every resource on every Home open, so they go out together.
 const STAT_CONCURRENCY = 16;
 
 export async function statResourceDir(storage: LocalFilesystem, dir: string, suffix: string): Promise<ResourceScan> {
@@ -181,9 +177,7 @@ export function dedupeByUid<T>(
     return kept;
 }
 
-// A bulk write (a whole-file import, a device sync) broadcasts ONE list-level event for the per-resource
-// events it held back, instead of one per resource — a thousand cards were a thousand broadcasts. The flush
-// runs even when the body throws: what landed before it still has to reach the tabs.
+// A bulk write broadcasts one list-level event instead of one per resource, and the flush runs even when the body throws.
 export class BroadcastBatch {
     private depth = 0;
     private held = false;

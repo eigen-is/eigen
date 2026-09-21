@@ -10,8 +10,7 @@ import { getUserByEmail } from '../user/';
 import { composeCancelEmail, composeInviteEmail, composeUpdateEmail } from './imip';
 import { buildCalendarEvent } from './sse-events';
 
-// Which occurrence a removal drops, and the revision its receiver orders it against; undefined for a
-// message about the whole series.
+// The revision its receiver orders the removal against; undefined for a message about the whole series.
 function occurrenceRevision(
     event: CalendarEvent,
     recurrenceDate: string | null,
@@ -19,9 +18,7 @@ function occurrenceRevision(
     return recurrenceDate ? { recurrenceDate, sequence: event.sequence, dtstamp: event.updatedAt } : undefined;
 }
 
-// `series` is set when `event` is one occurrence of it. Every message then names the SERIES' event id
-// plus the occurrence key, so a guest's receiver attaches it to their linked series as an exception —
-// the exact shape an iMIP REQUEST carrying a RECURRENCE-ID has (docs/CALENDAR.md § Invitations).
+// `series` set means `event` is one occurrence: the messages name the series id plus the occurrence key, the shape an iMIP REQUEST with a RECURRENCE-ID has (docs/CALENDAR.md § Invitations).
 export async function propagateInvitation(
     organizerHome: Home,
     event: CalendarEvent,
@@ -68,8 +65,7 @@ export async function propagateInvitation(
                     timezone: event.timezone,
                     status: event.status,
                     sequence: event.sequence,
-                    // The revision the organizer's own copy carries, so the attendee can order this
-                    // message against the next one (RFC 5546 § 2.1.5) — the fan-out is unordered.
+                    // The organizer's own revision, so the attendee can order this message against the next (RFC 5546 § 2.1.5); the fan-out is unordered.
                     dtstamp: event.updatedAt,
                     data: {
                         organizer: { userId: organizerHome.user.id, email: user.email, name: user.name },
@@ -84,8 +80,7 @@ export async function propagateInvitation(
             if (getServerSettings().notifications.email.userOnCalendarInvite) {
                 const organizer = { userId: user.id, email: user.email, name: user.name };
                 const mail = composeInviteEmail(event, organizer, [attendee], series);
-                // Local Eigen recipient already has the event in-app via sendToHome above.
-                // Drop the iMIP attachment so processInboundImip doesn't fire a second update.
+                // A local recipient already has the event via sendToHome, so the iMIP attachment would fire a second update.
                 mail.icalEvent = undefined;
                 sendMail(mail).catch((err) => console.error('Failed to send Eigen invite email:', err));
             }
@@ -171,9 +166,7 @@ export async function propagateRsvp(
     });
 }
 
-// `series` is set when only ONE of its occurrences is cancelled: the id every message names is the
-// series', and the occurrence key says which instance the guests drop. `attendees` is who held the
-// event, which a cancelled occurrence — an EXDATE with no guest list — cannot state itself.
+// `attendees` is who held the event: a cancelled occurrence — an EXDATE with no guest list — cannot state it itself.
 export async function propagateCancellation(
     organizerHome: Home,
     event: CalendarEvent,

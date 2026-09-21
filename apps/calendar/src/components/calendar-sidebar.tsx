@@ -47,9 +47,7 @@ function CalendarCheckbox({ color, checked, onChange }: { color: string; checked
     );
 }
 
-// One row for both personal calendars and shared/team calendars — callers resolve
-// the color, label and checked state from whichever calendar shape they hold. No onExport means the
-// calendar cannot be downloaded from here: it lives in another user's home, or the viewer is a guest.
+// No onExport means the calendar cannot be downloaded here: it lives in another user's home, or the viewer is a guest.
 function CalendarRow({
     color,
     label,
@@ -150,9 +148,7 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
         setSharedConfigDialogOpen(true);
     };
 
-    // Recompute the target period at click time so a tab left open across a midnight or month
-    // boundary still lands on today's period. The render-time ranges below only seed the Link's
-    // params and its active-route highlight, which re-derive on the post-navigation render.
+    // Recomputed at click time: a tab left open across midnight would navigate to yesterday's period.
     const navigateToCurrentPeriod = (e: MouseEvent, mode: 'month' | 'week') => {
         e.preventDefault();
         const range = mode === 'month' ? getMonthRange(new Date()) : getWeekRange(new Date());

@@ -1,11 +1,4 @@
-// Writes Eigen-owned edits back into a stored vCard while preserving every byte we don't own. Owned
-// properties are diffed against the parsed projection: a multi-value line (EMAIL/TEL/ADR) whose
-// value is unchanged keeps its exact source bytes, a removed value drops its line (plus any now-orphaned
-// same-group X- label), one line out against one value in carries the dropped line's group and params onto
-// the replacement, and an edited single-value property is rewritten in place — keeping the first line's
-// group and params, and taking the whole property name so no repeated line of it survives the edit.
-// Everything else — IMPP, URL, X-SOCIALPROFILE, unknown props, VERSION/UID/PRODID/REV — rides through
-// untouched. `createVCard` emits the minimal clean 3.0 card a brand-new contact starts from.
+// Writes Eigen-owned edits back into a stored card while preserving every byte Eigen does not own.
 import { escapeContentText, stripLineBreaks } from '@workspace/lib/content-line';
 import type { Address } from '@workspace/lib/types/contact';
 import { makeLine, photoParams, serializeVCardLines, splitValue, unescapeText } from './ast';
@@ -37,11 +30,7 @@ function insertBeforeEnd(lines: VCardLine[], added: VCardLine[]): VCardLine[] {
     return [...lines.slice(0, idx), ...added, ...lines.slice(idx)];
 }
 
-// Rewrite `name` as one line at the position of its first occurrence (keeping that line's group; params
-// replaced only when given) and drop every further line of the same name, or insert before END when the card
-// has none. Editing an owned property takes the whole name: CATEGORIES and NOTE are legally repeatable, but an
-// owned edit replaces the whole property, so any repeated line — even one the projection folded in (CATEGORIES
-// aggregates every line) — can't survive to drift from what the app just wrote.
+// An owned edit takes the whole property name, so no repeated line survives to drift from what the app just wrote.
 function rewriteOwned(lines: VCardLine[], name: string, value: string, params?: [string, string][]): VCardLine[] {
     const idx = lines.findIndex((l) => l.name === name);
     if (idx === -1) return insertBeforeEnd(lines, [makeLine(name, value, params)]);
@@ -53,17 +42,14 @@ function rewriteOwned(lines: VCardLine[], name: string, value: string, params?: 
     return next;
 }
 
-// Value-keyed write for a single-value owned prop: an unchanged value leaves the line byte-identical
-// (updateContact echoes every owned key on every save, so presence alone must not rewrite).
-// A changed or cleared value owns every line named `name`.
+// updateContact echoes every owned key on every save, so presence alone must not rewrite a byte-identical line.
 function writeSingle(lines: VCardLine[], name: string, changed: boolean, value: string | null): VCardLine[] {
     if (!changed) return lines;
     if (value === null) return lines.filter((l) => l.name !== name);
     return rewriteOwned(lines, name, value);
 }
 
-// A company change keeps the card's existing trailing ORG components verbatim (`Acme;Engineering` +
-// `NewCorp` -> `NewCorp;Engineering`) — the department is unowned bytes, not ours to destroy.
+// A company change keeps the trailing ORG components verbatim: the department is unowned bytes.
 function buildOrgValue(card: ParsedCard, company: string): string {
     const existing = card.lines.find((l) => l.name === 'ORG');
     if (!existing) return escapeContentText(company);
@@ -71,9 +57,7 @@ function buildOrgValue(card: ParsedCard, company: string): string {
     return [escapeContentText(company), ...rest].join(';');
 }
 
-// A name change keeps the N components from the third onwards verbatim (`Doe;John;Quincy;Dr.;Jr.` ->
-// `Smith;Jane;Quincy;Dr.;Jr.`) — components 3-5 are unowned, not ours to destroy (the buildOrgValue rule).
-// No N line, or fewer than three components -> the clean `family;given;;;` shape.
+// A rename keeps N components 3-5 verbatim (Apple's middle name, prefix and suffix): they are unowned bytes.
 function buildNameValue(card: ParsedCard, first: string, last: string): string {
     const owned = `${escapeContentText(last)};${escapeContentText(first)}`;
     const existing = card.lines.find((l) => l.name === 'N');
@@ -89,16 +73,12 @@ function sameNames(a: string[], b: string[]): boolean {
     return x.every((v, i) => v === y[i]);
 }
 
-// One line dropped against one value added is an edit of that value, not a swap of two, so the new line
-// inherits the dropped line's group and params: a retyped work email keeps TYPE=WORK and its grouped
-// X-ABLabel. Any other count is ambiguous to pair and appends bare, as a pure addition does.
+// One line out against one value in is an edit, so the new line inherits the dropped line's group and params.
 function appendDiffed(name: string, values: string[], dropped: VCardLine[], toAppend: VCardLine[]): void {
     const edited = dropped.length === 1 && values.length === 1 ? dropped[0] : null;
     for (const value of values) toAppend.push(makeLine(name, value, edited?.params, edited?.group ?? null));
 }
 
-// Diff a text-valued multi-value property (EMAIL/TEL): kept lines stay byte-for-byte, unmatched lines are
-// marked for removal, and wanted values with no matching line append a new line.
 function diffText(
     lines: VCardLine[],
     name: string,
@@ -119,8 +99,7 @@ function diffText(
     appendDiffed(name, remaining.map(escapeContentText), dropped, toAppend);
 }
 
-// ADR diffs by the mapped Address (field-wise, '' ≡ absent). Existing ADR lines correspond positionally to
-// `card.address`, so we compare against the projection instead of re-parsing the value.
+// ADR lines correspond positionally to `card.address`, so the diff compares the projection instead of re-parsing.
 function diffAddresses(card: ParsedCard, wanted: Address[], toRemove: Set<VCardLine>, toAppend: VCardLine[]): void {
     const remaining = [...wanted];
     const dropped: VCardLine[] = [];
@@ -144,8 +123,7 @@ export function mergeVCard(card: ParsedCard, edits: CardEdits): string {
     if (edits.phone !== undefined) diffText(card.lines, 'TEL', edits.phone, toRemove, toAppend);
     if (edits.address !== undefined) diffAddresses(card, edits.address, toRemove, toAppend);
 
-    // Dropping a grouped value orphans its label (item1.EMAIL + item1.X-ABLabel): once nothing non-X keeps
-    // the group — an appended line that inherited it included — drop the group's X- lines too.
+    // Once nothing non-X keeps a group, its X- label lines are orphans (item1.X-ABLabel) and go too.
     const removedGroups = new Set<string>();
     for (const line of toRemove) if (line.group) removedGroups.add(line.group);
     for (const group of removedGroups) {
@@ -159,10 +137,7 @@ export function mergeVCard(card: ParsedCard, edits: CardEdits): string {
 
     let result = card.lines.filter((l) => !toRemove.has(l));
 
-    // Single-value owned props are value-keyed: only a genuinely changed value rewrites its line, so an
-    // unchanged name/company/… on a full-projection save keeps its exact bytes (an ORG department). N/FN are
-    // rewritten as a pair — buildNameValue preserving Apple's N middle name, honorific prefix and suffix across a
-    // real rename too, not just an unchanged-value skip — or skipped entirely when neither name changed.
+    // Only a genuinely changed value rewrites its line, so a full-projection save keeps the unchanged bytes; N and FN move as a pair.
     if (edits.firstName !== undefined || edits.lastName !== undefined) {
         const first = edits.firstName ?? card.firstName;
         const last = edits.lastName ?? card.lastName;
@@ -180,8 +155,7 @@ export function mergeVCard(card: ParsedCard, edits: CardEdits): string {
         result = writeSingle(result, 'TITLE', edits.jobTitle !== card.jobTitle, value);
     }
     if (edits.birthday !== undefined) {
-        // BDAY is written verbatim (dates aren't TEXT-escaped), so anything but a strict ISO date is a clear —
-        // that is what closes the CR/newline injection path a raw value would open.
+        // BDAY is written verbatim, so anything but a strict ISO date is a clear: that closes the newline injection path.
         const birthday = ISO_DATE.test(edits.birthday) ? edits.birthday : '';
         const value = birthday === '' ? null : birthday;
         result = writeSingle(result, 'BDAY', birthday !== card.birthday, value);
@@ -195,15 +169,13 @@ export function mergeVCard(card: ParsedCard, edits: CardEdits): string {
         result = writeSingle(result, 'CATEGORIES', !sameNames(edits.categories, card.categories), value);
     }
     if (edits.eigenId !== undefined) {
-        // X-EIGEN-ID is written verbatim (an arbitrary id from another server rides through by shape), so the
-        // only sanitize is stripping CR/LF that would otherwise inject a new content line off the REST body.
+        // X-EIGEN-ID is written verbatim, so stripping CR/LF is what stops a REST body injecting a second content line.
         const eigenId = edits.eigenId === null ? null : stripLineBreaks(edits.eigenId);
         const changed = (eigenId ?? '') !== (card.eigenId ?? '');
         result = writeSingle(result, 'X-EIGEN-ID', changed, eigenId ? eigenId : null);
     }
     if (edits.photo !== undefined) {
-        // Presence-triggered: callers only pass the key when the photo actually changed. Fresh ENCODING=b
-        // params replace whatever the old PHOTO line carried.
+        // Presence-triggered: callers pass the key only when the photo actually changed.
         result = edits.photo
             ? rewriteOwned(result, 'PHOTO', photoBase64(edits.photo.bytes), photoParams(edits.photo.mediaType))
             : result.filter((l) => l.name !== 'PHOTO');

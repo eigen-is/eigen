@@ -1,13 +1,4 @@
-// Cross-home relay — the sharding seam.
-//
-// Every interaction where one user's action touches another user's Home
-// flows through this module. Push operations (writes/notifications) use
-// sendToHome() with a typed HomeMessage. Pull operations (reads) use
-// individual pull*() functions.
-//
-// Today these are direct in-process calls via getHome(). In a sharded
-// deployment, only this file changes: sendToHome() routes to the correct
-// server (or enqueues a message), and pull functions become remote API calls.
+// The sharding seam: every touch of another user's Home goes through here, so a sharded deployment changes only this file.
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -99,8 +90,7 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
             break;
         case 'calendar:invitation': {
             if (!home.hasCalendar) break;
-            // A dropped invitation is said out loud: the organizer's side otherwise believes this Home
-            // holds a copy of an event it refused.
+            // A dropped invitation is logged: the organizer's side otherwise believes this Home holds a copy it refused.
             const received = await home.calendar.receiveInvitation(message.payload);
             if (!received) {
                 console.info(
@@ -130,8 +120,7 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
         case 'calendar:rsvp':
             if (!home.hasCalendar) break;
             if (message.recurrenceDate) {
-                // Organizer-side reception of an attendee RSVP: PARTSTAT only, never resurrect an
-                // occurrence the organizer deleted (same rule as the iMIP REPLY path).
+                // PARTSTAT only: an RSVP never resurrects an occurrence the organizer deleted.
                 await home.calendar.receiveRsvpForOccurrence(
                     message.eventId,
                     message.attendeeEmail,
@@ -153,8 +142,7 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
     }
 }
 
-// Single effective-member fan-out for the chat + drive broadcasters, so the null-guard/try-catch
-// behavior can't drift. sendToHome self-gates 'broadcast' on atHome().
+// One fan-out for the chat and drive broadcasters, so their null-guard and catch behavior cannot drift apart.
 export async function relayEventToMembers(members: EffectiveMember[], event: SSEvent): Promise<void> {
     await Promise.all(
         members.map(async (member) => {
@@ -179,9 +167,7 @@ export async function pullDrivePath(ownerUserId: string, mountId: string, pathId
     return home.drive.getPath(mountId, pathId);
 }
 
-// Sizing a foreign user's Home (admin usage view). Answers Home.size() from the home's own files
-// instead of booting the Home: the admin Users page sizes every user at once, and a boot apiece is
-// seconds each.
+// Reads the home's own files instead of booting the Home: the admin Users page sizes every user at once, and a boot apiece costs seconds.
 export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeResponse> {
     // Sizing reads a user home's folder layout and quotas; a team or org home has neither.
     if (ownerUserId.startsWith('team_') || ownerUserId.startsWith('org_')) {
@@ -225,11 +211,7 @@ export async function pullCalendarShares(
     return home.calendar.getSharedWith(email, teamIds);
 }
 
-// --- Calendar event seam (reads + writes on another user's calendar) ---
-// Every read/write on a foreign calendar routes through one of the five functions below.
-// In a sharded deployment, only this module changes: getHome() becomes an RPC to the server
-// hosting ownerUserId. The `user` argument is the actor (for SSE/audit), same-server today,
-// serialized across the wire in a sharded future.
+// The `user` argument below is the acting user, for SSE and audit, not the owner of the calendar.
 
 export async function pullEventsInRange(
     ownerUserId: string,
@@ -351,15 +333,13 @@ export async function pullTeamMounts(
     );
 }
 
-// Mime-filtered contents of a team drive, aggregated over its mounts. Team membership grants read
-// of everything in the mount by design, so the caller-side membership check is the only gate.
+// Team membership grants read of the whole mount by design, so the caller-side membership check is the only gate.
 export async function pullMimeContents(ownerId: string, mimeType: string): Promise<DrivePath[]> {
     const home = await getTeamHome(ownerId);
     return home.drive.getMimeTypeContents(mimeType);
 }
 
-// FTS search over a team drive's own mounts (name + body). Same design as pullMimeContents: team
-// membership grants read of the whole mount, so the caller-side membership check is the only gate.
+// Same gate as pullMimeContents: team membership grants read of the whole mount.
 export async function pullDriveSearch(ownerId: string, opts: { q: string; limit: number }): Promise<DrivePath[]> {
     const home = await getTeamHome(ownerId);
     return home.drive.search(opts);

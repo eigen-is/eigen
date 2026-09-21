@@ -25,8 +25,7 @@ function homeDataMaxOf(overrides: TeamQuotaOverrides[]): number {
     return Math.max(...candidates) * 1024 * 1024;
 }
 
-// The mail + contacts + calendar ceiling in bytes. Its own function because it needs no mount: a team Home
-// has none, and its calendar is metered against this budget like any other Home's.
+// Its own function because it needs no mount: a team Home has none, yet its calendar meters against this budget.
 export async function resolveHomeDataMax(teamIds: string[]): Promise<number> {
     return homeDataMaxOf(await pullOverrides(teamIds));
 }

@@ -129,8 +129,7 @@ export class Calendar {
             });
         }
 
-        // A home nobody registered — a test harness, a seeding script — stays unmetered: its quota lookup
-        // would boot a second Home over these very files. EVENT_MAX_BYTES bounds every resource either way.
+        // A home nobody registered stays unmetered: its quota lookup would boot a second Home over these very files.
         this.meteredIngest = atHome(this.home.user.id);
     }
 
@@ -228,8 +227,7 @@ export class Calendar {
                 const bytes = this.calendarRow(calendarId)
                     ? await readResourceFile(this.storage, resourcePath(calendarId, existing?.uri ?? uri))
                     : null;
-                // A file the row already describes settles without a commit: a lock-free read that raced a
-                // write marks a pair that is whole, and a commit would bump a ctag for nothing.
+                // A file the row already describes settles without a commit: a ctag bump would resync clients for nothing.
                 if (bytes) {
                     await this.indexIfChanged(calendarId, existing?.uri ?? uri, bytes, existing);
                 } else if (existing) {
@@ -242,9 +240,7 @@ export class Calendar {
                 }
                 clearPendingWrite(this.db, calendarId, uri);
             } catch (e) {
-                // A pass over foreign bytes skips and warns, as every other one does: rethrowing here would
-                // escape the gate and take every later read and write of this Home with it. The write intent
-                // stays behind for the next init to retry.
+                // Rethrowing escapes the gate and takes every later read and write of this Home with it; the intent stays for init to retry.
                 console.warn(`calendar: could not re-index ${key}:`, e);
             }
             settled(key);
@@ -496,8 +492,6 @@ export class Calendar {
 
     // --- Events (reads) ---
 
-    // The file facts an event row is read with are its name and its hash, so the join carries those two
-    // columns and not every column of both tables.
     joinedEvents() {
         return this.db
             .select({
@@ -597,7 +591,7 @@ export class Calendar {
         return events.moveEvent(this, calendarId, id, targetCalendarId);
     }
 
-    // A whole `.ics` into one calendar of this Home (docs/CALENDAR.md § Importing an .ics).
+    // A whole `.ics` into one calendar of this Home (docs/CALENDAR.md § iCalendar import / export).
     public async importEvents(calendarId: string, bytes: Uint8Array): Promise<ImportCountsResult> {
         return importEvents(this, calendarId, bytes);
     }

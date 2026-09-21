@@ -6,9 +6,6 @@ import type { PropMap } from '../dav/propfind';
 import { formatSyncToken } from '../dav/sync-token';
 import { currentUserPrincipalProp, ownershipEntries } from '../dav/xml';
 
-// The calendar-specific property blocks, and nothing else: the XML envelope, the member props, the
-// PROPFIND core and the sync-token grammar are the shared DAV layer's.
-
 // Calendar collection properties (for listing calendars)
 export function calendarCollectionProps(cal: CalendarCollection, ownerId: string): PropMap {
     return new Map([
@@ -24,8 +21,7 @@ export function calendarCollectionProps(cal: CalendarCollection, ownerId: string
         ],
         // RFC 4791 § 5.2.5 — the ceiling the PUT already enforces, so a client can size a resource first.
         ['max-resource-size', `<C:max-resource-size>${EVENT_MAX_BYTES}</C:max-resource-size>`],
-        // macOS Contacts/Calendar keys on supported-report-set to pick sync-collection and is documented not
-        // to fall back when it's missing (spec § 4).
+        // macOS Calendar keys on supported-report-set to pick sync-collection and does not fall back when it is missing.
         [
             'supported-report-set',
             `<D:supported-report-set><D:supported-report><D:report><C:calendar-query/></D:report></D:supported-report><D:supported-report><D:report><C:calendar-multiget/></D:report></D:supported-report><D:supported-report><D:report><D:sync-collection/></D:report></D:supported-report></D:supported-report-set>`,

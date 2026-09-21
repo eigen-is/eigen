@@ -65,8 +65,7 @@ async function handleCalendarQuery(
     report: Extract<ReportRequest, { type: 'calendar-query' }>,
     budget: DataBudget,
 ): Promise<Response> {
-    // A filter naming a component Eigen does not store matches nothing. The one superset served here is
-    // the time-range's: a resource whose recurrence the index cannot expand rides along (R16 5b).
+    // A filter naming a component Eigen does not store matches nothing; a time-range may over-match, never under-match.
     if (!report.matchesEvents) return multistatusResponse([]);
     const resources = report.timeRange
         ? await calendar.getResourcesInRange(calendarId, report.timeRange.start, report.timeRange.end)
@@ -130,15 +129,13 @@ async function handleSyncCollection(
     } else {
         const token = parseSyncToken(report.syncToken);
         if (!token) return invalidSyncToken();
-        // A stale generation or a ctag ahead of the collection both force a clean resync: an empty delta
-        // under a LOWER token would stall that client permanently.
+        // A stale generation or a ctag ahead of the collection forces a resync: an empty delta under a lower token stalls the client forever.
         if (token.gen !== collection.syncGen || token.since > collection.ctag) return invalidSyncToken();
 
         for (const resource of await calendar.getChangedResourcesSince(calendarId, token.since)) {
             responses.push(await resourceRow(calendar, calendarId, ownerId, resource, report.wantsData, budget));
         }
-        // One tombstone row per uri: the tombstone primary key and the commit's tombstone-clear together
-        // guarantee no href is both a 200 and a 404 in one response (RFC 6578).
+        // One tombstone row per uri: no href may be both a 200 and a 404 in one response (RFC 6578).
         for (const removed of await calendar.getDeletedResourcesSince(calendarId, token.since)) {
             responses.push(removedRow(eventHref(ownerId, calendarId, removed.uri)));
         }

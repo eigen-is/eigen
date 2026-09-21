@@ -36,8 +36,7 @@ export function invalidateCalendarDeleted(queryClient: QueryClient, ownerId: str
     invalidateEventList(queryClient, ownerId);
 }
 
-// Any event that moved — one create, one delete, a whole imported file — makes every range query stale, and
-// its `.ics` bytes count against the Home's storage budget.
+// A moved event stales every range query, and its `.ics` bytes count against the Home's storage budget.
 export function invalidateEventList(queryClient: QueryClient, ownerId: string): void {
     queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
     invalidateHomeSize(queryClient, ownerId);

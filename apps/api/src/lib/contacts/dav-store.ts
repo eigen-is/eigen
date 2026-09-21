@@ -23,8 +23,7 @@ import * as schema from './schema';
 
 // The CardDAV store seam over the Contacts facade. See docs/CONTACTS.md § CardDAV surface.
 
-// The index projection the sync layer reads for a resource: the etag is the hash the handler quotes, the
-// size is what a REPORT weighs against its byte budget before reading the file at all.
+// The size lets a REPORT weigh a row against its byte budget before reading the file at all.
 export type CardRow = { uri: string; etag: string; size: number };
 const CARD_ROW = { uri: schema.contacts.uri, etag: schema.contacts.etag, size: schema.contacts.size };
 
@@ -33,9 +32,7 @@ export type CardBook = { ctag: number; syncGen: number };
 
 export type DeleteCardResult = DeleteResourceResult | { ok: false; error: 'self-delete' };
 
-// The index-only reads the protocol handlers sit on. Each drains a pending failed pair before observing the
-// index so no DAV read is served past a torn write — which is why they are async even where the shape looks
-// synchronous.
+// Each read drains a pending torn write first, which is why they are async where the shape looks synchronous.
 
 export async function getBook(contacts: Contacts): Promise<CardBook> {
     await contacts.gate.ensureDrained();
@@ -84,8 +81,7 @@ export async function getCard(contacts: Contacts, uri: string): Promise<{ bytes:
     return { bytes, etag };
 }
 
-// The single-resource PROPFIND read: an indexed single-row lookup, unlike a `listCards().find()` over the
-// whole book, and unlike getCard it doesn't read the file bytes a PROPFIND never returns.
+// An indexed single-row lookup, and no file read: a PROPFIND never returns the bytes.
 export async function getCardMeta(contacts: Contacts, uri: string): Promise<CardRow | null> {
     await contacts.gate.ensureDrained();
     return (
@@ -97,10 +93,7 @@ export async function getCardMeta(contacts: Contacts, uri: string): Promise<Card
     );
 }
 
-// The single self-link for a card being PUT, plus the bytes to store. On update the row keeps its existing
-// link — promoting a non-self card is left to the reconcile rematch, as updateContact does. When this card
-// holds the link but its bytes don't assert X-EIGEN-ID (a client stripped it, or an email-only claim never
-// wrote it), the property is restored so the stored file and the index never disagree.
+// An update keeps the row's link — promotion is the reconcile rematch's — and a restored X-EIGEN-ID keeps file and index agreeing.
 function resolveSelfLinkOnPut(
     contacts: Contacts,
     parsed: ParsedCard,
@@ -162,14 +155,10 @@ export async function putCard(
             return { ok: false, error: 'precondition' };
         }
 
-        // A case-variant PUT rewrites the existing file in place: writing under the caller's spelling would
-        // strand the old file on a case-sensitive fs and let the next reconcile re-index from its stale
-        // bytes, silently reverting the accepted write.
+        // A case-variant PUT rewrites the existing file, or a case-sensitive fs strands the old one and the next reconcile reverts the write.
         const storedUri = existing?.uri ?? uri;
 
-        // A name free in the INDEX is not free on DISK: a card the index skipped — a dedupe loser, bytes that
-        // won't parse — is still on disk, and a create would destroy it. Refused with the answer an explicit
-        // `If-None-Match: *` already gives for a name the index does know.
+        // A name free in the index may still be on disk (a dedupe loser, bytes that won't parse), and a create would destroy it.
         if (!existing && (await contacts.storage.exists(cardPath(storedUri)))) {
             return { ok: false, error: 'precondition' };
         }
@@ -193,9 +182,7 @@ export async function putCard(
             new TextEncoder().encode(stored),
             existing,
         );
-        // A body the server rewrote before storing it is not the client's revision, so the response carries no
-        // validator and the client re-reads (RFC 4918 § 9.7.2). The two rewrites are the 4.0 transcode and a
-        // restored self-link.
+        // A body the server rewrote is not the client's revision, so no validator goes back and the client re-reads (RFC 4918 § 9.7.2).
         const verbatim = stored === body && !merged;
 
         // The stored bytes credit the card this one replaces; a raised 413/507 maps to a typed result.
@@ -217,8 +204,7 @@ export async function putCard(
             contacts.recordCardWrite(storedUri);
             const { mtime, size } = await writeResourceFile(contacts.storage, cardPath(storedUri), bytes);
             etag = computeResourceEtag(bytes);
-            // Regenerates only when the hash-named file is missing, so an unchanged-photo re-PUT keeps the
-            // promoted first-generation cache.
+            // Regenerated only when the hash-named file is missing, so an unchanged-photo re-PUT keeps its cache.
             projectionAvatar = await deriveCardPhotoCache(contacts, id, parsed.photo);
             contacts.commitCard({
                 row: {
@@ -245,9 +231,7 @@ export async function putCard(
             throw e;
         }
 
-        // A self-card PUT renames the user org-wide, exactly as updateContact's push does — after the commit,
-        // failure logged never rethrown. A DAV PUT carries no staged avatar URL, so the pushed bytes are the
-        // derived webp cache.
+        // A self-card PUT renames the user org-wide; a DAV PUT stages no avatar, so the pushed bytes are the derived webp cache.
         if (isSelf) {
             let avatarWebP: Buffer | null = null;
             if (projectionAvatar) {
@@ -270,8 +254,7 @@ export async function putCard(
     });
 }
 
-// A DAV DELETE: an unknown uri is a 404 (deliberately unlike REST's idempotent no-op), your own card a 403,
-// a stale If-Match a 412 — then the shared purge tail runs under the lock.
+// An unknown uri is a 404, deliberately unlike REST's idempotent no-op.
 export async function deleteCard(
     contacts: Contacts,
     uri: string,
@@ -286,13 +269,7 @@ export async function deleteCard(
         if (!row) return { ok: false, error: 'not-found' };
         // Self before etag, mirroring deleteContact: your own card cannot be removed regardless of token.
         if (row.eigenId === contacts.home.user.id) {
-            // The delete is refused, but the client (Thunderbird) drops the card from its view before the
-            // request and ignores the 403 — a delta that doesn't list the self card leaves that view wrong
-            // forever. So touch it: bump the book ctag and re-stamp the self row's cardCtag, bytes/etag/mtime
-            // untouched (no SSE — nothing the app shows changed). The next sync-collection delta then lists
-            // it as an unchanged 200 row and the ignoring client re-downloads it. This deliberately bends
-            // the "ctag bumps only on a real change" rule: a user-initiated mutation WAS refused, and the
-            // trade is one phantom re-fetch row for every other client so the refusal self-heals on theirs.
+            // Thunderbird drops the card from its view and ignores the 403, so bump the ctag: the next delta lists it and that client re-downloads it.
             contacts.db.transaction((tx) => {
                 const ctag = contacts.bumpCtag(tx);
                 tx.update(schema.contacts).set({ cardCtag: ctag }).where(eq(schema.contacts.id, row.id)).run();

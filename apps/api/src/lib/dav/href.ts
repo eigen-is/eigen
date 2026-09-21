@@ -10,9 +10,7 @@ export const principalHref = (ownerId: string) => `/dav/principals/${ownerId}/`;
 
 export type CollectionPath = { ok: true; collection: string | null; resource: string | null } | { ok: false };
 
-// Both DAV routers mount one wildcard that decodes to at most two segments — the collection and an optional
-// resource name. Both are client-chosen, so every segment is percent-decoded (the webdav/xml.ts convention);
-// a malformed escape or a third segment is a client error, not a silent misroute.
+// Both routers mount one wildcard of at most two client-chosen segments, so each is percent-decoded and a third segment is a client error, not a misroute.
 export function parseCollectionPath(wildcard: string): CollectionPath {
     const parts = wildcard
         .replace(/^\/+|\/+$/g, '')
@@ -30,15 +28,10 @@ export function parseCollectionPath(wildcard: string): CollectionPath {
     return { ok: true, collection: decoded[0] ?? null, resource: decoded[1] ?? null };
 }
 
-// A multiget refuses a client that asks for more than this many resources in one round-trip. One fact, so the
-// two protocols can't bound their requests differently.
+// One fact for both protocols, so they cannot bound a multiget differently.
 export const MULTIGET_HREF_LIMIT = 500;
 
-// Each requested multiget href resolved against its collection: percent-decoded when it points inside, null
-// otherwise so the caller answers a 404 row echoing the original href. Dedupe keeps one row per resource — a
-// client listing one resource N ways must not make us retain N copies of its bytes — folded through `keyOf`,
-// the collection's own notion of resource identity. Both key spaces are prefixed, so a stored uri literally
-// starting with `raw:` can't collide with a bad-href key. First occurrence wins, preserving request order.
+// Deduped through the collection's own `keyOf`, so a client listing one resource N ways never makes us hold N copies of its bytes; the `raw:`/`uri:` prefixes keep a stored uri out of the bad-href key space.
 export function resolveMultigetHrefs(
     hrefs: string[],
     prefix: string,

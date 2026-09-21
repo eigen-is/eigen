@@ -6,8 +6,7 @@ import { isXmlNode, type XmlNode } from '../dav/xml-node';
 import { calendarHref } from './discovery';
 import { caldavXmlParser } from './xml-parser';
 
-// A prop element is either the bare text or, when it carried an attribute (e.g. xml:lang), an object with
-// the value under '#text'. Return the string form; null when absent.
+// A prop that carried an attribute (xml:lang) parses to an object holding the value under '#text', not a bare string.
 function textOf(value: unknown): string | null {
     if (typeof value === 'string') return value;
     if (isXmlNode(value) && '#text' in value) return String(value['#text']);
@@ -51,8 +50,7 @@ export async function handleMkcalendar(
         await calendar.createCalendar({ id, name: props.name ?? id, color: props.color });
     } catch (error) {
         if (!(error instanceof ApiError)) throw error;
-        // MKCALENDAR over a collection that exists — under this name or a case variant of it, since one
-        // directory is one calendar — is a precondition failure (RFC 5689 / WebDAV MKCOL semantics).
+        // One directory is one calendar, so a case variant of an existing name hits the same collection: 405 (RFC 5689).
         if (error.status === 409) return new Response('Method Not Allowed', { status: 405 });
         // A property value the domain refuses is WebDAV's 403 on a property the server will not set.
         if (error.status === 400) return new Response('Forbidden', { status: 403 });
@@ -61,9 +59,7 @@ export async function handleMkcalendar(
     return new Response(null, { status: 201, headers: { Location: calendarHref(ownerId, id) } });
 }
 
-// DELETE /dav/calendars/:ownerId/:calendarId/ — the MKCALENDAR twin. deleteCalendar owns which calendars may go
-// (and the SSE broadcast), and DAV renames exactly one of its statuses: the default calendar's 400 refusal is
-// WebDAV's 403 on a protected collection. Every other failure travels on with its own status.
+// DAV renames one status deleteCalendar raises: the default calendar's 400 refusal is WebDAV's 403 on a protected collection.
 export async function handleDeleteCalendar(calendar: Calendar, calendarId: string): Promise<Response> {
     try {
         await calendar.deleteCalendar(calendarId);

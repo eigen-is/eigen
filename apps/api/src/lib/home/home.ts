@@ -91,9 +91,7 @@ export class Home {
         try {
             await time('Home.init.settings', () => this.settings?.load() ?? Promise.resolve());
 
-            // allSettled (not all): if one subsystem init throws, let its peers finish opening before
-            // we tear down — a rejected Promise.all returns while siblings are still mid-init, so
-            // their ManagedDatabases + upload/reindex timers would leak.
+            // allSettled, not all: a rejected all returns while its siblings are mid-init, leaking their databases and timers.
             const results = await Promise.allSettled([
                 time('Home.init.drive', () => this._drive?.init(autoCreateDefaultMount) ?? Promise.resolve()),
                 time('Home.init.contacts', () => this._contacts?.init() ?? Promise.resolve()),
@@ -107,10 +105,7 @@ export class Home {
             console.log(`[Home] Initialized for ${this.user.id}`);
             return this;
         } catch (err) {
-            // One failure path for the whole init body (settings load included): the idempotent
-            // shutdown() (see destruct) closes what got built and clears the idle timer, and the
-            // rethrow makes getHome discard this half-built Home instead of caching a leaking one
-            // (concurrent callers share the memoised rejection).
+            // The rethrow makes getHome discard this half-built Home instead of caching one that leaks.
             await this.shutdown();
             throw err;
         }
@@ -151,8 +146,7 @@ export class Home {
         this.sseListeners = this.sseListeners.filter((l) => l !== listener);
     }
 
-    // Reads the fields, not the getters: a team Home's calendar getter refuses a calendar the team disabled,
-    // and its bytes are on disk either way.
+    // Reads the fields, not the getters: a team Home's calendar getter refuses a disabled calendar whose bytes are on disk anyway.
     public async dataSize(): Promise<number> {
         const [mail, contacts, calendar] = await Promise.all([
             this._mail?.size(),
@@ -188,15 +182,11 @@ export class Home {
     }
 
     protected destruct(): Promise<void> {
-        // Idempotent: the idle timer and an explicit shutdown() (e.g. getHome evicting a home that is
-        // already tearing down) can both fire, so run teardown once — a second concurrent pass would
-        // close, checkpoint and journal-unlink the same DB files twice.
+        // Idempotent: the idle timer and an explicit shutdown can both fire, and a second pass would checkpoint and journal-unlink the same DB files twice.
         if (this._destructPromise) return this._destructPromise;
         this._destructing = true;
         this._destructPromise = (async () => {
-            // Subsystems close their own ManagedDatabase. Run those first so the
-            // managedDatabases loop below is a safety net (idempotent close), not a
-            // concurrent second close on the same db.
+            // Subsystems close their own ManagedDatabase first, so the loop below is a safety net and not a concurrent second close.
             const subsystems: [string, Promise<unknown> | undefined][] = [
                 ['drive', this._drive?.destruct()],
                 ['contacts', this._contacts?.destruct()],

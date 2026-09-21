@@ -11,8 +11,7 @@ import {
     invalidateEventList,
 } from './hooks/keys';
 
-// A whole-file import sends the one batched calendar:events-changed instead. The writing tab's own
-// onSuccess invalidation is untouched, so a single write still lands immediately.
+// Debounced for the fan-out of a whole-file import; the writing tab's own onSuccess invalidation still lands at once.
 const invalidateEventsSoon = debouncePerOwner(invalidateEventList, 250);
 
 export function handleCalendarSSEvent(event: SSEvent, queryClient: QueryClient, userId: string): boolean {

@@ -39,10 +39,7 @@ export const CALENDAR_DB_CONFIG: DatabaseConfig<typeof schema> = {
             `),
         },
         {
-            // Files-as-truth refit: events live in `calendars/<calendarId>/<uri>` and this database becomes
-            // the index over them. The v1 event rows are DROPPED, not migrated — init re-derives them from
-            // the files, and a v1 home has none (docs/CALENDAR.md § Storage). `calendars` and
-            // `shared_calendars` are authoritative, so they are reshaped in place rather than dropped.
+            // The v1 event rows are dropped, not migrated: init re-derives them from the files, where `calendars` and `shared_calendars` are authoritative (docs/CALENDAR.md § Storage model — files as truth).
             version: 2,
             up: (db) =>
                 db.exec(`

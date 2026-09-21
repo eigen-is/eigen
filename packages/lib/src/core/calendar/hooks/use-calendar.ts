@@ -250,8 +250,7 @@ export function useSharedCalendars(ownerId: string, enabled = true) {
     });
 }
 
-// The one place that decides what a shared calendar is called. Batched, so a team the viewer isn't
-// a member of still gets a name; an unresolved one keeps the calendar's own name, never `team_<id>`.
+// A team the viewer is not in still resolves to a name; an unresolved one keeps the calendar's name, never `team_<id>`.
 export function useSharedCalendarLabel(sharedCalendars: SharedCalendar[]): (sc: SharedCalendar) => string {
     const teamOwnerIds = useMemo(
         () => [
@@ -276,8 +275,6 @@ export function useSharedCalendarLabel(sharedCalendars: SharedCalendar[]): (sc: 
     );
 }
 
-// Every calendar a viewer may write in, in one list: their own home's first, then each shared calendar
-// they hold `write` on, under the name the shared-calendar label resolves.
 export function useCalendarOptions(
     ownerId: string,
     calendars: CalendarItem[],

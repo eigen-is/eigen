@@ -4,10 +4,7 @@ import { type PropfindRequest, selectProps } from '../dav/propfind';
 import { currentUserPrincipalProp, multistatusResponse, principalProps, propstatOk, response } from '../dav/xml';
 import { calendarCollectionProps, homeCollectionProps } from './xml-builder';
 
-// The two href shapes every CalDAV surface emits (discovery, PROPFIND rows, REPORT rows, the PUT/MKCALENDAR
-// Location header), so the path shape and the escaping rule live in one place. The resource name is client-chosen,
-// so its segment is minimally path-encoded via the shared dav/href encoder (the CardDAV twin's cardHref); ownerId
-// and the calendarId are not — a client-chosen calendarId is charset-restricted by sanitizeCalendarId instead.
+// Only the client-chosen resource name needs path encoding; a calendarId is charset-restricted by sanitizeCalendarId.
 export const calendarHref = (ownerId: string, calendarId: string) => `/dav/calendars/${ownerId}/${calendarId}/`;
 export const eventHref = (ownerId: string, calendarId: string, uri: string) =>
     `${calendarHref(ownerId, calendarId)}${encodePathSegment(uri)}`;

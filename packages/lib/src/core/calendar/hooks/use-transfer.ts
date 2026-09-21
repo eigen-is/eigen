@@ -11,16 +11,12 @@ import { fetchImportBlob, postImportBytes, reportImportCounts } from '../../tran
 import { invalidateEventList } from './keys';
 import { useCreateCalendar, useDeleteCalendar } from './use-calendar';
 
-// The homes a whole `.ics` may leave or enter: the viewer's own and a team's, the only two the transfer
-// routes resolve. A calendar shared out of another user's home is refused there, so it is neither an
-// export source nor an import target.
+// The transfer routes resolve only the viewer's own home and a team's, so a calendar shared out of another home is refused.
 export function isTransferableCalendarHome(ownerId: string, viewerId: string): boolean {
     return ownerId === viewerId || parseOwnerId(ownerId).type === 'team';
 }
 
-// The export answers with the file itself, so it goes through raw fetch rather than Eden — same download
-// hook as useExportContacts, down to reporting its own failures (there is no mutation to carry them).
-// The home is named per call, not per hook: a sidebar draws its own calendars and a team's side by side.
+// The export answers with the file itself, so it takes raw fetch over Eden and reports its own failures.
 export function useExportCalendar() {
     const { download, isDownloading } = useFileDownload();
 
@@ -37,9 +33,7 @@ export function useExportCalendar() {
     return { exportCalendar, isExporting: isDownloading };
 }
 
-// One import, whichever identity the file has: a Drive path the server copies out, or the download URL a
-// file with no Drive path behind it (a mail part, a chat attachment) is read from in the browser. Unlike
-// its siblings this one needs a target, so the picker's chosen home and calendar ride with the source.
+// A mail part or chat attachment has no Drive path for the server to copy, so the browser reads its bytes and posts them.
 export function useImportCalendar() {
     const queryClient = useQueryClient();
 
@@ -69,16 +63,11 @@ export function useImportCalendar() {
     });
 }
 
-// Where a picked file lands: a calendar that exists, in whichever home holds it, or one made in the
-// viewer's own home for this file alone.
 export type ImportCalendarTarget =
     | { kind: 'existing'; ownerId: string; calendarId: string }
     | { kind: 'new'; name: string; color: string };
 
-// The whole action an `.ics` picker runs. A new calendar is made before the import and, when nothing
-// landed in it, deleted again — the user asked for the file's events, never for an empty calendar. The
-// one a failed attempt made is remembered, so a retry imports into it rather than making a second of the
-// same name; `forgetNewCalendar` drops that memory when the dialog closes.
+// A new calendar that took no events is deleted again, and a failed attempt's calendar is remembered so a retry reuses it.
 export function useImportToCalendar(ownerId: string): {
     importToCalendar: (source: FileImportSource, target: ImportCalendarTarget) => Promise<void>;
     forgetNewCalendar: () => void;

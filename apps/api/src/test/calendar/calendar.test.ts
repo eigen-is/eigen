@@ -485,39 +485,38 @@ describe('Calendar', () => {
             );
             const beforeEvents = await assertJson<CalendarEventOccurrence[]>(beforeRes);
             const weeklySyncs = beforeEvents.filter((e: CalendarEventOccurrence) => e.title === 'Weekly Sync');
-            const targetDate = weeklySyncs[1]?.occurrenceDate;
+            expect(weeklySyncs.length).toBeGreaterThan(1);
+            const targetDate = weeklySyncs[1].occurrenceDate;
 
-            if (targetDate) {
-                const cancelRes = await authedRequest(
-                    ctx.alice.user.sessionToken,
-                    `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
-                    {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            title: 'Weekly Sync',
-                            startTime: weeklySyncs[1].startTime,
-                            endTime: weeklySyncs[1].endTime,
-                            allDay: false,
-                            parentEventId: aliceRecurringEventId,
-                            recurrenceDate: targetDate,
-                            status: 'cancelled',
-                        }),
-                    },
-                );
-                expect(cancelRes.status).toBe(200);
+            const cancelRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Weekly Sync',
+                        startTime: weeklySyncs[1].startTime,
+                        endTime: weeklySyncs[1].endTime,
+                        allDay: false,
+                        parentEventId: aliceRecurringEventId,
+                        recurrenceDate: targetDate,
+                        status: 'cancelled',
+                    }),
+                },
+            );
+            expect(cancelRes.status).toBe(200);
 
-                const afterRes = await authedRequest(
-                    ctx.alice.user.sessionToken,
-                    `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/event-range/${from}/${to}`,
-                );
-                const afterEvents = await assertJson<CalendarEventOccurrence[]>(afterRes);
-                const afterSyncs = afterEvents.filter(
-                    (e: CalendarEventOccurrence) =>
-                        e.title === 'Weekly Sync' && e.occurrenceDate === targetDate && !e.parentEventId,
-                );
-                expect(afterSyncs.length).toBe(0);
-            }
+            const afterRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/event-range/${from}/${to}`,
+            );
+            const afterEvents = await assertJson<CalendarEventOccurrence[]>(afterRes);
+            const afterSyncs = afterEvents.filter(
+                (e: CalendarEventOccurrence) =>
+                    e.title === 'Weekly Sync' && e.occurrenceDate === targetDate && !e.parentEventId,
+            );
+            expect(afterSyncs.length).toBe(0);
         });
 
         test('cancel a single occurrence with ISO datetime recurrenceDate (FE format)', async () => {
@@ -532,41 +531,39 @@ describe('Calendar', () => {
             const weeklySyncs = beforeEvents.filter(
                 (e: CalendarEventOccurrence) => e.title === 'Weekly Sync' && !e.parentEventId,
             );
+            expect(weeklySyncs.length).toBeGreaterThan(0);
             const target = weeklySyncs[0];
+            const isoDate = new Date(target.occurrenceDate).toISOString();
 
-            if (target) {
-                const isoDate = new Date(target.occurrenceDate).toISOString();
+            const cancelRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: target.title,
+                        startTime: target.startTime,
+                        endTime: target.endTime,
+                        allDay: false,
+                        parentEventId: aliceRecurringEventId,
+                        recurrenceDate: isoDate,
+                        status: 'cancelled',
+                    }),
+                },
+            );
+            expect(cancelRes.status).toBe(200);
 
-                const cancelRes = await authedRequest(
-                    ctx.alice.user.sessionToken,
-                    `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
-                    {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            title: target.title,
-                            startTime: target.startTime,
-                            endTime: target.endTime,
-                            allDay: false,
-                            parentEventId: aliceRecurringEventId,
-                            recurrenceDate: isoDate,
-                            status: 'cancelled',
-                        }),
-                    },
-                );
-                expect(cancelRes.status).toBe(200);
-
-                const afterRes = await authedRequest(
-                    ctx.alice.user.sessionToken,
-                    `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/event-range/${from}/${to}`,
-                );
-                const afterEvents = await assertJson<CalendarEventOccurrence[]>(afterRes);
-                const afterSyncs = afterEvents.filter(
-                    (e: CalendarEventOccurrence) =>
-                        e.title === 'Weekly Sync' && e.occurrenceDate === target.occurrenceDate && !e.parentEventId,
-                );
-                expect(afterSyncs.length).toBe(0);
-            }
+            const afterRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/event-range/${from}/${to}`,
+            );
+            const afterEvents = await assertJson<CalendarEventOccurrence[]>(afterRes);
+            const afterSyncs = afterEvents.filter(
+                (e: CalendarEventOccurrence) =>
+                    e.title === 'Weekly Sync' && e.occurrenceDate === target.occurrenceDate && !e.parentEventId,
+            );
+            expect(afterSyncs.length).toBe(0);
         });
 
         test('modify a single occurrence', async () => {
@@ -581,35 +578,34 @@ describe('Calendar', () => {
             const weeklySyncs = beforeEvents.filter(
                 (e: CalendarEventOccurrence) => e.title === 'Weekly Sync' && !e.parentEventId,
             );
+            expect(weeklySyncs.length).toBeGreaterThan(0);
             const first = weeklySyncs[0];
 
-            if (first) {
-                const modRes = await authedRequest(
-                    ctx.alice.user.sessionToken,
-                    `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
-                    {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            title: 'Weekly Sync (moved)',
-                            startTime: new Date(new Date(first.startTime).getTime() + 3600_000),
-                            endTime: new Date(new Date(first.endTime).getTime() + 3600_000),
-                            allDay: false,
-                            parentEventId: aliceRecurringEventId,
-                            recurrenceDate: first.occurrenceDate,
-                        }),
-                    },
-                );
-                expect(modRes.status).toBe(200);
+            const modRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Weekly Sync (moved)',
+                        startTime: new Date(new Date(first.startTime).getTime() + 3600_000),
+                        endTime: new Date(new Date(first.endTime).getTime() + 3600_000),
+                        allDay: false,
+                        parentEventId: aliceRecurringEventId,
+                        recurrenceDate: first.occurrenceDate,
+                    }),
+                },
+            );
+            expect(modRes.status).toBe(200);
 
-                const afterRes = await authedRequest(
-                    ctx.alice.user.sessionToken,
-                    `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/event-range/${from}/${to}`,
-                );
-                const afterEvents = await assertJson<CalendarEventOccurrence[]>(afterRes);
-                const modified = findOrFail(afterEvents, (e) => e.title === 'Weekly Sync (moved)');
-                expect(new Date(modified.startTime).getTime()).toBe(new Date(first.startTime).getTime() + 3600_000);
-            }
+            const afterRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/event-range/${from}/${to}`,
+            );
+            const afterEvents = await assertJson<CalendarEventOccurrence[]>(afterRes);
+            const modified = findOrFail(afterEvents, (e) => e.title === 'Weekly Sync (moved)');
+            expect(new Date(modified.startTime).getTime()).toBe(new Date(first.startTime).getTime() + 3600_000);
         });
     });
 

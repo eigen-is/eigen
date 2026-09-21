@@ -7,14 +7,9 @@ import { toEvent } from './mappers';
 import { expandRecurrence } from './recurrence';
 import * as schema from './schema';
 
-// The range reads over the Calendar facade: the occurrences a span touches, and the files they were
-// projected from. An override answers from its own times (RFC 4791 § 9.9), so moving one carries it out of
-// the window it was expanded in and into the one it now sits in.
+// An override answers from its own times (RFC 4791 § 9.9), so moving one carries it out of the window it was expanded in.
 
-// Widest window the range reads honor. The calendar FE only ever asks for a month/week and CalDAV
-// initial-sync windows are far narrower, so 5 years is generous headroom while bounding rrule's
-// iteration and stopping the `event-range/0/253402300799` (year-9999) span from the audit. Clamp (not
-// reject) so a legit-but-wide CalDAV sync still gets bounded data instead of an error.
+// 5 years bounds rrule iteration against a year-9999 span; clamp rather than reject so a wide CalDAV sync still gets bounded data.
 const MAX_RANGE_SPAN_MS = 5 * 366 * 24 * 60 * 60 * 1000;
 
 function clampRangeEnd(from: Date, to: Date): Date {
@@ -54,8 +49,7 @@ export async function getEventsInRange(
         .all()
         .map(toEvent);
 
-    // An override is read twice over: for the occurrence of its parent it replaces, and — when its own times
-    // overlap — as the occurrence it was moved to, whose parent may expand nowhere near this window.
+    // An override is read twice: as the parent occurrence it replaces, and — when its own times overlap — where it was moved to.
     const parentIds = recurring.map((event) => event.id);
     const exceptions = calendar
         .joinedEvents()

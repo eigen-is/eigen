@@ -78,9 +78,7 @@ export function EditEventDialog({
     const [showRecurringDialog, setShowRecurringDialog] = useState(false);
     const [showMoveConfirm, setShowMoveConfirm] = useState(false);
 
-    // A cross-Home move creates the destination event then deletes the source. If the delete fails the
-    // dialog stays open; remember that the destination already exists so a retry only re-runs the delete
-    // instead of creating a second event (and re-fanning-out invitations). Reset each time the dialog opens.
+    // A retry after a failed source delete must not create the destination twice, nor fan invitations out again.
     const createdDestRef = useRef(false);
     useEffect(() => {
         if (open) createdDestRef.current = false;
@@ -135,18 +133,14 @@ export function EditEventDialog({
     if (!event) return null;
 
     const isRecurring = !!event.rrule;
-    // An override of one occurrence carries no rule of its own, so it has no series rule to truncate and
-    // no rule to send back: without this it read as a single event and saved over the whole series unasked.
+    // An override of one occurrence carries no rule of its own: sending one back saves over the whole series.
     const isOverride = !!event.parentEventId;
     const isPartOfSeries = isSeriesOccurrence(event);
     const isLinkedEvent = isInvitationFromOthers(event, eventOwnerId === user?.id ? user.email : undefined);
-    // Every detail of an invitation from someone else is read-only; only which calendar holds the copy is
-    // the viewer's, so that move is the one thing there is to save.
+    // An invitation from someone else is read-only except for which calendar holds the copy.
     const canSave = !isLinkedEvent || calendarChanged;
 
-    // A cross-Home move recreates the event in the other Home and deletes the source — which fires
-    // deleteEvent's iMIP side effects and can't carry exception children. Warn honestly before that
-    // (same precedence as deleteEvent: invitee-decline over organizer-cancel).
+    // A cross-Home move fires deleteEvent's iMIP side effects and leaves the exception children behind, so warn first.
     const crossHomeMove = calendarChanged && !!selectedCal && selectedCal.ownerId !== eventOwnerId;
     const moveLossReasons: string[] = [];
     if (isLinkedEvent) moveLossReasons.push('the invitation link will be removed (the organizer will see a decline)');
@@ -186,9 +180,7 @@ export function EditEventDialog({
 
         if (calendarChanged && selectedCal) {
             if (selectedCal.ownerId === eventOwnerId) {
-                // Same Home: apply the edits in place, then the server-owned atomic move re-homes the master
-                // and its exception children, preserving the organizer link, timezone, and data a client can't
-                // re-send — and never firing deleteEvent's decline.
+                // The server-owned move carries the exception children and the organizer link, and fires no decline.
                 await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, ...updates });
                 await moveEvent.mutateAsync({
                     calendarId: event.calendarId,
@@ -196,10 +188,7 @@ export function EditEventDialog({
                     targetCalendarId: selectedCal.id,
                 });
             } else {
-                // Cross-Home move can't be atomic (the calendars live in different Homes): recreate the event
-                // in the target Home and delete the source. Organizer link and exception overrides don't cross Homes.
-                // The ref keeps the move retry-safe — skip re-creation if a prior attempt already created the
-                // destination and only the source delete failed.
+                // Two Homes have no atomic move: recreate, then delete, and the organizer link and overrides stay behind.
                 if (!createdDestRef.current) {
                     await createEvent.mutateAsync({ calendarId: selectedCal.id, ...updates });
                     createdDestRef.current = true;

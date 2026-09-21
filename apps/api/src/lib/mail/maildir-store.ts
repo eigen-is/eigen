@@ -29,8 +29,7 @@ import {
 const STALE_DRAFT_TEMP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 // The Maildir spec's own age: a `tmp/` file older than this is a crash leftover, never an in-flight write.
 const STALE_MAILDIR_TEMP_MAX_AGE_MS = 36 * 60 * 60 * 1000;
-// Every mail SSE event re-lists the mailboxes, so the reconcile a listing kicks for a folder outside
-// the standard six is due at most this often — a rescan of every folder per event is the whole cost.
+// Every mail SSE event re-lists the mailboxes, so a non-standard folder's listing-kicked reconcile is throttled to this.
 const BACKGROUND_RECONCILE_INTERVAL_MS = 60 * 1000;
 // Sibling of the Maildir tree (not inside it) so Dovecot IMAP doesn't see it as a folder.
 const DRAFT_ATTACHMENTS_DIR = 'draft-attachments';
@@ -40,16 +39,12 @@ export function readDraftStagingSize(homeFs: LocalFilesystem): Promise<number> {
     return homeFs.dirSize(path.join(PATHS.MAIL.ROOT, DRAFT_ATTACHMENTS_DIR));
 }
 
-// What Mail charges to the home data budget, for a Home nobody has booted (the admin usage view). Counts
-// what `MaildirStore.size()` counts: the index sum plus the bytes staged for a draft.
+// The admin usage view reads this for a Home nobody booted, so it must count exactly what `MaildirStore.size()` counts.
 export async function readMailTotalSize(homeFs: LocalFilesystem): Promise<number> {
     return readMailIndexSize(homeFs.absolutePath(PATHS.MAIL.DB)) + (await readDraftStagingSize(homeFs));
 }
 
-// A segment is a directory name under the Maildir root, so the rule is what breaks a path or the hierarchy,
-// not an allowlist: Dovecot spells `&` and everything outside printable ASCII in modified UTF-7
-// (`Ärger` is `.&AMQ-rger`), and an allowlist dropped those folders from the listing. Splitting on both
-// delimiters leaves no separator inside a segment, so `..` and a leading dot are empty segments here.
+// Dovecot spells non-ASCII folder names in modified UTF-7 (`Ärger` is `.&AMQ-rger`), so the rule bans path breakage, not characters.
 const MAILBOX_SEGMENT_MAX_CHARS = 200;
 const CONTROL_CHARACTER = /\p{Cc}/u;
 
@@ -78,14 +73,12 @@ export class MaildirStore implements MailStore {
     private events!: MailStoreEvents;
     private reconcilingMailboxes = new Map<string, Promise<void>>();
     private lastReconcileStartedAt = new Map<string, number>();
-    // Each id this store delivered, and whether it was an arrival — read by whichever sync reaches the
-    // file first, this append's own or a watcher's.
+    // Whether a delivered id was an arrival, read by whichever sync reaches the file first: this append's or a watcher's.
     private deliveries = new Map<string, boolean>();
     // Reconciliation (doReconcileMailbox) must not straddle a mutation's fs+db pair, or its delete phase drops just-moved rows.
     private storeLock = new Semaphore(1);
     private watchers: FSWatcher[] = [];
-    // Running byte totals so size() answers from memory — the mail+contacts quota gate calls it on every
-    // metered write, and an index sum plus a staging walk per call would make an N-card device sync O(N²).
+    // size() answers from memory: the quota gate calls it on every metered write, and a walk per call makes an N-card sync O(N²).
     private indexBytes = 0;
     private stagedBytes = 0;
 
@@ -110,8 +103,7 @@ export class MaildirStore implements MailStore {
         return isNew;
     }
 
-    // The standard six only: a watcher per folder would cost a home with hundreds of IMAP folders
-    // hundreds of handles against a per-user inotify limit every home shares.
+    // The standard six only: a watcher per IMAP folder spends the per-user inotify limit every home shares.
     watch(): void {
         for (const mailbox of STANDARD_MAILBOXES) {
             const mailboxPath = this.mailboxDir(mailbox);
@@ -133,8 +125,7 @@ export class MaildirStore implements MailStore {
     async unwatch(): Promise<void> {
         for (const watcher of this.watchers) watcher.close();
         this.watchers = [];
-        // Let any in-flight mailbox sync (kicked fire-and-forget by a watcher or a listing) finish before
-        // the domain flushes drafts and the db closes — later sync phases would hit a closed db.
+        // A sync still in flight would reach a closed db once the domain flushes drafts.
         await Promise.allSettled([...this.reconcilingMailboxes.values()]);
     }
 
@@ -149,8 +140,7 @@ export class MaildirStore implements MailStore {
         return this.indexBytes + this.stagedBytes;
     }
 
-    // The staging dir holds one compose session's attachments at most, so a re-walk per change costs
-    // nothing next to writing the attachment and — unlike a delta per partial write — cannot drift.
+    // The staging dir holds one compose session at most, so a re-walk is free and, unlike a running delta, cannot drift.
     private async recountStaged(): Promise<void> {
         this.stagedBytes = await readDraftStagingSize(this.home.fs);
     }
@@ -194,8 +184,7 @@ export class MaildirStore implements MailStore {
         if (!(await this.mailboxDirExists(mailbox))) {
             throw new ApiError(404, `Mailbox '${mailbox}' not found`);
         }
-        // First open (empty DB) blocks so the user sees content immediately; otherwise serve the
-        // DB now and reconcile in the background — new/changed rows arrive via the sync's SSE events.
+        // Only the first open blocks: afterwards the DB answers at once and the sync's SSE events carry what changed.
         if (this.db.getEmailsCount(mailbox) === 0) {
             await this.reconcileMailbox(mailbox);
         } else {
@@ -212,8 +201,7 @@ export class MaildirStore implements MailStore {
         return this.db.getEmail(messageId);
     }
 
-    // null means "not found" ONLY: no summary row (a real cache-miss). A parse/read/DB
-    // fault propagates — never masked as a missing message.
+    // null means "no summary row" only: a parse, read or DB fault propagates rather than masking as a missing message.
     async getMessage(messageId: string): Promise<Email | null> {
         const cached = this.db.getEmail(messageId);
         if (!cached) return null;
@@ -246,8 +234,7 @@ export class MaildirStore implements MailStore {
         opts?: { skipReconcile?: boolean; arrival?: boolean },
     ): Promise<string> {
         const uniqueId = createUniqueMessageId();
-        // Recorded before the file lands: a watcher-driven sync can reach the file before this continues,
-        // and must find the flag. A delivery that never lands leaves none.
+        // Recorded before the file lands: a watcher-driven sync can reach it first and must find the flag.
         this.deliveries.set(uniqueId, opts?.arrival ?? true);
         try {
             // Lock covers only the delivery — the follow-up reconcile takes the lock itself.
@@ -263,14 +250,12 @@ export class MaildirStore implements MailStore {
     }
 
     async saveDraft(raw: string, existingId?: string): Promise<Email> {
-        // Parse the in-memory bytes up front so the heavyweight MIME parse stays off the lock —
-        // the bytes we write are exactly what parseEml would read back from the delivered file.
+        // Parsed off the lock: these bytes are exactly what parseEml would read back from the delivered file.
         const messageId = existingId ?? createUniqueMessageId();
         const bytes = Buffer.from(raw, 'utf-8');
         const parsed = await parseEmlBytes(messageId, MAILBOX_DRAFTS, bytes, bytes.length);
 
-        // Hold the lock across the fs write + db.addEmail pair so a concurrent watcher sync can't
-        // ingest the draft file first and fire a spurious received(isNew) event.
+        // The file write and the row stay one step, or a watcher sync ingests the draft first and fires a spurious received.
         return this.storeLock.run(async () => {
             // Straight into cur/: Eigen placed it there itself, with the flags already in the name.
             const filename = buildMaildirFilename(messageId, { draft: true, seen: true }, bytes.byteLength);
@@ -344,8 +329,7 @@ export class MaildirStore implements MailStore {
     }
 
     private async reconcileMailbox(mailbox: string): Promise<void> {
-        // Don't start a sync once teardown has begun — the watcher can fire one fire-and-forget
-        // (watch()) and doReconcileMailbox's later phases would query a closed db (see destruct).
+        // A watcher's fire-and-forget sync started during teardown would query a closed db.
         if (this.home.destructing) return;
         this.lastReconcileStartedAt.set(mailbox, Date.now());
         const running = this.reconcilingMailboxes.get(mailbox);
@@ -375,21 +359,15 @@ export class MaildirStore implements MailStore {
         // A mailbox with no rows yet is indexed for the first time: what it finds was discovered, not delivered.
         const indexed = dbRecords.length > 0;
 
-        // New messages (on disk but not in DB): parse in chunks, then bulk-insert each chunk in
-        // one transaction — with `addEmail` at ~71% of a 92s cold sync of 100k messages, batching
-        // the inserts (and skipping the per-row SELECT the diff map already made redundant) is the
-        // single biggest cold-index win. `received` fires per message but after the chunk commits,
-        // so a big sync is naturally throttled to one SSE burst per chunk instead of per message.
+        // Batched inserts are the biggest cold-index win (addEmail was ~71% of a 92 s sync of 100k), and `received` waits on the commit.
         const NEW_CHUNK = 250;
         const newEntries = [...diskFiles].filter(([id]) => !dbById.has(id));
         for (let i = 0; i < newEntries.length; i += NEW_CHUNK) {
             const chunk = newEntries.slice(i, i + NEW_CHUNK);
-            // Keep the parsed Email (not EmailSummary) — events.received needs the full parse
-            // (e.g. `from`) for the notification; insertEmails only reads the EmailSummary subset.
+            // events.received needs the full parse (`from`) for the notification, while insertEmails reads only the summary.
             const parsed: Email[] = [];
             for (const [id, fileName] of chunk) {
-                // parseEml throws on a bad message; log + skip so one unreadable .eml can't drop
-                // the rest of the chunk. ENOENT is a benign mid-sync race.
+                // One unreadable .eml must not drop the rest of the chunk, and an ENOENT is a benign mid-sync race.
                 try {
                     const file = this.getMessageFile(mailbox, fileName);
                     const p = await parseEml(id, mailbox, file);
@@ -467,8 +445,7 @@ export class MaildirStore implements MailStore {
     }
 
     async readDraftMeta(draftId: string): Promise<DraftMeta | null> {
-        // The Drafts sync reads ids off disk, where another MDA's filename can hold characters no id Eigen
-        // writes a sidecar under ever has: no sidecar can exist for one, and one file must not fail the sync.
+        // Another MDA's filename can hold characters no Eigen id has: no sidecar exists for it, and it must not fail the sync.
         if (!isSafePathSegment(draftId)) return null;
         const metaPath = this.getDraftMetaPath(draftId);
         if (!(await this.storage.exists(metaPath))) return null;
@@ -481,8 +458,7 @@ export class MaildirStore implements MailStore {
     }
 
     async deleteDraftMeta(draftId: string): Promise<void> {
-        // Mirrors readDraftMeta: no sidecar can exist under an id Eigen did not mint, and the delete of a
-        // message carrying one runs after the row and the file are already gone.
+        // No sidecar can exist under an id Eigen did not mint.
         if (!isSafePathSegment(draftId)) return;
         const metaPath = this.getDraftMetaPath(draftId);
         try {
@@ -607,8 +583,7 @@ export class MaildirStore implements MailStore {
         await this.recountStaged();
     }
 
-    // A crash between a staged write and its rename leaves a file in a mailbox's `tmp/` that no name
-    // outside it points at; in standalone mode no Dovecot comes past to sweep it.
+    // A crash between a staged write and its rename strands a `tmp/` file, and standalone mode has no Dovecot to sweep it.
     private async cleanupStaleMaildirTemps(): Promise<void> {
         const now = Date.now();
         for (const mailbox of await this.listMailboxPaths()) {
@@ -674,13 +649,11 @@ export class MaildirStore implements MailStore {
             await this.storage.write(path.join(mailboxPath, 'maildirfolder'), '');
         }
         await this.storage.syncDir(mailboxPath);
-        // The root's entry for the folder: a crash that loses it strands the index rows of a folder no
-        // enumeration reaches any more.
+        // A crash that loses the root's entry for the folder strands the index rows of a folder no enumeration reaches.
         if (!isInbox) await this.storage.syncDir(this.basePath);
     }
 
-    // One delivery, both destinations: staged in the mailbox's tmp/ and fsynced, then renamed into `new`
-    // (an arrival no reconcile has seen) or straight into `cur` (a message Eigen placed there itself).
+    // Maildir delivery: staged in `tmp/` and fsynced, then renamed into `new` for an arrival or `cur` for Eigen's own write.
     private async deliver(mailbox: string, subdir: 'new' | 'cur', filename: string, bytes: Buffer): Promise<void> {
         const mailboxPath = this.mailboxDir(mailbox);
         const tmpPath = path.join(mailboxPath, PATHS.MAIL.TMP, filename);

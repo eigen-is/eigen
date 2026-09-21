@@ -1,7 +1,6 @@
 import { memberProps, notFoundRow, propstatNotFound, propstatOk, response } from './xml';
 
-// How many bytes of resource data one REPORT serves. Past it a row still appears, with its etag and a 404
-// for the data the client then multigets (RFC 4918 § 9.1): a truncated collection loses resources silently.
+// Past it a row still appears, with its etag and a 404 for the data (RFC 4918 § 9.1): a truncated collection loses resources silently.
 export const REPORT_DATA_BUDGET_BYTES = 33_554_432;
 
 // What one REPORT may still spend on resource bodies.
@@ -20,8 +19,7 @@ export type ResourceDataRow = {
     budget: DataBudget;
 };
 
-// One collection member as a REPORT row, shared by both protocols. A row that serves the body quotes the
-// etag of the bytes it read, never the index row's: the two must describe one revision.
+// A row that serves the body quotes the etag of the bytes it read, never the index row's: the two must describe one revision.
 export async function resourceDataRow(member: ResourceDataRow): Promise<string> {
     const props = (etag: string) => memberProps(etag, member.contentType);
     if (!member.wantsData) return response(member.href, [propstatOk(props(member.row.etag))]);

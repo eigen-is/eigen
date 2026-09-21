@@ -1,5 +1,4 @@
-// CLDR supplemental `windowsZones.xml`, the `territory="001"` rows: the IANA zone Unicode names as the
-// worldwide default for each Windows zone. Every Outlook and Exchange file writes its TZID this way.
+// CLDR supplemental `windowsZones.xml`, the `territory="001"` rows: the TZID every Outlook and Exchange file writes.
 export const WINDOWS_ZONES = new Map<string, string>([
     ['Dateline Standard Time', 'Etc/GMT+12'],
     ['UTC-11', 'Etc/GMT+11'],

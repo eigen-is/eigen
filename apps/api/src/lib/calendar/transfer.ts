@@ -18,19 +18,12 @@ import type { Calendar } from './calendar';
 import { resourcePath } from './resource-store';
 import * as schema from './schema';
 
-// Whole-file iCalendar transfer over the Calendar facade: export joins the stored files into one
-// VCALENDAR, import replays one into the same PUT seam a CalDAV device sync takes (docs/CALENDAR.md
-// § Importing an .ics). The file is the truth on both sides — the import moves components, so every line
-// the author wrote lands as written and scheduling is the only thing taken out of it, and the export
-// hands back the stored bytes minus the lines Eigen owns.
+// Export joins the stored files into one VCALENDAR; import replays one into the PUT seam a device sync takes (docs/CALENDAR.md § iCalendar import / export).
 
-// What one import may store. A series is one resource, so a VTIMEZONE the file defines once is copied into
-// every series that names it and a file well inside its own ceiling can ask for many times its size on
-// disk. Past this the run stops the way a quota stop does; a retry continues, since what landed skips by UID.
+// A VTIMEZONE is copied into every series that names it, so a file well inside its own ceiling can ask for many times its size on disk.
 const ICS_IMPORT_MAX_WRITTEN_BYTES = 8 * ICS_MAX_BYTES;
 
-// A `.ics` may be a stream of several VCALENDAR objects (RFC 5545 §3.4), which ICAL.parse answers with an
-// array of jCal arrays rather than one.
+// A `.ics` may be a stream of several VCALENDAR objects (RFC 5545 §3.4), which ICAL.parse answers with an array of jCal arrays.
 function parseCalendarStream(text: string): ICAL.Component[] {
     const parsed = ICAL.parse(text);
     if (!Array.isArray(parsed[0])) return [new ICAL.Component(parsed)];
@@ -39,8 +32,7 @@ function parseCalendarStream(text: string): ICAL.Component[] {
     return roots;
 }
 
-// The TZIDs a VEVENT names, on its DTSTART, on any other property a client hung a zone on, and inside a
-// subcomponent of its own — a VALARM's absolute TRIGGER names one too.
+// A zone can hang on any property and inside a subcomponent — a VALARM's absolute TRIGGER names one too.
 function referencedTzids(component: ICAL.Component, into: Set<string>): void {
     for (const prop of component.getAllProperties()) {
         const raw = prop.getParameter('tzid');
@@ -50,17 +42,14 @@ function referencedTzids(component: ICAL.Component, into: Set<string>): void {
     for (const sub of component.getAllSubcomponents()) referencedTzids(sub, into);
 }
 
-// The lines of one property, out of the component: matched on the bare name, because a group prefix
-// ("A.ATTENDEE") names the same property and `removeAllProperties` compares the whole name.
+// Matched on the bare name: a group prefix ("A.ATTENDEE") names the same property and `removeAllProperties` compares the whole name.
 function takeProperties(vevent: ICAL.Component, name: string): ICAL.Property[] {
     const found = vevent.getAllProperties().filter((prop) => bareName(prop.name) === name);
     for (const prop of found) vevent.removeProperty(prop);
     return found;
 }
 
-// Scheduling is what an imported event loses, and nothing else: the guest list goes, and the organizer
-// stays behind as one inert address for the inbound-REQUEST rule to match a verified sender against.
-// A VALARM keeps its own ATTENDEE — that is the alarm's recipient, not a guest.
+// The organizer stays behind as one inert address for the inbound-REQUEST rule; a VALARM's own ATTENDEE is its recipient, not a guest.
 function dropScheduling(vevent: ICAL.Component): string | null {
     takeProperties(vevent, 'attendee');
     const organizer = takeProperties(vevent, 'organizer')[0];
@@ -81,8 +70,7 @@ export async function importEvents(
     const text = decodeUtf8Strict(bytes);
     if (text === null) throw new ApiError(400, NOT_UTF8_FILE);
 
-    // Counted on the text before ical.js builds a tree per VEVENT. A folded line starts with a space, so a
-    // line that starts with the property name is a VEVENT of its own.
+    // Counted on the text before ical.js builds a tree: a folded line starts with a space, so a line starting with the name is its own VEVENT.
     if ((text.match(/^BEGIN:VEVENT\r?$/gim)?.length ?? 0) > ICS_IMPORT_MAX_EVENTS) {
         throw new ApiError(413, 'Too many events');
     }
@@ -95,8 +83,7 @@ export async function importEvents(
         throw e;
     }
 
-    // One series is one resource, so the whole stream is grouped by UID first — a file may spell a master
-    // in one VCALENDAR object and its overrides in the next. A VEVENT naming no UID gets a minted one.
+    // Grouped by UID first: a file may spell a master in one VCALENDAR object and its overrides in the next.
     const series = new Map<string, { master: ICAL.Component | null; overrides: ICAL.Component[] }>();
     const zones = new Map<string, ICAL.Component>();
     let vevents = 0;
@@ -146,9 +133,7 @@ export async function importEvents(
             resource.addSubcomponent(group.master);
             for (const override of group.overrides) resource.addSubcomponent(override);
 
-            // A fresh name every time: a UID is not a safe filename, and If-None-Match: * keeps the write a
-            // create. A UID the Home already holds comes back a conflict, which is what makes a partial
-            // import retryable: the series already written skip.
+            // A fresh name every time: a UID is not a safe filename, and If-None-Match: * turns a UID the Home already holds into a skippable conflict.
             const body = serializeResource(resource);
             let put: PutResourceResult;
             try {
@@ -183,9 +168,7 @@ export async function importEvents(
 
 // ---- Export ----
 
-// The resource uris of `ids` — an exclusion or an override names the series it belongs to — or every
-// resource of the calendar. Ordered by the earliest start among the rows asked for, so a reader meets the
-// events in the order a calendar draws them.
+// Ordered by the earliest start among the rows asked for, so a reader meets the events in the order a calendar draws them.
 function exportedUris(calendar: Calendar, calendarId: string, ids?: string[]): string[] {
     const rows = calendar.db
         .select({ id: schema.events.id, uri: schema.resources.uri, startTime: schema.events.startTime })

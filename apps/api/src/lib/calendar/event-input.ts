@@ -24,8 +24,7 @@ export function validateEventInput(input: { rrule?: string | null; startTime: Da
             throw new ApiError(400, 'Recurring event start time is out of range');
         }
     }
-    // Inbound iMIP clamps instead (imip.ts): dropping an emailed invite is worse than a zero-length event.
-    // Zero duration stays legal — RFC 5545 §3.6.1 permits DTEND == DTSTART, and the importers rely on it.
+    // Inbound iMIP clamps instead (imip.ts); zero duration stays legal, RFC 5545 §3.6.1 permits DTEND == DTSTART.
     if (input.endTime < input.startTime) throw new ApiError(400, 'Event end time cannot be before start time');
 }
 

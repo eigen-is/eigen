@@ -66,8 +66,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const isShared = !!sharedCalendar;
     const canEdit = !isShared || sharedCalendar?.permission === 'write';
     const canExport = !isGuest && isTransferableCalendarHome(eventOwnerId, user?.id ?? '');
-    // An ORGANIZER equal to the calendar owner is an event they organize, not an invitation to them;
-    // the owner's address is known only when the owner is the viewer.
+    // The owner's address is known only when the owner is the viewer; without it an organized event reads as an invitation.
     const isLinkedEvent = isInvitationFromOthers(event, eventOwnerId === user?.id ? user.email : undefined);
     const myAttendeeStatus = event.data?.attendees?.find(
         (a) => a.email.toLowerCase() === user?.email?.toLowerCase(),
@@ -133,8 +132,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                 await deleteEvent.mutateAsync({ id: targetId, calendarId: event.calendarId });
             }
         }
-        // Close the detail view only after the awaited work resolves (matching handleNonRecurringDelete):
-        // on rejection the nested confirm DeleteDialog stays open for retry instead of being torn down.
+        // Closing only after the await keeps the nested confirm dialog alive for a retry when the delete rejects.
         onOpenChange(false);
     };
 
