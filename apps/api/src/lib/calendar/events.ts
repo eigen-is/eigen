@@ -343,10 +343,15 @@ async function eraseStoredEvent(calendar: Calendar, calendarId: string, id: stri
     if (existing.parentEventId) {
         // A synthetic exclusion row carries no data of its own, so the link is the master's to state.
         const parent = eventById(calendar, existing.parentEventId)!;
-        // Deleting one occurrence is a write of its master's file, never a delete of the resource.
+        // Deleting one occurrence is a write of its master's file, never a delete of the resource: a live
+        // override is that occurrence, so it goes; the cancelled row standing for a dropped one is the
+        // exclusion itself, and deleting it puts the occurrence back.
         await editResource(calendar, resource, (component) => {
             const key = existing.recurrenceDate ? storedRecurrenceKey(existing.recurrenceDate) : null;
-            if (key) removeExclusion(component, key, writeContext(actorIsOrganizer(parent)));
+            if (!key) return;
+            const context = writeContext(actorIsOrganizer(parent));
+            if (existing.status === 'cancelled') removeExclusion(component, key, context);
+            else addExclusion(component, parent, existing, context);
         });
     } else {
         await calendar.purgeResource(resource);
