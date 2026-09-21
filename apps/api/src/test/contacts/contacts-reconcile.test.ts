@@ -1057,6 +1057,24 @@ describe('fail-closed drain guard', () => {
         expect(list.some((c) => c.firstName === 'Orphan')).toBe(true);
     });
 
+    test('a dirty card whose file the index already describes settles without a re-commit', async () => {
+        const { contacts, db, broadcasts } = await makeContacts();
+        const id = await contacts.addContact(validContact({ firstName: 'Healthy', email: ['healthy@example.com'] }));
+        const before = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
+        const ctagBefore = db.select().from(contactsSchema.book).get()!.ctag;
+        broadcasts.length = 0;
+
+        // A lock-free read that raced a PUT sees the new bytes against the old row and marks a uri that is
+        // not out of sync at all; re-committing it would bump the ctag for a book that never changed.
+        (contacts as unknown as { gate: { markDirty(uri: string): void } }).gate.markDirty(before.uri);
+        await contacts.getContacts();
+
+        expect(db.select().from(contactsSchema.book).get()!.ctag).toBe(ctagBefore);
+        const after = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
+        expect(after.cardCtag).toBe(before.cardCtag);
+        expect(broadcasts).toEqual([]);
+    });
+
     test('deleteContact fails closed: a commit throw after the file delete tombstones on the next read', async () => {
         const { contacts, db } = await makeContacts();
         const id = await contacts.addContact(validContact({ firstName: 'Vanish', email: ['vanish@example.com'] }));
@@ -1158,9 +1176,10 @@ describe('fail-closed drain guard', () => {
 
         for (let i = 0; i < 3; i++) await expect(contacts.getContacts()).rejects.toThrow('prepare boom');
 
-        // The healthy card settled on the first drain. Re-committing it behind the poison card would bump the
-        // ctag on every read and send every CardDAV client into a no-op delta poll.
-        expect(db.select().from(contactsSchema.book).get()!.ctag).toBe(ctagBefore + 1);
+        // The healthy card settled on the first drain, and its pair was whole, so it committed nothing.
+        // Re-committing it behind the poison card would bump the ctag on every read and send every CardDAV
+        // client into a no-op delta poll.
+        expect(db.select().from(contactsSchema.book).get()!.ctag).toBe(ctagBefore);
     });
 });
 

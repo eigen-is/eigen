@@ -16,6 +16,7 @@ import {
     DEFAULT_LABELS,
     LocalFilesystem,
     PATHS,
+    readResourceFile,
     statResourceFile,
     uriKeyOf,
     WriteGate,
@@ -350,7 +351,10 @@ export class Contacts {
                 .from(schema.contacts)
                 .where(eq(schema.contacts.uriKey, uriKeyOf(uri)))
                 .get();
-            if (await this.storage.exists(cardPath(uri))) {
+            const bytes = await readResourceFile(this.storage, cardPath(uri));
+            // A file the row already describes is settled, not re-committed: a lock-free read that raced a
+            // PUT marks a pair that is whole, and a commit would bump the ctag for a book that never changed.
+            if (bytes && computeResourceEtag(bytes) !== existing?.etag) {
                 // cardUpdateSet omits eigenId, so this value drives only a freshly-INSERTED row; an
                 // incumbent's self-link rides the omission untouched, which is why ranking against the
                 // incumbent here would be dead code.
@@ -359,7 +363,7 @@ export class Contacts {
                 // A present file is alive, so a card re-planted at a deleted uri drops its stale removal.
                 this.commitCard({ row: prep.row, categories: prep.categories, tombstoneCleared: true });
                 this.cardsBytes += prep.row.size - (existing?.size ?? 0);
-            } else if (existing) {
+            } else if (!bytes && existing) {
                 this.db.transaction((tx) => {
                     const ctag = this.bumpCtag(tx);
                     tx.delete(schema.contacts).where(eq(schema.contacts.id, existing.id)).run();

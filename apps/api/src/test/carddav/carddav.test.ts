@@ -1,7 +1,9 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { statSync, utimesSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { CARD_MAX_BYTES, cardPath } from '../../lib/contacts/card-store';
-import { computeResourceEtag } from '../../lib/core';
+import { computeResourceEtag, PATHS } from '../../lib/core';
 import { encodePathSegment } from '../../lib/dav/href';
 import { getHome } from '../../lib/home';
 import { app, getTestContext } from '../setup';
@@ -365,6 +367,28 @@ describe('CardDAV', () => {
         const res = await getCard(uri);
         expect(await res.text()).toBe(edited);
         expect(res.headers.get('ETag')).toBe(`"${computeResourceEtag(new TextEncoder().encode(edited))}"`);
+    });
+
+    test('a GET that found the row stale re-indexes it, so the etag it served is one a PUT accepts', async () => {
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        expect((await putCard(uri, vcard(uid, ['NOTE:before']), { 'If-None-Match': '*' })).status).toBe(201);
+
+        // A same-length replacement under the indexed mtime: the row is durably stale and the stat-only
+        // reconcile is blind to it, so the read is the only thing that can notice.
+        const home = await getHome(userId);
+        const cardFile = join(home.homeDir, PATHS.CONTACTS.ROOT, cardPath(uri));
+        const { atime, mtime } = statSync(cardFile);
+        writeFileSync(cardFile, vcard(uid, ['NOTE:beforX']));
+        utimesSync(cardFile, atime, mtime);
+
+        const etag = (await getCard(uri)).headers.get('ETag')!;
+
+        // Without the re-index the client loops forever: the etag every GET serves is one the row's own etag
+        // refuses, so every conditional write answers 412 and every re-GET hands back the same validator.
+        const propfindXml = await (await propfind(`/dav/addressbooks/${userId}/contacts/${uri}`, '0')).text();
+        expect(propfindXml).toContain(`<D:getetag>${etag}</D:getetag>`);
+        expect((await putCard(uri, vcard(uid, ['NOTE:conditional']), { 'If-Match': etag })).status).toBe(204);
     });
 
     test('GET under an unknown book segment is 404 even for an existing card', async () => {

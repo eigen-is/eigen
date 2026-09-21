@@ -75,7 +75,8 @@ export async function getDeletedCardsSince(contacts: Contacts, sinceCtag: number
 
 // The stored bytes for a resource (GET/multiget). A row whose file has vanished is not a 500: mark it so the
 // next drain tombstones it and answer this request as a miss. The etag hashes the bytes just read, so body
-// and validator are one revision by construction even when the read raced a write or the row is stale.
+// and validator are one revision by construction even when the read raced a write or the row is stale — and a
+// row that turned out stale is marked too, or every conditional write against the etag served here is a 412.
 export async function getCard(contacts: Contacts, uri: string): Promise<{ bytes: Uint8Array; etag: string } | null> {
     await contacts.gate.ensureDrained();
     const row = contacts.db
@@ -89,7 +90,9 @@ export async function getCard(contacts: Contacts, uri: string): Promise<{ bytes:
         contacts.gate.markDirty(row.uri);
         return null;
     }
-    return { bytes, etag: computeResourceEtag(bytes) };
+    const etag = computeResourceEtag(bytes);
+    if (etag !== row.etag) contacts.gate.markDirty(row.uri);
+    return { bytes, etag };
 }
 
 // The single-resource PROPFIND read: an indexed single-row lookup, unlike a `listCards().find()` over the
