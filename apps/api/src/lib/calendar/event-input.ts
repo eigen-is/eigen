@@ -1,6 +1,7 @@
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import { RRule } from 'rrule';
 import { ApiError } from '../core';
+import { clampStamp } from '../ical/ical-component';
 import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../ical/recurrence-limits';
 import { normalizeTimezone } from '../ical/timezone';
 import type { CreateEventArgs } from './types';
@@ -59,6 +60,6 @@ export function eventForFile(args: {
         createByUserId: input.createByUserId ?? null,
         createdAt: now,
         // A receiver states the organizer's stamp, so the stored DTSTAMP is the revision the next message beats.
-        updatedAt: input.dtstamp ?? now,
+        updatedAt: clampStamp(input.dtstamp, now) ?? now,
     };
 }

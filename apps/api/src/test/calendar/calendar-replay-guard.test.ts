@@ -4,7 +4,7 @@ import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import type { Calendar } from '../../lib/calendar/calendar';
 import type { ReceiveInvitationPayload } from '../../lib/calendar/types';
 import { parseIcs } from '../../lib/ical';
-import type { ParsedEvent } from '../../lib/ical/ical-parse';
+import { type ParsedEvent, utcStampString } from '../../lib/ical/ical-parse';
 import { makeSyntheticUser } from '../../lib/user';
 import { CALENDAR_TEST_ROOT, makeCalendar } from '../calendar-test-helpers';
 import { vcal } from '../ics-test-helpers';
@@ -171,6 +171,21 @@ describe('inbound message ordering', () => {
         await calendar.receiveImipRequest(parsedOf(occurrence('Moved once', 2, '20260401T110000Z')), ORG);
 
         expect((await exceptionOf(calendar))?.title).toBe('Moved twice');
+    });
+
+    // A buggy or compromised organizer client can stamp a message years ahead. Stored as it came, that
+    // revision would outrank every genuine update that follows at the same SEQUENCE, forever.
+    test('a REQUEST stamped far in the future never outranks the updates that follow it', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+
+        await calendar.receiveImipRequest(parsedOf(request('Title 2099', 2, '20990101T000000Z')), ORG);
+        expect((await masterOf(calendar)).title).toBe('Title 2099');
+
+        const soon = utcStampString(new Date(Date.now() + 60_000));
+        await calendar.receiveImipRequest(parsedOf(request('Title now', 2, soon)), ORG);
+
+        expect((await masterOf(calendar)).title).toBe('Title now');
     });
 
     // The attendee's own copy mirrors the organizer's SEQUENCE, so a local edit of it — here, dropping one

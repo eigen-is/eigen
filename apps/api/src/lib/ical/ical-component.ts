@@ -262,6 +262,15 @@ function exdateKeys(vevent: ICAL.Component, seriesTz: string | null): Set<string
     return keys;
 }
 
+const STAMP_HORIZON_MS = 24 * 60 * 60 * 1000;
+
+// A message stamped far ahead of the receiver's clock would outrank every genuine update that follows it at
+// the same SEQUENCE, so the revision a receiver stores is bounded by its own clock (RFC 5546 § 2.1.5).
+export function clampStamp(dtstamp: Date | null | undefined, now: Date): Date | null {
+    if (!dtstamp) return null;
+    return dtstamp.getTime() > now.getTime() + STAMP_HORIZON_MS ? now : dtstamp;
+}
+
 // A submitted sequence is the organizer's own revision number, which an attendee copy mirrors rather
 // than computes; without one the three-way bump rule decides.
 function touch(vevent: ICAL.Component, ctx: WriteContext, scheduling: boolean, sequence?: number): void {
@@ -269,7 +278,7 @@ function touch(vevent: ICAL.Component, ctx: WriteContext, scheduling: boolean, s
     // DTSTAMP on a copy of somebody else's event is the organizer's own revision stamp, which the next
     // message is ordered against: only a message moves it, never the attendee's local edit.
     if (ctx.dtstamp || readStamp(vevent, EIGEN.organizerEvent) === null) {
-        setProperty(vevent, utcStamp('dtstamp', ctx.dtstamp ?? ctx.now));
+        setProperty(vevent, utcStamp('dtstamp', clampStamp(ctx.dtstamp, ctx.now) ?? ctx.now));
     }
     if (sequence !== undefined) {
         vevent.updatePropertyWithValue('sequence', sequence);
@@ -694,7 +703,7 @@ export function addExclusion(
     for (const stamp of vevent.getAllProperties(EIGEN.exdate)) {
         if (storedRecurrenceKey(String(stamp.getFirstValue() ?? '')) === key) vevent.removeProperty(stamp);
     }
-    vevent.addProperty(exclusionStamp(key, exclusion.id, exclusion.sequence, ctx.dtstamp ?? null));
+    vevent.addProperty(exclusionStamp(key, exclusion.id, exclusion.sequence, clampStamp(ctx.dtstamp, ctx.now)));
     syncVTimezones(resource);
     touch(vevent, ctx, true);
 }
