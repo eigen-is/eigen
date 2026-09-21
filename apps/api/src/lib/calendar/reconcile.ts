@@ -76,15 +76,17 @@ function recoverCalendarRows(calendar: Calendar, orphans: string[]): void {
         .where(eq(schema.calendars.isDefault, true))
         .get();
     let recovered = 0;
+    let unnamed = 0;
     for (const id of orphans) {
-        recovered++;
-        const name = UUID_NAME.test(id) ? `Recovered calendar${recovered > 1 ? ` ${recovered}` : ''}` : id;
+        const isUuid = UUID_NAME.test(id);
+        if (isUuid) unnamed++;
+        const name = isUuid ? `Recovered calendar${unnamed > 1 ? ` ${unnamed}` : ''}` : id;
         calendar.db
             .insert(schema.calendars)
             .values({
                 id,
                 name,
-                color: EIGEN_ACCENT_COLORS_SHUFFLED[(recovered - 1) % EIGEN_ACCENT_COLORS_SHUFFLED.length].value,
+                color: EIGEN_ACCENT_COLORS_SHUFFLED[recovered++ % EIGEN_ACCENT_COLORS_SHUFFLED.length].value,
                 isDefault: !hasDefault,
                 ctag: 0,
                 syncGen: nextSyncGen(undefined, Date.now()),
