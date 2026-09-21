@@ -166,7 +166,7 @@ export class Home {
         // Org homes have no drive — nothing to size, return early before touching subsystems.
         if (!this._drive) {
             return {
-                mailAndContacts: { used: 0, max: 0 },
+                homeData: { used: 0, max: 0 },
                 drive: { default: { used: 0, max: 0 } },
                 total: { used: 0, max: 0 },
             };
@@ -178,7 +178,7 @@ export class Home {
         const quotas = await resolveUserQuotas(mountConfig, teamIds);
 
         return {
-            mailAndContacts: { used: dataUsed, max: quotas.homeDataMax },
+            homeData: { used: dataUsed, max: quotas.homeDataMax },
             drive: { default: { used: driveDefault, max: quotas.mountMax } },
             total: {
                 used: dataUsed + driveDefault,

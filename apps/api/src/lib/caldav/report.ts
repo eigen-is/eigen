@@ -4,23 +4,12 @@ import type { ResourceRow } from '../calendar/calendar-store';
 import type { CalendarCollection } from '../calendar/resource-store';
 import { uriKeyOf } from '../core';
 import { MULTIGET_HREF_LIMIT, resolveMultigetHrefs } from '../dav/href';
+import { type DataBudget, REPORT_DATA_BUDGET_BYTES, resourceDataRow } from '../dav/report-row';
 import { formatSyncToken, invalidSyncToken, parseSyncToken } from '../dav/sync-token';
-import {
-    memberProps,
-    multistatusResponse,
-    notFoundRow,
-    propstatNotFound,
-    propstatOk,
-    removedRow,
-    response,
-} from '../dav/xml';
+import { multistatusResponse, notFoundRow, removedRow } from '../dav/xml';
 import { calendarHref, eventHref } from './discovery';
 import { calendarDataProp } from './xml-builder';
 import { parseReport, type ReportRequest } from './xml-parser';
-
-// How many bytes of calendar data one REPORT serves. Past it a row still appears, with its etag and a 404
-// for the data the client then multigets (RFC 4918 § 9.1): a truncated collection loses events silently.
-export const REPORT_DATA_BUDGET_BYTES = 33_554_432;
 
 // REPORT on /dav/calendars/:ownerId/:calendarId/
 export async function handleReport(
@@ -49,11 +38,6 @@ export async function handleReport(
     }
 }
 
-// What one REPORT may still spend on resource bodies.
-type DataBudget = { left: number };
-
-// A row that serves the body quotes the etag of the bytes it read, never the index row's: the two must
-// describe one revision.
 async function resourceRow(
     calendar: Calendar,
     calendarId: string,
@@ -62,22 +46,16 @@ async function resourceRow(
     wantsData: boolean,
     budget: DataBudget,
 ): Promise<string> {
-    const href = eventHref(ownerId, calendarId, resource.uri);
-    if (!wantsData) return response(href, [propstatOk(memberProps(resource.etag, ICS_CONTENT_TYPE))]);
-    if (resource.size > budget.left) {
-        return response(href, [
-            propstatOk(memberProps(resource.etag, ICS_CONTENT_TYPE)),
-            propstatNotFound(['<C:calendar-data/>']),
-        ]);
-    }
-
-    const served = await calendar.readResource(calendarId, resource);
-    // The row is there and the file is not: the drain tombstones it, and this response says it is gone.
-    if (!served) return notFoundRow(href);
-    budget.left -= served.bytes.length;
-    const props = memberProps(served.etag, ICS_CONTENT_TYPE);
-    props.push(calendarDataProp(new TextDecoder().decode(served.bytes)));
-    return response(href, [propstatOk(props)]);
+    return resourceDataRow({
+        href: eventHref(ownerId, calendarId, resource.uri),
+        row: resource,
+        contentType: ICS_CONTENT_TYPE,
+        wantsData,
+        dataElement: '<C:calendar-data/>',
+        dataProp: calendarDataProp,
+        read: () => calendar.readResource(calendarId, resource),
+        budget,
+    });
 }
 
 async function handleCalendarQuery(

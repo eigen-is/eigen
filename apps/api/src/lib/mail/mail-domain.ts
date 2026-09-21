@@ -90,7 +90,7 @@ export class Mail {
         if (isNew) {
             const welcome = await welcomeMail(this.home.user.name, this.home.user.email);
             // Seeded, not delivered: the first sync indexes it without announcing new mail.
-            if (welcome) await this.store.append('', welcome, { skipSync: true, arrival: false });
+            if (welcome) await this.store.append('', welcome, { skipReconcile: true, arrival: false });
         }
         this.store.watch();
         this.store.cleanupStaleDraftTemps().catch((err) => console.error('mail: stale draft temp cleanup failed', err));

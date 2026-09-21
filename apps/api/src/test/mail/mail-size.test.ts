@@ -6,8 +6,7 @@ import type { HomeSizeResponse } from '@workspace/lib/types/settings';
 import { getMailUploadMaxSize } from '../../lib/config/enforcement';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { getHome } from '../../lib/home';
-import { readMailTotalSize } from '../../lib/mail/maildb';
-import { readDraftStagingSize } from '../../lib/mail/maildir-store';
+import { readMailTotalSize } from '../../lib/mail/maildir-store';
 import { mailRootOf, makeEml } from '../mail-test-helpers';
 import { assertJson, authedRequest, createTestUser, ensureServer, putDraft, uploadDraftAttachment } from '../setup';
 
@@ -26,7 +25,7 @@ describe('Mail usage', () => {
         const user = await createTestUser(`mailsize-${Date.now()}@test.eigen.is`, 'testpassword123', 'Mail Size');
         userId = user.id;
         token = user.sessionToken;
-        // The welcome mail is appended with skipSync, so the index only learns about it on the first
+        // The welcome mail is appended with skipReconcile, so the index only learns about it on the first
         // sync — one list on the empty DB blocks on that, leaving the deltas below to these messages.
         const home = await getHome(userId);
         await home.mail.mailboxGet('');
@@ -106,8 +105,7 @@ describe('Mail usage', () => {
         );
         await home.mail.messageImport(sizedEml('Run import', 'i'.repeat(512)));
 
-        const onDisk = readMailTotalSize(join(mailRootOf(userId), 'mail.db')) + (await readDraftStagingSize(home.fs));
-        expect(await home.mail.size()).toBe(onDisk);
+        expect(await home.mail.size()).toBe(await readMailTotalSize(home.fs));
     });
 
     // The admin usage view sizes homes nobody has loaded, so it reads the files and the DB itself. For a
@@ -116,7 +114,7 @@ describe('Mail usage', () => {
         const home = await getHome(userId);
         const reported = await assertJson<HomeSizeResponse>(await authedRequest(token, `/home/${userId}/size`));
 
-        expect(reported.mailAndContacts.used - (await home.contacts.size())).toBe(await home.mail.size());
+        expect(reported.homeData.used - (await home.contacts.size())).toBe(await home.mail.size());
     });
 });
 
@@ -134,7 +132,7 @@ describe('Staged draft attachment usage', () => {
         userId = user.id;
         token = user.sessionToken;
         stagingDir = join(mailRootOf(userId), 'draft-attachments');
-        // The welcome mail is appended with skipSync; one list on the empty DB indexes it, so the
+        // The welcome mail is appended with skipReconcile; one list on the empty DB indexes it, so the
         // deltas below belong to the staged files alone.
         const home = await getHome(userId);
         await home.mail.mailboxGet('');
@@ -142,7 +140,7 @@ describe('Staged draft attachment usage', () => {
 
     async function reportedUsage(): Promise<number> {
         const size = await assertJson<HomeSizeResponse>(await authedRequest(token, `/home/${userId}/size`));
-        return size.mailAndContacts.used;
+        return size.homeData.used;
     }
 
     test('staging grows reported usage, and saving the draft gives the staged bytes back', async () => {

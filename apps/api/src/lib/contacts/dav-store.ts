@@ -23,9 +23,10 @@ import * as schema from './schema';
 
 // The CardDAV store seam over the Contacts facade. See docs/CONTACTS.md § CardDAV surface.
 
-// The index projection the sync layer reads for a resource; the etag is the hash the handler quotes.
-export type CardRow = { uri: string; etag: string };
-const CARD_ROW = { uri: schema.contacts.uri, etag: schema.contacts.etag };
+// The index projection the sync layer reads for a resource: the etag is the hash the handler quotes, the
+// size is what a REPORT weighs against its byte budget before reading the file at all.
+export type CardRow = { uri: string; etag: string; size: number };
+const CARD_ROW = { uri: schema.contacts.uri, etag: schema.contacts.etag, size: schema.contacts.size };
 
 // ctag advances on each change, syncGen rotates on an index rebuild so stale sync tokens are refused.
 export type CardBook = { ctag: number; syncGen: number };
@@ -105,7 +106,7 @@ function resolveSelfLinkOnPut(
     parsed: ParsedCard,
     bytes: Uint8Array,
     existing: { id: string; eigenId: string } | undefined,
-): { eigenId: string; bytes: Uint8Array } {
+): { eigenId: string; bytes: Uint8Array; merged: boolean } {
     const me = contacts.home.user.id;
     let eigenId: string;
     if (existing) {
@@ -120,9 +121,9 @@ function resolveSelfLinkOnPut(
         eigenId = claim && !heldElsewhere ? me : '';
     }
     if (eigenId === me && parsed.eigenId !== me) {
-        return { eigenId, bytes: new TextEncoder().encode(mergeVCard(parsed, { eigenId: me })) };
+        return { eigenId, bytes: new TextEncoder().encode(mergeVCard(parsed, { eigenId: me })), merged: true };
     }
-    return { eigenId, bytes };
+    return { eigenId, bytes, merged: false };
 }
 
 // Preconditions, UID rules, quota and the self-link are decided inside the gate, against the state the write overwrites.
@@ -166,6 +167,13 @@ export async function putCard(
         // bytes, silently reverting the accepted write.
         const storedUri = existing?.uri ?? uri;
 
+        // A name free in the INDEX is not free on DISK: a card the index skipped — a dedupe loser, bytes that
+        // won't parse — is still on disk, and a create would destroy it. Refused with the answer an explicit
+        // `If-None-Match: *` already gives for a name the index does know.
+        if (!existing && (await contacts.storage.exists(cardPath(storedUri)))) {
+            return { ok: false, error: 'precondition' };
+        }
+
         // A UID another resource owns is a conflict the client can act on, not a raw 500 on the UNIQUE index.
         if (!parsed.uid) return { ok: false, error: 'invalid', message: 'UID is required' };
         const holder = contacts.db
@@ -178,8 +186,17 @@ export async function putCard(
         }
         if (existing && parsed.uid !== existing.uid) return { ok: false, error: 'uid-conflict' };
 
-        // Before the quota gate, so the meter and the returned etag both hash the exact bytes written.
-        const { eigenId, bytes } = resolveSelfLinkOnPut(contacts, parsed, new TextEncoder().encode(stored), existing);
+        // Before the quota gate, so the meter and the stored etag both hash the exact bytes written.
+        const { eigenId, bytes, merged } = resolveSelfLinkOnPut(
+            contacts,
+            parsed,
+            new TextEncoder().encode(stored),
+            existing,
+        );
+        // A body the server rewrote before storing it is not the client's revision, so the response carries no
+        // validator and the client re-reads (RFC 4918 § 9.7.2). The two rewrites are the 4.0 transcode and a
+        // restored self-link.
+        const verbatim = stored === body && !merged;
 
         // The stored bytes credit the card this one replaces; a raised 413/507 maps to a typed result.
         try {
@@ -249,7 +266,7 @@ export async function putCard(
         }
 
         contacts.emitContact(existing ? SSEventType.CONTACT_UPDATED : SSEventType.CONTACT_CREATED, id);
-        return { ok: true, etag, created: !existing };
+        return { ok: true, etag: verbatim ? etag : null, created: !existing };
     });
 }
 

@@ -22,14 +22,14 @@ export function statCardDir(storage: LocalFilesystem): Promise<ResourceScan> {
     return statResourceDir(storage, PATHS.CONTACTS.CARDS, CARD_SUFFIX);
 }
 
-// The card bytes of a Home nobody has booted, read from its own folder for the admin usage view. Counts
-// what `Contacts.cardsBytes` counts, through the same scan. `homeFs` is rooted at the home folder, not at
-// the contacts root.
-export async function readCardsTotalSize(homeFs: LocalFilesystem): Promise<number> {
+// What Contacts charges to the home data budget, for a Home nobody has booted (the admin usage view).
+// Counts what `Contacts.size()` counts — the cards through the same scan, plus the derived avatar cache.
+// `homeFs` is rooted at the home folder, not at the contacts root.
+export async function readContactsTotalSize(homeFs: LocalFilesystem): Promise<number> {
     const cards = `${PATHS.CONTACTS.ROOT}/${PATHS.CONTACTS.CARDS}`;
     if (!(await homeFs.dirExists(cards))) return 0;
     const scan = await statResourceDir(homeFs, cards, CARD_SUFFIX);
-    let total = 0;
+    let total = await homeFs.dirSize(`${PATHS.CONTACTS.ROOT}/${PATHS.CONTACTS.AVATARS}`);
     for (const file of scan.files.values()) total += file.size;
     return total;
 }

@@ -97,9 +97,9 @@ describe('writeAtomic', () => {
 describe('normalizeLabelName', () => {
     test('trims, lowercases and NFC-normalizes', () => {
         expect(normalizeLabelName('  Work  ')).toBe('work');
-        // Decomposed "café" (e + combining acute) and composed é normalize to the same key.
-        expect(normalizeLabelName('Café')).toBe(normalizeLabelName('Café'));
-        expect(normalizeLabelName('Café')).toBe('café');
+        // Decomposed "cafe" + combining acute, spelled in escapes so no editor can recompose it.
+        expect(normalizeLabelName('Cafe\u0301')).toBe(normalizeLabelName('Caf\u00E9'));
+        expect(normalizeLabelName('Cafe\u0301')).toBe('caf\u00E9');
     });
 });
 

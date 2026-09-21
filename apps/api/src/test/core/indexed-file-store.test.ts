@@ -97,8 +97,9 @@ describe('uriKeyOf', () => {
     });
 
     test('NFC-normalizes before lowercasing', () => {
-        // Decomposed A + combining ring above and composed Å collapse to one key.
-        expect(uriKeyOf('Å.vcf')).toBe(uriKeyOf('Å.vcf'));
+        // Decomposed A + combining ring above, spelled in escapes so no editor can recompose it.
+        expect(uriKeyOf('A\u030A.vcf')).toBe(uriKeyOf('\u00C5.vcf'));
+        expect(uriKeyOf('A\u030A.vcf')).toBe('\u00E5.vcf');
     });
 });
 

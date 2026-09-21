@@ -27,11 +27,10 @@ import { readCalendarTotalSize } from '../calendar/resource-store';
 import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload } from '../calendar/types';
 import { getAvatarsDir, getUserHomePath } from '../config/paths';
 import { resolveUserQuotas } from '../config/quota';
-import { readCardsTotalSize } from '../contacts/card-store';
+import { readContactsTotalSize } from '../contacts/card-store';
 import { LocalFilesystem, PATHS } from '../core';
 import type { EventPatch } from '../ical/ical-component';
-import { readMailTotalSize } from '../mail/maildb';
-import { readDraftStagingSize } from '../mail/maildir-store';
+import { readMailTotalSize } from '../mail/maildir-store';
 import { createDefaultMountConfig, createMountConfig, readMountTotalSize } from '../mount/helpers';
 import type { User } from '../user';
 import { getMemberships, getUserByEmail, updateUser } from '../user';
@@ -191,13 +190,11 @@ export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeRespons
     const homeDir = getUserHomePath(ownerUserId);
     // A user who has never signed in has no home folder yet, and sizing must not create one.
     const homeFs = fs.existsSync(homeDir) ? new LocalFilesystem(homeDir) : null;
-    const [cards, avatars, staged, calendars] = await Promise.all([
-        homeFs ? readCardsTotalSize(homeFs) : 0,
-        homeFs?.dirSize(`${PATHS.CONTACTS.ROOT}/${PATHS.CONTACTS.AVATARS}`) ?? 0,
-        homeFs ? readDraftStagingSize(homeFs) : 0,
+    const [contacts, mail, calendars] = await Promise.all([
+        homeFs ? readContactsTotalSize(homeFs) : 0,
+        homeFs ? readMailTotalSize(homeFs) : 0,
         homeFs ? readCalendarTotalSize(homeFs) : 0,
     ]);
-    const mail = readMailTotalSize(path.join(homeDir, PATHS.MAIL.DB)) + staged;
     const driveUsed = readMountTotalSize(
         path.join(homeDir, PATHS.DRIVE.ROOT, PATHS.DRIVE.DEFAULT_MOUNT, PATHS.DRIVE.METADATA_DB),
     );
@@ -211,9 +208,9 @@ export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeRespons
         teamIds,
     );
 
-    const dataUsed = mail + cards + avatars + calendars;
+    const dataUsed = contacts + mail + calendars;
     return {
-        mailAndContacts: { used: dataUsed, max: quotas.homeDataMax },
+        homeData: { used: dataUsed, max: quotas.homeDataMax },
         drive: { default: { used: driveUsed, max: quotas.mountMax } },
         total: { used: dataUsed + driveUsed, max: quotas.homeDataMax + quotas.mountMax },
     };

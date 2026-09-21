@@ -18,6 +18,7 @@ export async function makeContacts() {
         user: harness.user,
         dir: harness.dir,
         db: managed.db,
+        close: harness.close,
     };
 }
 

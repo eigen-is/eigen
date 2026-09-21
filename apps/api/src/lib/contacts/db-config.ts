@@ -111,8 +111,6 @@ export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 CREATE INDEX IF NOT EXISTS idx_contact_tombstones_ctag ON contact_tombstones(deletedAtCtag);
                 CREATE INDEX IF NOT EXISTS idx_contact_tombstones_uriKey ON contact_tombstones(uriKey);
                 CREATE INDEX IF NOT EXISTS idx_contacts_to_labels_labelId ON contacts_to_labels(labelId);
-
-                INSERT OR IGNORE INTO book (id, ctag, syncGen) VALUES (1, 0, 1);
             `),
         },
         {

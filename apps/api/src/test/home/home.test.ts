@@ -22,8 +22,8 @@ describe('Home', () => {
 
         expect(error).toBeNull();
         expect(data).toBeDefined();
-        expect(typeof data!.mailAndContacts.used).toBe('number');
-        expect(typeof data!.mailAndContacts.max).toBe('number');
+        expect(typeof data!.homeData.used).toBe('number');
+        expect(typeof data!.homeData.max).toBe('number');
         expect(typeof data!.drive.default.used).toBe('number');
         expect(typeof data!.drive.default.max).toBe('number');
         expect(typeof data!.total.used).toBe('number');
@@ -31,10 +31,10 @@ describe('Home', () => {
         expect(data!.total.max).toBeGreaterThan(0);
     });
 
-    test('total.used = mailAndContacts.used + drive.default.used', async () => {
+    test('total.used = homeData.used + drive.default.used', async () => {
         const { data } = await ctx.alice.api.home({ ownerId: ctx.alice.user.id }).size.get();
 
-        expect(data!.total.used).toBe(data!.mailAndContacts.used + data!.drive.default.used);
+        expect(data!.total.used).toBe(data!.homeData.used + data!.drive.default.used);
     });
 
     test('Bob has his own separate home', async () => {

@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { readdirSync, rmSync } from 'node:fs';
+import { readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { CARD_MAX_BYTES } from '../../lib/contacts/card-store';
 import type { Contacts } from '../../lib/contacts/contacts';
@@ -166,8 +167,19 @@ describe('putCard — 4.0 transcode', () => {
         expect(stored).not.toBe(body);
         expect(stored).toContain('VERSION:3.0');
         expect(stored).toContain('PHOTO;ENCODING=b');
-        // The etag hashes the stored 3.0 bytes, not the 4.0 input, so an honest client re-converges on GET.
-        expect((res as { etag: string }).etag).toBe(computeResourceEtag((await contacts.getCard(uri))!.bytes));
+        // The bytes stored are not the bytes sent, so the write carries no validator and the client re-reads.
+        expect((res as { etag: string | null }).etag).toBeNull();
+    });
+
+    test('a 3.0 PUT stored verbatim still answers with the etag of its own bytes', async () => {
+        const { contacts } = await makeContacts();
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        const body = card({ uid, email: ['verbatim@example.org'] });
+
+        const res = await put(contacts, uri, body);
+
+        expect((res as { etag: string }).etag).toBe(computeResourceEtag(new TextEncoder().encode(body)));
     });
 });
 
@@ -455,7 +467,8 @@ describe('putCard — self-link', () => {
         expect(after.id).toBe(self.id);
         const stored = new TextDecoder().decode((await contacts.getCard(self.uri))!.bytes);
         expect(stored).toContain(`X-EIGEN-ID:${user.id}`);
-        expect((res as { etag: string }).etag).toBe(computeResourceEtag(new TextEncoder().encode(stored)));
+        // The restored property makes the stored bytes the server's, not the client's: no validator.
+        expect((res as { etag: string | null }).etag).toBeNull();
         expect((await contacts.getMe())?.id).toBe(self.id);
     });
 
@@ -476,6 +489,101 @@ describe('putCard — self-link', () => {
         expect(rowByUri(db, uri)!.eigenId).toBe('');
         expect(new TextDecoder().decode((await contacts.getCard(uri))!.bytes)).toContain(`X-EIGEN-ID:${user.id}`);
         expect((await contacts.getMe())?.id).toBe(self.id);
+    });
+});
+
+describe('drainDirty — foreign bytes', () => {
+    // A file that drifted out of band is what every other pass over foreign bytes skips and warns about; the
+    // drain used to re-commit it unguarded, so one GET wedged every later read and write of the book.
+    const driftedCard = async (bytes: string) => {
+        const harness = await makeContacts();
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        expect((await put(harness.contacts, uri, card({ uid, email: ['drift@example.org'] }))).ok).toBe(true);
+        writeFileSync(join(cardsDirOf(harness.dir), uri), bytes);
+        // One CardDAV GET hashes the bytes it read, disagrees with the row and marks the uri dirty.
+        expect(await harness.contacts.getCard(uri)).not.toBeNull();
+        return { ...harness, uri };
+    };
+
+    test('a corrupt card is skipped and the book stays readable and writable', async () => {
+        const { contacts, uri } = await driftedCard('this is not a vCard at all');
+
+        expect((await contacts.getContacts()).length).toBeGreaterThan(0);
+        expect((await contacts.getBook()).ctag).toBeGreaterThan(0);
+        expect((await contacts.listCards()).some((c) => c.uri === uri)).toBe(true);
+        const fresh = randomUUID();
+        expect((await put(contacts, `${fresh}.vcf`, card({ uid: fresh }))).ok).toBe(true);
+    });
+
+    test('a card whose UID duplicates another resource is skipped and the book stays usable', async () => {
+        const { contacts, dir } = await makeContacts();
+        const holderUid = randomUUID();
+        const victimUid = randomUUID();
+        const victim = `${victimUid}.vcf`;
+        expect((await put(contacts, `${holderUid}.vcf`, card({ uid: holderUid }))).ok).toBe(true);
+        expect((await put(contacts, victim, card({ uid: victimUid, email: ['victim@example.org'] }))).ok).toBe(true);
+
+        // The victim's file is re-pointed out of band at the UID the first resource owns.
+        writeFileSync(join(cardsDirOf(dir), victim), card({ uid: holderUid, email: ['stolen@example.org'] }));
+        expect(await contacts.getCard(victim)).not.toBeNull();
+
+        expect((await contacts.getContacts()).length).toBeGreaterThan(0);
+        expect((await contacts.getBook()).ctag).toBeGreaterThan(0);
+        const fresh = randomUUID();
+        expect((await put(contacts, `${fresh}.vcf`, card({ uid: fresh }))).ok).toBe(true);
+    });
+
+    test('a skipped card keeps its journal row so the next init retries it', async () => {
+        const { contacts, db, dir } = await makeContacts();
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+
+        // A crash between the file rename and its index commit: the durable intent is recorded, the file
+        // lands, the commit throws.
+        const priv = contacts as unknown as { commitCard: (o: unknown) => void };
+        const origCommit = priv.commitCard;
+        priv.commitCard = () => {
+            throw new Error('commit boom');
+        };
+        await expect(put(contacts, uri, card({ uid }))).rejects.toThrow('commit boom');
+        priv.commitCard = origCommit;
+        expect(
+            db
+                .select()
+                .from(contactsSchema.pendingCardWrites)
+                .all()
+                .map((r) => r.uri),
+        ).toContain(uri);
+
+        // The bytes on disk are then corrupted out of band, so the drain can never settle that pair.
+        writeFileSync(join(cardsDirOf(dir), uri), 'this is not a vCard at all');
+        expect((await contacts.getContacts()).length).toBeGreaterThan(0);
+
+        expect(
+            db
+                .select()
+                .from(contactsSchema.pendingCardWrites)
+                .all()
+                .map((r) => r.uri),
+        ).toContain(uri);
+    });
+});
+
+describe('putCard — a create never replaces an unindexed file', () => {
+    test('a card the index skipped keeps its bytes when a client creates at its name', async () => {
+        const { contacts, dir } = await makeContacts();
+        const uri = 'ghost.vcf';
+        const stranded = 'this is not a vCard at all';
+        writeFileSync(join(cardsDirOf(dir), uri), stranded);
+
+        // The reconcile cannot index it, and skipped is never deleted: the file stays on disk, unknown.
+        await contacts.reconcileIndex();
+        expect(await contacts.getCardMeta(uri)).toBeNull();
+
+        const uid = randomUUID();
+        expect(await put(contacts, uri, card({ uid }))).toEqual({ ok: false, error: 'precondition' });
+        expect(readFileSync(join(cardsDirOf(dir), uri), 'utf8')).toBe(stranded);
     });
 });
 

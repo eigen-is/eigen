@@ -145,6 +145,12 @@ export class LocalFilesystem {
         return await this.file(filePath).exists();
     }
 
+    // For the reader that has to hand a real path to a library instead of going through this class
+    // (bun:sqlite opens a file by name); still resolved within the base.
+    absolutePath(filePath: string): string {
+        return this.getFilePath(filePath);
+    }
+
     async size(filePath: string): Promise<number | null> {
         const file = this.file(filePath);
         if (await file.exists()) {

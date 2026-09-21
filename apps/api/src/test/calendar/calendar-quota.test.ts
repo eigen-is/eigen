@@ -105,14 +105,14 @@ const setBudget = (mb: number) => updateServerSettings({ quotas: { mailAndContac
 // bytes overflows and only an edit inside the headroom or a shrinking rewrite fits.
 async function fillBudget(user: TestUser): Promise<void> {
     const home = await getHome(user.id);
-    await setBudget((await home.size()).mailAndContacts.used / MB);
+    await setBudget((await home.size()).homeData.used / MB);
 }
 
 // Half a MiB under what the Home holds: the state an admin who lowered a quota leaves behind, still inside
 // the edit headroom, where a rewrite that adds a little fits and every create projects over the ceiling.
 async function overfillBudget(user: TestUser): Promise<void> {
     const home = await getHome(user.id);
-    await setBudget(((await home.size()).mailAndContacts.used - MB / 2) / MB);
+    await setBudget(((await home.size()).homeData.used - MB / 2) / MB);
 }
 
 // The ceiling is one server-wide setting, so whatever a test does to it, the next test starts where it did.
@@ -317,7 +317,7 @@ describe('Calendar storage quota', () => {
             const fat = await assertJson<CalendarEvent>(await createEvent(user, calendarId, 'Fat', 1.5 * MB));
             const url = `/calendar/${user.id}/calendars/${calendarId}/events/${fat.id}`;
             const home = await getHome(user.id);
-            await setBudget(((await home.size()).mailAndContacts.used - 1.5 * MB) / MB);
+            await setBudget(((await home.size()).homeData.used - 1.5 * MB) / MB);
 
             expect((await putJson(user, url, { description: 'x'.repeat(1.5 * MB + 800) })).status).toBe(507);
             expect((await putJson(user, url, { description: 'x'.repeat(1.5 * MB - 800) })).status).toBe(200);
@@ -540,7 +540,7 @@ describe('Calendar storage quota', () => {
 
             const home = await getHome(user.id);
             // Room for a PARTSTAT and nothing near an override of a 2 MB event.
-            await setBudget(((await home.size()).mailAndContacts.used + 256 * 1024) / MB);
+            await setBudget(((await home.size()).homeData.used + 256 * 1024) / MB);
 
             const reply = (uid: string, recurrenceId: string[]) => [
                 'BEGIN:VEVENT',
@@ -648,8 +648,8 @@ describe('Calendar storage quota', () => {
             const calendarBytes = await home.calendar.size();
             const parts = (await home.mail.size()) + (await home.contacts.size()) + calendarBytes;
             const booted = await home.size();
-            expect(booted.mailAndContacts.used).toBe(parts);
-            expect((await pullHomeSize(user.id)).mailAndContacts.used).toBe(parts);
+            expect(booted.homeData.used).toBe(parts);
+            expect((await pullHomeSize(user.id)).homeData.used).toBe(parts);
             return calendarBytes;
         };
 

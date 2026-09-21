@@ -521,7 +521,7 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
 
     // -- Atomic delivery --
 
-    test('deliverAtomic goes through tmp then new', async () => {
+    test('a delivery goes through tmp then new', async () => {
         const eml = testEml('Atomic Delivery');
         const res = await ctx.app.handle(
             new Request(`http://localhost/mail/deliver/${ctx.charlie.user.email}`, {

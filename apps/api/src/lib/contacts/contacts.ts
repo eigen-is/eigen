@@ -157,10 +157,8 @@ export class Contacts {
         // owned by the reconcile/rebuild pass below.
         this.avatarsBytes = await this.storage.dirSize(PATHS.CONTACTS.AVATARS);
 
-        // Bring the index in line with cards/ before seeding: a stat-only reconcile on a healthy book, or a
-        // full rebuild if the book/sync bookkeeping is gone.
-        if (this.indexIsIntact()) await this.reconcileIndex();
-        else await this.rebuildIndex();
+        // Bring the index in line with cards/ before seeding; the pass also recovers a lost book row.
+        await this.reconcileIndex();
 
         // Then finish what a crash left half-applied — after the index pass, which guarantees the book row
         // the ctag bumps need, and before anything is served.
@@ -338,14 +336,34 @@ export class Contacts {
             // A file the row already describes settles without a commit: a lock-free read that raced a PUT
             // marks a pair that is whole, and a commit would bump the ctag for a book that never changed.
             if (bytes && computeResourceEtag(bytes) !== existing?.etag) {
-                // cardUpdateSet omits eigenId, so this value drives only a freshly-INSERTED row; an
-                // incumbent's self-link rides the omission untouched, which is why ranking against the
-                // incumbent here would be dead code.
-                const prep = await this.prepareCardRow(uri, existing?.id ?? randomUUID(), existing?.uid);
-                prep.row.eigenId = this.resolveSelfLink(prep.parsed.eigenId ?? undefined);
-                // A present file is alive, so a card re-planted at a deleted uri drops its stale removal.
-                this.commitCard({ row: prep.row, categories: prep.categories, tombstoneCleared: true });
-                this.cardsBytes += prep.row.size - (existing?.size ?? 0);
+                try {
+                    // cardUpdateSet omits eigenId, so this value drives only a freshly-INSERTED row; an
+                    // incumbent's self-link rides the omission untouched, which is why ranking against the
+                    // incumbent here would be dead code.
+                    const prep = await this.prepareCardRow(uri, existing?.id ?? randomUUID(), existing?.uid);
+                    // A uid a surviving row owns would throw on the UNIQUE index, as the reconcile's own guard says.
+                    const uidOwner = this.db
+                        .select({ id: schema.contacts.id })
+                        .from(schema.contacts)
+                        .where(eq(schema.contacts.uid, prep.row.uid))
+                        .get();
+                    if (uidOwner && uidOwner.id !== prep.row.id) {
+                        console.warn(`contacts: skipping ${uri} — UID ${prep.row.uid} is claimed by another card`);
+                        settled(uri);
+                        continue;
+                    }
+                    prep.row.eigenId = this.resolveSelfLink(prep.parsed.eigenId ?? undefined);
+                    // A present file is alive, so a card re-planted at a deleted uri drops its stale removal.
+                    this.commitCard({ row: prep.row, categories: prep.categories, tombstoneCleared: true });
+                    this.cardsBytes += prep.row.size - (existing?.size ?? 0);
+                } catch (e) {
+                    // Foreign bytes skip and warn like every other pass over them: a throw would leave the uri
+                    // dirty and every later read and write of the book would rethrow it. The journal row stays,
+                    // so the next init retries the pair.
+                    console.warn(`contacts: skipping unindexable card ${uri}: ${e}`);
+                    settled(uri);
+                    continue;
+                }
             } else if (!bytes && existing) {
                 this.db.transaction((tx) => {
                     const ctag = this.bumpCtag(tx);
@@ -385,16 +403,6 @@ export class Contacts {
             await this.gate.run(() => this.resumeLabelRenames());
         } catch (e) {
             console.warn(`contacts: could not resume a pending label rename: ${e}`);
-        }
-    }
-
-    // The book/sync bookkeeping is authoritative in the DB, not derivable from cards/, so a missing book row
-    // means the index needs a from-scratch rebuild rather than a reconcile.
-    private indexIsIntact(): boolean {
-        try {
-            return !!this.db.select().from(schema.book).where(eq(schema.book.id, 1)).get();
-        } catch {
-            return false;
         }
     }
 
@@ -438,10 +446,6 @@ export class Contacts {
 
     public async reconcileIndex(): Promise<void> {
         return reconcile.reconcileIndex(this);
-    }
-
-    public async rebuildIndex(): Promise<void> {
-        return reconcile.rebuildIndex(this);
     }
 
     // Only self-linkable when the caller-supplied id is this user's AND no row already claims it: at most one

@@ -63,7 +63,7 @@ function seedV3Database(dbPath: string): void {
         CONTACTS_DB_CONFIG.migrations.find((migration) => migration.version === version)!.up(raw);
     }
     raw.exec(`
-        UPDATE book SET ctag = 9, syncGen = 3, ownerSeeded = 1 WHERE id = 1;
+        INSERT INTO book (id, ctag, syncGen, ownerSeeded) VALUES (1, 9, 3, 1);
         INSERT INTO contacts (
             id, uri, uriKey, uid, firstName, lastName, eigenId, isGroup, data,
             etag, cardCtag, mtime, size
@@ -97,7 +97,7 @@ function seedHistoricalV2Database(dbPath: string): void {
             deletedAtCtag INTEGER NOT NULL
         );
 
-        UPDATE book SET ctag = 11, syncGen = 7, ownerSeeded = 1 WHERE id = 1;
+        INSERT INTO book (id, ctag, syncGen, ownerSeeded) VALUES (1, 11, 7, 1);
         INSERT INTO contacts (
             id, uri, uriKey, uid, firstName, lastName, eigenId, isGroup, data,
             etag, cardCtag, mtime, size
@@ -164,12 +164,9 @@ describe('Contacts index-schema migrations', () => {
         // v1 data is dropped by design, not migrated (the vCard files become the source of truth).
         expect(mdb.db.all(sql`SELECT * FROM contacts`).length).toBe(0);
 
-        const bookRow = mdb.db.all(sql`SELECT ctag, syncGen, ownerSeeded FROM book`)[0] as {
-            ctag: number;
-            syncGen: number;
-            ownerSeeded: number;
-        };
-        expect(bookRow).toEqual({ ctag: 0, syncGen: 1, ownerSeeded: 0 });
+        // The book row is the reconcile's to create: a migration that seeded one would hand a lost index the
+        // generation it just lost, and every outstanding sync token back with it.
+        expect(mdb.db.all(sql`SELECT * FROM book`)).toEqual([]);
 
         await mdb.close();
     });
@@ -198,12 +195,9 @@ describe('Contacts index-schema migrations', () => {
         expect(cols).not.toContain('avatar');
 
         expect(mdb.db.all(sql`SELECT * FROM contacts`).length).toBe(0);
-        const bookRow = mdb.db.all(sql`SELECT ctag, syncGen, ownerSeeded FROM book`)[0] as {
-            ctag: number;
-            syncGen: number;
-            ownerSeeded: number;
-        };
-        expect(bookRow).toEqual({ ctag: 0, syncGen: 1, ownerSeeded: 0 });
+        // The book row is the reconcile's to create: a migration that seeded one would hand a lost index the
+        // generation it just lost, and every outstanding sync token back with it.
+        expect(mdb.db.all(sql`SELECT * FROM book`)).toEqual([]);
 
         await mdb.close();
     });

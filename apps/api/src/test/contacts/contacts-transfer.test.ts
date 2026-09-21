@@ -1,12 +1,15 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { SSEventType } from '@workspace/lib/types/sse';
+import { eq } from 'drizzle-orm';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
+import * as contactsSchema from '../../lib/contacts/schema';
 import { VCARD_IMPORT_MAX_CARDS } from '../../lib/core/transfer';
 import { getHome } from '../../lib/home';
 import { parseVCard, splitVCards } from '../../lib/vcard';
-import { CONTACTS_TEST_ROOT, makeContacts, stageAvatar, validContact } from '../contacts-test-helpers';
+import { CONTACTS_TEST_ROOT, cardsDirOf, makeContacts, stageAvatar, validContact } from '../contacts-test-helpers';
 import { createTestUser, getTestContext } from '../setup';
 
 afterAll(() => {
@@ -77,6 +80,33 @@ describe('Contacts export', () => {
     test('export of an unknown id throws 404', async () => {
         const { contacts } = await makeContacts();
         await expect(contacts.exportCards([randomUUID()])).rejects.toMatchObject({ status: 404 });
+    });
+
+    test('the self card exports without the server-owned X-EIGEN-ID', async () => {
+        const { contacts, user } = await makeContacts();
+        const me = (await contacts.getMe())!;
+
+        const text = await contacts.exportCards([me.id]);
+
+        expect(text).toContain('BEGIN:VCARD');
+        expect(text).not.toContain('X-EIGEN-ID');
+        expect(text).not.toContain(user.id);
+    });
+
+    test('a card whose file is gone is skipped, and the rest of the book still exports', async () => {
+        const { contacts, db, dir } = await makeContacts();
+        const kept = await contacts.addContact(validContact({ firstName: 'Kept', email: ['kept@example.com'] }));
+        const torn = await contacts.addContact(validContact({ firstName: 'Torn', email: ['torn@example.com'] }));
+        const tornUri = db
+            .select()
+            .from(contactsSchema.contacts)
+            .where(eq(contactsSchema.contacts.id, torn))
+            .get()!.uri;
+        rmSync(join(cardsDirOf(dir), tornUri));
+
+        const cards = splitVCards(await contacts.exportCards([kept, torn])).map((c) => parseVCard(c));
+
+        expect(cards.map((c) => c.firstName)).toEqual(['Kept']);
     });
 });
 

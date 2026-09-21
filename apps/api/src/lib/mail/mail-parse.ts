@@ -14,7 +14,7 @@ export type IndexedEmail = Email & { html: null };
 
 // Throws on a genuine parse/read fault (unreadable .eml, disk EIO, malformed MIME). Callers
 // decide the policy: single-message reads (messageGet) let it propagate → Elysia 500; bulk
-// sweeps (syncMailbox) wrap it in a logged try/catch so one bad message can't abort the batch.
+// sweeps (reconcileMailbox) wrap it in a logged try/catch so one bad message can't abort the batch.
 // It must never mask a fault as a missing message.
 export async function parseEml(messageId: string, mailbox: string, file: BunFile): Promise<IndexedEmail> {
     return parseEmlBytes(messageId, mailbox, Buffer.from(await file.arrayBuffer()), file.size);

@@ -493,33 +493,38 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
         await priv.cleanupAvatarImages();
 
         // Park the sweep on its closing recount; while it waits there it must still own the write lock.
+        // `parked` is the positive signal that it got there, so nothing here waits on a clock.
         let release!: () => void;
+        let parked!: () => void;
         const gate = new Promise<void>((resolve) => {
             release = resolve;
+        });
+        const reachedRecount = new Promise<void>((resolve) => {
+            parked = resolve;
         });
         const originalDirSize = priv.storage.dirSize;
         let gated = true;
         priv.storage.dirSize = async (dirPath: string) => {
             if (gated) {
                 gated = false;
+                parked();
                 await gate;
             }
             return originalDirSize.call(priv.storage, dirPath);
         };
 
         try {
-            const sweep = priv.cleanupAvatarImages();
-            let deleted = false;
-            const deletion = contacts.deleteContact(id).then(() => {
-                deleted = true;
-            });
-            await new Promise((resolve) => setTimeout(resolve, 50));
+            const order: string[] = [];
+            const sweep = priv.cleanupAvatarImages().then(() => order.push('sweep'));
+            const deletion = contacts.deleteContact(id).then(() => order.push('delete'));
+            await reachedRecount;
 
             // Unserialized, the delete's byte credit lands inside the scan and the recount overwrites it.
-            expect(deleted).toBe(false);
+            expect(order).toEqual([]);
 
             release();
             await Promise.all([sweep, deletion]);
+            expect(order).toEqual(['sweep', 'delete']);
         } finally {
             release();
             priv.storage.dirSize = originalDirSize;

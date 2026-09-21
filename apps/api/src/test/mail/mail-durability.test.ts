@@ -20,7 +20,7 @@ beforeAll(async () => {
     await ensureServer();
     const user = await createTestUser(`durability-${Date.now()}@test.eigen.is`, 'testpassword123', 'Durability');
     userId = user.id;
-    // The welcome mail is appended with skipSync; one listing indexes it, so new/ is empty below.
+    // The welcome mail is appended with skipReconcile; one listing indexes it, so new/ is empty below.
     const home = await getHome(userId);
     await home.mail.mailboxGet('');
 });
