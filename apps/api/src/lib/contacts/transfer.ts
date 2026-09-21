@@ -23,18 +23,12 @@ import { cardPath } from './card-store';
 import type { Contacts } from './contacts';
 import * as schema from './schema';
 
-// Whole-file vCard transfer over the Contacts facade: export concatenates the stored 3.0 cards, import
-// replays a multi-card file through the CardDAV PUT seam so every card is stored byte-faithfully and metered
-// by the same gate a device sync takes. See docs/CONTACTS.md § vCard import / export.
+// Whole-file vCard transfer; import replays each card through the CardDAV PUT seam. See docs/CONTACTS.md § vCard import / export.
 
-// Which lines of a stored card are Eigen's own bookkeeping rather than the user's data. Only `X-EIGEN-ID`
-// exists today, and it carries the account's uuid, which no export may hand out.
+// X-EIGEN-ID carries the account's uuid, which no export may hand out.
 const isEigenName = (name: string) => name.startsWith('X-EIGEN-');
 
-// The stored cards for `ids`, in that order — or the whole book (groups excluded, as the contact list serves
-// it, symmetric with import skipping them). Each card's terminator is normalized to exactly one CRLF so the
-// concatenation is one well-formed directory whatever the writers left behind; every line but Eigen's own is
-// re-emitted from its own source bytes, PHOTO and unknown properties included.
+// Groups are excluded, as import skips them; every line but Eigen's own re-emits from its own source bytes.
 export async function exportCards(contacts: Contacts, ids?: string[]): Promise<string> {
     await contacts.gate.ensureDrained();
     const rows = contacts.db
@@ -64,8 +58,6 @@ export async function exportCards(contacts: Contacts, ids?: string[]): Promise<s
     return cards.join('');
 }
 
-// The UID a card is stored under: its own, or a minted one spliced in after VERSION (after BEGIN when the
-// card carries no VERSION line). Every other line re-emits from its own source bytes.
 function withMintedUid(parsed: ParsedCard): string {
     const version = parsed.lines.findIndex((line) => line.name === 'VERSION');
     const lines = [...parsed.lines];
@@ -73,14 +65,7 @@ function withMintedUid(parsed: ParsedCard): string {
     return serializeVCardLines(lines);
 }
 
-// Replay a multi-card file into the book, bytes in: the decode and the parse are the domain's, as the
-// mail and calendar imports' are. vCard files are UTF-8 (RFC 6350 §3.1) — decoded leniently a
-// Windows-1252 export would import with U+FFFD in every accented name, stored in the card bytes and
-// re-served to every DAV client. Duplicates skip, never merge: a card whose UID is already in the book,
-// or whose first email already belongs to a contact, is counted and passed over — the running Set means
-// a file that repeats an address imports it once. A card that fails on its own content (unparseable,
-// refused by the PUT) is counted and the file continues; only the shared storage quota stops the run,
-// because every later card would be refused the same way.
+// Strict UTF-8 (RFC 6350 §3.1): decoded leniently, a Windows-1252 export stores U+FFFD in every accented name and re-serves it to DAV clients.
 export async function importCards(contacts: Contacts, bytes: Uint8Array): Promise<ImportCountsResult> {
     const text = decodeUtf8Strict(bytes);
     if (text === null) throw new ApiError(400, NOT_UTF8_FILE);
@@ -138,8 +123,7 @@ export async function importCards(contacts: Contacts, bytes: Uint8Array): Promis
             }
             if (!parsed.uid) body = withMintedUid(parsed);
 
-            // A fresh resource name every time: a UID is not a safe filename (Apple's `…:ABPerson`, `urn:uuid:`
-            // and anything else sanitizeCardUri refuses), and If-None-Match: * keeps the write a create.
+            // A UID is not a safe filename (Apple's `…:ABPerson`, `urn:uuid:`), so mint one; If-None-Match: * keeps the write a create.
             const put = await contacts.putCard(`${randomUUID()}.vcf`, body, { ifMatch: null, ifNoneMatch: '*' });
             if (put.ok) {
                 result.imported++;

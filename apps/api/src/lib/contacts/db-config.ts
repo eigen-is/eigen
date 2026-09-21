@@ -42,12 +42,7 @@ export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
             `),
         },
         {
-            // CardDAV refit: reshape the index around cards-as-truth (uri/uid/etag + a one-row book
-            // carrying the ctag/syncGen, plus a tombstone log for sync-collection removals). The v1
-            // rows are DROPPED, not migrated — once the file-backed refit lands the index is rebuilt
-            // at init from the vCard files on disk, which become the source of truth
-            // (docs/CONTACTS.md § Storage model — files as truth).
-            // Runs inside ManagedDatabase's BEGIN/ROLLBACK, so a failure leaves the db at v1 untouched.
+            // v1 rows are DROPPED, not migrated: init rebuilds the index from the vCard files (docs/CONTACTS.md § Storage model — files as truth).
             version: 2,
             up: (db) =>
                 db.exec(`
@@ -114,8 +109,7 @@ export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
             `),
         },
         {
-            // Some persistent v2 databases predate uriKey being added to the unshipped v2 tombstone shape.
-            // Heal those databases forward; fresh databases already have the column and only ensure the index.
+            // Some v2 databases predate uriKey on the tombstone table; a fresh one only ensures the index.
             version: 3,
             up: (db) => {
                 const hasUriKey = db
@@ -132,10 +126,7 @@ export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
             },
         },
         {
-            // The two recovery journals: a card write intent that outlives a crash between the file rename
-            // and its index commit, and a label rename whose member-card fan-out was cut short. Both are
-            // written and cleared by the mutation seams; init drains whatever survived. Pure table adds —
-            // an existing book keeps every row.
+            // Recovery journals init drains: a card write cut between the file rename and its index commit, and a half-applied label rename.
             version: 4,
             up: (db) =>
                 db.exec(`

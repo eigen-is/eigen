@@ -17,15 +17,11 @@ import { avatarNameOf, cardPath, cardUpdateSet, statCardDir } from './card-store
 import type { Contacts } from './contacts';
 import * as schema from './schema';
 
-// The index pass over the Contacts facade — a stat-only reconcile that re-reads only what drifted, and owns
-// the book row a lost index comes back without — plus the ranking machinery that hands the single self-link
-// to exactly one card. See docs/CONTACTS.md § Reconcile.
+// The stat-only index pass, plus the ranking that hands the self-link to exactly one card. See docs/CONTACTS.md § Reconcile.
 
 // Scalars only — never the `data` JSON, so init parses no stored projection.
 type IndexIncumbent = Pick<typeof schema.contacts.$inferSelect, 'id' | 'uri' | 'uid' | 'eigenId' | 'etag'>;
 
-// One card file, prepared but not yet committed. The incumbent rides along so the caller can tell a new
-// card from an updated one.
 type CardCandidate = {
     row: CardRowInput;
     categories: string[];
@@ -34,10 +30,7 @@ type CardCandidate = {
     rank: 0 | 1 | 2 | 3;
 };
 
-// Strength of a card's claim to the single self-link slot, highest wins; ties break by uri sort (candidates
-// are pre-sorted). 3 incumbent — its index row already held the link; 2 strong — the file asserts
-// X-EIGEN-ID = user.id; 1 email-only — an exact owner-email match, a weak claim that only rewrites the file
-// if it actually wins. A forged foreign X-EIGEN-ID scores 0: it stays in the file verbatim and drives nothing.
+// Self-link claim, highest wins, ties by uri: 3 incumbent, 2 the file asserts our X-EIGEN-ID, 1 owner-email only, 0 a foreign X-EIGEN-ID.
 export function selfClaimRank(
     contacts: Contacts,
     parsed: ParsedCard,
@@ -59,9 +52,7 @@ function pickSelfWinner(candidates: CardCandidate[]): CardCandidate | undefined 
     return winner;
 }
 
-// Stamp the winner's row with the self-link and, when its file does not already assert it, restore
-// X-EIGEN-ID into that one file so the link survives a restart — the case of an email-only claim, or an
-// incumbent whose file a client stripped. No loser's file is ever touched.
+// Restores X-EIGEN-ID into the winner's file so the link survives a restart; no loser's file is ever touched.
 async function applySelfLink(contacts: Contacts, winner: CardCandidate): Promise<void> {
     winner.row.eigenId = contacts.home.user.id;
     if (winner.parsed.eigenId === contacts.home.user.id) return;
@@ -77,8 +68,7 @@ function dedupeCardsByUid(candidates: CardCandidate[], uidOwner: Map<string, str
     return dedupeByUid(candidates, uidOwner, (c) => ({ scope: c.row.uid, id: c.row.id, uri: c.row.uri }));
 }
 
-// Phase 1 of both passes: prepare each entry into a candidate row without touching the self-link, ranking its
-// claim against the entry's incumbent eigenId. One unreadable card never fails the whole pass.
+// One unreadable card never fails the whole pass.
 async function buildCandidates(
     contacts: Contacts,
     entries: { uri: string; existing?: IndexIncumbent }[],
@@ -95,17 +85,13 @@ async function buildCandidates(
     return candidates;
 }
 
-// Stat-only, so a same-size timestamp-preserving replacement is invisible here — the write journal is what
-// catches that one.
+// Stat-only: a same-size, timestamp-preserving replacement is invisible here — the write journal catches that one.
 export async function reconcileIndex(contacts: Contacts): Promise<void> {
     return contacts.gate.run(async () => {
         const scan = await statCardDir(contacts.storage);
         const { files: present, skipped } = scan;
 
-        // The book row is authoritative and lives nowhere but contacts.db, so a book that lost it comes back
-        // from cards/ alone: its generation rotates and every outstanding sync token is refused, rather than
-        // a reset counter telling clients "nothing changed" while gap-deletions become ghosts. A book that
-        // never had a row has no cards and no client to strand, so it starts at the schema default.
+        // A lost book row rebuilds from cards/ under a rotated generation, so stale sync tokens are refused instead of hiding gap-deletions.
         if (!contacts.db.select({ id: schema.book.id }).from(schema.book).where(eq(schema.book.id, 1)).get()) {
             const lost = present.size > 0 || skipped.size > 0;
             contacts.db
@@ -150,8 +136,7 @@ export async function reconcileIndex(contacts: Contacts): Promise<void> {
             ...diff.changed.map(({ file, row }) => ({ uri: file.uri, existing: row })),
         ].sort((a, b) => (a.uri < b.uri ? -1 : a.uri > b.uri ? 1 : 0));
 
-        // Unindexable bytes count too: the file occupies storage (and quota) whether or not the index can
-        // make sense of it.
+        // Unindexable bytes count too: the file occupies quota whatever the index makes of it.
         const presentBytes = [...present.values()].reduce((sum, p) => sum + p.size, 0);
 
         if (reindex.length === 0 && diff.vanished.length === 0) {
@@ -163,24 +148,18 @@ export async function reconcileIndex(contacts: Contacts): Promise<void> {
 
         const candidates = await buildCandidates(contacts, reindex);
 
-        // Seed the uid→owner guard with every row that will REMAIN after the vanished deletes, not just the
-        // untouched ones: a reindexing incumbent whose candidate is skipped keeps its stored uid, so a new
-        // same-UID card must lose to it rather than trip the UNIQUE index inside the transaction.
+        // Seeded with every row that survives the vanished deletes, so a new same-uid card loses instead of tripping the UNIQUE index.
         const vanishedIds = new Set(diff.vanished.map((r) => r.id));
         const uidOwner = new Map(rows.filter((r) => !vanishedIds.has(r.id)).map((r) => [r.uid, r.id] as const));
         const prepared = dedupeCardsByUid(candidates, uidOwner);
 
-        // Nothing survived to commit and nothing vanished. A card that can never be indexed drifts into this
-        // set on every restart, so running the transaction here would bump the ctag for a book that never
-        // changed and send every client into a no-op delta poll per restart.
+        // A never-indexable card drifts in on every restart; committing here would bump the ctag and send every client a no-op delta poll.
         if (prepared.length === 0 && diff.vanished.length === 0) {
             contacts.cardsBytes = presentBytes;
             return;
         }
 
-        // Phase 2: choose the one self-link winner. A self row that survives this pass untouched holds the
-        // slot outright; only one whose file is really gone — tombstoned this same pass — frees it for a
-        // twin's claim. A skipped stat is not a removal, so it may not mint a second eigenId row either.
+        // A self row that survives this pass keeps the slot; only one tombstoned here frees it, and a skipped stat is not a removal.
         const survivingSelf = rows.some(
             (r) =>
                 r.eigenId === contacts.home.user.id &&
@@ -192,8 +171,7 @@ export async function reconcileIndex(contacts: Contacts): Promise<void> {
             if (winner) await applySelfLink(contacts, winner);
         }
 
-        // The restore rule: a restore drifts every mtime, so a card that still hashes the same changed nothing
-        // and only refreshes its stat — re-stamping it would send every client back for the whole book.
+        // A restore drifts every mtime: a card that still hashes the same only refreshes its stat, or every client refetches the book.
         const isRestored = (c: CardCandidate) =>
             !!c.existing &&
             c.existing.etag === c.row.etag &&
