@@ -1167,7 +1167,14 @@ describe('fail-closed drain guard', () => {
         priv.gate.markDirty('poison.vcf');
         const ctagBefore = db.select().from(contactsSchema.book).get()!.ctag;
 
-        for (let i = 0; i < 3; i++) await expect(contacts.getContacts()).rejects.toThrow('prepare boom');
+        // The poison card is skipped once and warned about once — it leaves the dirty set like any settled
+        // uri — and the reads it rode along with still answer.
+        const warnings = await captureWarnings(async () => {
+            for (let i = 0; i < 3; i++) {
+                expect((await contacts.getContacts()).some((c) => c.firstName === 'Healthy')).toBe(true);
+            }
+        });
+        expect(warnings.filter((w) => w.includes('poison.vcf')).length).toBe(1);
 
         // The healthy card settled on the first drain, and its pair was whole, so it committed nothing.
         // Re-committing it behind the poison card would bump the ctag on every read and send every CardDAV

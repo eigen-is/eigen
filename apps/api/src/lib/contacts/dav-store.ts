@@ -166,6 +166,13 @@ export async function putCard(
         // bytes, silently reverting the accepted write.
         const storedUri = existing?.uri ?? uri;
 
+        // A name free in the INDEX is not free on DISK: a card the index skipped — a dedupe loser, bytes that
+        // won't parse — is still on disk, and a create would destroy it. Refused with the answer an explicit
+        // `If-None-Match: *` already gives for a name the index does know.
+        if (!existing && (await contacts.storage.exists(cardPath(storedUri)))) {
+            return { ok: false, error: 'precondition' };
+        }
+
         // A UID another resource owns is a conflict the client can act on, not a raw 500 on the UNIQUE index.
         if (!parsed.uid) return { ok: false, error: 'invalid', message: 'UID is required' };
         const holder = contacts.db
