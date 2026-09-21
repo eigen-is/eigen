@@ -7,7 +7,6 @@ import type {
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
 import type { Notification } from '@workspace/lib/types/notification';
-import { computeEtag } from '../../lib/calendar/mappers';
 import { getHome } from '../../lib/home';
 import { assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
 
@@ -2022,11 +2021,9 @@ describe('Calendar invite email to Eigen user', () => {
     });
 });
 
-// Audit #24: computeEtag must include `timezone` on every path. rsvpForOccurrence and
-// removeThisAndFuture omitted it while create/update include it, so a byte-identical event hashed
-// differently across paths → spurious CalDAV re-sync. The invariant: the stored etag equals the etag
-// recomputed with the row's timezone (and differs from the etag that drops it).
-describe('Calendar etag timezone consistency (audit #24)', () => {
+// Audit #24: every occurrence-level write keeps the series timezone, or the exception serializes in Z
+// form and keys against a different wall-clock day than the series it belongs to.
+describe('Calendar occurrence timezone consistency (audit #24)', () => {
     const NY = 'America/New_York';
     let testCtx: Awaited<ReturnType<typeof getTestContext>>;
     let aliceCalId: string;
@@ -2107,22 +2104,9 @@ describe('Calendar etag timezone consistency (audit #24)', () => {
         const exc = (await home.calendar.getRawEvents(bobCalId)).find((e) => e.parentEventId === linkedId);
         expect(exc).toBeDefined();
         expect(exc!.timezone).toBe(NY); // exception now inherits the parent's timezone
-        const base = {
-            title: exc!.title,
-            description: exc!.description,
-            location: exc!.location,
-            startTime: exc!.startTime,
-            endTime: exc!.endTime,
-            allDay: exc!.allDay,
-            rrule: exc!.rrule,
-            status: exc!.status,
-            data: exc!.data,
-        };
-        expect(exc!.etag).toBe(computeEtag({ ...base, timezone: exc!.timezone })); // pre-fix: equalled the no-tz etag
-        expect(exc!.etag).not.toBe(computeEtag(base));
     });
 
-    test('removeThisAndFuture stores an etag that includes the timezone', async () => {
+    test('removeThisAndFuture keeps the series timezone', async () => {
         await assertJson(
             await authedRequest(
                 testCtx.bob.user.sessionToken,
@@ -2143,18 +2127,6 @@ describe('Calendar etag timezone consistency (audit #24)', () => {
         const row = (await home.calendar.getRawEvents(bobCalId)).find((e) => e.id === linkedId);
         expect(row).toBeDefined();
         expect(row!.timezone).toBe(NY);
-        const base = {
-            title: row!.title,
-            description: row!.description,
-            location: row!.location,
-            startTime: row!.startTime,
-            endTime: row!.endTime,
-            allDay: row!.allDay,
-            rrule: row!.rrule,
-            status: row!.status,
-            data: row!.data,
-        };
-        expect(row!.etag).toBe(computeEtag({ ...base, timezone: row!.timezone })); // pre-fix: equalled the no-tz etag
     });
 });
 
@@ -2351,7 +2323,7 @@ describe('Event move across calendars (finding #1)', () => {
             }),
         });
         const created = await assertJson<CalendarEvent>(createRes);
-        const uri = `${created.uid}.ics`;
+        const uri = created.uri;
 
         const home = await getHome(ctx.alice.user.id);
         // The client's sync token on the source, captured before it ever leaves.
@@ -2360,8 +2332,12 @@ describe('Event move across calendars (finding #1)', () => {
         await home.calendar.moveEvent(sourceCalId, created.id, targetCalId); // A → B (tombstones the uri in A)
         await home.calendar.moveEvent(targetCalId, created.id, sourceCalId); // B → A (must clear that tombstone)
 
-        const changed = (await home.calendar.getChangedEventsSince(sourceCalId, preCtag)).filter((e) => e.uri === uri);
-        const deleted = (await home.calendar.getDeletedEventsSince(sourceCalId, preCtag)).filter((d) => d.uri === uri);
+        const changed = (await home.calendar.getChangedResourcesSince(sourceCalId, preCtag)).filter(
+            (r) => r.uri === uri,
+        );
+        const deleted = (await home.calendar.getDeletedResourcesSince(sourceCalId, preCtag)).filter(
+            (d) => d.uri === uri,
+        );
         expect(changed).toHaveLength(1); // the re-homed event, once, as a 200
         expect(deleted).toHaveLength(0); // and never as a stale 404
     });

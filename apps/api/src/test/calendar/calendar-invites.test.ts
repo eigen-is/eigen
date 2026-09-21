@@ -255,10 +255,9 @@ describe('Calendar Invites', () => {
             const secondId = await cal.receiveInvitation(payload); // Alice re-sends the same invite
             expect(secondId).not.toBe(firstId);
 
-            const changed = (await cal.getChangedEventsSince(defaultCal.id, preCtag)).filter((e) => e.uri === uri);
-            const deleted = (await cal.getDeletedEventsSince(defaultCal.id, preCtag)).filter((d) => d.uri === uri);
+            const changed = (await cal.getChangedResourcesSince(defaultCal.id, preCtag)).filter((r) => r.uri === uri);
+            const deleted = (await cal.getDeletedResourcesSince(defaultCal.id, preCtag)).filter((d) => d.uri === uri);
             expect(changed).toHaveLength(1);
-            expect(changed[0].eventCtag).not.toBeNull();
             expect(deleted).toHaveLength(0);
         });
 

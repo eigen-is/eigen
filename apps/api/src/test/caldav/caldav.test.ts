@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { handleDeleteCalendar } from '../../lib/caldav/proppatch';
-import { Calendar, EVENT_MAX_BYTES } from '../../lib/calendar/calendar';
+import { Calendar } from '../../lib/calendar/calendar';
+import { EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
 import { ApiError } from '../../lib/core';
 import { getHome } from '../../lib/home/get-home';
 import { basicAuth } from '../dav-test-helpers';
@@ -30,6 +31,19 @@ describe('CalDAV', () => {
         expect(ids.length).toBeGreaterThan(0);
         defaultCalendarId = ids[0];
     });
+
+    // Eigen stamps every stored resource with its own lines, so a PUT hands back no validator (RFC 4791
+    // § 5.3.4): the etag of the bytes the server kept comes from reading them.
+    async function etagOf(uri: string): Promise<string> {
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'GET',
+                headers: { Authorization: basicAuth(ctx.alice.user.email) },
+            }),
+        );
+        expect(res.status).toBe(200);
+        return res.headers.get('ETag')!;
+    }
 
     test('OPTIONS returns DAV header', async () => {
         const res = await app.handle(new Request('http://localhost/dav/', { method: 'OPTIONS' }));
@@ -128,8 +142,8 @@ describe('CalDAV', () => {
             }),
         );
         expect(putRes.status).toBe(201);
-        const etag = putRes.headers.get('ETag');
-        expect(etag).toBeTruthy();
+        // A body the server re-stamped before storing carries no validator back.
+        expect(putRes.headers.get('ETag')).toBeNull();
 
         // GET to verify
         const getRes = await app.handle(
@@ -270,7 +284,7 @@ describe('CalDAV', () => {
             }),
         );
         expect(create.status).toBe(201);
-        const etag = create.headers.get('ETag');
+        const etag = await etagOf(uri);
 
         const stale = await app.handle(
             new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
@@ -315,7 +329,7 @@ describe('CalDAV', () => {
             }),
         );
         expect(create.status).toBe(201);
-        const etag = create.headers.get('ETag');
+        const etag = await etagOf(uri);
 
         const res = await app.handle(
             new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
@@ -349,7 +363,7 @@ describe('CalDAV', () => {
             }),
         );
         expect(create.status).toBe(201);
-        const etag = create.headers.get('ETag');
+        const etag = await etagOf(uri);
 
         const update = await app.handle(
             new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
@@ -431,7 +445,7 @@ describe('CalDAV', () => {
             }),
         );
         expect(putRes.status).toBe(201);
-        const originalEtag = putRes.headers.get('ETag');
+        const originalEtag = await etagOf('caldav-recur-1.ics');
 
         // PUT again with an exception (cancel April 3)
         const icsWithException = [
@@ -477,8 +491,10 @@ describe('CalDAV', () => {
         );
         const body = await getRes.text();
         expect(body).toContain('RRULE:FREQ=DAILY');
-        expect(body).toContain('EXDATE:20260403T090000Z');
-        expect(body).not.toContain('RECURRENCE-ID');
+        // A PUT is a full-resource replace: the cancelled override the client wrote is stored as it
+        // wrote it, and the occurrence it cancels drops out of the expansion all the same.
+        expect(body).toContain('RECURRENCE-ID:20260403T090000Z');
+        expect(body).toContain('STATUS:CANCELLED');
 
         // The master event's etag should have changed (so CalDAV clients detect the change)
         const newEtag = getRes.headers.get('ETag');
@@ -751,7 +767,7 @@ describe('CalDAV', () => {
             }),
         );
         expect(putRes.status).toBe(201);
-        const etag1 = putRes.headers.get('ETag');
+        const etag1 = await etagOf('etag-stable.ics');
 
         // Re-PUT identical content
         const putRes2 = await app.handle(
@@ -766,7 +782,7 @@ describe('CalDAV', () => {
             }),
         );
         expect(putRes2.status).toBe(204);
-        const etag2 = putRes2.headers.get('ETag');
+        const etag2 = await etagOf('etag-stable.ics');
 
         // ETags should be identical — no spurious re-PUT loop
         expect(etag2).toBe(etag1);
@@ -888,7 +904,8 @@ describe('CalDAV', () => {
                 body: ics,
             }),
         );
-        // Untrusted ICS must not 500 the sync; the explosive rule is stripped and the event stored once.
+        // Untrusted ICS must not 500 the sync; the file keeps what the client wrote and the index
+        // degrades the explosive rule to a single event instead of expanding it.
         expect([201, 204]).toContain(putRes.status);
 
         const getRes = await app.handle(
@@ -899,7 +916,10 @@ describe('CalDAV', () => {
         );
         const body = await getRes.text();
         expect(body).toContain('SubDaily PUT');
-        expect(body).not.toContain('SECONDLY');
+        // The stored resource is the client's, rule included — the index is what drops it.
+        expect(body).toContain('RRULE:FREQ=SECONDLY');
+        const stored = await (await getHome(userId)).calendar.getEventByUri(defaultCalendarId, 'caldav-subdaily-1.ics');
+        expect(stored!.rrule).toBeNull();
     });
 
     test('a REPORT body over 1 MiB is 413 before parsing', async () => {
@@ -1043,7 +1063,7 @@ describe('CalDAV', () => {
             }),
         );
         expect(putRes.status).toBe(201);
-        const etag = putRes.headers.get('ETag');
+        const etag = await etagOf(uri);
 
         const res = await app.handle(
             new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
@@ -1094,7 +1114,7 @@ describe('CalDAV', () => {
                 }),
             );
             expect(putRes.status).toBe(201);
-            propEtag = putRes.headers.get('ETag') ?? '';
+            propEtag = await etagOf(propUri);
         });
 
         test('a body requesting only getetag drops getcontenttype from the member row', async () => {
@@ -1199,8 +1219,6 @@ describe('CalDAV', () => {
         );
         expect(putRes.status).toBe(201);
         expect(putRes.headers.get('Location')).toBe(emittedHref);
-        const etag = putRes.headers.get('ETag');
-        expect(etag).toBeTruthy();
 
         const getRes = await app.handle(
             new Request(`http://localhost${requestHref}`, {
@@ -1210,7 +1228,8 @@ describe('CalDAV', () => {
         );
         expect(getRes.status).toBe(200);
         expect(await getRes.text()).toContain('Encoded URI Event');
-        expect(getRes.headers.get('ETag')).toBe(etag);
+        const etag = getRes.headers.get('ETag');
+        expect(etag).toBeTruthy();
 
         const propRes = await app.handle(
             new Request(`http://localhost${requestHref}`, {
@@ -1558,7 +1577,7 @@ describe('CalDAV', () => {
 
         const all = await propfindCalendar('');
         expect(all.status).toBe(207);
-        expect(await all.text()).toContain('<C:max-resource-size>20971520</C:max-resource-size>');
+        expect(await all.text()).toContain('<C:max-resource-size>5242880</C:max-resource-size>');
 
         // RFC 4791 § 5.2.5: a client asks for it by name to size a PUT before sending it.
         const named = await propfindCalendar(
@@ -1566,7 +1585,7 @@ describe('CalDAV', () => {
         );
         expect(named.status).toBe(207);
         const xml = await named.text();
-        expect(xml).toContain('<C:max-resource-size>20971520</C:max-resource-size>');
+        expect(xml).toContain('<C:max-resource-size>5242880</C:max-resource-size>');
         expect(xml).not.toContain('404 Not Found');
     });
 
@@ -1651,45 +1670,34 @@ describe('CalDAV', () => {
         expect(xml).toContain(outOfCollectionHref);
     });
 
-    test('a resource name that genuinely needs encoding (a space) round-trips as %20', async () => {
-        // A space is not pchar-legal, so it MUST stay percent-encoded on the wire: the client PUTs a%20b.ics, the
-        // server stores "a b.ics" and re-emits the href as a%20b.ics — the raw space never appears in a listing.
-        const requestHref = `/dav/calendars/${userId}/${defaultCalendarId}/a%20b.ics`;
+    test('a resource name a file system cannot hold is refused, never rewritten', async () => {
+        // A resource name is a file name now, so it takes the same segment rule a card does: a space, a
+        // traversal, a missing suffix and an over-long name are all 400s rather than a silent rewrite.
         const ics = [
             'BEGIN:VCALENDAR',
             'VERSION:2.0',
             'BEGIN:VEVENT',
-            'UID:caldav-space@eigen',
-            'SUMMARY:Spaced URI Event',
+            'UID:caldav-unsafe@eigen',
+            'SUMMARY:Unsafe name',
             'DTSTART:20261103T090000Z',
             'DTEND:20261103T100000Z',
             'END:VEVENT',
             'END:VCALENDAR',
         ].join('\r\n');
 
-        const putRes = await app.handle(
-            new Request(`http://localhost${requestHref}`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar',
-                    'If-None-Match': '*',
-                },
-                body: ics,
-            }),
-        );
-        expect(putRes.status).toBe(201);
-        expect(putRes.headers.get('Location')).toBe(requestHref);
-
-        const propRes = await app.handle(
-            new Request(`http://localhost${requestHref}`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
-            }),
-        );
-        expect(propRes.status).toBe(207);
-        const propXml = await propRes.text();
-        expect(propXml).toContain(requestHref);
-        expect(propXml).not.toContain('a b.ics');
+        for (const name of ['a%20b.ics', '..%2Fescape.ics', 'no-suffix', `${'x'.repeat(300)}.ics`, 'calendar.db']) {
+            const res = await app.handle(
+                new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${name}`, {
+                    method: 'PUT',
+                    headers: {
+                        Authorization: basicAuth(ctx.alice.user.email),
+                        'Content-Type': 'text/calendar',
+                        'If-None-Match': '*',
+                    },
+                    body: ics,
+                }),
+            );
+            expect([400, 404]).toContain(res.status);
+        }
     });
 });

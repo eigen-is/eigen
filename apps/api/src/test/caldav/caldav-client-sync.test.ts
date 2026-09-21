@@ -107,7 +107,7 @@ describe('CalDAV client sync on web-created events', () => {
             recurrenceDate: '2026-07-13',
         });
 
-        const { ics } = await davGet(`${ev.uid}.ics`);
+        const { ics } = await davGet(ev.uri);
         const vevents = ics.split('BEGIN:VEVENT').slice(1);
         expect(vevents.length).toBe(2);
         const override = vevents.find((v) => v.includes('RECURRENCE-ID'));
@@ -128,7 +128,7 @@ describe('CalDAV client sync on web-created events', () => {
             rrule: 'FREQ=WEEKLY',
         });
 
-        const { ics, etag } = await davGet(`${ev.uid}.ics`);
+        const { ics, etag } = await davGet(ev.uri);
         // Inject into the VEVENT's RRULE — the VTIMEZONE also carries RRULE lines, so a naive
         // first-match injection would land inside the VTIMEZONE and be ignored.
         const withExdate = ics.replace(
@@ -136,7 +136,7 @@ describe('CalDAV client sync on web-created events', () => {
             'RRULE:FREQ=WEEKLY\r\nEXDATE;TZID=Europe/Amsterdam:20260810T120000',
         );
         expect(withExdate).not.toBe(ics);
-        const put = await davPut(`${ev.uid}.ics`, withExdate, etag ?? undefined);
+        const put = await davPut(ev.uri, withExdate, etag ?? undefined);
         expect(put.status).toBe(204);
 
         expect(await occurrenceDays(ev.uid, '2026-08-01T00:00:00Z', '2026-08-31T00:00:00Z')).toEqual([
@@ -173,7 +173,7 @@ describe('CalDAV client sync on web-created events', () => {
         // The deletion must be served as EXDATE on the master; Thunderbird does not round-trip a
         // STATUS:CANCELLED override VEVENT, and the full-replace exception prune would then
         // resurrect the occurrence on TB's next PUT.
-        const { ics, etag } = await davGet(`${ev.uid}.ics`);
+        const { ics, etag } = await davGet(ev.uri);
         expect(ics).toContain('EXDATE;TZID=Europe/Amsterdam:20260914T120000');
         expect(ics).not.toContain('STATUS:CANCELLED');
 
@@ -194,7 +194,7 @@ describe('CalDAV client sync on web-created events', () => {
                 out.push(line);
             }
         }
-        const put = await davPut(`${ev.uid}.ics`, out.join('\r\n'), etag ?? undefined);
+        const put = await davPut(ev.uri, out.join('\r\n'), etag ?? undefined);
         expect(put.status).toBe(204);
 
         expect(await occurrenceDays(ev.uid, '2026-09-01T00:00:00Z', '2026-09-30T00:00:00Z')).not.toContain(
@@ -269,11 +269,11 @@ describe('CalDAV client sync on web-created events', () => {
             timezone: 'Europe/Amsterdam',
         });
 
-        const { ics, etag } = await davGet(`${ev.uid}.ics`);
+        const { ics, etag } = await davGet(ev.uri);
         expect(etag).toBeTruthy();
 
         const moved = ics.replace(/20260720T/g, '20260721T');
-        const put = await davPut(`${ev.uid}.ics`, moved, etag ?? undefined);
+        const put = await davPut(ev.uri, moved, etag ?? undefined);
         expect(put.status).toBe(204);
 
         expect(await occurrenceDays(ev.uid, '2026-07-19T00:00:00Z', '2026-07-23T00:00:00Z')).toEqual(['2026-07-21']);

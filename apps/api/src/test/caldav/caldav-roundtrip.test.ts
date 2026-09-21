@@ -316,10 +316,9 @@ describe('CalDAV round-trip fidelity', () => {
             expect(ics).not.toContain('STATUS:CANCELLED');
         });
 
-        // The full-replace prune presumes the payload represents the whole resource. A degenerate
-        // master-less PUT (no VEVENT without a RECURRENCE-ID) proves nothing about the exceptions
-        // it omits, so it must not delete them.
-        test('a master-less PUT does not prune stored exceptions', async () => {
+        // A PUT replaces the whole resource, so a payload without a master stores a resource without
+        // one: the file the client sent IS the resource, and nothing of the old one is kept back.
+        test('a master-less PUT replaces the whole resource', async () => {
             const withOverride = vcal(
                 [
                     'BEGIN:VEVENT',
@@ -354,10 +353,10 @@ describe('CalDAV round-trip fidelity', () => {
             );
             expect((await putIcs('rt-lone.ics', loneOverride)).status).toBe(204);
 
-            const calendar = (await getHome(userId)).calendar;
-            const masterRow = (await calendar.getEventByUri(calendarId, 'rt-lone.ics'))!;
-            // Both rows survive: the override (updated by the PUT) and the canceled EXDATE row.
-            expect(await calendar.getExceptionsForParent(masterRow.id)).toHaveLength(2);
+            const ics = await getIcs('rt-lone.ics');
+            expect(ics).toContain('SUMMARY:Lone series (moved again)');
+            expect(ics).not.toContain('RRULE:FREQ=WEEKLY');
+            expect(ics.split('BEGIN:VEVENT')).toHaveLength(2);
         });
 
         test('control: TEXT escaping and long-line folding survive the round-trip', async () => {
@@ -447,7 +446,7 @@ describe('CalDAV round-trip fidelity', () => {
             expect(ics).toContain('RECURRENCE-ID;TZID=America/New_York:20260604T230000');
         });
 
-        test('unparseable recurrenceDate keys are inert: the resource still serves', async () => {
+        test('an occurrence key the file cannot name is refused at the write boundary', async () => {
             const calendar = (await getHome(userId)).calendar;
             const master = await calendar.createEvent(calendarId, {
                 title: 'Garbage key series',
@@ -460,34 +459,25 @@ describe('CalDAV round-trip fidelity', () => {
                 uri: 'legacy-garbage.ics',
                 createByUserId: userId,
             });
-            await calendar.createEvent(calendarId, {
-                title: 'Garbage key series',
-                startTime: new Date('2026-06-03T03:00:00Z'),
-                endTime: new Date('2026-06-03T03:50:00Z'),
-                allDay: false,
-                parentEventId: master.id,
-                recurrenceDate: 'not-a-date',
-                status: 'cancelled',
-                uid: master.uid,
-                createByUserId: userId,
-            });
-            await calendar.createEvent(calendarId, {
-                title: 'Garbage key series (moved)',
-                startTime: new Date('2026-06-10T10:00:00Z'),
-                endTime: new Date('2026-06-10T10:50:00Z'),
-                allDay: false,
-                timezone: 'America/New_York',
-                parentEventId: master.id,
-                recurrenceDate: 'also!garbage',
-                uid: master.uid,
-                createByUserId: userId,
-            });
 
-            const ics = await getIcs('legacy-garbage.ics'); // pre-fix: 500
-            // The unkeyable cancellation cancels nothing (matches expansion) — no EXDATE emitted.
+            // A RECURRENCE-ID and an EXDATE are both written from this key, so a series can never hold
+            // an occurrence nobody can name.
+            await expect(
+                calendar.createEvent(calendarId, {
+                    title: 'Garbage key series',
+                    startTime: new Date('2026-06-03T03:00:00Z'),
+                    endTime: new Date('2026-06-03T03:50:00Z'),
+                    allDay: false,
+                    parentEventId: master.id,
+                    recurrenceDate: 'not-a-date',
+                    status: 'cancelled',
+                    uid: master.uid,
+                    createByUserId: userId,
+                }),
+            ).rejects.toThrow('Invalid occurrence date');
+
+            const ics = await getIcs('legacy-garbage.ics');
             expect(ics).not.toContain('EXDATE');
-            // The unkeyable override falls back to its own startTime (pre-#C shape) rather than 500ing.
-            expect(ics).toContain('RECURRENCE-ID;TZID=America/New_York:20260610T060000');
         });
     });
 
@@ -561,7 +551,9 @@ describe('CalDAV round-trip fidelity', () => {
             await new Promise((r) => setTimeout(r, 300)); // let the fire-and-forget fan-out run
 
             expect(updated.title).toBe('Design review (web)'); // pre-fix: the edit was dropped
-            expect(updated.sequence).toBeGreaterThan(occ.sequence);
+            // A title is not a scheduling change (RFC 5546), so SEQUENCE holds while the guests are
+            // still told about it.
+            expect(updated.sequence).toBe(occ.sequence);
             const updates = spy.mock.calls.filter((c) => c[0].subject === 'Updated invitation: Design review (web)');
             expect(updates.flatMap((c) => c[0].to.map((t) => t.address))).toContain(GUEST);
             spy.mockRestore();

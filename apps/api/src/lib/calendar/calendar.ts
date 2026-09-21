@@ -884,6 +884,11 @@ export class Calendar {
         }
         const resource = this.resourceOf(parent.id);
         if (!resource) throw new ApiError(404, 'Event not found');
+        // An occurrence the file cannot name is an occurrence the series cannot hold: a RECURRENCE-ID
+        // and an EXDATE are both written from this key.
+        if (!input.recurrenceDate || !storedRecurrenceKey(input.recurrenceDate)) {
+            throw new ApiError(400, 'Invalid occurrence date');
+        }
 
         const override = eventForFile({
             id: randomUUID(),
