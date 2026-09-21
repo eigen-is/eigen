@@ -6,7 +6,7 @@ category: Basics
 tags: [mail, email, imap, sync, troubleshooting]
 related: [mail/get-started, mail/move-email-between-folders, connect/mount-drive-on-your-computer]
 order: 210
-updated: 2026-09-20
+updated: 2026-09-21
 ---
 
 A message that seems to have vanished is usually in another mailbox, not gone. And if you read the same account in
@@ -73,8 +73,6 @@ one.
 
 ## A folder you made in another app is missing from Mail
 
-**Mail lists folders whose names use letters, numbers, spaces, hyphens, and underscores.** A folder with anything
-else in its name, such as an accent, an ampersand, or an emoji, stays on the server and keeps working in your
-other mail app, but Mail leaves it out of the sidebar.
+**Mail lists the folders you make in another app, accents, ampersands, and emoji included.** A folder is left out only when its name would break the folder tree: a name holding a dot or a slash, a name that is empty or only spaces, or one longer than 200 characters. Such a folder stays on the server and keeps working in your other mail app, but Mail leaves it out of the sidebar.
 
-Rename the folder in your other app to a plain name, or move the messages into a folder Mail lists.
+Rename the folder in your other app, or move the messages into a folder Mail lists.
