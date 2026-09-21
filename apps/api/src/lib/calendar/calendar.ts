@@ -3,9 +3,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { isInvitationFromOthers, occurrenceDateToString, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
-import { ICS_IMPORT_MAX_EVENTS, ICS_IMPORT_MAX_REMINDERS } from '@workspace/lib/constants/calendar';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
-import { NOT_A_CALENDAR_FILE, NOT_UTF8_FILE } from '@workspace/lib/constants/transfer';
 import type {
     Attendee,
     CalendarEvent,
@@ -20,9 +18,18 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { and, count, eq, gt, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
+import ICAL from 'ical.js';
 import { RRule } from 'rrule';
 import { type IcsParseResult, type ParsedEvent, parseIcs } from '../caldav/ical-parse';
-import { ApiError, PATHS } from '../core';
+import {
+    ApiError,
+    decodeUtf8Strict,
+    ICS_IMPORT_MAX_EVENTS,
+    ICS_IMPORT_MAX_REMINDERS,
+    NOT_A_CALENDAR_FILE,
+    NOT_UTF8_FILE,
+    PATHS,
+} from '../core';
 import type { ManagedDatabase } from '../core/';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
@@ -97,22 +104,6 @@ function isImportableUid(uid: string): boolean {
         if (code < 0x20 || code === 0x7f) return false;
     }
     return true;
-}
-
-// The bytes an import was handed, as events. iCalendar is UTF-8, so another encoding is its own answer
-// rather than "not a calendar" — the same pair a vCard import gives (contacts/transfer.ts).
-function parseIcsFile(bytes: Uint8Array): IcsParseResult {
-    let text: string;
-    try {
-        text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-    } catch {
-        throw new ApiError(400, NOT_UTF8_FILE);
-    }
-    try {
-        return parseIcs(text);
-    } catch {
-        throw new ApiError(400, NOT_A_CALENDAR_FILE);
-    }
 }
 
 // An imported event as this Home's own: no organizer, no attendees, a handful of reminders.
@@ -327,16 +318,24 @@ export class Calendar {
         return calendarEvent;
     }
 
-    // A whole `.ics` into one calendar of this Home, bytes in: the decode and the parse are the domain's,
-    // as the mail import's are. Every event lands as this user's own: the file's ORGANIZER and ATTENDEE
-    // lists are dropped, because a stored organizer reads as someone else's invitation (the updateEvent
-    // guard locks it, delete becomes a decline) and an attendee list mails the file author's addresses on
-    // every later edit.
+    // A whole `.ics` into one calendar of this Home, bytes in, every event landing as this user's own
+    // (docs/CALENDAR.md § Importing an .ics).
     public importEvents(calendarId: string, bytes: Uint8Array): ImportCountsResult {
         const cal = this.getCalendarById(calendarId);
         if (!cal) throw new ApiError(404, 'Calendar not found');
 
-        const parsed = parseIcsFile(bytes);
+        // iCalendar is UTF-8, so another encoding is its own answer rather than "not a calendar" — the
+        // same pair a vCard import gives (contacts/transfer.ts).
+        const text = decodeUtf8Strict(bytes);
+        if (text === null) throw new ApiError(400, NOT_UTF8_FILE);
+
+        let parsed: IcsParseResult;
+        try {
+            parsed = parseIcs(text);
+        } catch (e) {
+            if (e instanceof ICAL.parse.ParserError) throw new ApiError(400, NOT_A_CALENDAR_FILE);
+            throw e;
+        }
 
         // Every VEVENT is a row, overrides included: one master with 37 000 RECURRENCE-IDs is the same
         // write volume as 37 000 masters.

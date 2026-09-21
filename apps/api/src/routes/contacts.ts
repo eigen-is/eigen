@@ -1,5 +1,4 @@
-import { VCARD_CONTENT_TYPE, VCARD_IMPORT_MAX_CARDS, VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
-import { NOT_A_VCARD_FILE } from '@workspace/lib/constants/transfer';
+import { VCARD_CONTENT_TYPE, VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import type { Contact } from '@workspace/lib/types/contact';
 import { isVCardFile } from '@workspace/lib/types/drive';
 import type { Label } from '@workspace/lib/types/label';
@@ -12,6 +11,7 @@ import { getContacts } from '../lib/contacts/contacts';
 import { requireNonGuest, requireSelf } from '../lib/core/access';
 import { ApiError } from '../lib/core/errors';
 import { contentDisposition, readBoundedBodyBytes, setCacheHeaders } from '../lib/core/http';
+import { NOT_A_VCARD_FILE, VCARD_IMPORT_MAX_CARDS } from '../lib/core/transfer';
 import { readImportSourceBytes } from '../lib/drive';
 import { parseVCardLines, unescapeText } from '../lib/vcard';
 import { betterAuth } from './auth';

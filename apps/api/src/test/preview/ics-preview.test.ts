@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
+import { ApiError } from '../../lib/core/errors';
 import {
     ICS_PREVIEW_MAX_ATTENDEES,
     ICS_PREVIEW_MAX_DESCRIPTION_CHARS,
     ICS_PREVIEW_MAX_EVENTS,
-} from '@workspace/lib/constants/calendar';
-import { ApiError } from '../../lib/core/errors';
+} from '../../lib/core/transfer';
 import { toTransferableText } from '../../lib/document/transform/protocol';
 import { buildIcsPreviewPayload } from '../../lib/preview/ics-preview';
 

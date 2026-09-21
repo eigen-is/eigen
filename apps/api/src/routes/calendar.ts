@@ -1,5 +1,4 @@
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
-import { NOT_A_CALENDAR_FILE } from '@workspace/lib/constants/transfer';
 import type {
     CalendarEvent,
     CalendarEventOccurrence,
@@ -13,7 +12,7 @@ import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { checkCalendarAccess, resolveCalendar, syncTeamCalendars } from '../lib/calendar/get-calendar';
 import { storedRecurrenceKey } from '../lib/calendar/recurrence';
-import { ApiError } from '../lib/core';
+import { ApiError, NOT_A_CALENDAR_FILE } from '../lib/core';
 import { requireNonGuest, requireSelf } from '../lib/core/access';
 import { readBoundedBodyBytes } from '../lib/core/http';
 import { readImportSourceBytes } from '../lib/drive';

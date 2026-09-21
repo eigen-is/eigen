@@ -1,12 +1,8 @@
-import {
-    EML_PREVIEW_MAX_ATTACHMENTS,
-    EML_PREVIEW_MAX_HTML_BYTES,
-    EML_PREVIEW_MAX_TEXT_CHARS,
-} from '@workspace/lib/constants/mail';
-import type { AddressObject, ParsedMail } from '@workspace/lib/types/mail';
+import type { ParsedMail } from '@workspace/lib/types/mail';
 import type { EmlPreview } from '@workspace/lib/types/preview';
 import DOMPurify from 'isomorphic-dompurify';
 import { ApiError } from '../core/errors';
+import { EML_PREVIEW_MAX_ATTACHMENTS, EML_PREVIEW_MAX_HTML_BYTES, EML_PREVIEW_MAX_TEXT_CHARS } from '../core/transfer';
 import type { AttrNode } from '../export/sanitize';
 import { READER_SANITIZE_CONFIG } from '../mail/mail-parse';
 import { parseMail } from '../mail/mail-parser';
@@ -96,15 +92,7 @@ function sanitizeEmlHtml(html: string): string {
     }
 }
 
-// The single AddressObject a header carries: the parser hands back an array when a message repeats the
-// header, and the last one is what the reader's own envelope rows show.
-function oneAddress(value: AddressObject | AddressObject[] | undefined): AddressObject | null {
-    return (Array.isArray(value) ? value.at(-1) : value) ?? null;
-}
-
-// File bytes → the message an .eml preview serves. Runs inside the transform Worker (worker.ts owns
-// execution; the main-thread orchestration lives in preview-cache.ts). This module must not reach the
-// Mount or the transform seam — the Worker imports it.
+// File bytes → the message an .eml preview serves.
 export function buildEmlPreviewPayload(data: ArrayBuffer): EmlPreview {
     let parsed: ParsedMail;
     try {
@@ -116,8 +104,8 @@ export function buildEmlPreviewPayload(data: ArrayBuffer): EmlPreview {
     return {
         subject: parsed.subject ?? '',
         from: parsed.from ?? null,
-        to: oneAddress(parsed.to),
-        cc: oneAddress(parsed.cc),
+        to: parsed.to ?? null,
+        cc: parsed.cc ?? null,
         date: parsed.date?.toISOString() ?? null,
         html: parsed.html === null ? null : boundedHtml(parsed.html),
         text: parsed.text?.slice(0, EML_PREVIEW_MAX_TEXT_CHARS) ?? null,

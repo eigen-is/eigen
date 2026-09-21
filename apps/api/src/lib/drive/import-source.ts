@@ -4,11 +4,9 @@ import { readBoundedStreamBytes } from '../core/http';
 import type { User } from '../user';
 import { getSharedDrive } from './get-drive';
 
-// The bytes of the Drive file an import-from-drive body names, for every route that ingests one. The
-// source can live in any drive the user may read — SharedDrive is what checks that. Two things a row
-// check alone cannot give: a folder or Eigen container can carry any name, so the type says whether the
-// path holds bytes at all before `accepts` reads its extension; and the recorded size is only a claim,
-// so the read itself carries the ceiling and a source that grew since is cancelled, not buffered whole.
+// The bytes of the Drive file an import-from-drive body names, for every route that ingests one: the
+// source can live in any drive the user may read (SharedDrive checks that), and its recorded size is only
+// a claim, so the read itself carries the ceiling and a source that grew since is cancelled, not buffered.
 export async function readImportSourceBytes(
     user: User,
     source: DriveImportSource,

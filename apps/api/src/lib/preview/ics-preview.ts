@@ -1,16 +1,14 @@
-import {
-    ICS_PREVIEW_MAX_ATTENDEES,
-    ICS_PREVIEW_MAX_DESCRIPTION_CHARS,
-    ICS_PREVIEW_MAX_EVENTS,
-} from '@workspace/lib/constants/calendar';
 import type { IcsPreview, IcsPreviewEvent } from '@workspace/lib/types/preview';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { type IcsParseResult, type ParsedEvent, parseIcs } from '../caldav/ical-parse';
 import { ApiError } from '../core/errors';
+import {
+    decodeUtf8Strict,
+    ICS_PREVIEW_MAX_ATTENDEES,
+    ICS_PREVIEW_MAX_DESCRIPTION_CHARS,
+    ICS_PREVIEW_MAX_EVENTS,
+} from '../core/transfer';
 
-// A cached body is JSON this process wrote from a value it built, so the read back is a typed assignment,
-// like the vCard and message previews beside it. Nothing else checks the shape: change IcsPreview and
-// bump ICS_FORMAT (preview-cache.ts), or a restored previewsDir serves the old shape.
 export const parseIcsPreview = (body: string): IcsPreview => JSON.parse(body);
 
 // An all-day event is stored as UTC midnight with an exclusive end, which is the pair the card reads back.
@@ -46,15 +44,16 @@ function previewEvent(event: ParsedEvent): IcsPreviewEvent {
     };
 }
 
-// File bytes → the events an .ics preview serves. Runs inside the transform Worker (worker.ts owns
-// execution; the main-thread orchestration lives in preview-cache.ts). This module must not reach the
-// Mount or the transform seam — the Worker imports it.
+// File bytes → the events an .ics preview serves.
 export function buildIcsPreviewPayload(data: ArrayBuffer): IcsPreview {
+    // The same fatal decode the vCard build takes: RFC 5545 requires UTF-8, and a file in another
+    // encoding is not a calendar stored with replacement characters.
+    const text = decodeUtf8Strict(data);
+    if (text === null) throw new ApiError(422, 'Could not read this file');
+
     let parsed: IcsParseResult;
     try {
-        // The same fatal decode the vCard build takes: RFC 5545 requires UTF-8, and a file in another
-        // encoding is not a calendar stored with replacement characters.
-        parsed = parseIcs(new TextDecoder('utf-8', { fatal: true }).decode(data));
+        parsed = parseIcs(text);
     } catch {
         throw new ApiError(422, 'Could not read this file');
     }

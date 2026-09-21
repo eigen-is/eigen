@@ -8,3 +8,4 @@ export * from './local-filesystem';
 export * from './mailer';
 export * from './managed-database';
 export * from './path-utils';
+export * from './transfer';
