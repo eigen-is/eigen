@@ -62,9 +62,16 @@ async function mount(popoverOpen: boolean) {
     });
 
     const press = async (key: string, from: EventTarget = document) => {
-        await act(async () => {
-            from.dispatchEvent(new KeyboardEvent('keydown', { key, code: key === ' ' ? 'Space' : key, bubbles: true }));
+        const event = new KeyboardEvent('keydown', {
+            key,
+            code: key === ' ' ? 'Space' : key,
+            bubbles: true,
+            cancelable: true,
         });
+        await act(async () => {
+            from.dispatchEvent(event);
+        });
+        return event;
     };
     const cleanup = async () => {
         await act(async () => root.unmount());
@@ -87,14 +94,38 @@ test('Escape with a layer open above the overlay is that layer’s, not the over
     await cleanup();
 });
 
-test('Space on a focused control inside the overlay does not close it', async () => {
+test('Space on a focused control inside the overlay is that control’s own activation', async () => {
     const { closed, press, cleanup } = await mount(false);
     const button = document.querySelector('[data-preview-overlay] button');
     if (!button) throw new Error('the overlay drew no button');
-    await press(' ', button);
+    const onButton = await press(' ', button);
+    expect(closed.count).toBe(0);
+    // The overlay's own hotkey must prevent no default here, or the button never presses.
+    expect(onButton.defaultPrevented).toBe(false);
+
+    const onOverlay = await press(' ');
+    expect(closed.count).toBe(1);
+    expect(onOverlay.defaultPrevented).toBe(true);
+    await cleanup();
+});
+
+// A menu and a listbox are layers above the overlay the same way a dialog is, and their own Escape
+// runs on the capture phase of the very keydown the overlay hears later: presence is settled by then,
+// so where the key was pressed is what says whose Escape it was.
+test.each(['menu', 'listbox'])('Escape inside an open %s above the overlay is not the overlay’s', async (role) => {
+    const { closed, press, cleanup } = await mount(false);
+    const layer = document.createElement('div');
+    layer.setAttribute('role', role);
+    const item = document.createElement('button');
+    layer.append(item);
+    document.body.append(layer);
+
+    await press('Escape', item);
     expect(closed.count).toBe(0);
 
-    await press(' ');
+    // The same key, pressed anywhere else, is still the overlay's.
+    layer.remove();
+    await press('Escape');
     expect(closed.count).toBe(1);
     await cleanup();
 });

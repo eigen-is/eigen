@@ -8,7 +8,7 @@ import { mailAttachmentName } from '@workspace/lib/types/mail';
 import type { EmlPreview } from '@workspace/lib/types/preview';
 import { SimpleAttachmentChip } from '../attachment/simple-attachment-chip';
 import { MessageView } from '../mail/message-view';
-import { PreviewPane } from './preview-pane';
+import { PREVIEW_BODY_CLASS, PreviewPane } from './preview-pane';
 
 // The served message, whichever route served it. Drive and mail each have their own component, so exactly
 // one query hook runs per render and the overlay picks by the subject it holds.
@@ -38,7 +38,7 @@ function EmlMessage({
     return (
         <PreviewPane oversize={oversize} maxBytes={EML_MAX_BYTES} isPending={isPending} unreadable={isError}>
             {data && (
-                <div className="p-8">
+                <div className={PREVIEW_BODY_CLASS}>
                     <MessageView
                         subject={data.subject}
                         from={data.from}
@@ -47,7 +47,6 @@ function EmlMessage({
                         date={data.date}
                         html={data.html}
                         text={data.text}
-                        abovePreview
                         attachments={<PreviewAttachments data={data} />}
                     />
                 </div>

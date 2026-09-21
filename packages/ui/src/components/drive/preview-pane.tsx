@@ -5,8 +5,13 @@ import { EmptyState } from '../layout/app/empty-state';
 import { ErrorState } from '../layout/app/error-state';
 import { LoadingState } from '../layout/app/loading-state';
 
-// The box every non-image preview fills: the overlay's content area minus its header and footer.
-export const PREVIEW_PANE_CLASS = 'w-[80vw] h-[calc(100vh-7rem)]';
+// The box every non-image preview fills: the overlay's content area minus its header and footer. On a
+// phone it takes the whole width the overlay allows, so a message reads in the column width the mail
+// reader gives it rather than in two thirds of it.
+export const PREVIEW_PANE_CLASS = 'w-[90vw] sm:w-[80vw] h-[calc(100vh-7rem)]';
+
+// The gutter a payload draws in: the reader's on a phone, roomier once there is room.
+export const PREVIEW_BODY_CLASS = 'p-4 sm:p-8';
 
 type PreviewPaneProps = {
     // Past its format's import ceiling nothing was fetched, because the route would refuse the file.

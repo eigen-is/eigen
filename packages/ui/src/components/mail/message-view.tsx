@@ -5,7 +5,9 @@ import type { AddressObject } from '@workspace/lib/types/mail';
 import { ChevronDown } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '../../lib/utils';
+import { ABOVE_PREVIEW_Z } from '../dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '../popover';
+import { useOptionalPreview } from '../preview-provider/preview-context';
 import { Separator } from '../separator';
 import { ShadowContent } from '../shadow-content';
 import { UserAvatar } from '../user/user-avatar';
@@ -31,9 +33,6 @@ type MessageViewProps = {
     isSent?: boolean;
     // A ?q= landing term, highlighted in the rendered body.
     highlightTerm?: string;
-    // Drawn inside the full-screen quick look (z-100), so the header's details popover has to clear it
-    // the way a dialog does (LAYOUT.md § Z-Index Scale).
-    abovePreview?: boolean;
     // The chips under the header: the reader's own, with their actions, or the preview's plain ones.
     attachments?: ReactNode;
     // What the host draws after the body, inside the message's own spacing — the reader's invite widgets.
@@ -55,7 +54,6 @@ export function MessageView({
     text,
     isSent,
     highlightTerm,
-    abovePreview,
     attachments,
     footer,
 }: MessageViewProps) {
@@ -68,7 +66,7 @@ export function MessageView({
             <div>
                 <h1 className="text-xl font-medium mb-4">{subject || NO_SUBJECT}</h1>
 
-                <MailHeader header={header} isSent={isSent} abovePreview={abovePreview} />
+                <MailHeader header={header} isSent={isSent} />
             </div>
 
             <Separator />
@@ -162,15 +160,10 @@ function MailHeaderDetails({ header }: { header: HeaderFields }) {
     );
 }
 
-function MailHeader({
-    header,
-    isSent,
-    abovePreview,
-}: {
-    header: HeaderFields;
-    isSent?: boolean;
-    abovePreview?: boolean;
-}) {
+function MailHeader({ header, isSent }: { header: HeaderFields; isSent?: boolean }) {
+    // Drawn inside the full-screen quick look (z-100), the details popover has to clear it the way a
+    // dialog does (LAYOUT.md § Z-Index / Layering); the reader draws it under no overlay at all.
+    const preview = useOptionalPreview();
     const recipients = [
         ...collectAddresses(header.to),
         ...collectAddresses(header.cc),
@@ -207,7 +200,10 @@ function MailHeader({
                             <PopoverContent
                                 align="start"
                                 collisionPadding={8}
-                                className={cn('w-[28rem] max-w-[calc(100vw-2rem)]', abovePreview && 'z-[200]')}
+                                className={cn(
+                                    'w-[28rem] max-w-[calc(100vw-2rem)]',
+                                    preview?.isPreviewOpen && ABOVE_PREVIEW_Z,
+                                )}
                             >
                                 <MailHeaderDetails header={header} />
                             </PopoverContent>

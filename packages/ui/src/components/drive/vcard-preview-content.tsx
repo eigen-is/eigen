@@ -5,9 +5,10 @@ import { useMailVCardPreview } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { MailPartRef } from '@workspace/lib/types/file-subject';
 import type { VCardPreview } from '@workspace/lib/types/preview';
+import { cn } from '../../lib/utils';
 import { EmptyState } from '../layout/app/empty-state';
 import { ContactDetailCard } from '../user/contact-detail-card';
-import { PreviewPane } from './preview-pane';
+import { PREVIEW_BODY_CLASS, PreviewPane } from './preview-pane';
 
 // The served cards, whichever route served them. Drive and mail each have their own component, so exactly
 // one query hook runs per render and the overlay picks by the subject it holds.
@@ -55,7 +56,7 @@ function VCardCards({
                 (data.cards.length === 0 ? (
                     <EmptyState message="No contacts in this file" hint={counts.join(' · ') || undefined} />
                 ) : (
-                    <div className="max-w-3xl mx-auto flex flex-col gap-8 p-8">
+                    <div className={cn('max-w-3xl mx-auto flex flex-col gap-8', PREVIEW_BODY_CLASS)}>
                         {data.cards.map(({ contact, categories }, index) => (
                             <ContactDetailCard
                                 key={index}

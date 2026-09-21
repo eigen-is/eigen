@@ -43,6 +43,10 @@ const dialogSizeMap: Record<DialogSize, string> = {
     lg: 'sm:max-w-2xl',
 };
 
+// The layer above the full-screen preview overlay (LAYOUT.md § Z-Index / Layering). Spelled once: every
+// surface that has to clear the overlay — a dialog, the `.eml` reader header's popover — uses this.
+export const ABOVE_PREVIEW_Z = 'z-[200]';
+
 function DialogContent({
     className,
     children,
@@ -60,7 +64,7 @@ function DialogContent({
 
     return (
         <DialogPortal data-slot="dialog-portal">
-            <DialogOverlay className={abovePreview ? 'z-[200]' : undefined} />
+            <DialogOverlay className={abovePreview ? ABOVE_PREVIEW_Z : undefined} />
             <DialogPrimitive.Content
                 data-slot="dialog-content"
                 className={cn(
@@ -68,7 +72,7 @@ function DialogContent({
                     // scrolls inside the dialog instead of pushing its footer off-screen. Callers
                     // that manage their own height (flex-col + max-h-[85vh]) override both.
                     'fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] max-h-[calc(100vh-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
-                    abovePreview ? 'z-[200]' : undefined,
+                    abovePreview ? ABOVE_PREVIEW_Z : undefined,
                     size ? dialogSizeMap[size] : 'sm:max-w-xl',
                     className,
                 )}

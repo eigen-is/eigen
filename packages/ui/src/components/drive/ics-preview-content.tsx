@@ -10,7 +10,7 @@ import { Calendar } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { EventDetailCard } from '../calendar/event-detail-card';
 import { EmptyState } from '../layout/app/empty-state';
-import { PreviewPane } from './preview-pane';
+import { PREVIEW_BODY_CLASS, PreviewPane } from './preview-pane';
 
 // The served events, whichever route served them. Drive and mail each have their own component, so
 // exactly one query hook runs per render and the overlay picks by the subject it holds.
@@ -51,7 +51,7 @@ function IcsEvents({
                 (data.events.length === 0 ? (
                     <EmptyState message="No events in this file" hint={counts.join(' · ') || undefined} />
                 ) : (
-                    <div className="max-w-3xl mx-auto flex flex-col gap-8 p-8">
+                    <div className={cn('max-w-3xl mx-auto flex flex-col gap-8', PREVIEW_BODY_CLASS)}>
                         {/* The METHOD belongs to the file, not to one of its events, so it is said once. */}
                         {data.method && <MethodBanner method={data.method} />}
                         {data.events.map((event, index) => (
