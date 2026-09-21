@@ -90,6 +90,38 @@ test('the guests an event holds beyond the ones listed are counted', async () =>
     expect(text).toContain('and 150 more guests');
 });
 
+test('a truncated guest list says nothing about how the event replied', async () => {
+    const text = await render({
+        start: new Date('2026-09-20T09:00:00Z'),
+        end: new Date('2026-09-20T10:00:00Z'),
+        allDay: false,
+        attendees: [
+            { email: 'ada@example.com', name: 'Ada', status: 'accepted', role: 'required' },
+            { email: 'bob@example.com', name: 'Bob', status: 'declined', role: 'required' },
+        ],
+        remainingAttendees: 149,
+    });
+
+    expect(text).toContain('151 guests');
+    expect(text).toContain('and 149 more guests');
+    expect(text).not.toContain('accepted');
+    expect(text).not.toContain('declined');
+});
+
+test('a guest list the payload carried whole keeps its breakdown', async () => {
+    const text = await render({
+        start: new Date('2026-09-20T09:00:00Z'),
+        end: new Date('2026-09-20T10:00:00Z'),
+        allDay: false,
+        attendees: [
+            { email: 'ada@example.com', name: 'Ada', status: 'accepted', role: 'required' },
+            { email: 'bob@example.com', name: 'Bob', status: 'declined', role: 'required' },
+        ],
+    });
+
+    expect(text).toContain('1 accepted, 1 declined');
+});
+
 test('what the event does not carry draws nothing', async () => {
     const text = await render({
         start: new Date('2026-09-20T09:00:00Z'),
