@@ -64,15 +64,6 @@ export async function readResourceFile(storage: LocalFilesystem, filePath: strin
     }
 }
 
-// Unlinks rather than deletes: `delete` reaps a newly-empty parent, taking the resource directory with it.
-export async function cleanupTempFiles(storage: LocalFilesystem, dir: string): Promise<void> {
-    for (const name of await storage.list(dir)) {
-        if (name.startsWith('.') && name.includes('.tmp-')) {
-            await storage.unlink(`${dir}/${name}`);
-        }
-    }
-}
-
 // Sorted, because callers tie-break on this order — a key collision must resolve the same way every pass.
 export async function listResourceUris(
     storage: LocalFilesystem,

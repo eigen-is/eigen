@@ -1,10 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { LocalFilesystem } from '../../lib/core';
 import {
-    cleanupTempFiles,
     computeResourceEtag,
     dedupeByUid,
     diffFileStats,
@@ -146,36 +144,6 @@ describe('resource file helpers', () => {
         expect(mtime).toBeGreaterThan(0);
         expect(Number.isInteger(mtime)).toBe(true);
         expect(new Uint8Array(await store.file(`${DIR}/card.vcf`).arrayBuffer())).toEqual(bytes);
-    });
-
-    test('cleanupTempFiles removes only the dot-prefixed .tmp- leftovers', async () => {
-        const { store, base } = nextStore();
-        await store.mkdir(DIR);
-        const cardsDir = join(base, DIR);
-        writeFileSync(join(cardsDir, 'real.vcf'), 'x');
-        writeFileSync(join(cardsDir, '.real.vcf.tmp-abc'), 'x');
-        // A stray non-`.vcf` (README, csv, a mixed-case .VCF) is NOT temp debris — it survives the sweep and is
-        // warn-skipped by reconcile/rebuild instead of being silently deleted. A hand-placed dotfile without
-        // the `.tmp-` infix (a `.backup.vcf`) is not writeAtomic debris either and must survive.
-        writeFileSync(join(cardsDir, 'stray.txt'), 'x');
-        writeFileSync(join(cardsDir, 'x.VCF'), 'x');
-        writeFileSync(join(cardsDir, '.backup.vcf'), 'x');
-
-        await cleanupTempFiles(store, DIR);
-
-        expect(readdirSync(cardsDir).sort()).toEqual(['.backup.vcf', 'real.vcf', 'stray.txt', 'x.VCF']);
-    });
-
-    test('a resource directory holding nothing but temp debris survives the sweep', async () => {
-        const { store, base } = nextStore();
-        await store.mkdir(DIR);
-        writeFileSync(join(base, DIR, `.x.vcf.tmp-${randomUUID()}`), 'x');
-
-        await cleanupTempFiles(store, DIR);
-
-        // Emptying the directory must not take it with it: the very same init enumerates it next.
-        expect(existsSync(join(base, DIR))).toBe(true);
-        expect(await listResourceUris(store, DIR, SUFFIX)).toEqual([]);
     });
 
     test('listResourceUris sorts, keys and warn-skips a non-conforming name', async () => {

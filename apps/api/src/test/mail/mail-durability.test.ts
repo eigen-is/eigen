@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, fstatSync, readdirSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, fstatSync, mkdirSync, readdirSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
 import { type FileHandle, open } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -248,5 +248,21 @@ describe('Maildir write durability', () => {
 
         expect(existsSync(stale)).toBe(false);
         expect(existsSync(fresh)).toBe(true);
+    });
+
+    test('an atomic temp a crash left in draft-meta/ is swept, and a real sidecar is not', async () => {
+        const home = await getHome(userId);
+        const store = (home.mail as unknown as { store: { cleanupStaleDraftTemps: () => Promise<void> } }).store;
+        const metaDir = join(mailRootOf(userId), 'draft-meta');
+        mkdirSync(metaDir, { recursive: true });
+        const temp = join(metaDir, '.draft-1.json.tmp-abc');
+        const sidecar = join(metaDir, 'draft-1.json');
+        writeFileSync(temp, '{}');
+        writeFileSync(sidecar, '{}');
+
+        await store.cleanupStaleDraftTemps();
+
+        expect(existsSync(temp)).toBe(false);
+        expect(existsSync(sidecar)).toBe(true);
     });
 });

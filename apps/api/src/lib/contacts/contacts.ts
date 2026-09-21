@@ -11,7 +11,6 @@ import { getServerSettings } from '../config/server-settings';
 import type { ManagedDatabase, PutResourceResult } from '../core';
 import {
     ApiError,
-    cleanupTempFiles,
     computeResourceEtag,
     DEFAULT_LABELS,
     LocalFilesystem,
@@ -167,7 +166,7 @@ export class Contacts {
         this.db = this.managedDb.db;
 
         await this.storage.mkdir(PATHS.CONTACTS.CARDS);
-        await cleanupTempFiles(this.storage, PATHS.CONTACTS.CARDS);
+        await this.storage.sweepAtomicTemps(PATHS.CONTACTS.CARDS);
 
         // Seeded from disk once; every avatar write/delete adjusts it by delta thereafter. cardsBytes is
         // owned by the reconcile/rebuild pass below.
