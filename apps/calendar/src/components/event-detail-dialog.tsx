@@ -1,6 +1,7 @@
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import {
     isInvitationFromOthers,
+    isTransferableCalendarHome,
     occurrenceDateToString,
     parseOccurrenceDate,
     truncateRRule,
@@ -11,7 +12,6 @@ import {
     useSharedCalendarLabel,
     useUpdateEvent,
 } from '@workspace/lib/calendar';
-import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { DeleteDialog } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -66,9 +66,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const calendarName = calendar?.name || (sharedCalendar ? sharedCalendarLabel(sharedCalendar) : null);
     const isShared = !!sharedCalendar;
     const canEdit = !isShared || sharedCalendar?.permission === 'write';
-    // The export reads the event's own home, and only this home and a team's are reachable: a calendar
-    // shared out of another user's home is refused by the route, so it offers nothing here.
-    const canExport = !isGuest && (!sharedCalendar || parseOwnerId(sharedCalendar.ownerUserId).type === 'team');
+    const canExport = !isGuest && isTransferableCalendarHome(eventOwnerId, user?.id ?? '');
     // An ORGANIZER equal to the calendar owner is an event they organize, not an invitation to them;
     // the owner's address is known only when the owner is the viewer.
     const isLinkedEvent = isInvitationFromOthers(event, eventOwnerId === user?.id ? user.email : undefined);

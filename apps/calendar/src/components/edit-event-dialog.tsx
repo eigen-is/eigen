@@ -5,6 +5,7 @@ import {
     parseOccurrenceDate,
     toLocalDateString,
     truncateRRule,
+    useCalendarOptions,
     useCalendars,
     useCreateEvent,
     useDeleteEvent,
@@ -28,7 +29,7 @@ import {
 import { UsersRound } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { AttendeeEditor } from './attendee-editor';
-import { buildEventTimes, useCalendarOptions } from './calendar-utils';
+import { buildEventTimes } from './calendar-utils';
 import { EventFormFields } from './event-form-fields';
 import type { RecurringAction } from './recurring-action-dialog';
 import { RecurringActionDialog } from './recurring-action-dialog';

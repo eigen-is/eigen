@@ -1,17 +1,15 @@
 // The one thing an .ics import needs that the other two do not: a target. What is pinned here is which
 // calendars are offered (the home's own, plus a team calendar the viewer may write in — a calendar shared
-// from another user's home is refused by the import route, so it is not on the list), which home each
-// target names, that "New calendar" creates before it imports, that the defaults land once, that a retry
-// after a failed import reuses the calendar the first attempt created, that a list that would not load
-// offers a retry rather than loading for ever, and that a new calendar nothing landed in goes again.
+// from another user's home is refused by the import route, so it is not on the list), the target the dialog
+// hands `useImportToCalendar`, that the defaults land once, and that a list that would not load offers a
+// retry rather than loading for ever. Making, filling and unmaking a new calendar is the hook's, pinned in
+// packages/lib (src/test/core/calendar/hooks/use-transfer.test.ts).
 import { expect, mock, test } from 'bun:test';
 import { subjectFromMailAttachment } from '@workspace/lib/file-subject';
 import { installHappyDom } from '../../happy-dom';
 
 installHappyDom();
 
-type ImportCall = { ownerId: string; calendarId: string; url?: string };
-type ImportCounts = { imported: number; skipped: number; failed: number };
 type Calendar = { id: string; name: string; color: string; isDefault: boolean };
 type Shared = {
     id: string;
@@ -24,11 +22,10 @@ type Shared = {
     visible: boolean;
 };
 
-const calls: { created: string[]; imported: ImportCall[]; deleted: string[] } = {
-    created: [],
-    imported: [],
-    deleted: [],
-};
+// Where the dialog says the file goes, in the vocabulary the hook takes.
+type Target = { kind: 'existing'; ownerId: string; calendarId: string } | { kind: 'new'; name: string; color: string };
+
+let handed: Target[] = [];
 const calendars: Calendar[] = [
     { id: 'cal-work', name: 'Work', color: '#111111', isDefault: false },
     { id: 'cal-home', name: 'Home', color: '#222222', isDefault: true },
@@ -71,50 +68,25 @@ const sharedCalendars: Shared[] = [
         visible: true,
     },
 ];
-// What the hooks answer for the render under test: the list may not have arrived, and an import may fail.
-const served: {
-    calendars: Calendar[] | undefined;
-    isError: boolean;
-    failNextImport: boolean;
-    counts: ImportCounts;
-} = {
-    calendars,
-    isError: false,
-    failNextImport: false,
-    counts: { imported: 2, skipped: 0, failed: 0 },
-};
-
-const importOnce = async (input: ImportCall): Promise<ImportCounts> => {
-    if (served.failNextImport) {
-        served.failNextImport = false;
-        throw new Error('import failed');
-    }
-    calls.imported.push(input);
-    return served.counts;
-};
+// What the hooks answer for the render under test: the list may not have arrived.
+const served: { calendars: Calendar[] | undefined; isError: boolean } = { calendars, isError: false };
 
 const realCalendarModule = await import('@workspace/lib/calendar');
 mock.module('@workspace/lib/calendar', () => ({
     ...realCalendarModule,
     useCalendars: () => ({ data: served.calendars, isError: served.isError, refetch: () => {} }),
     useSharedCalendars: () => ({ data: sharedCalendars }),
-    // The real one resolves a team's name over the network; here the team home stands in for it.
-    useSharedCalendarLabel: () => (sc: Shared) => (sc.ownerUserId === TEAM ? 'Marketing' : sc.calendarName),
-    useCreateCalendar: () => ({
-        mutateAsync: async ({ name }: { name: string }) => {
-            calls.created.push(name);
-            return { id: 'cal-new' };
+    useImportToCalendar: () => ({
+        importToCalendar: async (_source: unknown, target: Target) => {
+            handed.push(target);
         },
+        forgetNewCalendar: () => {},
     }),
-    useDeleteCalendar: () => ({
-        mutateAsync: async (id: string) => {
-            calls.deleted.push(id);
-        },
-    }),
-    useImportCalendar: () => ({ mutateAsync: importOnce }),
 }));
 
 mock.module('@workspace/lib/auth', () => ({ useAuth: () => ({ user: { id: 'owner-1' } }) }));
+// useCalendarOptions resolves a team's name through this; there is no query client under this render.
+mock.module('@workspace/lib/public', () => ({ usePublicUsers: () => ({ [TEAM]: { name: 'Marketing' } }) }));
 
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
@@ -127,9 +99,7 @@ const subject = subjectFromMailAttachment('owner-1', 'message-1', 0, {
 });
 
 async function open() {
-    calls.created = [];
-    calls.imported = [];
-    calls.deleted = [];
+    handed = [];
     const closed = { count: 0 };
     const container = document.createElement('div');
     document.body.append(container);
@@ -214,8 +184,7 @@ test('the viewer’s own default calendar is preselected, and the import names t
     expect(dialog().textContent).toContain('Home');
 
     await click('button', 'Import');
-    expect(calls.created).toEqual([]);
-    expect(calls.imported.map((call) => [call.ownerId, call.calendarId])).toEqual([['owner-1', 'cal-home']]);
+    expect(handed).toEqual([{ kind: 'existing', ownerId: 'owner-1', calendarId: 'cal-home' }]);
     expect(closed.count).toBe(1);
     await cleanup();
 });
@@ -226,7 +195,7 @@ test('a team calendar the viewer may write in is a target, named after its team,
     expect(trigger().textContent).toContain('Marketing');
 
     await click('button', 'Import');
-    expect(calls.imported.map((call) => [call.ownerId, call.calendarId])).toEqual([[TEAM, 'cal-team']]);
+    expect(handed).toEqual([{ kind: 'existing', ownerId: TEAM, calendarId: 'cal-team' }]);
     await cleanup();
 });
 
@@ -244,22 +213,20 @@ test('a calendar the viewer only reads, and one shared from another user’s hom
     await cleanup();
 });
 
-test('New calendar creates one named after the file in the viewer’s own home, then imports into it', async () => {
+test('New calendar asks for one named after the file, in the viewer’s own home', async () => {
     const { chooseCalendar, click, cleanup, nameInput } = await open();
     await chooseCalendar('New calendar');
     expect(nameInput().value).toBe('Autumn market');
 
     await click('button', 'Import');
-    expect(calls.created).toEqual(['Autumn market']);
-    expect(calls.imported.map((call) => [call.ownerId, call.calendarId])).toEqual([['owner-1', 'cal-new']]);
+    expect(handed).toEqual([{ kind: 'new', name: 'Autumn market', color: expect.any(String) }]);
     await cleanup();
 });
 
 test('cancel imports nothing', async () => {
     const { closed, click, cleanup } = await open();
     await click('button', 'Cancel');
-    expect(calls.created).toEqual([]);
-    expect(calls.imported).toEqual([]);
+    expect(handed).toEqual([]);
     expect(closed.count).toBe(1);
     await cleanup();
 });
@@ -290,20 +257,6 @@ test('a later fetch of the calendars overwrites neither the chosen target nor th
     await cleanup();
 });
 
-test('a retry after a failed import reuses the calendar the first attempt created', async () => {
-    served.failNextImport = true;
-    const { chooseCalendar, click, cleanup } = await open();
-    await chooseCalendar('New calendar');
-
-    await click('button', 'Import');
-    expect(calls.imported).toEqual([]);
-
-    await click('button', 'Import');
-    expect(calls.created).toEqual(['Autumn market']);
-    expect(calls.imported.map((call) => call.calendarId)).toEqual(['cal-new']);
-    await cleanup();
-});
-
 test('a calendar list that would not load offers a retry instead of loading for ever', async () => {
     served.isError = true;
     const { button, cleanup, dialog } = await open();
@@ -313,27 +266,5 @@ test('a calendar list that would not load offers a retry instead of loading for 
     expect(button('Import')?.disabled).toBe(true);
 
     served.isError = false;
-    await cleanup();
-});
-
-test('a new calendar nothing landed in goes again', async () => {
-    served.counts = { imported: 0, skipped: 4, failed: 0 };
-    const { chooseCalendar, click, cleanup } = await open();
-    await chooseCalendar('New calendar');
-
-    await click('button', 'Import');
-    expect(calls.created).toEqual(['Autumn market']);
-    expect(calls.deleted).toEqual(['cal-new']);
-
-    served.counts = { imported: 2, skipped: 0, failed: 0 };
-    await cleanup();
-});
-
-test('a calendar that took the file is kept', async () => {
-    const { chooseCalendar, click, cleanup } = await open();
-    await chooseCalendar('New calendar');
-
-    await click('button', 'Import');
-    expect(calls.deleted).toEqual([]);
     await cleanup();
 });

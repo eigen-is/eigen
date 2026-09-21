@@ -5,6 +5,8 @@ import { parseOwnerId } from '@workspace/lib/types';
 import type {
     CalendarEvent,
     CalendarEventOccurrence,
+    CalendarItem,
+    CalendarOption,
     CreateEventInput,
     FreeBusyBlock,
     SharedCalendar,
@@ -272,6 +274,31 @@ export function useSharedCalendarLabel(sharedCalendars: SharedCalendar[]): (sc: 
         },
         [teams],
     );
+}
+
+// Every calendar a viewer may write in, in one list: their own home's first, then each shared calendar
+// they hold `write` on, under the name the shared-calendar label resolves.
+export function useCalendarOptions(
+    ownerId: string,
+    calendars: CalendarItem[],
+    sharedCalendars: SharedCalendar[],
+): CalendarOption[] {
+    const label = useSharedCalendarLabel(sharedCalendars);
+
+    return useMemo(() => {
+        const options: CalendarOption[] = calendars.map((c) => ({ id: c.id, name: c.name, color: c.color, ownerId }));
+        for (const sc of sharedCalendars) {
+            if (sc.permission === 'write') {
+                options.push({
+                    id: sc.calendarId,
+                    name: label(sc),
+                    color: sc.color || sc.calendarColor,
+                    ownerId: sc.ownerUserId,
+                });
+            }
+        }
+        return options;
+    }, [calendars, sharedCalendars, ownerId, label]);
 }
 
 export function useUpdateSharedCalendar(ownerId: string) {
