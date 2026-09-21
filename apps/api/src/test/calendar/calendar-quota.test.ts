@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
@@ -669,6 +669,12 @@ describe('Calendar storage quota', () => {
             path.join(getUserHomePath(user.id), PATHS.CALENDAR.ROOT, PATHS.CALENDAR.CALENDARS, calendarId, 'note.txt'),
             'n'.repeat(4096),
         );
+        expect(await agree()).toBe(afterDelete);
+
+        // A directory whose name is no calendar id: the index never recovers one, so neither reader counts it.
+        const calendarsRoot = path.join(getUserHomePath(user.id), PATHS.CALENDAR.ROOT, PATHS.CALENDAR.CALENDARS);
+        await mkdir(path.join(calendarsRoot, 'stray calendar'));
+        await writeFile(path.join(calendarsRoot, 'stray calendar', 'stray.ics'), 's'.repeat(4096));
         expect(await agree()).toBe(afterDelete);
 
         await authedRequest(user.sessionToken, `/calendar/${user.id}/calendars/${extra.id}`, { method: 'DELETE' });

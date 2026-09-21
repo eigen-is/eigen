@@ -46,15 +46,15 @@ export function statCalendarDir(storage: LocalFilesystem, calendarId: string): P
 }
 
 // The calendar bytes of a Home nobody has booted, read from its own folder for the admin usage view. Counts
-// what `Calendar.eventsBytes` counts, through the same scan: the `.ics` files of every calendar directory,
-// and none of the `.`-prefixed staging a delete leaves behind — the counter drops those bytes the moment
-// the rename lands. `homeFs` is rooted at the home folder, not at the calendar root.
+// what `Calendar.eventsBytes` counts, through the same scan: the `.ics` files of every directory a calendar
+// row can own — a reconcile recovers a row for each of those — and none of the `.`-prefixed staging a delete
+// leaves behind, which the counter drops the moment the rename lands. `homeFs` is rooted at the home folder.
 export async function readCalendarTotalSize(homeFs: LocalFilesystem): Promise<number> {
     const root = `${PATHS.CALENDAR.ROOT}/${PATHS.CALENDAR.CALENDARS}`;
     if (!(await homeFs.dirExists(root))) return 0;
     let total = 0;
     for (const entry of await homeFs.readdir(root, { withFileTypes: true })) {
-        if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+        if (!entry.isDirectory() || sanitizeCalendarId(entry.name) !== entry.name) continue;
         const scan = await statResourceDir(homeFs, `${root}/${entry.name}`, ICS_SUFFIX);
         for (const file of scan.files.values()) total += file.size;
     }
