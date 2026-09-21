@@ -1142,4 +1142,180 @@ describe('Calendar transfer routes', () => {
             sse.stop();
         }
     });
+
+    // An export is the stored bytes minus the lines Eigen owns, joined into one VCALENDAR. Its own
+    // calendar, so the whole-collection assertions below are exact.
+    describe('export', () => {
+        let exportCalendarId: string;
+
+        const exportRequest = (user: TestUser, ownerId: string, target: string, ids?: string[]) =>
+            authedRequest(user.sessionToken, `/calendar/${ownerId}/export`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ calendarId: target, ...(ids ? { ids } : {}) }),
+            });
+
+        const exported = async (ids?: string[]): Promise<string> => {
+            const res = await exportRequest(alice, alice.id, exportCalendarId, ids);
+            expect(res.status).toBe(200);
+            expect(res.headers.get('Content-Type')).toBe('text/calendar; charset=utf-8');
+            return res.text();
+        };
+
+        beforeAll(async () => {
+            const created = await authedRequest(alice.sessionToken, `/calendar/${alice.id}/calendars`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'Exportable', color: '#00ff00' }),
+            });
+            exportCalendarId = (await assertJson<CalendarItem>(created)).id;
+        });
+
+        test('a stored resource exports byte-for-byte, the lines Eigen owns aside', async () => {
+            const uid = 'export-kitchen@client';
+            const vevent = [
+                'BEGIN:VEVENT',
+                `UID:${uid}`,
+                'DTSTAMP:20260101T000000Z',
+                'SUMMARY:Exported kitchen sink',
+                'DESCRIPTION:has a \\; semicolon and a \\, comma',
+                'DTSTART;TZID=America/New_York:20270415T120000',
+                'DTEND;TZID=America/New_York:20270415T130000',
+                'RRULE:FREQ=WEEKLY;COUNT=10',
+                'GEO:52.37;4.89',
+                'CATEGORIES:work,travel',
+                'ATTACH;FMTTYPE=text/plain;VALUE=URI:https://example.com/agenda.txt',
+                'X-APPLE-STRUCTURED-LOCATION;VALUE=URI;X-ADDRESS="Herengracht 1\\nAmsterdam";X-APPLE-RADIUS=49;X-TITLE=Office:geo:52.37,4.89',
+                'END:VEVENT',
+            ];
+            expect((await putIcs(exportCalendarId, 'export-kitchen.ics', vcal(VTZ_NY, vevent))).status).toBe(201);
+
+            const text = await exported();
+            const stored = await davGet(`/dav/calendars/${alice.id}/${exportCalendarId}/export-kitchen.ics`);
+            // Every line the file holds travels verbatim: no ical.js re-serialization stands between them.
+            for (const line of stored.split('\r\n')) {
+                if (line.startsWith('X-EIGEN-') || line.startsWith('PRODID:')) continue;
+                expect(text).toContain(line);
+            }
+            expect(text).not.toContain('X-EIGEN-');
+        });
+
+        test('a whole calendar is one VCALENDAR, each VTIMEZONE once, the events by start time', async () => {
+            const second = [
+                'BEGIN:VEVENT',
+                'UID:export-second@client',
+                'DTSTAMP:20260101T000000Z',
+                'SUMMARY:Earlier in the same zone',
+                'DTSTART;TZID=America/New_York:20270101T120000',
+                'DTEND;TZID=America/New_York:20270101T130000',
+                'END:VEVENT',
+            ];
+            expect((await putIcs(exportCalendarId, 'export-second.ics', vcal(VTZ_NY, second))).status).toBe(201);
+
+            const text = await exported();
+            expect(text.match(/BEGIN:VCALENDAR/g)).toHaveLength(1);
+            expect(text.match(/BEGIN:VTIMEZONE/g)).toHaveLength(1);
+            expect(text.endsWith('END:VCALENDAR\r\n')).toBe(true);
+            // The zone has to lead the events that name it, or a reader takes their wall times as floating.
+            expect(text.indexOf('BEGIN:VTIMEZONE')).toBeLessThan(text.indexOf('BEGIN:VEVENT'));
+            expect(text.indexOf('SUMMARY:Earlier in the same zone')).toBeLessThan(
+                text.indexOf('SUMMARY:Exported kitchen sink'),
+            );
+        });
+
+        // Every X-EIGEN- line the store writes: the row id, the author, the color, and the stamp beside an
+        // EXDATE, which carries its facts as parameters.
+        test('no export carries an X-EIGEN- line, whatever the store stamped on the resource', async () => {
+            const created = await assertJson<CalendarEvent>(
+                await authedRequest(alice.sessionToken, `/calendar/${alice.id}/calendars/${exportCalendarId}/events`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Stamped series',
+                        startTime: '2027-03-01T09:00:00.000Z',
+                        endTime: '2027-03-01T10:00:00.000Z',
+                        allDay: false,
+                        rrule: 'FREQ=DAILY;COUNT=5',
+                        data: { color: '#ff8800' },
+                    }),
+                }),
+            );
+            const cancelled = await authedRequest(
+                alice.sessionToken,
+                `/calendar/${alice.id}/calendars/${exportCalendarId}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Stamped series',
+                        startTime: '2027-03-02T09:00:00.000Z',
+                        endTime: '2027-03-02T10:00:00.000Z',
+                        allDay: false,
+                        status: 'cancelled',
+                        parentEventId: created.id,
+                        recurrenceDate: '2027-03-02',
+                    }),
+                },
+            );
+            expect(cancelled.status).toBe(200);
+            expect(await davGet(`/dav/calendars/${alice.id}/${exportCalendarId}/${created.uri}`)).toContain(
+                'X-EIGEN-EXDATE',
+            );
+
+            expect(await exported()).not.toContain('X-EIGEN');
+        });
+
+        test('an export re-imports into another calendar unchanged', async () => {
+            const target = await assertJson<CalendarItem>(
+                await authedRequest(alice.sessionToken, `/calendar/${alice.id}/calendars`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: 'Round trip', color: '#0000ff' }),
+                }),
+            );
+
+            const text = await exported();
+            const result = await assertJson<ImportCountsResult>(await importRequest(alice, target.id, text));
+            expect(result.failed).toBe(0);
+            expect(result.imported).toBe(0); // every UID is already in the Home
+            expect(result.skipped).toBe(3);
+        });
+
+        test('an override id exports the series it belongs to', async () => {
+            const uid = 'export-override@client';
+            const file = vcal(
+                vevent(uid, 'Series', '20270501T090000Z', '20270501T093000Z', ['RRULE:FREQ=DAILY;COUNT=3']),
+                vevent(uid, 'Series moved', '20270502T140000Z', '20270502T143000Z', ['RECURRENCE-ID:20270502T090000Z']),
+            );
+            expect((await putIcs(exportCalendarId, 'export-override.ics', file)).status).toBe(201);
+
+            const home = await getHome(alice.id);
+            const rows = await home.calendar.getEventsByUid(uid);
+            const override = findOrFail(rows, (e) => e.recurrenceDate !== null);
+
+            const res = await exportRequest(alice, alice.id, exportCalendarId, [override.id]);
+            expect(res.status).toBe(200);
+            // The name comes from the series the id named, not from a raw string in the header.
+            expect(res.headers.get('Content-Disposition')).toBe('attachment; filename="Series.ics"');
+            const text = await res.text();
+            expect(text).toContain('SUMMARY:Series moved');
+            expect(text).toContain('RRULE:FREQ=DAILY;COUNT=3');
+            expect(text).not.toContain('Exported kitchen sink');
+        });
+
+        test('an unknown event id is 404 and an unknown calendar is 404', async () => {
+            expect((await exportRequest(alice, alice.id, exportCalendarId, [randomUUID()])).status).toBe(404);
+            expect((await exportRequest(alice, alice.id, randomUUID())).status).toBe(404);
+        });
+
+        test("bob cannot export alice's calendar, and a guest cannot export at all", async () => {
+            expect((await exportRequest(bob, alice.id, exportCalendarId)).status).toBe(403);
+            const guest = await authedRequest(guestToken, `/calendar/${guestId}/export`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ calendarId: exportCalendarId }),
+            });
+            expect(guest.status).toBe(403);
+        });
+    });
 });

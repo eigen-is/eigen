@@ -51,7 +51,7 @@ import * as schema from './schema';
 import { notifySharedCalendarUsers, propagateCalendarShare } from './share-propagation';
 import * as shares from './shares';
 import { buildCalendarEvent, buildEventsChangedEvent } from './sse-events';
-import { importEvents } from './transfer';
+import { exportEvents, importEvents } from './transfer';
 
 import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload, UpdateEventArgs } from './types';
 
@@ -601,6 +601,11 @@ export class Calendar {
     // A whole `.ics` into one calendar of this Home (docs/CALENDAR.md § Importing an .ics).
     public async importEvents(calendarId: string, bytes: Uint8Array): Promise<ImportCountsResult> {
         return importEvents(this, calendarId, bytes);
+    }
+
+    // One calendar, or the series `ids` name, as one `.ics`.
+    public async exportEvents(calendarId: string, ids?: string[]): Promise<string> {
+        return exportEvents(this, calendarId, ids);
     }
 
     // --- Shared calendars (implementation in calendar/shares.ts) ---

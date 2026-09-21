@@ -6,14 +6,14 @@ import type {
     CalendarShare,
     FreeBusyBlock,
 } from '@workspace/lib/types/calendar';
-import { isIcsFile } from '@workspace/lib/types/drive';
+import { ICS_CONTENT_TYPE, isIcsFile } from '@workspace/lib/types/drive';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { checkCalendarAccess, resolveCalendar, syncTeamCalendars } from '../lib/calendar/get-calendar';
-import { ApiError, NOT_A_CALENDAR_FILE } from '../lib/core';
+import { ApiError, ICS_IMPORT_MAX_EVENTS, NOT_A_CALENDAR_FILE } from '../lib/core';
 import { requireNonGuest, requireSelf } from '../lib/core/access';
-import { readBoundedBodyBytes } from '../lib/core/http';
+import { contentDisposition, readBoundedBodyBytes } from '../lib/core/http';
 import { readImportSourceBytes } from '../lib/drive';
 import { getHome } from '../lib/home';
 import {
@@ -25,6 +25,7 @@ import {
     pullEventsInRange,
     updateEventAt,
 } from '../lib/home/home-relay';
+import { parseResource } from '../lib/ical';
 import { storedRecurrenceKey } from '../lib/ical/wall-clock';
 import { getMemberships } from '../lib/user';
 import { betterAuth } from './auth';
@@ -364,6 +365,41 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             return { success: true };
         },
         { auth: true },
+    )
+
+    // --- Export ---
+    // One calendar, or the events `ids` name inside it, as one `.ics`. Read access is enough, and it is
+    // the rule every calendar read route takes: own calendars and the team home's.
+    .post(
+        '/calendar/:ownerId/export',
+        async ({ params, body, user, set }): Promise<string> => {
+            requireNonGuest(user);
+            await checkCalendarAccess(user, params.ownerId, body.calendarId);
+            const cal = await resolveCalendar(user, params.ownerId);
+            const text = await cal.exportEvents(body.calendarId, body.ids);
+            // A one-event export is named after the event itself, a whole calendar after the calendar.
+            // contentDisposition sanitizes whatever comes back before it reaches the header; the clamp
+            // keeps one absurd SUMMARY from filling it.
+            let name = cal.calendarRow(body.calendarId)?.name ?? '';
+            if (body.ids?.length === 1) {
+                const vevent = parseResource(text).getFirstSubcomponent('vevent');
+                name = String(vevent?.getFirstPropertyValue('summary') ?? '');
+            }
+            set.headers['Content-Type'] = ICS_CONTENT_TYPE;
+            set.headers['Content-Disposition'] = contentDisposition(
+                'attachment',
+                `${name.trim().slice(0, 200) || 'calendar'}.ics`,
+            );
+            return text;
+        },
+        {
+            // The same event ceiling the import side enforces: one selection can't outgrow one file.
+            body: t.Object({
+                calendarId: t.String({ minLength: 1 }),
+                ids: t.Optional(t.Array(t.String(), { maxItems: ICS_IMPORT_MAX_EVENTS })),
+            }),
+            auth: true,
+        },
     )
 
     // --- Import ---

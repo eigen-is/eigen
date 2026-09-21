@@ -4,6 +4,7 @@ export {
     eventsToIcs,
     isNewerRevision,
     newVCalendar,
+    PRODID,
     patchEvent,
     putOverride,
     remintEventIds,

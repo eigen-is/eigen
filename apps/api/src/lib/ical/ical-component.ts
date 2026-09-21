@@ -29,7 +29,7 @@ import { normalizeTimezone } from './timezone';
 import { buildVTimezone } from './vtimezone';
 import { computeOccurrenceTimes, localToUtc, storedRecurrenceKey, utcToLocal } from './wall-clock';
 
-const PRODID = '-//Eigen//CalDAV//EN';
+export const PRODID = '-//Eigen//CalDAV//EN';
 
 // `dtstamp` is the instant the scheduling message this write applies was stamped with; a local edit states
 // none and the clock stands in.
