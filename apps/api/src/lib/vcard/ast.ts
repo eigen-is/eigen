@@ -2,7 +2,7 @@
 // serializes them back, keeping the exact source bytes of any line we don't rewrite so an untouched
 // card round-trips byte-for-byte through a CardDAV GET. The fold and TEXT-escape algorithms are the
 // shared MIME-directory primitives in @workspace/lib/content-line.
-import { foldLine, isIllegalC0, neuterParamValue } from '@workspace/lib/content-line';
+import { foldLine, isIllegalC0, neuterParamValue, unfoldContentLines } from '@workspace/lib/content-line';
 import type { VCardLine } from './types';
 
 export class VCardError extends Error {}
@@ -40,37 +40,6 @@ function stripQuotes(v: string): string {
     return v.length >= 2 && v.startsWith('"') && v.endsWith('"') ? v.slice(1, -1) : v;
 }
 
-// Split into logical lines, unfolding continuations (RFC 2425 §5.8.1: a physical line starting with a
-// single SPACE or TAB continues the previous one — drop the line break and that one whitespace char).
-// Each line keeps `raw`, the exact source slice including its internal folding, so it re-emits verbatim.
-function unfold(text: string): { raw: string; logical: string }[] {
-    const lines: { start: number; end: number; logical: string }[] = [];
-    let i = 0;
-    const n = text.length;
-    while (i < n) {
-        const start = i;
-        let j = i;
-        while (j < n && text[j] !== '\n' && text[j] !== '\r') j++;
-        const content = text.slice(i, j);
-        if (j >= n) i = j;
-        else if (text[j] === '\r' && text[j + 1] === '\n') i = j + 2;
-        else i = j + 1;
-
-        const first = content.charCodeAt(0);
-        if ((first === 0x20 || first === 0x09) && lines.length > 0) {
-            const cur = lines[lines.length - 1];
-            cur.end = j;
-            cur.logical += content.slice(1);
-        } else {
-            lines.push({ start, end: j, logical: content });
-        }
-    }
-    // Drop empty logical lines (blank physical lines, e.g. the trailing CRLF Outlook exports leave): they
-    // carry no property and would otherwise reach parseLine without a colon. Byte-identity of a card with
-    // blanks isn't preserved — the blanks simply don't round-trip.
-    return lines.filter((l) => l.logical !== '').map((l) => ({ raw: text.slice(l.start, l.end), logical: l.logical }));
-}
-
 function parseLine(raw: string, logical: string): VCardLine {
     const colon = indexOfOutsideQuotes(logical, ':');
     if (colon === -1) throw new VCardError(`unparseable vCard line: ${logical}`);
@@ -103,7 +72,7 @@ export function parseVCardLines(text: string): VCardLine[] {
         if (isIllegalC0(text.charCodeAt(i))) throw new VCardError('control character in vCard');
     }
 
-    const lines = unfold(text).map(({ raw, logical }) => parseLine(raw, logical));
+    const lines = unfoldContentLines(text).map(({ raw, logical }) => parseLine(raw, logical));
 
     // trimEnd only, mirroring splitVCards: a card a PUT accepts must re-import from its own export
     const frames = (name: string) =>

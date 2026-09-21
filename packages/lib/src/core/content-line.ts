@@ -51,6 +51,36 @@ export function stripLineBreaks(s: string): string {
     return stripControlChars(s).replace(/[\r\n]/g, '');
 }
 
+// RFC 2425 §5.8.1 — split into logical lines, unfolding continuations: a physical line starting with a single
+// SPACE or TAB continues the previous one, so the line break and that one whitespace char go. Each line keeps
+// `raw`, the exact source slice including its internal folding, so a line nobody rewrites re-emits verbatim.
+// Empty logical lines (blank physical lines, e.g. the trailing CRLF Outlook exports leave) carry no property
+// and are dropped, so byte-identity of a payload with blanks is not preserved — the blanks simply go.
+export function unfoldContentLines(text: string): { raw: string; logical: string }[] {
+    const lines: { start: number; end: number; logical: string }[] = [];
+    let i = 0;
+    const n = text.length;
+    while (i < n) {
+        const start = i;
+        let j = i;
+        while (j < n && text[j] !== '\n' && text[j] !== '\r') j++;
+        const content = text.slice(i, j);
+        if (j >= n) i = j;
+        else if (text[j] === '\r' && text[j + 1] === '\n') i = j + 2;
+        else i = j + 1;
+
+        const first = content.charCodeAt(0);
+        if ((first === 0x20 || first === 0x09) && lines.length > 0) {
+            const cur = lines[lines.length - 1];
+            cur.end = j;
+            cur.logical += content.slice(1);
+        } else {
+            lines.push({ start, end: j, logical: content });
+        }
+    }
+    return lines.filter((l) => l.logical !== '').map((l) => ({ raw: text.slice(l.start, l.end), logical: l.logical }));
+}
+
 // RFC 5545 §3.1 / RFC 2425 §5.8.1 — fold lines longer than 75 octets with CRLF + single space.
 export function foldLine(line: string): string {
     const bytes = new TextEncoder().encode(line);

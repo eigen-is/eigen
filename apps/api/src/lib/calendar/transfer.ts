@@ -12,8 +12,8 @@ import {
     type PutResourceResult,
     readResourceFile,
 } from '../core';
-import { newVCalendar, PRODID, serializeResource } from '../ical';
-import { bareName, calAddress, isEigenName, uidOf } from '../ical/ical-parse';
+import { newVCalendar, PRODID, serializeResource, spliceBlocks } from '../ical';
+import { bareName, calAddress, uidOf } from '../ical/ical-parse';
 import type { Calendar } from './calendar';
 import { resourcePath } from './resource-store';
 import * as schema from './schema';
@@ -193,57 +193,6 @@ export async function importEvents(
 }
 
 // ---- Export ----
-
-// One logical content line: the property name it opens with, and the physical lines it was folded into.
-type ContentLine = { name: string; text: string };
-
-function contentLines(ics: string): ContentLine[] {
-    const lines: ContentLine[] = [];
-    for (const physical of ics.split('\n')) {
-        const text = physical.endsWith('\r') ? physical.slice(0, -1) : physical;
-        if (!text) continue;
-        // RFC 5545 §3.1: a line beginning with a space or a tab continues the one before it.
-        if ((text[0] === ' ' || text[0] === '\t') && lines.length) {
-            lines[lines.length - 1].text += `\r\n${text}`;
-            continue;
-        }
-        const end = text.search(/[;:]/);
-        lines.push({ name: (end === -1 ? text : text.slice(0, end)).toLowerCase(), text });
-    }
-    return lines;
-}
-
-// The VTIMEZONE and VEVENT blocks of one stored resource, with every line Eigen owns dropped. A splice
-// rather than a parse → toString: ical.js rewrites parameter quoting and order on every line it re-emits
-// (a `VALUE=URI` folded into the jCal type, a quoted parameter re-escaped RFC 6868-style), and a file the
-// store only indexed was never Eigen's to rewrite. Only Eigen's own lines carry an Eigen parameter, so
-// dropping those lines whole is the strip `stripEigenStamps` performs.
-function spliceBlocks(ics: string, zones: Map<string, string[]>, events: string[][]): void {
-    let block: string[] | null = null;
-    let depth = 0;
-    for (const line of contentLines(ics)) {
-        if (!block) {
-            if (line.text === 'BEGIN:VTIMEZONE' || line.text === 'BEGIN:VEVENT') {
-                block = [line.text];
-                depth = 1;
-            }
-            continue;
-        }
-        if (line.text.startsWith('BEGIN:')) depth++;
-        else if (line.text.startsWith('END:')) depth--;
-        if (!isEigenName(line.name)) block.push(line.text);
-        if (depth > 0) continue;
-
-        if (block[0] === 'BEGIN:VEVENT') {
-            events.push(block);
-        } else {
-            // The first definition of a TZID wins: two resources naming one zone carry it once.
-            const tzid = block.find((text) => text.startsWith('TZID:'))?.slice(5) ?? '';
-            if (!zones.has(tzid)) zones.set(tzid, block);
-        }
-        block = null;
-    }
-}
 
 // The resource uris of `ids` — an exclusion or an override names the series it belongs to — or every
 // resource of the calendar. Ordered by the earliest start each file holds, so a reader meets the events

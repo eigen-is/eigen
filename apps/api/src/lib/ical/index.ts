@@ -1,3 +1,4 @@
+export { spliceBlocks } from './blocks';
 export {
     addExclusion,
     buildResource,
