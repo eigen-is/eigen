@@ -23,7 +23,7 @@ import { makeTestHome, type TestHome } from '../home-test-helpers';
 import { vcal } from '../ics-test-helpers';
 
 // The file store behind every calendar write: what lands on disk, what the index says about it, and what
-// each of them looks like after a crash. See docs/CALENDAR.md § Storage.
+// each of them looks like after a crash. See docs/CALENDAR.md § Storage model — files as truth.
 
 // A filesystem whose next directory move fails, the way a roll-back can fail once and still be owed.
 class MoveFailingFilesystem extends LocalFilesystem {
