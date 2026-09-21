@@ -1479,10 +1479,11 @@ export class Calendar {
         const linked = this.findLinkedEvent(orgEventId, orgUserId);
         if (!linked) return;
 
-        // RFC 5546 §3.2.2.1: ignore a REQUEST whose SEQUENCE isn't newer than the stored revision — a
-        // stale or replayed invite must not overwrite the attendee's live copy. Equal SEQUENCE is also
-        // dropped: a significant change bumps SEQUENCE, so an equal one is a non-significant re-send.
-        if (payload.sequence <= linked.sequence) return;
+        // RFC 5546 §3.2.2.1: ignore a REQUEST older than the stored revision — a stale or replayed
+        // invite must not overwrite the attendee's live copy. An equal SEQUENCE still applies: a title,
+        // description or location edit is not a significant change and never bumps it (RFC 5545 §3.8.7.4),
+        // so the attendee would otherwise never see one.
+        if (payload.sequence < linked.sequence) return;
 
         const resource = this.resourceOf(linked.id);
         if (!resource) return;
@@ -1506,6 +1507,9 @@ export class Calendar {
                         timezone: payload.timezone !== undefined ? payload.timezone : undefined,
                         status: payload.status,
                         data: payload.attendees ? { ...linked.data, attendees: payload.attendees } : undefined,
+                        // The attendee's copy carries the organizer's revision, so the replay guard has
+                        // a number to compare the next message against.
+                        sequence: payload.sequence,
                     },
                     this.writeContext(false),
                 );
@@ -1654,6 +1658,9 @@ export class Calendar {
 
         const key = this.recurrenceKeyForSeries(recurrenceDate, recurrenceInstant, parent.timezone);
         const existing = this.exceptionOf(eventId, key);
+        // An occurrence the organizer deleted is an EXDATE, which carries no attendee list: there is
+        // nowhere to record a PARTSTAT for an instance that no longer exists.
+        if (existing?.status === 'cancelled' && !restoreCancelled) return;
         const data = existing?.data ?? parent.data ?? {};
         // Only recorded invitees may leave a PARTSTAT — inbound iMIP routes occurrence REPLYs here, and
         // an uninvited sender must not mutate rows. Someone can be invited to a single occurrence only.

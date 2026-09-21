@@ -1798,9 +1798,13 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
         ].join('\r\n');
         await processInboundImip(home, icsMail(withMethod('REPLY', reply), 'REPLY', ATT));
 
-        const exception = (await home.calendar.getEventsByUid(event.uid)).find((e) => e.parentEventId);
+        const rows = await home.calendar.getEventsByUid(event.uid);
+        const exception = rows.find((e) => e.parentEventId);
         expect(exception!.status).toBe('cancelled'); // pre-fix: 'confirmed' — deleted occurrence resurrected
-        expect(exception!.data?.attendees?.[0].status).toBe('declined'); // PARTSTAT is still recorded
+        // A deleted occurrence is an EXDATE and carries no attendee list, so the reply records nothing
+        // — least of all on the series the attendee did not answer for.
+        expect(exception!.data).toBeNull();
+        expect(rows.find((e) => !e.parentEventId)!.data?.attendees?.[0].status).toBe('pending');
     });
 
     // Someone can be invited to a single occurrence only: the exception row carries its own attendee

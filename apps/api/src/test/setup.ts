@@ -204,6 +204,17 @@ export function findOrFail<T>(arr: T[], pred: (t: T) => boolean, msg?: string): 
     return result;
 }
 
+// A cross-home fan-out (an invitation, a share) lands a moment after the call that triggered it
+// answers: the receiving Home writes its own file. Poll for what it promises rather than reading once.
+export async function eventually<T>(read: () => Promise<T | undefined>, what = 'the expected state'): Promise<T> {
+    for (let attempt = 0; attempt < 100; attempt++) {
+        const found = await read();
+        if (found !== undefined) return found;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    throw new Error(`Timed out waiting for ${what}`);
+}
+
 export function driveUrl(ownerId: string, mountId: string, ...parts: string[]) {
     return `/drive/${ownerId}/${mountId}/${parts.join('/')}`;
 }
