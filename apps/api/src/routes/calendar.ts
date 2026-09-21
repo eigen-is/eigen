@@ -24,6 +24,7 @@ import {
     moveEventAt,
     pullCalendarById,
     pullCalendarShares,
+    pullEventById,
     pullEventsInRange,
     updateEventAt,
 } from '../lib/home/home-relay';
@@ -238,6 +239,20 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             params: t.Object({ ownerId: t.String(), calId: t.String(), from: t.Numeric(), to: t.Numeric() }),
             auth: true,
         },
+    )
+
+    // A series is edited from one occurrence, and only the master row carries the times the series really runs on.
+    .get(
+        '/calendar/:ownerId/calendars/:calId/events/:id',
+        async ({ params, user }): Promise<CalendarEvent> => {
+            requireNonGuest(user);
+            const { permission } = await checkCalendarAccess(user, params.ownerId, params.calId);
+            if (permission === 'free-busy') throw new ApiError(403, 'Read permission required');
+            const event = await pullEventById(params.ownerId, params.calId, params.id);
+            if (!event) throw new ApiError(404, 'Event not found');
+            return event;
+        },
+        { auth: true },
     )
 
     .post(

@@ -52,14 +52,18 @@ export function EventDetailCard({
         <div className={cn('space-y-3', className)}>
             {(title || cancelled) && (
                 <div className="flex items-center gap-2">
-                    {title && <h3 className={cn('text-lg font-medium', cancelled && 'line-through')}>{title}</h3>}
+                    {title && (
+                        <h3 className={cn('text-lg font-medium min-w-0 break-words', cancelled && 'line-through')}>
+                            {title}
+                        </h3>
+                    )}
                     {cancelled && <Badge variant="destructive">Canceled</Badge>}
                 </div>
             )}
 
             <div className="flex items-start gap-3 text-sm">
                 <Clock className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                <div>
+                <div className="min-w-0 break-words">
                     {formatEventWhen(start, end, allDay, timezone, viewerTimeZone())}
                     {timezone && (
                         <div className="text-xs text-muted-foreground">
@@ -72,28 +76,28 @@ export function EventDetailCard({
             {recurrenceText && (
                 <div className="flex items-start gap-3 text-sm">
                     <Repeat className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                    <span>{recurrenceText}</span>
+                    <span className="min-w-0 break-words">{recurrenceText}</span>
                 </div>
             )}
 
             {location && (
                 <div className="flex items-start gap-3 text-sm">
                     <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                    <span>{location}</span>
+                    <span className="min-w-0 break-words">{location}</span>
                 </div>
             )}
 
             {description && (
                 <div className="flex items-start gap-3 text-sm">
                     <AlignLeft className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                    <span className="whitespace-pre-wrap">{description}</span>
+                    <span className="min-w-0 whitespace-pre-wrap break-words">{description}</span>
                 </div>
             )}
 
             {attendees.length > 0 && (
                 <div className="flex items-start gap-3 text-sm">
                     <UsersRound className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                         <AttendeeList attendees={attendees} organizer={organizer} remaining={remainingAttendees} />
                         {remainingAttendees > 0 && (
                             <p className="mt-1 text-xs text-muted-foreground">

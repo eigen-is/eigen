@@ -6,6 +6,8 @@ import {
     isSeriesOccurrence,
     normalizeTimezone,
     rruleToText,
+    type SeriesEdit,
+    seriesEditFromOccurrence,
     viewerTimeZone,
 } from '../../../core/calendar/calendar-utils';
 import { WINDOWS_ZONES } from '../../../core/calendar/windows-zones';
@@ -173,6 +175,98 @@ describe('rruleToText', () => {
     // A file's own RRULE is untrusted input: the card prints it verbatim rather than nothing.
     test('a rule rrule cannot read comes back as itself', () => {
         expect(rruleToText('FREQ=NEVER')).toBe('FREQ=NEVER');
+    });
+
+    // rrule's own ordinals stop at a month day, so anything past the 31st reads "131th" without this.
+    test('a day of the year past the 31st still gets the right ordinal', () => {
+        const text = rruleToText('FREQ=YEARLY;BYYEARDAY=32,101,111,112,113,121,131');
+        expect(text).toBe('every year on the 32nd, 101st, 111th, 112th, 113th, 121st and 131st day');
+    });
+
+    test('the teens and the month days rrule already spells keep their suffix', () => {
+        expect(rruleToText('FREQ=MONTHLY;BYMONTHDAY=1,2,3,11,12,13,21,22,23,31')).toBe(
+            'every month on the 1st, 2nd, 3rd, 11th, 12th, 13th, 21st, 22nd, 23rd and 31st',
+        );
+    });
+
+    test('a count and an interval are numbers, not ordinals', () => {
+        expect(rruleToText('FREQ=WEEKLY;INTERVAL=2;COUNT=13')).toBe('every 2 weeks for 13 times');
+    });
+});
+
+// The edit dialog opens on the occurrence the user clicked, and "all events in series" saves on the master:
+// only what they changed travels, and the times travel as a delta so the series keeps its earlier occurrences.
+describe('seriesEditFromOccurrence', () => {
+    // A weekly 09:00–10:00 series from 2 Nov, opened on the 9 Nov occurrence.
+    const master = { startTime: new Date('2026-11-02T09:00:00Z'), endTime: new Date('2026-11-02T10:00:00Z') };
+    const occurrence: SeriesEdit = {
+        title: 'Weekly Sync',
+        description: null,
+        location: null,
+        allDay: false,
+        startTime: new Date('2026-11-09T09:00:00Z'),
+        endTime: new Date('2026-11-09T10:00:00Z'),
+    };
+
+    test('a dialog nobody touched sends nothing at all', () => {
+        expect(seriesEditFromOccurrence(occurrence, master, occurrence)).toEqual({});
+    });
+
+    test('a new time of day shifts the master by that delta, not to the occurrence date', () => {
+        const patch = seriesEditFromOccurrence(occurrence, master, {
+            ...occurrence,
+            startTime: new Date('2026-11-09T11:00:00Z'),
+            endTime: new Date('2026-11-09T12:00:00Z'),
+        });
+        expect(patch.startTime?.toISOString()).toBe('2026-11-02T11:00:00.000Z');
+        expect(patch.endTime?.toISOString()).toBe('2026-11-02T12:00:00.000Z');
+    });
+
+    test('a longer occurrence stretches the series and leaves its start alone', () => {
+        const patch = seriesEditFromOccurrence(occurrence, master, {
+            ...occurrence,
+            endTime: new Date('2026-11-09T11:30:00Z'),
+        });
+        expect(patch.startTime).toBeUndefined();
+        expect(patch.endTime?.toISOString()).toBe('2026-11-02T11:30:00.000Z');
+    });
+
+    test('picking another day moves every occurrence by whole days', () => {
+        const patch = seriesEditFromOccurrence(occurrence, master, {
+            ...occurrence,
+            startTime: new Date('2026-11-11T09:00:00Z'),
+            endTime: new Date('2026-11-11T10:00:00Z'),
+        });
+        expect(patch.startTime?.toISOString()).toBe('2026-11-04T09:00:00.000Z');
+        expect(patch.endTime?.toISOString()).toBe('2026-11-04T10:00:00.000Z');
+    });
+
+    test('an override title reaches the series only when the user retypes it', () => {
+        const override: SeriesEdit = { ...occurrence, title: 'Solo Edited' };
+        expect(seriesEditFromOccurrence(override, master, override).title).toBeUndefined();
+        expect(seriesEditFromOccurrence(override, master, { ...override, title: 'Renamed' }).title).toBe('Renamed');
+    });
+
+    test('a cleared description and a new location travel, an untouched one does not', () => {
+        const described: SeriesEdit = { ...occurrence, description: 'Agenda', location: 'Room 1' };
+        const patch = seriesEditFromOccurrence(described, master, {
+            ...described,
+            description: null,
+            location: 'Room 2',
+        });
+        expect(patch).toEqual({ description: null, location: 'Room 2' });
+    });
+
+    test('turning the series all-day restates both bounds, midnight UTC to midnight UTC', () => {
+        const patch = seriesEditFromOccurrence(occurrence, master, {
+            ...occurrence,
+            allDay: true,
+            startTime: new Date('2026-11-09T00:00:00Z'),
+            endTime: new Date('2026-11-10T00:00:00Z'),
+        });
+        expect(patch.allDay).toBe(true);
+        expect(patch.startTime?.toISOString()).toBe('2026-11-02T00:00:00.000Z');
+        expect(patch.endTime?.toISOString()).toBe('2026-11-03T00:00:00.000Z');
     });
 });
 

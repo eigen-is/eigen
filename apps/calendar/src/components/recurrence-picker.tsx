@@ -83,7 +83,8 @@ export function RecurrencePicker({ value, onChange, startDate, disabled }: Recur
     const selectValue = matchedPreset ? currentValue : 'custom';
 
     return (
-        <div className="flex items-center gap-3">
+        // A custom rule reads as a sentence ("every year on the 1st, 2nd …"), so the trigger has to be shrinkable.
+        <div className="flex items-center gap-3 min-w-0">
             <Select
                 value={selectValue}
                 disabled={disabled}
@@ -95,7 +96,7 @@ export function RecurrencePicker({ value, onChange, startDate, disabled }: Recur
                     }
                 }}
             >
-                <SelectTrigger className="flex-1">
+                <SelectTrigger className="flex-1 min-w-0">
                     <SelectValue placeholder="Does not repeat">
                         {matchedPreset ? matchedPreset.label : rruleText ? `Custom: ${rruleText}` : 'Does not repeat'}
                     </SelectValue>

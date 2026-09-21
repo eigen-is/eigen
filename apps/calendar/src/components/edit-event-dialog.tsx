@@ -4,12 +4,14 @@ import {
     isSeriesOccurrence,
     occurrenceDateToString,
     parseOccurrenceDate,
+    seriesEditFromOccurrence,
     toLocalDateString,
     truncateRRule,
     useCalendarOptions,
     useCalendars,
     useCreateEvent,
     useDeleteEvent,
+    useEvent,
     useMoveEvent,
     useSharedCalendars,
     useUpdateEvent,
@@ -93,6 +95,13 @@ export function EditEventDialog({
     const createEvent = useCreateEvent(selectedCal?.ownerId || eventOwnerId);
     const deleteEventOnSource = useDeleteEvent(eventOwnerId);
     const moveEvent = useMoveEvent(eventOwnerId);
+    // A series is saved on its master, and only the master's own row says which date the series starts on.
+    const { data: master } = useEvent(
+        eventOwnerId,
+        event?.calendarId ?? '',
+        event ? event.parentEventId || event.id : '',
+        open && !!event && isSeriesOccurrence(event),
+    );
     const saving =
         updateEvent.isPending || createEvent.isPending || deleteEventOnSource.isPending || moveEvent.isPending;
 
@@ -164,24 +173,37 @@ export function EditEventDialog({
 
         const data = { ...event.data, attendees: attendees.length > 0 ? attendees : undefined };
         const timezone = allDay ? null : (event.timezone ?? viewerTimeZone());
-        const updates = {
+        const edited = {
             title: title.trim(),
-            startTime: start,
-            endTime: end,
-            allDay,
             description: description.trim() || null,
             location: location.trim() || null,
+            allDay,
+            startTime: start,
+            endTime: end,
+        };
+        const updates = {
+            ...edited,
             rrule: isOverride ? undefined : rruleString,
             timezone,
             data: Object.values(data).some((v) => v !== undefined) ? data : null,
         };
+        // The master is saved with what the user changed, never with the clicked occurrence's own times: taking
+        // those would drag the series' start onto that date and drop every occurrence before it.
+        const seriesUpdates = master
+            ? {
+                  rrule: updates.rrule,
+                  timezone,
+                  data: updates.data,
+                  ...seriesEditFromOccurrence(event, master, edited),
+              }
+            : updates;
 
         const targetId = event.parentEventId || event.id;
 
         if (calendarChanged && selectedCal) {
             if (selectedCal.ownerId === eventOwnerId) {
                 // The server-owned move carries the exception children and the organizer link, and fires no decline.
-                await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, ...updates });
+                await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, ...seriesUpdates });
                 await moveEvent.mutateAsync({
                     calendarId: event.calendarId,
                     id: targetId,
@@ -197,7 +219,7 @@ export function EditEventDialog({
                 createdDestRef.current = false;
             }
         } else if (action === 'all') {
-            await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, ...updates });
+            await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, ...seriesUpdates });
         } else if (action === 'this') {
             await createEvent.mutateAsync({
                 calendarId: event.calendarId,
@@ -302,7 +324,10 @@ export function EditEventDialog({
                             {canSave ? 'Cancel' : 'Close'}
                         </Button>
                         {canSave && (
-                            <Button onClick={handleSaveClick} disabled={saving || !title.trim()}>
+                            <Button
+                                onClick={handleSaveClick}
+                                disabled={saving || !title.trim() || (isPartOfSeries && !master)}
+                            >
                                 {saving ? 'Saving...' : 'Save'}
                             </Button>
                         )}

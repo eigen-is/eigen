@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { type SeriesEdit, seriesEditFromOccurrence } from '@workspace/lib/calendar/calendar-utils';
 import type {
     CalendarEvent,
     CalendarEventOccurrence,
@@ -2713,5 +2714,147 @@ describe('A series-wide edit sent from an already-overridden occurrence', () => 
         ).filter((e) => e.uid === updated.uid);
         expect(occurrences.length).toBeGreaterThan(1);
         expect(occurrences.every((e) => e.title === 'Moved Sync')).toBe(true);
+    });
+});
+
+// The edit dialog opens on the occurrence the user clicked, so "all events in series" has to apply what changed
+// in it relative to the series: the master shifts by the dialog's own delta and keeps the date it started on.
+describe('A series-wide edit from a later occurrence', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let calId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        calId = findOrFail(
+            await assertJson<CalendarItem[]>(
+                await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars`),
+            ),
+            (c) => c.isDefault,
+        ).id;
+    });
+
+    function eventsUrl() {
+        return `/calendar/${ctx.alice.user.id}/calendars/${calId}/events`;
+    }
+
+    async function createSeries(title: string): Promise<CalendarEvent> {
+        return assertJson<CalendarEvent>(
+            await authedRequest(ctx.alice.user.sessionToken, eventsUrl(), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title,
+                    startTime: '2027-03-01T09:00:00Z',
+                    endTime: '2027-03-01T10:00:00Z',
+                    allDay: false,
+                    rrule: 'FREQ=WEEKLY;COUNT=5',
+                    timezone: 'UTC',
+                }),
+            }),
+        );
+    }
+
+    async function occurrencesOf(uid: string): Promise<CalendarEventOccurrence[]> {
+        const from = Math.floor(Date.parse('2027-02-01T00:00:00Z') / 1000);
+        const to = Math.floor(Date.parse('2027-05-01T00:00:00Z') / 1000);
+        const all = await assertJson<CalendarEventOccurrence[]>(
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/event-range/${from}/${to}`,
+            ),
+        );
+        return all.filter((e) => e.uid === uid);
+    }
+
+    async function saveSeries(id: string, body: object): Promise<CalendarEvent> {
+        return assertJson<CalendarEvent>(
+            await authedRequest(ctx.alice.user.sessionToken, `${eventsUrl()}/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            }),
+        );
+    }
+
+    // The master the dialog reads before it saves, and the fields it opens on the clicked occurrence with.
+    async function readMaster(id: string): Promise<Pick<SeriesEdit, 'startTime' | 'endTime'>> {
+        const master = await assertJson<CalendarEvent>(
+            await authedRequest(ctx.alice.user.sessionToken, `${eventsUrl()}/${id}`),
+        );
+        return { startTime: new Date(master.startTime), endTime: new Date(master.endTime) };
+    }
+
+    function opened(occurrence: CalendarEventOccurrence): SeriesEdit {
+        return {
+            title: occurrence.title,
+            description: occurrence.description,
+            location: occurrence.location,
+            allDay: occurrence.allDay,
+            startTime: new Date(occurrence.startTime),
+            endTime: new Date(occurrence.endTime),
+        };
+    }
+
+    test('a new time of day on a plain occurrence moves every occurrence, the first one included', async () => {
+        const series = await createSeries('Team Weekly');
+        const clicked = findOrFail(await occurrencesOf(series.uid), (e) => e.occurrenceDate === '2027-03-15');
+
+        const patch = seriesEditFromOccurrence(opened(clicked), await readMaster(series.id), {
+            ...opened(clicked),
+            startTime: new Date('2027-03-15T11:00:00Z'),
+            endTime: new Date('2027-03-15T12:00:00Z'),
+        });
+        const updated = await saveSeries(series.id, { rrule: clicked.rrule, timezone: 'UTC', ...patch });
+
+        expect(new Date(updated.startTime).toISOString()).toBe('2027-03-01T11:00:00.000Z');
+        const after = await occurrencesOf(series.uid);
+        expect(after.map((e) => e.occurrenceDate)).toEqual([
+            '2027-03-01',
+            '2027-03-08',
+            '2027-03-15',
+            '2027-03-22',
+            '2027-03-29',
+        ]);
+        expect(after.every((e) => new Date(e.startTime).getUTCHours() === 11)).toBe(true);
+    });
+
+    test('an overridden occurrence pushes its new time, and not its own title, onto the series', async () => {
+        const series = await createSeries('Weekly Standup');
+        await authedRequest(ctx.alice.user.sessionToken, eventsUrl(), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: 'Solo Edited',
+                startTime: '2027-03-15T09:00:00Z',
+                endTime: '2027-03-15T10:00:00Z',
+                allDay: false,
+                parentEventId: series.id,
+                recurrenceDate: '2027-03-15',
+            }),
+        });
+        const clicked = findOrFail(await occurrencesOf(series.uid), (e) => e.title === 'Solo Edited');
+
+        // An override carries no rule of its own, so the dialog sends none back.
+        const patch = seriesEditFromOccurrence(opened(clicked), await readMaster(series.id), {
+            ...opened(clicked),
+            startTime: new Date('2027-03-15T11:00:00Z'),
+            endTime: new Date('2027-03-15T12:00:00Z'),
+        });
+        const updated = await saveSeries(series.id, { timezone: 'UTC', ...patch });
+
+        expect(new Date(updated.startTime).toISOString()).toBe('2027-03-01T11:00:00.000Z');
+        expect(updated.title).toBe('Weekly Standup');
+
+        const after = await occurrencesOf(series.uid);
+        expect(after.map((e) => e.occurrenceDate)).toEqual([
+            '2027-03-01',
+            '2027-03-08',
+            '2027-03-15',
+            '2027-03-22',
+            '2027-03-29',
+        ]);
+        const override = findOrFail(after, (e) => e.occurrenceDate === '2027-03-15');
+        expect(override.title).toBe('Solo Edited');
+        expect(new Date(override.startTime).toISOString()).toBe('2027-03-15T09:00:00.000Z');
     });
 });

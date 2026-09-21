@@ -222,7 +222,7 @@ export function EventFormFields({
                 <div className="flex items-center gap-3">
                     <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
                     <Select value={selectedCalKey} onValueChange={setSelectedCalKey}>
-                        <SelectTrigger className="flex-1">
+                        <SelectTrigger className="flex-1 min-w-0">
                             <SelectValue placeholder="Select calendar" />
                         </SelectTrigger>
                         <SelectContent>

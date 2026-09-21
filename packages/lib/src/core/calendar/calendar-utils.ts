@@ -211,14 +211,67 @@ export function occurrenceDateToString(value: unknown): string {
     return String(value).substring(0, 10);
 }
 
+// rrule spells ordinals by a lookup that stops at the 31st, so a day of the year comes out as "131th".
+const ORDINAL_IN_TEXT = /(\d+)(?:st|nd|rd|th)/g;
+
+function ordinalSuffix(n: number): string {
+    if (n % 100 >= 11 && n % 100 <= 13) return 'th';
+    if (n % 10 === 1) return 'st';
+    if (n % 10 === 2) return 'nd';
+    if (n % 10 === 3) return 'rd';
+    return 'th';
+}
+
 // A file's RRULE is untrusted input, so a rule rrule cannot read is printed verbatim rather than swallowed.
 export function rruleToText(rrule: string | null): string | null {
     if (!rrule) return null;
     try {
-        return RRule.fromString(rrule).toText();
+        return RRule.fromString(rrule)
+            .toText()
+            .replace(ORDINAL_IN_TEXT, (_, digits: string) => `${digits}${ordinalSuffix(Number(digits))}`);
     } catch {
         return rrule;
     }
+}
+
+export type SeriesEdit = {
+    title: string;
+    description: string | null;
+    location: string | null;
+    allDay: boolean;
+    startTime: Date;
+    endTime: Date;
+};
+
+export type SeriesEditPatch = {
+    title?: string;
+    description?: string | null;
+    location?: string | null;
+    allDay?: boolean;
+    startTime?: Date;
+    endTime?: Date;
+};
+
+// "All events in series" is edited from one occurrence but saved on the master, so what the user changed travels
+// as a delta: taking the dialog's own times would drop every occurrence before the one they opened.
+export function seriesEditFromOccurrence(
+    occurrence: SeriesEdit,
+    master: Pick<SeriesEdit, 'startTime' | 'endTime'>,
+    edited: SeriesEdit,
+): SeriesEditPatch {
+    const patch: SeriesEditPatch = {};
+    if (edited.title !== occurrence.title) patch.title = edited.title;
+    if (edited.description !== occurrence.description) patch.description = edited.description;
+    if (edited.location !== occurrence.location) patch.location = edited.location;
+
+    const startDelta = edited.startTime.getTime() - occurrence.startTime.getTime();
+    const endDelta = edited.endTime.getTime() - occurrence.endTime.getTime();
+    // A timed series turning all-day restates both bounds, because midnight-UTC bounds mean nothing beside the old ones.
+    const allDayChanged = edited.allDay !== occurrence.allDay;
+    if (allDayChanged) patch.allDay = edited.allDay;
+    if (startDelta !== 0 || allDayChanged) patch.startTime = new Date(master.startTime.getTime() + startDelta);
+    if (endDelta !== 0 || allDayChanged) patch.endTime = new Date(master.endTime.getTime() + endDelta);
+    return patch;
 }
 
 export function truncateRRule(rruleStr: string, beforeDate: Date): string {
