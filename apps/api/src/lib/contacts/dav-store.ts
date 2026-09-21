@@ -5,8 +5,10 @@ import { mergeVCard } from '../carddav/vcard-serialize';
 import {
     ApiError,
     computeResourceEtag,
+    type DeleteResourceResult,
     matchesIfMatch,
     matchesIfNoneMatch,
+    type PutResourceResult,
     readResourceFile,
     uriKeyOf,
     writeResourceFile,
@@ -31,15 +33,8 @@ const CARD_ROW = { uri: schema.contacts.uri, etag: schema.contacts.etag };
 // ctag advances on each change, syncGen rotates on an index rebuild so stale sync tokens are refused.
 export type CardBook = { ctag: number; syncGen: number };
 
-// The typed outcome of a DAV PUT, which the handler turns into a 4xx or a 201/204. No raw throw crosses this
-// seam for a client-caused failure — only genuine IO errors bubble.
-export type PutCardResult =
-    | { ok: true; etag: string; created: boolean }
-    | { ok: false; error: 'precondition' | 'uid-conflict' | 'invalid' | 'too-large' | 'quota'; message?: string };
-
-// Mirrors PutCardResult so both write seams name their result once: a 404 for an unknown uri, a 403 for your
-// own card, a 412 for a stale If-Match.
-export type DeleteCardResult = { ok: true } | { ok: false; error: 'not-found' | 'precondition' | 'self-delete' };
+// The shared DAV delete result plus the one refusal only this book has: a 403 for your own card.
+export type DeleteCardResult = DeleteResourceResult | { ok: false; error: 'self-delete' };
 
 // The index-only reads the protocol handlers sit on. Each drains a pending failed pair before observing the
 // index so no DAV read is served past a torn write — which is why they are async even where the shape looks
@@ -142,9 +137,9 @@ export async function putCard(
     uri: string,
     body: string,
     pre: { ifMatch: string | null; ifNoneMatch: string | null },
-): Promise<PutCardResult> {
+): Promise<PutResourceResult> {
     if (sanitizeCardUri(uri) !== uri) return { ok: false, error: 'invalid' };
-    return contacts.gate.run(async (): Promise<PutCardResult> => {
+    return contacts.gate.run(async (): Promise<PutResourceResult> => {
         // Bounded before any parse, so a hostile multi-MiB payload never reaches the AST unfolder.
         if (Buffer.byteLength(body) > CARD_MAX_BYTES) return { ok: false, error: 'too-large' };
 
@@ -177,19 +172,18 @@ export async function putCard(
         // bytes, silently reverting the accepted write.
         const storedUri = existing?.uri ?? uri;
 
-        // A card carries one UID for its life, and one another resource owns is a conflict, not a raw 500.
+        // A card carries one UID for its life, and one another resource owns is a conflict, not a raw 500. The
+        // holder is named so the client can point at it; a card changing only its own UID has none to name.
         if (!parsed.uid) return { ok: false, error: 'invalid', message: 'UID is required' };
-        if (existing) {
-            if (parsed.uid !== existing.uid) return { ok: false, error: 'uid-conflict' };
-        } else if (
-            contacts.db
-                .select({ id: schema.contacts.id })
-                .from(schema.contacts)
-                .where(eq(schema.contacts.uid, parsed.uid))
-                .get()
-        ) {
-            return { ok: false, error: 'uid-conflict' };
+        const holder = contacts.db
+            .select({ id: schema.contacts.id, uri: schema.contacts.uri })
+            .from(schema.contacts)
+            .where(eq(schema.contacts.uid, parsed.uid))
+            .get();
+        if (holder && holder.id !== existing?.id) {
+            return { ok: false, error: 'uid-conflict', conflictUri: holder.uri };
         }
+        if (existing && parsed.uid !== existing.uid) return { ok: false, error: 'uid-conflict' };
 
         // Before the quota gate, so the meter and the returned etag both hash the exact bytes written.
         const { eigenId, bytes } = resolveSelfLinkOnPut(contacts, parsed, new TextEncoder().encode(stored), existing);

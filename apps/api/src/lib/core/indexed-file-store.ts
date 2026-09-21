@@ -21,6 +21,22 @@ export function computeResourceEtag(bytes: Uint8Array): string {
     return new Bun.CryptoHasher('sha256').update(bytes).digest('hex');
 }
 
+// The typed outcome of a DAV write, which the protocol handler turns into a 4xx or a 201/204. No raw throw
+// crosses this seam for a client-caused failure — only genuine IO errors bubble. `conflictUri` names the
+// resource that already owns the UID, where one exists (RFC 6352 § 6.3.2.1 and its CalDAV twin).
+export type PutResourceResult =
+    | { ok: true; etag: string; created: boolean }
+    | {
+          ok: false;
+          error: 'precondition' | 'uid-conflict' | 'invalid' | 'too-large' | 'quota';
+          message?: string;
+          conflictUri?: string;
+      };
+
+// The delete twin: a 404 for an unknown uri, a 412 for a stale If-Match. A domain with its own refusal
+// extends this union rather than widening it here.
+export type DeleteResourceResult = { ok: true } | { ok: false; error: 'not-found' | 'precondition' };
+
 // The mtime is rounded here, once, so a writer and every later pass compare the same number.
 export type ResourceStat = { mtime: number; size: number };
 

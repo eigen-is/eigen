@@ -402,12 +402,44 @@ describe('CardDAV', () => {
         expect(res.status).toBe(204);
     });
 
-    test('a second uri claiming an owned UID maps to 412 no-uid-conflict', async () => {
+    test('a second uri claiming an owned UID is 409 no-uid-conflict naming the holder', async () => {
         const uid = randomUUID();
-        await putCard(`${uid}.vcf`, vcard(uid), { 'If-None-Match': '*' });
+        // The holder's name carries an @ — pchar-legal, so its href quotes it raw like every other href the
+        // CardDAV layer emits, proving the conflict href goes through the same encoder.
+        const holder = `h${randomUUID().replace(/-/g, '')}@x.vcf`;
+        expect((await putCard(holder.replace('@', '%40'), vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
+
         const res = await putCard(`${randomUUID()}.vcf`, vcard(uid), { 'If-None-Match': '*' });
-        expect(res.status).toBe(412);
-        expect(await res.text()).toContain('no-uid-conflict');
+        expect(res.status).toBe(409);
+        const xml = await res.text();
+        expect(xml).toContain(
+            `<CARD:no-uid-conflict><D:href>/dav/addressbooks/${userId}/contacts/${holder}</D:href></CARD:no-uid-conflict>`,
+        );
+        expect(xml).not.toContain('%40');
+    });
+
+    test('changing the UID of a stored card is a bare 409 no-uid-conflict', async () => {
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
+
+        const res = await putCard(uri, vcard(randomUUID()));
+        expect(res.status).toBe(409);
+        const xml = await res.text();
+        expect(xml).toContain('<CARD:no-uid-conflict/>');
+        expect(xml).not.toContain('D:href');
+    });
+
+    test('a UID change onto a UID another card holds names that card', async () => {
+        const held = randomUUID();
+        const holder = `${held}.vcf`;
+        expect((await putCard(holder, vcard(held), { 'If-None-Match': '*' })).status).toBe(201);
+        const mine = randomUUID();
+        expect((await putCard(`${mine}.vcf`, vcard(mine), { 'If-None-Match': '*' })).status).toBe(201);
+
+        const res = await putCard(`${mine}.vcf`, vcard(held));
+        expect(res.status).toBe(409);
+        expect(await res.text()).toContain(`<D:href>/dav/addressbooks/${userId}/contacts/${holder}</D:href>`);
     });
 
     test('a card with no UID maps to 400', async () => {
