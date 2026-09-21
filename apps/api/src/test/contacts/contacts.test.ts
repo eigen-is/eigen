@@ -623,9 +623,9 @@ describe('Contacts', () => {
             try {
                 const home = await getHome(ctx.alice.user.id);
                 const used = (await home.mail.size()) + (await home.contacts.size());
-                // Floor to whole MB (the setting's unit): the ceiling now sits at or just under what the book
-                // already uses, so anything that adds bytes overflows and only a shrinking rewrite fits.
-                await updateServerSettings({ quotas: { mailAndContactsMaxMB: Math.floor(used / MB) } });
+                // The ceiling now sits at exactly what the book already uses, so anything that adds bytes
+                // overflows and only an edit inside the headroom or a shrinking rewrite fits.
+                await updateServerSettings({ quotas: { mailAndContactsMaxMB: used / MB } });
 
                 const create = await authedRequest(token, url, {
                     method: 'POST',
