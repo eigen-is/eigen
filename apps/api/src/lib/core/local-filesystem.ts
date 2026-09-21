@@ -67,11 +67,14 @@ export class LocalFilesystem {
         }
     }
 
-    // Publishes a staged file under its final name. The directory losing the old name is fsynced by the
-    // caller instead, which only a move between mailboxes needs.
+    // Publishes a staged file under its final name. A move between directories fsyncs both: the one gaining
+    // the name, and the one that must not hand the old name back after a power loss.
     async renameDurable(oldPath: string, newPath: string): Promise<void> {
         await this.rename(oldPath, newPath);
-        await this.syncDir(path.dirname(newPath));
+        const newDir = path.dirname(newPath);
+        const oldDir = path.dirname(oldPath);
+        await this.syncDir(newDir);
+        if (oldDir !== newDir) await this.syncDir(oldDir);
     }
 
     // Removes a name for good: a file already gone is the outcome the caller wanted, and the directory that

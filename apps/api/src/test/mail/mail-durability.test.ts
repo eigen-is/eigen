@@ -82,7 +82,9 @@ describe('Maildir write durability', () => {
             await home.mail.mailboxDeliver(eml('Durable delivery'));
         });
 
-        expect(events).toEqual(['file', 'rename', 'new', 'rename', 'cur']);
+        // A rename across directories fsyncs both ends, so publishing out of tmp/ syncs the staging directory
+        // it emptied as well.
+        expect(events).toEqual(['file', 'rename', 'new', 'tmp', 'rename', 'cur']);
         expect(readdirSync(dirs.tmp)).toEqual([]);
     });
 

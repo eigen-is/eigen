@@ -85,3 +85,26 @@ describe('unlinkDurable', () => {
         expect(await store.exists('cards/refused.vcf')).toBe(false);
     });
 });
+
+describe('renameDurable', () => {
+    test('a move across directories fsyncs the destination and then the source', async () => {
+        const store = nextStore();
+        await store.write('from/msg', 'x');
+        await store.mkdir('to');
+
+        const synced = await recordSyncs(store, () => store.renameDurable('from/msg', 'to/msg'));
+
+        // The old name must not come back after the index says it moved, so both directories are on the platter.
+        expect(synced).toEqual(['to', 'from']);
+        expect(await store.exists('to/msg')).toBe(true);
+    });
+
+    test('a rename within one directory fsyncs it once', async () => {
+        const store = nextStore();
+        await store.write('cur/msg', 'x');
+
+        const synced = await recordSyncs(store, () => store.renameDurable('cur/msg', 'cur/msg:2,S'));
+
+        expect(synced).toEqual(['cur']);
+    });
+});
