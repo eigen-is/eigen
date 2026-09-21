@@ -87,16 +87,16 @@ describe('unlinkDurable', () => {
 });
 
 describe('renameDurable', () => {
-    test('a move across directories fsyncs the destination and then the source', async () => {
+    test('publishing a staged file fsyncs only the directory that gained the name', async () => {
         const store = nextStore();
-        await store.write('from/msg', 'x');
-        await store.mkdir('to');
+        await store.write('tmp/msg', 'x');
+        await store.mkdir('new');
 
-        const synced = await recordSyncs(store, () => store.renameDurable('from/msg', 'to/msg'));
+        const synced = await recordSyncs(store, () => store.renameDurable('tmp/msg', 'new/msg'));
 
-        // The old name must not come back after the index says it moved, so both directories are on the platter.
-        expect(synced).toEqual(['to', 'from']);
-        expect(await store.exists('to/msg')).toBe(true);
+        // Nothing indexes a staging name, so a second directory fsync would cost every delivery for nothing.
+        expect(synced).toEqual(['new']);
+        expect(await store.exists('new/msg')).toBe(true);
     });
 
     test('a rename within one directory fsyncs it once', async () => {
@@ -106,5 +106,46 @@ describe('renameDurable', () => {
         const synced = await recordSyncs(store, () => store.renameDurable('cur/msg', 'cur/msg:2,S'));
 
         expect(synced).toEqual(['cur']);
+    });
+});
+
+describe('moveDurable', () => {
+    test('a move between two indexed directories fsyncs the destination and then the source', async () => {
+        const store = nextStore();
+        await store.write('inbox/msg', 'x');
+        await store.mkdir('trash');
+
+        const synced = await recordSyncs(store, () => store.moveDurable('inbox/msg', 'trash/msg'));
+
+        // The old name must not come back after the index says it moved, so both directories are on the platter.
+        expect(synced).toEqual(['trash', 'inbox']);
+        expect(await store.exists('trash/msg')).toBe(true);
+    });
+
+    test('a move within one directory fsyncs it once', async () => {
+        const store = nextStore();
+        await store.write('cur/msg', 'x');
+
+        const synced = await recordSyncs(store, () => store.moveDurable('cur/msg', 'cur/other'));
+
+        expect(synced).toEqual(['cur']);
+    });
+
+    test('a directory fsync the file system refuses does not fail the move', async () => {
+        const store = nextStore();
+        await store.write('inbox/refused', 'x');
+        await store.mkdir('trash');
+        const proto = await syncProto();
+        const spy = spyOn(proto, 'sync').mockImplementation(async () => {
+            throw new Error('EINVAL: fsync of a directory');
+        });
+
+        try {
+            await store.moveDurable('inbox/refused', 'trash/refused');
+        } finally {
+            spy.mockRestore();
+        }
+
+        expect(await store.exists('trash/refused')).toBe(true);
     });
 });

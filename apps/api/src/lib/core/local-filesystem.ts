@@ -67,14 +67,20 @@ export class LocalFilesystem {
         }
     }
 
-    // Publishes a staged file under its final name. A move between directories fsyncs both: the one gaining
-    // the name, and the one that must not hand the old name back after a power loss.
+    // Publishes a staged file under its final name, fsyncing the directory that gained it. The one that lost
+    // the name is the caller's call: a staging name nothing indexes is swept, so paying for it here would
+    // cost every delivery a second directory fsync.
     async renameDurable(oldPath: string, newPath: string): Promise<void> {
         await this.rename(oldPath, newPath);
-        const newDir = path.dirname(newPath);
-        const oldDir = path.dirname(oldPath);
-        await this.syncDir(newDir);
-        if (oldDir !== newDir) await this.syncDir(oldDir);
+        await this.syncDir(path.dirname(newPath));
+    }
+
+    // A rename between two INDEXED directories, where the old name must not come back after the index says it
+    // moved: both ends reach the platter, under the same refused-fsync policy.
+    async moveDurable(from: string, to: string): Promise<void> {
+        await this.renameDurable(from, to);
+        const fromDir = path.dirname(from);
+        if (fromDir !== path.dirname(to)) await this.syncDir(fromDir);
     }
 
     // Removes a name for good: a file already gone is the outcome the caller wanted, and the directory that

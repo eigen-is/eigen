@@ -724,7 +724,8 @@ export class MaildirStore implements MailStore {
     private async moveMessage(fromMailbox: string, fromFilename: string, toMailbox: string): Promise<void> {
         const srcDir = path.join(this.mailboxDir(fromMailbox), PATHS.MAIL.CUR);
         const dstPath = path.join(this.mailboxDir(toMailbox), PATHS.MAIL.CUR, fromFilename);
-        await this.storage.renameDurable(path.join(srcDir, fromFilename), dstPath);
+        // Both ends are indexed here: the old name must not come back after the index says it moved.
+        await this.storage.moveDurable(path.join(srcDir, fromFilename), dstPath);
     }
 
     private async renameInCur(mailbox: string, oldFilename: string, newFilename: string): Promise<void> {

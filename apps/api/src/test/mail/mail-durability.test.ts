@@ -5,7 +5,7 @@ import { type FileHandle, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { MAILBOX_DRAFTS, MAILBOX_TRASH } from '@workspace/lib/constants/mailboxes';
 import { getHome } from '../../lib/home';
-import { boxDir, maildirOf, makeEml } from '../mail-test-helpers';
+import { boxDir, maildirOf, mailRootOf, makeEml } from '../mail-test-helpers';
 import { createTestUser, ensureServer, TEST_DATA_DIR } from '../setup';
 
 // Durability can only be proven by killing the machine, so what these tests pin is the protocol that buys
@@ -82,15 +82,19 @@ describe('Maildir write durability', () => {
             await home.mail.mailboxDeliver(eml('Durable delivery'));
         });
 
-        // A rename across directories fsyncs both ends, so publishing out of tmp/ syncs the staging directory
-        // it emptied as well.
-        expect(events).toEqual(['file', 'rename', 'new', 'tmp', 'rename', 'cur']);
+        // Publishing out of tmp/ does not fsync the staging directory: nothing indexes a name there, and a
+        // resurrected one is swept.
+        expect(events).toEqual(['file', 'rename', 'new', 'rename', 'cur']);
         expect(readdirSync(dirs.tmp)).toEqual([]);
     });
 
     test('a draft save fsyncs the EML before the rename into Drafts cur/', async () => {
         const home = await getHome(userId);
-        const dirs = { tmp: join(box(MAILBOX_DRAFTS), 'tmp'), cur: join(box(MAILBOX_DRAFTS), 'cur') };
+        const dirs = {
+            tmp: join(box(MAILBOX_DRAFTS), 'tmp'),
+            cur: join(box(MAILBOX_DRAFTS), 'cur'),
+            meta: join(mailRootOf(userId), 'draft-meta'),
+        };
 
         const events = await record(dirs, async () => {
             await home.mail.messageHandleDraft({
@@ -101,8 +105,8 @@ describe('Maildir write durability', () => {
             });
         });
 
-        // The sidecar write that follows is writeAtomic's own file + directory pair.
-        expect(events.slice(0, 3)).toEqual(['file', 'rename', 'cur']);
+        // The EML, then the sidecar write that follows — writeAtomic's own file + directory pair.
+        expect(events).toEqual(['file', 'rename', 'cur', 'file', 'rename', 'meta']);
         expect(readdirSync(dirs.tmp)).toEqual([]);
     });
 
