@@ -35,8 +35,8 @@ export const VCARD_PREVIEW_MAX_CARDS = 200;
 
 // What one import may write, counting every VEVENT of the file: a master is a row plus a recurrence
 // expansion on every later range query, and an override is a row too. Set above what `ICS_MAX_BYTES` holds
-// (about 9 600 typical events), so the byte ceiling is the one that binds and a calendar this instance
-// exported is a calendar this instance takes back.
+// (about 9 600 typical events), so the two ceilings agree and the byte one is the one that binds. Both
+// bound one FILE, not a calendar: a calendar past them exports whole and imports back only in parts.
 export const ICS_IMPORT_MAX_EVENTS = 10_000;
 
 // What one import may store. A series is one resource, so a VTIMEZONE the file defines once is copied into

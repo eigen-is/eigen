@@ -1460,39 +1460,6 @@ describe('Calendar transfer routes', () => {
             expect(await exported()).not.toContain('X-EIGEN');
         });
 
-        // Into another Home, because a UID this Home already holds is a skip: the round trip is what an
-        // export is for, and it holds when every VEVENT comes back property for property.
-        test('an export re-imports into another home line for line', async () => {
-            const text = await exported();
-
-            const result = await assertJson<ImportCountsResult>(
-                await importRaw(bob, 'calendar', ICS_MIME, text, {
-                    query: `?calendarId=${encodeURIComponent(bobCalendarId)}`,
-                }),
-            );
-            expect(result).toEqual({ imported: 3, skipped: 0, failed: 0 });
-
-            const res = await exportRequest(bob, bob.id, bobCalendarId);
-            expect(res.status).toBe(200);
-
-            // Keyed per series member, and blind to what an import is allowed to change: scheduling goes,
-            // and Eigen's own lines are the store's, not the file's.
-            const members = (ics: string): Record<string, Record<string, unknown[]>> => {
-                const out: Record<string, Record<string, unknown[]>> = {};
-                for (const v of parseResource(ics).getAllSubcomponents('vevent')) {
-                    const props = properties(v);
-                    for (const name of Object.keys(props)) {
-                        if (/(^|\.)(organizer|attendee)$/.test(name) || name.includes('x-eigen-')) {
-                            delete props[name];
-                        }
-                    }
-                    out[`${v.getFirstPropertyValue('uid')}|${v.getFirstPropertyValue('recurrence-id') ?? ''}`] = props;
-                }
-                return out;
-            };
-            expect(members(await res.text())).toEqual(members(text));
-        });
-
         test('an override id exports the series it belongs to', async () => {
             const uid = 'export-override@client';
             const file = vcal(
@@ -1513,6 +1480,45 @@ describe('Calendar transfer routes', () => {
             expect(text).toContain('SUMMARY:Series moved');
             expect(text).toContain('RRULE:FREQ=DAILY;COUNT=3');
             expect(text).not.toContain('Exported kitchen sink');
+        });
+
+        // Into another Home, because a UID this Home already holds is a skip: the round trip is what an
+        // export is for, and it holds when every VEVENT comes back property for property. Runs here, so
+        // the calendar it exports holds a VTIMEZONE, an exclusion and an override.
+        test('an export re-imports into another home line for line', async () => {
+            const text = await exported();
+
+            const result = await assertJson<ImportCountsResult>(
+                await importRaw(bob, 'calendar', ICS_MIME, text, {
+                    query: `?calendarId=${encodeURIComponent(bobCalendarId)}`,
+                }),
+            );
+            expect(result).toEqual({ imported: 4, skipped: 0, failed: 0 });
+
+            const res = await exportRequest(bob, bob.id, bobCalendarId);
+            expect(res.status).toBe(200);
+
+            // Keyed per series member, and blind to what an import is allowed to change: scheduling goes,
+            // and Eigen's own lines are the store's, not the file's.
+            const members = (ics: string): Record<string, Record<string, unknown[]>> => {
+                const out: Record<string, Record<string, unknown[]>> = {};
+                for (const v of parseResource(ics).getAllSubcomponents('vevent')) {
+                    const props = properties(v);
+                    for (const name of Object.keys(props)) {
+                        if (/(^|\.)(organizer|attendee)$/.test(name) || name.includes('x-eigen-')) {
+                            delete props[name];
+                        }
+                    }
+                    out[`${v.getFirstPropertyValue('uid')}|${v.getFirstPropertyValue('recurrence-id') ?? ''}`] = props;
+                }
+                return out;
+            };
+            const roundTripped = members(await res.text());
+            expect(text).toContain('BEGIN:VTIMEZONE');
+            expect(text).toContain('EXDATE');
+            // A key carries the RECURRENCE-ID, so an override is one of the members compared.
+            expect(Object.keys(roundTripped).filter((key) => !key.endsWith('|'))).toHaveLength(1);
+            expect(roundTripped).toEqual(members(text));
         });
 
         test('an unknown event id is 404 and an unknown calendar is 404', async () => {
