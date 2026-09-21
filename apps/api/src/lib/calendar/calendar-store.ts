@@ -221,17 +221,17 @@ export async function writeResource(
     uri: string,
     resource: ICAL.Component,
     existing: { id: string; size: number } | null,
+    removal = false,
 ): Promise<{ etag: string; text: string }> {
     const id = existing?.id ?? randomUUID();
     const projection = projectRows(calendarId, id, resource);
     const text = serializeResource(resource);
     const bytes = new TextEncoder().encode(text);
-    // Every write funnels through here, so this is where both ceilings hold — and they hold on the bytes
-    // that would land, after the stamps and the merge with what was stored. Raised before any write intent
-    // is recorded, so a refusal leaves nothing for a drain to chase. The stored resource's bytes are
-    // credited against the Home's budget, so a rewrite that shrinks a resource is never refused.
+    // Both ceilings hold on the bytes that would land, before any write intent is recorded, so a refusal
+    // leaves nothing for a drain to chase.
     if (bytes.byteLength > EVENT_MAX_BYTES) throw new ApiError(413, 'Event is too large');
-    if (calendar.meteredIngest) {
+    // Taking an occurrence away is how a user gets back under a full budget, so the budget never refuses it.
+    if (calendar.meteredIngest && !removal) {
         await enforceHomeDataQuota(calendar.home.user.id, bytes.byteLength, existing?.size ?? 0);
     }
     const etag = computeResourceEtag(bytes);

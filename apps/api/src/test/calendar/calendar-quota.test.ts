@@ -114,6 +114,88 @@ describe('Calendar storage quota', () => {
         });
     });
 
+    test('a full budget refuses a create but never a write that takes an occurrence away', async () => {
+        const user = await makeUser();
+        const calendarId = await defaultCalendarOf(user);
+        const eventsUrl = `/calendar/${user.id}/calendars/${calendarId}/events`;
+        const post = (body: Record<string, unknown>) =>
+            authedRequest(user.sessionToken, eventsUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+        const put = (path: string, body: Record<string, unknown>) =>
+            authedRequest(user.sessionToken, path, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+
+        await withBudget(null, async () => {
+            const series = await assertJson<CalendarEvent>(
+                await post({ ...eventBody('Weekly', 1.5 * MB), rrule: 'FREQ=WEEKLY;COUNT=6' }),
+            );
+            const exception = await assertJson<CalendarEvent>(
+                await post({
+                    ...eventBody('Moved', 0),
+                    startTime: new Date('2026-05-11T12:00:00Z'),
+                    endTime: new Date('2026-05-11T13:00:00Z'),
+                    parentEventId: series.id,
+                    recurrenceDate: '2026-05-11',
+                }),
+            );
+            await sendToHome(user.id, {
+                type: 'calendar:invitation',
+                payload: {
+                    uid: 'remove-quota@test',
+                    title: 'Invited weekly',
+                    description: null,
+                    location: null,
+                    startTime: new Date('2026-05-04T16:00:00Z'),
+                    endTime: new Date('2026-05-04T17:00:00Z'),
+                    allDay: false,
+                    rrule: 'FREQ=WEEKLY;COUNT=4',
+                    timezone: null,
+                    status: 'confirmed',
+                    sequence: 0,
+                    data: {
+                        organizer: { userId: ctx.alice.user.id, email: ctx.alice.user.email, name: 'Alice' },
+                        attendees: [{ email: user.email, status: 'pending', role: 'required' }],
+                    },
+                    createByUserId: ctx.alice.user.id,
+                    organizerEventId: 'remove-quota-org-event',
+                    organizerUserId: ctx.alice.user.id,
+                },
+            });
+            const home = await getHome(user.id);
+            const linked = findOrFail(await home.calendar.getEventsByUid('remove-quota@test'), (e) => !e.parentEventId);
+
+            await fillBudget(user);
+            expect((await createEvent(user, calendarId, 'Refused')).status).toBe(507);
+
+            // Deleting one occurrence of an own series: an EXDATE plus its stamp, a few bytes MORE on disk.
+            const excluded = await post({
+                ...eventBody('Weekly', 0),
+                startTime: new Date('2026-05-18T10:00:00Z'),
+                endTime: new Date('2026-05-18T11:00:00Z'),
+                parentEventId: series.id,
+                recurrenceDate: '2026-05-18',
+                status: 'cancelled',
+            });
+            expect(excluded.status).toBe(200);
+
+            expect((await put(`${eventsUrl}/${exception.id}`, { status: 'cancelled' })).status).toBe(200);
+
+            const removed = await put(`${eventsUrl}/${linked.id}/rsvp`, {
+                status: 'declined',
+                scope: 'this',
+                recurrenceDate: '2026-05-11',
+                remove: true,
+            });
+            expect(removed.status).toBe(200);
+        });
+    });
+
     test('a REST create past the resource ceiling is still a 413, not a 507', async () => {
         const user = await makeUser();
         const calendarId = await defaultCalendarOf(user);
