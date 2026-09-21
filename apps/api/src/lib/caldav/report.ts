@@ -45,6 +45,7 @@ async function resourceRow(
     resource: ResourceRow,
     wantsData: boolean,
     budget: DataBudget,
+    vanished: (href: string) => string = notFoundRow,
 ): Promise<string> {
     return resourceDataRow({
         href: eventHref(ownerId, calendarId, resource.uri),
@@ -54,6 +55,7 @@ async function resourceRow(
         dataElement: '<C:calendar-data/>',
         dataProp: calendarDataProp,
         read: () => calendar.readResource(calendarId, resource),
+        vanished,
         budget,
     });
 }
@@ -124,7 +126,9 @@ async function handleSyncCollection(
     if (!report.syncToken) {
         // Initial sync — the whole collection as 200 rows.
         for (const resource of await calendar.listResources(calendarId)) {
-            responses.push(await resourceRow(calendar, calendarId, ownerId, resource, report.wantsData, budget));
+            responses.push(
+                await resourceRow(calendar, calendarId, ownerId, resource, report.wantsData, budget, removedRow),
+            );
         }
     } else {
         const token = parseSyncToken(report.syncToken);
@@ -133,7 +137,9 @@ async function handleSyncCollection(
         if (token.gen !== collection.syncGen || token.since > collection.ctag) return invalidSyncToken();
 
         for (const resource of await calendar.getChangedResourcesSince(calendarId, token.since)) {
-            responses.push(await resourceRow(calendar, calendarId, ownerId, resource, report.wantsData, budget));
+            responses.push(
+                await resourceRow(calendar, calendarId, ownerId, resource, report.wantsData, budget, removedRow),
+            );
         }
         // One tombstone row per uri: no href may be both a 200 and a 404 in one response (RFC 6578).
         for (const removed of await calendar.getDeletedResourcesSince(calendarId, token.since)) {

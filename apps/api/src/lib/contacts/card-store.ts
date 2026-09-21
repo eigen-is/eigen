@@ -25,9 +25,10 @@ export function statCardDir(storage: LocalFilesystem): Promise<ResourceScan> {
 // Sizes Contacts for a Home nobody booted; `homeFs` is rooted at the home folder, not at the contacts root.
 export async function readContactsTotalSize(homeFs: LocalFilesystem): Promise<number> {
     const cards = `${PATHS.CONTACTS.ROOT}/${PATHS.CONTACTS.CARDS}`;
-    if (!(await homeFs.dirExists(cards))) return 0;
-    const scan = await statResourceDir(homeFs, cards, CARD_SUFFIX);
+    // The avatars are counted whether or not any card is: a photo outlives the card it was cropped for.
     let total = await homeFs.dirSize(`${PATHS.CONTACTS.ROOT}/${PATHS.CONTACTS.AVATARS}`);
+    if (!(await homeFs.dirExists(cards))) return total;
+    const scan = await statResourceDir(homeFs, cards, CARD_SUFFIX);
     for (const file of scan.files.values()) total += file.size;
     return total;
 }
