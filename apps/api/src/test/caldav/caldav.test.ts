@@ -1876,9 +1876,14 @@ describe('CalDAV', () => {
             expect(res.status).toBe(207);
             const xml = await res.text();
             // Every resource is still named; the ones past the budget carry their data as a 404 prop, so a
-            // client sees them and fetches them by multiget instead of losing them.
+            // client sees them and fetches them by multiget instead of losing them. Both halves are
+            // asserted: a budget that serves nothing, or spends nothing, would answer this query too.
             expect((xml.match(/<D:response>/g) ?? []).length).toBe(count);
-            expect(xml).toContain('<C:calendar-data/>');
+            const served = (xml.match(/<C:calendar-data>/g) ?? []).length;
+            const withheld = (xml.match(/<C:calendar-data\/>/g) ?? []).length;
+            expect(served).toBeGreaterThan(0);
+            expect(withheld).toBeGreaterThan(0);
+            expect(served + withheld).toBe(count);
             expect(xml.length).toBeLessThan(REPORT_DATA_BUDGET_BYTES);
         }, 120_000);
 
