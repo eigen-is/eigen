@@ -68,6 +68,7 @@ import {
     resourcePath,
     sanitizeCalendarId,
     sanitizeEventUri,
+    statCalendarDir,
 } from './resource-store';
 import * as schema from './schema';
 import { notifySharedCalendarUsers, propagateCalendarShare } from './share-propagation';
@@ -527,12 +528,9 @@ export class Calendar {
 
         await this.gate.run(async () => {
             const staged = `${PATHS.CALENDAR.CALENDARS}/.${id}.deleting-${randomUUID()}`;
-            const bytes = this.db
-                .select({ size: schema.resources.size })
-                .from(schema.resources)
-                .where(eq(schema.resources.calendarId, id))
-                .all()
-                .reduce((sum, row) => sum + row.size, 0);
+            // What the directory holds, not what the index indexed: the counter carries every file on disk.
+            const scan = await statCalendarDir(this.storage, id);
+            const bytes = [...scan.files.values()].reduce((sum, file) => sum + file.size, 0);
             // Staged first, committed second: the init sweep decides by the row, so a crash in between
             // rolls the directory back rather than losing every event of a delete nobody acknowledged.
             await this.storage.moveDurable(calendarDir(id), staged);

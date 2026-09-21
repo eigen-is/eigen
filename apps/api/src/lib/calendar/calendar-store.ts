@@ -66,7 +66,7 @@ export function projectRows(
     calendarId: string,
     resourceId: string,
     resource: ICAL.Component,
-): { rows: EventRowInput[]; hasUnindexedRecurrence: boolean; skipped: number } {
+): { rows: EventRowInput[]; hasUnindexedRecurrence: boolean; skipped: number; duplicateMaster: boolean } {
     const projected = projectResource(resource);
     const now = new Date();
     const claimed = new Set<string>();
@@ -76,10 +76,14 @@ export function projectRows(
         return { event, id };
     });
 
-    // A master leads its own overrides, whatever order the file lists them in.
+    // A master leads its own overrides, whatever order the file lists them in. One UID has one master, so
+    // a second one is a malformed resource the first still leads.
     const masterIdByUid = new Map<string, string>();
+    let duplicateMaster = false;
     for (const { event, id } of identified) {
-        if (event.recurrenceDate === null) masterIdByUid.set(event.uid, id);
+        if (event.recurrenceDate !== null) continue;
+        if (masterIdByUid.has(event.uid)) duplicateMaster = true;
+        else masterIdByUid.set(event.uid, id);
     }
 
     const rows = identified.map(({ event, id }) => ({
@@ -107,7 +111,12 @@ export function projectRows(
         updatedAt: event.updatedAt ?? now,
     }));
 
-    return { rows, hasUnindexedRecurrence: projected.hasUnindexedRecurrence, skipped: projected.skipped };
+    return {
+        rows,
+        hasUnindexedRecurrence: projected.hasUnindexedRecurrence,
+        skipped: projected.skipped,
+        duplicateMaster,
+    };
 }
 
 // ---- Index reads: what the protocol handlers sit on ----
@@ -357,7 +366,9 @@ export async function putResource(
         const projection = projectRows(calendarId, id, resource);
         // One resource is one series a client just wrote: a VEVENT of it Eigen cannot read makes the whole
         // payload malformed, where a previewed or imported file drops that one member and keeps going.
-        if (projection.skipped) return { ok: false, error: 'invalid', message: 'invalid iCalendar data' };
+        if (projection.skipped || projection.duplicateMaster) {
+            return { ok: false, error: 'invalid', message: 'invalid iCalendar data' };
+        }
 
         const text = serializeResource(resource);
         if (Buffer.byteLength(text) > EVENT_MAX_BYTES) return { ok: false, error: 'too-large' };

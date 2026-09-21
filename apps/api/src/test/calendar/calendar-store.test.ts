@@ -12,10 +12,11 @@ import {
     writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
-import type { Calendar } from '../../lib/calendar/calendar';
+import { Calendar } from '../../lib/calendar/calendar';
+import { calendarStorage } from '../../lib/calendar/resource-store';
 import { LocalFilesystem, PATHS } from '../../lib/core';
-import { calendarsDirOf, makeCalendar } from '../calendar-test-helpers';
-import type { TestHome } from '../home-test-helpers';
+import { CALENDAR_TEST_ROOT, calendarsDirOf, makeCalendar } from '../calendar-test-helpers';
+import { makeTestHome, type TestHome } from '../home-test-helpers';
 import { vcal } from '../ics-test-helpers';
 
 // The file store behind every calendar write: what lands on disk, what the index says about it, and what
@@ -35,6 +36,16 @@ class DyingFilesystem extends LocalFilesystem {
     override async unlinkDurable(filePath: string): Promise<void> {
         await super.unlinkDurable(filePath);
         if (this.dieAfterUnlink) throw new Error('the process died after the unlink');
+    }
+}
+
+// A home whose index transaction fails where a real one can: the Home-wide phase of the reconcile.
+class TombstoneFailingCalendar extends Calendar {
+    static failing = false;
+
+    override tombstone(...args: Parameters<Calendar['tombstone']>): void {
+        if (TombstoneFailingCalendar.failing) throw new Error('the index transaction failed');
+        super.tombstone(...args);
     }
 }
 
@@ -360,6 +371,292 @@ describe('calendar file store', () => {
             expect(result).toEqual({ ok: false, error: 'invalid' });
         }
         expect(await harness.instance.listResources(calendarId)).toHaveLength(0);
+    });
+
+    test('a new file whose commit never ran is indexed at the next open', async () => {
+        let storage!: DyingFilesystem;
+        const harness = await makeCalendar((homeDir) => {
+            storage = new DyingFilesystem(`${homeDir}/${PATHS.CALENDAR.ROOT}`);
+            return storage;
+        });
+        const calendarId = await defaultCalendarId(harness);
+
+        // A name nothing indexed yet: no journal row and no resource row, so only the stat diff can find it.
+        storage.dieAfterWrite = true;
+        await expect(
+            put(harness.instance, calendarId, 'fresh.ics', vcal(event('fresh@eigen', 'Fresh'))),
+        ).rejects.toThrow('the process died after the rename');
+
+        const restarted = await harness.reopen();
+        try {
+            const rows = await restarted.instance.getRawEvents(calendarId);
+            expect(rows.map((r) => r.title)).toEqual(['Fresh']);
+            const served = await restarted.instance.getResource(calendarId, 'fresh.ics');
+            expect(rows[0].etag).toBe(served!.etag);
+        } finally {
+            await restarted.close();
+        }
+    });
+
+    test('a staged delete whose calendar directory is back is dropped, not rolled onto it', async () => {
+        const harness = await makeCalendar();
+        const cal = await harness.instance.createCalendar({ name: 'Recreated', color: '#2563eb' });
+        await put(harness.instance, cal.id, 'live.ics', vcal(event('live@eigen', 'Live')));
+
+        // The delete staged its directory, died before removing it, and the id was created again since.
+        const staged = join(calendarsDirOf(harness.dir), `.${cal.id}.deleting-${randomUUID()}`);
+        mkdirSync(staged, { recursive: true });
+        writeFileSync(join(staged, 'stale.ics'), vcal(event('stale@eigen', 'Stale')));
+
+        const restarted = await harness.reopen();
+        try {
+            expect(readdirSync(calendarsDirOf(harness.dir)).some((name) => name.includes('.deleting-'))).toBe(false);
+            expect((await restarted.instance.getRawEvents(cal.id)).map((r) => r.title)).toEqual(['Live']);
+        } finally {
+            await restarted.close();
+        }
+    });
+
+    test('a calendar whose directory cannot be scanned is skipped, and the rest of the home opens', async () => {
+        const harness = await makeCalendar();
+        const healthy = await defaultCalendarId(harness);
+        const broken = await harness.instance.createCalendar({ name: 'Broken', color: '#2563eb', id: 'broken' });
+        await put(harness.instance, healthy, 'fine.ics', vcal(event('fine@eigen', 'Fine')));
+        await put(harness.instance, broken.id, 'blocked.ics', vcal(event('blocked@eigen', 'Blocked')));
+        const brokenCtag = (await harness.instance.getCollection(broken.id))!.ctag;
+
+        // A plain file where the directory belongs: every phase-1 call on it throws.
+        rmSync(join(calendarsDirOf(harness.dir), broken.id), { recursive: true, force: true });
+        writeFileSync(join(calendarsDirOf(harness.dir), broken.id), 'not a directory');
+
+        const restarted = await harness.reopen();
+        try {
+            expect((await restarted.instance.getRawEvents(healthy)).map((r) => r.title)).toEqual(['Fine']);
+            // Unscannable is not "every file vanished": the stale rows stay and nothing is tombstoned.
+            expect((await restarted.instance.listResources(broken.id)).map((r) => r.uri)).toEqual(['blocked.ics']);
+            expect(await restarted.instance.getDeletedResourcesSince(broken.id, brokenCtag)).toHaveLength(0);
+            expect(readFileSync(join(calendarsDirOf(harness.dir), broken.id), 'utf8')).toBe('not a directory');
+        } finally {
+            await restarted.close();
+        }
+    });
+
+    test('an index transaction that fails leaves the index stale and still opens the home', async () => {
+        const harness = await makeTestHome(
+            (home) => new TombstoneFailingCalendar(home, calendarStorage(home.homeDir)),
+            CALENDAR_TEST_ROOT,
+        );
+        const calendarId = await defaultCalendarId(harness);
+        await put(harness.instance, calendarId, 'vanishing.ics', vcal(event('vanishing@eigen', 'Vanishing')));
+
+        // One resource gone and one new file waiting: phase 2 fails on the first, phase 3 never runs.
+        rmSync(fileOf(harness, calendarId, 'vanishing.ics'));
+        writeFileSync(fileOf(harness, calendarId, 'new.ics'), vcal(event('new@eigen', 'New')));
+
+        TombstoneFailingCalendar.failing = true;
+        const restarted = await harness.reopen();
+        TombstoneFailingCalendar.failing = false;
+        try {
+            expect((await restarted.instance.listResources(calendarId)).map((r) => r.uri)).toEqual(['vanishing.ics']);
+            expect(readFileSync(fileOf(harness, calendarId, 'new.ics'), 'utf8')).toContain('SUMMARY:New');
+        } finally {
+            await restarted.close();
+        }
+    });
+
+    test('a directory whose id another calendar already holds in another case is left alone', async () => {
+        const harness = await makeCalendar();
+        const cal = await harness.instance.createCalendar({ name: 'Work', color: '#2563eb', id: 'Work' });
+        await put(harness.instance, cal.id, 'shift.ics', vcal(event('shift@eigen', 'Shift')));
+        const before = (await harness.instance.getCalendars()).map((c) => c.id).sort();
+
+        // A tree carried over from a case-sensitive file system: one directory, spelled the other way.
+        renameSync(join(calendarsDirOf(harness.dir), 'Work'), join(calendarsDirOf(harness.dir), 'work'));
+
+        const restarted = await harness.reopen();
+        try {
+            expect((await restarted.instance.getCalendars()).map((c) => c.id).sort()).toEqual(before);
+            expect((await restarted.instance.getRawEvents(cal.id)).map((r) => r.title)).toEqual(['Shift']);
+        } finally {
+            await restarted.close();
+        }
+    });
+
+    test('a calendar row whose directory vanished keeps the row and tombstones what it indexed', async () => {
+        const harness = await makeCalendar();
+        const cal = await harness.instance.createCalendar({ name: 'Wiped', color: '#2563eb' });
+        await put(harness.instance, cal.id, 'wiped.ics', vcal(event('wiped@eigen', 'Wiped')));
+        const ctag = (await harness.instance.getCollection(cal.id))!.ctag;
+
+        rmSync(join(calendarsDirOf(harness.dir), cal.id), { recursive: true, force: true });
+
+        const restarted = await harness.reopen();
+        try {
+            // The calendar is what the user created; only its contents are gone.
+            expect((await restarted.instance.getCalendarById(cal.id))?.name).toBe('Wiped');
+            expect(readdirSync(join(calendarsDirOf(harness.dir), cal.id))).toEqual([]);
+            expect(await restarted.instance.listResources(cal.id)).toHaveLength(0);
+            expect((await restarted.instance.getDeletedResourcesSince(cal.id, ctag)).map((d) => d.uri)).toEqual([
+                'wiped.ics',
+            ]);
+        } finally {
+            await restarted.close();
+        }
+    });
+
+    test('a calendar directory renamed by hand comes back as its new name, and the old row stays empty', async () => {
+        const harness = await makeCalendar();
+        const cal = await harness.instance.createCalendar({ name: 'Trips', color: '#2563eb', id: 'trips' });
+        await put(harness.instance, cal.id, 'trip.ics', vcal(event('trip@eigen', 'Trip')));
+        const storedId = (await harness.instance.getRawEvents(cal.id))[0].id;
+
+        renameSync(join(calendarsDirOf(harness.dir), 'trips'), join(calendarsDirOf(harness.dir), 'journeys'));
+
+        const restarted = await harness.reopen();
+        try {
+            const rows = await restarted.instance.getRawEvents('journeys');
+            expect(rows.map((r) => r.id)).toEqual([storedId]);
+            // The row the user created is not deleted by a rename nobody told the index about.
+            expect(await restarted.instance.listResources(cal.id)).toHaveLength(0);
+            expect((await restarted.instance.getCalendarById(cal.id))?.name).toBe('Trips');
+        } finally {
+            await restarted.close();
+        }
+    });
+
+    test('a file the dedupe discards does not push a later file off its own event ids', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        const loserId = randomUUID();
+        const files: [string, string, string][] = [
+            ['a.ics', 'twin@eigen', randomUUID()],
+            // Same UID as a.ics, so the dedupe drops it — with the ids it claimed.
+            ['b.ics', 'twin@eigen', loserId],
+            ['c.ics', 'solo@eigen', loserId],
+        ];
+        for (const [uri, uid, id] of files) {
+            writeFileSync(fileOf(harness, calendarId, uri), vcal(event(uid, 'Planted', [`X-EIGEN-EVENT-ID:${id}`])));
+        }
+
+        const restarted = await harness.reopen();
+        try {
+            const rows = await restarted.instance.getRawEvents(calendarId);
+            expect(rows.find((r) => r.uid === 'solo@eigen')!.id).toBe(loserId);
+            expect(readFileSync(fileOf(harness, calendarId, 'c.ics'), 'utf8')).toContain(loserId);
+        } finally {
+            await restarted.close();
+        }
+    });
+
+    test('a resource with two masters for one UID keeps the first, and an override-only file stands alone', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+
+        // RFC 4791 § 4.1 allows a resource that holds overrides only; its override is an event of its own.
+        const result = await put(
+            harness.instance,
+            calendarId,
+            'detached.ics',
+            vcal([
+                'BEGIN:VEVENT',
+                'UID:detached@eigen',
+                'RECURRENCE-ID:20260408T100000Z',
+                'DTSTART:20260408T140000Z',
+                'DTEND:20260408T150000Z',
+                'SUMMARY:Detached',
+                'END:VEVENT',
+            ]),
+        );
+        expect(result.ok).toBe(true);
+        const detached = (await harness.instance.getRawEvents(calendarId)).find((r) => r.uid === 'detached@eigen')!;
+        expect(detached.recurrenceDate).toBe('2026-04-08');
+        expect(detached.parentEventId).toBeNull();
+
+        const first = randomUUID();
+        const second = randomUUID();
+        writeFileSync(
+            fileOf(harness, calendarId, 'twins.ics'),
+            vcal(
+                event('twins@eigen', 'First master', [`X-EIGEN-EVENT-ID:${first}`, 'RRULE:FREQ=WEEKLY;COUNT=3']),
+                event('twins@eigen', 'Second master', [`X-EIGEN-EVENT-ID:${second}`, 'RRULE:FREQ=WEEKLY;COUNT=3']),
+                [
+                    'BEGIN:VEVENT',
+                    'UID:twins@eigen',
+                    'RECURRENCE-ID:20260408T100000Z',
+                    'DTSTART:20260408T140000Z',
+                    'DTEND:20260408T150000Z',
+                    'SUMMARY:Override',
+                    'END:VEVENT',
+                ],
+            ),
+        );
+
+        const restarted = await harness.reopen();
+        try {
+            const rows = await restarted.instance.getRawEvents(calendarId);
+            expect(rows.find((r) => r.title === 'Override')!.parentEventId).toBe(first);
+            expect(
+                rows
+                    .filter((r) => r.recurrenceDate === null)
+                    .map((r) => r.id)
+                    .sort(),
+            ).toEqual([first, second].sort());
+        } finally {
+            await restarted.close();
+        }
+    });
+
+    test('the byte counter follows the files through a write, a replace, a delete and a drain', async () => {
+        let storage!: DyingFilesystem;
+        const harness = await makeCalendar((homeDir) => {
+            storage = new DyingFilesystem(`${homeDir}/${PATHS.CALENDAR.ROOT}`);
+            return storage;
+        });
+        const calendarId = await defaultCalendarId(harness);
+        const sizeOnDisk = (uri: string) => statSync(fileOf(harness, calendarId, uri)).size;
+
+        await put(harness.instance, calendarId, 'counted.ics', vcal(event('counted@eigen', 'Counted')));
+        expect(await harness.instance.size()).toBe(sizeOnDisk('counted.ics'));
+
+        await put(
+            harness.instance,
+            calendarId,
+            'counted.ics',
+            vcal(event('counted@eigen', 'Counted', ['DESCRIPTION:Much longer than it was'])),
+        );
+        expect(await harness.instance.size()).toBe(sizeOnDisk('counted.ics'));
+
+        storage.dieAfterWrite = true;
+        await expect(
+            put(harness.instance, calendarId, 'counted.ics', vcal(event('counted@eigen', 'Torn'))),
+        ).rejects.toThrow();
+        storage.dieAfterWrite = false;
+        await harness.instance.listResources(calendarId);
+        expect(await harness.instance.size()).toBe(sizeOnDisk('counted.ics'));
+
+        await harness.instance.deleteResource(calendarId, 'counted.ics', { ifMatch: null });
+        expect(await harness.instance.size()).toBe(0);
+    });
+
+    test('the byte counter holds every file on disk, a reconcile and a calendar delete included', async () => {
+        const harness = await makeCalendar();
+        const cal = await harness.instance.createCalendar({ name: 'Metered', color: '#2563eb' });
+        await put(harness.instance, cal.id, 'real.ics', vcal(event('metered@eigen', 'Metered')));
+        // A file no parse can read still occupies the disk it occupies.
+        writeFileSync(fileOf(harness, cal.id, 'junk.ics'), 'BEGIN:VCALENDAR\r\nnot really\r\n');
+        const bytes = readdirSync(join(calendarsDirOf(harness.dir), cal.id)).reduce(
+            (sum, name) => sum + statSync(fileOf(harness, cal.id, name)).size,
+            0,
+        );
+
+        const restarted = await harness.reopen();
+        try {
+            expect(await restarted.instance.size()).toBe(bytes);
+            await restarted.instance.deleteCalendar(cal.id);
+            expect(await restarted.instance.size()).toBe(0);
+        } finally {
+            await restarted.close();
+        }
     });
 
     test('two calendars cannot share one directory, whatever the case', async () => {

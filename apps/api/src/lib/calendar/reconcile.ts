@@ -42,6 +42,8 @@ type Candidate = {
     rows: EventRowInput[];
     hasUnindexedRecurrence: boolean;
     restored: boolean;
+    // The parsed file, kept until the copy rule has judged the candidate; a restore never parses one.
+    resource: ICAL.Component | null;
     rewritten?: string;
 };
 
@@ -49,19 +51,28 @@ type Candidate = {
 // hand can both be new, with neither indexed yet.
 type IdOwners = Map<string, string>;
 
+// One entry's failure is logged and left for the next open: init throwing here would take the whole Home
+// down, every domain of it, on every restart.
 async function sweepDeleting(calendar: Calendar): Promise<void> {
     for (const entry of await calendar.storage.readdir(PATHS.CALENDAR.CALENDARS, { withFileTypes: true })) {
         if (!entry.isDirectory()) continue;
         const match = DELETING_DIR.exec(entry.name);
         if (!match) continue;
+        const id = match[1];
         const staged = `${PATHS.CALENDAR.CALENDARS}/${entry.name}`;
-        // By the row, never by the directory: a delete that was never acknowledged did not happen, and
-        // sweeping first would destroy every event of a delete that crashed before its commit.
-        if (calendar.calendarRow(match[1])) {
-            await calendar.storage.moveDurable(staged, calendarDir(match[1]));
-            console.warn(`calendar: rolled back the interrupted delete of calendar ${match[1]}`);
-        } else {
-            await calendar.storage.removeDir(staged);
+        try {
+            // By the row AND the directory: a delete that was never acknowledged did not happen, but a
+            // live directory under that id means this staging belongs to an older delete that did.
+            const live = await calendar.storage.dirExists(calendarDir(id));
+            if (calendar.calendarRow(id) && !live) {
+                await calendar.storage.moveDurable(staged, calendarDir(id));
+                console.warn(`calendar: rolled back the interrupted delete of calendar ${id}`);
+            } else {
+                if (live) console.warn(`calendar: dropping ${entry.name} — calendar ${id} has a directory again`);
+                await calendar.storage.removeDir(staged);
+            }
+        } catch (e) {
+            console.error(`calendar: could not sweep ${entry.name}: ${e}`);
         }
     }
 }
@@ -78,28 +89,39 @@ function recoverCalendarRows(calendar: Calendar, orphans: string[]): void {
     let recovered = 0;
     let unnamed = 0;
     for (const id of orphans) {
+        // A calendar id is unique case-insensitively, so a directory a row already holds in another case
+        // is that row's directory: a second row over it would reconcile the same files twice.
+        if (calendar.calendarIdTaken(id)) {
+            console.warn(`calendar: leaving directory ${id} alone — a calendar already holds that id`);
+            continue;
+        }
         const isUuid = UUID_NAME.test(id);
         if (isUuid) unnamed++;
         const name = isUuid ? `Recovered calendar${unnamed > 1 ? ` ${unnamed}` : ''}` : id;
-        calendar.db
-            .insert(schema.calendars)
-            .values({
-                id,
-                name,
-                color: EIGEN_ACCENT_COLORS_SHUFFLED[recovered++ % EIGEN_ACCENT_COLORS_SHUFFLED.length].value,
-                isDefault: !hasDefault,
-                ctag: 0,
-                syncGen: nextSyncGen(undefined, Date.now()),
-                shares: null,
-            })
-            .run();
-        hasDefault = true;
-        console.warn(`calendar: recovered calendar ${id} from its directory`);
+        try {
+            calendar.db
+                .insert(schema.calendars)
+                .values({
+                    id,
+                    name,
+                    color: EIGEN_ACCENT_COLORS_SHUFFLED[recovered++ % EIGEN_ACCENT_COLORS_SHUFFLED.length].value,
+                    isDefault: !hasDefault,
+                    ctag: 0,
+                    syncGen: nextSyncGen(undefined, Date.now()),
+                    shares: null,
+                })
+                .run();
+            hasDefault = true;
+            console.warn(`calendar: recovered calendar ${id} from its directory`);
+        } catch (e) {
+            console.error(`calendar: could not recover calendar ${id} from its directory: ${e}`);
+        }
     }
 }
 
 // A row id another resource of this Home already holds means this file is a copy of one: it keeps every
-// other Eigen line and gets fresh ids, so neither original loses its rows to the primary key.
+// other Eigen line and gets fresh ids, so neither original loses its rows to the primary key. It runs on
+// the candidates that survived the dedupe: a discarded one holds no ids to lose.
 function applyCopyRule(calendar: Calendar, candidate: Candidate, resource: ICAL.Component, owners: IdOwners): void {
     const ids = candidate.rows.map((row) => row.id);
     const indexed = calendar.db
@@ -130,7 +152,6 @@ async function buildCandidate(
     calendarId: string,
     file: ResourceFile,
     existing: IndexIncumbent | undefined,
-    owners: IdOwners,
 ): Promise<Candidate | null> {
     const bytes = await readResourceFile(calendar.storage, resourcePath(calendarId, file.uri));
     if (!bytes) return null;
@@ -146,6 +167,7 @@ async function buildCandidate(
             rows: [],
             hasUnindexedRecurrence: false,
             restored: true,
+            resource: null,
         };
     }
 
@@ -156,7 +178,10 @@ async function buildCandidate(
         console.warn(`calendar: skipping ${calendarId}/${file.uri} — it names no VEVENT with a UID`);
         return null;
     }
-    const candidate: Candidate = {
+    if (projection.duplicateMaster) {
+        console.warn(`calendar: ${calendarId}/${file.uri} names ${uid} twice as a master — the first one leads`);
+    }
+    return {
         calendarId,
         file,
         id,
@@ -165,21 +190,19 @@ async function buildCandidate(
         rows: projection.rows,
         hasUnindexedRecurrence: projection.hasUnindexedRecurrence,
         restored: false,
+        resource,
     };
-    applyCopyRule(calendar, candidate, resource, owners);
-    return candidate;
 }
 
 async function buildCandidates(
     calendar: Calendar,
     calendarId: string,
     entries: { file: ResourceFile; existing?: IndexIncumbent }[],
-    owners: IdOwners,
 ): Promise<Candidate[]> {
     const candidates: Candidate[] = [];
     for (const { file, existing } of entries) {
         try {
-            const candidate = await buildCandidate(calendar, calendarId, file, existing, owners);
+            const candidate = await buildCandidate(calendar, calendarId, file, existing);
             if (candidate) candidates.push(candidate);
         } catch (e) {
             // An unindexable file stays on disk, is never deleted, and still counts toward the bytes.
@@ -291,7 +314,7 @@ export async function reconcileIndex(calendar: Calendar): Promise<void> {
                 .map((r) => r.id),
         );
         const orphans = dirs.filter((dir) => !known.has(dir) && sanitizeCalendarId(dir) === dir);
-        if (orphans.length) recoverCalendarRows(calendar, orphans);
+        recoverCalendarRows(calendar, orphans);
 
         const calendarIds = calendar.db
             .select({ id: schema.calendars.id })
@@ -307,45 +330,58 @@ export async function reconcileIndex(calendar: Calendar): Promise<void> {
             vanished: IndexIncumbent[];
         }[] = [];
         for (const calendarId of calendarIds) {
-            await calendar.storage.mkdir(calendarDir(calendarId));
-            await calendar.storage.sweepAtomicTemps(calendarDir(calendarId));
-            const scan = await statCalendarDir(calendar.storage, calendarId);
-            for (const file of scan.files.values()) bytes += file.size;
+            // A calendar whose directory cannot be read is excluded from the pass entirely: counting it as
+            // "every file vanished" would tombstone a collection over a transient IO error.
+            try {
+                await calendar.storage.mkdir(calendarDir(calendarId));
+                await calendar.storage.sweepAtomicTemps(calendarDir(calendarId));
+                const scan = await statCalendarDir(calendar.storage, calendarId);
+                for (const file of scan.files.values()) bytes += file.size;
 
-            const indexed = calendar.db
-                .select({
-                    id: schema.resources.id,
-                    uri: schema.resources.uri,
-                    uriKey: schema.resources.uriKey,
-                    uid: schema.resources.uid,
-                    etag: schema.resources.etag,
-                    mtime: schema.resources.mtime,
-                    size: schema.resources.size,
-                })
-                .from(schema.resources)
-                .where(eq(schema.resources.calendarId, calendarId))
-                .all();
-            const diff = diffFileStats(scan, new Map(indexed.map((r) => [r.uriKey, r])));
-            // Sorted, so a uid collision resolves the same way on every pass.
-            const entries = [
-                ...diff.added.map((file) => ({ file, existing: undefined })),
-                ...diff.changed.map(({ file, row }) => ({ file, existing: row })),
-            ].sort((a, b) => (a.file.uri < b.file.uri ? -1 : a.file.uri > b.file.uri ? 1 : 0));
-            passes.push({ calendarId, entries, vanished: diff.vanished });
+                const indexed = calendar.db
+                    .select({
+                        id: schema.resources.id,
+                        uri: schema.resources.uri,
+                        uriKey: schema.resources.uriKey,
+                        uid: schema.resources.uid,
+                        etag: schema.resources.etag,
+                        mtime: schema.resources.mtime,
+                        size: schema.resources.size,
+                    })
+                    .from(schema.resources)
+                    .where(eq(schema.resources.calendarId, calendarId))
+                    .all();
+                const diff = diffFileStats(scan, new Map(indexed.map((r) => [r.uriKey, r])));
+                // Sorted, so a uid collision resolves the same way on every pass.
+                const entries = [
+                    ...diff.added.map((file) => ({ file, existing: undefined })),
+                    ...diff.changed.map(({ file, row }) => ({ file, existing: row })),
+                ].sort((a, b) => (a.file.uri < b.file.uri ? -1 : a.file.uri > b.file.uri ? 1 : 0));
+                passes.push({ calendarId, entries, vanished: diff.vanished });
+            } catch (e) {
+                console.error(`calendar: could not scan calendar ${calendarId}: ${e}`);
+            }
         }
 
-        // Phase 2: every vanished resource of every calendar, in one transaction.
-        if (passes.some((pass) => pass.vanished.length > 0)) {
-            calendar.db.transaction((tx) => {
-                for (const pass of passes) {
-                    if (!pass.vanished.length) continue;
-                    const ctag = calendar.bumpCtag(tx, pass.calendarId);
-                    for (const row of pass.vanished) {
-                        tx.delete(schema.resources).where(eq(schema.resources.id, row.id)).run();
-                        calendar.tombstone(tx, pass.calendarId, row.uri, row.uriKey, ctag);
+        // Phase 2: every vanished resource of every calendar, in one transaction. A stale index beats an
+        // unopenable Home, so a failure here ends the pass and leaves the index as the last one left it.
+        try {
+            if (passes.some((pass) => pass.vanished.length > 0)) {
+                calendar.db.transaction((tx) => {
+                    for (const pass of passes) {
+                        if (!pass.vanished.length) continue;
+                        const ctag = calendar.bumpCtag(tx, pass.calendarId);
+                        for (const row of pass.vanished) {
+                            tx.delete(schema.resources).where(eq(schema.resources.id, row.id)).run();
+                            calendar.tombstone(tx, pass.calendarId, row.uri, row.uriKey, ctag);
+                        }
                     }
-                }
-            });
+                });
+            }
+        } catch (e) {
+            console.error(`calendar: could not drop the vanished resources — the index stays as it was: ${e}`);
+            calendar.eventsBytes = bytes;
+            return;
         }
 
         // Phase 3: index the changed and the new, per calendar. One calendar throwing leaves that calendar
@@ -354,7 +390,7 @@ export async function reconcileIndex(calendar: Calendar): Promise<void> {
         for (const pass of passes) {
             if (!pass.entries.length) continue;
             try {
-                const candidates = await buildCandidates(calendar, pass.calendarId, pass.entries, owners);
+                const candidates = await buildCandidates(calendar, pass.calendarId, pass.entries);
                 // Seeded with every row that REMAINS after the vanished deletes: a reindexing incumbent
                 // keeps its stored uid, so a new same-UID file must lose to it rather than trip the index.
                 const uidOwner = new Map(
@@ -366,6 +402,9 @@ export async function reconcileIndex(calendar: Calendar): Promise<void> {
                         .map((r) => [`${pass.calendarId}|${r.uid}`, r.id] as const),
                 );
                 const prepared = dedupeCandidates(candidates, uidOwner);
+                for (const candidate of prepared) {
+                    if (candidate.resource) applyCopyRule(calendar, candidate, candidate.resource, owners);
+                }
                 bytes += await rewriteCopies(calendar, prepared);
                 writeIndexed(calendar, pass.calendarId, prepared);
             } catch (e) {
