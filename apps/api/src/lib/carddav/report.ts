@@ -194,11 +194,11 @@ async function handleSyncCollection(
     return multistatusResponse(responses, `<D:sync-token>${formatSyncToken(book)}</D:sync-token>`);
 }
 
+// A row that also serves the card body quotes the etag of the bytes it read, never the index row's: the two
+// must describe one revision. Without address-data nothing is read, so the row's etag is what there is.
 async function cardRow(contacts: Contacts, ownerId: string, card: CardRow, wantsData: boolean): Promise<string> {
-    const props = [...cardEtagProp(card.etag)];
-    if (wantsData) {
-        const got = await contacts.getCard(card.uri);
-        if (got) props.push(addressDataProp(new TextDecoder().decode(got.bytes)));
-    }
+    const got = wantsData ? await contacts.getCard(card.uri) : null;
+    const props = [...cardEtagProp(got?.etag ?? card.etag)];
+    if (got) props.push(addressDataProp(new TextDecoder().decode(got.bytes)));
     return response(cardHref(ownerId, card.uri), [propstatOk(props)]);
 }

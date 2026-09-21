@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { CARD_MAX_BYTES } from '../../lib/contacts/card-store';
+import { CARD_MAX_BYTES, cardPath } from '../../lib/contacts/card-store';
 import { computeResourceEtag } from '../../lib/core';
 import { encodePathSegment } from '../../lib/dav/href';
 import { getHome } from '../../lib/home';
@@ -349,6 +349,22 @@ describe('CardDAV', () => {
         expect(getRes.headers.get('Content-Type')).toBe('text/vcard; charset=utf-8');
         expect(await getRes.text()).toBe(body);
         expect(getRes.headers.get('ETag')).toBe(etag);
+    });
+
+    test('GET hashes the bytes it read, so a stale index row cannot mislabel a body', async () => {
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
+
+        // The file changes out of band — a restore, or the same-stat replacement only a rebuild catches — so
+        // the row's etag now describes bytes that are gone.
+        const edited = vcard(uid, ['NOTE:edited out of band']);
+        const contacts = (await getHome(userId)).contacts;
+        await contacts.storage.write(cardPath(uri), edited);
+
+        const res = await getCard(uri);
+        expect(await res.text()).toBe(edited);
+        expect(res.headers.get('ETag')).toBe(`"${computeResourceEtag(new TextEncoder().encode(edited))}"`);
     });
 
     test('GET under an unknown book segment is 404 even for an existing card', async () => {
