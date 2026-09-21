@@ -211,35 +211,38 @@ export async function reconcileIndex(contacts: Contacts): Promise<void> {
             c.existing.uri === c.row.uri &&
             c.existing.eigenId === c.row.eigenId &&
             !cacheMissing.has(c.row.uriKey);
-        const restored = prepared.filter(isRestored);
-        const changed = prepared.filter((c) => !isRestored(c));
+        const restored: CardCandidate[] = [];
+        const changed: CardCandidate[] = [];
+        for (const c of prepared) (isRestored(c) ? restored : changed).push(c);
 
         const createdLabelIds: string[] = [];
         contacts.db.transaction((tx) => {
-            // A pass that only refreshed stats is a clean pass for sync purposes: no bump, so no delta.
-            const ctag = changed.length > 0 || vanished.length > 0 ? contacts.bumpCtag(tx) : 0;
             for (const { row } of restored) {
                 tx.update(schema.contacts)
                     .set({ mtime: row.mtime, size: row.size })
                     .where(eq(schema.contacts.id, row.id))
                     .run();
             }
-            // Vanished rows go first so a card renamed within this pass (old uri gone, new uri carrying the
-            // same UID) can't collide with the row it replaces on the uid UNIQUE index.
-            for (const r of vanished) {
-                tx.delete(schema.contacts).where(eq(schema.contacts.id, r.id)).run();
-                contacts.tombstone(tx, r.uri, r.uriKey, ctag);
-            }
-            for (const { row } of changed) {
-                tx.insert(schema.contacts)
-                    .values({ ...row, cardCtag: ctag })
-                    .onConflictDoUpdate({
-                        target: schema.contacts.id,
-                        set: { ...cardUpdateSet(row, ctag), eigenId: row.eigenId },
-                    })
-                    .run();
-                // A present card is alive again, so a card re-planted at a deleted uri drops its stale removal.
-                tx.delete(schema.contactTombstones).where(eq(schema.contactTombstones.uriKey, row.uriKey)).run();
+            // A pass that only refreshed stats is a clean pass for sync purposes: no bump, so no delta.
+            if (changed.length > 0 || vanished.length > 0) {
+                const ctag = contacts.bumpCtag(tx);
+                // Vanished rows go first so a card renamed within this pass (old uri gone, new uri carrying
+                // the same UID) can't collide with the row it replaces on the uid UNIQUE index.
+                for (const r of vanished) {
+                    tx.delete(schema.contacts).where(eq(schema.contacts.id, r.id)).run();
+                    contacts.tombstone(tx, r.uri, r.uriKey, ctag);
+                }
+                for (const { row } of changed) {
+                    tx.insert(schema.contacts)
+                        .values({ ...row, cardCtag: ctag })
+                        .onConflictDoUpdate({
+                            target: schema.contacts.id,
+                            set: { ...cardUpdateSet(row, ctag), eigenId: row.eigenId },
+                        })
+                        .run();
+                    // A present card is alive again, so one re-planted at a deleted uri drops its stale removal.
+                    tx.delete(schema.contactTombstones).where(eq(schema.contactTombstones.uriKey, row.uriKey)).run();
+                }
             }
             // This pass paid whatever write intent each settled uri carried — a drifted card by re-indexing
             // it, a restored one because an etag match proves the file and the row are already a pair — so

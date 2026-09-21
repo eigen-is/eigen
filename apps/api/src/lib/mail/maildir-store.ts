@@ -272,7 +272,7 @@ export class MaildirStore implements MailStore {
             const email = this.db.getEmail(messageId);
             if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
 
-            await this.deleteMessage(email.mailbox, email.filename);
+            await this.storage.unlinkDurable(path.join(this.mailboxDir(email.mailbox), PATHS.MAIL.CUR, email.filename));
             this.db.deleteEmail(messageId);
             this.indexBytes -= email.size;
         });
@@ -731,10 +731,6 @@ export class MaildirStore implements MailStore {
     private async renameInCur(mailbox: string, oldFilename: string, newFilename: string): Promise<void> {
         const curPath = path.join(this.mailboxDir(mailbox), PATHS.MAIL.CUR);
         await this.storage.renameDurable(path.join(curPath, oldFilename), path.join(curPath, newFilename));
-    }
-
-    private async deleteMessage(mailbox: string, filename: string): Promise<void> {
-        await this.storage.unlinkDurable(path.join(this.mailboxDir(mailbox), PATHS.MAIL.CUR, filename));
     }
 
     // Either delimiter addresses one directory: `Clients/Acme` and `Clients.Acme` are both `.Clients.Acme`.
