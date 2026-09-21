@@ -183,6 +183,18 @@ describe('statResourceDir', () => {
         expect(scan.skipped.size).toBe(0);
     });
 
+    // The stats go out in flight together, and a caller tie-breaks a key collision on this order.
+    test('more files than the scan keeps in flight still come back in listing order', async () => {
+        const { store, base } = nextStore();
+        await store.mkdir(DIR);
+        const names = Array.from({ length: 40 }, (_, index) => `${String(index).padStart(2, '0')}.vcf`);
+        for (const name of names) writeFileSync(join(base, DIR, name), 'x');
+
+        const scan = await statResourceDir(store, DIR, SUFFIX);
+
+        expect([...scan.files.keys()]).toEqual(names);
+    });
+
     test('a listed resource whose stat fails is skipped, not absent', async () => {
         const { store, base } = nextStore();
         await store.mkdir(DIR);
