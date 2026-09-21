@@ -20,7 +20,7 @@ import { type SSEventMail, SSEventType } from '@workspace/lib/types/sse';
 import { processInboundImip, summarizeCalendarInvite } from '../calendar/imip';
 import { enforceHomeDataQuota } from '../config/enforcement';
 import { isDemo } from '../config/env';
-import { isInternalAddress } from '../config/server-config';
+import { getMailDomain, isInternalAddress } from '../config/server-config';
 import { ApiError, isSafePathSegment, NOT_AN_EMAIL_FILE } from '../core';
 import { renderAttachmentLinksText, renderAttachmentPills } from '../core/mail-template';
 import { type OutboundMail, sendMail } from '../core/mailer';
@@ -28,6 +28,7 @@ import type { Home } from '../home';
 import { MaxFileSizeExceededError, parseMultipartRequest } from '../multipart';
 import type { StorageFile } from '../storage';
 import { grantAccessForReferences } from './access-grants';
+import { verifyImipSender } from './imip-auth';
 import { type PartHeaders, parseMail, splitMime } from './mail-parser';
 import type { DraftMeta, DraftMetaAttachment, MailSearchOptions, MailStore } from './mail-store';
 import { createEmlContent, type EmlAttachment } from './mailfile';
@@ -128,7 +129,15 @@ export class Mail {
             const parsed = parseMail(message);
             const hasCalendar = parsed.attachments.some(isCalendarPart);
             if (hasCalendar) {
-                await processInboundImip(this.home, parsed);
+                // Delivered mail is the only mail carrying our own MTA's verdict, so the verdict the
+                // calendar acts on is computed here and nowhere else.
+                const from = parsed.from?.value?.[0]?.address?.toLowerCase() ?? null;
+                const verdict = verifyImipSender(
+                    parsed.authenticationResults,
+                    getMailDomain(),
+                    from?.split('@')[1] ?? null,
+                );
+                await processInboundImip(this.home, parsed, verdict);
             }
         } catch (error) {
             console.error('iMIP processing failed:', error);

@@ -3,14 +3,12 @@ import { escapeHtml } from '@workspace/lib/html';
 import type { Attendee, CalendarEvent, EventData, ImipMethod } from '@workspace/lib/types/calendar';
 import { type AddressObject, type Attachment, type CalendarInvite, isCalendarPart } from '@workspace/lib/types/mail';
 import { externalOwnerId } from '@workspace/lib/types/owner';
-import { getMailDomain } from '../config/server-config';
 import { EMAIL_MUTED, EMAIL_TEXT, renderEigenEmail } from '../core/mail-template';
 import type { OutboundICalEvent, OutboundMail } from '../core/mailer';
 import type { Home } from '../home';
 import { parseIcs, serializeEventForImip } from '../ical';
 import { normalizeTimezone } from '../ical/timezone';
 import { computeOccurrenceTimes } from '../ical/wall-clock';
-import { verifyImipSender } from '../mail/imip-auth';
 
 type Organizer = NonNullable<EventData['organizer']>;
 
@@ -216,9 +214,13 @@ export function summarizeCalendarInvite(attachment: Attachment): CalendarInvite 
     }
 }
 
+// `verdict` is what the delivery seam made of the message's own Authentication-Results (mail-domain.ts):
+// every mutation below binds to `From:`, which is trustworthy only where our MTA recorded an aligned
+// DKIM pass. A message nobody vouched for stays a plain attachment.
 export async function processInboundImip(
     home: Home,
-    mail: { attachments: Attachment[]; from?: AddressObject; authenticationResults?: string[] },
+    mail: { attachments: Attachment[]; from?: AddressObject },
+    verdict: { verified: boolean; reason: string },
 ): Promise<void> {
     const calAttachment = extractCalendarAttachment(mail);
     if (!calAttachment) return;
@@ -227,10 +229,7 @@ export async function processInboundImip(
     const method = parsedMethod ?? calAttachment.method;
     if (!method || events.length === 0) return;
 
-    // Every mutation binds to `From:`, which is only trustworthy once our own MTA recorded an aligned
-    // DKIM pass; otherwise fail closed and leave the invite as a plain attachment.
     const sender = mail.from?.value?.[0]?.address?.toLowerCase() ?? null;
-    const verdict = verifyImipSender(mail.authenticationResults, getMailDomain(), sender?.split('@')[1] ?? null);
     if (!sender || !verdict.verified) {
         console.info(`iMIP: not acting on ${method} from ${sender ?? 'unknown sender'} — ${verdict.reason}`);
         return;
