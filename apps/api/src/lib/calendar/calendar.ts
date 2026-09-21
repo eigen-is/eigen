@@ -13,10 +13,10 @@ import type {
     EventData,
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
-import { externalOwnerId, isExternalOwnerId, parseOwnerId } from '@workspace/lib/types/owner';
+import { externalOwnerId, isExternalOwnerId } from '@workspace/lib/types/owner';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
-import { and, count, eq, gte, isNull, lte, sql } from 'drizzle-orm';
+import { and, eq, gte, isNull, lte, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import type ICAL from 'ical.js';
 import { RRule } from 'rrule';
@@ -55,7 +55,7 @@ import { CALENDAR_DB_CONFIG } from './db-config';
 import { eventForFile, validateEventInput } from './event-input';
 import { composeRsvpReply } from './imip';
 import { propagateCancellation, propagateDecline, propagateInvitation, propagateRsvp } from './invite-propagation';
-import { dbCalendarToCalendarItem, dbEventToCalendarEvent, dbRowToSharedCalendar } from './mappers';
+import { dbCalendarToCalendarItem, dbEventToCalendarEvent } from './mappers';
 import { reconcileIndex } from './reconcile';
 import { constrainRRule, expandRecurrence } from './recurrence';
 import type { CalendarCollection } from './resource-store';
@@ -70,6 +70,7 @@ import {
 } from './resource-store';
 import * as schema from './schema';
 import { notifySharedCalendarUsers, propagateCalendarShare } from './share-propagation';
+import * as shares from './shares';
 import { buildCalendarEvent, buildEventsChangedEvent } from './sse-events';
 import { importEvents } from './transfer';
 
@@ -1103,59 +1104,21 @@ export class Calendar {
         return importEvents(this, calendarId, bytes);
     }
 
-    // --- Shared calendars ---
+    // --- Shared calendars (implementation in calendar/shares.ts) ---
 
     public async getSharedCalendars(): Promise<SharedCalendar[]> {
-        return this.db.select().from(schema.sharedCalendars).all().map(dbRowToSharedCalendar);
+        return shares.getSharedCalendars(this);
     }
 
     public async updateSharedCalendar(
         id: string,
         input: { color?: string | null; visible?: boolean },
     ): Promise<SharedCalendar> {
-        const existing = this.db.select().from(schema.sharedCalendars).where(eq(schema.sharedCalendars.id, id)).get();
-        if (!existing) throw new ApiError(404, 'Shared calendar not found');
-
-        this.db
-            .update(schema.sharedCalendars)
-            .set({
-                color: input.color !== undefined ? input.color : existing.color,
-                visible: input.visible !== undefined ? input.visible : existing.visible,
-                updatedAt: sql`unixepoch()`,
-            })
-            .where(eq(schema.sharedCalendars.id, id))
-            .run();
-
-        const updated = this.db.select().from(schema.sharedCalendars).where(eq(schema.sharedCalendars.id, id)).get()!;
-        return dbRowToSharedCalendar(updated);
+        return shares.updateSharedCalendar(this, id, input);
     }
 
     public async deleteSharedCalendar(id: string): Promise<void> {
-        this.db.delete(schema.sharedCalendars).where(eq(schema.sharedCalendars.id, id)).run();
-    }
-
-    private insertSharedCalendar(
-        ownerUserId: string,
-        calendarId: string,
-        calendarName: string,
-        permission: CalendarShare['permission'],
-    ): void {
-        const ownCalendarCount = this.db.select({ count: count() }).from(schema.calendars).get()!.count;
-        const sharedCount = this.db.select({ count: count() }).from(schema.sharedCalendars).get()!.count;
-        const localColor =
-            EIGEN_ACCENT_COLORS_SHUFFLED[(ownCalendarCount + sharedCount) % EIGEN_ACCENT_COLORS_SHUFFLED.length].value;
-        this.db
-            .insert(schema.sharedCalendars)
-            .values({
-                id: randomUUID(),
-                ownerUserId,
-                calendarId,
-                calendarName,
-                calendarColor: localColor,
-                permission,
-                visible: true,
-            })
-            .run();
+        shares.deleteSharedCalendar(this, id);
     }
 
     public async receiveShare(
@@ -1167,35 +1130,7 @@ export class Calendar {
         actorEmail?: string,
         actorName?: string,
     ): Promise<void> {
-        const existing = this.db
-            .select()
-            .from(schema.sharedCalendars)
-            .where(
-                and(
-                    eq(schema.sharedCalendars.ownerUserId, ownerUserId),
-                    eq(schema.sharedCalendars.calendarId, calendarId),
-                ),
-            )
-            .get();
-
-        if (existing) {
-            this.db
-                .update(schema.sharedCalendars)
-                .set({ calendarName, permission, updatedAt: sql`unixepoch()` })
-                .where(eq(schema.sharedCalendars.id, existing.id))
-                .run();
-        } else {
-            this.insertSharedCalendar(ownerUserId, calendarId, calendarName, permission);
-        }
-
-        this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_SHARED, ownerUserId));
-        this.home.notifications?.persist({
-            type: 'calendar-share',
-            actorEmail,
-            title: `${actorDisplayName(actorName, actorEmail)} shared a calendar`,
-            body: calendarName,
-            tag: `calendar-share:${calendarId}:${ownerUserId}`,
-        });
+        shares.receiveShare(this, ownerUserId, calendarId, calendarName, permission, actorEmail, actorName);
     }
 
     public async removeShare(
@@ -1204,27 +1139,7 @@ export class Calendar {
         actorEmail?: string,
         actorName?: string,
     ): Promise<void> {
-        const existing = this.db
-            .select()
-            .from(schema.sharedCalendars)
-            .where(
-                and(
-                    eq(schema.sharedCalendars.ownerUserId, ownerUserId),
-                    eq(schema.sharedCalendars.calendarId, calendarId),
-                ),
-            )
-            .get();
-
-        if (existing) {
-            this.db.delete(schema.sharedCalendars).where(eq(schema.sharedCalendars.id, existing.id)).run();
-            this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_UNSHARED, ownerUserId));
-            this.home.notifications?.persist({
-                type: 'calendar-unshare',
-                actorEmail,
-                title: `${actorDisplayName(actorName, actorEmail)} removed your access`,
-                body: existing.calendarName,
-            });
-        }
+        shares.removeShare(this, ownerUserId, calendarId, actorEmail, actorName);
     }
 
     public async ensureSharedEntry(
@@ -1234,48 +1149,18 @@ export class Calendar {
         _calendarColor: string,
         permission: CalendarShare['permission'],
     ): Promise<void> {
-        const existing = this.db
-            .select()
-            .from(schema.sharedCalendars)
-            .where(
-                and(
-                    eq(schema.sharedCalendars.ownerUserId, ownerUserId),
-                    eq(schema.sharedCalendars.calendarId, calendarId),
-                ),
-            )
-            .get();
-
-        if (existing) {
-            if (existing.calendarName !== calendarName || existing.permission !== permission) {
-                this.db
-                    .update(schema.sharedCalendars)
-                    .set({ calendarName, permission, updatedAt: sql`unixepoch()` })
-                    .where(eq(schema.sharedCalendars.id, existing.id))
-                    .run();
-            }
-        } else {
-            this.insertSharedCalendar(ownerUserId, calendarId, calendarName, permission);
-        }
+        shares.ensureSharedEntry(this, ownerUserId, calendarId, calendarName, permission);
     }
 
     public async removeSharedEntriesForOwner(ownerUserId: string): Promise<void> {
-        this.db.delete(schema.sharedCalendars).where(eq(schema.sharedCalendars.ownerUserId, ownerUserId)).run();
+        shares.removeSharedEntriesForOwner(this, ownerUserId);
     }
 
     public async getSharedWith(
         userEmail: string,
         teamIds: string[],
     ): Promise<{ calendarId: string; name: string; color: string; permission: CalendarShare['permission'] }[]> {
-        const results: { calendarId: string; name: string; color: string; permission: CalendarShare['permission'] }[] =
-            [];
-        for (const cal of await this.getCalendars()) {
-            if (!cal.shares) continue;
-            const permission = await this.checkPermission(cal.id, userEmail, teamIds);
-            if (permission) {
-                results.push({ calendarId: cal.id, name: cal.name, color: cal.color, permission });
-            }
-        }
-        return results;
+        return shares.getSharedWith(this, userEmail, teamIds);
     }
 
     public async checkPermission(
@@ -1283,27 +1168,7 @@ export class Calendar {
         userEmail: string,
         teamIds: string[],
     ): Promise<CalendarShare['permission'] | null> {
-        const cal = this.calendarById(calendarId);
-        if (!cal?.shares) return null;
-
-        let bestPermission: CalendarShare['permission'] | null = null;
-        const permissionRank = { 'free-busy': 0, read: 1, write: 2 };
-
-        for (const share of cal.shares) {
-            let matches = false;
-            if (share.targetId.toLowerCase() === userEmail.toLowerCase()) {
-                matches = true;
-            } else {
-                const parsedTarget = parseOwnerId(share.targetId);
-                if (parsedTarget.type === 'team' && teamIds.includes(parsedTarget.id)) matches = true;
-            }
-
-            if (matches && (!bestPermission || permissionRank[share.permission] > permissionRank[bestPermission])) {
-                bestPermission = share.permission;
-            }
-        }
-
-        return bestPermission;
+        return shares.checkPermission(this, calendarId, userEmail, teamIds);
     }
 
     // --- Invitations ---
