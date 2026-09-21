@@ -22,8 +22,7 @@ import { ErrorState } from '../layout/app/error-state';
 import { useOptionalPreview } from '../preview-provider/preview-context';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '../select';
 
-// The option that stands for "somewhere that does not exist yet". A leading colon is what keeps it out of
-// the target space: every other value is a home and a calendar id joined by one, and a home is never empty.
+// The leading colon keeps this out of the target space: every real value is a home and a calendar id joined by one.
 const NEW_CALENDAR = ':new';
 
 const targetValue = (option: CalendarOption) => `${option.ownerId}/${option.id}`;
@@ -43,9 +42,7 @@ type ImportToCalendarPickerProps = {
     onClose: () => void;
 };
 
-// The "which calendar does this go into" dialog, the one thing an .ics import needs that a contacts or
-// a mail import does not. The viewer's own calendars and the team calendars they may write in are the
-// targets: a calendar shared out of another user's home is refused by the import route.
+// The import route refuses a calendar shared out of another user's home, so only own and writable team calendars are offered.
 export function ImportToCalendarPicker({ subject, open, onClose }: ImportToCalendarPickerProps) {
     const { user } = useAuth();
     const preview = useOptionalPreview();
