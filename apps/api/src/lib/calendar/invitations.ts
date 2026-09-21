@@ -663,8 +663,8 @@ async function rsvpForOccurrence(
     email: string,
     status: Attendee['status'],
     recurrenceDate: string,
-    recurrenceInstant?: Date | null,
-    restoreCancelled = true,
+    recurrenceInstant: Date | null | undefined,
+    restoreCancelled: boolean,
 ): Promise<void> {
     const calendarId = await calendar.gate.run(async () => {
         const parent = events.eventById(calendar, eventId);
@@ -704,7 +704,7 @@ async function rsvpForOccurrence(
             timezone: parent.timezone,
             parentEventId: eventId,
             recurrenceDate: key,
-            status: existing && !restoreCancelled ? 'cancelled' : 'confirmed',
+            status: 'confirmed',
             data: { ...data, attendees },
             createByUserId: parent.createByUserId,
             uid: parent.uid,
@@ -776,7 +776,7 @@ export async function rsvp(
             await calendar.gate.run(() => removeOccurrence(calendar, eventId, recurrenceDate));
             calendar.announce(event.calendarId, SSEventType.CALENDAR_EVENT_UPDATED);
         } else {
-            await rsvpForOccurrence(calendar, eventId, user.email, input.status, recurrenceDate);
+            await rsvpForOccurrence(calendar, eventId, user.email, input.status, recurrenceDate, null, true);
         }
         if (isExternalOrganizer) {
             sendRsvpReply(status, recurrenceDate);
