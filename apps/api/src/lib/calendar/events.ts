@@ -98,10 +98,16 @@ export async function createEvent(
     input: CreateEventArgs,
     user?: User,
 ): Promise<CalendarEvent> {
-    const created = await calendar.gate.run(() => writeEvent(calendar, calendarId, input));
+    // Who holds the occurrence this write replaces: a cancelled override keeps no guest list of its own.
+    const { created, replaced } = await calendar.gate.run(async () => {
+        const replaced = input.parentEventId
+            ? exceptionOf(calendar, input.parentEventId, input.recurrenceDate ?? null)
+            : null;
+        return { created: await writeEvent(calendar, calendarId, input), replaced };
+    });
 
     calendar.announce(calendarId, SSEventType.CALENDAR_EVENT_CREATED);
-    if (user) propagateWrite(calendar, created, user, []).catch(console.error);
+    if (user) propagateWrite(calendar, created, user, replaced?.data?.attendees ?? []).catch(console.error);
     return created;
 }
 
@@ -115,18 +121,21 @@ async function propagateWrite(
     oldAttendees: Attendee[],
 ): Promise<void> {
     const series = event.parentEventId ? eventById(calendar, event.parentEventId) : null;
-    const attendees = event.data?.attendees ?? series?.data?.attendees;
-    if (!attendees?.length) return;
-    // Only the organizer fans out: a guest's own edit bumping SEQUENCE would outrun the organizer's updates.
-    if (isInvitationFromOthers(series ?? event, calendar.home.user.email)) return;
-    if (series && event.status === 'cancelled') {
-        await propagateCancellation(calendar.home, event, series);
-        return;
-    }
     // What the guests already hold: the series' list when the override states none of its own, so an
     // occurrence edit reads as an update of that occurrence and a name missing from it cancels that
     // instance for whoever was dropped.
     const held = oldAttendees.length ? oldAttendees : (series?.data?.attendees ?? []);
+    // A cancelled occurrence rides as an EXDATE and keeps no guest list, so the ones it drops are the
+    // ones who held it.
+    const attendees = event.data?.attendees ?? (series ? held : []);
+    // A write that names nobody and replaced nobody owes the guests nothing; emptying the list cancels.
+    if (!attendees.length && !held.length) return;
+    // Only the organizer fans out: a guest's own edit bumping SEQUENCE would outrun the organizer's updates.
+    if (isInvitationFromOthers(series ?? event, calendar.home.user.email)) return;
+    if (series && event.status === 'cancelled') {
+        await propagateCancellation(calendar.home, event, held, series);
+        return;
+    }
     await propagateInvitation(calendar.home, event, user, held, attendees, series ?? undefined);
 }
 
@@ -317,7 +326,7 @@ export async function deleteEvent(calendar: Calendar, calendarId: string, id: st
         }
     } else if (!invitation && existing.data?.attendees?.length) {
         // An event with no foreign organizer makes this user its organizer, and an organizer's delete cancels.
-        propagateCancellation(calendar.home, existing).catch(console.error);
+        propagateCancellation(calendar.home, existing, existing.data.attendees).catch(console.error);
     }
 
     calendar.announce(calendarId, SSEventType.CALENDAR_EVENT_DELETED);

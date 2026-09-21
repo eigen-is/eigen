@@ -171,14 +171,15 @@ export async function propagateRsvp(
     });
 }
 
-// `series` is set when only ONE of its occurrences is cancelled: the guest list and the id every message
-// names are the series', and the occurrence key says which instance the guests drop.
+// `series` is set when only ONE of its occurrences is cancelled: the id every message names is the
+// series', and the occurrence key says which instance the guests drop. `attendees` is who held the
+// event, which a cancelled occurrence — an EXDATE with no guest list — cannot state itself.
 export async function propagateCancellation(
     organizerHome: Home,
     event: CalendarEvent,
+    attendees: Attendee[],
     series?: CalendarEvent,
 ): Promise<void> {
-    const attendees = (series ?? event).data?.attendees || [];
     const occurrence = occurrenceRevision(event, series ? event.recurrenceDate : null);
     for (const attendee of attendees) {
         try {
