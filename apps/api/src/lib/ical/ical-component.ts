@@ -521,6 +521,31 @@ function patchReminders(vevent: ICAL.Component, reminders: Reminder[]): boolean 
     return true;
 }
 
+// A series-wide edit reaches the overrides that never claimed the field: one whose value equals the master's BEFORE the edit follows it, one that set its own keeps it. Times never follow. Caller runs this before the master is patched.
+function followMaster(resource: ICAL.Component, master: ICAL.Component, patch: EventPatch): boolean {
+    const fields: Array<[string, string, string]> = [];
+    for (const [name, value] of [
+        ['summary', patch.title],
+        ['description', patch.description],
+        ['location', patch.location],
+    ] as const) {
+        if (value === undefined) continue;
+        fields.push([name, String(master.getFirstPropertyValue(name) ?? ''), value ?? '']);
+    }
+    if (!fields.length) return false;
+
+    const uid = uidOf(master);
+    let changed = false;
+    for (const vevent of resource.getAllSubcomponents('vevent')) {
+        if (vevent === master || uidOf(vevent) !== uid || !vevent.getFirstProperty('recurrence-id')) continue;
+        for (const [name, before, after] of fields) {
+            if (String(vevent.getFirstPropertyValue(name) ?? '') !== before) continue;
+            changed = setOptionalText(vevent, name, after) || changed;
+        }
+    }
+    return changed;
+}
+
 // Only changed values are written: the save form carries every field, so writing all of it would rebuild rich VALARMs from a {type, minutes} pair, drop unmodelled attendee parameters and rewrite the RRULE from a lossy projection.
 export function patchEvent(
     resource: ICAL.Component,
@@ -536,7 +561,7 @@ export function patchEvent(
     const storedStart = vevent.getFirstProperty('dtstart')?.getFirstValue();
     const allDay = patch.allDay ?? (storedStart instanceof ICAL.Time && storedStart.isDate);
 
-    let changed = false;
+    let changed = recurrenceKey === null && followMaster(resource, vevent, patch);
     let scheduling = false;
 
     if (patch.title !== undefined) changed = setProperty(vevent, textProperty('summary', patch.title)) || changed;
