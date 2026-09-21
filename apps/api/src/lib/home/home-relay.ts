@@ -121,7 +121,7 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
             if (message.recurrenceDate) {
                 // Organizer-side reception of an attendee RSVP: PARTSTAT only, never resurrect an
                 // occurrence the organizer deleted (same rule as the iMIP REPLY path).
-                await home.calendar.rsvpForOccurrence(
+                await home.calendar.receiveRsvpForOccurrence(
                     message.eventId,
                     message.attendeeEmail,
                     message.status,
@@ -130,7 +130,7 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
                     false,
                 );
             } else {
-                await home.calendar.updateAttendeeStatus(message.eventId, message.attendeeEmail, message.status);
+                await home.calendar.receiveAttendeeStatus(message.eventId, message.attendeeEmail, message.status);
             }
             break;
         case 'broadcast':

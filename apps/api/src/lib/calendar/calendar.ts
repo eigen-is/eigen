@@ -715,11 +715,11 @@ export class Calendar {
         return invitations.removeInvitation(this, orgEventId, orgUserId);
     }
 
-    public async updateAttendeeStatus(eventId: string, email: string, status: Attendee['status']): Promise<void> {
+    public async receiveAttendeeStatus(eventId: string, email: string, status: Attendee['status']): Promise<void> {
         return invitations.receiveAttendeeStatus(this, eventId, email, status);
     }
 
-    public async rsvpForOccurrence(
+    public async receiveRsvpForOccurrence(
         eventId: string,
         email: string,
         status: Attendee['status'],

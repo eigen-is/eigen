@@ -721,7 +721,7 @@ describe('Calendar Invites', () => {
         });
     });
 
-    // Every write path must hash the etag over the same basis. rsvpForOccurrence used to
+    // Every write path must hash the etag over the same basis. receiveRsvpForOccurrence used to
     // omit `timezone`, so a byte-identical repeat RSVP flipped the exception's etag and triggered a
     // spurious CalDAV re-download.
     describe('#24 occurrence-RSVP etag consistency', () => {
