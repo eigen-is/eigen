@@ -1031,15 +1031,12 @@ describe('Calendar transfer routes', () => {
         );
 
         const sse = collectSSE(alice.id);
-        const started = Date.now();
         const result = await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file));
-        const elapsed = Date.now() - started;
         sse.stop();
 
         expect(result.imported).toBe(1000);
         expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENTS_CHANGED).length).toBe(1);
         expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENT_CREATED).length).toBe(0);
-        expect(elapsed).toBeLessThan(30_000);
     }, 30_000);
 
     test('CalDAV clients pick the imported events up', async () => {
