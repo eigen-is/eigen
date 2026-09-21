@@ -9,6 +9,7 @@ import {
     dedupeByUid,
     diffFileStats,
     listResourceUris,
+    nextSyncGen,
     sanitizeResourceUri,
     uriKeyOf,
     WriteGate,
@@ -105,6 +106,20 @@ describe('computeResourceEtag', () => {
         expect(computeResourceEtag(new TextEncoder().encode('x'))).toBe(
             '2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881',
         );
+    });
+});
+
+describe('nextSyncGen', () => {
+    test('a rebuild that lost the stored generation starts from the wall clock, not from 1', () => {
+        expect(nextSyncGen(undefined, 1_700_000_000_000)).toBe(1_700_000_000);
+    });
+
+    test('a stored generation ahead of the clock still advances by one', () => {
+        expect(nextSyncGen(1_700_000_005, 1_700_000_000_000)).toBe(1_700_000_006);
+    });
+
+    test('a generation the clock has overtaken jumps to the clock', () => {
+        expect(nextSyncGen(2, 1_700_000_000_000)).toBe(1_700_000_000);
     });
 });
 

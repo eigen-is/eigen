@@ -6,6 +6,7 @@ import {
     computeResourceEtag,
     dedupeByUid,
     diffFileStats,
+    nextSyncGen,
     PATHS,
     statResourceFile,
     uriKeyOf,
@@ -252,7 +253,7 @@ export async function rebuildIndex(contacts: Contacts): Promise<void> {
         );
         const book = contacts.db.select().from(schema.book).where(eq(schema.book.id, 1)).get();
         const newCtag = (book?.ctag ?? 0) + 1;
-        const newSyncGen = (book?.syncGen ?? 1) + 1;
+        const newSyncGen = nextSyncGen(book?.syncGen, Date.now());
 
         // Pair each listed uri with its pre-clear incumbent, so a surviving self row still outranks an
         // email-only twin that sorts earlier.

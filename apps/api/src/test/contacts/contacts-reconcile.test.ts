@@ -399,7 +399,7 @@ describe('self-link ranking', () => {
             .get()!;
         expect(twin.eigenId).toBe('');
         expect(readFileSync(cardPathOf(dir, '0.vcf'), 'utf8')).not.toContain('X-EIGEN-ID');
-        expect(db.select().from(contactsSchema.book).get()!.syncGen).toBe(syncGenBefore + 1);
+        expect(db.select().from(contactsSchema.book).get()!.syncGen).toBeGreaterThan(syncGenBefore);
     });
 
     test('a deleted self card lets an owner-email twin claim the slot without duplicating me', async () => {
@@ -535,7 +535,7 @@ describe('rebuildIndex', () => {
         for (const r of db.select().from(contactsSchema.contacts).all()) {
             expect(r.etag).toBe(etagsBefore.get(r.id)!);
         }
-        expect(db.select().from(contactsSchema.book).get()!.syncGen).toBe(2);
+        expect(db.select().from(contactsSchema.book).get()!.syncGen).toBeGreaterThan(1);
         expect(db.select().from(contactsSchema.contactTombstones).all().length).toBe(0);
     });
 
@@ -546,8 +546,30 @@ describe('rebuildIndex', () => {
 
         await contacts.init();
 
-        expect(db.select().from(contactsSchema.book).get()!.syncGen).toBe(2);
+        expect(db.select().from(contactsSchema.book).get()!.syncGen).toBeGreaterThan(1);
         expect((await contacts.getContactById(me.id))?.eigenId).toBe(me.eigenId);
+    });
+
+    test('a rebuild that lost the book row never reissues a generation it already handed out', async () => {
+        const { contacts, db } = await makeContacts();
+        const clockBefore = Math.floor(Date.now() / 1000);
+
+        db.delete(contactsSchema.book).run();
+        await contacts.init();
+        const first = db.select().from(contactsSchema.book).get()!.syncGen;
+
+        // Counting up from the surviving row is not enough: the row is exactly what a lost book took with it,
+        // so a generation derived from it alone repeats, and a client replays a token of the dead history.
+        expect(first).toBeGreaterThanOrEqual(clockBefore);
+
+        // A later second, the book row lost again — the same state the first rebuild started from.
+        await Bun.sleep(1100);
+        db.delete(contactsSchema.book).run();
+        await contacts.init();
+
+        const second = db.select().from(contactsSchema.book).get()!.syncGen;
+        expect(second).toBeGreaterThan(first);
+        expect(second).toBeGreaterThanOrEqual(clockBefore);
     });
 
     test('a same-length, timestamp-preserved replacement is missed by reconcile but caught by rebuild', async () => {
@@ -572,7 +594,7 @@ describe('rebuildIndex', () => {
         await contacts.rebuildIndex(); // full re-read does
         const after = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
         expect(after.etag).not.toBe(before.etag);
-        expect(db.select().from(contactsSchema.book).get()!.syncGen).toBe(syncGenBefore + 1);
+        expect(db.select().from(contactsSchema.book).get()!.syncGen).toBeGreaterThan(syncGenBefore);
     });
 });
 
