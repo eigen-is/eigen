@@ -102,6 +102,32 @@ describe('calendar file store', () => {
         expect(rows[0].etag).toBe(served!.etag);
     });
 
+    test('two concurrent attendee updates keep both answers, and the byte counter stays exact', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        const created = await harness.instance.createEvent(calendarId, {
+            title: 'Standup',
+            startTime: new Date('2026-04-01T10:00:00Z'),
+            endTime: new Date('2026-04-01T11:00:00Z'),
+            allDay: false,
+            data: {
+                attendees: [
+                    { email: 'one@test.local', status: 'pending', role: 'required' },
+                    { email: 'two@test.local', status: 'pending', role: 'required' },
+                ],
+            },
+        });
+
+        await Promise.all([
+            harness.instance.updateAttendeeStatus(created.id, 'one@test.local', 'accepted'),
+            harness.instance.updateAttendeeStatus(created.id, 'two@test.local', 'declined'),
+        ]);
+
+        const stored = (await harness.instance.getRawEvents(calendarId))[0];
+        expect(stored.data?.attendees?.map((a) => a.status).sort()).toEqual(['accepted', 'declined']);
+        expect(await harness.instance.size()).toBe(statSync(fileOf(harness, calendarId, stored.uri)).size);
+    });
+
     test('a write past the resource ceiling answers 413 and stores nothing', async () => {
         const harness = await makeCalendar();
         const calendarId = await defaultCalendarId(harness);

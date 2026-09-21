@@ -22,6 +22,7 @@ import {
     driveGet,
     drivePost,
     driveUpload,
+    eventually,
     findOrFail,
     firstMountId,
     getTestContext,
@@ -836,5 +837,34 @@ describe('Calendar transfer routes', () => {
             }),
         });
         expect(fromDrive.status).toBe(403);
+    });
+
+    test('an import into a shared calendar reaches the Home it is shared with', async () => {
+        const shareRes = await authedRequest(
+            alice.sessionToken,
+            `/calendar/${alice.id}/calendars/${secondCalendarId}`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shares: [{ targetId: bob.email, permission: 'read' }] }),
+            },
+        );
+        expect(shareRes.status).toBe(200);
+
+        const sse = collectSSE(bob.id);
+        try {
+            const file = vcal(
+                vevent(`shared-import-${randomUUID()}@other`, 'Shared', '20260401T090000Z', '20260401T100000Z'),
+            );
+            const result = await assertJson<ImportCountsResult>(await importRequest(alice, secondCalendarId, file));
+            expect(result.imported).toBe(1);
+
+            await eventually(
+                async () => (sse.events.some((e) => e.type === SSEventType.CALENDAR_EVENTS_CHANGED) ? true : undefined),
+                "the sharee's tabs to hear about the import",
+            );
+        } finally {
+            sse.stop();
+        }
     });
 });

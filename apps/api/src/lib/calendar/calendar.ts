@@ -14,7 +14,7 @@ import type {
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
 import { externalOwnerId, isExternalOwnerId } from '@workspace/lib/types/owner';
-import { SSEventType } from '@workspace/lib/types/sse';
+import { type SSEvent, SSEventType } from '@workspace/lib/types/sse';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { and, eq, gte, isNull, lte, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
@@ -217,7 +217,11 @@ export class Calendar {
     eventsBytes = 0; // internal — used by calendar/*.ts
 
     // Bulk writes in flight; while any runs, per-resource events are held and the last one out closes them.
-    private readonly batch = new BroadcastBatch(() => this.home.broadcast(buildEventsChangedEvent(this.home.user.id)));
+    private readonly batch = new BroadcastBatch(() => this.flushHeldAnnouncements());
+
+    // Which calendars the held announcements were for, so the one event the batch sends reaches everybody
+    // a per-resource one would have.
+    private readonly heldCalendars = new Set<string>();
 
     // Only the reconcile/drain machinery bumps this; the mutation paths parse for their own merges.
     private parses = 0;
@@ -487,28 +491,34 @@ export class Calendar {
     }): Promise<CalendarItem> {
         const id = input.id ?? randomUUID();
         if (sanitizeCalendarId(id) !== id) throw new ApiError(400, 'Invalid calendar name');
-        if (this.calendarIdTaken(id)) throw new ApiError(409, 'Calendar already exists');
 
-        // An id is free only because the delete that held it committed, so its leftover staging is deleted
-        // data: dropping it here is what stops a later sweep rolling it into this calendar.
-        for (const staged of await stagedDeletesOf(this, id)) await this.storage.removeDir(staged);
+        // Inside the gate, so a create and a delete of the same id serialize: the staging this create
+        // removes is the staging that delete made.
+        const created = await this.gate.run(async () => {
+            if (this.calendarIdTaken(id)) throw new ApiError(409, 'Calendar already exists');
 
-        // The directory first: an empty calendar survives a lost database only if it is on disk.
-        await this.storage.mkdir(calendarDir(id));
-        this.db
-            .insert(schema.calendars)
-            .values({
-                id,
-                name: input.name.trim(),
-                color: input.color,
-                isDefault: input.isDefault ?? false,
-                ctag: 0,
-                shares: null,
-            })
-            .run();
+            // An id is free only because the delete that held it committed, so its leftover staging is
+            // deleted data: dropping it here is what stops a later sweep rolling it into this calendar.
+            for (const staged of await stagedDeletesOf(this, id)) await this.storage.removeDir(staged);
+
+            // The directory first: an empty calendar survives a lost database only if it is on disk.
+            await this.storage.mkdir(calendarDir(id));
+            this.db
+                .insert(schema.calendars)
+                .values({
+                    id,
+                    name: input.name.trim(),
+                    color: input.color,
+                    isDefault: input.isDefault ?? false,
+                    ctag: 0,
+                    shares: null,
+                })
+                .run();
+            return this.calendarById(id)!;
+        });
 
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_CREATED, this.home.user.id));
-        return this.calendarById(id)!;
+        return created;
     }
 
     // internal — used by calendar/*.ts
@@ -825,11 +835,27 @@ export class Calendar {
     // --- Events (writes) ---
 
     private announce(calendarId: string, type: Parameters<typeof buildCalendarEvent>[0]): void {
-        if (this.batch.hold()) return;
-        const sseEvent = buildCalendarEvent(type, this.home.user.id);
+        if (this.batch.hold()) {
+            this.heldCalendars.add(calendarId);
+            return;
+        }
+        this.reachReaders([calendarId], buildCalendarEvent(type, this.home.user.id));
+    }
+
+    // The single event a bulk write sends stands for every one it held, so it goes everywhere they would.
+    private flushHeldAnnouncements(): void {
+        const held = [...this.heldCalendars];
+        this.heldCalendars.clear();
+        this.reachReaders(held, buildEventsChangedEvent(this.home.user.id));
+    }
+
+    // An announcement reaches the owner's own tabs and every Home the calendars are shared with.
+    private reachReaders(calendarIds: string[], sseEvent: SSEvent): void {
         this.home.broadcast(sseEvent);
-        const cal = this.calendarById(calendarId);
-        if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {});
+        for (const calendarId of calendarIds) {
+            const cal = this.calendarById(calendarId);
+            if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(console.error);
+        }
     }
 
     // A bulk write (a whole-file import) tells the tabs once instead of per resource.
@@ -887,9 +913,6 @@ export class Calendar {
     }
 
     public async createEvent(calendarId: string, input: CreateEventArgs, user?: User): Promise<CalendarEvent> {
-        const cal = this.calendarById(calendarId);
-        if (!cal) throw new ApiError(404, 'Calendar not found');
-
         const created = await this.gate.run(() => this.writeEvent(calendarId, input));
 
         this.announce(calendarId, SSEventType.CALENDAR_EVENT_CREATED);
@@ -903,6 +926,9 @@ export class Calendar {
     // decide WHICH file is written — the name, the UID, and an override's parent — run inside it.
     // internal — used by calendar/*.ts
     async writeEvent(calendarId: string, input: CreateEventArgs): Promise<CalendarEvent> {
+        // Inside the gate, where a delete of the calendar serializes against it: a write into a directory
+        // nobody owns any more would mkdir it back.
+        if (!this.calendarRow(calendarId)) throw new ApiError(404, 'Calendar not found');
         validateEventInput(input);
         if (input.parentEventId) return this.writeOverride(calendarId, input);
 
@@ -972,6 +998,28 @@ export class Calendar {
         input: UpdateEventArgs,
         user?: User,
     ): Promise<CalendarEvent> {
+        const { updated, oldAttendees, linked } = await this.gate.run(() =>
+            this.patchStoredEvent(calendarId, id, input, user),
+        );
+        this.announce(calendarId, SSEventType.CALENDAR_EVENT_UPDATED);
+
+        // Only the organizer fans out invitations. An attendee editing their linked copy (guarded to
+        // reminders/color below) must NOT bump SEQUENCE or send iMIP — doing so spoofs the attendee as
+        // organizer AND outruns the organizer's SEQUENCE, so the ordering rule later drops the
+        // organizer's real updates.
+        if (user && !linked && updated.data?.attendees?.length) {
+            propagateInvitation(this.home, updated, user, oldAttendees, updated.data.attendees).catch(console.error);
+        }
+        return updated;
+    }
+
+    // Caller holds the gate, so the row the patch is computed against is the row the write overwrites.
+    private async patchStoredEvent(
+        calendarId: string,
+        id: string,
+        input: UpdateEventArgs,
+        user?: User,
+    ): Promise<{ updated: CalendarEvent; oldAttendees: Attendee[]; linked: boolean }> {
         const existing = this.eventById(id);
         // 404 (not 403) on calendar mismatch so a share on one calendar can't oracle event ids in another.
         if (!existing || existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
@@ -1015,46 +1063,32 @@ export class Calendar {
         const resource = this.resourceOf(id);
         if (!resource) throw new ApiError(404, 'Event not found');
 
-        await this.gate.run(async () => {
-            const key = existing.recurrenceDate ? storedRecurrenceKey(existing.recurrenceDate) : null;
-            await this.editResource(resource, (component) => {
-                patchEvent(
-                    component,
-                    key,
-                    {
-                        title: input.title?.trim(),
-                        description: input.description,
-                        location: input.location,
-                        startTime: input.startTime,
-                        endTime: input.endTime,
-                        allDay: input.allDay,
-                        rrule: input.rrule ?? undefined,
-                        timezone: input.timezone,
-                        status: input.status,
-                        data: input.data ?? undefined,
-                    },
-                    this.writeContext(!!user && !linked),
-                );
-            });
+        const key = existing.recurrenceDate ? storedRecurrenceKey(existing.recurrenceDate) : null;
+        await this.editResource(resource, (component) => {
+            patchEvent(
+                component,
+                key,
+                {
+                    title: input.title?.trim(),
+                    description: input.description,
+                    location: input.location,
+                    startTime: input.startTime,
+                    endTime: input.endTime,
+                    allDay: input.allDay,
+                    rrule: input.rrule ?? undefined,
+                    timezone: input.timezone,
+                    status: input.status,
+                    data: input.data ?? undefined,
+                },
+                this.writeContext(!!user && !linked),
+            );
         });
 
-        const updated = this.eventById(id)!;
-        this.announce(existing.calendarId, SSEventType.CALENDAR_EVENT_UPDATED);
-
-        // Only the organizer fans out invitations. An attendee editing their linked copy (guarded to
-        // reminders/color above) must NOT bump SEQUENCE or send iMIP — doing so spoofs the attendee as
-        // organizer AND outruns the organizer's SEQUENCE, so the RFC 5546 replay guard later drops the
-        // organizer's real updates.
-        if (user && !linked && updated.data?.attendees?.length) {
-            propagateInvitation(this.home, updated, user, oldAttendees, updated.data.attendees).catch(console.error);
-        }
-        return updated;
+        return { updated: this.eventById(id)!, oldAttendees, linked };
     }
 
     public async deleteEvent(calendarId: string, id: string, user?: User): Promise<void> {
-        const existing = this.eventById(id);
-        // 404 (not 403) on calendar mismatch so a share on one calendar can't oracle event ids in another.
-        if (!existing || existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
+        const existing = await this.gate.run(() => this.eraseStoredEvent(calendarId, id));
 
         const invitation = isInvitationFromOthers(existing, this.home.user.email) ? existing.data : null;
         // Attendee deleting a linked copy = decline, and only an attendee has an RSVP to give: a file or a
@@ -1078,39 +1112,39 @@ export class Calendar {
             propagateCancellation(this.home, existing).catch(console.error);
         }
 
+        this.announce(calendarId, SSEventType.CALENDAR_EVENT_DELETED);
+    }
+
+    // Caller holds the gate. Answers with the row it removed, which is what the decline or cancellation
+    // mail is composed from.
+    private async eraseStoredEvent(calendarId: string, id: string): Promise<CalendarEvent> {
+        const existing = this.eventById(id);
+        // 404 (not 403) on calendar mismatch so a share on one calendar can't oracle event ids in another.
+        if (!existing || existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
         const resource = this.resourceOf(id);
         if (!resource) throw new ApiError(404, 'Event not found');
 
         if (existing.parentEventId) {
             // Deleting one occurrence is a write of its master's file, never a delete of the resource.
-            await this.gate.run(() =>
-                this.editResource(resource, (component) => {
-                    const key = existing.recurrenceDate ? storedRecurrenceKey(existing.recurrenceDate) : null;
-                    if (key) removeExclusion(component, key, this.writeContext(true));
-                }),
-            );
+            await this.editResource(resource, (component) => {
+                const key = existing.recurrenceDate ? storedRecurrenceKey(existing.recurrenceDate) : null;
+                if (key) removeExclusion(component, key, this.writeContext(true));
+            });
         } else {
-            await store.deleteResource(this, calendarId, resource.uri, { ifMatch: null });
+            await this.purgeResource(resource);
         }
-        this.announce(existing.calendarId, SSEventType.CALENDAR_EVENT_DELETED);
-    }
-
-    public async deleteByUri(calendarId: string, uri: string): Promise<void> {
-        const event = await this.getEventByUri(calendarId, uri);
-        if (!event) return;
-        await this.deleteEvent(calendarId, event.id);
+        return existing;
     }
 
     // Re-home a resource to another calendar of this same Home: one rename plus one transaction, so the
     // rows keep their identity and a linked invite is never declined on the organizer's behalf.
     public async moveEvent(calendarId: string, id: string, targetCalendarId: string): Promise<CalendarEvent> {
-        const existing = this.eventById(id);
-        if (!existing || existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
-        if (existing.parentEventId) throw new ApiError(400, 'Cannot move a single recurrence occurrence');
-        if (targetCalendarId === calendarId) return existing;
-        if (!this.calendarById(targetCalendarId)) throw new ApiError(404, 'Calendar not found');
-
-        await this.gate.run(async () => {
+        const moved = await this.gate.run(async () => {
+            const existing = this.eventById(id);
+            if (!existing || existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
+            if (existing.parentEventId) throw new ApiError(400, 'Cannot move a single recurrence occurrence');
+            if (targetCalendarId === calendarId) return false;
+            if (!this.calendarRow(targetCalendarId)) throw new ApiError(404, 'Calendar not found');
             const resource = this.resourceOf(id);
             if (!resource) throw new ApiError(404, 'Event not found');
             // The target holding this UID would throw on its UNIQUE index after the rename.
@@ -1153,10 +1187,13 @@ export class Calendar {
                     .where(eq(schema.events.resourceId, resource.id))
                     .run();
             });
+            return true;
         });
 
-        this.announce(calendarId, SSEventType.CALENDAR_EVENT_UPDATED);
-        this.announce(targetCalendarId, SSEventType.CALENDAR_EVENT_UPDATED);
+        if (moved) {
+            this.announce(calendarId, SSEventType.CALENDAR_EVENT_UPDATED);
+            this.announce(targetCalendarId, SSEventType.CALENDAR_EVENT_UPDATED);
+        }
         return this.eventById(id)!;
     }
 
@@ -1611,12 +1648,15 @@ export class Calendar {
     }
 
     public async removeInvitation(orgEventId: string, orgUserId: string): Promise<void> {
-        const linked = this.findLinkedEvent(orgEventId, orgUserId);
+        const linked = await this.gate.run(async () => {
+            const linked = this.findLinkedEvent(orgEventId, orgUserId);
+            const resource = linked && this.resourceOf(linked.id);
+            if (!linked || !resource) return null;
+            await this.purgeResource(resource);
+            return linked;
+        });
         if (!linked) return;
-        const resource = this.resourceOf(linked.id);
-        if (!resource) return;
 
-        await store.deleteResource(this, linked.calendarId, resource.uri, { ifMatch: null });
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_CANCELLED, orgUserId));
         const organizer = linked.data?.organizer;
         this.home.notifications?.persist({
@@ -1629,20 +1669,22 @@ export class Calendar {
     }
 
     public async updateAttendeeStatus(eventId: string, email: string, status: Attendee['status']): Promise<void> {
-        const event = this.eventById(eventId);
-        if (!event?.data?.attendees) return;
-        const resource = this.resourceOf(eventId);
-        if (!resource) return;
+        // The guest list is read inside the gate: two RSVPs for one event serialize, so neither merges its
+        // answer into a list the other already replaced.
+        await this.gate.run(async () => {
+            const event = this.eventById(eventId);
+            if (!event?.data?.attendees) return;
+            const resource = this.resourceOf(eventId);
+            if (!resource) return;
 
-        const attendees = event.data.attendees.map((a) =>
-            a.email.toLowerCase() === email.toLowerCase() ? { ...a, status } : a,
-        );
-        const key = event.recurrenceDate ? storedRecurrenceKey(event.recurrenceDate) : null;
-        await this.gate.run(() =>
-            this.editResource(resource, (component) => {
+            const attendees = event.data.attendees.map((a) =>
+                a.email.toLowerCase() === email.toLowerCase() ? { ...a, status } : a,
+            );
+            const key = event.recurrenceDate ? storedRecurrenceKey(event.recurrenceDate) : null;
+            await this.editResource(resource, (component) => {
                 patchEvent(component, key, { data: { ...event.data, attendees } }, this.writeContext(false));
-            }),
-        );
+            });
+        });
     }
 
     // `restoreCancelled` distinguishes the two sides of an occurrence RSVP: an attendee re-accepting
@@ -1657,48 +1699,52 @@ export class Calendar {
         recurrenceInstant?: Date | null,
         restoreCancelled = true,
     ): Promise<void> {
-        const parent = this.eventById(eventId);
-        if (!parent) throw new ApiError(404, 'Event not found');
+        const calendarId = await this.gate.run(async () => {
+            const parent = this.eventById(eventId);
+            if (!parent) throw new ApiError(404, 'Event not found');
 
-        const key = this.recurrenceKeyForSeries(recurrenceDate, recurrenceInstant, parent.timezone);
-        const existing = this.exceptionOf(eventId, key);
-        // An occurrence the organizer deleted is an EXDATE, which carries no attendee list: there is
-        // nowhere to record a PARTSTAT for an instance that no longer exists.
-        if (existing?.status === 'cancelled' && !restoreCancelled) return;
-        const data = existing?.data ?? parent.data ?? {};
-        // Only recorded invitees may leave a PARTSTAT — inbound iMIP routes occurrence REPLYs here, and
-        // an uninvited sender must not mutate rows. Someone can be invited to a single occurrence only.
-        const invitees = data.attendees ?? parent.data?.attendees ?? [];
-        if (!invitees.some((a) => a.email.toLowerCase() === email.toLowerCase())) return;
-        const attendees = invitees.map((a) => (a.email.toLowerCase() === email.toLowerCase() ? { ...a, status } : a));
-
-        if (existing && existing.status !== 'cancelled') {
-            const resource = this.resourceOf(existing.id);
-            if (!resource) return;
-            await this.gate.run(() =>
-                this.editResource(resource, (component) => {
-                    patchEvent(component, key, { data: { ...data, attendees } }, this.writeContext(false));
-                }),
+            const key = this.recurrenceKeyForSeries(recurrenceDate, recurrenceInstant, parent.timezone);
+            const existing = this.exceptionOf(eventId, key);
+            // An occurrence the organizer deleted is an EXDATE, which carries no attendee list: there is
+            // nowhere to record a PARTSTAT for an instance that no longer exists.
+            if (existing?.status === 'cancelled' && !restoreCancelled) return null;
+            const data = existing?.data ?? parent.data ?? {};
+            // Only recorded invitees may leave a PARTSTAT — inbound iMIP routes occurrence REPLYs here, and
+            // an uninvited sender must not mutate rows. Someone can be invited to a single occurrence only.
+            const invitees = data.attendees ?? parent.data?.attendees ?? [];
+            if (!invitees.some((a) => a.email.toLowerCase() === email.toLowerCase())) return null;
+            const attendees = invitees.map((a) =>
+                a.email.toLowerCase() === email.toLowerCase() ? { ...a, status } : a,
             );
-            return;
-        }
 
-        const { startTime, endTime } = computeOccurrenceTimes(parent, key);
-        await this.createEvent(parent.calendarId, {
-            title: existing?.title ?? parent.title,
-            description: parent.description,
-            location: parent.location,
-            startTime: existing?.startTime ?? startTime,
-            endTime: existing?.endTime ?? endTime,
-            allDay: parent.allDay,
-            timezone: parent.timezone,
-            parentEventId: eventId,
-            recurrenceDate: key,
-            status: existing && !restoreCancelled ? 'cancelled' : 'confirmed',
-            data: { ...data, attendees },
-            createByUserId: parent.createByUserId,
-            uid: parent.uid,
+            if (existing && existing.status !== 'cancelled') {
+                const resource = this.resourceOf(existing.id);
+                if (!resource) return null;
+                await this.editResource(resource, (component) => {
+                    patchEvent(component, key, { data: { ...data, attendees } }, this.writeContext(false));
+                });
+                return parent.calendarId;
+            }
+
+            const { startTime, endTime } = computeOccurrenceTimes(parent, key);
+            await this.writeEvent(parent.calendarId, {
+                title: existing?.title ?? parent.title,
+                description: parent.description,
+                location: parent.location,
+                startTime: existing?.startTime ?? startTime,
+                endTime: existing?.endTime ?? endTime,
+                allDay: parent.allDay,
+                timezone: parent.timezone,
+                parentEventId: eventId,
+                recurrenceDate: key,
+                status: existing && !restoreCancelled ? 'cancelled' : 'confirmed',
+                data: { ...data, attendees },
+                createByUserId: parent.createByUserId,
+                uid: parent.uid,
+            });
+            return parent.calendarId;
         });
+        if (calendarId) this.announce(calendarId, SSEventType.CALENDAR_EVENT_UPDATED);
     }
 
     // Caller holds the gate. `revision` is set on the iMIP CANCEL path so the exclusion records what the
@@ -1781,17 +1827,16 @@ export class Calendar {
     }
 
     private async removeThisAndFuture(eventId: string, recurrenceDate: string): Promise<void> {
-        const event = this.eventById(eventId);
-        if (!event) throw new ApiError(404, 'Event not found');
-        if (!event.rrule) throw new ApiError(400, 'Not a recurring event');
-        const truncated = truncateRRule(event.rrule, new Date(`${recurrenceDate}T00:00:00Z`));
-
-        const resource = this.resourceOf(eventId);
-        if (!resource) throw new ApiError(404, 'Event not found');
-        await this.gate.run(() =>
-            this.editResource(resource, (component) => {
+        await this.gate.run(async () => {
+            const event = this.eventById(eventId);
+            if (!event) throw new ApiError(404, 'Event not found');
+            if (!event.rrule) throw new ApiError(400, 'Not a recurring event');
+            const resource = this.resourceOf(eventId);
+            if (!resource) throw new ApiError(404, 'Event not found');
+            const truncated = truncateRRule(event.rrule, new Date(`${recurrenceDate}T00:00:00Z`));
+            await this.editResource(resource, (component) => {
                 patchEvent(component, null, { rrule: truncated }, this.writeContext(false));
-            }),
-        );
+            });
+        });
     }
 }
