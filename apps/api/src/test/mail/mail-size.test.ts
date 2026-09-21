@@ -25,7 +25,7 @@ describe('Mail usage', () => {
         const user = await createTestUser(`mailsize-${Date.now()}@test.eigen.is`, 'testpassword123', 'Mail Size');
         userId = user.id;
         token = user.sessionToken;
-        // The welcome mail is appended with skipSync, so the index only learns about it on the first
+        // The welcome mail is appended with skipReconcile, so the index only learns about it on the first
         // sync — one list on the empty DB blocks on that, leaving the deltas below to these messages.
         const home = await getHome(userId);
         await home.mail.mailboxGet('');
@@ -132,7 +132,7 @@ describe('Staged draft attachment usage', () => {
         userId = user.id;
         token = user.sessionToken;
         stagingDir = join(mailRootOf(userId), 'draft-attachments');
-        // The welcome mail is appended with skipSync; one list on the empty DB indexes it, so the
+        // The welcome mail is appended with skipReconcile; one list on the empty DB indexes it, so the
         // deltas below belong to the staged files alone.
         const home = await getHome(userId);
         await home.mail.mailboxGet('');

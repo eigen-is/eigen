@@ -43,8 +43,8 @@ This section describes `MaildirStore`, the only `MailStore` today; under a remot
 | | Lives in | Rebuilds from the files |
 |---|---|---|
 | Messages, flags, mailbox membership | the `.eml` files and their Maildir names | yes |
-| `emails` rows, `emails_fts` | `mail.db` | yes, by `syncMailbox` |
-| A fast-saved draft's subject, preview and recipients | the `draft-meta/` sidecar | yes, by `syncMailbox`: a Drafts row rebuilt from the stale `.eml` gets the sidecar projected back over it |
+| `emails` rows, `emails_fts` | `mail.db` | yes, by `reconcileMailbox` |
+| A fast-saved draft's subject, preview and recipients | the `draft-meta/` sidecar | yes, by `reconcileMailbox`: a Drafts row rebuilt from the stale `.eml` gets the sidecar projected back over it |
 | Staged draft attachments | `draft-attachments/`, swept after 24 h | not indexed, but charged to the mail quota, which re-walks that directory on every change to it ([QUOTA.md](QUOTA.md)) |
 
 The sidecar is written through `writeAtomic`, and a sidecar that cannot be read reads as absent — torn bytes, or an id no sidecar can exist under because another MDA named the file (`readDraftMeta` answers null rather than throwing, so one such file can't fail the whole Drafts reconcile). `applyDraftMeta` (`MaildirStore`) is the one projection of a sidecar onto its index row: the fast save applies it beside the sidecar write, and the Drafts sync re-applies it over each row it has just rebuilt.
@@ -57,7 +57,7 @@ The sidecar is written through `writeAtomic`, and a sidecar that cannot be read 
 
 A crash between a staged write and its rename leaves a file in a mailbox's `tmp/` that nothing else sweeps in standalone mode, so `cleanupStaleDraftTemps` sweeps those too, over every mailbox the enumeration lists, at the Maildir spec's age of 36 hours.
 
-**The file lands before the index row, always** — the files are the truth, so a crash between the two leaves the index behind the disk and the next `syncMailbox` repairs it:
+**The file lands before the index row, always** — the files are the truth, so a crash between the two leaves the index behind the disk and the next `reconcileMailbox` repairs it:
 
 | A crash right after | Leaves | The next sync |
 |---|---|---|
@@ -145,7 +145,7 @@ At a real account shape (~50k Inbox + ~50k Archive) the naive list was ~34 MB pe
 1. **Keyset pagination.** `MailDB.listMessages` uses a composite `(date, id)` cursor (`WHERE (date,id) < (?,?) ORDER BY date DESC, id DESC LIMIT`) backed by the v4 index; the route caps `textShort` at 200 chars in the response only (the full body stays in the DB for FTS). Page size 200, max 500.
 2. **Optimistic cache updates.** move/read/flag/delete patch the cached pages by id (`patchEmailInLists`) inside an `onMutate` snapshot → patch → rollback-on-error contract, instead of invalidating. The UI is instant; no mutation-path refetch.
 3. **Own-echo suppression.** The server echoes every mutation back to its originator over SSE. Each mutation records the echo it expects (`markRecentMailMutation`) in a short-TTL per-tab registry; the SSE handler `consumeRecentMailMutation`s it and skips the list refetch (keeping the cheap counts/search invalidations). Other clients' changes are unaffected (no registry entry).
-4. **Non-blocking sync + batched cold-index.** `MaildirStore.listMessages` serves the DB immediately and reconciles via a fire-and-forget `syncMailbox` (it blocks only on the first open of an empty mailbox); the cold-index loop parses in chunks of 250 and bulk-inserts each chunk in one `insertEmails` upsert transaction. See [IMAP.md § Sync Engine](IMAP.md#sync-engine) for the reconcile diff.
+4. **Non-blocking sync + batched cold-index.** `MaildirStore.listMessages` serves the DB immediately and reconciles via a fire-and-forget `reconcileMailbox` (it blocks only on the first open of an empty mailbox); the cold-index loop parses in chunks of 250 and bulk-inserts each chunk in one `insertEmails` upsert transaction. See [IMAP.md § Sync Engine](IMAP.md#sync-engine) for the reconcile diff.
 
 Deferred (Step 4, only for big imports): moving `parseEml` into a worker so a cold index of tens of thousands of messages doesn't saturate the shared event loop. A one-time bulk import still causes a stretch of slowness while the background index drains.
 

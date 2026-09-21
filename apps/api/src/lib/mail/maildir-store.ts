@@ -76,12 +76,12 @@ export class MaildirStore implements MailStore {
     readonly storage: LocalFilesystem;
     private db!: MailDB;
     private events!: MailStoreEvents;
-    private syncingMailboxes = new Map<string, Promise<void>>();
-    private lastSyncStartedAt = new Map<string, number>();
+    private reconcilingMailboxes = new Map<string, Promise<void>>();
+    private lastReconcileStartedAt = new Map<string, number>();
     // Each id this store delivered, and whether it was an arrival — read by whichever sync reaches the
     // file first, this append's own or a watcher's.
     private deliveries = new Map<string, boolean>();
-    // Reconciliation (doSyncMailbox) must not straddle a mutation's fs+db pair, or its delete phase drops just-moved rows.
+    // Reconciliation (doReconcileMailbox) must not straddle a mutation's fs+db pair, or its delete phase drops just-moved rows.
     private storeLock = new Semaphore(1);
     private watchers: FSWatcher[] = [];
     // Running byte totals so size() answers from memory — the mail+contacts quota gate calls it on every
@@ -118,7 +118,9 @@ export class MaildirStore implements MailStore {
             for (const subdir of [PATHS.MAIL.CUR, PATHS.MAIL.NEW]) {
                 try {
                     const watcher = this.storage.watch(path.join(mailboxPath, subdir), () =>
-                        this.syncMailbox(mailbox).catch((err) => console.error('maildir: mailbox sync failed', err)),
+                        this.reconcileMailbox(mailbox).catch((err) =>
+                            console.error('maildir: mailbox sync failed', err),
+                        ),
                     );
                     this.watchers.push(watcher);
                 } catch {
@@ -133,7 +135,7 @@ export class MaildirStore implements MailStore {
         this.watchers = [];
         // Let any in-flight mailbox sync (kicked fire-and-forget by a watcher or a listing) finish before
         // the domain flushes drafts and the db closes — later sync phases would hit a closed db.
-        await Promise.allSettled([...this.syncingMailboxes.values()]);
+        await Promise.allSettled([...this.reconcilingMailboxes.values()]);
     }
 
     async destruct(): Promise<void> {
@@ -164,7 +166,9 @@ export class MaildirStore implements MailStore {
         for (const name of await this.listMailboxPaths()) {
             // Counts come from the index; a folder without a watcher reconciles here, in the background.
             if (!isStandardMailbox(name) && this.reconcileDue(name)) {
-                this.syncMailbox(name).catch((err) => console.error('maildir: background mailbox sync failed', err));
+                this.reconcileMailbox(name).catch((err) =>
+                    console.error('maildir: background mailbox sync failed', err),
+                );
             }
             mailboxes.push(this.getMailboxInfo(name));
         }
@@ -193,9 +197,11 @@ export class MaildirStore implements MailStore {
         // First open (empty DB) blocks so the user sees content immediately; otherwise serve the
         // DB now and reconcile in the background — new/changed rows arrive via the sync's SSE events.
         if (this.db.getEmailsCount(mailbox) === 0) {
-            await this.syncMailbox(mailbox);
+            await this.reconcileMailbox(mailbox);
         } else {
-            this.syncMailbox(mailbox).catch((err) => console.error('maildir: background mailbox sync failed', err));
+            this.reconcileMailbox(mailbox).catch((err) =>
+                console.error('maildir: background mailbox sync failed', err),
+            );
         }
         return this.db.listMessages(mailbox, opts);
     }
@@ -234,19 +240,25 @@ export class MaildirStore implements MailStore {
         return parsed.attachments;
     }
 
-    async append(mailbox: string, message: Buffer, opts?: { skipSync?: boolean; arrival?: boolean }): Promise<string> {
+    async append(
+        mailbox: string,
+        message: Buffer,
+        opts?: { skipReconcile?: boolean; arrival?: boolean },
+    ): Promise<string> {
         const uniqueId = createUniqueMessageId();
         // Recorded before the file lands: a watcher-driven sync can reach the file before this continues,
         // and must find the flag. A delivery that never lands leaves none.
         this.deliveries.set(uniqueId, opts?.arrival ?? true);
         try {
-            // Lock covers only the delivery — the follow-up sync takes the lock itself.
-            await this.storeLock.run(() => this.deliverAtomic(message, mailbox, uniqueId));
+            // Lock covers only the delivery — the follow-up reconcile takes the lock itself.
+            await this.storeLock.run(() =>
+                this.deliver(mailbox, PATHS.MAIL.NEW, `${uniqueId},S=${message.byteLength}`, message),
+            );
         } catch (e) {
             this.deliveries.delete(uniqueId);
             throw e;
         }
-        if (!opts?.skipSync) await this.syncMailbox(mailbox);
+        if (!opts?.skipReconcile) await this.reconcileMailbox(mailbox);
         return uniqueId;
     }
 
@@ -260,7 +272,9 @@ export class MaildirStore implements MailStore {
         // Hold the lock across the fs write + db.addEmail pair so a concurrent watcher sync can't
         // ingest the draft file first and fire a spurious received(isNew) event.
         return this.storeLock.run(async () => {
-            const { filename } = await this.deliverToCur(MAILBOX_DRAFTS, raw, { draft: true, seen: true }, messageId);
+            // Straight into cur/: Eigen placed it there itself, with the flags already in the name.
+            const filename = buildMaildirFilename(messageId, { draft: true, seen: true }, bytes.byteLength);
+            await this.deliver(MAILBOX_DRAFTS, PATHS.MAIL.CUR, filename, bytes);
 
             applyFlagsFromFilename(parsed, filename);
             parsed.filename = filename;
@@ -325,28 +339,28 @@ export class MaildirStore implements MailStore {
     // -- Sync --
 
     private reconcileDue(mailbox: string): boolean {
-        const last = this.lastSyncStartedAt.get(mailbox);
+        const last = this.lastReconcileStartedAt.get(mailbox);
         return last === undefined || Date.now() - last >= BACKGROUND_RECONCILE_INTERVAL_MS;
     }
 
-    private async syncMailbox(mailbox: string): Promise<void> {
+    private async reconcileMailbox(mailbox: string): Promise<void> {
         // Don't start a sync once teardown has begun — the watcher can fire one fire-and-forget
-        // (watch()) and doSyncMailbox's later phases would query a closed db (see destruct).
+        // (watch()) and doReconcileMailbox's later phases would query a closed db (see destruct).
         if (this.home.destructing) return;
-        this.lastSyncStartedAt.set(mailbox, Date.now());
-        const running = this.syncingMailboxes.get(mailbox);
+        this.lastReconcileStartedAt.set(mailbox, Date.now());
+        const running = this.reconcilingMailboxes.get(mailbox);
         if (running) return running;
 
-        const promise = this.storeLock.run(() => this.doSyncMailbox(mailbox));
-        this.syncingMailboxes.set(mailbox, promise);
+        const promise = this.storeLock.run(() => this.doReconcileMailbox(mailbox));
+        this.reconcilingMailboxes.set(mailbox, promise);
         try {
             await promise;
         } finally {
-            this.syncingMailboxes.delete(mailbox);
+            this.reconcilingMailboxes.delete(mailbox);
         }
     }
 
-    private async doSyncMailbox(mailbox: string): Promise<void> {
+    private async doReconcileMailbox(mailbox: string): Promise<void> {
         await this.moveNewToCur(mailbox);
 
         const diskFiles = new Map<string, string>();
@@ -356,7 +370,7 @@ export class MaildirStore implements MailStore {
             }
         }
 
-        const dbRecords = this.db.listSyncRows(mailbox);
+        const dbRecords = this.db.listReconcileRows(mailbox);
         const dbById = new Map(dbRecords.map((r) => [r.id, r]));
         // A mailbox with no rows yet is indexed for the first time: what it finds was discovered, not delivered.
         const indexed = dbRecords.length > 0;
@@ -385,7 +399,10 @@ export class MaildirStore implements MailStore {
                 } catch (e: unknown) {
                     this.deliveries.delete(id);
                     if (!isEnoent(e))
-                        console.warn(`syncMailbox: failed to parse ${fileName}:`, e instanceof Error ? e.message : e);
+                        console.warn(
+                            `reconcileMailbox: failed to parse ${fileName}:`,
+                            e instanceof Error ? e.message : e,
+                        );
                 }
             }
             // Upsert, so a chunk can re-home a row that already exists: credit what it replaces.
@@ -662,38 +679,13 @@ export class MaildirStore implements MailStore {
         if (!isInbox) await this.storage.syncDir(this.basePath);
     }
 
-    private async deliverAtomic(message: Buffer, mailbox: string, uniqueId: string): Promise<void> {
-        const filename = `${uniqueId},S=${message.byteLength}`;
+    // One delivery, both destinations: staged in the mailbox's tmp/ and fsynced, then renamed into `new`
+    // (an arrival no reconcile has seen) or straight into `cur` (a message Eigen placed there itself).
+    private async deliver(mailbox: string, subdir: 'new' | 'cur', filename: string, bytes: Buffer): Promise<void> {
         const mailboxPath = this.mailboxDir(mailbox);
-
         const tmpPath = path.join(mailboxPath, PATHS.MAIL.TMP, filename);
-        await this.storage.writeDurable(tmpPath, message);
-
-        const newPath = path.join(mailboxPath, PATHS.MAIL.NEW, filename);
-        await this.storage.renameDurable(tmpPath, newPath);
-    }
-
-    private async deliverToCur(
-        mailbox: string,
-        message: string,
-        flags: Partial<Record<MailFlag, boolean>>,
-        existingId: string,
-    ): Promise<{
-        uniqueId: string;
-        size: number;
-        filename: string;
-    }> {
-        const size = Buffer.byteLength(message, 'utf-8');
-        const filename = buildMaildirFilename(existingId, flags, size);
-        const mailboxPath = this.mailboxDir(mailbox);
-
-        const tmpPath = path.join(mailboxPath, PATHS.MAIL.TMP, filename);
-        await this.storage.writeDurable(tmpPath, message);
-
-        const curPath = path.join(mailboxPath, PATHS.MAIL.CUR, filename);
-        await this.storage.renameDurable(tmpPath, curPath);
-
-        return { uniqueId: existingId, size, filename };
+        await this.storage.writeDurable(tmpPath, bytes);
+        await this.storage.renameDurable(tmpPath, path.join(mailboxPath, subdir, filename));
     }
 
     private async moveNewToCur(mailbox: string): Promise<void> {

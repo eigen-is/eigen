@@ -197,9 +197,9 @@ export default class MailDB {
             .run();
     }
 
-    // The three columns the sync diff reads. A `SELECT *` would carry every row's `textShort` — the whole
-    // body, kept for FTS — so a 100k-message mailbox paid 417 MiB to compare filenames.
-    listSyncRows(mailbox: string) {
+    // The three columns the reconcile diff reads. A `SELECT *` would carry every row's `textShort` — the
+    // whole body, kept for FTS — so a 100k-message mailbox paid 417 MiB to compare filenames.
+    listReconcileRows(mailbox: string) {
         return this.db
             .select({ id: schema.emails.id, filename: schema.emails.filename, size: schema.emails.size })
             .from(schema.emails)
