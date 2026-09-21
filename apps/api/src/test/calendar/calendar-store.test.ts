@@ -636,6 +636,27 @@ describe('calendar file store', () => {
             );
         });
 
+        test('a file no row describes still counts toward the budget once the drain skips it', async () => {
+            const harness = await makeCalendar();
+            const calendarId = await defaultCalendarId(harness);
+            await put(harness.instance, calendarId, 'first.ics', vcal(event('shared-uid@eigen', 'First')));
+            const before = await harness.instance.size();
+
+            // A crash between the rename and the commit: a file no row names, whose UID the drain cannot take.
+            writeFileSync(
+                fileOf(harness, calendarId, 'orphan.ics'),
+                readFileSync(fileOf(harness, calendarId, 'first.ics'), 'utf8'),
+            );
+            const gate = (harness.instance as unknown as { gate: { markDirty(key: string): void } }).gate;
+            gate.markDirty(`${calendarId}/orphan.ics`);
+
+            expect((await harness.instance.getRawEvents(calendarId)).map((r) => r.uid)).toEqual(['shared-uid@eigen']);
+            // The bytes stay on disk and the next reconcile counts them, so the budget counts them now.
+            expect(await harness.instance.size()).toBe(
+                before + statSync(fileOf(harness, calendarId, 'orphan.ics')).size,
+            );
+        });
+
         test("a file claiming another file's event id is skipped, and the home keeps serving", async () => {
             const harness = await makeCalendar();
             const calendarId = await defaultCalendarId(harness);

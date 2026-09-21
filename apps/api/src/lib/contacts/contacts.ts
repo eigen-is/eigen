@@ -328,6 +328,7 @@ export class Contacts {
                         .get();
                     if (uidOwner && uidOwner.id !== prep.row.id) {
                         console.warn(`contacts: skipping ${uri} — UID ${prep.row.uid} is claimed by another card`);
+                        if (!existing) this.cardsBytes += bytes.byteLength;
                         settled(uri);
                         continue;
                     }
@@ -338,6 +339,8 @@ export class Contacts {
                 } catch (e) {
                     // A throw would leave the uri dirty and rethrow on every later read of the book; the journal row stays, so init retries.
                     console.warn(`contacts: skipping unindexable card ${uri}: ${e}`);
+                    // The file stays on disk and the next reconcile counts it, so the budget counts it now.
+                    if (!existing) this.cardsBytes += bytes.byteLength;
                     settled(uri);
                     continue;
                 }
