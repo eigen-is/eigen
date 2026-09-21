@@ -5,20 +5,18 @@ import {
     ApiError,
     decodeUtf8Strict,
     ICS_IMPORT_MAX_EVENTS,
-    ICS_IMPORT_MAX_REMINDERS,
     NOT_A_CALENDAR_FILE,
     NOT_UTF8_FILE,
     type PutResourceResult,
 } from '../core';
-import { buildResource, parseIcs, serializeResource } from '../ical';
-import type { IcsParseResult, ParsedEvent } from '../ical/ical-parse';
+import { newVCalendar, serializeResource } from '../ical';
+import { calAddress, uidOf } from '../ical/ical-parse';
 import type { Calendar } from './calendar';
-import { eventForFile, validateEventInput } from './event-input';
 import { holdsUid } from './events';
-import type { CreateEventArgs } from './types';
 
 // Whole-file iCalendar transfer, one resource per series through the same PUT seam a CalDAV device sync
-// takes (docs/CALENDAR.md § Importing an .ics).
+// takes (docs/CALENDAR.md § Importing an .ics). The file is the truth, so the import moves components:
+// every line the author wrote lands as written, and scheduling is the only thing taken out of it.
 
 // A UID travels into etags and sync deltas, so an unprintable or endless one is refused rather than stored.
 const MAX_UID_LENGTH = 255;
@@ -31,28 +29,35 @@ function isImportableUid(uid: string): boolean {
     return true;
 }
 
-// An imported event as this Home's own: no organizer, no attendees, a handful of reminders.
-function importable(event: ParsedEvent): ParsedEvent {
-    const reminders = event.data?.reminders?.slice(0, ICS_IMPORT_MAX_REMINDERS);
-    return { ...event, data: reminders?.length ? { reminders } : null };
+// A `.ics` may be a stream of several VCALENDAR objects (RFC 5545 §3.4), which ICAL.parse answers with an
+// array of jCal arrays rather than one.
+function parseCalendarStream(text: string): ICAL.Component[] {
+    const parsed = ICAL.parse(text);
+    if (!Array.isArray(parsed[0])) return [new ICAL.Component(parsed)];
+    const roots: ICAL.Component[] = [];
+    for (const root of parsed) roots.push(new ICAL.Component(root));
+    return roots;
 }
 
-function importArgs(event: ParsedEvent, createByUserId: string): CreateEventArgs {
-    return {
-        title: event.title,
-        description: event.description,
-        location: event.location,
-        startTime: event.startTime,
-        endTime: event.endTime,
-        allDay: event.allDay,
-        rrule: event.rrule,
-        timezone: event.timezone,
-        status: event.status,
-        sequence: event.sequence,
-        data: event.data,
-        uid: event.uid,
-        createByUserId,
-    };
+// The TZIDs a VEVENT names, whether on its DTSTART or on any other property a client hung a zone on.
+function referencedTzids(vevent: ICAL.Component, into: Set<string>): void {
+    for (const prop of vevent.getAllProperties()) {
+        const raw = prop.getParameter('tzid');
+        const tzid = Array.isArray(raw) ? raw[0] : raw;
+        if (tzid) into.add(String(tzid));
+    }
+}
+
+// Scheduling is what an imported event loses, and nothing else: the guest list goes, and the organizer
+// stays behind as one inert address for the inbound-REQUEST rule to match a verified sender against.
+// A VALARM keeps its own ATTENDEE — that is the alarm's recipient, not a guest.
+function dropScheduling(vevent: ICAL.Component): string | null {
+    vevent.removeAllProperties('attendee');
+    const organizer = vevent.getFirstProperty('organizer');
+    if (!organizer) return null;
+    const address = calAddress(organizer.getFirstValue()).toLowerCase();
+    vevent.removeAllProperties('organizer');
+    return address.includes('@') ? address : null;
 }
 
 // One resource per series, so a crash mid-import is retryable: the series already written are skipped by UID.
@@ -73,93 +78,83 @@ export async function importEvents(
         throw new ApiError(413, 'Too many events');
     }
 
-    let parsed: IcsParseResult;
+    let roots: ICAL.Component[];
     try {
-        parsed = parseIcs(text);
+        roots = parseCalendarStream(text);
     } catch (e) {
         if (e instanceof ICAL.parse.ParserError) throw new ApiError(400, NOT_A_CALENDAR_FILE);
         throw e;
     }
 
-    // Every VEVENT is a row: one master with 37 000 RECURRENCE-IDs is the write volume of 37 000 masters.
-    if (parsed.events.length > ICS_IMPORT_MAX_EVENTS) throw new ApiError(413, 'Too many events');
-
-    // One occurrence is one exception row: a file naming the same RECURRENCE-ID twice keeps the last.
-    const masters: ParsedEvent[] = [];
-    const overridesByUid = new Map<string, Map<string, ParsedEvent>>();
-    for (const event of parsed.events) {
-        if (!event.recurrenceDate) {
-            masters.push(event);
-            continue;
+    // One series is one resource, so the whole stream is grouped by UID first — a file may spell a master
+    // in one VCALENDAR object and its overrides in the next. A VEVENT naming no UID gets a minted one.
+    const series = new Map<string, { master: ICAL.Component | null; overrides: ICAL.Component[] }>();
+    const zones = new Map<string, ICAL.Component>();
+    let vevents = 0;
+    for (const root of roots) {
+        for (const vtimezone of root.getAllSubcomponents('vtimezone')) {
+            const tzid = String(vtimezone.getFirstPropertyValue('tzid') ?? '');
+            if (tzid && !zones.has(tzid)) zones.set(tzid, vtimezone);
         }
-        const series = overridesByUid.get(event.uid);
-        if (series) series.set(event.recurrenceDate, event);
-        else overridesByUid.set(event.uid, new Map([[event.recurrenceDate, event]]));
+        for (const vevent of root.getAllSubcomponents('vevent')) {
+            vevents++;
+            if (!uidOf(vevent)) vevent.updatePropertyWithValue('uid', randomUUID());
+            const uid = uidOf(vevent);
+            const group = series.get(uid) ?? { master: null, overrides: [] };
+            series.set(uid, group);
+            if (vevent.getFirstProperty('recurrence-id')) group.overrides.push(vevent);
+            else if (group.master)
+                group.overrides.push(vevent); // two masters: the seam refuses the series
+            else group.master = vevent;
+        }
     }
 
-    // A VEVENT the parser could not read, and an override with no master to attach to, are counted as failures.
-    const masterUids = new Set(masters.map((event) => event.uid));
-    let unwritable = parsed.skipped;
-    for (const [uid, overrides] of overridesByUid) {
-        if (!masterUids.has(uid)) unwritable += overrides.size;
-    }
+    // Every VEVENT is a row: one master with 37 000 RECURRENCE-IDs is the write volume of 37 000 masters.
+    if (vevents > ICS_IMPORT_MAX_EVENTS) throw new ApiError(413, 'Too many events');
 
-    const createByUserId = calendar.home.user.id;
-    const result: ImportCountsResult = { imported: 0, skipped: 0, failed: unwritable };
+    const actor = calendar.home.user.id;
+    const result: ImportCountsResult = { imported: 0, skipped: 0, failed: 0 };
     // One list-level event for the whole file instead of one per series.
     await calendar.withBatchedEvents(async () => {
-        for (const parsedMaster of masters) {
-            const master = importable(parsedMaster);
-            if (!isImportableUid(master.uid)) {
+        for (const [uid, group] of series) {
+            // An override with no master has nothing to attach to, and the file goes on without it.
+            if (!group.master) {
+                result.failed += group.overrides.length;
+                continue;
+            }
+            if (!isImportableUid(uid)) {
                 result.failed++;
                 continue;
             }
             // A UID the Home already holds skips like a re-import, which is what makes a partial import retryable.
-            if (await holdsUid(calendar, master.uid)) {
+            if (await holdsUid(calendar, uid)) {
                 result.skipped++;
                 continue;
             }
 
-            let body: string;
-            try {
-                const now = new Date();
-                const masterId = randomUUID();
-                const args = importArgs(master, createByUserId);
-                const events = [eventForFile({ id: masterId, calendarId, uid: master.uid, input: args, now })];
-                for (const override of overridesByUid.get(master.uid)?.values() ?? []) {
-                    const overrideArgs = importArgs(importable(override), createByUserId);
-                    events.push(
-                        eventForFile({
-                            id: randomUUID(),
-                            calendarId,
-                            uid: master.uid,
-                            // The master's zone when the override names none, or it keys a different day (audit #24).
-                            input: {
-                                ...overrideArgs,
-                                rrule: null,
-                                timezone: overrideArgs.timezone ?? args.timezone,
-                                parentEventId: masterId,
-                                recurrenceDate: override.recurrenceDate,
-                            },
-                            now,
-                        }),
-                    );
-                }
-                // The series is one resource: a member the domain refuses takes the series with it.
-                for (const event of events) validateEventInput(event);
-                body = serializeResource(buildResource(events));
-            } catch {
-                result.failed++;
-                continue;
+            const importedOrganizer = dropScheduling(group.master);
+            for (const override of group.overrides) dropScheduling(override);
+
+            const tzids = new Set<string>();
+            referencedTzids(group.master, tzids);
+            for (const override of group.overrides) referencedTzids(override, tzids);
+
+            const resource = newVCalendar();
+            for (const tzid of tzids) {
+                const vtimezone = zones.get(tzid);
+                if (vtimezone) resource.addSubcomponent(vtimezone);
             }
+            resource.addSubcomponent(group.master);
+            for (const override of group.overrides) resource.addSubcomponent(override);
 
             // A fresh name every time: a UID is not a safe filename, and If-None-Match: * keeps the write a create.
             let put: PutResourceResult;
             try {
-                put = await calendar.putResource(calendarId, `${randomUUID()}.ics`, body, {
+                put = await calendar.putResource(calendarId, `${randomUUID()}.ics`, serializeResource(resource), {
                     ifMatch: null,
                     ifNoneMatch: '*',
-                    actor: createByUserId,
+                    actor,
+                    importedOrganizer,
                 });
             } catch {
                 // One series' write failing is that series' failure; a retry finishes the file.

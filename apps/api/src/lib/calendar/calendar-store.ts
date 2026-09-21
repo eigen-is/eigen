@@ -286,6 +286,15 @@ function adoptAlarms(stored: ICAL.Component, incoming: ICAL.Component): void {
     }
 }
 
+// What a write states beside its bytes: the preconditions it carries, and the stamps only the server may
+// spell — the author of a resource nobody wrote before, and the address an imported file was filed under.
+export type PutResourceOptions = {
+    ifMatch: string | null;
+    ifNoneMatch: string | null;
+    actor?: string | null;
+    importedOrganizer?: string | null;
+};
+
 // Preconditions, the UID rules, re-stamping and the linked-copy restriction are all decided here, inside
 // the gate, against the state the write overwrites.
 export async function putResource(
@@ -293,7 +302,7 @@ export async function putResource(
     calendarId: string,
     uri: string,
     body: string,
-    pre: { ifMatch: string | null; ifNoneMatch: string | null; actor?: string | null },
+    pre: PutResourceOptions,
 ): Promise<PutResourceResult> {
     if (sanitizeCalendarId(calendarId) !== calendarId) return { ok: false, error: 'invalid' };
     if (sanitizeEventUri(uri) !== uri) return { ok: false, error: 'invalid' };
@@ -358,8 +367,11 @@ export async function putResource(
             resource = stored;
         } else {
             // Nothing the body says about an Eigen line is trusted: the stamps come back from the stored
-            // resource, and only a resource nobody wrote before takes the actor as its author.
-            restampResource(incoming, stored, { createByUserId: stored ? undefined : (pre.actor ?? undefined) });
+            // resource, and only a resource nobody wrote before takes the caller's own stamps.
+            restampResource(incoming, stored, {
+                createByUserId: stored ? undefined : (pre.actor ?? undefined),
+                importedOrganizer: stored ? undefined : (pre.importedOrganizer ?? undefined),
+            });
             resource = incoming;
         }
 

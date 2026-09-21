@@ -6,12 +6,14 @@ import { type DrivePath, EML_MIME, ICS_MIME } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { eq } from 'drizzle-orm';
+import type ICAL from 'ical.js';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getMailDomain } from '../../lib/config/server-config';
 import type { OutboundMail } from '../../lib/core/mailer';
 import { ICS_IMPORT_MAX_EVENTS } from '../../lib/core/transfer';
 import { getHome } from '../../lib/home';
+import { parseResource } from '../../lib/ical';
 import { basicAuth, DAV_PASSWORD } from '../dav-test-helpers';
 import { vcal } from '../ics-test-helpers';
 import {
@@ -41,6 +43,38 @@ const vevent = (uid: string, summary: string, start: string, end: string, extra:
     'END:VEVENT',
 ];
 
+const VTZ_NY = [
+    'BEGIN:VTIMEZONE',
+    'TZID:America/New_York',
+    'BEGIN:DAYLIGHT',
+    'TZOFFSETFROM:-0500',
+    'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU',
+    'DTSTART:20070311T020000',
+    'TZNAME:EDT',
+    'TZOFFSETTO:-0400',
+    'END:DAYLIGHT',
+    'BEGIN:STANDARD',
+    'TZOFFSETFROM:-0400',
+    'RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU',
+    'DTSTART:20071104T020000',
+    'TZNAME:EST',
+    'TZOFFSETTO:-0500',
+    'END:STANDARD',
+    'END:VTIMEZONE',
+];
+
+const veventOf = (ics: string, uid: string): ICAL.Component =>
+    findOrFail(parseResource(ics).getAllSubcomponents('vevent'), (v) => v.getFirstPropertyValue('uid') === uid);
+
+// Every property in jCal form, keyed by name: ical.js reorders parameters and rewrites escapes, so only
+// name + parameters + values decide equality.
+const properties = (comp: ICAL.Component): Record<string, unknown[]> => {
+    const out: Record<string, unknown[]> = {};
+    for (const prop of comp.getAllProperties()) (out[prop.name] ??= []).push(prop.toJSON());
+    for (const sub of comp.getAllSubcomponents()) (out[`${sub.name}/`] ??= []).push(properties(sub));
+    return out;
+};
+
 // Own users, never the shared ctx home: the counts below are exact and other calendar suites write into alice.
 describe('Calendar transfer routes', () => {
     let alice: TestUser;
@@ -60,6 +94,25 @@ describe('Calendar transfer routes', () => {
         importFromDriveRequest(user, 'calendar', source, { calendarId: target });
 
     const epoch = (iso: string) => Math.floor(new Date(iso).getTime() / 1000);
+
+    // The other writer of the same file: a device PUT, which the import is measured against.
+    const putIcs = (calId: string, uri: string, body: string): Promise<Response> =>
+        app.handle(
+            new Request(`http://localhost/dav/calendars/${alice.id}/${calId}/${uri}`, {
+                method: 'PUT',
+                headers: { Authorization: basicAuth(alice.email), 'Content-Type': ICS_MIME },
+                body,
+            }),
+        );
+
+    // The stored bytes, the way a device reads them back.
+    const davGet = async (path: string): Promise<string> => {
+        const res = await app.handle(
+            new Request(`http://localhost${path}`, { headers: { Authorization: basicAuth(alice.email) } }),
+        );
+        expect(res.status).toBe(200);
+        return res.text();
+    };
 
     const eventsInRange = async (user: TestUser, from: string, to: string): Promise<CalendarEventOccurrence[]> => {
         const res = await authedRequest(
@@ -240,10 +293,11 @@ describe('Calendar transfer routes', () => {
         });
     });
 
-    test('an invitation file is stored as plain events: no organizer, no attendees, five reminders', async () => {
+    test('an invitation file is stored as plain events: no organizer, no attendees, every alarm', async () => {
         const stamp = randomUUID();
         const uid = `invite-${stamp}@external.com`;
-        const alarms = Array.from({ length: 8 }, (_, i) => [
+        const alarmCount = 8;
+        const alarms = Array.from({ length: alarmCount }, (_, i) => [
             'BEGIN:VALARM',
             'ACTION:DISPLAY',
             `TRIGGER:-PT${(i + 1) * 5}M`,
@@ -273,7 +327,8 @@ describe('Calendar transfer routes', () => {
         const stored = findOrFail(await april(), (e) => e.uid === uid);
         expect(stored.data?.organizer).toBeUndefined();
         expect(stored.data?.attendees).toBeUndefined();
-        expect(stored.data?.reminders?.length).toBe(5);
+        // Alarms are not scheduling: the write seam bounds a resource by its size, as it does a device PUT.
+        expect(stored.data?.reminders?.length).toBe(alarmCount);
 
         const mailer = await import('../../lib/core/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
@@ -305,6 +360,65 @@ describe('Calendar transfer routes', () => {
 
         expect(straySubjects(spy.mock.calls.map((c) => c[0]))).toEqual([]);
         spy.mockRestore();
+    });
+
+    // R19: the file is the truth, so an import keeps every line the client wrote and drops scheduling only.
+    // Everything here is something Eigen does not model — ATTACH, CATEGORIES, GEO, RDATE, a rich VALARM.
+    test('a kitchen-sink event imports with every line the file wrote, scheduling aside', async () => {
+        const uid = `kitchen-${randomUUID()}@client`;
+        const vevent = [
+            'BEGIN:VEVENT',
+            `UID:${uid}`,
+            'DTSTAMP:20260101T000000Z',
+            'CREATED:20251201T090000Z',
+            'LAST-MODIFIED:20251215T090000Z',
+            'SEQUENCE:2',
+            'STATUS:TENTATIVE',
+            'SUMMARY:Kitchen sink',
+            'DESCRIPTION:has a \\; semicolon and a \\, comma',
+            'DTSTART;TZID=America/New_York:20260417T120000',
+            'DTEND;TZID=America/New_York:20260417T130000',
+            'RRULE:FREQ=WEEKLY;COUNT=10',
+            'RDATE;TZID=America/New_York:20260501T120000',
+            'GEO:52.37;4.89',
+            'CATEGORIES:work,travel',
+            'ATTACH;FMTTYPE=text/plain;VALUE=URI:https://example.com/agenda.txt',
+            'X-APPLE-STRUCTURED-LOCATION;VALUE=URI;X-ADDRESS="Herengracht 1\\nAmsterdam";X-APPLE-RADIUS=49;X-TITLE=Office:geo:52.37,4.89',
+            'ORGANIZER;CN=External Org:mailto:Kitchen.Org@External.com',
+            'ATTENDEE;CUTYPE=ROOM;ROLE=OPT-PARTICIPANT;PARTSTAT=ACCEPTED;CN=Room 42:mailto:room42@x.com',
+            'BEGIN:VALARM',
+            'ACTION:AUDIO',
+            'TRIGGER;RELATED=END:-PT10M',
+            'ATTACH;FMTTYPE=audio/basic:ftp://example.com/pub/sounds/bell-01.aud',
+            'END:VALARM',
+            'END:VEVENT',
+        ];
+        const source = vcal(VTZ_NY, vevent);
+
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, source))).toEqual({
+            imported: 1,
+            skipped: 0,
+            failed: 0,
+        });
+
+        const stored = findOrFail(await april(), (e) => e.uid === uid);
+        const served = await davGet(`/dav/calendars/${alice.id}/${calendarId}/${stored.uri}`);
+        const before = properties(veventOf(vcal(VTZ_NY, vevent), uid));
+        const after = properties(veventOf(served, uid));
+
+        const scheduling = ['organizer', 'attendee'];
+        for (const name of Object.keys(before)) {
+            if (scheduling.includes(name)) continue;
+            expect({ [name]: after[name] }).toEqual({ [name]: before[name] });
+        }
+        // Only the scheduling lines and Eigen's own stamps are new or gone.
+        const added = Object.keys(after).filter((name) => !(name in before));
+        expect(added.every((name) => name.startsWith('x-eigen-'))).toBe(true);
+        expect(after['organizer']).toBeUndefined();
+        expect(after['attendee']).toBeUndefined();
+        // The organizer address travels as one inert line, lower-cased, for the inbound-REQUEST rule to match.
+        expect(served).toContain('X-EIGEN-IMPORTED-ORGANIZER:kitchen.org@external.com');
+        expect(served).toContain('BEGIN:VTIMEZONE');
     });
 
     test('a forged iMIP REPLY for an imported UID has no attendee list to move', async () => {
@@ -400,19 +514,21 @@ describe('Calendar transfer routes', () => {
         expect(listed.filter((e) => e.uid.includes(stamp)).map((e) => e.title)).toEqual(['Readable']);
     });
 
-    test('an event whose end precedes its start fails while the rest of the file imports', async () => {
+    // One seam, one rule: an import writes through the same PUT a device takes, so a file stores what that
+    // PUT stores. A backwards DTEND is legal iCalendar the REST form refuses and a device may write.
+    test('an event whose end precedes its start imports, as a CalDAV PUT of it stores it', async () => {
         const stamp = randomUUID();
-        const file = vcal(
-            vevent(`reversed-${stamp}@other`, 'Backwards', '20260410T120000Z', '20260410T100000Z'),
-            vevent(`forward-${stamp}@other`, 'Forwards', '20260410T140000Z', '20260410T150000Z'),
-        );
+        const uid = `reversed-${stamp}@other`;
+        const file = vcal(vevent(uid, 'Backwards', '20260410T120000Z', '20260410T100000Z'));
 
         expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
             imported: 1,
             skipped: 0,
-            failed: 1,
+            failed: 0,
         });
-        expect((await april()).some((e) => e.title === 'Backwards')).toBe(false);
+        expect((await april()).some((e) => e.title === 'Backwards')).toBe(true);
+
+        expect((await putIcs(secondCalendarId, `${randomUUID()}.ics`, file)).status).toBe(201);
     });
 
     test('two series with overrides in one file keep each override on its own master', async () => {
@@ -444,9 +560,9 @@ describe('Calendar transfer routes', () => {
         expect(findOrFail(seriesB, (e) => e.occurrenceDate === '2026-04-15').title).toBe('Standup B');
     });
 
-    // One occurrence is one exception row, whichever writer made it: a CalDAV PUT of a file with two
-    // VEVENTs for the same RECURRENCE-ID converges on the last one, so an import lands there in one pass.
-    test('two VEVENTs for one occurrence store one exception row, the last one', async () => {
+    // A file naming one occurrence twice is malformed, and the import keeps the members it was given: the
+    // resource is what a CalDAV PUT of the same file stores, down to the occurrence the expansion draws.
+    test('two VEVENTs for one occurrence store what a CalDAV PUT of the file stores', async () => {
         const uid = `dupe-override-${randomUUID()}@other`;
         const file = vcal(
             vevent(uid, 'Daily', '20260601T090000Z', '20260601T093000Z', ['RRULE:FREQ=DAILY;COUNT=3']),
@@ -459,17 +575,22 @@ describe('Calendar transfer routes', () => {
             skipped: 0,
             failed: 0,
         });
+        expect((await putIcs(secondCalendarId, `${randomUUID()}.ics`, file)).status).toBe(201);
 
         const home = await getHome(alice.id);
-        const rows = (await home.calendar.getRawEvents(calendarId)).filter((e) => e.uid === uid && e.recurrenceDate);
-        expect(rows.length).toBe(1);
-        expect(rows[0]?.title).toBe('Last write');
+        const rowsOf = async (calId: string) =>
+            (await home.calendar.getRawEvents(calId))
+                .filter((e) => e.uid === uid && e.recurrenceDate)
+                .map((e) => e.title)
+                .sort();
+        expect(await rowsOf(calendarId)).toEqual(await rowsOf(secondCalendarId));
 
-        const series = (await calendarRange(calendarId, '2026-06-01T00:00:00Z', '2026-06-05T23:59:59Z')).filter(
-            (e) => e.uid === uid,
-        );
-        expect(series.length).toBe(3);
-        expect(findOrFail(series, (e) => e.occurrenceDate === '2026-06-02').title).toBe('Last write');
+        const expansionOf = async (calId: string) =>
+            (await calendarRange(calId, '2026-06-01T00:00:00Z', '2026-06-05T23:59:59Z'))
+                .filter((e) => e.uid === uid)
+                .map((e) => `${e.occurrenceDate} ${e.title}`)
+                .sort();
+        expect(await expansionOf(calendarId)).toEqual(await expansionOf(secondCalendarId));
     });
 
     test('a series of overrides is one broadcast, and every occurrence matches a CalDAV PUT of the same file', async () => {
@@ -560,9 +681,7 @@ describe('Calendar transfer routes', () => {
             vevent(halfUid, 'Fine override', '20260802T110000Z', '20260802T113000Z', [
                 'RECURRENCE-ID:20260802T090000Z',
             ]),
-            vevent(halfUid, 'Backwards override', '20260803T120000Z', '20260803T100000Z', [
-                'RECURRENCE-ID:20260803T090000Z',
-            ]),
+            ['BEGIN:VEVENT', `UID:${halfUid}`, 'RECURRENCE-ID:20260803T090000Z', 'SUMMARY:No start', 'END:VEVENT'],
             vevent(wholeUid, 'Whole event', '20260801T100000Z', '20260801T103000Z'),
         );
 

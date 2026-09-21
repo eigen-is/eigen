@@ -30,7 +30,7 @@ import { parseResource } from '../ical';
 import type { Revision } from '../ical/ical-component';
 import type { ParsedEvent } from '../ical/ical-parse';
 import type { User } from '../user';
-import type { ResourceCommit, ResourceRow } from './calendar-store';
+import type { PutResourceOptions, ResourceCommit, ResourceRow } from './calendar-store';
 import * as store from './calendar-store';
 import { CALENDAR_DB_CONFIG } from './db-config';
 import * as events from './events';
@@ -465,7 +465,7 @@ export class Calendar {
         calendarId: string,
         uri: string,
         body: string,
-        pre: { ifMatch: string | null; ifNoneMatch: string | null; actor?: string | null },
+        pre: PutResourceOptions,
     ): Promise<PutResourceResult> {
         const ctagBefore = this.calendarRow(calendarId)?.ctag;
         const result = await store.putResource(this, calendarId, uri, body, pre);

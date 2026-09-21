@@ -41,6 +41,7 @@ export type TrustedStamps = {
     createByUserId?: string | null;
     organizerEventId?: string | null;
     organizerUserId?: string | null;
+    importedOrganizer?: string | null;
 };
 
 // ical.js types every jCal array as `any[]`; this is the shape RFC 5545 gives it, narrowed once here
@@ -429,7 +430,7 @@ function buildVEvent(event: CalendarEvent, options: BuildOptions = {}): ICAL.Com
     return vevent;
 }
 
-function newVCalendar(): ICAL.Component {
+export function newVCalendar(): ICAL.Component {
     const vcalendar = new ICAL.Component('vcalendar');
     vcalendar.addPropertyWithValue('version', '2.0');
     vcalendar.addPropertyWithValue('prodid', PRODID);
@@ -850,7 +851,11 @@ export function restampResource(
             trusted.organizerUserId ?? (match && readStamp(match, EIGEN.organizerUser)),
         );
         addStamp(vevent, EIGEN.color, match && readStamp(match, EIGEN.color));
-        addStamp(vevent, EIGEN.importedOrganizer, match && readStamp(match, EIGEN.importedOrganizer));
+        addStamp(
+            vevent,
+            EIGEN.importedOrganizer,
+            trusted.importedOrganizer ?? (match && readStamp(match, EIGEN.importedOrganizer)),
+        );
 
         for (const key of exdateKeys(vevent, seriesTz)) {
             const prior = storedStamps.get(`${uid}|${key}`);
