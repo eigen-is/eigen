@@ -121,6 +121,16 @@ describe('nextSyncGen', () => {
     test('a generation the clock has overtaken jumps to the clock', () => {
         expect(nextSyncGen(2, 1_700_000_000_000)).toBe(1_700_000_000);
     });
+
+    test('two rebuilds inside one second never repeat while the stored generation survives', () => {
+        const first = nextSyncGen(undefined, 1_700_000_000_000);
+        expect(nextSyncGen(first, 1_700_000_000_500)).toBe(first + 1);
+    });
+
+    test('the one repeat left takes two lost generations inside the same second', () => {
+        expect(nextSyncGen(undefined, 1_700_000_000_999)).toBe(nextSyncGen(undefined, 1_700_000_000_000));
+        expect(nextSyncGen(undefined, 1_700_000_001_000)).toBe(nextSyncGen(undefined, 1_700_000_000_000) + 1);
+    });
 });
 
 describe('resource file helpers', () => {

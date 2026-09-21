@@ -596,7 +596,7 @@ describe('rebuildIndex', () => {
         expect((await contacts.getContactById(me.id))?.eigenId).toBe(me.eigenId);
     });
 
-    test('a rebuild that lost the book row never reissues a generation it already handed out', async () => {
+    test('a rebuild that lost the book row stamps the wall clock, and the generation only ever rises', async () => {
         const { contacts, db } = await makeContacts();
         const clockBefore = Math.floor(Date.now() / 1000);
 
@@ -604,18 +604,13 @@ describe('rebuildIndex', () => {
         await contacts.init();
         const first = db.select().from(contactsSchema.book).get()!.syncGen;
 
-        // Counting up from the surviving row is not enough: the row is exactly what a lost book took with it,
+        // Counting up from the stored row is not enough: that row is exactly what a lost book took with it,
         // so a generation derived from it alone repeats, and a client replays a token of the dead history.
         expect(first).toBeGreaterThanOrEqual(clockBefore);
 
-        // A later second, the book row lost again — the same state the first rebuild started from.
-        await Bun.sleep(1100);
-        db.delete(contactsSchema.book).run();
-        await contacts.init();
-
-        const second = db.select().from(contactsSchema.book).get()!.syncGen;
-        expect(second).toBeGreaterThan(first);
-        expect(second).toBeGreaterThanOrEqual(clockBefore);
+        // With the row in hand, the next rebuild is strictly greater however close the two run together.
+        await contacts.rebuildIndex();
+        expect(db.select().from(contactsSchema.book).get()!.syncGen).toBeGreaterThan(first);
     });
 
     test('a same-length, timestamp-preserved replacement is missed by reconcile but caught by rebuild', async () => {

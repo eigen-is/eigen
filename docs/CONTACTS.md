@@ -110,7 +110,8 @@ drains both before anything is served. A drain that fails inside init is logged,
   gap-deletions become ghosts. The new generation is `nextSyncGen` (`lib/core/indexed-file-store.ts`):
   `max(stored + 1, now in seconds)`, because the stored value is exactly what a lost book row takes with it —
   counting from nothing alone would hand two rebuilds the same generation and let a client replay a token of
-  the dead history against the new one.
+  the dead history against the new one. The floor is one-second grained, so the one repeat left needs two
+  index losses inside the same second: a rebuild whose row survived is always strictly greater.
 
 There are **no fs-watchers**: unlike mail (Dovecot moves `new/` → `cur/` out of process), contacts have no
 out-of-process writer, so every in-process mutation updates file + index together under the lock, and
