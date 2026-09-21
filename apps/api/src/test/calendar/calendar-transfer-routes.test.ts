@@ -1535,6 +1535,19 @@ describe('Calendar transfer routes', () => {
             expect(res.headers.get('Content-Disposition')).toContain('.ics');
         });
 
+        // A SUMMARY is a client's text and the header names a file the client then writes.
+        test('a path in a title never reaches the filename header', async () => {
+            const uid = 'export-path@client';
+            const file = vcal(vevent(uid, '../../../etc/passwd', '20270801T090000Z', '20270801T093000Z'));
+            expect((await putIcs(exportCalendarId, 'export-path.ics', file)).status).toBe(201);
+
+            const home = await getHome(alice.id);
+            const row = findOrFail(await home.calendar.getEventsByUid(uid), (e) => e.recurrenceDate === null);
+            const res = await exportRequest(alice, alice.id, exportCalendarId, [row.id]);
+            expect(res.status).toBe(200);
+            expect(res.headers.get('Content-Disposition')).toBe('attachment; filename="_.._.._etc_passwd.ics"');
+        });
+
         test("bob cannot export alice's calendar, and a guest cannot export at all", async () => {
             expect((await exportRequest(bob, alice.id, exportCalendarId)).status).toBe(403);
             const guest = await authedRequest(guestToken, `/calendar/${guestId}/export`, {

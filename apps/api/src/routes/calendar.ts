@@ -390,8 +390,8 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             const cal = await resolveTransferCalendar(user, params.ownerId, body.calendarId, 'read');
             const text = await cal.exportEvents(body.calendarId, body.ids);
             // A one-event export is named after the event itself, a whole calendar after the calendar.
-            // contentDisposition sanitizes whatever comes back before it reaches the header; the clamp
-            // keeps one absurd title from filling it.
+            // contentDisposition takes the path and the control characters out of it; the clamp keeps one
+            // absurd title from filling the header.
             const only = body.ids?.length === 1 ? await cal.getEventById(body.ids[0]) : null;
             const name = only ? only.title : (cal.calendarRow(body.calendarId)?.name ?? '');
             set.headers['Content-Type'] = ICS_CONTENT_TYPE;
