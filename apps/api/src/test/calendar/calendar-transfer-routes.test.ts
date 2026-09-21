@@ -993,6 +993,39 @@ describe('Calendar transfer routes', () => {
         expect(res.status).toBe(404);
     });
 
+    // A calendar another user's Home holds is out of scope for both transfer routes, whatever the share
+    // says: that read and that write cross homes, which only the relay may do.
+    test("a calendar in another user's home is neither an import nor an export target", async () => {
+        for (const permission of ['free-busy', 'read', 'write'] as const) {
+            const shared = await authedRequest(bob.sessionToken, `/calendar/${bob.id}/calendars/${bobCalendarId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shares: [{ targetId: alice.email, permission }] }),
+            });
+            expect(shared.status).toBe(200);
+
+            const imported = await authedRequest(
+                alice.sessionToken,
+                `/calendar/${bob.id}/import?calendarId=${encodeURIComponent(bobCalendarId)}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': ICS_MIME },
+                    body: vcal(
+                        vevent(`cross-home-${randomUUID()}@other`, 'Not mine', '20260423T090000Z', '20260423T100000Z'),
+                    ),
+                },
+            );
+            expect(imported.status).toBe(403);
+
+            const sent = await authedRequest(alice.sessionToken, `/calendar/${bob.id}/export`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ calendarId: bobCalendarId }),
+            });
+            expect(sent.status).toBe(403);
+        }
+    });
+
     test('an unknown calendar is 404', async () => {
         const res = await importRequest(
             alice,

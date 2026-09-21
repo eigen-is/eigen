@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { teamOwnerId } from '@workspace/lib/types';
-import type { CalendarItem } from '@workspace/lib/types/calendar';
+import type { CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
 import { ICS_MIME } from '@workspace/lib/types/drive';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { getServerConfig } from '../../lib/config/server-config';
@@ -40,7 +40,16 @@ describe('Calendar transfer into a team calendar', () => {
             body: JSON.stringify({ calendarId: target }),
         });
 
-    const createCalendar = async (name: string, permission?: 'read' | 'write'): Promise<string> => {
+    const share = async (calendarId: string, permission: CalendarShare['permission']): Promise<void> => {
+        const shared = await authedRequest(ctx.alice.user.sessionToken, `/calendar/${owner}/calendars/${calendarId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ shares: [{ targetId: owner, permission }] }),
+        });
+        expect(shared.status).toBe(200);
+    };
+
+    const createCalendar = async (name: string, permission?: CalendarShare['permission']): Promise<string> => {
         const created = await assertJson<CalendarItem>(
             await authedRequest(ctx.alice.user.sessionToken, `/calendar/${owner}/calendars`, {
                 method: 'POST',
@@ -48,18 +57,7 @@ describe('Calendar transfer into a team calendar', () => {
                 body: JSON.stringify({ name, color: '#334455' }),
             }),
         );
-        if (permission) {
-            const shared = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${owner}/calendars/${created.id}`,
-                {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ shares: [{ targetId: owner, permission }] }),
-                },
-            );
-            expect(shared.status).toBe(200);
-        }
+        if (permission) await share(created.id, permission);
         return created.id;
     };
 
@@ -119,6 +117,20 @@ describe('Calendar transfer into a team calendar', () => {
 
         // Reading a team calendar needs no share, so the export answers where the import refused.
         expect((await exportRequest(ctx.bob.user, owner, readOnly)).status).toBe(200);
+    });
+
+    // Free-busy is the level that may learn when a calendar is busy and nothing else, so it exports nothing:
+    // the file carries every SUMMARY and DESCRIPTION the range view redacts for it.
+    test('a member whose share is free-busy exports nothing', async () => {
+        const uid = `team-freebusy-${randomUUID()}@other`;
+        const secret = await createCalendar('Team board', 'write');
+        expect(
+            (await importRequest(ctx.bob.user, owner, secret, vcal(vevent(uid, 'Secret board meeting')))).status,
+        ).toBe(200);
+        await share(secret, 'free-busy');
+
+        const res = await exportRequest(ctx.bob.user, owner, secret);
+        expect(res.status).toBe(403);
     });
 
     test('a non-member is refused both', async () => {
