@@ -322,6 +322,24 @@ describe('Calendar transfer routes', () => {
         });
     });
 
+    // The Home holds a UID once. Two imports of one file into two calendars both read "nobody holds it"
+    // before either writes, so the rule has to be decided where the write is, inside the gate.
+    test('two concurrent imports of one UID into two calendars leave one series', async () => {
+        const uid = `race-${randomUUID()}@other`;
+        const file = vcal(vevent(uid, 'Raced', '20260430T090000Z', '20260430T100000Z'));
+
+        const results = await Promise.all([
+            importRequest(alice, calendarId, file),
+            importRequest(alice, secondCalendarId, file),
+        ]);
+        const counts = await Promise.all(results.map((res) => assertJson<ImportCountsResult>(res)));
+        expect(counts.map((c) => c.imported).sort()).toEqual([0, 1]);
+        expect(counts.map((c) => c.skipped).sort()).toEqual([0, 1]);
+
+        const home = await getHome(alice.id);
+        expect((await home.calendar.getEventsByUid(uid)).length).toBe(1);
+    });
+
     test('an invitation file is stored as plain events: no organizer, no attendees, every alarm', async () => {
         const stamp = randomUUID();
         const uid = `invite-${stamp}@external.com`;
@@ -625,6 +643,35 @@ describe('Calendar transfer routes', () => {
             expect(served).toContain('TZID:America/New_York');
             expect(new Date(stored.startTime).toISOString()).toBe('2026-04-19T13:00:00.000Z');
         }
+    });
+
+    // A zone hangs off a property, and not every property is the VEVENT's own: a VALARM's absolute TRIGGER
+    // names one too, and the series file has to carry the definition or the alarm's wall time floats.
+    test('a VTIMEZONE a VALARM trigger names travels with the series', async () => {
+        const uid = `alarm-zone-${randomUUID()}@other`;
+        const file = vcal(VTZ_NY, [
+            'BEGIN:VEVENT',
+            `UID:${uid}`,
+            'SUMMARY:Alarm zone',
+            'DTSTART:20260419T140000Z',
+            'DTEND:20260419T150000Z',
+            'BEGIN:VALARM',
+            'ACTION:DISPLAY',
+            'DESCRIPTION:Reminder',
+            'TRIGGER;VALUE=DATE-TIME;TZID=America/New_York:20260419T080000',
+            'END:VALARM',
+            'END:VEVENT',
+        ]);
+
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
+            imported: 1,
+            skipped: 0,
+            failed: 0,
+        });
+
+        const stored = findOrFail(await april(), (e) => e.uid === uid);
+        const served = await davGet(`/dav/calendars/${alice.id}/${calendarId}/${stored.uri}`);
+        expect(served).toContain('TZID:America/New_York');
     });
 
     test('a VEVENT naming no UID is imported under a minted one', async () => {
@@ -1413,20 +1460,37 @@ describe('Calendar transfer routes', () => {
             expect(await exported()).not.toContain('X-EIGEN');
         });
 
-        test('an export re-imports into another calendar unchanged', async () => {
-            const target = await assertJson<CalendarItem>(
-                await authedRequest(alice.sessionToken, `/calendar/${alice.id}/calendars`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: 'Round trip', color: '#0000ff' }),
+        // Into another Home, because a UID this Home already holds is a skip: the round trip is what an
+        // export is for, and it holds when every VEVENT comes back property for property.
+        test('an export re-imports into another home line for line', async () => {
+            const text = await exported();
+
+            const result = await assertJson<ImportCountsResult>(
+                await importRaw(bob, 'calendar', ICS_MIME, text, {
+                    query: `?calendarId=${encodeURIComponent(bobCalendarId)}`,
                 }),
             );
+            expect(result).toEqual({ imported: 3, skipped: 0, failed: 0 });
 
-            const text = await exported();
-            const result = await assertJson<ImportCountsResult>(await importRequest(alice, target.id, text));
-            expect(result.failed).toBe(0);
-            expect(result.imported).toBe(0); // every UID is already in the Home
-            expect(result.skipped).toBe(3);
+            const res = await exportRequest(bob, bob.id, bobCalendarId);
+            expect(res.status).toBe(200);
+
+            // Keyed per series member, and blind to what an import is allowed to change: scheduling goes,
+            // and Eigen's own lines are the store's, not the file's.
+            const members = (ics: string): Record<string, Record<string, unknown[]>> => {
+                const out: Record<string, Record<string, unknown[]>> = {};
+                for (const v of parseResource(ics).getAllSubcomponents('vevent')) {
+                    const props = properties(v);
+                    for (const name of Object.keys(props)) {
+                        if (/(^|\.)(organizer|attendee)$/.test(name) || name.includes('x-eigen-')) {
+                            delete props[name];
+                        }
+                    }
+                    out[`${v.getFirstPropertyValue('uid')}|${v.getFirstPropertyValue('recurrence-id') ?? ''}`] = props;
+                }
+                return out;
+            };
+            expect(members(await res.text())).toEqual(members(text));
         });
 
         test('an override id exports the series it belongs to', async () => {

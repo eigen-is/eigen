@@ -293,6 +293,8 @@ export type PutResourceOptions = {
     ifNoneMatch: string | null;
     actor?: string | null;
     importedOrganizer?: string | null;
+    // An import files one UID once per Home, where a device syncs one calendar and owns only that one.
+    uidUniqueInHome?: boolean;
 };
 
 // Preconditions, the UID rules, re-stamping and the linked-copy restriction are all decided here, inside
@@ -345,10 +347,15 @@ export async function putResource(
         }
 
         // A UID another resource owns is a conflict the client can act on, not a raw 500 on the UNIQUE index.
+        // Decided here rather than before the gate, or two writers of one UID both read "nobody holds it".
         const holder = calendar.db
             .select({ id: schema.resources.id, uri: schema.resources.uri })
             .from(schema.resources)
-            .where(and(eq(schema.resources.calendarId, calendarId), eq(schema.resources.uid, uid)))
+            .where(
+                pre.uidUniqueInHome
+                    ? eq(schema.resources.uid, uid)
+                    : and(eq(schema.resources.calendarId, calendarId), eq(schema.resources.uid, uid)),
+            )
             .get();
         if (holder && holder.id !== existing?.id) return { ok: false, error: 'uid-conflict', conflictUri: holder.uri };
         if (existing && uid !== existing.uid) return { ok: false, error: 'uid-conflict' };

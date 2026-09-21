@@ -15,7 +15,6 @@ import {
 import { newVCalendar, PRODID, serializeResource } from '../ical';
 import { bareName, calAddress, isEigenName, uidOf } from '../ical/ical-parse';
 import type { Calendar } from './calendar';
-import { holdsUid } from './events';
 import { resourcePath } from './resource-store';
 import * as schema from './schema';
 
@@ -46,13 +45,15 @@ function parseCalendarStream(text: string): ICAL.Component[] {
     return roots;
 }
 
-// The TZIDs a VEVENT names, whether on its DTSTART or on any other property a client hung a zone on.
-function referencedTzids(vevent: ICAL.Component, into: Set<string>): void {
-    for (const prop of vevent.getAllProperties()) {
+// The TZIDs a VEVENT names, on its DTSTART, on any other property a client hung a zone on, and inside a
+// subcomponent of its own — a VALARM's absolute TRIGGER names one too.
+function referencedTzids(component: ICAL.Component, into: Set<string>): void {
+    for (const prop of component.getAllProperties()) {
         const raw = prop.getParameter('tzid');
         const tzid = Array.isArray(raw) ? raw[0] : raw;
         if (tzid) into.add(String(tzid));
     }
+    for (const sub of component.getAllSubcomponents()) referencedTzids(sub, into);
 }
 
 // The lines of one property, out of the component: matched on the bare name, because a group prefix
@@ -140,12 +141,6 @@ export async function importEvents(
                 result.failed++;
                 continue;
             }
-            // A UID the Home already holds skips like a re-import, which is what makes a partial import retryable.
-            if (await holdsUid(calendar, uid)) {
-                result.skipped++;
-                continue;
-            }
-
             const importedOrganizer = dropScheduling(group.master);
             for (const override of group.overrides) dropScheduling(override);
 
@@ -161,7 +156,9 @@ export async function importEvents(
             resource.addSubcomponent(group.master);
             for (const override of group.overrides) resource.addSubcomponent(override);
 
-            // A fresh name every time: a UID is not a safe filename, and If-None-Match: * keeps the write a create.
+            // A fresh name every time: a UID is not a safe filename, and If-None-Match: * keeps the write a
+            // create. A UID the Home already holds comes back a conflict, which is what makes a partial
+            // import retryable: the series already written skip.
             const body = serializeResource(resource);
             let put: PutResourceResult;
             try {
@@ -170,6 +167,7 @@ export async function importEvents(
                     ifNoneMatch: '*',
                     actor,
                     importedOrganizer,
+                    uidUniqueInHome: true,
                 });
             } catch {
                 // One series' write failing is that series' failure; a retry finishes the file.
