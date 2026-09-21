@@ -11,7 +11,7 @@ import { NO_SUBJECT } from '@workspace/lib/mail';
 import type { Contact } from '@workspace/lib/types/contact';
 import { type DrivePath, isEmlFile, isIcsFile, isVCardFile } from '@workspace/lib/types/drive';
 import type { LucideIcon } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useElementSize } from '../../hooks/use-element-size';
 import { cn, IMAGE_CHECKERBOARD_STYLE } from '../../lib/utils';
 import { UserAvatar } from '../user/user-avatar';
@@ -96,6 +96,16 @@ function IconFallback({ icon: Icon, color }: { icon: LucideIcon; color: string }
 // What fits the 16:9 box at reading size, badge and counted lines included.
 const HERO_CARD_LIMIT = 3;
 
+// The body every format that reads its file composes into: rows centred under the format badge, on the
+// app tint the wrapper already paints.
+function HeroBody({ children }: { children: ReactNode }) {
+    return (
+        <div className="absolute inset-0 flex flex-col justify-center gap-2 overflow-hidden px-4 pt-8 pb-3">
+            {children}
+        </div>
+    );
+}
+
 // The quick look reads a column of full cards; the hero shows the first three as compact rows, off the
 // same query — which is why a .vcf never asks for its text preview here.
 function VCardHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; color: string }) {
@@ -110,12 +120,12 @@ function VCardHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; c
     const remaining = data.total - data.dropped - contacts.length;
 
     return (
-        <div className="absolute inset-0 flex flex-col justify-center gap-2 overflow-hidden px-4 pt-8 pb-3">
+        <HeroBody>
             {contacts.map(({ contact }, index) => (
                 <VCardRow key={index} contact={contact} />
             ))}
             <PreviewCounts remaining={remaining} dropped={data.dropped} noun="contact" className="truncate text-xs" />
-        </div>
+        </HeroBody>
     );
 }
 
@@ -131,7 +141,7 @@ function EmlHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; col
     const senderName = sender?.name || sender?.address || 'Unknown';
 
     return (
-        <div className="absolute inset-0 flex flex-col justify-center gap-2 overflow-hidden px-4 pt-8 pb-3">
+        <HeroBody>
             <div className="flex min-w-0 items-center gap-3">
                 <UserAvatar name={senderName} email={sender?.address ?? ''} />
                 <div className="min-w-0">
@@ -141,7 +151,7 @@ function EmlHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; col
             </div>
             <p className="truncate text-sm text-foreground">{data.subject || NO_SUBJECT}</p>
             {data.text && <p className="line-clamp-2 text-xs text-muted-foreground">{data.text}</p>}
-        </div>
+        </HeroBody>
     );
 }
 
@@ -159,7 +169,7 @@ function IcsHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; col
     const remaining = data.total - data.dropped - events.length;
 
     return (
-        <div className="absolute inset-0 flex flex-col justify-center gap-2 overflow-hidden px-4 pt-8 pb-3">
+        <HeroBody>
             {events.map((event, index) => (
                 <div key={index} className="min-w-0">
                     <p className="truncate text-sm font-medium text-foreground">{event.title}</p>
@@ -175,7 +185,7 @@ function IcsHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; col
                 </div>
             ))}
             <PreviewCounts remaining={remaining} dropped={data.dropped} noun="event" className="truncate text-xs" />
-        </div>
+        </HeroBody>
     );
 }
 
