@@ -18,8 +18,7 @@ export function multistatusResponse(responses: string[], extra?: string): Respon
     });
 }
 
-// DAV:error wrapping one precondition element (RFC 3253 § 1.6), e.g. <D:valid-sync-token/>; namespaces are
-// declared inline so the body stands alone.
+// DAV:error wrapping one precondition element (RFC 3253 § 1.6); the namespaces are inline so the body stands alone.
 export function davError(status: number, element: string): Response {
     return new Response(
         `<?xml version="1.0" encoding="utf-8"?><D:error xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CARD="urn:ietf:params:xml:ns:carddav">${element}</D:error>`,
@@ -39,22 +38,19 @@ export function propstatNotFound(props: string[]): string {
     return `<D:propstat><D:prop>${props.join('')}</D:prop><D:status>HTTP/1.1 404 Not Found</D:status></D:propstat>`;
 }
 
-// The two 404 rows, which are not interchangeable: a multiget names the prop it could not serve, while a
-// sync-collection removal carries a bare status (RFC 6578 § 3.2) because there is no resource left to describe.
+// Not interchangeable: a multiget names the prop it could not serve, a sync-collection removal carries a bare status (RFC 6578 § 3.2).
 export const notFoundRow = (href: string) => response(href, [propstatNotFound(['<D:getetag/>'])]);
 export const removedRow = (href: string) => response(href, ['<D:status>HTTP/1.1 404 Not Found</D:status>']);
 
 const getetag = (etag: string) => `<D:getetag>"${escapeXml(etag)}"</D:getetag>`;
 const getcontenttype = (contentType: string) => `<D:getcontenttype>${contentType}</D:getcontenttype>`;
 
-// A collection member as a REPORT row: etag and content type, single-sourced with the PROPFIND map below so
-// the two views can't spell one resource differently. The content type is all the two protocols differ in.
+// Single-sourced with the PROPFIND map below, so the two views cannot spell one resource differently.
 export function memberProps(etag: string, contentType: string): string[] {
     return [getetag(etag), getcontenttype(contentType)];
 }
 
-// The same member as a PROPFIND row map, plus the empty resourcetype that marks it a non-collection (the
-// RFC 4918 discriminator).
+// The empty resourcetype is RFC 4918's discriminator for a non-collection.
 export function memberRowProps(etag: string, contentType: string): PropMap {
     return new Map([
         ['getetag', getetag(etag)],
@@ -63,8 +59,7 @@ export function memberRowProps(etag: string, contentType: string): PropMap {
     ]);
 }
 
-// The one property a client asks /dav/ for before it knows anything else, and the one both protocols'
-// home collections carry.
+// The one property a client asks /dav/ for before it knows anything else.
 export function currentUserPrincipalProp(userId: string): string {
     return `<D:current-user-principal><D:href>${principalHref(userId)}</D:href></D:current-user-principal>`;
 }
@@ -79,11 +74,7 @@ export function principalProps(userId: string): string[] {
     ];
 }
 
-// Apple's AddressBook (and Calendar) derive per-source editability from these permission props; a
-// server that omits them is treated as read-only and every edit lands as a NEW resource with a fresh
-// UID instead of a PUT to the existing href (the duplicate-on-edit class, wire-diagnosed 2026-08-18).
-// The DAV surface is single-owner (requireSelf), so full privileges and ownership are statements of fact.
-// Returned as [localName, fragment] entries so the collection prop maps can spread them in place.
+// Apple's AddressBook and Calendar read editability from these props: a server that omits them is read-only, and every edit lands as a new resource with a fresh UID.
 export function ownershipEntries(ownerId: string): [string, string][] {
     return [
         [

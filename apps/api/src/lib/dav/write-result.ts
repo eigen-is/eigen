@@ -3,9 +3,7 @@ import type { DeleteResourceResult, InvalidReason, PutResourceResult } from '../
 import { encodePathSegment } from './href';
 import { davError } from './xml';
 
-// The precondition each rejection carries, in the vocabulary of the protocol answering it: CardDAV has one
-// element for a body it will not store, CalDAV names the rule that was broken (RFC 6352 § 6.3.2.1,
-// RFC 4791 § 5.3.2.1).
+// CardDAV has one element for a body it will not store, CalDAV names the rule that broke (RFC 6352 § 6.3.2.1, RFC 4791 § 5.3.2.1).
 const PRECONDITIONS: Record<'C' | 'CARD', Record<InvalidReason, string>> = {
     C: {
         data: 'valid-calendar-data',
@@ -15,8 +13,7 @@ const PRECONDITIONS: Record<'C' | 'CARD', Record<InvalidReason, string>> = {
     CARD: { data: 'valid-address-data', object: 'valid-address-data', component: 'valid-address-data' },
 };
 
-// A GET of one stored resource: the bytes verbatim, with the content hash as a quoted ETag. The copy into an
-// ArrayBuffer-backed view is what the Response BodyInit type takes — storage.bytes() may be SharedArrayBuffer-backed.
+// The copy is what the Response BodyInit type takes: storage.bytes() may be SharedArrayBuffer-backed.
 export function davResourceResponse(bytes: Uint8Array, etag: string, contentType: string): Response {
     return new Response(new Uint8Array(bytes), {
         status: 200,
