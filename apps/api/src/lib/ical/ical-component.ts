@@ -589,12 +589,11 @@ export function patchEvent(
         changed = changed || moved;
     }
 
-    if (
-        patch.startTime !== undefined ||
-        patch.endTime !== undefined ||
-        patch.allDay !== undefined ||
-        patch.timezone !== undefined
-    ) {
+    // A submitted bound is one the caller found moved against the index row; a zone only Eigen named is re-spelled.
+    const whenChanged = patch.startTime !== undefined || patch.endTime !== undefined || patch.allDay !== undefined;
+    const zoneChanged = storedTz !== null && tzid !== storedTz;
+
+    if (whenChanged || zoneChanged) {
         const bounds: Array<[string, Date | undefined]> = [
             ['dtstart', patch.startTime],
             ['dtend', patch.endTime],
@@ -604,10 +603,13 @@ export function patchEvent(
             if (!instant) continue;
             const written =
                 name === 'dtend' ? endProperty(instant, tzid, allDay) : timeProperty(name, instant, tzid, allDay);
-            const moved = setProperty(vevent, written);
-            scheduling = scheduling || moved;
-            changed = changed || moved;
+            changed = setProperty(vevent, written) || changed;
         }
+        // RFC 5545 §3.6.1: a VEVENT states its length as a DTEND or as a DURATION, never both.
+        if (vevent.getFirstProperty('dtend')) changed = vevent.removeAllProperties('duration') || changed;
+        // Re-spelling the same instants in another zone is a byte change, not a reason to mail the guests.
+        scheduling = scheduling || whenChanged;
+        syncVTimezones(resource);
     }
 
     // A null incoming rrule never removes a stored one: the projection nulls the rules the index cannot
@@ -637,7 +639,6 @@ export function patchEvent(
     if (patch.sequence !== undefined && sequenceOf(vevent) !== patch.sequence) changed = true;
 
     if (!changed) return false;
-    if (patch.timezone !== undefined) syncVTimezones(resource);
     touch(vevent, ctx, scheduling, patch.sequence);
     return true;
 }
