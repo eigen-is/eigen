@@ -3,9 +3,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { isInvitationFromOthers, occurrenceDateToString, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
-import { ICS_IMPORT_MAX_EVENTS, ICS_IMPORT_MAX_REMINDERS } from '@workspace/lib/constants/calendar';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
-import { NOT_A_CALENDAR_FILE, NOT_UTF8_FILE } from '@workspace/lib/constants/transfer';
 import type {
     Attendee,
     CalendarEvent,
@@ -20,9 +18,18 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { and, count, eq, gt, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
+import ICAL from 'ical.js';
 import { RRule } from 'rrule';
 import { type IcsParseResult, type ParsedEvent, parseIcs } from '../caldav/ical-parse';
-import { ApiError, PATHS } from '../core';
+import {
+    ApiError,
+    decodeUtf8Strict,
+    ICS_IMPORT_MAX_EVENTS,
+    ICS_IMPORT_MAX_REMINDERS,
+    NOT_A_CALENDAR_FILE,
+    NOT_UTF8_FILE,
+    PATHS,
+} from '../core';
 import type { ManagedDatabase } from '../core/';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
@@ -99,26 +106,32 @@ function isImportableUid(uid: string): boolean {
     return true;
 }
 
-// The bytes an import was handed, as events. iCalendar is UTF-8, so another encoding is its own answer
-// rather than "not a calendar" — the same pair a vCard import gives (contacts/transfer.ts).
-function parseIcsFile(bytes: Uint8Array): IcsParseResult {
-    let text: string;
-    try {
-        text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-    } catch {
-        throw new ApiError(400, NOT_UTF8_FILE);
-    }
-    try {
-        return parseIcs(text);
-    } catch {
-        throw new ApiError(400, NOT_A_CALENDAR_FILE);
-    }
-}
-
 // An imported event as this Home's own: no organizer, no attendees, a handful of reminders.
 function importable(event: ParsedEvent): ParsedEvent {
     const reminders = event.data?.reminders?.slice(0, ICS_IMPORT_MAX_REMINDERS);
     return { ...event, data: reminders?.length ? { reminders } : null };
+}
+
+// The row an imported VEVENT lands as, master and override alike: what the file said, written by this
+// user. Never the file's UID as the resource name — it is the author's string, and two files that share
+// one collide on the (calendarId, uri) unique index.
+function importArgs(event: ParsedEvent, userId: string): CreateEventArgs {
+    return {
+        title: event.title,
+        description: event.description,
+        location: event.location,
+        startTime: event.startTime,
+        endTime: event.endTime,
+        allDay: event.allDay,
+        rrule: event.rrule,
+        timezone: event.timezone,
+        status: event.status,
+        sequence: event.sequence,
+        data: event.data,
+        uid: event.uid,
+        createByUserId: userId,
+        uri: `${randomUUID()}.ics`,
+    };
 }
 
 export class Calendar {
@@ -327,16 +340,32 @@ export class Calendar {
         return calendarEvent;
     }
 
-    // A whole `.ics` into one calendar of this Home, bytes in: the decode and the parse are the domain's,
-    // as the mail import's are. Every event lands as this user's own: the file's ORGANIZER and ATTENDEE
-    // lists are dropped, because a stored organizer reads as someone else's invitation (the updateEvent
-    // guard locks it, delete becomes a decline) and an attendee list mails the file author's addresses on
-    // every later edit.
+    // A whole `.ics` into one calendar of this Home, bytes in, every event landing as this user's own
+    // (docs/CALENDAR.md § Importing an .ics).
     public importEvents(calendarId: string, bytes: Uint8Array): ImportCountsResult {
         const cal = this.getCalendarById(calendarId);
         if (!cal) throw new ApiError(404, 'Calendar not found');
 
-        const parsed = parseIcsFile(bytes);
+        // iCalendar is UTF-8, so another encoding is its own answer rather than "not a calendar" — the
+        // same pair a vCard import gives (contacts/transfer.ts).
+        const text = decodeUtf8Strict(bytes);
+        if (text === null) throw new ApiError(400, NOT_UTF8_FILE);
+
+        // Counted on the text before ical.js builds a component tree per VEVENT: the route runs with the
+        // idle timeout off on the thread that serves every app, and a file far past the ceiling answers
+        // this 413 either way. A folded line starts with a space, so a line that starts with the property
+        // name is a VEVENT of its own.
+        if ((text.match(/^BEGIN:VEVENT\r?$/gim)?.length ?? 0) > ICS_IMPORT_MAX_EVENTS) {
+            throw new ApiError(413, 'Too many events');
+        }
+
+        let parsed: IcsParseResult;
+        try {
+            parsed = parseIcs(text);
+        } catch (e) {
+            if (e instanceof ICAL.parse.ParserError) throw new ApiError(400, NOT_A_CALENDAR_FILE);
+            throw e;
+        }
 
         // Every VEVENT is a row, overrides included: one master with 37 000 RECURRENCE-IDs is the same
         // write volume as 37 000 masters.
@@ -356,7 +385,16 @@ export class Calendar {
             else overridesByUid.set(event.uid, new Map([[event.recurrenceDate, event]]));
         }
 
-        const result: ImportCountsResult = { imported: 0, skipped: 0, failed: 0 };
+        // A VEVENT the parser could not read, and an override whose master the file does not hold — it
+        // has no series to attach to — are members the import cannot write, counted as the failures they
+        // are rather than dropped in silence.
+        const masterUids = new Set(masters.map((event) => event.uid));
+        let unwritable = parsed.skipped;
+        for (const [uid, overrides] of overridesByUid) {
+            if (!masterUids.has(uid)) unwritable += overrides.size;
+        }
+
+        const result: ImportCountsResult = { imported: 0, skipped: 0, failed: unwritable };
         // One transaction for the file: a crash mid-loop would otherwise leave masters behind that a
         // retry skips, so a series would lose its overrides for good.
         this.db.transaction((tx) => {
@@ -378,24 +416,7 @@ export class Calendar {
                     continue;
                 }
 
-                const args: CreateEventArgs = {
-                    title: master.title,
-                    description: master.description,
-                    location: master.location,
-                    startTime: master.startTime,
-                    endTime: master.endTime,
-                    allDay: master.allDay,
-                    rrule: master.rrule,
-                    timezone: master.timezone,
-                    status: master.status,
-                    sequence: master.sequence,
-                    data: master.data,
-                    uid: master.uid,
-                    createByUserId: this.home.user.id,
-                    // Never the file's UID: it is the author's string, and two files that share one collide
-                    // on the (calendarId, uri) unique index.
-                    uri: `${randomUUID()}.ics`,
-                };
+                const args = importArgs(master, this.home.user.id);
 
                 try {
                     // A savepoint per series, so an override the calendar refuses takes its master's row
@@ -408,23 +429,15 @@ export class Calendar {
                         for (const parsedOverride of overridesByUid.get(master.uid)?.values() ?? []) {
                             const override = importable(parsedOverride);
                             const overrideArgs: CreateEventArgs = {
-                                title: override.title,
-                                description: override.description,
-                                location: override.location,
-                                startTime: override.startTime,
-                                endTime: override.endTime,
-                                allDay: override.allDay,
+                                ...importArgs(override, this.home.user.id),
+                                // One occurrence of its master's series, never a series of its own.
+                                rrule: null,
                                 // The master's zone when the override names none, or it serializes in Z
                                 // form and its etag stops hashing like the create/update paths (audit #24).
                                 timezone: override.timezone ?? event.timezone,
-                                status: override.status,
-                                sequence: override.sequence,
-                                data: override.data,
                                 parentEventId: event.id,
                                 recurrenceDate: override.recurrenceDate,
                                 uid: event.uid,
-                                createByUserId: this.home.user.id,
-                                uri: `${randomUUID()}.ics`,
                             };
                             validateEventInput(overrideArgs);
                             this.insertEvent(calendarId, overrideArgs, newCtag);

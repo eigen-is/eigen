@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { VCARD_IMPORT_MAX_CARDS, VCARD_PREVIEW_MAX_CARDS } from '@workspace/lib/constants/contact';
 import { ApiError } from '../../lib/core/errors';
+import { VCARD_IMPORT_MAX_CARDS, VCARD_PREVIEW_MAX_CARDS } from '../../lib/core/transfer';
 import { toTransferableBuffer, toTransferableText } from '../../lib/document/transform/protocol';
 import { buildVCardPreviewPayload } from '../../lib/preview/vcard-preview';
 

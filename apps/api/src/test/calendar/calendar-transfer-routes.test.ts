@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { ICS_IMPORT_MAX_EVENTS, ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
+import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { type DrivePath, EML_MIME, ICS_MIME } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -9,7 +9,9 @@ import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getMailDomain } from '../../lib/config/server-config';
+import { ICS_IMPORT_MAX_EVENTS } from '../../lib/core/transfer';
 import { getHome } from '../../lib/home';
+import { vcal } from '../ics-test-helpers';
 import {
     app,
     assertJson,
@@ -24,12 +26,9 @@ import {
     getTestContext,
     type TestUser,
 } from '../setup';
+import { importFromDriveRequest, importRaw } from '../transfer-test-helpers';
 
 const PASSWORD = 'testpassword123';
-
-// A calendar file the way a client writes one to disk: CRLF, one VCALENDAR, every event a VEVENT.
-const feed = (...events: string[][]) =>
-    ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Another Client//EN', ...events.flat(), 'END:VCALENDAR'].join('\r\n');
 
 const vevent = (uid: string, summary: string, start: string, end: string, extra: string[] = []) => [
     'BEGIN:VEVENT',
@@ -54,23 +53,10 @@ describe('Calendar transfer routes', () => {
     let guestId: string;
 
     const importRequest = (user: TestUser, target: string, body: BodyInit, headers: Record<string, string> = {}) =>
-        authedRequest(user.sessionToken, `/calendar/${user.id}/import?calendarId=${encodeURIComponent(target)}`, {
-            method: 'POST',
-            headers: { 'Content-Type': ICS_MIME, ...headers },
-            body,
-        });
+        importRaw(user, 'calendar', ICS_MIME, body, { query: `?calendarId=${encodeURIComponent(target)}`, headers });
 
     const importFromDrive = (user: TestUser, target: string, source: DrivePath) =>
-        authedRequest(user.sessionToken, `/calendar/${user.id}/import-from-drive`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                calendarId: target,
-                sourceOwnerId: source.ownerId,
-                sourceMountId: source.mountId,
-                sourcePathId: source.id,
-            }),
-        });
+        importFromDriveRequest(user, 'calendar', source, { calendarId: target });
 
     const epoch = (iso: string) => Math.floor(new Date(iso).getTime() / 1000);
 
@@ -133,7 +119,7 @@ describe('Calendar transfer routes', () => {
 
     test('a file of events lands in the calendar, and each one is the importing user to edit and delete', async () => {
         const stamp = randomUUID();
-        const file = feed(
+        const file = vcal(
             vevent(`plain-1-${stamp}@other`, 'Kickoff', '20260402T090000Z', '20260402T100000Z'),
             vevent(`plain-2-${stamp}@other`, 'Retro', '20260403T090000Z', '20260403T100000Z'),
             vevent(`plain-3-${stamp}@other`, 'Demo', '20260404T090000Z', '20260404T100000Z'),
@@ -182,7 +168,7 @@ describe('Calendar transfer routes', () => {
 
     test('re-importing the same file skips every event', async () => {
         const stamp = randomUUID();
-        const file = feed(
+        const file = vcal(
             vevent(`twice-1-${stamp}@other`, 'Once', '20260405T090000Z', '20260405T100000Z'),
             vevent(`twice-2-${stamp}@other`, 'Again', '20260405T110000Z', '20260405T120000Z'),
         );
@@ -202,7 +188,7 @@ describe('Calendar transfer routes', () => {
 
     test('a UID already in another calendar of the home is skipped', async () => {
         const stamp = randomUUID();
-        const file = feed(vevent(`elsewhere-${stamp}@other`, 'Only once', '20260406T090000Z', '20260406T100000Z'));
+        const file = vcal(vevent(`elsewhere-${stamp}@other`, 'Only once', '20260406T090000Z', '20260406T100000Z'));
 
         expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
             imported: 1,
@@ -280,7 +266,7 @@ describe('Calendar transfer routes', () => {
     test('a forged iMIP REPLY for an imported UID has no attendee list to move', async () => {
         const stamp = randomUUID();
         const uid = `reply-target-${stamp}@external.com`;
-        const file = feed(
+        const file = vcal(
             vevent(uid, 'Imported meeting', '20260408T090000Z', '20260408T100000Z', [
                 'ORGANIZER;CN="External Org":mailto:organizer@external.com',
                 'ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION:mailto:mallory@external.com',
@@ -327,7 +313,7 @@ describe('Calendar transfer routes', () => {
 
     test('an unusable UID fails while the rest of the file imports', async () => {
         const stamp = randomUUID();
-        const file = feed(
+        const file = vcal(
             vevent(`bad/\u0001uid-${stamp}@other`, 'Unusable', '20260409T090000Z', '20260409T100000Z'),
             vevent(`fine-1-${stamp}@other`, 'Fine one', '20260409T110000Z', '20260409T120000Z'),
             vevent(`fine-2-${stamp}@other`, 'Fine two', '20260409T130000Z', '20260409T140000Z'),
@@ -343,9 +329,36 @@ describe('Calendar transfer routes', () => {
         expect(listed.some((e) => e.title === 'Unusable')).toBe(false);
     });
 
+    // A whole file used to be "not a calendar" over one VEVENT the parser could not read. Both members it
+    // cannot write are counted as failures, and the readable event still lands.
+    test('a VEVENT with no start and an override with no master fail while the rest of the file imports', async () => {
+        const stamp = randomUUID();
+        const file = vcal(
+            vevent(`readable-${stamp}@other`, 'Readable', '20260411T090000Z', '20260411T100000Z'),
+            ['BEGIN:VEVENT', `UID:no-start-${stamp}@other`, 'SUMMARY:No start at all', 'END:VEVENT'],
+            [
+                'BEGIN:VEVENT',
+                `UID:orphan-${stamp}@other`,
+                'RECURRENCE-ID:20260411T110000Z',
+                'DTSTART:20260411T120000Z',
+                'DTEND:20260411T130000Z',
+                'SUMMARY:Override of a series this file does not hold',
+                'END:VEVENT',
+            ],
+        );
+
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
+            imported: 1,
+            skipped: 0,
+            failed: 2,
+        });
+        const listed = await april();
+        expect(listed.filter((e) => e.uid.includes(stamp)).map((e) => e.title)).toEqual(['Readable']);
+    });
+
     test('an event whose end precedes its start fails while the rest of the file imports', async () => {
         const stamp = randomUUID();
-        const file = feed(
+        const file = vcal(
             vevent(`reversed-${stamp}@other`, 'Backwards', '20260410T120000Z', '20260410T100000Z'),
             vevent(`forward-${stamp}@other`, 'Forwards', '20260410T140000Z', '20260410T150000Z'),
         );
@@ -362,7 +375,7 @@ describe('Calendar transfer routes', () => {
         const stamp = randomUUID();
         const uidA = `series-a-${stamp}@other`;
         const uidB = `series-b-${stamp}@other`;
-        const file = feed(
+        const file = vcal(
             vevent(uidA, 'Standup A', '20260413T090000Z', '20260413T093000Z', ['RRULE:FREQ=DAILY;COUNT=5']),
             vevent(uidA, 'Standup A moved', '20260415T110000Z', '20260415T113000Z', ['RECURRENCE-ID:20260415T090000Z']),
             vevent(uidB, 'Standup B', '20260413T100000Z', '20260413T103000Z', ['RRULE:FREQ=DAILY;COUNT=5']),
@@ -391,7 +404,7 @@ describe('Calendar transfer routes', () => {
     // VEVENTs for the same RECURRENCE-ID converges on the last one, so an import lands there in one pass.
     test('two VEVENTs for one occurrence store one exception row, the last one', async () => {
         const uid = `dupe-override-${randomUUID()}@other`;
-        const file = feed(
+        const file = vcal(
             vevent(uid, 'Daily', '20260601T090000Z', '20260601T093000Z', ['RRULE:FREQ=DAILY;COUNT=3']),
             vevent(uid, 'First write', '20260602T140000Z', '20260602T150000Z', ['RECURRENCE-ID:20260602T090000Z']),
             vevent(uid, 'Last write', '20260602T160000Z', '20260602T170000Z', ['RECURRENCE-ID:20260602T090000Z']),
@@ -419,7 +432,7 @@ describe('Calendar transfer routes', () => {
         const uid = `overrides-${randomUUID()}@other`;
         const day = (offset: number) =>
             new Date(Date.UTC(2026, 4, 1 + offset)).toISOString().slice(0, 10).replaceAll('-', '');
-        const file = feed(
+        const file = vcal(
             vevent(uid, 'Daily', '20260501T090000Z', '20260501T093000Z', [
                 'RRULE:FREQ=DAILY;COUNT=55',
                 `EXDATE:${day(2)}T090000Z`,
@@ -461,7 +474,7 @@ describe('Calendar transfer routes', () => {
 
     test('imported overrides get a resource name of their own, never one built from the file UID', async () => {
         const uid = `../../weird-${randomUUID()}@other`;
-        const file = feed(
+        const file = vcal(
             vevent(uid, 'Traversal', '20260901T090000Z', '20260901T093000Z', ['RRULE:FREQ=DAILY;COUNT=3']),
             vevent(uid, 'Traversal moved', '20260902T110000Z', '20260902T113000Z', ['RECURRENCE-ID:20260902T090000Z']),
         );
@@ -497,7 +510,7 @@ describe('Calendar transfer routes', () => {
         const stamp = randomUUID();
         const halfUid = `half-${stamp}@other`;
         const wholeUid = `whole-${stamp}@other`;
-        const file = feed(
+        const file = vcal(
             vevent(halfUid, 'Half series', '20260801T090000Z', '20260801T093000Z', ['RRULE:FREQ=DAILY;COUNT=5']),
             vevent(halfUid, 'Fine override', '20260802T110000Z', '20260802T113000Z', [
                 'RECURRENCE-ID:20260802T090000Z',
@@ -521,7 +534,7 @@ describe('Calendar transfer routes', () => {
 
     test('a crash mid-import leaves the calendar exactly as it was', async () => {
         const stamp = randomUUID();
-        const file = feed(
+        const file = vcal(
             ...Array.from({ length: 4 }, (_, i) =>
                 vevent(`crash-${i}-${stamp}@other`, `Crash ${i}`, '20261001T090000Z', '20261001T100000Z'),
             ),
@@ -550,7 +563,7 @@ describe('Calendar transfer routes', () => {
 
     test('a file past the event ceiling is refused before anything is written', async () => {
         const stamp = randomUUID();
-        const file = feed(
+        const file = vcal(
             ...Array.from({ length: ICS_IMPORT_MAX_EVENTS + 1 }, (_, i) =>
                 vevent(`over-${i}-${stamp}@other`, `Over ${i}`, '20260420T090000Z', '20260420T100000Z'),
             ),
@@ -561,9 +574,34 @@ describe('Calendar transfer routes', () => {
         expect((await april()).some((e) => e.uid.includes(stamp))).toBe(false);
     });
 
+    // The route runs with the idle timeout off, on the one thread that serves every app, and ical.js does
+    // not cache a TZID lookup that finds no VTIMEZONE — so a file far past the ceiling must be refused on
+    // what it says it holds, not after it is parsed (26 805 such VEVENTs cost 21 s of that thread).
+    test('a file far past the ceiling is refused on its VEVENT count, before the parse', async () => {
+        const stamp = randomUUID();
+        const file = vcal(
+            ...Array.from({ length: ICS_IMPORT_MAX_EVENTS * 20 }, (_, i) => [
+                'BEGIN:VEVENT',
+                `UID:flood-${i}-${stamp}@other`,
+                `SUMMARY:Flood ${i}`,
+                'DTSTART;TZID=Europe/Amsterdam:20260420T090000',
+                'DTEND;TZID=Europe/Amsterdam:20260420T100000',
+                'END:VEVENT',
+            ]),
+        );
+
+        const started = Date.now();
+        const res = await importRequest(alice, calendarId, file);
+        const elapsed = Date.now() - started;
+
+        expect(res.status).toBe(413);
+        expect(elapsed).toBeLessThan(2000);
+        expect((await april()).some((e) => e.uid.includes(stamp))).toBe(false);
+    });
+
     test('the ceiling counts every VEVENT: a file of one master and its overrides is refused too', async () => {
         const uid = `flood-${randomUUID()}@other`;
-        const file = feed(
+        const file = vcal(
             vevent(uid, 'Flood', '20261101T090000Z', '20261101T093000Z', [
                 `RRULE:FREQ=DAILY;COUNT=${ICS_IMPORT_MAX_EVENTS}`,
             ]),
@@ -580,7 +618,7 @@ describe('Calendar transfer routes', () => {
 
     test('a thousand events are one calendar broadcast', async () => {
         const stamp = randomUUID();
-        const file = feed(
+        const file = vcal(
             ...Array.from({ length: ICS_IMPORT_MAX_EVENTS }, (_, i) =>
                 vevent(`bulk-${i}-${stamp}@other`, `Bulk ${i}`, '20260421T090000Z', '20260421T100000Z'),
             ),
@@ -625,7 +663,7 @@ describe('Calendar transfer routes', () => {
                 await importRequest(
                     alice,
                     calendarId,
-                    feed(vevent(uid, 'Synced', '20260422T090000Z', '20260422T100000Z')),
+                    vcal(vevent(uid, 'Synced', '20260422T090000Z', '20260422T100000Z')),
                 )
             ).status,
         ).toBe(200);
@@ -643,7 +681,7 @@ describe('Calendar transfer routes', () => {
                 await importRequest(
                     alice,
                     calendarId,
-                    feed(vevent(uid, 'Odd name', '20260429T090000Z', '20260429T100000Z')),
+                    vcal(vevent(uid, 'Odd name', '20260429T090000Z', '20260429T100000Z')),
                 )
             ).status,
         ).toBe(200);
@@ -673,7 +711,7 @@ describe('Calendar transfer routes', () => {
         const res = await importRequest(
             alice,
             bobCalendarId,
-            feed(vevent(`shared-${randomUUID()}@other`, 'Not mine', '20260423T090000Z', '20260423T100000Z')),
+            vcal(vevent(`shared-${randomUUID()}@other`, 'Not mine', '20260423T090000Z', '20260423T100000Z')),
         );
         expect(res.status).toBe(404);
     });
@@ -682,7 +720,7 @@ describe('Calendar transfer routes', () => {
         const res = await importRequest(
             alice,
             randomUUID(),
-            feed(vevent(`unknown-${randomUUID()}@other`, 'Nowhere', '20260424T090000Z', '20260424T100000Z')),
+            vcal(vevent(`unknown-${randomUUID()}@other`, 'Nowhere', '20260424T090000Z', '20260424T100000Z')),
         );
         expect(res.status).toBe(404);
     });
@@ -740,7 +778,7 @@ describe('Calendar transfer routes', () => {
     test('import-from-drive on own drive imports the file into the calendar', async () => {
         const stamp = randomUUID();
         const uploaded = await uploadIcs(
-            feed(vevent(`drive-${stamp}@other`, 'From Drive', '20260425T090000Z', '20260425T100000Z')),
+            vcal(vevent(`drive-${stamp}@other`, 'From Drive', '20260425T090000Z', '20260425T100000Z')),
         );
 
         const result = await assertJson<ImportCountsResult>(await importFromDrive(alice, calendarId, uploaded));
@@ -752,7 +790,7 @@ describe('Calendar transfer routes', () => {
     // the server-wide idle timeout the way the raw import and both contacts imports do.
     test('import-from-drive exempts its request from the idle timeout', async () => {
         const uploaded = await uploadIcs(
-            feed(vevent(`timeout-${randomUUID()}@other`, 'Long run', '20260428T090000Z', '20260428T100000Z')),
+            vcal(vevent(`timeout-${randomUUID()}@other`, 'Long run', '20260428T090000Z', '20260428T100000Z')),
         );
         // app.handle() runs with no server, so the route's `server?.timeout` is a no-op in tests: give the
         // app a real one to observe the call, and take it away again.
@@ -771,7 +809,7 @@ describe('Calendar transfer routes', () => {
 
     test('import-from-drive on a file that is not an .ics is 400', async () => {
         const file = new File(
-            [new TextEncoder().encode(feed(vevent('x@other', 'X', '20260426T090000Z', '20260426T100000Z')))],
+            [new TextEncoder().encode(vcal(vevent('x@other', 'X', '20260426T090000Z', '20260426T100000Z')))],
             'notes.txt',
             {
                 type: 'text/plain',
@@ -797,7 +835,7 @@ describe('Calendar transfer routes', () => {
             {
                 method: 'POST',
                 headers: { 'Content-Type': ICS_MIME },
-                body: feed(vevent(`mallory-${randomUUID()}@other`, 'Mallory', '20260427T090000Z', '20260427T100000Z')),
+                body: vcal(vevent(`mallory-${randomUUID()}@other`, 'Mallory', '20260427T090000Z', '20260427T100000Z')),
             },
         );
         expect(res.status).toBe(403);
@@ -810,7 +848,7 @@ describe('Calendar transfer routes', () => {
             {
                 method: 'POST',
                 headers: { 'Content-Type': ICS_MIME },
-                body: feed(vevent(`guest-${randomUUID()}@other`, 'Guest', '20260428T090000Z', '20260428T100000Z')),
+                body: vcal(vevent(`guest-${randomUUID()}@other`, 'Guest', '20260428T090000Z', '20260428T100000Z')),
             },
         );
         expect(raw.status).toBe(403);

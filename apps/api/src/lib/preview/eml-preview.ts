@@ -1,12 +1,8 @@
-import {
-    EML_PREVIEW_MAX_ATTACHMENTS,
-    EML_PREVIEW_MAX_HTML_BYTES,
-    EML_PREVIEW_MAX_TEXT_CHARS,
-} from '@workspace/lib/constants/mail';
-import type { AddressObject, ParsedMail } from '@workspace/lib/types/mail';
+import type { ParsedMail } from '@workspace/lib/types/mail';
 import type { EmlPreview } from '@workspace/lib/types/preview';
 import DOMPurify from 'isomorphic-dompurify';
 import { ApiError } from '../core/errors';
+import { EML_PREVIEW_MAX_ATTACHMENTS, EML_PREVIEW_MAX_HTML_BYTES, EML_PREVIEW_MAX_TEXT_CHARS } from '../core/transfer';
 import type { AttrNode } from '../export/sanitize';
 import { READER_SANITIZE_CONFIG } from '../mail/mail-parse';
 import { parseMail } from '../mail/mail-parser';
@@ -55,10 +51,25 @@ const INLINE_IMAGE = new RegExp(`^\\s*${RASTER_DATA_URI}`, 'i');
 const CSS_REMOTE_URL = new RegExp(`url\\((?!\\s*(?:['"]\\s*)?${RASTER_DATA_URI})`, 'i');
 const DATA_URI = /data:[^\s"'<>)]+/g;
 
+// A viewer renders on a canvas of its own and drops the color-scheme rules that disagree with it
+// (ShadowContent, packages/ui), one scheme or the other. Deleting such a block rejoins whatever it was
+// written between — `ur@media (prefers-color-scheme: dark){}l(https://…)` carries no token until it is
+// gone — so the text each of those two deletions would leave behind is read as its own CSS.
+const schemeMediaBlock = (scheme: string) =>
+    new RegExp(
+        String.raw`@media\s*\([^)]*prefers-color-scheme:\s*${scheme}[^)]*\)\s*\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}`,
+        'gi',
+    );
+const SCHEME_MEDIA_BLOCKS = [schemeMediaBlock('dark'), schemeMediaBlock('light')];
+
 // Both refusals read a token, never a pair: a CSS escape spells `url(` invisibly to a regex (`u\72l(`), and
 // an unterminated `url(` fetches without ever closing.
-function cssFetches(css: string): boolean {
+function fetchTokens(css: string): boolean {
     return CSS_FETCHES.test(css) || CSS_REMOTE_URL.test(css);
+}
+
+function cssFetches(css: string): boolean {
+    return fetchTokens(css) || SCHEME_MEDIA_BLOCKS.some((block) => fetchTokens(css.replace(block, '')));
 }
 
 function restrictNode(node: AttrNode): void {
@@ -96,15 +107,7 @@ function sanitizeEmlHtml(html: string): string {
     }
 }
 
-// The single AddressObject a header carries: the parser hands back an array when a message repeats the
-// header, and the last one is what the reader's own envelope rows show.
-function oneAddress(value: AddressObject | AddressObject[] | undefined): AddressObject | null {
-    return (Array.isArray(value) ? value.at(-1) : value) ?? null;
-}
-
-// File bytes → the message an .eml preview serves. Runs inside the transform Worker (worker.ts owns
-// execution; the main-thread orchestration lives in preview-cache.ts). This module must not reach the
-// Mount or the transform seam — the Worker imports it.
+// File bytes → the message an .eml preview serves.
 export function buildEmlPreviewPayload(data: ArrayBuffer): EmlPreview {
     let parsed: ParsedMail;
     try {
@@ -116,8 +119,8 @@ export function buildEmlPreviewPayload(data: ArrayBuffer): EmlPreview {
     return {
         subject: parsed.subject ?? '',
         from: parsed.from ?? null,
-        to: oneAddress(parsed.to),
-        cc: oneAddress(parsed.cc),
+        to: parsed.to ?? null,
+        cc: parsed.cc ?? null,
         date: parsed.date?.toISOString() ?? null,
         html: parsed.html === null ? null : boundedHtml(parsed.html),
         text: parsed.text?.slice(0, EML_PREVIEW_MAX_TEXT_CHARS) ?? null,

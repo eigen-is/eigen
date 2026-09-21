@@ -1,6 +1,6 @@
 import { escapeXml } from '@workspace/lib/html';
 import type { CalendarItem } from '@workspace/lib/types/calendar';
-import { ICS_MIME } from '@workspace/lib/types/drive';
+import { ICS_CONTENT_TYPE } from '@workspace/lib/types/drive';
 import { calendarHomeHref } from '../dav/href';
 import type { PropMap } from '../dav/propfind';
 import { ownershipEntries } from '../dav/xml';
@@ -26,7 +26,7 @@ export function parseSyncToken(token: string): { since: number } | null {
 // The two member fragments, single-sourced so the REPORT view (eventEtagProp) and the PROPFIND row map
 // (eventRowProps) can't spell them differently.
 const eventGetetag = (etag: string) => `<D:getetag>"${escapeXml(etag)}"</D:getetag>`;
-const EVENT_CONTENT_TYPE = `<D:getcontenttype>${ICS_MIME}; charset=utf-8</D:getcontenttype>`;
+const EVENT_CONTENT_TYPE = `<D:getcontenttype>${ICS_CONTENT_TYPE}</D:getcontenttype>`;
 
 // Calendar collection properties (for listing calendars)
 export function calendarCollectionProps(cal: CalendarItem, ownerId: string): PropMap {

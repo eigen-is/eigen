@@ -1,11 +1,12 @@
 import { describe, expect, test } from 'bun:test';
+import type { EmlPreview } from '@workspace/lib/types/preview';
+import DOMPurify from 'isomorphic-dompurify';
+import { ApiError } from '../../lib/core/errors';
 import {
     EML_PREVIEW_MAX_ATTACHMENTS,
     EML_PREVIEW_MAX_HTML_BYTES,
     EML_PREVIEW_MAX_TEXT_CHARS,
-} from '@workspace/lib/constants/mail';
-import DOMPurify from 'isomorphic-dompurify';
-import { ApiError } from '../../lib/core/errors';
+} from '../../lib/core/transfer';
 import { toTransferableText } from '../../lib/document/transform/protocol';
 import { buildEmlPreviewPayload } from '../../lib/preview/eml-preview';
 
@@ -32,6 +33,11 @@ const htmlMessage = (body: string, extraHeaders: string[] = []) =>
     ]);
 
 const payloadOf = (text: string) => buildEmlPreviewPayload(toTransferableText(text));
+
+// A recipient header reaches the payload as the parser hands it over: one object, or one per occurrence
+// when the message repeats the header.
+const addressesOf = (field: EmlPreview['to']) =>
+    (Array.isArray(field) ? field : [field]).flatMap((one) => one?.value.map((v) => v.address) ?? []);
 
 // One cid image, inlined by the parser, plus N references to it in the body.
 const withInlineImage = (body: string, imageBytes: number, boundary = 'inline-image') =>
@@ -74,13 +80,34 @@ describe('buildEmlPreviewPayload', () => {
 
         expect(payload.subject).toBe('Quarterly report');
         expect(payload.from?.value[0]?.address).toBe('sender@external.com');
-        expect(payload.to?.value.map((v) => v.address)).toEqual(['alice@example.com', 'bob@example.com']);
-        expect(payload.cc?.value[0]?.address).toBe('carol@example.com');
+        expect(addressesOf(payload.to)).toEqual(['alice@example.com', 'bob@example.com']);
+        expect(addressesOf(payload.cc)).toEqual(['carol@example.com']);
         expect(payload.date).toBe('2026-08-15T10:30:00.000Z');
         expect(payload.text).toContain('The numbers are in.');
         expect(payload.attachments).toEqual([]);
         expect(payload.remainingAttachments).toBe(0);
         expect(JSON.stringify(payload)).not.toContain('secret@example.com');
+    });
+
+    // A message that repeats a header carries one list per occurrence, and the reader shows every one of
+    // them: a quick look that kept the last would silently drop recipients the message was addressed to.
+    test('a repeated To: or Cc: keeps every recipient the message names', () => {
+        const payload = payloadOf(
+            eml([
+                'From: sender@external.com',
+                'To: Alice <alice@example.com>',
+                'To: Bob <bob@example.com>',
+                'Cc: Carol <carol@example.com>',
+                'Cc: Dave <dave@example.com>',
+                'Subject: Repeated headers',
+                'Content-Type: text/plain; charset=utf-8',
+                '',
+                'Everyone is on it.',
+            ]),
+        );
+
+        expect(addressesOf(payload.to)).toEqual(['alice@example.com', 'bob@example.com']);
+        expect(addressesOf(payload.cc)).toEqual(['carol@example.com', 'dave@example.com']);
     });
 
     test('a message with no subject, date or sender is a payload, not a failure', () => {
@@ -177,6 +204,32 @@ describe('buildEmlPreviewPayload', () => {
 
         expect(payload.html).not.toContain(HOSTILE);
         expect(payload.html).toContain('attr 0');
+    });
+
+    // A client renders on a canvas of its own and drops the color-scheme rules that disagree with it
+    // (ShadowContent, packages/ui), which rejoins a token split across such a block: neither half of
+    // `ur@media (prefers-color-scheme: dark){}l(` is a token the raw text carries, and the deletion leaves
+    // `url(`. The refusal reads the text such a deletion would leave behind as well as the raw text.
+    test('a fetch token split across a prefers-color-scheme block is refused, whichever scheme it names', () => {
+        const declarations = [
+            `background:ur@media (prefers-color-scheme: dark){}l(https://${HOSTILE}/dark-pixel.png)`,
+            `background:ur@media (prefers-color-scheme: light){}l(https://${HOSTILE}/light-pixel.png)`,
+        ];
+        const payload = payloadOf(
+            htmlMessage(
+                [
+                    ...declarations.map((css, i) => `<div style="${css}">attr ${i}</div>`),
+                    ...declarations.map((css) => `<style>p{${css}}</style>`),
+                    `<style>@imp@media (prefers-color-scheme: dark){}ort "https://${HOSTILE}/dark.css";</style>`,
+                    `<style>@imp@media (prefers-color-scheme: light){}ort "https://${HOSTILE}/light.css";</style>`,
+                    '<p>hello</p>',
+                ].join('\n'),
+            ),
+        );
+
+        expect(payload.html).not.toContain(HOSTILE);
+        // The CSS is all that is refused: the message still reads.
+        expect(payload.html).toContain('hello');
     });
 
     // A data: reference is kept for the inline images a message really carries; an SVG or an HTML one is a

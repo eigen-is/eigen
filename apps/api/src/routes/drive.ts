@@ -7,7 +7,13 @@ import { Elysia, t } from 'elysia';
 import { getUploadMaxSize } from '../lib/config/enforcement';
 import { ApiError } from '../lib/core';
 import { requireNonGuest, requireSelf } from '../lib/core/access';
-import { contentDisposition, readBoundedBodyBytes, scriptableInlineHeaders, setCacheHeaders } from '../lib/core/http';
+import {
+    contentDisposition,
+    readBoundedBodyBytes,
+    readBoundedStreamBytes,
+    scriptableInlineHeaders,
+    setCacheHeaders,
+} from '../lib/core/http';
 import { getDrive, getSharedDrive } from '../lib/drive';
 import { propagateAccessRequest } from '../lib/drive/access-request-propagation';
 import { aggregateMimeContents, aggregateWatches } from '../lib/drive/aggregate';
@@ -291,7 +297,11 @@ export const driveRouter = new Elysia({ name: 'drive' })
             if (sourcePath.size > maxSize) throw new ApiError(413, 'Source file too large');
             const sourceFile = await sourceDrive.downloadFile(body.sourceMountId, body.sourcePathId);
             if (!sourceFile) throw new ApiError(404, 'Source file not found');
-            const buffer = Buffer.from(await sourceFile.arrayBuffer());
+            // The row's size is a claim: a source that grew since is cancelled as it is read, the way
+            // every other import-from-drive route reads its source (lib/drive/import-source.ts).
+            const bytes = await readBoundedStreamBytes(sourceFile.stream(), maxSize);
+            if (bytes === null) throw new ApiError(413, 'Upload too large');
+            const buffer = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
             await importIntoDocument(drive, mount, path, buffer, user, request.signal);
             return { success: true };
         },

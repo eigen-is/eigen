@@ -372,6 +372,9 @@ export function isEmlFile(mimeType: string, name: string): boolean {
 // an invitation mail, a CalDAV resource.
 export const ICS_MIME = 'text/calendar';
 
+// The media type an iCalendar byte stream is served under (CalDAV GET, PROPFIND getcontenttype, export).
+export const ICS_CONTENT_TYPE = `${ICS_MIME}; charset=utf-8`;
+
 // The media type with its own parameters, because a calendar body names its purpose in them
 // (`text/calendar; method=REQUEST; charset=utf-8`) — but a type that merely starts with those letters
 // is another media type. The one rule for "these bytes are iCalendar", so a stored file and a mail part

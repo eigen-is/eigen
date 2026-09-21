@@ -1,9 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { VCARD_IMPORT_MAX_CARDS } from '@workspace/lib/constants/contact';
-import { NOT_A_VCARD_FILE, NOT_UTF8_FILE } from '@workspace/lib/constants/transfer';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { eq } from 'drizzle-orm';
-import { ApiError } from '../core';
+import { ApiError, decodeUtf8Strict, NOT_A_VCARD_FILE, NOT_UTF8_FILE, VCARD_IMPORT_MAX_CARDS } from '../core';
 import { makeLine, parseVCard, serializeVCardLines, splitVCards, transcodeTo30, VCardError } from '../vcard';
 import type { ParsedCard } from '../vcard/types';
 import type { Contacts } from './contacts';
@@ -54,12 +52,8 @@ function withMintedUid(parsed: ParsedCard): string {
 // refused by the PUT) is counted and the file continues; only the shared storage quota stops the run,
 // because every later card would be refused the same way.
 export async function importCards(contacts: Contacts, bytes: Uint8Array): Promise<ImportCountsResult> {
-    let text: string;
-    try {
-        text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-    } catch {
-        throw new ApiError(400, NOT_UTF8_FILE);
-    }
+    const text = decodeUtf8Strict(bytes);
+    if (text === null) throw new ApiError(400, NOT_UTF8_FILE);
 
     let cards: string[];
     try {

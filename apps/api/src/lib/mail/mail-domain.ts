@@ -1,6 +1,5 @@
 import { MAIL_PREVIEW_CHARS, MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
 import { canonicalMailbox, MAILBOX_DRAFTS, MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
-import { NOT_AN_EMAIL_FILE } from '@workspace/lib/constants/transfer';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import {
     type AddressObject,
@@ -22,7 +21,7 @@ import { processInboundImip, summarizeCalendarInvite } from '../calendar/imip';
 import { enforceMailAndContactsQuota } from '../config/enforcement';
 import { isDemo } from '../config/env';
 import { isInternalAddress } from '../config/server-config';
-import { ApiError, isSafePathSegment } from '../core';
+import { ApiError, isSafePathSegment, NOT_AN_EMAIL_FILE } from '../core';
 import { renderAttachmentLinksText, renderAttachmentPills } from '../core/mail-template';
 import { type OutboundMail, sendMail } from '../core/mailer';
 import type { Home } from '../home';

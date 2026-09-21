@@ -1,5 +1,4 @@
 import { EML_MAX_BYTES, MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
-import { NOT_AN_EMAIL_FILE } from '@workspace/lib/constants/transfer';
 import { EML_MIME, isEmlFile } from '@workspace/lib/types/drive';
 import {
     type ImportMailResult,
@@ -8,7 +7,7 @@ import {
     type SentMailResult,
 } from '@workspace/lib/types/mail';
 import { Elysia, type Static, status, t } from 'elysia';
-import { ApiError, contentDisposition, readBoundedBodyBytes, setCacheHeaders } from '../lib/core';
+import { ApiError, contentDisposition, NOT_AN_EMAIL_FILE, readBoundedBodyBytes, setCacheHeaders } from '../lib/core';
 import { requireLocalhost, requireNonGuest, requireSelf } from '../lib/core/access';
 import { readImportSourceBytes } from '../lib/drive';
 import {

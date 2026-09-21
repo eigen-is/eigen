@@ -1,9 +1,9 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
-import { VCARD_IMPORT_MAX_CARDS } from '@workspace/lib/constants/contact';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
+import { VCARD_IMPORT_MAX_CARDS } from '../../lib/core/transfer';
 import { getHome } from '../../lib/home';
 import { parseVCard, splitVCards } from '../../lib/vcard';
 import { CONTACTS_TEST_ROOT, makeContacts, stageAvatar, validContact } from '../contacts-test-helpers';

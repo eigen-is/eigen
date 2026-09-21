@@ -1,20 +1,18 @@
 import { describe, expect, test } from 'bun:test';
+import { ApiError } from '../../lib/core/errors';
 import {
     ICS_PREVIEW_MAX_ATTENDEES,
     ICS_PREVIEW_MAX_DESCRIPTION_CHARS,
     ICS_PREVIEW_MAX_EVENTS,
-} from '@workspace/lib/constants/calendar';
-import { ApiError } from '../../lib/core/errors';
+} from '../../lib/core/transfer';
 import { toTransferableText } from '../../lib/document/transform/protocol';
 import { buildIcsPreviewPayload } from '../../lib/preview/ics-preview';
+import { vcal } from '../ics-test-helpers';
 
 // The payload the quick look reads. Every value in it came from a file a stranger wrote, and the card
 // that draws it must never fetch anything the file named.
 
 const HOSTILE = 'evil.example';
-
-const vcal = (lines: string[], head: string[] = []) =>
-    ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Test//EN', ...head, ...lines, 'END:VCALENDAR'].join('\r\n');
 
 const payloadOf = (text: string) => buildIcsPreviewPayload(toTransferableText(text));
 
@@ -40,19 +38,6 @@ const THUNDERBIRD = vcal([
 
 // An Apple-style invitation: METHOD:REQUEST, an ORGANIZER, ATTENDEEs, a VALARM and a VTIMEZONE.
 const APPLE_INVITE = vcal(
-    event('invite@eigen', [
-        'DTSTART;TZID=America/New_York:20260420T140000',
-        'DTEND;TZID=America/New_York:20260420T150000',
-        'SUMMARY:Design review',
-        'LOCATION:Studio B',
-        'ORGANIZER;CN=Ada Lovelace:mailto:ada@external.com',
-        'ATTENDEE;CN=Bob;PARTSTAT=ACCEPTED;ROLE=REQ-PARTICIPANT:mailto:bob@example.com',
-        'ATTENDEE;PARTSTAT=NEEDS-ACTION;ROLE=OPT-PARTICIPANT:MAILTO:carol@example.com',
-        'BEGIN:VALARM',
-        'ACTION:DISPLAY',
-        'TRIGGER:-PT15M',
-        'END:VALARM',
-    ]),
     [
         'METHOD:REQUEST',
         'BEGIN:VTIMEZONE',
@@ -71,6 +56,19 @@ const APPLE_INVITE = vcal(
         'END:DAYLIGHT',
         'END:VTIMEZONE',
     ],
+    event('invite@eigen', [
+        'DTSTART;TZID=America/New_York:20260420T140000',
+        'DTEND;TZID=America/New_York:20260420T150000',
+        'SUMMARY:Design review',
+        'LOCATION:Studio B',
+        'ORGANIZER;CN=Ada Lovelace:mailto:ada@external.com',
+        'ATTENDEE;CN=Bob;PARTSTAT=ACCEPTED;ROLE=REQ-PARTICIPANT:mailto:bob@example.com',
+        'ATTENDEE;PARTSTAT=NEEDS-ACTION;ROLE=OPT-PARTICIPANT:MAILTO:carol@example.com',
+        'BEGIN:VALARM',
+        'ACTION:DISPLAY',
+        'TRIGGER:-PT15M',
+        'END:VALARM',
+    ]),
 );
 
 describe('buildIcsPreviewPayload', () => {
@@ -216,6 +214,9 @@ describe('buildIcsPreviewPayload', () => {
                 timed('uri@eigen', '20260601T100000Z', '20260601T110000Z', [
                     'ORGANIZER;CN=Ada:javascript:alert(1)',
                     `ATTENDEE:http://${HOSTILE}/x`,
+                    // A mailto: URI carries header fields after a `?`, which the card would write straight
+                    // back into the link it draws — an address with one in it is not a plain address.
+                    `ATTENDEE:mailto:mallory@example.com?subject=hi&body=https://${HOSTILE}/x`,
                     'ATTENDEE:mailto:bob@example.com',
                 ]),
             ),
@@ -228,6 +229,44 @@ describe('buildIcsPreviewPayload', () => {
         // Omitted, never counted: `remainingAttendees` says how many addresses the card is not showing.
         expect(payload.events[0]?.remainingAttendees).toBe(0);
         expect(JSON.stringify(payload)).not.toContain(HOSTILE);
+    });
+
+    // One VEVENT a stranger's file spells wrong used to cost the quick look the whole file. Every member
+    // the card cannot show is counted instead: a VEVENT with no start, and an override whose series the
+    // file does not hold.
+    test('a member the builder cannot read is counted, and the rest of the file still shows', () => {
+        const payload = payloadOf(
+            vcal([
+                ...timed('sane@eigen', '20260601T100000Z', '20260601T110000Z'),
+                ...event('no-start@eigen', ['SUMMARY:No start at all']),
+                ...event('orphan@eigen', [
+                    'RECURRENCE-ID:20260608T100000Z',
+                    'DTSTART:20260608T120000Z',
+                    'DTEND:20260608T130000Z',
+                    'SUMMARY:Override of a series this file does not hold',
+                ]),
+            ]),
+        );
+
+        expect(payload.events.map((e) => e.uid)).toEqual(['sane@eigen']);
+        expect(payload.total).toBe(3);
+        expect(payload.dropped).toBe(2);
+    });
+
+    test('a file of nothing but orphan overrides reads as a file of unreadable members', () => {
+        const payload = payloadOf(
+            vcal([
+                ...event('orphan@eigen', [
+                    'RECURRENCE-ID:20260608T100000Z',
+                    'DTSTART:20260608T120000Z',
+                    'DTEND:20260608T130000Z',
+                ]),
+            ]),
+        );
+
+        expect(payload.events).toEqual([]);
+        expect(payload.total).toBe(1);
+        expect(payload.dropped).toBe(1);
     });
 
     // toISOString spells a year outside 1–9999 as "+010007-06-07T…", which a card prints as "Invalid
