@@ -2,10 +2,7 @@ import { cn } from '@workspace/ui/lib/utils';
 
 export type EventPillVariant = 'block' | 'dot';
 
-// Invite-status / free-busy state classes shared by the MonthView and WeekView event pills; each
-// pill's base layout classes stay inline. Filled all-day pills ('block') dim and hover as a whole
-// and get a dashed border while an invite is pending; timed pills ('dot') hover the row and carry
-// the pending ring on their color dot instead, so 'dot' has no container-level pending class.
+// Shared by the MonthView and WeekView pills so both read a state the same way; their layout classes stay inline.
 export function eventPillStateClasses(
     variant: EventPillVariant,
     freeBusy: boolean,
@@ -24,8 +21,7 @@ export function eventPillStateClasses(
     );
 }
 
-// All-day events store midnight-UTC bounds with an exclusive end (day after the last day); timed events keep
-// the local wall time. See CALENDAR.md § All-Day Events.
+// All-day bounds are midnight UTC with an exclusive end (docs/CALENDAR.md § All-day events, intervals and zone-less rendering).
 export function buildEventTimes(
     allDay: boolean,
     startDate: string,

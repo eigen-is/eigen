@@ -39,8 +39,7 @@ type EventFormFieldsProps = {
     timezone: string;
     allDayId: string;
     attendeesSection: ReactNode;
-    // Title, time, recurrence, location and description of an invitation are the organizer's to change:
-    // updateEvent's linked event guard drops them (docs/CALENDAR.md). The calendar select stays live.
+    // An invitation's details belong to the organizer: updateEvent's linked-event guard drops them anyway.
     detailsDisabled?: boolean;
 };
 
