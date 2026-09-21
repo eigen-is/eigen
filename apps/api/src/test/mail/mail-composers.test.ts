@@ -139,6 +139,8 @@ describe('composeOtpEmail', () => {
         );
         expect(mail.subject).toBe('Your guest access code');
         expect(mail.text).toContain('shared documents');
+        expect(mail.text).toContain('only the newest works');
+        expect(mail.html).toContain('only the newest works');
     });
 
     test('omits domain trailer when running on localhost', () => {

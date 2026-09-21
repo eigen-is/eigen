@@ -203,7 +203,9 @@ function GuestLoginForm({ initialEmail = '' }: { initialEmail?: string }) {
                             onChange={(e) => setOtp(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleVerifyOtp()}
                         />
-                        <p className="text-xs text-muted-foreground">Check your email for the 6-digit code.</p>
+                        <p className="text-xs text-muted-foreground">
+                            Check your email for the 6-digit code. If you asked for more than one, use the newest.
+                        </p>
                     </div>
                     <Button className="w-full" disabled={isLoading || otp.length < 6} onClick={handleVerifyOtp}>
                         {isLoading ? 'Verifying...' : 'Verify'}

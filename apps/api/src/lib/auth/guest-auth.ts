@@ -12,7 +12,7 @@ import { reconcileSharesForNewUser } from '../share';
 import { getEntriesForTarget } from '../share/registry';
 import { getUserByEmail } from '../user/user';
 import { auth, getAuthDrizzleDb } from './auth';
-import { checkOtpRateLimit } from './otp-rate-limit';
+import { checkOtpRateLimit, countOtpGuess, refundOtpRequests, resetOtpGuesses } from './otp-rate-limit';
 
 const OTP_EXPIRY_MS = 5 * 60 * 1000;
 
@@ -106,27 +106,43 @@ export async function requestOtp(email: string, ip: string): Promise<void> {
             .run();
     });
 
+    resetOtpGuesses(email);
+
     const ok = await sendMail(composeOtpEmail({ name: email, email }, otp, 'guest', getOrgName(), getDomain()));
     if (!ok) throw new ApiError(500, 'Failed to send verification code');
 }
 
-export async function verifyOtpAndSignIn(email: string, otp: string): Promise<Response> {
+export async function verifyOtpAndSignIn(email: string, otp: string, ip: string): Promise<Response> {
     const db = getAuthDrizzleDb();
     const identifier = `guest-otp:${email}`;
 
     const record = db.select().from(verification).where(eq(verification.identifier, identifier)).get();
     if (!record) throw new ApiError(400, 'Invalid code');
 
-    // Consume the code synchronously, before the async verify below. bun:sqlite is synchronous,
-    // so this SELECT + DELETE runs in one un-interruptible tick: a second concurrent request for
-    // the same code finds no row, so one OTP can never mint two sessions. A wrong or expired
-    // guess also consumes the code — acceptable given the 6-digit space and 5-minute expiry.
-    db.delete(verification).where(eq(verification.id, record.id)).run();
+    if (record.expiresAt < new Date()) {
+        db.delete(verification).where(eq(verification.id, record.id)).run();
+        throw new ApiError(400, 'Code expired');
+    }
 
-    if (record.expiresAt < new Date()) throw new ApiError(400, 'Code expired');
+    // Counted before the async verify, so a burst of parallel guesses can't outrun the cap.
+    if (!countOtpGuess(email, record.expiresAt)) {
+        db.delete(verification).where(eq(verification.id, record.id)).run();
+        throw new ApiError(429, 'Too many wrong attempts — request a new code');
+    }
 
     const valid = await Bun.password.verify(otp, record.value);
     if (!valid) throw new ApiError(400, 'Invalid code');
+
+    // bun:sqlite is synchronous, so of two concurrent requests with the right code only one
+    // deletes the row: one OTP can never mint two sessions.
+    const consumed = db
+        .delete(verification)
+        .where(eq(verification.id, record.id))
+        .returning({ id: verification.id })
+        .all();
+    if (consumed.length === 0) throw new ApiError(400, 'Invalid code');
+    resetOtpGuesses(email);
+    refundOtpRequests(email, ip);
 
     // Find or create guest user
     let guestUser = await getUserByEmail(email);

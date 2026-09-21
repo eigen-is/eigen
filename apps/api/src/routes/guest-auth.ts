@@ -14,8 +14,8 @@ export const guestAuthRouter = new Elysia({ name: 'guest-auth' })
     )
     .post(
         '/guest-auth/verify-otp',
-        async ({ body }) => {
-            return verifyOtpAndSignIn(body.email.toLowerCase().trim(), body.otp);
+        async ({ body, request, server }) => {
+            return verifyOtpAndSignIn(body.email.toLowerCase().trim(), body.otp, clientIpKey(request, server));
         },
         { body: t.Object({ email: t.String({ maxLength: MAX_EMAIL_LENGTH }), otp: t.String() }) },
     );

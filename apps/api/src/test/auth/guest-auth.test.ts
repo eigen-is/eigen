@@ -4,7 +4,7 @@ import type { DrivePath } from '@workspace/lib/types';
 import { eq } from 'drizzle-orm';
 import { user as userSchema, verification as verificationSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
-import { _resetOtpRateLimitForTests } from '../../lib/auth/otp-rate-limit';
+import { _resetOtpRateLimitForTests, MAX_OTP_GUESSES, MAX_OTP_REQUESTS_PER_EMAIL } from '../../lib/auth/otp-rate-limit';
 import { updateServerConfig } from '../../lib/config/server-config';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import { getOrgRole } from '../../lib/user';
@@ -81,7 +81,7 @@ describe('Guest Auth', () => {
 
     test('request-otp returns 429 after exceeding the per-email rate limit', async () => {
         const email = `rl-${randomUUID()}@example.com`;
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < MAX_OTP_REQUESTS_PER_EMAIL; i++) {
             const ok = await ctx.app.handle(
                 new Request('http://localhost/guest-auth/request-otp', {
                     method: 'POST',
@@ -334,14 +334,59 @@ describe('Guest Auth', () => {
             );
         }
 
-        test('a wrong guess consumes the code — a later correct attempt fails', async () => {
-            const otp = await requestOtpAndCapture(guestEmail);
-            // The code row is deleted before the async verify, so even a wrong guess consumes it...
-            const wrong = await verifyOtp(guestEmail, otp === '000000' ? '111111' : '000000');
+        function wrongCodeFor(otp: string): string {
+            return otp === '000000' ? '111111' : '000000';
+        }
+
+        test('a wrong guess leaves the code usable', async () => {
+            const email = `typo-${randomUUID()}@external.com`;
+            const otp = await requestOtpAndCapture(email);
+            const wrong = await verifyOtp(email, wrongCodeFor(otp));
             expect(wrong.status).toBe(400);
-            // ...and the real code no longer works (one code can't be retried or double-spent).
-            const retry = await verifyOtp(guestEmail, otp);
+            const retry = await verifyOtp(email, otp);
+            expect(retry.status).toBe(200);
+        });
+
+        test('the code is burned once the guesses run out', async () => {
+            const email = `brute-${randomUUID()}@external.com`;
+            const otp = await requestOtpAndCapture(email);
+            for (let i = 0; i < MAX_OTP_GUESSES; i++) {
+                const wrong = await verifyOtp(email, wrongCodeFor(otp));
+                expect(wrong.status).toBe(400);
+            }
+            const late = await verifyOtp(email, otp);
+            expect(late.status).toBe(429);
+            // The row is gone, so the code stays dead after the counter is forgotten.
+            _resetOtpRateLimitForTests();
+            const retry = await verifyOtp(email, otp);
             expect(retry.status).toBe(400);
+        });
+
+        test('a fresh code gets a fresh set of guesses', async () => {
+            const email = `again-${randomUUID()}@external.com`;
+            const first = await requestOtpAndCapture(email);
+            for (let i = 0; i < MAX_OTP_GUESSES; i++) {
+                await verifyOtp(email, wrongCodeFor(first));
+            }
+            const second = await requestOtpAndCapture(email);
+            const res = await verifyOtp(email, second);
+            expect(res.status).toBe(200);
+        });
+
+        test('a successful sign-in does not count toward the request limit', async () => {
+            const email = `regular-${randomUUID()}@external.com`;
+            for (let i = 0; i < MAX_OTP_REQUESTS_PER_EMAIL + 1; i++) {
+                const otp = await requestOtpAndCapture(email);
+                const res = await verifyOtp(email, otp);
+                expect(res.status).toBe(200);
+            }
+        });
+
+        test('one code cannot mint two sessions', async () => {
+            const email = `double-${randomUUID()}@external.com`;
+            const otp = await requestOtpAndCapture(email);
+            const results = await Promise.all([verifyOtp(email, otp), verifyOtp(email, otp)]);
+            expect(results.map((r) => r.status).sort()).toEqual([200, 400]);
         });
 
         test('end-to-end: guest can hit /events, /notifications, and sees shared item in /shared/with-me', async () => {
