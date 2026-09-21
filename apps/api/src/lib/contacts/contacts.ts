@@ -8,7 +8,7 @@ import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { type CardEdits, createVCard, mergeVCard } from '../carddav/vcard-serialize';
 import { enforceMailAndContactsQuota } from '../config/enforcement';
 import { getServerSettings } from '../config/server-settings';
-import type { ManagedDatabase } from '../core';
+import type { ManagedDatabase, PutResourceResult } from '../core';
 import {
     ApiError,
     cleanupTempFiles,
@@ -41,7 +41,7 @@ import {
     normalizeLabelName,
     parsedToData,
 } from './card-store';
-import type { CardBook, CardRow, DeleteCardResult, PutCardResult } from './dav-store';
+import type { CardBook, CardRow, DeleteCardResult } from './dav-store';
 import * as davStore from './dav-store';
 import { CONTACTS_DB_CONFIG } from './db-config';
 import * as labels from './labels';
@@ -883,7 +883,7 @@ export class Contacts {
         uri: string,
         body: string,
         pre: { ifMatch: string | null; ifNoneMatch: string | null },
-    ): Promise<PutCardResult> {
+    ): Promise<PutResourceResult> {
         return davStore.putCard(this, uri, body, pre);
     }
 

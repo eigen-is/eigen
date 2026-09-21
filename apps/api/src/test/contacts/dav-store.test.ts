@@ -284,12 +284,17 @@ describe('putCard — UID rules', () => {
         expect(await put(contacts, uri, card({ uid: randomUUID() }))).toEqual({ ok: false, error: 'uid-conflict' });
     });
 
-    test('a second uri claiming an owned UID is a uid-conflict', async () => {
+    test('a second uri claiming an owned UID is a uid-conflict naming the holder', async () => {
         const { contacts } = await makeContacts();
         const uid = randomUUID();
-        await put(contacts, `${uid}.vcf`, card({ uid }));
+        const holder = `${uid}.vcf`;
+        await put(contacts, holder, card({ uid }));
 
-        expect(await put(contacts, `${randomUUID()}.vcf`, card({ uid }))).toEqual({ ok: false, error: 'uid-conflict' });
+        expect(await put(contacts, `${randomUUID()}.vcf`, card({ uid }))).toEqual({
+            ok: false,
+            error: 'uid-conflict',
+            conflictUri: holder,
+        });
     });
 });
 
