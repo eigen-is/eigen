@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
-import { and, eq, inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import type ICAL from 'ical.js';
 import {
     computeResourceEtag,
@@ -10,13 +10,20 @@ import {
     PATHS,
     type ResourceFile,
     readResourceFile,
-    uriKeyOf,
     writeResourceFile,
 } from '../core';
 import { remintEventIds, serializeResource } from '../ical';
 import type { Calendar } from './calendar';
 import { projectRows } from './calendar-store';
-import { calendarDir, type EventRowInput, resourcePath, sanitizeCalendarId, statCalendarDir } from './resource-store';
+import {
+    calendarDir,
+    clearPendingWrite,
+    type EventRowInput,
+    indexResource,
+    resourcePath,
+    sanitizeCalendarId,
+    statCalendarDir,
+} from './resource-store';
 import * as schema from './schema';
 
 // The index pass over `calendars/`: files are the truth, so it runs before anything is served and re-reads
@@ -265,40 +272,26 @@ function writeIndexed(calendar: Calendar, calendarId: string, candidates: Candid
         if (changed.length > 0) {
             const ctag = calendar.bumpCtag(tx, calendarId);
             for (const c of changed) {
-                const row = {
-                    uri: c.file.uri,
-                    uriKey: uriKeyOf(c.file.uri),
-                    uid: c.uid,
-                    etag: c.etag,
-                    mtime: c.file.mtime,
-                    size: c.file.size,
-                    resourceCtag: ctag,
-                    hasUnindexedRecurrence: c.hasUnindexedRecurrence,
-                };
-                tx.insert(schema.resources)
-                    .values({ id: c.id, calendarId, ...row })
-                    .onConflictDoUpdate({ target: schema.resources.id, set: row })
-                    .run();
-                tx.delete(schema.events).where(eq(schema.events.resourceId, c.id)).run();
-                for (const event of c.rows) tx.insert(schema.events).values(event).run();
-                // A present file is alive again, so one re-planted at a deleted uri drops its stale removal.
-                tx.delete(schema.resourceTombstones)
-                    .where(
-                        and(
-                            eq(schema.resourceTombstones.calendarId, calendarId),
-                            eq(schema.resourceTombstones.uriKey, row.uriKey),
-                        ),
-                    )
-                    .run();
+                indexResource(
+                    tx,
+                    {
+                        id: c.id,
+                        calendarId,
+                        uri: c.file.uri,
+                        uid: c.uid,
+                        etag: c.etag,
+                        mtime: c.file.mtime,
+                        size: c.file.size,
+                        resourceCtag: ctag,
+                        hasUnindexedRecurrence: c.hasUnindexedRecurrence,
+                    },
+                    c.rows,
+                );
             }
         }
 
         // This pass settled every prepared uri, so the recovery drain behind init owes their intents nothing.
-        for (const c of candidates) {
-            tx.delete(schema.pendingWrites)
-                .where(and(eq(schema.pendingWrites.calendarId, calendarId), eq(schema.pendingWrites.uri, c.file.uri)))
-                .run();
-        }
+        for (const c of candidates) clearPendingWrite(tx, calendarId, c.file.uri);
     });
 }
 

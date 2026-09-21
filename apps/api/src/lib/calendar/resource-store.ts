@@ -1,4 +1,6 @@
 import type { CalendarItem } from '@workspace/lib/types/calendar';
+import { and, eq } from 'drizzle-orm';
+import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import {
     isSafePathSegment,
     LocalFilesystem,
@@ -6,8 +8,9 @@ import {
     type ResourceScan,
     sanitizeResourceUri,
     statResourceDir,
+    uriKeyOf,
 } from '../core';
-import type * as schema from './schema';
+import * as schema from './schema';
 
 // The calendar-shaped half of the store over `core/indexed-file-store.ts`: where a resource lives, what its
 // name may be, and how large it may get. The protocol layers import these from here, never the reverse.
@@ -79,3 +82,48 @@ export type EventRowInput = Omit<typeof schema.events.$inferInsert, 'createdAt' 
     createdAt: Date;
     updatedAt: Date;
 };
+
+// The transaction handle drizzle hands a `db.transaction(cb)` callback.
+export type Tx = Parameters<Parameters<BunSQLiteDatabase<typeof schema>['transaction']>[0]>[0];
+
+// One indexed resource, at the ctag its change carries: its own row, every event row it projects to, and
+// the removal a present file cancels. The caller is inside the transaction that bumped that ctag, so a
+// write, a drain and a reconcile all leave one shape behind.
+export function indexResource(
+    tx: Tx,
+    resource: Omit<typeof schema.resources.$inferInsert, 'uriKey'>,
+    rows: EventRowInput[],
+): void {
+    const row = {
+        uri: resource.uri,
+        uriKey: uriKeyOf(resource.uri),
+        uid: resource.uid,
+        etag: resource.etag,
+        mtime: resource.mtime,
+        size: resource.size,
+        resourceCtag: resource.resourceCtag,
+        hasUnindexedRecurrence: resource.hasUnindexedRecurrence,
+    };
+    tx.insert(schema.resources)
+        .values({ id: resource.id, calendarId: resource.calendarId, ...row })
+        .onConflictDoUpdate({ target: schema.resources.id, set: row })
+        .run();
+    tx.delete(schema.events).where(eq(schema.events.resourceId, resource.id)).run();
+    for (const event of rows) tx.insert(schema.events).values(event).run();
+    // So no href is ever both a 200 and a 404 in one sync response.
+    tx.delete(schema.resourceTombstones)
+        .where(
+            and(
+                eq(schema.resourceTombstones.calendarId, resource.calendarId),
+                eq(schema.resourceTombstones.uriKey, row.uriKey),
+            ),
+        )
+        .run();
+}
+
+// A settled write intent: the index owes that file nothing any more.
+export function clearPendingWrite(db: Tx | BunSQLiteDatabase<typeof schema>, calendarId: string, uri: string): void {
+    db.delete(schema.pendingWrites)
+        .where(and(eq(schema.pendingWrites.calendarId, calendarId), eq(schema.pendingWrites.uri, uri)))
+        .run();
+}

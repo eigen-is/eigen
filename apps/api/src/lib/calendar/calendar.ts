@@ -42,7 +42,9 @@ import { reconcileIndex, stagedDeletesOf } from './reconcile';
 import type { CalendarCollection } from './resource-store';
 import {
     calendarDir,
+    clearPendingWrite,
     gateKey,
+    indexResource,
     parseGateKey,
     resourcePath,
     sanitizeCalendarId,
@@ -166,13 +168,6 @@ export class Calendar {
         this.db.insert(schema.pendingWrites).values({ calendarId, uri }).onConflictDoNothing().run();
     }
 
-    private clearPendingWrite(calendarId: string, uri: string): void {
-        this.db
-            .delete(schema.pendingWrites)
-            .where(and(eq(schema.pendingWrites.calendarId, calendarId), eq(schema.pendingWrites.uri, uri)))
-            .run();
-    }
-
     parseResourceFile(bytes: Uint8Array): ICAL.Component {
         this.parses++;
         return parseResource(new TextDecoder().decode(bytes));
@@ -185,43 +180,11 @@ export class Calendar {
 
     // The single index-write seam: the ctag, the resource row, its event rows, the tombstone, all in one transaction.
     commitResource(commit: ResourceCommit): void {
-        const uriKey = uriKeyOf(commit.uri);
+        const { rows, ...resource } = commit;
         this.db.transaction((tx) => {
-            const ctag = this.bumpCtag(tx, commit.calendarId);
-            const row = {
-                uri: commit.uri,
-                uriKey,
-                uid: commit.uid,
-                etag: commit.etag,
-                mtime: commit.mtime,
-                size: commit.size,
-                resourceCtag: ctag,
-                hasUnindexedRecurrence: commit.hasUnindexedRecurrence,
-            };
-            tx.insert(schema.resources)
-                .values({ id: commit.id, calendarId: commit.calendarId, ...row })
-                .onConflictDoUpdate({ target: schema.resources.id, set: row })
-                .run();
-            tx.delete(schema.events).where(eq(schema.events.resourceId, commit.id)).run();
-            for (const event of commit.rows) tx.insert(schema.events).values(event).run();
-            // So no href is ever both a 200 and a 404 in one sync response.
-            tx.delete(schema.resourceTombstones)
-                .where(
-                    and(
-                        eq(schema.resourceTombstones.calendarId, commit.calendarId),
-                        eq(schema.resourceTombstones.uriKey, uriKey),
-                    ),
-                )
-                .run();
+            indexResource(tx, { ...resource, resourceCtag: this.bumpCtag(tx, commit.calendarId) }, rows);
             // The write intent settles in the very transaction that settles the pair; a crash earlier leaves it for init.
-            tx.delete(schema.pendingWrites)
-                .where(
-                    and(
-                        eq(schema.pendingWrites.calendarId, commit.calendarId),
-                        eq(schema.pendingWrites.uri, commit.uri),
-                    ),
-                )
-                .run();
+            clearPendingWrite(tx, commit.calendarId, commit.uri);
         });
     }
 
@@ -266,7 +229,7 @@ export class Calendar {
                     });
                     this.eventsBytes -= existing.size;
                 }
-                this.clearPendingWrite(calendarId, uri);
+                clearPendingWrite(this.db, calendarId, uri);
             } catch (e) {
                 // A pass over foreign bytes skips and warns, as every other one does: rethrowing here would
                 // escape the gate and take every later read and write of this Home with it. The write intent
