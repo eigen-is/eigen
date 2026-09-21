@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq, gt, inArray } from 'drizzle-orm';
+import { and, eq, gt, inArray, or } from 'drizzle-orm';
 import type ICAL from 'ical.js';
 import { enforceHomeDataQuota } from '../config/enforcement';
 import {
@@ -154,6 +154,27 @@ export async function getResourcesByUris(
         .select(RESOURCE_ROW)
         .from(schema.resources)
         .where(and(eq(schema.resources.calendarId, calendarId), inArray(schema.resources.uriKey, uris.map(uriKeyOf))))
+        .all();
+}
+
+// The resources a range read answers with: the ones its matched uris name, plus every resource the index
+// cannot expand — a stripped rule or an RDATE still has occurrences to sync.
+export async function getResourcesInRange(
+    calendar: Calendar,
+    calendarId: string,
+    matched: string[],
+): Promise<ResourceRow[]> {
+    await calendar.gate.ensureDrained();
+    const unindexed = eq(schema.resources.hasUnindexedRecurrence, true);
+    return calendar.db
+        .select(RESOURCE_ROW)
+        .from(schema.resources)
+        .where(
+            and(
+                eq(schema.resources.calendarId, calendarId),
+                matched.length ? or(inArray(schema.resources.uriKey, matched.map(uriKeyOf)), unindexed) : unindexed,
+            ),
+        )
         .all();
 }
 

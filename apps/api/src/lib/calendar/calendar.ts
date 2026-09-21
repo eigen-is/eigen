@@ -10,7 +10,7 @@ import type {
 } from '@workspace/lib/types/calendar';
 import { type SSEvent, SSEventType } from '@workspace/lib/types/sse';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, getTableColumns, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import type ICAL from 'ical.js';
 import {
@@ -475,18 +475,19 @@ export class Calendar {
     // Plus every resource the index cannot expand: a stripped rule or an RDATE still has occurrences to sync.
     public async getResourcesInRange(calendarId: string, from: Date, to: Date): Promise<ResourceRow[]> {
         const rows = await this.getRawEventsInRange(calendarId, from, to);
-        await this.gate.ensureDrained();
-        const matched = new Set(rows.map((row) => row.uri));
-        return (await this.listResources(calendarId)).filter(
-            (resource) => matched.has(resource.uri) || resource.hasUnindexedRecurrence,
-        );
+        return store.getResourcesInRange(this, calendarId, [...new Set(rows.map((row) => row.uri))]);
     }
 
     // --- Events (reads) ---
 
+    // The file facts an event row is read with are its name and its hash, so the join carries those two
+    // columns and not every column of both tables.
     joinedEvents() {
         return this.db
-            .select()
+            .select({
+                events: getTableColumns(schema.events),
+                resources: { uri: schema.resources.uri, etag: schema.resources.etag },
+            })
             .from(schema.events)
             .innerJoin(schema.resources, eq(schema.events.resourceId, schema.resources.id));
     }

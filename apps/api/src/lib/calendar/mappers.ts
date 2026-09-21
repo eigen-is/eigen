@@ -35,7 +35,7 @@ export function dbEventToCalendarEvent(
 // An event row and the file it was projected from — what every read of a stored event answers with.
 export type JoinedEvent = {
     events: typeof schema.events.$inferSelect;
-    resources: typeof schema.resources.$inferSelect;
+    resources: { uri: string; etag: string };
 };
 
 export function toEvent(row: JoinedEvent): CalendarEvent {
