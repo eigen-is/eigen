@@ -9,6 +9,7 @@ import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getMailDomain } from '../../lib/config/server-config';
+import type { OutboundMail } from '../../lib/core/mailer';
 import { ICS_IMPORT_MAX_EVENTS } from '../../lib/core/transfer';
 import { getHome } from '../../lib/home';
 import { basicAuth, DAV_PASSWORD } from '../dav-test-helpers';
@@ -89,6 +90,39 @@ describe('Calendar transfer routes', () => {
         return driveUpload(alice.sessionToken, alice.id, mountId, rootId, file);
     };
 
+    const CONTROL_GUEST = 'control.guest@external.com';
+
+    // The cancellation fan-out is fire-and-forget, so a delete that mails nothing proves nothing on its own.
+    // This event Alice organizes IS mailed about, and it is created and deleted after the silent one, so its
+    // cancellation is composed behind anything the silent delete owed. Returns the subject to wait for.
+    const controlCancellation = async (): Promise<string> => {
+        const title = `Control ${randomUUID()}`;
+        const created = await assertJson<CalendarEvent>(
+            await authedRequest(alice.sessionToken, `/calendar/${alice.id}/calendars/${calendarId}/events`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title,
+                    startTime: '2026-04-30T09:00:00Z',
+                    endTime: '2026-04-30T10:00:00Z',
+                    allDay: false,
+                    data: { attendees: [{ email: CONTROL_GUEST, status: 'pending', role: 'required' }] },
+                }),
+            }),
+        );
+        const removed = await authedRequest(
+            alice.sessionToken,
+            `/calendar/${alice.id}/calendars/${calendarId}/events/${created.id}`,
+            { method: 'DELETE' },
+        );
+        expect(removed.status).toBe(200);
+        return `Canceled: ${title}`;
+    };
+
+    // Every mail the spy caught that the control did not account for.
+    const straySubjects = (mails: OutboundMail[]): string[] =>
+        mails.filter((m) => !m.to.some((t) => t.address === CONTROL_GUEST)).map((m) => m.subject);
+
     beforeAll(async () => {
         await getTestContext();
         alice = await createTestUser('ics-import-alice@test.eigen.is', DAV_PASSWORD, 'Ics Import Alice');
@@ -159,14 +193,14 @@ describe('Calendar transfer routes', () => {
             { method: 'DELETE' },
         );
         expect(removed.status).toBe(200);
-        // The cancellation mail would ride on the same call the delete answers: once the row is gone, it
-        // has either been composed or never will be.
+
+        const control = await controlCancellation();
         await eventually(
-            async () => ((await april()).some((e) => e.uid === `plain-2-${stamp}@other`) ? undefined : true),
-            'the deleted event to be gone',
+            async () => spy.mock.calls.some((c) => c[0].subject === control) || undefined,
+            "the control delete's cancellation mail",
         );
 
-        expect(spy.mock.calls.length).toBe(0);
+        expect(straySubjects(spy.mock.calls.map((c) => c[0]))).toEqual([]);
         spy.mockRestore();
     });
 
@@ -262,13 +296,14 @@ describe('Calendar transfer routes', () => {
             { method: 'DELETE' },
         );
         expect(removed.status).toBe(200);
-        // Same pairing: the row being gone is the moment a decline would have been composed.
+
+        const control = await controlCancellation();
         await eventually(
-            async () => ((await april()).some((e) => e.uid === stored.uid) ? undefined : true),
-            'the deleted event to be gone',
+            async () => spy.mock.calls.some((c) => c[0].subject === control) || undefined,
+            "the control delete's cancellation mail",
         );
 
-        expect(spy.mock.calls.length).toBe(0);
+        expect(straySubjects(spy.mock.calls.map((c) => c[0]))).toEqual([]);
         spy.mockRestore();
     });
 
