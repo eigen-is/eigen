@@ -32,16 +32,6 @@ export function eventById(calendar: Calendar, id: string): CalendarEvent | null 
     return row ? toEvent(row) : null;
 }
 
-// Home-wide, where the index keeps the UID unique per calendar: a series filed elsewhere is a re-import.
-export async function holdsUid(calendar: Calendar, uid: string): Promise<boolean> {
-    await calendar.gate.ensureDrained();
-    return !!calendar.db
-        .select({ uid: schema.resources.uid })
-        .from(schema.resources)
-        .where(eq(schema.resources.uid, uid))
-        .get();
-}
-
 // The stored component of a resource, or null when the file is gone under a row that still names it.
 export async function loadResource(
     calendar: Calendar,

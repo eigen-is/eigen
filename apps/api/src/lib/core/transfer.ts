@@ -1,3 +1,5 @@
+import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
+
 // What a whole-file transfer refuses, and what it answers with. Every fact here is the server's alone: the
 // route that ingests the file, the domain that parses it and the preview builder that reads it are all in
 // this app, so none of it is shared with a frontend. The two ceilings a surface does need — the byte size
@@ -32,12 +34,15 @@ export const VCARD_IMPORT_MAX_CARDS = 1000;
 export const VCARD_PREVIEW_MAX_CARDS = 200;
 
 // What one import may write, counting every VEVENT of the file: a master is a row plus a recurrence
-// expansion on every later range query, an override is a row too, and a file past this is a whole
-// account's history rather than a calendar moved by hand.
-export const ICS_IMPORT_MAX_EVENTS = 1000;
-// An imported event keeps a handful of alarms: a file may carry dozens, and each one is stored on the
-// row and written back out as a VALARM.
-export const ICS_IMPORT_MAX_REMINDERS = 5;
+// expansion on every later range query, and an override is a row too. Set above what `ICS_MAX_BYTES` holds
+// (about 9 600 typical events), so the two ceilings agree and the byte one is the one that binds. Both
+// bound one FILE, not a calendar: a calendar past them exports whole and imports back only in parts.
+export const ICS_IMPORT_MAX_EVENTS = 10_000;
+
+// What one import may store. A series is one resource, so a VTIMEZONE the file defines once is copied into
+// every series that names it and a file well inside its own ceiling can ask for many times its size on
+// disk. Past this the run stops the way a quota stop does; a retry continues, since what landed skips by UID.
+export const ICS_IMPORT_MAX_WRITTEN_BYTES = 8 * ICS_MAX_BYTES;
 
 // What one `.ics` preview may carry. A calendar export is a year of a team's meetings and an event's
 // description is a whole agenda, so the builder is where the payload is bounded.

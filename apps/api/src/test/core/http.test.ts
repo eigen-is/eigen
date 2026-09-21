@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+    contentDisposition,
     matchesIfMatch,
     matchesIfNoneMatch,
     parseByteRange,
@@ -30,6 +31,46 @@ describe('scriptableInlineHeaders', () => {
         for (const type of ['image/png', 'application/pdf', 'video/mp4', 'text/plain', 'application/xml-dtd']) {
             expect(scriptableInlineHeaders(type)).toEqual({});
         }
+    });
+});
+
+// A calendar SUMMARY, a vCard FN, a stored file name and a mail part's name all reach this helper as user
+// text, and what it emits is the name the client writes to disk.
+describe('contentDisposition', () => {
+    test('no path reaches either filename form', () => {
+        expect(contentDisposition('attachment', '../../../etc/passwd.ics')).toBe(
+            'attachment; filename="_.._.._etc_passwd.ics"',
+        );
+        expect(contentDisposition('attachment', 'a/b\\c.txt')).toBe('attachment; filename="a_b_c.txt"');
+        expect(contentDisposition('attachment', '..\\..\\win.ini')).toBe('attachment; filename="_.._win.ini"');
+        expect(contentDisposition('attachment', '.hidden.ics')).toBe('attachment; filename="hidden.ics"');
+    });
+
+    test('a name that sanitizes to nothing falls back to a neutral one', () => {
+        expect(contentDisposition('attachment', '..')).toBe('attachment; filename="download"');
+        expect(contentDisposition('attachment', '')).toBe('attachment; filename="download"');
+    });
+
+    test('a control character cannot split the header, in either form', () => {
+        expect(contentDisposition('attachment', 'note\r\nX-Evil: 1.ics')).toBe(
+            'attachment; filename="note__X-Evil: 1.ics"',
+        );
+        expect(contentDisposition('attachment', 'p\u0000ä.txt')).toBe(
+            `attachment; filename="p__.txt"; filename*=UTF-8''${encodeURIComponent('p_ä.txt')}`,
+        );
+    });
+
+    test('spaces, dots and unicode inside the name come out untouched', () => {
+        expect(contentDisposition('attachment', 'Q1 report.final.pdf')).toBe(
+            'attachment; filename="Q1 report.final.pdf"',
+        );
+        expect(contentDisposition('inline', 'räp"ort.txt')).toBe(
+            `inline; filename="r_p_ort.txt"; filename*=UTF-8''${encodeURIComponent('räp"ort.txt')}`,
+        );
+    });
+
+    test('a clamp that cut a surrogate pair in half still spells a header', () => {
+        expect(contentDisposition('attachment', `${'a'.repeat(3)}\ud83d`)).toContain("filename*=UTF-8''aaa%EF%BF%BD");
     });
 });
 

@@ -30,13 +30,14 @@ export type ExclusionStamp = { id: string; sequence: number; dtstamp: Date | nul
 
 const EIGEN_PREFIX = 'x-eigen-';
 
-// ical.js keeps a vCard-style group in the name, so `A.X-EIGEN-EVENT-ID` is that property under a
-// label and must not pass as a foreign `X-` line.
+// ical.js keeps a vCard-style group in the name (RFC 5545 §3.1), so `A.ATTENDEE` is an ATTENDEE: the rules
+// that must see past a group ask here, where ical.js's own `getFirstProperty('attendee')` does not.
+export function bareName(name: string): string {
+    return name.slice(name.lastIndexOf('.') + 1).toLowerCase();
+}
+
 export function isEigenName(name: string): boolean {
-    return name
-        .slice(name.lastIndexOf('.') + 1)
-        .toLowerCase()
-        .startsWith(EIGEN_PREFIX);
+    return bareName(name).startsWith(EIGEN_PREFIX);
 }
 
 // A property's normalized IANA TZID parameter, or null.

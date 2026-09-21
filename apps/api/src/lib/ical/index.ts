@@ -3,6 +3,8 @@ export {
     buildResource,
     eventsToIcs,
     isNewerRevision,
+    newVCalendar,
+    PRODID,
     patchEvent,
     putOverride,
     remintEventIds,
