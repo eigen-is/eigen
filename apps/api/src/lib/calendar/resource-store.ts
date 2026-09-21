@@ -45,6 +45,22 @@ export function statCalendarDir(storage: LocalFilesystem, calendarId: string): P
     return statResourceDir(storage, calendarDir(calendarId), ICS_SUFFIX);
 }
 
+// The calendar bytes of a Home nobody has booted, read from its own folder for the admin usage view. Counts
+// what `Calendar.eventsBytes` counts: every calendar directory, and none of the `.`-prefixed staging a
+// delete leaves behind — the counter drops those bytes the moment the rename lands. `homeFs` is rooted at
+// the home folder, not at the calendar root.
+export async function readCalendarTotalSize(homeFs: LocalFilesystem): Promise<number> {
+    const root = `${PATHS.CALENDAR.ROOT}/${PATHS.CALENDAR.CALENDARS}`;
+    if (!(await homeFs.dirExists(root))) return 0;
+    let total = 0;
+    for (const entry of await homeFs.readdir(root, { withFileTypes: true })) {
+        if (entry.isDirectory() && !entry.name.startsWith('.')) {
+            total += await homeFs.dirSize(`${root}/${entry.name}`);
+        }
+    }
+    return total;
+}
+
 // The gate key of one resource. Neither segment holds a `/`, so the pair round-trips through one string.
 export function gateKey(calendarId: string, uri: string): string {
     return `${calendarId}/${uri}`;

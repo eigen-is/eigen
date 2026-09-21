@@ -45,18 +45,19 @@ type InboundRequestOutcome =
     | { kind: 'updated'; event: CalendarEvent; title: string; startTime: Date }
     | { kind: 'created'; event: CalendarEvent; payload: ReceiveInvitationPayload };
 
-// A fire-and-forget receiver has nobody to answer a 413 to, so an oversized message is dropped, not raised.
-async function unlessTooLarge<T>(uid: string, apply: () => Promise<T>, dropped: T): Promise<T> {
+// A fire-and-forget receiver has nobody to answer a 413 or a 507 to, so a message the store will not keep
+// is dropped, not raised: the mail it rode in on has landed already, and the relay call has other effects.
+async function unlessRefused<T>(uid: string, apply: () => Promise<T>, dropped: T): Promise<T> {
     try {
         return await apply();
     } catch (e) {
-        if (!(e instanceof ApiError) || e.status !== 413) throw e;
+        if (!(e instanceof ApiError) || (e.status !== 413 && e.status !== 507)) throw e;
         console.info(`calendar: dropped a message for ${uid} — ${e.message}`);
         return dropped;
     }
 }
 
-const TOO_LARGE: InboundRequestOutcome = { kind: 'dropped', reason: 'the message is too large to store' };
+const REFUSED: InboundRequestOutcome = { kind: 'dropped', reason: 'the store would not keep it' };
 
 // One guest's PARTSTAT moved on a list that is otherwise untouched; addresses match case-insensitively.
 function withAttendeeStatus(attendees: Attendee[], email: string, status: Attendee['status']): Attendee[] {
@@ -194,10 +195,10 @@ export async function receiveInvitation(calendar: Calendar, payload: ReceiveInvi
         organizerUserId: payload.organizerUserId,
         createByUserId: payload.createByUserId,
     };
-    const outcome = await unlessTooLarge(
+    const outcome = await unlessRefused(
         payload.uid,
         () => calendar.gate.run(() => decideInboundRequest(calendar, relayedRequest(payload), link)),
-        TOO_LARGE,
+        REFUSED,
     );
     if (outcome.kind === 'dropped') {
         console.info(`calendar: dropped a relayed invitation for ${payload.uid} — ${outcome.reason}`);
@@ -225,7 +226,7 @@ export async function receiveInvitationUpdate(
     orgUserId: string,
     payload: InvitationUpdatePayload,
 ): Promise<void> {
-    const linked = await unlessTooLarge(
+    const linked = await unlessRefused(
         orgEventId,
         () =>
             calendar.gate.run(async () => {
@@ -360,10 +361,10 @@ export async function receiveImipRequest(calendar: Calendar, parsed: ParsedEvent
         organizerUserId,
         createByUserId: organizerUserId,
     };
-    const outcome = await unlessTooLarge(
+    const outcome = await unlessRefused(
         parsed.uid,
         () => calendar.gate.run(() => decideInboundRequest(calendar, parsed, link)),
-        TOO_LARGE,
+        REFUSED,
     );
     if (outcome.kind === 'dropped') {
         console.info(`iMIP: dropped a REQUEST for ${parsed.uid} from ${sender} — ${outcome.reason}`);
@@ -491,7 +492,7 @@ export async function cancelInvitationOccurrence(
     revision: Revision,
 ): Promise<void> {
     // The calendar the write landed in, so the announcement after the gate reaches the Homes it is shared with.
-    const cancelledIn = await unlessTooLarge(
+    const cancelledIn = await unlessRefused(
         orgEventId,
         () =>
             calendar.gate.run(async () => {

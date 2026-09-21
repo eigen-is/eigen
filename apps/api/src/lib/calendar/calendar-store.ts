@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq, gt, inArray } from 'drizzle-orm';
 import type ICAL from 'ical.js';
+import { enforceHomeDataQuota } from '../config/enforcement';
 import {
     ApiError,
     computeResourceEtag,
@@ -225,10 +226,14 @@ export async function writeResource(
     const projection = projectRows(calendarId, id, resource);
     const text = serializeResource(resource);
     const bytes = new TextEncoder().encode(text);
-    // Every write funnels through here, so this is where the ceiling holds — and it holds on the bytes that
-    // would land, after the stamps and the merge with what was stored. Raised before any write intent is
-    // recorded, so a refusal leaves nothing for a drain to chase.
+    // Every write funnels through here, so this is where both ceilings hold — and they hold on the bytes
+    // that would land, after the stamps and the merge with what was stored. Raised before any write intent
+    // is recorded, so a refusal leaves nothing for a drain to chase. The stored resource's bytes are
+    // credited against the Home's budget, so a rewrite that shrinks a resource is never refused.
     if (bytes.byteLength > EVENT_MAX_BYTES) throw new ApiError(413, 'Event is too large');
+    if (calendar.meteredIngest) {
+        await enforceHomeDataQuota(calendar.home.user.id, bytes.byteLength, existing?.size ?? 0);
+    }
     const etag = computeResourceEtag(bytes);
 
     try {
@@ -381,13 +386,15 @@ export async function putResource(
             return { ok: true, etag: text === body ? stamped : null, created: false };
         }
 
-        // The stamps and the stored alarms can push an accepted body past the ceiling: a raised 413 is the
-        // client error the protocol has an element for, not a 500.
+        // The stamps and the stored alarms can push an accepted body past the ceiling, and the Home's budget
+        // is only known against the state this write overwrites: both refusals are client errors the
+        // protocol has an element for, not a 500.
         let etag: string;
         try {
             ({ etag } = await writeResource(calendar, calendarId, storedUri, resource, existing ?? null));
         } catch (e) {
             if (e instanceof ApiError && e.status === 413) return { ok: false, error: 'too-large' };
+            if (e instanceof ApiError && e.status === 507) return { ok: false, error: 'quota' };
             throw e;
         }
 

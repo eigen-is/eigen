@@ -151,6 +151,18 @@ export class Home {
         this.sseListeners = this.sseListeners.filter((l) => l !== listener);
     }
 
+    // The mail + contacts + calendar bytes this Home holds: the one data budget every quota check meters
+    // against. Reads the fields, not the getters, because a team Home's calendar getter refuses a calendar
+    // the team disabled, and its bytes are on disk either way.
+    public async dataSize(): Promise<number> {
+        const [mail, contacts, calendar] = await Promise.all([
+            this._mail?.size(),
+            this._contacts?.size(),
+            this._calendar?.size(),
+        ]);
+        return (mail || 0) + (contacts || 0) + (calendar || 0);
+    }
+
     public async size(teamIds: string[] = []): Promise<HomeSizeResponse> {
         // Org homes have no drive — nothing to size, return early before touching subsystems.
         if (!this._drive) {
@@ -161,21 +173,16 @@ export class Home {
             };
         }
 
-        const [mail, contacts, driveDefault] = await Promise.all([
-            this._mail?.size(),
-            this._contacts?.size(),
-            this._drive.size('default'),
-        ]);
+        const [dataUsed, driveDefault] = await Promise.all([this.dataSize(), this._drive.size('default')]);
 
         const mountConfig = this._drive.getMountConfig('default');
         const quotas = await resolveUserQuotas(mountConfig, teamIds);
-        const mailAndContactsUsed = (mail || 0) + (contacts || 0);
 
         return {
-            mailAndContacts: { used: mailAndContactsUsed, max: quotas.homeDataMax },
+            mailAndContacts: { used: dataUsed, max: quotas.homeDataMax },
             drive: { default: { used: driveDefault, max: quotas.mountMax } },
             total: {
-                used: mailAndContactsUsed + driveDefault,
+                used: dataUsed + driveDefault,
                 max: quotas.homeDataMax + quotas.mountMax,
             },
         };

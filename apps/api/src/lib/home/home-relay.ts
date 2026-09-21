@@ -23,6 +23,7 @@ import type { NotificationPersistInput } from '@workspace/lib/types/notification
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import type { HomeSizeResponse, TeamSettings, UserSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
+import { readCalendarTotalSize } from '../calendar/resource-store';
 import type {
     CreateEventArgs,
     InvitationUpdatePayload,
@@ -177,10 +178,11 @@ export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeRespons
     const homeDir = getUserHomePath(ownerUserId);
     // A user who has never signed in has no home folder yet, and sizing must not create one.
     const homeFs = fs.existsSync(homeDir) ? new LocalFilesystem(homeDir) : null;
-    const [cards, avatars, staged] = await Promise.all([
+    const [cards, avatars, staged, calendars] = await Promise.all([
         homeFs?.dirSize(`${PATHS.CONTACTS.ROOT}/${PATHS.CONTACTS.CARDS}`) ?? 0,
         homeFs?.dirSize(`${PATHS.CONTACTS.ROOT}/${PATHS.CONTACTS.AVATARS}`) ?? 0,
         homeFs ? readDraftStagingSize(homeFs) : 0,
+        homeFs ? readCalendarTotalSize(homeFs) : 0,
     ]);
     const mail = readMailTotalSize(path.join(homeDir, PATHS.MAIL.DB)) + staged;
     const driveUsed = readMountTotalSize(
@@ -196,11 +198,11 @@ export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeRespons
         teamIds,
     );
 
-    const mailAndContactsUsed = mail + cards + avatars;
+    const dataUsed = mail + cards + avatars + calendars;
     return {
-        mailAndContacts: { used: mailAndContactsUsed, max: quotas.homeDataMax },
+        mailAndContacts: { used: dataUsed, max: quotas.homeDataMax },
         drive: { default: { used: driveUsed, max: quotas.mountMax } },
-        total: { used: mailAndContactsUsed + driveUsed, max: quotas.homeDataMax + quotas.mountMax },
+        total: { used: dataUsed + driveUsed, max: quotas.homeDataMax + quotas.mountMax },
     };
 }
 

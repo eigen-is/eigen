@@ -26,6 +26,7 @@ import {
 } from '../core';
 import type { DeleteResourceResult, ManagedDatabase } from '../core/';
 import type { Home } from '../home';
+import { atHome } from '../home';
 import { parseResource } from '../ical';
 import type { Revision } from '../ical/ical-component';
 import type { ParsedEvent } from '../ical/ical-parse';
@@ -74,6 +75,9 @@ export class Calendar {
     // Bytes on disk under `calendars/`, unindexable files included; size() answers from here and never drains.
     eventsBytes = 0;
 
+    // Whether resource writes are quota-metered — see the assignment in init() for what turns it on.
+    meteredIngest = false;
+
     // Bulk writes in flight; while any runs, per-resource events are held and the last one out closes them.
     private readonly batch = new BroadcastBatch(() => this.flushHeldAnnouncements());
 
@@ -111,6 +115,12 @@ export class Calendar {
                 isDefault: true,
             });
         }
+
+        // Metering starts only here: the quota lookup goes through getHome, which during this home's init
+        // would await the very init doing the write — and the copy rule above does write. An unregistered
+        // home (a test harness, a seeding script) stays unmetered; EVENT_MAX_BYTES still bounds every
+        // resource either way.
+        this.meteredIngest = atHome(this.home.user.id);
     }
 
     // Never drains and never locks: a quota check reaches it from inside the write gate.

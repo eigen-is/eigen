@@ -2,7 +2,7 @@ import { ApiError } from '../core';
 import { getHome } from '../home';
 import type { Home } from '../home/home';
 import { getMemberships } from '../user';
-import { type ResolvedQuotas, resolveUserQuotas } from './quota';
+import { type ResolvedQuotas, resolveHomeDataMax, resolveUserQuotas } from './quota';
 import { getMaxUploadSize } from './server-settings';
 
 async function resolveQuotas(
@@ -54,13 +54,15 @@ export async function getUploadMaxSize(ownerId: string, userId: string, mountId:
 
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 
-// The other half of the storage budget — mail and contacts share one quota. Mirrors getMountQuotaState.
-// Both halves answer from in-memory byte counters (MaildirStore.size, Contacts.size), so a CardDAV device
-// sync metering every card it PUTs costs no query per card and every write is charged to the next check.
-async function getHomeDataQuotaState(userId: string): Promise<{ used: number; max: number }> {
-    const { home, quotas } = await resolveQuotas(userId, userId, 'default');
-    const used = ((await home.mail?.size()) || 0) + ((await home.contacts?.size()) || 0);
-    return { used, max: quotas.homeDataMax };
+// The other half of the storage budget — mail, contacts and calendar share one quota. Mirrors
+// getMountQuotaState, but resolves no mount, so a team Home (which has none) meters its calendar here too.
+// Every part answers from in-memory byte counters (MaildirStore.size, Contacts.size, Calendar.size), so a
+// device sync metering every resource it PUTs costs no query per write and each one is charged to the next
+// check.
+async function getHomeDataQuotaState(ownerId: string): Promise<{ used: number; max: number }> {
+    const home = await getHome(ownerId); // ownerId-routed: this is the Home whose bytes are being charged
+    const { teamIds } = await getMemberships(ownerId);
+    return { used: await home.dataSize(), max: await resolveHomeDataMax(teamIds) };
 }
 
 export async function getMailUploadMaxSize(userId: string): Promise<number> {
@@ -87,11 +89,11 @@ export async function enforceAvatarUpload(userId: string, fileSize: number): Pro
     }
 }
 
-// Bytes about to be written into the mail+contacts half of the budget — a contact card, an imported
-// message: addBytes is what lands, creditBytes the size of what it replaces (subtracted from the
+// Bytes about to be written into the data half of the budget — a contact card, an imported message, a
+// calendar resource: addBytes is what lands, creditBytes the size of what it replaces (subtracted from the
 // projection, so a rewrite that shrinks a card is never refused). Same credit convention as enforceMountQuota.
-export async function enforceHomeDataQuota(userId: string, addBytes: number, creditBytes = 0): Promise<void> {
-    const { used, max } = await getHomeDataQuotaState(userId);
+export async function enforceHomeDataQuota(ownerId: string, addBytes: number, creditBytes = 0): Promise<void> {
+    const { used, max } = await getHomeDataQuotaState(ownerId);
     if (used + addBytes - creditBytes > max) {
         throw new ApiError(507, 'Insufficient Storage');
     }
