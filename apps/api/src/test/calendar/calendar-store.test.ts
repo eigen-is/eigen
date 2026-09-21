@@ -571,6 +571,80 @@ describe('calendar file store', () => {
         expect(stored).not.toContain('forged-by-the-client');
     });
 
+    // A file that drifted out of band is read again by the drain the read that noticed it scheduled. Foreign
+    // bytes are a skip-and-warn there, as in every other pass over them: a throw would escape the gate and
+    // make every later read and write of the Home rethrow it.
+    describe('a drifted file the drain cannot index', () => {
+        const drifted = async (harness: TestHome<Calendar>, calendarId: string, uri: string, bytes: string) => {
+            writeFileSync(fileOf(harness, calendarId, uri), bytes);
+            // The GET hashes what it read, so the row and the bytes disagreeing is what marks the key.
+            await harness.instance.getResource(calendarId, uri);
+        };
+
+        test('bytes that no longer parse leave the row as it was, and the next write still lands', async () => {
+            const harness = await makeCalendar();
+            const calendarId = await defaultCalendarId(harness);
+            await put(harness.instance, calendarId, 'garbled.ics', vcal(event('garbled@eigen', 'Garbled')));
+            await put(harness.instance, calendarId, 'intact.ics', vcal(event('intact@eigen', 'Intact')));
+
+            await drifted(harness, calendarId, 'garbled.ics', 'BEGIN:VCALENDAR\r\nnot really\r\n');
+
+            expect((await harness.instance.getRawEvents(calendarId)).map((r) => r.title).sort()).toEqual([
+                'Garbled',
+                'Intact',
+            ]);
+            expect((await put(harness.instance, calendarId, 'later.ics', vcal(event('later@eigen', 'Later')))).ok).toBe(
+                true,
+            );
+        });
+
+        test('a UID another resource owns is skipped, and the home keeps serving', async () => {
+            const harness = await makeCalendar();
+            const calendarId = await defaultCalendarId(harness);
+            await put(harness.instance, calendarId, 'first.ics', vcal(event('shared-uid@eigen', 'First')));
+            await put(harness.instance, calendarId, 'second.ics', vcal(event('second@eigen', 'Second')));
+
+            const stored = readFileSync(fileOf(harness, calendarId, 'second.ics'), 'utf8');
+            await drifted(
+                harness,
+                calendarId,
+                'second.ics',
+                stored.replace('UID:second@eigen', 'UID:shared-uid@eigen'),
+            );
+
+            expect((await harness.instance.getRawEvents(calendarId)).map((r) => r.uid).sort()).toEqual([
+                'second@eigen',
+                'shared-uid@eigen',
+            ]);
+            expect((await put(harness.instance, calendarId, 'later.ics', vcal(event('later@eigen', 'Later')))).ok).toBe(
+                true,
+            );
+        });
+
+        test("a file claiming another file's event id is skipped, and the home keeps serving", async () => {
+            const harness = await makeCalendar();
+            const calendarId = await defaultCalendarId(harness);
+            await put(harness.instance, calendarId, 'owner.ics', vcal(event('owner@eigen', 'Owner')));
+            await put(harness.instance, calendarId, 'thief.ics', vcal(event('thief@eigen', 'Thief')));
+            const claimed = (await harness.instance.getRawEvents(calendarId)).find((r) => r.uid === 'owner@eigen')!.id;
+
+            const stored = readFileSync(fileOf(harness, calendarId, 'thief.ics'), 'utf8');
+            await drifted(
+                harness,
+                calendarId,
+                'thief.ics',
+                stored.replace(/X-EIGEN-EVENT-ID:[^\r\n]+/, `X-EIGEN-EVENT-ID:${claimed}`),
+            );
+
+            const rows = await harness.instance.getRawEvents(calendarId);
+            expect(rows.map((r) => r.title).sort()).toEqual(['Owner', 'Thief']);
+            expect(rows.filter((r) => r.id === claimed)).toHaveLength(1);
+            expect((await put(harness.instance, calendarId, 'later.ics', vcal(event('later@eigen', 'Later')))).ok).toBe(
+                true,
+            );
+        });
+    });
+
     test('a name a file system cannot hold is refused, never rewritten', async () => {
         const harness = await makeCalendar();
         const calendarId = await defaultCalendarId(harness);

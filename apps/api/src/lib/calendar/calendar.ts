@@ -245,27 +245,34 @@ export class Calendar {
     private async drainDirty(keys: string[], settled: (key: string) => void): Promise<void> {
         for (const key of keys) {
             const { calendarId, uri } = parseGateKey(key);
-            const existing = this.db
-                .select()
-                .from(schema.resources)
-                .where(and(eq(schema.resources.calendarId, calendarId), eq(schema.resources.uriKey, uriKeyOf(uri))))
-                .get();
-            const bytes = this.calendarRow(calendarId)
-                ? await readResourceFile(this.storage, resourcePath(calendarId, existing?.uri ?? uri))
-                : null;
-            // A file the row already describes settles without a commit: a lock-free read that raced a write
-            // marks a pair that is whole, and a commit would bump a ctag for nothing.
-            if (bytes) {
-                await this.indexIfChanged(calendarId, existing?.uri ?? uri, bytes, existing);
-            } else if (existing) {
-                this.db.transaction((tx) => {
-                    const ctag = this.bumpCtag(tx, calendarId);
-                    tx.delete(schema.resources).where(eq(schema.resources.id, existing.id)).run();
-                    this.tombstone(tx, calendarId, existing.uri, existing.uriKey, ctag);
-                });
-                this.eventsBytes -= existing.size;
+            try {
+                const existing = this.db
+                    .select()
+                    .from(schema.resources)
+                    .where(and(eq(schema.resources.calendarId, calendarId), eq(schema.resources.uriKey, uriKeyOf(uri))))
+                    .get();
+                const bytes = this.calendarRow(calendarId)
+                    ? await readResourceFile(this.storage, resourcePath(calendarId, existing?.uri ?? uri))
+                    : null;
+                // A file the row already describes settles without a commit: a lock-free read that raced a
+                // write marks a pair that is whole, and a commit would bump a ctag for nothing.
+                if (bytes) {
+                    await this.indexIfChanged(calendarId, existing?.uri ?? uri, bytes, existing);
+                } else if (existing) {
+                    this.db.transaction((tx) => {
+                        const ctag = this.bumpCtag(tx, calendarId);
+                        tx.delete(schema.resources).where(eq(schema.resources.id, existing.id)).run();
+                        this.tombstone(tx, calendarId, existing.uri, existing.uriKey, ctag);
+                    });
+                    this.eventsBytes -= existing.size;
+                }
+                this.clearPendingWrite(calendarId, uri);
+            } catch (e) {
+                // A pass over foreign bytes skips and warns, as every other one does: rethrowing here would
+                // escape the gate and take every later read and write of this Home with it. The write intent
+                // stays behind for the next init to retry.
+                console.warn(`calendar: could not re-index ${key}:`, e);
             }
-            this.clearPendingWrite(calendarId, uri);
             settled(key);
         }
     }
