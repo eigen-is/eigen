@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { Contact } from '@workspace/lib/types/contact';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
+import { handleCardReport } from '../../lib/carddav/report';
 import { mergeVCard } from '../../lib/carddav/vcard-serialize';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { labelColorFor, normalizeLabelName } from '../../lib/contacts/card-store';
@@ -58,6 +59,51 @@ describe('reconcileIndex (stat-only pass)', () => {
 
         expect(parseCount(contacts)).toBe(parsesBefore);
         expect(db.select().from(contactsSchema.book).get()!.ctag).toBe(ctagBefore);
+    });
+
+    test('a restore that moved every mtime refreshes the stats and nothing else', async () => {
+        const { contacts, broadcasts, db, dir, user } = await makeContacts();
+        await contacts.addContact(validContact({ firstName: 'One', email: ['one@example.com'] }));
+        await contacts.addContact(validContact({ firstName: 'Two', email: ['two@example.com'] }));
+        const before = new Map(
+            db
+                .select()
+                .from(contactsSchema.contacts)
+                .all()
+                .map((r) => [r.id, r] as const),
+        );
+        const book = db.select().from(contactsSchema.book).get()!;
+        const token = `urn:eigen:sync:${book.syncGen}-${book.ctag}`;
+
+        // A per-home restore does not preserve mtimes, so every card drifts while its bytes are the ones the
+        // backup held. Re-stamping them all would make every CardDAV client re-download the whole book.
+        const future = new Date(Date.now() + 5000);
+        for (const row of before.values()) utimesSync(cardPathOf(dir, row.uri), future, future);
+        broadcasts.length = 0;
+
+        await contacts.init();
+
+        expect(db.select().from(contactsSchema.book).get()!.ctag).toBe(book.ctag);
+        for (const row of db.select().from(contactsSchema.contacts).all()) {
+            const was = before.get(row.id)!;
+            expect(row.cardCtag).toBe(was.cardCtag);
+            expect(row.etag).toBe(was.etag);
+            expect(row.mtime).not.toBe(was.mtime);
+        }
+        expect(broadcasts).toEqual([]);
+
+        // The client's token from before the restore still resolves, and its delta is empty.
+        const body =
+            `<?xml version="1.0" encoding="utf-8"?>\n<D:sync-collection xmlns:D="DAV:">\n` +
+            `<D:sync-token>${token}</D:sync-token>\n<D:prop><D:getetag/></D:prop>\n</D:sync-collection>`;
+        const res = await handleCardReport(contacts, user.id, body);
+        expect(res.status).toBe(207);
+        expect(await res.text()).not.toContain('<D:response>');
+
+        // The refreshed stats are what keeps the NEXT init off the files.
+        const parsesBefore = parseCount(contacts);
+        await contacts.init();
+        expect(parseCount(contacts)).toBe(parsesBefore);
     });
 
     test('a cards directory enumeration failure leaves rows, ctag, and tombstones untouched', async () => {
