@@ -355,9 +355,9 @@ describe('CalDAV round-trip fidelity', () => {
             expect((await putIcs('rt-lone.ics', loneOverride)).status).toBe(204);
 
             const calendar = (await getHome(userId)).calendar;
-            const masterRow = calendar.getEventByUri(calendarId, 'rt-lone.ics')!;
+            const masterRow = (await calendar.getEventByUri(calendarId, 'rt-lone.ics'))!;
             // Both rows survive: the override (updated by the PUT) and the canceled EXDATE row.
-            expect(calendar.getExceptionsForParent(masterRow.id)).toHaveLength(2);
+            expect(await calendar.getExceptionsForParent(masterRow.id)).toHaveLength(2);
         });
 
         test('control: TEXT escaping and long-line folding survive the round-trip', async () => {
@@ -418,7 +418,7 @@ describe('CalDAV round-trip fidelity', () => {
     describe('legacy recurrenceDate rows', () => {
         test('an exception keyed by a full ISO datetime serves with the truncated-key RECURRENCE-ID', async () => {
             const calendar = (await getHome(userId)).calendar;
-            const master = calendar.createEvent(calendarId, {
+            const master = await calendar.createEvent(calendarId, {
                 title: 'Legacy key series',
                 startTime: new Date('2026-06-02T03:00:00Z'), // Jun 1 23:00 America/New_York
                 endTime: new Date('2026-06-02T03:50:00Z'),
@@ -429,7 +429,7 @@ describe('CalDAV round-trip fidelity', () => {
                 uri: 'legacy-rid.ics',
                 createByUserId: userId,
             });
-            calendar.createEvent(calendarId, {
+            await calendar.createEvent(calendarId, {
                 title: 'Legacy key series (moved)',
                 startTime: new Date('2026-06-05T10:00:00Z'),
                 endTime: new Date('2026-06-05T10:50:00Z'),
@@ -449,7 +449,7 @@ describe('CalDAV round-trip fidelity', () => {
 
         test('unparseable recurrenceDate keys are inert: the resource still serves', async () => {
             const calendar = (await getHome(userId)).calendar;
-            const master = calendar.createEvent(calendarId, {
+            const master = await calendar.createEvent(calendarId, {
                 title: 'Garbage key series',
                 startTime: new Date('2026-06-02T03:00:00Z'),
                 endTime: new Date('2026-06-02T03:50:00Z'),
@@ -460,7 +460,7 @@ describe('CalDAV round-trip fidelity', () => {
                 uri: 'legacy-garbage.ics',
                 createByUserId: userId,
             });
-            calendar.createEvent(calendarId, {
+            await calendar.createEvent(calendarId, {
                 title: 'Garbage key series',
                 startTime: new Date('2026-06-03T03:00:00Z'),
                 endTime: new Date('2026-06-03T03:50:00Z'),
@@ -471,7 +471,7 @@ describe('CalDAV round-trip fidelity', () => {
                 uid: master.uid,
                 createByUserId: userId,
             });
-            calendar.createEvent(calendarId, {
+            await calendar.createEvent(calendarId, {
                 title: 'Garbage key series (moved)',
                 startTime: new Date('2026-06-10T10:00:00Z'),
                 endTime: new Date('2026-06-10T10:50:00Z'),
@@ -640,7 +640,7 @@ describe('CalDAV round-trip fidelity', () => {
             );
             expect(res.status).toBe(201);
 
-            const stored = (await getHome(userId)).calendar.getEventByUri(calendarId, uri)!;
+            const stored = (await (await getHome(userId)).calendar.getEventByUri(calendarId, uri))!;
             expect(stored.data?.organizer?.userId).toBe('');
             expect(stored.data?.organizerEventId).toBeUndefined();
             expect(stored.data?.color).toBeUndefined();

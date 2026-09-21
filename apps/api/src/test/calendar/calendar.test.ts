@@ -2104,7 +2104,7 @@ describe('Calendar etag timezone consistency (audit #24)', () => {
         await assertJson(await rsvp('tentative')); // updates it via the etag-omitting branch
 
         const home = await getHome(testCtx.bob.user.id);
-        const exc = home.calendar.getRawEvents(bobCalId).find((e) => e.parentEventId === linkedId);
+        const exc = (await home.calendar.getRawEvents(bobCalId)).find((e) => e.parentEventId === linkedId);
         expect(exc).toBeDefined();
         expect(exc!.timezone).toBe(NY); // exception now inherits the parent's timezone
         const base = {
@@ -2140,7 +2140,7 @@ describe('Calendar etag timezone consistency (audit #24)', () => {
             ),
         );
         const home = await getHome(testCtx.bob.user.id);
-        const row = home.calendar.getRawEvents(bobCalId).find((e) => e.id === linkedId);
+        const row = (await home.calendar.getRawEvents(bobCalId)).find((e) => e.id === linkedId);
         expect(row).toBeDefined();
         expect(row!.timezone).toBe(NY);
         const base = {
@@ -2281,9 +2281,9 @@ describe('Event move across calendars (finding #1)', () => {
         expect(moveRes.status).toBe(200);
 
         const home = await getHome(ctx.alice.user.id);
-        const sourceRows = home.calendar.getRawEvents(sourceCalId).filter((e) => e.uid === parent.uid);
+        const sourceRows = (await home.calendar.getRawEvents(sourceCalId)).filter((e) => e.uid === parent.uid);
         expect(sourceRows.length).toBe(0);
-        const targetRows = home.calendar.getRawEvents(targetCalId).filter((e) => e.uid === parent.uid);
+        const targetRows = (await home.calendar.getRawEvents(targetCalId)).filter((e) => e.uid === parent.uid);
         expect(targetRows.length).toBe(2); // master + its exception child
         expect(targetRows.some((e) => e.id === exception.id && e.parentEventId === parent.id)).toBe(true);
 
@@ -2307,7 +2307,7 @@ describe('Event move across calendars (finding #1)', () => {
         // A client can't declare itself an invitee (EventDataSchema strips organizer), so seed the linked
         // copy through the domain. External organizer → the decline path would be a sendMail.
         const home = await getHome(ctx.alice.user.id);
-        const linked = home.calendar.createEvent(sourceCalId, {
+        const linked = await home.calendar.createEvent(sourceCalId, {
             title: 'Invited Movable',
             startTime: new Date('2026-11-02T09:00:00Z'),
             endTime: new Date('2026-11-02T10:00:00Z'),
@@ -2355,13 +2355,13 @@ describe('Event move across calendars (finding #1)', () => {
 
         const home = await getHome(ctx.alice.user.id);
         // The client's sync token on the source, captured before it ever leaves.
-        const preCtag = home.calendar.getCalendarById(sourceCalId)!.ctag;
+        const preCtag = (await home.calendar.getCalendarById(sourceCalId))!.ctag;
 
-        home.calendar.moveEvent(sourceCalId, created.id, targetCalId); // A → B (tombstones the uri in A)
-        home.calendar.moveEvent(targetCalId, created.id, sourceCalId); // B → A (must clear that tombstone)
+        await home.calendar.moveEvent(sourceCalId, created.id, targetCalId); // A → B (tombstones the uri in A)
+        await home.calendar.moveEvent(targetCalId, created.id, sourceCalId); // B → A (must clear that tombstone)
 
-        const changed = home.calendar.getChangedEventsSince(sourceCalId, preCtag).filter((e) => e.uri === uri);
-        const deleted = home.calendar.getDeletedEventsSince(sourceCalId, preCtag).filter((d) => d.uri === uri);
+        const changed = (await home.calendar.getChangedEventsSince(sourceCalId, preCtag)).filter((e) => e.uri === uri);
+        const deleted = (await home.calendar.getDeletedEventsSince(sourceCalId, preCtag)).filter((d) => d.uri === uri);
         expect(changed).toHaveLength(1); // the re-homed event, once, as a 200
         expect(deleted).toHaveLength(0); // and never as a stale 404
     });
