@@ -50,6 +50,20 @@ type Candidate = {
 // hand can both be new, with neither indexed yet.
 type IdOwners = Map<string, string>;
 
+// The staging one calendar id left behind, newest names last. An id is free again only because its delete
+// committed, so what is staged under a free id is deleted data.
+export async function stagedDeletesOf(calendar: Calendar, id: string): Promise<string[]> {
+    const entries = await calendar.storage.readdir(PATHS.CALENDAR.CALENDARS, { withFileTypes: true });
+    return entries
+        .filter((entry) => entry.isDirectory() && DELETING_DIR.exec(entry.name)?.[1] === id)
+        .map((entry) => `${PATHS.CALENDAR.CALENDARS}/${entry.name}`);
+}
+
+async function isEmptyDir(calendar: Calendar, dir: string): Promise<boolean> {
+    return (await calendar.storage.readdir(dir)).length === 0;
+}
+
+// Runs before anything else in the open can create a calendar directory, so an absent one means absent.
 // One entry's failure is logged and left for the next open: init throwing here would take the whole Home
 // down, every domain of it, on every restart.
 async function sweepDeleting(calendar: Calendar): Promise<void> {
@@ -59,19 +73,23 @@ async function sweepDeleting(calendar: Calendar): Promise<void> {
         if (!match) continue;
         const id = match[1];
         const staged = `${PATHS.CALENDAR.CALENDARS}/${entry.name}`;
+        const live = calendarDir(id);
         try {
-            // By the row AND the directory: a delete that was never acknowledged did not happen, but a
-            // live directory under that id means this staging belongs to an older delete that did.
-            const live = await calendar.storage.dirExists(calendarDir(id));
-            if (calendar.calendarRow(id) && !live) {
-                await calendar.storage.moveDurable(staged, calendarDir(id));
+            // Staged files under a live row are a delete nobody acknowledged: they go back. A directory an
+            // index pass or a write merely mkdir'd is empty, so it is no evidence of a delete that committed.
+            if (calendar.calendarRow(id) && !(await isEmptyDir(calendar, staged))) {
+                if ((await calendar.storage.dirExists(live)) && !(await isEmptyDir(calendar, live))) {
+                    console.warn(`calendar: keeping ${entry.name} — calendar ${id} holds files of its own`);
+                    continue;
+                }
+                await calendar.storage.removeDir(live);
+                await calendar.storage.moveDurable(staged, live);
                 console.warn(`calendar: rolled back the interrupted delete of calendar ${id}`);
-            } else {
-                if (live) console.warn(`calendar: dropping ${entry.name} — calendar ${id} has a directory again`);
-                await calendar.storage.removeDir(staged);
+                continue;
             }
+            await calendar.storage.removeDir(staged);
         } catch (e) {
-            console.error(`calendar: could not sweep ${entry.name}: ${e}`);
+            console.error(`calendar: could not sweep ${entry.name}:`, e);
         }
     }
 }
