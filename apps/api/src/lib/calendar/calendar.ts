@@ -329,6 +329,14 @@ export class Calendar {
         const text = decodeUtf8Strict(bytes);
         if (text === null) throw new ApiError(400, NOT_UTF8_FILE);
 
+        // Counted on the text before ical.js builds a component tree per VEVENT: the route runs with the
+        // idle timeout off on the thread that serves every app, and a file far past the ceiling answers
+        // this 413 either way. A folded line starts with a space, so a line that starts with the property
+        // name is a VEVENT of its own.
+        if ((text.match(/^BEGIN:VEVENT\r?$/gim)?.length ?? 0) > ICS_IMPORT_MAX_EVENTS) {
+            throw new ApiError(413, 'Too many events');
+        }
+
         let parsed: IcsParseResult;
         try {
             parsed = parseIcs(text);

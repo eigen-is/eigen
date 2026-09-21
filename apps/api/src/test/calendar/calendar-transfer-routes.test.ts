@@ -589,6 +589,31 @@ describe('Calendar transfer routes', () => {
         expect((await april()).some((e) => e.uid.includes(stamp))).toBe(false);
     });
 
+    // The route runs with the idle timeout off, on the one thread that serves every app, and ical.js does
+    // not cache a TZID lookup that finds no VTIMEZONE — so a file far past the ceiling must be refused on
+    // what it says it holds, not after it is parsed (26 805 such VEVENTs cost 21 s of that thread).
+    test('a file far past the ceiling is refused on its VEVENT count, before the parse', async () => {
+        const stamp = randomUUID();
+        const file = feed(
+            ...Array.from({ length: ICS_IMPORT_MAX_EVENTS * 20 }, (_, i) => [
+                'BEGIN:VEVENT',
+                `UID:flood-${i}-${stamp}@other`,
+                `SUMMARY:Flood ${i}`,
+                'DTSTART;TZID=Europe/Amsterdam:20260420T090000',
+                'DTEND;TZID=Europe/Amsterdam:20260420T100000',
+                'END:VEVENT',
+            ]),
+        );
+
+        const started = Date.now();
+        const res = await importRequest(alice, calendarId, file);
+        const elapsed = Date.now() - started;
+
+        expect(res.status).toBe(413);
+        expect(elapsed).toBeLessThan(2000);
+        expect((await april()).some((e) => e.uid.includes(stamp))).toBe(false);
+    });
+
     test('the ceiling counts every VEVENT: a file of one master and its overrides is refused too', async () => {
         const uid = `flood-${randomUUID()}@other`;
         const file = feed(
