@@ -1,12 +1,5 @@
 import type { CalendarItem } from '@workspace/lib/types/calendar';
-import {
-    isSafePathSegment,
-    LocalFilesystem,
-    PATHS,
-    type ResourceScan,
-    sanitizeResourceUri,
-    statResourceDir,
-} from '../core';
+import { LocalFilesystem, PATHS, type ResourceScan, sanitizeResourceUri, statResourceDir } from '../core';
 import type * as schema from './schema';
 
 // The calendar-shaped half of the store over `core/indexed-file-store.ts`: where a resource lives, what its
@@ -33,8 +26,7 @@ export function resourcePath(calendarId: string, uri: string): string {
 // A client-chosen calendar id is a directory name and goes raw into an href, so it takes the shared segment
 // rule over the NFC form. Null on reject.
 export function sanitizeCalendarId(raw: string): string | null {
-    const id = raw.normalize('NFC');
-    return isSafePathSegment(id) ? id : null;
+    return sanitizeResourceUri(raw, '');
 }
 
 export function sanitizeEventUri(raw: string): string | null {

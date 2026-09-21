@@ -1,18 +1,13 @@
 import { escapeXml } from '@workspace/lib/html';
 import type { CalendarCollection } from '../calendar/resource-store';
 import { EVENT_MAX_BYTES } from '../calendar/resource-store';
-import { calendarHomeHref, principalHref } from '../dav/href';
+import { calendarHomeHref } from '../dav/href';
 import type { PropMap } from '../dav/propfind';
 import { formatSyncToken } from '../dav/sync-token';
-import { ownershipEntries } from '../dav/xml';
+import { currentUserPrincipalProp, ownershipEntries } from '../dav/xml';
 
 // The calendar-specific property blocks, and nothing else: the XML envelope, the member props, the
 // PROPFIND core and the sync-token grammar are the shared DAV layer's.
-
-// For the discovery PROPFIND on /dav/ — returns current-user-principal
-export function currentUserPrincipalProp(userId: string): string {
-    return `<D:current-user-principal><D:href>${principalHref(userId)}</D:href></D:current-user-principal>`;
-}
 
 // Calendar collection properties (for listing calendars)
 export function calendarCollectionProps(cal: CalendarCollection, ownerId: string): PropMap {

@@ -1,10 +1,10 @@
 import { escapeXml } from '@workspace/lib/html';
 import { CARD_MAX_BYTES } from '../contacts/card-store';
 import type { CardBook } from '../contacts/dav-store';
-import { addressbookHomeHref, principalHref } from '../dav/href';
+import { addressbookHomeHref } from '../dav/href';
 import type { PropMap } from '../dav/propfind';
 import { formatSyncToken } from '../dav/sync-token';
-import { ownershipEntries } from '../dav/xml';
+import { currentUserPrincipalProp, ownershipEntries } from '../dav/xml';
 
 // The addressbook-specific property blocks, and nothing else: the XML envelope, the member props, the
 // sync-token grammar and the PROPFIND core are the shared DAV layer's, imported from lib/dav/ where they live.
@@ -14,10 +14,7 @@ export function addressbookHomeProps(userId: string): PropMap {
     return new Map([
         ['resourcetype', `<D:resourcetype><D:collection/></D:resourcetype>`],
         ['displayname', `<D:displayname>Addressbooks</D:displayname>`],
-        [
-            'current-user-principal',
-            `<D:current-user-principal><D:href>${principalHref(userId)}</D:href></D:current-user-principal>`,
-        ],
+        ['current-user-principal', currentUserPrincipalProp(userId)],
         [
             'addressbook-home-set',
             `<CARD:addressbook-home-set><D:href>${addressbookHomeHref(userId)}</D:href></CARD:addressbook-home-set>`,

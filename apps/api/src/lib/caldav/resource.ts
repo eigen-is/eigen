@@ -1,22 +1,16 @@
 import { ICS_CONTENT_TYPE } from '@workspace/lib/types/drive';
 import type { Calendar } from '../calendar/calendar';
-import { davDeleteResponse, davPutResponse } from '../dav/write-result';
+import { davDeleteResponse, davPutResponse, davResourceResponse } from '../dav/write-result';
 import { calendarHref } from './discovery';
 
 // The CalDAV resource handlers: a thin adapter over the calendar file store, which owns the preconditions,
 // the UID rules, re-stamping and the ceiling. See docs/CALENDAR.md § DAV surface.
 
-// GET /dav/calendars/:ownerId/:calendarId/:uri — the stored bytes verbatim (the file IS the resource), with
-// the content hash as a quoted ETag. A uri the index doesn't know is a 404.
+// GET /dav/calendars/:ownerId/:calendarId/:uri — the file IS the resource. A uri the index doesn't know is a 404.
 export async function handleGet(calendar: Calendar, calendarId: string, uri: string): Promise<Response> {
     const resource = await calendar.getResource(calendarId, uri);
     if (!resource) return new Response('Not Found', { status: 404 });
-    // Copy into an ArrayBuffer-backed view: storage.bytes() is Uint8Array<ArrayBufferLike>, which the
-    // Response BodyInit type rejects (it could be SharedArrayBuffer-backed).
-    return new Response(new Uint8Array(resource.bytes), {
-        status: 200,
-        headers: { 'Content-Type': ICS_CONTENT_TYPE, ETag: `"${resource.etag}"` },
-    });
+    return davResourceResponse(resource.bytes, resource.etag, ICS_CONTENT_TYPE);
 }
 
 // PUT /dav/calendars/:ownerId/:calendarId/:uri — everything happens inside putResource's gate.
