@@ -932,11 +932,12 @@ describe('Calendar transfer routes', () => {
 
     // The route runs with the idle timeout off, on the one thread that serves every app, and ical.js does
     // not cache a TZID lookup that finds no VTIMEZONE — so a file far past the ceiling must be refused on
-    // what it says it holds, not after it is parsed (26 805 such VEVENTs cost 21 s of that thread).
+    // what it says it holds, not after it is parsed (26 805 such VEVENTs cost 21 s of that thread). Twice
+    // the ceiling is what fits under ICS_MAX_BYTES: past that the body reader answers first.
     test('a file far past the ceiling is refused on its VEVENT count, before the parse', async () => {
         const stamp = randomUUID();
         const file = vcal(
-            ...Array.from({ length: ICS_IMPORT_MAX_EVENTS * 20 }, (_, i) => [
+            ...Array.from({ length: ICS_IMPORT_MAX_EVENTS * 2 }, (_, i) => [
                 'BEGIN:VEVENT',
                 `UID:flood-${i}-${stamp}@other`,
                 `SUMMARY:Flood ${i}`,
@@ -972,10 +973,12 @@ describe('Calendar transfer routes', () => {
         expect((await home.calendar.getEventsByUid(uid)).length).toBe(0);
     });
 
+    // A bulk file, not the ceiling: writing every event the ceiling allows is a minute of disk this suite
+    // does not need to spend to learn that a file is one broadcast.
     test('a thousand events are one calendar broadcast', async () => {
         const stamp = randomUUID();
         const file = vcal(
-            ...Array.from({ length: ICS_IMPORT_MAX_EVENTS }, (_, i) =>
+            ...Array.from({ length: 1000 }, (_, i) =>
                 vevent(`bulk-${i}-${stamp}@other`, `Bulk ${i}`, '20260421T090000Z', '20260421T100000Z'),
             ),
         );
@@ -986,11 +989,11 @@ describe('Calendar transfer routes', () => {
         const elapsed = Date.now() - started;
         sse.stop();
 
-        expect(result.imported).toBe(ICS_IMPORT_MAX_EVENTS);
+        expect(result.imported).toBe(1000);
         expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENTS_CHANGED).length).toBe(1);
         expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENT_CREATED).length).toBe(0);
         expect(elapsed).toBeLessThan(30_000);
-    });
+    }, 30_000);
 
     test('CalDAV clients pick the imported events up', async () => {
         const stamp = randomUUID();
@@ -1176,12 +1179,14 @@ describe('Calendar transfer routes', () => {
         expect((await april()).some((e) => e.uid === `drive-${stamp}@other`)).toBe(true);
     });
 
-    // A file of a thousand events writes a row apiece before the route answers, so it exempts itself from
-    // the server-wide idle timeout the way the raw import and both contacts imports do.
-    test('import-from-drive exempts its request from the idle timeout', async () => {
+    // A file at the event ceiling writes a row apiece before the route answers — far longer than any
+    // server-wide idleTimeout — so both import routes exempt their request from it.
+    test('both import routes exempt their request from the idle timeout', async () => {
+        const stamp = randomUUID();
         const uploaded = await uploadIcs(
-            vcal(vevent(`timeout-${randomUUID()}@other`, 'Long run', '20260428T090000Z', '20260428T100000Z')),
+            vcal(vevent(`timeout-drive-${stamp}@other`, 'Long run', '20260428T090000Z', '20260428T100000Z')),
         );
+        const raw = vcal(vevent(`timeout-raw-${stamp}@other`, 'Long run', '20260428T110000Z', '20260428T120000Z'));
         // app.handle() runs with no server, so the route's `server?.timeout` is a no-op in tests: give the
         // app a real one to observe the call, and take it away again.
         const server = Bun.serve({ port: 0, fetch: () => new Response('') });
@@ -1189,7 +1194,8 @@ describe('Calendar transfer routes', () => {
         const timeout = spyOn(server, 'timeout');
         try {
             expect((await importFromDrive(alice, calendarId, uploaded)).status).toBe(200);
-            expect(timeout.mock.calls.map(([, seconds]) => seconds)).toEqual([0]);
+            expect((await importRequest(alice, calendarId, raw)).status).toBe(200);
+            expect(timeout.mock.calls.map(([, seconds]) => seconds)).toEqual([0, 0]);
         } finally {
             timeout.mockRestore();
             app.server = null;
