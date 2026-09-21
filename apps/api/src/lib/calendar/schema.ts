@@ -2,8 +2,7 @@ import type { CalendarEvent, CalendarShare, EventData } from '@workspace/lib/typ
 import { sql } from 'drizzle-orm';
 import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
-// `calendars` and `shared_calendars` are authoritative; `resources`, `events` and their tombstones are the
-// index over `calendars/<calendarId>/<uri>` and rebuild from it. See docs/CALENDAR.md § Storage.
+// Only `calendars` and `shared_calendars` are authoritative; the other tables rebuild from the files (docs/CALENDAR.md § Storage model — files as truth).
 
 export const calendars = sqliteTable('calendars', {
     id: text('id').primaryKey(),
@@ -19,8 +18,7 @@ export const calendars = sqliteTable('calendars', {
     updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
 
-// One row per stored file. The change tag is a resource fact: a commit replaces every event row of one
-// resource at once, and the sync delta is one indexed scan of this table.
+// One row per stored file; the change tag sits here so a sync delta is one indexed scan of this table.
 export const resources = sqliteTable(
     'resources',
     {
@@ -88,8 +86,7 @@ export const events = sqliteTable(
     }),
 );
 
-// Keyed by the real file name and cleared by the folded key, so a resource re-created under another
-// spelling of its name still drops its removal and no href is ever both a 200 and a 404 in one delta.
+// Keyed by the real name, cleared by the folded key: a re-create under another spelling drops the tombstone, so no href is both 200 and 404 in one delta.
 export const resourceTombstones = sqliteTable(
     'resource_tombstones',
     {

@@ -27,9 +27,7 @@ import type {
     ReceiveInvitationPayload,
 } from './types';
 
-// Everything an inbound scheduling message does to this Home's copy of somebody else's event, and every
-// RSVP that answers one: the receivers, the revision guard that orders a replay out, and the notifications
-// each applied message owes (docs/CALENDAR.md § Invitations).
+// Inbound scheduling messages against this Home's copy of somebody else's event, guarded by revision so a replay is ordered out (docs/CALENDAR.md § Invitations).
 
 // What the transport vouches for about an inbound REQUEST — never anything the body spells.
 type InvitationLink = {
@@ -45,8 +43,7 @@ type InboundRequestOutcome =
     | { kind: 'updated'; event: CalendarEvent; title: string; startTime: Date }
     | { kind: 'created'; event: CalendarEvent; payload: ReceiveInvitationPayload };
 
-// A fire-and-forget receiver has nobody to answer a 413 or a 507 to, so a message the store will not keep
-// is dropped, not raised: the mail it rode in on has landed already, and the relay call has other effects.
+// A fire-and-forget receiver has nobody to answer a 413 or a 507 to, so a message the store will not keep is dropped rather than raised.
 async function unlessRefused<T>(uid: string, apply: () => Promise<T>, dropped: T): Promise<T> {
     try {
         return await apply();
@@ -184,16 +181,14 @@ function invitationInput(payload: ReceiveInvitationPayload): CreateEventArgs {
         },
         createByUserId: payload.createByUserId,
         uid: payload.uid,
-        // An invitation to ONE occurrence of a series this Home does not hold is a standalone event that
-        // keeps its RECURRENCE-ID, which is the only place the occurrence it answers for is durable.
+        // An invitation to one occurrence of a series this Home does not hold keeps its RECURRENCE-ID: nothing else records which occurrence it answers for.
         recurrenceDate: payload.recurrenceDate,
     };
 }
 
 // A REQUEST relayed from the organizer's Home. Null when it was dropped, so the sender can say so.
 export async function receiveInvitation(calendar: Calendar, payload: ReceiveInvitationPayload): Promise<string | null> {
-    // A Home is never its own organizer: adopting such a message would make its own event a linked copy of
-    // itself. A team Home inviting its members states the team's id, which is not the member Home's own.
+    // A Home is never its own organizer: adopting such a message would make its own event a linked copy of itself.
     if (payload.organizerUserId === calendar.home.user.id) {
         console.info(
             `calendar: dropped a relayed invitation for ${payload.uid} — this Home is named as its own organizer`,
@@ -243,8 +238,7 @@ export async function receiveInvitationUpdate(
             calendar.gate.run(async () => {
                 const linked = findLinkedEvent(calendar, orgEventId, orgUserId);
                 if (!linked) return null;
-                // One occurrence attaches as an exception, exactly as a REQUEST carrying a RECURRENCE-ID
-                // does — a full update would collapse the series.
+                // One occurrence attaches as an exception, as a REQUEST with a RECURRENCE-ID does; a full update would collapse the series.
                 const key = exceptionKeyOf(linked, payload.recurrenceDate);
                 const applied = key
                     ? await applyInvitationException(calendar, linked, {
@@ -261,8 +255,7 @@ export async function receiveInvitationUpdate(
     if (linked) notifyInvitationUpdated(calendar, linked, payload.title, payload.startTime, orgEventId, orgUserId);
 }
 
-// The occurrence a message attaches to the stored copy as an exception, or null when the message is
-// about the copy itself — which a copy that IS one occurrence of a series this Home does not hold is.
+// Null when the message is about the stored copy itself, which is the case for a copy that IS one occurrence of an unheld series.
 function exceptionKeyOf(linked: CalendarEvent, recurrenceDate: string | null | undefined): string | null {
     if (!recurrenceDate || recurrenceDate === linked.recurrenceDate) return null;
     return recurrenceDate;
@@ -296,9 +289,7 @@ async function applyInvitationUpdate(
     return true;
 }
 
-// What an organizer's REQUEST is allowed to move on the attendee's copy. An organizer's client restates
-// WHEN the event is in every message, so the patch carries only the bounds that really moved — against
-// the row, the one reading that knows the end of an event stating a DURATION or no end at all.
+// An organizer's client restates the times in every message, so only the bounds that really moved are patched, compared against the row.
 function invitationPatch(linked: CalendarEvent, payload: InvitationUpdatePayload, rrule: string | null): EventPatch {
     const moved = payload.startTime.getTime() !== linked.startTime.getTime();
     const ended = payload.endTime.getTime() !== linked.endTime.getTime();
@@ -388,7 +379,7 @@ function recurrenceKeyForSeries(
     return `${year}-${pad(month)}-${pad(day)}`;
 }
 
-// `sender` is the DKIM-aligned From address the caller verified (R13 2c, R19); the link is by address alone.
+// `sender` is the DKIM-aligned From address the caller verified; the link is by address alone.
 export async function receiveImipRequest(calendar: Calendar, parsed: ParsedEvent, sender: string): Promise<void> {
     const organizerUserId = externalOwnerId(sender);
     const link: InvitationLink = {
@@ -429,8 +420,7 @@ function settleInboundRequest(calendar: Calendar, outcome: InboundRequestOutcome
     return outcome.event.id;
 }
 
-// The ONE decision an inbound REQUEST takes: Home-wide, and inside the gate, so two concurrent
-// deliveries never file two masters for one UID. Caller holds the gate.
+// Home-wide and inside the gate, so two concurrent deliveries never file two masters for one UID. Caller holds the gate.
 async function decideInboundRequest(
     calendar: Calendar,
     parsed: ParsedEvent,
@@ -451,14 +441,13 @@ async function decideInboundRequest(
         if (linked.data?.organizer?.email.toLowerCase() !== sender) {
             return { kind: 'dropped', reason: 'the sender is not the organizer this copy is linked to' };
         }
-        // A copy that is one occurrence of a series this Home does not hold gives way to the series the
-        // moment the organizer invites this Home to all of it, rather than standing beside it as a twin.
+        // A copy that is one occurrence of an unheld series gives way to the series once the organizer invites this Home to all of it.
         if (linked.recurrenceDate && !parsed.recurrenceDate) {
             const resource = events.resourceOf(calendar, linked.id);
             if (resource) await calendar.purgeResource(resource);
             return fileNewInvitation(calendar, parsed, link);
         }
-        // A "this event" edit attaches as an exception: a full update would collapse the series (audit #A).
+        // A "this event" edit attaches as an exception: a full update would collapse the series.
         const moved = exceptionKeyOf(linked, parsed.recurrenceDate)
             ? await applyInvitationException(calendar, linked, inboundExceptionPayload(parsed))
             : await applyInvitationUpdate(calendar, linked, inboundUpdatePayload(parsed));
@@ -467,7 +456,7 @@ async function decideInboundRequest(
 
     const master = stored.find((e) => !e.parentEventId);
     if (master) {
-        // The organizer may claim an event nobody linked, but only when it names the verified sender (R19).
+        // The organizer may claim an event nobody linked, but only when it names the verified sender.
         const resource = events.resourceOf(calendar, master.id);
         const component = resource ? await events.loadResource(calendar, resource.calendarId, resource.uri) : null;
         if (!resource || !component || storedOrganizerAddress(component) !== sender) {
@@ -483,9 +472,7 @@ async function decideInboundRequest(
     return fileNewInvitation(calendar, parsed, link);
 }
 
-// A REQUEST this Home holds nothing to attach to becomes an event of its own. One naming an occurrence
-// files as a standalone event: the guest was invited to that instance, not to the series around it.
-// Caller holds the gate.
+// One naming an occurrence files as a standalone event: the guest was invited to that instance, not the series. Caller holds the gate.
 async function fileNewInvitation(
     calendar: Calendar,
     parsed: ParsedEvent,
@@ -603,8 +590,7 @@ export async function removeInvitation(calendar: Calendar, orgEventId: string, o
     notifyInvitationCancelled(calendar, linked, linked.startTime, orgEventId);
 }
 
-// The organizer's side of a REPLY, inbound over iMIP or over the relay: fire-and-forget like every other
-// receiver here, so a refused PARTSTAT drops and the rest of the message still files.
+// Fire-and-forget like every other receiver here, so a refused PARTSTAT drops and the rest of the message still files.
 export function receiveAttendeeStatus(
     calendar: Calendar,
     eventId: string,
@@ -655,8 +641,7 @@ async function updateAttendeeStatus(
     });
 }
 
-// `restoreCancelled`: an attendee may un-cancel their own occurrence, an organizer-side receiver only
-// moves PARTSTAT — it never resurrects an occurrence the organizer deleted (RFC 5546).
+// `restoreCancelled`: an attendee may un-cancel their own occurrence, but an organizer-side receiver only moves PARTSTAT (RFC 5546).
 async function rsvpForOccurrence(
     calendar: Calendar,
     eventId: string,

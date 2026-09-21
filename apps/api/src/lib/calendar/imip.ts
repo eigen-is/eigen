@@ -11,13 +11,10 @@ import { computeOccurrenceTimes } from '../ical/wall-clock';
 
 type Organizer = NonNullable<EventData['organizer']>;
 
-// A scheduling message is about one meeting and the occurrences around it; a body carrying more than
-// this is a calendar export somebody mailed, and it does not get to write a Home once per VEVENT.
+// Above this a body is a mailed calendar export, not a scheduling message, and it does not get to write a Home once per VEVENT.
 export const IMIP_MAX_EVENTS = 50;
 
-// Invitation mail has no viewer, so a timed event that stored no usable zone (CalDAV/iMIP import,
-// API create) cannot borrow the browser's viewer zone or the server's own — either would name a wall
-// clock nobody agreed to. It renders in UTC and labels it, so the recipient can convert.
+// Invitation mail has no viewer, so an event with no stored zone renders in UTC and says so instead of borrowing the server's.
 function buildEventWhen(event: CalendarEvent): string {
     const timezone = normalizeTimezone(event.timezone);
     const when = formatEventWhen(event.startTime, event.endTime, event.allDay, timezone, 'UTC');
@@ -63,8 +60,7 @@ function withOrganizer(event: CalendarEvent, organizer: Organizer): CalendarEven
     return { ...event, data: { ...event.data, organizer } };
 }
 
-// `series` is the master of an event that is one occurrence of it, so the body can name the occurrence
-// it replaces (RECURRENCE-ID) instead of reading as a message about the whole series.
+// `series` lets the body name the occurrence it replaces (RECURRENCE-ID) instead of reading as a message about the whole series.
 function icalEvent(
     event: CalendarEvent,
     method: 'REQUEST' | 'REPLY' | 'CANCEL',
@@ -149,10 +145,7 @@ export function composeRsvpReply(
         },
     };
 
-    // A scope:'this' RSVP answers ONE occurrence: carry a RECURRENCE-ID for the original instant
-    // (RFC 5546) so an external organizer applies the PARTSTAT to that instance, not the whole series.
-    // An RSVP never moves the occurrence, so its time comes straight from the master's recurrence via
-    // computeOccurrenceTimes; dropping the rrule makes the VEVENT read as a single instance.
+    // A scope:'this' RSVP carries a RECURRENCE-ID (RFC 5546) so the organizer applies the PARTSTAT to that instance alone.
     if (recurrenceDate) {
         const { startTime, endTime } = computeOccurrenceTimes(event, recurrenceDate);
         replyEvent.rrule = null;
@@ -183,8 +176,7 @@ function extractCalendarAttachment(mail: { attachments: Attachment[] }): { ics: 
     return { ics: Buffer.from(attachment.content).toString(), method: attachment.calendarMethod };
 }
 
-// Read-time summary of a single text/calendar attachment for the message-detail payload.
-// Returns null for unparseable ICS — the mail widget renders that as an explicit error state.
+// Null for unparseable ICS: the mail widget renders that as an explicit error state.
 export function summarizeCalendarInvite(attachment: Attachment): CalendarInvite | null {
     const cal = extractCalendarAttachment({ attachments: [attachment] });
     if (!cal) return null;
@@ -194,8 +186,7 @@ export function summarizeCalendarInvite(attachment: Attachment): CalendarInvite 
         if (!event) return null;
         const organizer = event.data?.organizer;
         return {
-            // ICS METHOD wins, then the parser's Content-Type-derived calendarMethod; a bare
-            // event .ics without METHOD anywhere still renders as an invitation card.
+            // A bare event .ics with no METHOD anywhere still renders as an invitation card.
             method: method ?? cal.method ?? 'REQUEST',
             uid: event.uid,
             summary: event.title,
@@ -211,9 +202,7 @@ export function summarizeCalendarInvite(attachment: Attachment): CalendarInvite 
     }
 }
 
-// `verdict` is what the delivery seam made of the message's own Authentication-Results (mail-domain.ts):
-// every mutation below binds to `From:`, which is trustworthy only where our MTA recorded an aligned
-// DKIM pass. A message nobody vouched for stays a plain attachment.
+// Every mutation below binds to `From:`, trustworthy only where our MTA recorded an aligned DKIM pass (mail-domain.ts).
 export async function processInboundImip(
     home: Home,
     mail: { attachments: Attachment[]; from?: AddressObject },
@@ -232,9 +221,7 @@ export async function processInboundImip(
         return;
     }
 
-    // An organizer action this Home's own address signed is the user's own mail coming back — an invitee
-    // address that forwards to them, a list they are on. Acting on it would let them seize their own event
-    // as somebody else's copy, after which every CalDAV PUT on it is reduced to alarms.
+    // The user's own mail coming back: acting on it would seize their own event as somebody else's copy, reducing every CalDAV PUT to alarms.
     if (method !== 'REPLY' && sender === home.user.email.toLowerCase()) {
         console.info(`iMIP: not acting on a ${method} the recipient sent themselves (${sender})`);
         return;
@@ -249,24 +236,18 @@ export async function processInboundImip(
     }
 
     for (const parsed of events.slice(0, IMIP_MAX_EVENTS)) {
-        // Untrusted external ICS: clamp a reversed interval to zero-duration rather than reject the whole
-        // invite (mirrors the parser degrading a malformed rrule/tzid). iMIP is fire-and-forget email —
-        // there's no synchronous 400 to return, so dropping the invitation would be worse for the user than
-        // showing a zero-length event. The receive* writes bypass the createEvent/updateEvent guard, so this
-        // is where the domain's interval invariant is enforced for the inbound path.
+        // iMIP is fire-and-forget with no 400 to return, so a reversed interval clamps to zero duration rather than dropping the invitation.
         if (parsed.endTime < parsed.startTime) parsed.endTime = parsed.startTime;
 
         if (method === 'REQUEST') {
-            // Update, adopt or drop — one locked decision, because Postfix delivers concurrently and a
-            // lookup outside the gate would let two deliveries file two masters for one UID.
+            // One locked decision: Postfix delivers concurrently, and two deliveries would otherwise file two masters for one UID.
             await calendar.receiveImipRequest(parsed, sender);
         } else if (method === 'CANCEL') {
             // CANCEL is an organizer action too — same sender binding as REQUEST.
             const organizerEmail = parsed.data?.organizer?.email;
             if (!sentBy(organizerEmail)) continue;
             if (parsed.recurrenceDate) {
-                // Canceling one occurrence must cancel that instance only — removeInvitation would
-                // delete the attendee's entire linked series (audit #B).
+                // One instance only: removeInvitation would delete the attendee's whole linked series.
                 await calendar.cancelInvitationOccurrence(
                     parsed.uid,
                     externalOwnerId(organizerEmail),
@@ -278,8 +259,7 @@ export async function processInboundImip(
                 await calendar.removeInvitation(parsed.uid, externalOwnerId(organizerEmail));
             }
         } else if (method === 'REPLY') {
-            // Find the organizer's own MASTER (not a linked copy) by UID. Exceptions share the uid, so a
-            // REPLY must never bind to an exception row directly.
+            // Exceptions share the UID, so a REPLY binds to the organizer's own master and never to an exception row.
             const ownerEvent = (await calendar.getEventsByUid(parsed.uid)).find(
                 (e) => !isInvitationFromOthers(e, home.user.email) && !e.parentEventId,
             );
@@ -288,11 +268,7 @@ export async function processInboundImip(
                     // A REPLY may only set the PARTSTAT of the attendee who actually sent it.
                     if (!sentBy(attendee.email)) continue;
                     if (parsed.recurrenceDate) {
-                        // An attendee replying to ONE occurrence: land the PARTSTAT on that instance's
-                        // exception — receiveAttendeeStatus would mark them for the whole series.
-                        // receiveRsvpForOccurrence self-guards on membership (exception-aware: someone can be
-                        // invited to a single occurrence only) and, with restoreCancelled=false, never
-                        // resurrects an occurrence the organizer deleted.
+                        // The PARTSTAT lands on that instance's exception, and restoreCancelled=false keeps it from resurrecting an occurrence the organizer deleted.
                         await calendar.receiveRsvpForOccurrence(
                             ownerEvent.id,
                             attendee.email,

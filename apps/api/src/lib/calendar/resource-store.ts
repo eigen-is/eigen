@@ -11,13 +11,11 @@ import {
 } from '../core';
 import * as schema from './schema';
 
-// The calendar-shaped half of the store over `core/indexed-file-store.ts`: where a resource lives, what its
-// name may be, and how large it may get. The protocol layers import these from here, never the reverse.
+// The calendar-shaped half of `core/indexed-file-store.ts`; the protocol layers import from here, never the reverse.
 
 const ICS_SUFFIX = '.ics';
 
-// How large one calendar resource may be, the domain's own ceiling as CARD_MAX_BYTES is contacts'. CalDAV
-// bounds a PUT body against it before buffering and advertises it as C:max-resource-size.
+// CalDAV bounds a PUT body against this before buffering and advertises it as C:max-resource-size.
 export const EVENT_MAX_BYTES = 5_242_880;
 
 export function calendarDir(calendarId: string): string {
@@ -28,8 +26,7 @@ export function resourcePath(calendarId: string, uri: string): string {
     return `${calendarDir(calendarId)}/${uri}`;
 }
 
-// A client-chosen calendar id is a directory name and goes raw into an href, so it takes the shared segment
-// rule over the NFC form. Null on reject.
+// A client-chosen calendar id is a directory name and goes raw into an href, so it takes the shared segment rule over the NFC form.
 export function sanitizeCalendarId(raw: string): string | null {
     return sanitizeResourceUri(raw, '');
 }
@@ -42,10 +39,7 @@ export function statCalendarDir(storage: LocalFilesystem, calendarId: string): P
     return statResourceDir(storage, calendarDir(calendarId), ICS_SUFFIX);
 }
 
-// The calendar bytes of a Home nobody has booted, read from its own folder for the admin usage view. Counts
-// what `Calendar.eventsBytes` counts, through the same scan: the `.ics` files of every directory a calendar
-// row can own — a reconcile recovers a row for each of those — and none of the `.`-prefixed staging a delete
-// leaves behind, which the counter drops the moment the rename lands. `homeFs` is rooted at the home folder.
+// The calendar bytes of a Home nobody has booted: the `.ics` of every directory a calendar row can own, never the `.`-prefixed staging.
 export async function readCalendarTotalSize(homeFs: LocalFilesystem): Promise<number> {
     const root = `${PATHS.CALENDAR.ROOT}/${PATHS.CALENDAR.CALENDARS}`;
     if (!(await homeFs.dirExists(root))) return 0;
@@ -80,9 +74,7 @@ export type EventRowInput = Omit<typeof schema.events.$inferInsert, 'createdAt' 
 // The transaction handle drizzle hands a `db.transaction(cb)` callback.
 export type Tx = Parameters<Parameters<BunSQLiteDatabase<typeof schema>['transaction']>[0]>[0];
 
-// One indexed resource, at the ctag its change carries: its own row, every event row it projects to, and
-// the removal a present file cancels. The caller is inside the transaction that bumped that ctag, so a
-// write, a drain and a reconcile all leave one shape behind.
+// Runs inside the transaction that bumped the ctag, so a write, a drain and a reconcile all leave one shape behind.
 export function indexResource(
     tx: Tx,
     resource: Omit<typeof schema.resources.$inferInsert, 'uriKey'>,

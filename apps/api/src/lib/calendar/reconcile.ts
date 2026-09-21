@@ -26,19 +26,16 @@ import {
 } from './resource-store';
 import * as schema from './schema';
 
-// The index pass over `calendars/`: files are the truth, so it runs before anything is served and re-reads
-// only what drifted.
+// Files are the truth: this pass runs before anything is served and re-reads only what drifted.
 
-// `.<calendarId>.deleting-<uuid>`: the id parses from the left of a fixed-width tail, so a dot inside a
-// calendar id is not a problem.
+// `.<calendarId>.deleting-<uuid>`: the id parses from the left of a fixed-width tail, so a dot inside a calendar id is fine.
 const DELETING_DIR = /^\.(.+)\.deleting-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 const UUID_NAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type IndexIncumbent = Pick<typeof schema.resources.$inferSelect, 'id' | 'uri' | 'uriKey' | 'uid' | 'etag'>;
 
-// One file, read and projected but not yet committed: `restored` means its bytes still hash to the stored
-// etag (only its stat moved), `rewritten` the bytes the copy rule reminted.
+// `restored` means the bytes still hash to the stored etag (only the stat moved), `rewritten` the bytes the copy rule reminted.
 type Candidate = {
     calendarId: string;
     file: ResourceFile;
@@ -53,12 +50,10 @@ type Candidate = {
     rewritten?: string;
 };
 
-// Which resource each `X-EIGEN-EVENT-ID` belongs to, batch entries included: two files a user copied by
-// hand can both be new, with neither indexed yet.
+// Which resource each `X-EIGEN-EVENT-ID` belongs to: two files a user copied by hand can both be new, with neither indexed yet.
 type IdOwners = Map<string, string>;
 
-// The staging one calendar id left behind, newest names last. An id is free again only because its delete
-// committed, so what is staged under a free id is deleted data.
+// An id is free again only because its delete committed, so what is staged under a free id is deleted data.
 export async function stagedDeletesOf(calendar: Calendar, id: string): Promise<string[]> {
     const entries = await calendar.storage.readdir(PATHS.CALENDAR.CALENDARS, { withFileTypes: true });
     return entries
@@ -70,9 +65,7 @@ async function isEmptyDir(calendar: Calendar, dir: string): Promise<boolean> {
     return (await calendar.storage.readdir(dir)).length === 0;
 }
 
-// Runs before anything else in the open can create a calendar directory, so an absent one means absent.
-// One entry's failure is logged and left for the next open: init throwing here would take the whole Home
-// down, every domain of it, on every restart.
+// Runs before anything can create a calendar directory, so an absent one means absent; one entry's failure only logs, since throwing takes the whole Home down.
 async function sweepDeleting(calendar: Calendar): Promise<void> {
     for (const entry of await calendar.storage.readdir(PATHS.CALENDAR.CALENDARS, { withFileTypes: true })) {
         if (!entry.isDirectory()) continue;
@@ -82,8 +75,7 @@ async function sweepDeleting(calendar: Calendar): Promise<void> {
         const staged = `${PATHS.CALENDAR.CALENDARS}/${entry.name}`;
         const live = calendarDir(id);
         try {
-            // Staged files under a live row are a delete nobody acknowledged: they go back. A directory an
-            // index pass or a write merely mkdir'd is empty, so it is no evidence of a delete that committed.
+            // Staged files under a live row are a delete nobody acknowledged; an empty directory is no evidence of a delete that committed.
             if (calendar.calendarRow(id) && !(await isEmptyDir(calendar, staged))) {
                 if ((await calendar.storage.dirExists(live)) && !(await isEmptyDir(calendar, live))) {
                     console.warn(`calendar: keeping ${entry.name} — calendar ${id} holds files of its own`);
@@ -101,8 +93,7 @@ async function sweepDeleting(calendar: Calendar): Promise<void> {
     }
 }
 
-// A directory with no `calendars` row is a calendar whose metadata the index lost: its name becomes the id
-// and, unless it is a bare UUID, the display name; its generation rotates, so stale sync tokens are refused.
+// A directory with no row is a calendar whose metadata the index lost; its generation rotates, so stale sync tokens are refused.
 function recoverCalendarRows(calendar: Calendar, orphans: string[]): void {
     let hasDefault = !!calendar.db
         .select({ id: schema.calendars.id })
@@ -112,8 +103,7 @@ function recoverCalendarRows(calendar: Calendar, orphans: string[]): void {
     let recovered = 0;
     let unnamed = 0;
     for (const id of orphans) {
-        // A calendar id is unique case-insensitively, so a directory a row already holds in another case
-        // is that row's directory: a second row over it would reconcile the same files twice.
+        // A calendar id is unique case-insensitively, so a second row over the same directory would reconcile its files twice.
         if (calendar.calendarIdTaken(id)) {
             console.warn(`calendar: leaving directory ${id} alone — a calendar already holds that id`);
             continue;
@@ -142,8 +132,7 @@ function recoverCalendarRows(calendar: Calendar, orphans: string[]): void {
     }
 }
 
-// A row id another resource already holds means this file is a copy of one, so it gets fresh ids. Only the
-// candidates the dedupe kept run it: a discarded one holds no ids to lose, and a restore parsed nothing.
+// A row id another resource already holds means this file is a copy of one, so it gets fresh ids.
 function applyCopyRule(calendar: Calendar, candidate: Candidate, owners: IdOwners): void {
     const resource = candidate.resource;
     if (!resource) return;
@@ -169,8 +158,7 @@ function applyCopyRule(calendar: Calendar, candidate: Candidate, owners: IdOwner
     for (const row of candidate.rows) owners.set(row.id, candidate.id);
 }
 
-// Read one file into the rows to commit for it. A file whose bytes still hash to the stored etag is a
-// restore: nothing is parsed, because nothing about it changed but its timestamp.
+// A file whose bytes still hash to the stored etag is a restore: nothing is parsed, because only its timestamp moved.
 async function buildCandidate(
     calendar: Calendar,
     calendarId: string,
@@ -236,8 +224,7 @@ async function buildCandidates(
     return candidates;
 }
 
-// The bytes the copy rule reminted go back to disk before their rows are indexed, so file and index agree.
-// Returns the byte delta against what the stat pass counted.
+// The reminted bytes go back to disk before their rows are indexed, so file and index agree; the delta is against what the stat pass counted.
 async function rewriteCopies(calendar: Calendar, candidates: Candidate[]): Promise<number> {
     let delta = 0;
     for (const candidate of candidates) {
@@ -259,8 +246,7 @@ function writeIndexed(calendar: Calendar, calendarId: string, candidates: Candid
     const changed = candidates.filter((c) => !c.restored);
 
     calendar.db.transaction((tx) => {
-        // A restore drifts every mtime, so a file that still hashes the same changed nothing and only
-        // refreshes its stat — re-stamping it would send every client back for the whole collection.
+        // A restore drifts every mtime, so re-stamping a file that still hashes the same would send every client back for the whole collection.
         for (const c of candidates) {
             if (!c.restored) continue;
             tx.update(schema.resources)
@@ -295,8 +281,7 @@ function writeIndexed(calendar: Calendar, calendarId: string, candidates: Candid
     });
 }
 
-// Home-wide, in three phases: stat every calendar directory, drop every vanished resource in ONE
-// transaction, then index what changed — vanished before new, or a crashed move loses the ids it carried.
+// Vanished resources are dropped before the new are indexed, or a crashed move loses the ids it carried.
 export async function reconcileIndex(calendar: Calendar): Promise<void> {
     return calendar.gate.run(async () => {
         await sweepDeleting(calendar);
@@ -329,8 +314,7 @@ export async function reconcileIndex(calendar: Calendar): Promise<void> {
             vanished: IndexIncumbent[];
         }[] = [];
         for (const calendarId of calendarIds) {
-            // A calendar whose directory cannot be read is excluded from the pass entirely: counting it as
-            // "every file vanished" would tombstone a collection over a transient IO error.
+            // A directory that cannot be read is excluded: counting it as "every file vanished" would tombstone a collection over a transient IO error.
             try {
                 await calendar.storage.mkdir(calendarDir(calendarId));
                 await calendar.storage.sweepAtomicTemps(calendarDir(calendarId));
@@ -362,8 +346,7 @@ export async function reconcileIndex(calendar: Calendar): Promise<void> {
             }
         }
 
-        // Phase 2: every vanished resource of every calendar, in one transaction. A stale index beats an
-        // unopenable Home, so a failure here ends the pass and leaves the index as the last one left it.
+        // A stale index beats an unopenable Home, so a failure here ends the pass and leaves the index as it was.
         try {
             if (passes.some((pass) => pass.vanished.length > 0)) {
                 calendar.db.transaction((tx) => {
@@ -383,15 +366,13 @@ export async function reconcileIndex(calendar: Calendar): Promise<void> {
             return;
         }
 
-        // Phase 3: index the changed and the new, per calendar. One calendar throwing leaves that calendar
-        // stale rather than failing Home.init, which would make the whole Home unopenable.
+        // One calendar throwing leaves that calendar stale rather than failing Home.init, which would make the whole Home unopenable.
         const owners: IdOwners = new Map();
         for (const pass of passes) {
             if (!pass.entries.length) continue;
             try {
                 const candidates = await buildCandidates(calendar, pass.calendarId, pass.entries);
-                // Seeded with every row that REMAINS after the vanished deletes: a reindexing incumbent
-                // keeps its stored uid, so a new same-UID file must lose to it rather than trip the index.
+                // Seeded with every row that remains after the vanished deletes, so a new same-UID file loses to the incumbent.
                 const uidOwner = new Map(
                     calendar.db
                         .select({ uid: schema.resources.uid, id: schema.resources.id })
@@ -400,9 +381,7 @@ export async function reconcileIndex(calendar: Calendar): Promise<void> {
                         .all()
                         .map((r) => [`${pass.calendarId}|${r.uid}`, r.id] as const),
                 );
-                // A uid is unique per calendar, so the collision scope is the calendar plus the uid. A loser
-                // is skipped and logged, never deleted: two files with one UID is what copying one by hand
-                // ordinarily leaves.
+                // A loser is skipped and logged, never deleted: two files with one UID is what copying one by hand leaves.
                 const prepared = dedupeByUid(candidates, uidOwner, (c) => ({
                     scope: `${pass.calendarId}|${c.uid}`,
                     id: c.id,

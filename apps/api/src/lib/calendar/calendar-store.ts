@@ -20,8 +20,7 @@ import type { EventRowInput } from './resource-store';
 import { EVENT_MAX_BYTES, gateKey, resourcePath, sanitizeCalendarId, sanitizeEventUri } from './resource-store';
 import * as schema from './schema';
 
-// The store seam over the Calendar facade: one file per UID, the index behind it. Every mutation runs inside
-// the write gate against the state it overwrites; every read drains a torn pair first.
+// The store seam over the Calendar facade: every mutation runs inside the write gate, every read drains first.
 
 // The index projection the DAV layer reads for a resource; the etag is the hash the handler quotes.
 export type ResourceRow = {
@@ -70,8 +69,7 @@ export function projectRows(
         return { event, id };
     });
 
-    // A master leads its own overrides, whatever order the file lists them in. One UID has one master, so
-    // a second one is a malformed resource the first still leads.
+    // A master leads its overrides whatever order the file lists them in; a second master is malformed, the first still leads.
     const masterIdByUid = new Map<string, string>();
     let duplicateMaster = false;
     for (const { event, id } of identified) {
@@ -157,8 +155,7 @@ export async function getResourcesByUris(
         .all();
 }
 
-// The resources a range read answers with: the ones its matched uris name, plus every resource the index
-// cannot expand — a stripped rule or an RDATE still has occurrences to sync.
+// A resource the index cannot expand (stripped rule, RDATE) may still have occurrences in range, so it joins every match.
 export async function getResourcesInRange(
     calendar: Calendar,
     calendarId: string,
@@ -212,9 +209,7 @@ export async function getDeletedResourcesSince(
 
 // ---- Bytes ----
 
-// The bytes of a resource whose row the caller already read — a REPORT holds one per member. Hashing the
-// bytes just read keeps body and validator one revision; a durably stale row would otherwise 412 every
-// conditional write forever.
+// Hashes the bytes just read rather than trusting the row: a durably stale etag would 412 every conditional write forever.
 export async function readResource(
     calendar: Calendar,
     calendarId: string,
@@ -242,8 +237,6 @@ export async function getResource(
 
 // ---- Writes ----
 
-// What a write computes before it can land: the rows the file projects to, the bytes that would be stored
-// and their hash. Whoever judges a resource before writing it prepares it once and writes that.
 export type PreparedResource = {
     id: string;
     uid: string;
@@ -290,8 +283,7 @@ export function writeResource(
     );
 }
 
-// The one pair of file write + index commit. The caller holds the gate and owns the component; a throw
-// anywhere after the rename leaves the key dirty for the next drain.
+// The caller holds the gate: a throw anywhere after the rename leaves the key dirty for the next drain.
 export async function writePrepared(
     calendar: Calendar,
     calendarId: string,
@@ -299,14 +291,12 @@ export async function writePrepared(
     prepared: PreparedResource,
     existing: { id: string; size: number } | null,
 ): Promise<void> {
-    // Both ceilings hold on the bytes that would land, before any write intent is recorded, so a refusal
-    // leaves nothing for a drain to chase. The stored resource's size is the credit the edit grace reads.
+    // Both ceilings judge the bytes before any write intent is recorded, so a refusal leaves nothing for a drain to chase.
     if (prepared.bytes.byteLength > EVENT_MAX_BYTES) throw new ApiError(413, 'Event is too large');
     if (calendar.meteredIngest) {
         await enforceHomeDataQuota(calendar.home.user.id, prepared.bytes.byteLength, existing?.size ?? 0);
     }
-    // A name no row holds can still be a file: a dedupe loser, an unparseable resource, a calendar whose
-    // index phase threw. A create that replaced it would destroy bytes nothing carries any more.
+    // A name no row holds can still be a file (dedupe loser, unparseable resource), and a create would destroy those bytes.
     if (!existing && (await calendar.storage.exists(resourcePath(calendarId, uri)))) {
         throw new ApiError(412, 'A file already exists under this name');
     }
@@ -352,8 +342,7 @@ function uidOfResource(resource: ICAL.Component): string {
     return uidOf(resource.getAllSubcomponents('vevent')[0]);
 }
 
-// A copy of somebody else's event, which the owner may re-alarm and nothing more: the organizer stamp the
-// server wrote says so, where the ORGANIZER address is the client's own to spell.
+// A copy of somebody else's event: the server's own organizer stamp says so, where the ORGANIZER address is the client's to spell.
 function isLinkedCopy(stored: ICAL.Component): boolean {
     return stored.getAllSubcomponents('vevent').some((vevent) => readStamp(vevent, EIGEN.organizerEvent) !== null);
 }
@@ -379,19 +368,15 @@ function adoptAlarms(stored: ICAL.Component, incoming: ICAL.Component): void {
     }
 }
 
-// What a write states beside its bytes: the preconditions it carries, and the stamps only the server may
-// spell — the author of a resource nobody wrote before, and the address an imported file was filed under.
 export type PutResourceOptions = {
     ifMatch: string | null;
     ifNoneMatch: string | null;
     actor?: string | null;
-    // Set by a whole-file import alone: it files one UID once per Home, where a device syncs one calendar
-    // and owns only that one, and it carries the ORGANIZER address it took out of the file.
+    // Set by a whole-file import alone: it files one UID once per Home, where a device owns only the calendar it syncs.
     import?: { organizer: string | null };
 };
 
-// Preconditions, the UID rules, re-stamping and the linked-copy restriction are all decided here, inside
-// the gate, against the state the write overwrites.
+// Preconditions, UID rules, re-stamping and the linked-copy restriction are decided inside the gate, against the state overwritten.
 export async function putResource(
     calendar: Calendar,
     calendarId: string,
@@ -440,8 +425,7 @@ export async function putResource(
             return { ok: false, error: 'precondition' };
         }
 
-        // A UID another resource owns is a conflict the client can act on, not a raw 500 on the UNIQUE index.
-        // Decided here rather than before the gate, or two writers of one UID both read "nobody holds it".
+        // Inside the gate, or two writers of one UID both read "nobody holds it" and the UNIQUE index 500s.
         const holder = calendar.db
             .select({ id: schema.resources.id, uri: schema.resources.uri })
             .from(schema.resources)
@@ -454,8 +438,7 @@ export async function putResource(
         if (holder && holder.id !== existing?.id) return { ok: false, error: 'uid-conflict', conflictUri: holder.uri };
         if (existing && uid !== existing.uid) return { ok: false, error: 'uid-conflict' };
 
-        // A case-variant PUT rewrites the existing file in place: writing under the caller's spelling would
-        // strand the old file on a case-sensitive fs and let the next reconcile revert the accepted write.
+        // A case-variant PUT rewrites the existing file in place, or the old one strands on a case-sensitive fs and reconcile reverts the write.
         const storedUri = existing?.uri ?? uri;
         const storedBytes = existing
             ? await readResourceFile(calendar.storage, resourcePath(calendarId, storedUri))
@@ -467,8 +450,7 @@ export async function putResource(
             adoptAlarms(stored, incoming);
             resource = stored;
         } else {
-            // Nothing the body says about an Eigen line is trusted: the stamps come back from the stored
-            // resource, and only a resource nobody wrote before takes the caller's own stamps.
+            // Nothing the body says about an Eigen line is trusted: the stamps come back from the stored resource.
             restampResource(incoming, stored, {
                 createByUserId: stored ? undefined : (options.actor ?? undefined),
                 importedOrganizer: stored ? undefined : (options.import?.organizer ?? undefined),
@@ -478,13 +460,11 @@ export async function putResource(
 
         // Prepared once here: the write below lands exactly the rows, bytes and hash these refusals judged.
         const prepared = prepareResource(calendarId, resource, existing?.id ?? null);
-        // One resource is one series a client just wrote: a VEVENT of it Eigen cannot read makes the whole
-        // payload malformed, where a previewed or imported file drops that one member and keeps going.
+        // A PUT is all-or-nothing: one unreadable VEVENT makes the payload malformed, where an import drops that member and keeps going.
         if (prepared.skipped || prepared.duplicateMaster) {
             return { ok: false, error: 'invalid', reason: 'object', message: 'invalid iCalendar data' };
         }
-        // The interval invariant the REST write holds, so both surfaces answer alike. A zero-length event
-        // is legal (RFC 5545 §3.6.1) and common; one that ends before it starts is nobody's real event.
+        // A zero-length event is legal (RFC 5545 §3.6.1); one that ends before it starts is refused here as on the REST write.
         if (prepared.rows.some((row) => row.endTime < row.startTime)) {
             return { ok: false, error: 'invalid', reason: 'data', message: 'event ends before it starts' };
         }
@@ -492,15 +472,12 @@ export async function putResource(
         // A client whose bytes are not what got stored has nothing to attach a validator to (RFC 4791 § 5.3.4).
         const validator = prepared.text === body ? prepared.etag : null;
 
-        // Re-PUTting what is already stored changes nothing: writing it would bump the ctag and send every
-        // other client back for a resource that never moved. Judged against the bytes, never the row: a
-        // stale row would answer a PUT that does change the file with a no-op nobody ever learns about.
+        // Judged on the bytes, never the row: rewriting an unchanged resource bumps the ctag and resyncs every client for nothing.
         if (storedBytes && prepared.etag === computeResourceEtag(storedBytes)) {
             return { ok: true, etag: validator, created: false };
         }
 
-        // The stamps and the stored alarms decide the bytes, so both refusals are raised below the accepted
-        // body — and each is a client error the protocol has an element for, not a 500.
+        // Size and quota are only known once the stamps and stored alarms decided the bytes, so both map to protocol errors here, not a 500.
         try {
             await writePrepared(calendar, calendarId, storedUri, prepared, existing ?? null);
         } catch (e) {
