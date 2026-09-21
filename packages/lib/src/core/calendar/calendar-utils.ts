@@ -75,10 +75,7 @@ export function getEventsForDay(events: CalendarEventOccurrence[], day: Date): C
     });
 }
 
-// Returns the local calendar day as YYYY-MM-DD. Used for <input type="date"> values where
-// the user's local calendar day is what's shown/edited — not UTC. Contrast with
-// occurrenceDateToString, which derives the UTC day for occurrence/wire values (all-day
-// events are midnight UTC).
+// The local day, for `<input type="date">`; occurrenceDateToString gives the UTC day that wire values carry.
 export function toLocalDateString(date: Date): string {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -91,20 +88,12 @@ export function formatEventTime(event: CalendarEventOccurrence): string {
     return formatTime(event.startTime);
 }
 
-// The zone the calendar grid lays events out in: the runtime's own, because the grid reads local
-// Date getters (formatTime's getHours, getEventsForDay's getDate). Every browser surface that labels
-// those same events must resolve a zone-less one here too, or the dialog contradicts the grid.
+// The grid lays events out with local Date getters, so every surface labelling a zone-less event must resolve it here too.
 export function viewerTimeZone(): string {
     return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
-// The one zone oracle: every stored timezone, every parsed TZID and every labelled event resolves here.
-// Constructing the formatter IS the check — Intl throws RangeError on a zone it does not know — so a zone
-// it rejects degrades to null, which is what "no timezone" (floating) already means, and rows stored before
-// this guard existed heal the same way at read time. A Windows zone name resolves to its IANA zone first:
-// Intl knows none of them, and dropping one expands an Outlook series in UTC, which breaks its wall time at
-// the next DST change. The answer per zone, so a file of 10,000 events pays the construction once. Bounded
-// and dropped whole past the cap, because the zone is a string the file chose.
+// Intl knows no Windows zone name, and dropping one expands an Outlook series in UTC, breaking its wall time at the next DST change.
 const ZONE_ANSWERS = new Map<string, string | null>();
 const MAX_ZONE_ANSWERS = 64;
 
@@ -128,9 +117,7 @@ export function normalizeTimezone(timezone: string | null | undefined): string |
     return answer;
 }
 
-// fallbackTimeZone is explicit because there is no sane default on both sides: in the browser it is
-// viewerTimeZone(), on the API (iMIP mail) the server's own zone would be a lie, so that caller
-// passes 'UTC' and says so.
+// fallbackTimeZone is explicit: the browser passes viewerTimeZone(), iMIP mail passes 'UTC' because the server's zone is a lie.
 export function formatEventWhen(
     start: Date,
     end: Date,
@@ -138,8 +125,7 @@ export function formatEventWhen(
     timezone: string | null | undefined,
     fallbackTimeZone: string,
 ): string {
-    // An all-day event stores midnight UTC and its date portion IS the answer, so it never converts —
-    // same UTC day buckets getEventsForDay puts it in. Only timed events take the fallback.
+    // An all-day event stores midnight UTC and never converts, so it lands in the day bucket the grid uses.
     const tz = allDay ? 'UTC' : (normalizeTimezone(timezone) ?? fallbackTimeZone);
     const date = (d: Date) => formatDayMonth(d, { weekday: 'long', year: true, timeZone: tz });
     const dayKey = (d: Date) => dateFormatter({ timeZone: tz }).format(d);
@@ -151,8 +137,7 @@ export function formatEventWhen(
     };
 
     if (allDay) {
-        // All-day endTime is exclusive (midnight after the last day), so the displayed
-        // end date is one day earlier than the stored value.
+        // All-day endTime is exclusive, so the displayed end date is one day earlier than the stored one.
         const displayEnd = new Date(end.getTime() - 86400_000);
         if (dayKey(start) === dayKey(displayEnd)) return date(start);
         return `${date(start)} – ${date(displayEnd)}`;
@@ -189,16 +174,12 @@ export function formatFreeBusyTitle(endTime: Date): string {
     return `Busy until ${formatTime(endTime)}`;
 }
 
-// The one answer to "does this row belong to a series?". A master and every occurrence expanded from it
-// carry the rule; an override carries none of its own and is recognized by its link to the master instead.
+// An override carries no rule of its own, so only its link to the master says it belongs to a series.
 export function isSeriesOccurrence(event: { rrule: string | null; parentEventId: string | null }): boolean {
     return !!event.rrule || !!event.parentEventId;
 }
 
-// The one answer to "is this row an invitation from someone else?". CalDAV clients write
-// ORGANIZER:mailto:<own address> on every event they create with guests, so a stored organizer alone
-// says nothing — the organizer is me exactly when its address is the owner's, case-insensitively. An
-// owner with no address of its own (a team Home) matches nobody, so its rows stay locked.
+// CalDAV clients stamp ORGANIZER with their own address, so only a foreign one marks an invitation; a team Home has none.
 export function isInvitationFromOthers(event: { data?: EventData | null }, ownerEmail?: string): boolean {
     const organizer = event.data?.organizer;
     if (!organizer) return false;
@@ -230,8 +211,7 @@ export function occurrenceDateToString(value: unknown): string {
     return String(value).substring(0, 10);
 }
 
-// A recurrence in words, for every surface that describes one it does not edit. A file's own RRULE is
-// untrusted input, so a rule rrule cannot read is printed verbatim rather than swallowed.
+// A file's RRULE is untrusted input, so a rule rrule cannot read is printed verbatim rather than swallowed.
 export function rruleToText(rrule: string | null): string | null {
     if (!rrule) return null;
     try {
