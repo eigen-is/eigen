@@ -4,22 +4,16 @@ import { CARD_MAX_BYTES } from '../contacts/card-store';
 import type { CardBook } from '../contacts/dav-store';
 import { addressbookHomeHref } from '../dav/href';
 import type { PropMap } from '../dav/propfind';
+import { formatSyncToken } from '../dav/sync-token';
 // The multistatus/response/propstat helpers and the shared NS string (which already declares the CARD
 // namespace) live in the shared DAV envelope (lib/dav/xml.ts) — one principal and one XML envelope serve both
 // protocols, so these are imported, never duplicated. This file only adds the addressbook-specific property blocks.
 import { ownershipEntries } from '../dav/xml';
 
 export { DAV_BODY_MAX_BYTES, parsePropfind, selectProps, wantsBrief } from '../dav/propfind';
+// The sync-token grammar and the refusal both collections share (lib/dav/sync-token.ts).
+export { formatSyncToken, invalidSyncToken, parseSyncToken } from '../dav/sync-token';
 export { davError, multistatusResponse, propstatNotFound, propstatOk, response } from '../dav/xml';
-
-// RFC 6578 token, generation-stamped so a rebuilt index invalidates every outstanding token. The only two
-// sites allowed to spell the grammar — emit/parse drift would 412 every client into a full-resync loop.
-export const formatSyncToken = (book: CardBook) => `urn:eigen:sync:${book.syncGen}-${book.ctag}`;
-
-export function parseSyncToken(token: string): { gen: number; since: number } | null {
-    const m = /^urn:eigen:sync:(\d+)-(\d+)$/.exec(token);
-    return m ? { gen: Number(m[1]), since: Number(m[2]) } : null;
-}
 
 // Addressbook home collection — the parent of the single book. Mirrors the CalDAV homeCollectionProps.
 export function addressbookHomeProps(userId: string): PropMap {

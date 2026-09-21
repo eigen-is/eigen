@@ -11,6 +11,7 @@ import {
     cardEtagProp,
     davError,
     formatSyncToken,
+    invalidSyncToken,
     multistatusResponse,
     parseSyncToken,
     propstatNotFound,
@@ -24,11 +25,6 @@ import { type CardReportRequest, parseCardReport } from './xml-parser';
 // the shared DAV_BODY_MAX_BYTES, enforced in the router before the body reaches the XML unfolder.
 const MULTIGET_HREF_LIMIT = 500;
 const QUERY_RESULT_CAP = 1000;
-
-// RFC 6578 recovery: a token the book can't honor (stale generation, future ctag, or malformed) forces the
-// client to redo the full comparison. sabre answers 403 (InvalidSyncToken extends Forbidden) with
-// D:valid-sync-token; RFC 3253 § 1.6 marshals precondition failures as 403, and clients key full resync on it.
-const invalidSyncToken = () => davError(403, '<D:valid-sync-token/>');
 
 // REPORT on /dav/addressbooks/:ownerId/contacts/ — addressbook-multiget, addressbook-query, or sync-collection.
 export async function handleCardReport(contacts: Contacts, ownerId: string, body: string): Promise<Response> {

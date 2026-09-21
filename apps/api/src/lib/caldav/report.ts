@@ -5,9 +5,9 @@ import { calendarHref, eventHref } from './discovery';
 import { eventsToIcs } from './ical-serialize';
 import {
     calendarDataProp,
-    davError,
     eventEtagProp,
     formatSyncToken,
+    invalidSyncToken,
     multistatusResponse,
     parseSyncToken,
     propstatNotFound,
@@ -19,11 +19,6 @@ import { parseReport, type ReportRequest } from './xml-parser';
 // Multiget refuses a client that asks for more than this many resources in one round-trip. The XML body
 // ceiling every route shares is DAV_BODY_MAX_BYTES, enforced in the router before the body reaches the parser.
 const MULTIGET_HREF_LIMIT = 500;
-
-// RFC 6578 recovery: a token the calendar can't honor (future ctag or malformed) forces the client to redo
-// the full comparison. sabre answers 403 (InvalidSyncToken extends Forbidden) with D:valid-sync-token; RFC 3253
-// § 1.6 marshals precondition failures as 403, and clients key their full-resync recovery on it.
-const invalidSyncToken = () => davError(403, '<D:valid-sync-token/>');
 
 // REPORT on /dav/calendars/:ownerId/:calendarId/
 export function handleReport(
