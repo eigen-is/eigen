@@ -452,6 +452,42 @@ describe('Calendar transfer routes', () => {
         expect(served).toContain('BEGIN:VTIMEZONE');
     });
 
+    // RFC 5545 §3.1: a content line may carry a group prefix, and "A.ATTENDEE" is an ATTENDEE. The master
+    // and every override lose theirs.
+    test('group-prefixed scheduling lines are dropped like any other', async () => {
+        const stamp = randomUUID();
+        const uid = `grouped-${stamp}@external.com`;
+        const organizer = `grouped-org-${stamp}@external.com`;
+        const file = vcal(
+            vevent(uid, 'Grouped', '20260419T110000Z', '20260419T120000Z', [
+                'RRULE:FREQ=DAILY;COUNT=2',
+                `A.ORGANIZER;CN="External Org":mailto:${organizer}`,
+                `A.ATTENDEE;ROLE=REQ-PARTICIPANT:mailto:victim-${stamp}@external.com`,
+            ]),
+            vevent(uid, 'Grouped moved', '20260420T140000Z', '20260420T150000Z', [
+                'RECURRENCE-ID:20260420T110000Z',
+                `B.ATTENDEE;ROLE=REQ-PARTICIPANT:mailto:victim-${stamp}@external.com`,
+            ]),
+        );
+
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
+            imported: 1,
+            skipped: 0,
+            failed: 0,
+        });
+
+        const stored = findOrFail(await april(), (e) => e.uid === uid);
+        const served = await davGet(`/dav/calendars/${alice.id}/${calendarId}/${stored.uri}`);
+        for (const vevent of parseResource(served).getAllSubcomponents('vevent')) {
+            const scheduling = Object.keys(properties(vevent)).filter((name) =>
+                /(^|\.)(organizer|attendee)$/.test(name),
+            );
+            expect(scheduling).toEqual([]);
+        }
+        // The address a grouped ORGANIZER named still files the event, as an ungrouped one does.
+        expect(veventOf(served, uid).getFirstPropertyValue('x-eigen-imported-organizer')).toBe(organizer);
+    });
+
     // R19: an imported invitation is the user's own event, filed under the address that organized it — so
     // that organizer, and nobody else, may later claim it back over iMIP.
     test('an inbound REQUEST from the address an import filed adopts that event in place', async () => {

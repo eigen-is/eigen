@@ -12,7 +12,7 @@ import {
     readResourceFile,
 } from '../core';
 import { newVCalendar, PRODID, serializeResource } from '../ical';
-import { calAddress, isEigenName, uidOf } from '../ical/ical-parse';
+import { bareName, calAddress, isEigenName, uidOf } from '../ical/ical-parse';
 import type { Calendar } from './calendar';
 import { holdsUid } from './events';
 import { resourcePath } from './resource-store';
@@ -54,15 +54,22 @@ function referencedTzids(vevent: ICAL.Component, into: Set<string>): void {
     }
 }
 
+// The lines of one property, out of the component: matched on the bare name, because a group prefix
+// ("A.ATTENDEE") names the same property and `removeAllProperties` compares the whole name.
+function takeProperties(vevent: ICAL.Component, name: string): ICAL.Property[] {
+    const found = vevent.getAllProperties().filter((prop) => bareName(prop.name) === name);
+    for (const prop of found) vevent.removeProperty(prop);
+    return found;
+}
+
 // Scheduling is what an imported event loses, and nothing else: the guest list goes, and the organizer
 // stays behind as one inert address for the inbound-REQUEST rule to match a verified sender against.
 // A VALARM keeps its own ATTENDEE — that is the alarm's recipient, not a guest.
 function dropScheduling(vevent: ICAL.Component): string | null {
-    vevent.removeAllProperties('attendee');
-    const organizer = vevent.getFirstProperty('organizer');
+    takeProperties(vevent, 'attendee');
+    const organizer = takeProperties(vevent, 'organizer')[0];
     if (!organizer) return null;
     const address = calAddress(organizer.getFirstValue()).toLowerCase();
-    vevent.removeAllProperties('organizer');
     return address.includes('@') ? address : null;
 }
 
