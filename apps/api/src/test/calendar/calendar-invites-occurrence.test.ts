@@ -276,6 +276,19 @@ describe('Occurrence edits of an invited series', () => {
         }
     });
 
+    // An override that names nobody is a client that did not restate the guest list — a stored VEVENT
+    // cannot tell that apart from "this occurrence has no guests" — so an override moves the occurrence
+    // and never changes who is invited to it.
+    test('an override naming no guests still reaches the series guests', async () => {
+        const { series, target } = await seeded('Weekly Occurrence Guestless');
+
+        await editOccurrence(series.id, target, { title: 'Still Bob', data: { attendees: [] } });
+
+        const occurrences = await untilBob(series.uid, (occ) => occ.some((e) => e.title === 'Still Bob'));
+        expect(occurrences).toHaveLength(4);
+        expect(findOrFail(occurrences, (e) => e.occurrenceDate === target).title).toBe('Still Bob');
+    });
+
     test('the guest is told an invitation changed, not that they were invited to a new series', async () => {
         const { series, target } = await seeded('Weekly Occurrence Notice');
         const bobHome = await getHome(ctx.bob.user.id);

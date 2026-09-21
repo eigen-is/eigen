@@ -123,7 +123,11 @@ async function propagateWrite(
         await propagateCancellation(calendar.home, event, series);
         return;
     }
-    await propagateInvitation(calendar.home, event, user, oldAttendees, attendees, series ?? undefined);
+    // What the guests already hold: the series' list when the override states none of its own, so an
+    // occurrence edit reads as an update of that occurrence and a name missing from it cancels that
+    // instance for whoever was dropped.
+    const held = oldAttendees.length ? oldAttendees : (series?.data?.attendees ?? []);
+    await propagateInvitation(calendar.home, event, user, held, attendees, series ?? undefined);
 }
 
 // The locked core every writer of a NEW event shares: the checks that decide WHICH file is written run in it.
