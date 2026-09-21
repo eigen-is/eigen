@@ -14,7 +14,7 @@ import {
 import { join } from 'node:path';
 import { sql } from 'drizzle-orm';
 import { Calendar } from '../../lib/calendar/calendar';
-import { calendarStorage } from '../../lib/calendar/resource-store';
+import { calendarStorage, EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
 import { LocalFilesystem, PATHS } from '../../lib/core';
 import { CALENDAR_TEST_ROOT, calendarsDirOf, DyingFilesystem, makeCalendar } from '../calendar-test-helpers';
 import { makeTestHome, type TestHome } from '../home-test-helpers';
@@ -78,7 +78,7 @@ async function defaultCalendarId(harness: TestHome<Calendar>): Promise<string> {
 
 describe('calendar file store', () => {
     beforeAll(() => {
-        rmSync(join(import.meta.dir, '../../../../../data-test'), { recursive: true, force: true });
+        rmSync(CALENDAR_TEST_ROOT, { recursive: true, force: true });
     });
 
     test('a stored resource is the file on disk, and the index projects it', async () => {
@@ -100,6 +100,24 @@ describe('calendar file store', () => {
         expect(rows.map((r) => r.title)).toEqual(['Kickoff']);
         expect(rows[0].uri).toBe('first.ics');
         expect(rows[0].etag).toBe(served!.etag);
+    });
+
+    test('a write past the resource ceiling answers 413 and stores nothing', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+
+        const write = harness.instance.createEvent(calendarId, {
+            title: 'Too big',
+            description: 'x'.repeat(EVENT_MAX_BYTES),
+            startTime: new Date('2026-04-01T10:00:00Z'),
+            endTime: new Date('2026-04-01T11:00:00Z'),
+            allDay: false,
+        });
+
+        expect(write).rejects.toMatchObject({ status: 413 });
+        await write.catch(() => {});
+        expect(await harness.instance.listResources(calendarId)).toHaveLength(0);
+        expect(readdirSync(join(calendarsDirOf(harness.dir), calendarId))).toHaveLength(0);
     });
 
     test('a commit that fails after the rename leaves the key dirty, and the next read settles it', async () => {

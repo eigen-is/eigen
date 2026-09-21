@@ -94,11 +94,55 @@ type Tx = Parameters<Parameters<BunSQLiteDatabase<typeof schema>['transaction']>
 // An event row and the file it was projected from — what every read of a stored event answers with.
 type JoinedEvent = { events: typeof schema.events.$inferSelect; resources: typeof schema.resources.$inferSelect };
 
+// What the transport vouches for about an inbound REQUEST — the relay envelope, or `external_<address>`
+// for a DKIM-aligned iMIP sender. Never anything the body spells.
+type InvitationLink = {
+    organizerEmail: string;
+    organizerEventId: string;
+    organizerUserId: string;
+    createByUserId: string;
+};
+
 // What the inbound-REQUEST decision did, so the broadcast and the notification can run after release.
 type InboundRequestOutcome =
     | { kind: 'dropped'; reason: string }
-    | { kind: 'updated'; linked: CalendarEvent }
-    | { kind: 'created'; calendarId: string; payload: ReceiveInvitationPayload };
+    | { kind: 'updated'; event: CalendarEvent; title: string; startTime: Date }
+    | { kind: 'created'; event: CalendarEvent; payload: ReceiveInvitationPayload };
+
+// iMIP and the relay are fire-and-forget: a receiver has nobody to answer a 413 to, so a message the store
+// refuses for its size is dropped where an interactive write raises.
+async function unlessTooLarge<T>(uid: string, apply: () => Promise<T>, dropped: T): Promise<T> {
+    try {
+        return await apply();
+    } catch (e) {
+        if (!(e instanceof ApiError) || e.status !== 413) throw e;
+        console.info(`calendar: dropped a message for ${uid} — ${e.message}`);
+        return dropped;
+    }
+}
+
+const TOO_LARGE: InboundRequestOutcome = { kind: 'dropped', reason: 'the message is too large to store' };
+
+// The relay carries the same REQUEST an iMIP mail does, so it takes the same decision over the same shape.
+function relayedRequest(payload: ReceiveInvitationPayload): ParsedEvent {
+    return {
+        uid: payload.uid,
+        title: payload.title,
+        description: payload.description,
+        location: payload.location,
+        startTime: payload.startTime,
+        endTime: payload.endTime,
+        allDay: payload.allDay,
+        rrule: payload.rrule,
+        timezone: payload.timezone,
+        status: payload.status,
+        sequence: payload.sequence,
+        dtstamp: payload.dtstamp ?? null,
+        recurrenceDate: null,
+        recurrenceInstant: null,
+        data: payload.data,
+    };
+}
 
 function inboundUpdatePayload(parsed: ParsedEvent): InvitationUpdatePayload {
     return {
@@ -135,9 +179,7 @@ function inboundExceptionPayload(parsed: ParsedEvent): InvitationExceptionPayloa
     };
 }
 
-// An external organizer is known by address only, so the link is `external_<address>` on both stamps.
-function inboundInvitationPayload(parsed: ParsedEvent, sender: string): ReceiveInvitationPayload {
-    const organizerUserId = externalOwnerId(sender);
+function inboundInvitationPayload(parsed: ParsedEvent, link: InvitationLink): ReceiveInvitationPayload {
     return {
         uid: parsed.uid,
         title: parsed.title,
@@ -153,12 +195,12 @@ function inboundInvitationPayload(parsed: ParsedEvent, sender: string): ReceiveI
         dtstamp: parsed.dtstamp,
         data: {
             ...parsed.data,
-            organizer: parsed.data?.organizer ? { ...parsed.data.organizer, userId: organizerUserId } : undefined,
-            organizerEventId: parsed.uid,
+            organizer: parsed.data?.organizer ? { ...parsed.data.organizer, userId: link.organizerUserId } : undefined,
+            organizerEventId: link.organizerEventId,
         },
-        createByUserId: organizerUserId,
-        organizerEventId: parsed.uid,
-        organizerUserId,
+        createByUserId: link.createByUserId,
+        organizerEventId: link.organizerEventId,
+        organizerUserId: link.organizerUserId,
     };
 }
 
@@ -1226,27 +1268,25 @@ export class Calendar {
         };
     }
 
-    // Null when the invitation is dropped: the calendar already holds that UID under another link, which
-    // is one organizer re-using a UID somebody else already sent us — never a second master.
+    // A REQUEST relayed from the organizer's Home. Null when it was dropped — the sender's side must not
+    // believe this Home holds a copy.
     public async receiveInvitation(payload: ReceiveInvitationPayload): Promise<string | null> {
-        const existing = this.findLinkedEvent(payload.organizerEventId, payload.organizerUserId);
-        if (existing) return existing.id;
-
-        const defaultCal = (await this.getCalendars()).find((c) => c.isDefault);
-        if (!defaultCal) throw new ApiError(500, 'No default calendar');
-
-        const created = await this.gate.run(async () => {
-            if (this.uidHolder(defaultCal.id, payload.uid)) return null;
-            return this.writeEvent(defaultCal.id, this.invitationInput(payload));
-        });
-        if (!created) {
-            console.info(`calendar: dropped an invitation for ${payload.uid} — the calendar holds that UID already`);
+        const link: InvitationLink = {
+            organizerEmail: payload.data.organizer?.email.toLowerCase() ?? '',
+            organizerEventId: payload.organizerEventId,
+            organizerUserId: payload.organizerUserId,
+            createByUserId: payload.createByUserId,
+        };
+        const outcome = await unlessTooLarge(
+            payload.uid,
+            () => this.gate.run(() => this.decideInboundRequest(relayedRequest(payload), link)),
+            TOO_LARGE,
+        );
+        if (outcome.kind === 'dropped') {
+            console.info(`calendar: dropped a relayed invitation for ${payload.uid} — ${outcome.reason}`);
             return null;
         }
-
-        this.announce(defaultCal.id, SSEventType.CALENDAR_EVENT_CREATED);
-        this.notifyInvitationReceived(payload);
-        return created.id;
+        return this.settleInboundRequest(outcome, link);
     }
 
     private notifyInvitationReceived(payload: ReceiveInvitationPayload): void {
@@ -1267,10 +1307,15 @@ export class Calendar {
         orgUserId: string,
         payload: InvitationUpdatePayload,
     ): Promise<void> {
-        const linked = await this.gate.run(async () => {
-            const linked = this.findLinkedEvent(orgEventId, orgUserId);
-            return linked && (await this.applyInvitationUpdate(linked, payload)) ? linked : null;
-        });
+        const linked = await unlessTooLarge(
+            orgEventId,
+            () =>
+                this.gate.run(async () => {
+                    const linked = this.findLinkedEvent(orgEventId, orgUserId);
+                    return linked && (await this.applyInvitationUpdate(linked, payload)) ? linked : null;
+                }),
+            null,
+        );
         if (linked) this.notifyInvitationUpdated(linked, payload.title, payload.startTime, orgEventId, orgUserId);
     }
 
@@ -1405,32 +1450,59 @@ export class Calendar {
         return `${year}-${pad(month)}-${pad(day)}`;
     }
 
-    // The ONE decision an inbound iMIP REQUEST takes, made inside the gate against the state it would
-    // overwrite: deliveries are concurrent HTTP requests, so a lookup outside it lets two of them file two
-    // masters for one UID. `sender` is the DKIM-aligned From address the caller verified (R13 2c, R19).
+    // An inbound iMIP REQUEST. `sender` is the DKIM-aligned From address the caller verified (R13 2c, R19),
+    // and an external organizer is known by address only, so the link is `external_<address>`.
     public async receiveImipRequest(parsed: ParsedEvent, sender: string): Promise<void> {
-        const outcome = await this.gate.run(() => this.decideInboundRequest(parsed, sender));
+        const organizerUserId = externalOwnerId(sender);
+        const link: InvitationLink = {
+            organizerEmail: sender,
+            organizerEventId: parsed.uid,
+            organizerUserId,
+            createByUserId: organizerUserId,
+        };
+        const outcome = await unlessTooLarge(
+            parsed.uid,
+            () => this.gate.run(() => this.decideInboundRequest(parsed, link)),
+            TOO_LARGE,
+        );
         if (outcome.kind === 'dropped') {
             console.info(`iMIP: dropped a REQUEST for ${parsed.uid} from ${sender} — ${outcome.reason}`);
             return;
         }
-        if (outcome.kind === 'created') {
-            this.announce(outcome.calendarId, SSEventType.CALENDAR_EVENT_CREATED);
-            this.notifyInvitationReceived(outcome.payload);
-            return;
-        }
-        this.announce(outcome.linked.calendarId, SSEventType.CALENDAR_EVENT_UPDATED);
-        this.notifyInvitationUpdated(
-            outcome.linked,
-            parsed.title,
-            parsed.startTime,
-            parsed.uid,
-            externalOwnerId(sender),
-        );
+        this.settleInboundRequest(outcome, link);
     }
 
-    // Caller holds the gate.
-    private async decideInboundRequest(parsed: ParsedEvent, sender: string): Promise<InboundRequestOutcome> {
+    // The broadcast and the notification an applied REQUEST owes, run after the gate is released.
+    private settleInboundRequest(outcome: InboundRequestOutcome, link: InvitationLink): string | null {
+        if (outcome.kind === 'dropped') return null;
+        if (outcome.kind === 'created') {
+            this.announce(outcome.event.calendarId, SSEventType.CALENDAR_EVENT_CREATED);
+            this.notifyInvitationReceived(outcome.payload);
+            return outcome.event.id;
+        }
+        this.announce(outcome.event.calendarId, SSEventType.CALENDAR_EVENT_UPDATED);
+        this.notifyInvitationUpdated(
+            outcome.event,
+            outcome.title,
+            outcome.startTime,
+            link.organizerEventId,
+            link.organizerUserId,
+        );
+        return outcome.event.id;
+    }
+
+    // The ONE decision an inbound REQUEST takes, whichever transport carried it, made inside the gate
+    // against the state it would overwrite: deliveries are concurrent, so a lookup outside it lets two of
+    // them file two masters for one UID. The UID is looked up Home-wide, where the index only keeps it
+    // unique per calendar. Caller holds the gate.
+    private async decideInboundRequest(parsed: ParsedEvent, link: InvitationLink): Promise<InboundRequestOutcome> {
+        const sender = link.organizerEmail;
+        const applied = (event: CalendarEvent): InboundRequestOutcome => ({
+            kind: 'updated',
+            event,
+            title: parsed.title,
+            startTime: parsed.startTime,
+        });
         const stored = this.joinedEvents().where(eq(schema.events.uid, parsed.uid)).all().map(Calendar.toEvent);
         const linked = stored.find((e) => e.data?.organizer && e.data?.organizerEventId);
 
@@ -1442,10 +1514,10 @@ export class Calendar {
             }
             // A single-occurrence move (Google/Outlook "this event" edit) attaches as an exception: a
             // full-event update would null the master's rrule and collapse the whole series (audit #A).
-            const applied = parsed.recurrenceDate
+            const moved = parsed.recurrenceDate
                 ? await this.applyInvitationException(linked, inboundExceptionPayload(parsed))
                 : await this.applyInvitationUpdate(linked, inboundUpdatePayload(parsed));
-            return applied ? { kind: 'updated', linked } : { kind: 'dropped', reason: 'nothing newer to apply' };
+            return moved ? applied(linked) : { kind: 'dropped', reason: 'nothing newer to apply' };
         }
 
         const master = stored.find((e) => !e.parentEventId);
@@ -1454,14 +1526,14 @@ export class Calendar {
             // when the address it names is the verified sender (R19).
             const resource = this.resourceOf(master.id);
             const component = resource ? await this.loadResource(resource.calendarId, resource.uri) : null;
-            if (!component || storedOrganizerAddress(component) !== sender) {
+            if (!resource || !component || storedOrganizerAddress(component) !== sender) {
                 return { kind: 'dropped', reason: 'the stored event names another organizer' };
             }
             if (parsed.recurrenceDate) {
                 return { kind: 'dropped', reason: 'an occurrence of a series nobody organizes here yet' };
             }
-            await this.adoptAsInvitation(master, resource!, component, parsed, sender);
-            return { kind: 'updated', linked: master };
+            await this.adoptAsInvitation(master, resource, component, parsed, link);
+            return applied(master);
         }
 
         // A new invitation is attributed to its sender, so the body's ORGANIZER must be that address.
@@ -1477,9 +1549,9 @@ export class Calendar {
             .all()
             .find((row) => row.isDefault);
         if (!defaultCal) return { kind: 'dropped', reason: 'no default calendar' };
-        const payload = inboundInvitationPayload(parsed, sender);
-        await this.writeEvent(defaultCal.id, this.invitationInput(payload));
-        return { kind: 'created', calendarId: defaultCal.id, payload };
+        const payload = inboundInvitationPayload(parsed, link);
+        const event = await this.writeEvent(defaultCal.id, this.invitationInput(payload));
+        return { kind: 'created', event, payload };
     }
 
     // Caller holds the gate. The stored resource becomes the attendee-side copy of the organizer's event:
@@ -1489,10 +1561,14 @@ export class Calendar {
         resource: typeof schema.resources.$inferSelect,
         component: ICAL.Component,
         parsed: ParsedEvent,
-        sender: string,
+        link: InvitationLink,
     ): Promise<void> {
-        const organizer = { userId: externalOwnerId(sender), email: sender, name: parsed.data?.organizer?.name };
-        stampInvitationLink(component, { organizerEventId: parsed.uid, organizerUserId: organizer.userId });
+        const organizer = {
+            userId: link.organizerUserId,
+            email: link.organizerEmail,
+            name: parsed.data?.organizer?.name,
+        };
+        stampInvitationLink(component, link);
         patchEvent(
             component,
             null,
@@ -1514,18 +1590,23 @@ export class Calendar {
         recurrenceInstant: Date | null | undefined,
         revision: Revision,
     ): Promise<void> {
-        const cancelled = await this.gate.run(async () => {
-            const linked = this.findLinkedEvent(orgEventId, orgUserId);
-            if (!linked) return false;
-            const resource = this.resourceOf(linked.id);
-            if (!resource) return false;
-            const component = await this.loadResource(resource.calendarId, resource.uri);
-            if (!component) return false;
-            const key = this.recurrenceKeyForSeries(recurrenceDate, recurrenceInstant, linked.timezone);
-            if (!isNewerRevision(revision, storedRevision(component, key))) return false;
-            await this.removeOccurrence(linked.id, key, revision);
-            return true;
-        });
+        const cancelled = await unlessTooLarge(
+            orgEventId,
+            () =>
+                this.gate.run(async () => {
+                    const linked = this.findLinkedEvent(orgEventId, orgUserId);
+                    if (!linked) return false;
+                    const resource = this.resourceOf(linked.id);
+                    if (!resource) return false;
+                    const component = await this.loadResource(resource.calendarId, resource.uri);
+                    if (!component) return false;
+                    const key = this.recurrenceKeyForSeries(recurrenceDate, recurrenceInstant, linked.timezone);
+                    if (!isNewerRevision(revision, storedRevision(component, key))) return false;
+                    await this.removeOccurrence(linked.id, key, revision);
+                    return true;
+                }),
+            false,
+        );
         if (cancelled) this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_CANCELLED, orgUserId));
     }
 

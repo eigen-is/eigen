@@ -2,9 +2,10 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Calendar } from '../../lib/calendar/calendar';
+import type { ReceiveInvitationPayload } from '../../lib/calendar/types';
 import { parseIcs } from '../../lib/ical';
 import type { ParsedEvent } from '../../lib/ical/ical-parse';
-import { calendarsDirOf, makeCalendar } from '../calendar-test-helpers';
+import { CALENDAR_TEST_ROOT, calendarsDirOf, makeCalendar } from '../calendar-test-helpers';
 import type { TestHome } from '../home-test-helpers';
 import { vcal } from '../ics-test-helpers';
 
@@ -58,7 +59,7 @@ const NO_PRECONDITIONS = { ifMatch: null, ifNoneMatch: null };
 
 describe('inbound iMIP REQUEST', () => {
     beforeAll(() => {
-        rmSync(join(import.meta.dir, '../../../../../data-test'), { recursive: true, force: true });
+        rmSync(CALENDAR_TEST_ROOT, { recursive: true, force: true });
     });
 
     test('the organizer a stored event names adopts it in place', async () => {
@@ -135,6 +136,16 @@ describe('inbound iMIP REQUEST', () => {
         expect(await calendar.listResources(id)).toHaveLength(0);
     });
 
+    test('a REQUEST the store refuses for its size is dropped, not half-written', async () => {
+        const { calendar, id } = await harnessWith();
+        const huge = 'x'.repeat(6_000_000);
+
+        await calendar.receiveImipRequest(parsedOf(request([`DESCRIPTION:${huge}`])), ORG);
+
+        expect(await calendar.getEventsByUid(UID)).toHaveLength(0);
+        expect(await calendar.listResources(id)).toHaveLength(0);
+    });
+
     test('two concurrent deliveries of one REQUEST leave one resource', async () => {
         const { calendar, id } = await harnessWith();
         const parsed = parsedOf(request());
@@ -143,5 +154,61 @@ describe('inbound iMIP REQUEST', () => {
 
         expect(await calendar.listResources(id)).toHaveLength(1);
         expect(await calendar.getEventsByUid(UID)).toHaveLength(1);
+    });
+});
+
+// The relay carries the same REQUEST from one Eigen Home to another, so it takes the same decision: the
+// link it vouches for is the organizer's Home rather than an address, and nothing else differs.
+describe('relayed invitation', () => {
+    const ORG_HOME = 'organizer-home-id';
+    const ORG_EVENT = 'organizer-event-id';
+
+    const payload = (): ReceiveInvitationPayload => ({
+        uid: UID,
+        title: 'Quarterly review',
+        description: null,
+        location: null,
+        startTime: new Date('2026-05-01T09:00:00Z'),
+        endTime: new Date('2026-05-01T10:00:00Z'),
+        allDay: false,
+        rrule: null,
+        timezone: null,
+        status: 'confirmed',
+        sequence: 2,
+        dtstamp: new Date('2026-01-01T00:00:00Z'),
+        data: {
+            organizer: { userId: ORG_HOME, email: ORG, name: 'Ext Org' },
+            organizerEventId: ORG_EVENT,
+            attendees: [{ email: 'owner@test.local', status: 'pending', role: 'required' }],
+        },
+        createByUserId: ORG_HOME,
+        organizerEventId: ORG_EVENT,
+        organizerUserId: ORG_HOME,
+    });
+
+    test('a UID the Home holds in another calendar is never filed a second time', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const other = await calendar.createCalendar({ name: 'Work', color: '#aabbcc' });
+        expect((await calendar.putResource(other.id, 'mine.ics', stored(null), NO_PRECONDITIONS)).ok).toBe(true);
+
+        expect(await calendar.receiveInvitation(payload())).toBeNull();
+
+        expect(await calendar.getEventsByUid(UID)).toHaveLength(1);
+    });
+
+    test('the organizer an event in another calendar names adopts it in place', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const other = await calendar.createCalendar({ name: 'Work', color: '#aabbcc' });
+        expect((await calendar.putResource(other.id, 'mine.ics', stored(ORG), NO_PRECONDITIONS)).ok).toBe(true);
+
+        await calendar.receiveInvitation(payload());
+
+        const rows = await calendar.getEventsByUid(UID);
+        expect(rows).toHaveLength(1);
+        expect(rows[0].calendarId).toBe(other.id);
+        expect(rows[0].data?.organizerEventId).toBe(ORG_EVENT);
+        expect(rows[0].data?.organizer?.userId).toBe(ORG_HOME);
     });
 });

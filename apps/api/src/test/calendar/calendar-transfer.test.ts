@@ -3,7 +3,7 @@ import { existsSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Calendar } from '../../lib/calendar/calendar';
 import { PATHS } from '../../lib/core';
-import { calendarsDirOf, DyingFilesystem, makeCalendar } from '../calendar-test-helpers';
+import { CALENDAR_TEST_ROOT, calendarsDirOf, DyingFilesystem, makeCalendar } from '../calendar-test-helpers';
 import type { TestHome } from '../home-test-helpers';
 import { vcal } from '../ics-test-helpers';
 
@@ -30,7 +30,7 @@ const filesOf = (harness: TestHome<Calendar>, calendarId: string): string[] =>
 
 describe('calendar import', () => {
     beforeAll(() => {
-        rmSync(join(import.meta.dir, '../../../../../data-test'), { recursive: true, force: true });
+        rmSync(CALENDAR_TEST_ROOT, { recursive: true, force: true });
     });
 
     test('a write that fails mid-file keeps the series that landed and answers', async () => {

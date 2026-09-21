@@ -211,6 +211,14 @@ export async function processInboundImip(
         return;
     }
 
+    // An organizer action this Home's own address signed is the user's own mail coming back — an invitee
+    // address that forwards to them, a list they are on. Acting on it would let them seize their own event
+    // as somebody else's copy, after which every CalDAV PUT on it is reduced to alarms.
+    if (method !== 'REPLY' && sender === home.user.email.toLowerCase()) {
+        console.info(`iMIP: not acting on a ${method} the recipient sent themselves (${sender})`);
+        return;
+    }
+
     const sentBy = (email: string | undefined): email is string => !!sender && email?.toLowerCase() === sender;
 
     const calendar = home.calendar;

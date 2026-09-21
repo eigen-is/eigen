@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { and, eq, gt, inArray } from 'drizzle-orm';
 import type ICAL from 'ical.js';
 import {
+    ApiError,
     computeResourceEtag,
     type DeleteResourceResult,
     matchesIfMatch,
@@ -224,6 +225,10 @@ export async function writeResource(
     const projection = projectRows(calendarId, id, resource);
     const text = serializeResource(resource);
     const bytes = new TextEncoder().encode(text);
+    // Every write funnels through here, so this is where the ceiling holds — and it holds on the bytes that
+    // would land, after the stamps and the merge with what was stored. Raised before any write intent is
+    // recorded, so a refusal leaves nothing for a drain to chase.
+    if (bytes.byteLength > EVENT_MAX_BYTES) throw new ApiError(413, 'Event is too large');
     const etag = computeResourceEtag(bytes);
 
     try {
@@ -366,7 +371,6 @@ export async function putResource(
         }
 
         const text = serializeResource(resource);
-        if (Buffer.byteLength(text) > EVENT_MAX_BYTES) return { ok: false, error: 'too-large' };
 
         // Re-PUTting what is already stored changes nothing: writing it would bump the ctag and send every
         // other client back for a resource that never moved. Judged against the bytes, never the row: a
@@ -376,7 +380,15 @@ export async function putResource(
             return { ok: true, etag: text === body ? stamped : null, created: false };
         }
 
-        const { etag } = await writeResource(calendar, calendarId, storedUri, resource, existing ?? null);
+        // The stamps and the stored alarms can push an accepted body past the ceiling: a raised 413 is the
+        // client error the protocol has an element for, not a 500.
+        let etag: string;
+        try {
+            ({ etag } = await writeResource(calendar, calendarId, storedUri, resource, existing ?? null));
+        } catch (e) {
+            if (e instanceof ApiError && e.status === 413) return { ok: false, error: 'too-large' };
+            throw e;
+        }
 
         // A client whose bytes are not what got stored has nothing to attach a validator to (RFC 4791 § 5.3.4).
         return { ok: true, etag: text === body ? etag : null, created: !existing };

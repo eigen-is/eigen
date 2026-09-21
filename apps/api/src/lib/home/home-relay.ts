@@ -96,10 +96,18 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
                 );
             }
             break;
-        case 'calendar:invitation':
+        case 'calendar:invitation': {
             if (!home.hasCalendar) break;
-            await home.calendar.receiveInvitation(message.payload);
+            // A dropped invitation is said out loud: the organizer's side otherwise believes this Home
+            // holds a copy of an event it refused.
+            const received = await home.calendar.receiveInvitation(message.payload);
+            if (!received) {
+                console.info(
+                    `home-relay: ${targetUserId} dropped the invitation ${message.payload.uid} from ${message.payload.organizerUserId}`,
+                );
+            }
             break;
+        }
         case 'calendar:invitation-update':
             if (!home.hasCalendar) break;
             await home.calendar.receiveInvitationUpdate(message.orgEventId, message.orgUserId, message.payload);
