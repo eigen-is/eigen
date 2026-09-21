@@ -747,6 +747,22 @@ describe('Calendar Invites', () => {
             expect(after.etag).not.toBe(before.etag);
         });
     });
+
+    // Transports stay projected (R17 6a): the receiving Home builds its own file from the payload's
+    // fields, so no `X-EIGEN-` line ever crosses a home boundary.
+    test('a relay invitation carries no X-EIGEN- line', async () => {
+        const relay = await import('../../lib/home/home-relay');
+        const spy = spyOn(relay, 'sendToHome');
+        spy.mockClear();
+
+        await createEventWithAttendees('Projected Payload', [{ email: ctx.bob.user.email }]);
+        await bobEvent((e) => e.title === 'Projected Payload');
+
+        const messages = spy.mock.calls.map((call) => JSON.stringify(call[1]));
+        expect(messages.some((message) => message.includes('calendar:invitation'))).toBe(true);
+        expect(messages.some((message) => message.toUpperCase().includes('X-EIGEN'))).toBe(false);
+        spy.mockRestore();
+    });
 });
 
 // A decline is an RSVP, and only an attendee has one to give. A file or a CalDAV client can hang any

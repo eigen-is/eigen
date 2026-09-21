@@ -113,6 +113,86 @@ describe('CalDAV round-trip fidelity', () => {
         calendarId = ids[0];
     });
 
+    // The whole seam end to end: a client writes a kitchen sink, the web app renames it through the REST
+    // route, and the client reads its own bytes back with nothing but the title (and the stamps a write
+    // always moves) changed.
+    describe('a web edit of a client-written event', () => {
+        // The organizer is the calendar owner: an event somebody else organizes is an invitation, and the
+        // attendee guard would refuse the rename outright.
+        const kitchen = () =>
+            [
+                'BEGIN:VEVENT',
+                'UID:rt-kitchen@client',
+                'DTSTAMP:20260101T000000Z',
+                'CREATED:20251201T090000Z',
+                'LAST-MODIFIED:20251215T090000Z',
+                'SEQUENCE:2',
+                'SUMMARY:Kitchen sink',
+                'DESCRIPTION:has a ; semicolon and a , comma',
+                'DTSTART;TZID=America/New_York:20260415T120000',
+                'DTEND;TZID=America/New_York:20260415T130000',
+                'RRULE:FREQ=WEEKLY;COUNT=10',
+                'RDATE;TZID=America/New_York:20260501T120000',
+                'GEO:52.37;4.89',
+                'CATEGORIES:work,travel',
+                'ATTACH;FMTTYPE=text/plain;VALUE=URI:https://example.com/agenda.txt',
+                'X-APPLE-STRUCTURED-LOCATION;VALUE=URI;X-ADDRESS="Herengracht 1\\nAmsterdam";X-APPLE-RADIUS=49;X-TITLE=Office:geo:52.37,4.89',
+                `ORGANIZER;CN=Alice:mailto:${ctx.alice.user.email}`,
+                'ATTENDEE;CUTYPE=ROOM;ROLE=OPT-PARTICIPANT;PARTSTAT=ACCEPTED;CN=Room 42:mailto:room42@x.com',
+                'BEGIN:VALARM',
+                'ACTION:AUDIO',
+                'TRIGGER;RELATED=END:-PT10M',
+                'ATTACH;FMTTYPE=audio/basic:ftp://example.com/pub/sounds/bell-01.aud',
+                'END:VALARM',
+                'END:VEVENT',
+            ].join('\r\n');
+
+        // Every property in jCal form, keyed by name: ical.js reorders parameters and rewrites escapes,
+        // so only name + parameters + values decide equality.
+        const snapshot = (comp: ICAL.Component): Record<string, unknown[]> => {
+            const out: Record<string, unknown[]> = {};
+            for (const prop of comp.getAllProperties()) (out[prop.name] ??= []).push(prop.toJSON());
+            for (const sub of comp.getAllSubcomponents()) (out[`${sub.name}/`] ??= []).push(snapshot(sub));
+            return out;
+        };
+
+        const veventOf = (ics: string): ICAL.Component =>
+            parseResource(ics)
+                .getAllSubcomponents('vevent')
+                .find((v) => v.getFirstPropertyValue('uid') === 'rt-kitchen@client')!;
+
+        test('everything the client wrote survives, and only the title moves', async () => {
+            expect((await putIcs('rt-kitchen.ics', vcal(VTZ_NY, kitchen()))).status).toBe(201);
+            const before = snapshot(veventOf(await getIcs('rt-kitchen.ics')));
+
+            const home = await getHome(userId);
+            const stored = findOrFail(
+                await home.calendar.getRawEvents(calendarId),
+                (e) => e.uid === 'rt-kitchen@client',
+            );
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${userId}/calendars/${calendarId}/events/${stored.id}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: 'Kitchen sink, renamed' }),
+                },
+            );
+            expect(res.status).toBe(200);
+
+            const after = snapshot(veventOf(await getIcs('rt-kitchen.ics')));
+            // A title is not a significant change (RFC 5545 §3.8.7.4), so even SEQUENCE holds still.
+            const moved = ['summary', 'last-modified', 'dtstamp'];
+            for (const name of new Set([...Object.keys(before), ...Object.keys(after)])) {
+                if (moved.includes(name)) continue;
+                expect({ [name]: after[name] }).toEqual({ [name]: before[name] });
+            }
+            expect(after['summary']).toEqual([['summary', {}, 'text', 'Kitchen sink, renamed']]);
+            expect(after['sequence']).toEqual(before['sequence']);
+        });
+    });
+
     describe('EXDATE forms', () => {
         // Same class as audit #8 — Exchange/Outlook and several CalDAV clients normalize EXDATE to
         // UTC (Z) form; the key must still be the series wall-clock date, not the UTC date.
@@ -746,6 +826,43 @@ describe('CalDAV round-trip fidelity', () => {
             const occs = await getOccurrences('2026-05-01T00:00:00Z', '2026-06-01T00:00:00Z');
             const occ = findOrFail(occs, (o) => o.uid === 'rt-foreign-organizer@eigen');
             expect(occ.title).toBe('Partner sync (hijacked)');
+        });
+
+        // Transports stay projected (R17 6a): a message leaves with the event's fields, never with the
+        // lines the store keeps for itself, whatever the stored resource carries.
+        test('no outgoing iMIP message carries an X-EIGEN- line', async () => {
+            const mailer = await import('../../lib/core/mailer');
+            const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+            spy.mockClear();
+
+            const created = await assertJson<CalendarEvent>(
+                await authedRequest(ctx.alice.user.sessionToken, `/calendar/${userId}/calendars/${calendarId}/events`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Stamped locally',
+                        startTime: '2026-05-20T09:00:00.000Z',
+                        endTime: '2026-05-20T10:00:00.000Z',
+                        allDay: false,
+                        data: {
+                            color: '#ff8800',
+                            attendees: [{ email: 'guest@external.com', status: 'pending', role: 'required' }],
+                        },
+                    }),
+                }),
+            );
+            // The stored file does carry them — that is what makes the assertion below worth making.
+            expect(await getIcs(created.uri)).toContain('X-EIGEN-');
+
+            await new Promise((resolve) => setTimeout(resolve, 300));
+            const bodies = spy.mock.calls.flatMap((call) => [
+                call[0].icalEvent?.content ?? '',
+                call[0].text ?? '',
+                call[0].html ?? '',
+            ]);
+            expect(bodies.some((body) => body.includes('BEGIN:VEVENT'))).toBe(true);
+            expect(bodies.some((body) => body.includes('X-EIGEN'))).toBe(false);
+            spy.mockRestore();
         });
 
         // A CalDAV-parsed organizer is known by address only (no Eigen user id), so the decline takes the

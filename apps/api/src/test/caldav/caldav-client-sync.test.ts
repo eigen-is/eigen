@@ -5,6 +5,7 @@
 // calendar-timezone.test.ts (occurrence keying).
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence } from '@workspace/lib/types/calendar';
+import { getHome } from '../../lib/home';
 import { basicAuth, davRequest } from '../dav-test-helpers';
 import { app, assertJson, authedRequest, getTestContext } from '../setup';
 
@@ -258,6 +259,133 @@ describe('CalDAV client sync on web-created events', () => {
         );
         expect(res.status).toBe(403);
         expect(await res.text()).toContain('valid-sync-token');
+    });
+
+    // Every writer of a linked copy is a write of its file now, so the resource's change tag moves and a
+    // CalDAV client sees the organizer's update, a PARTSTAT change and a cancellation (L43). Before the
+    // file seam these four paths wrote rows without touching the tag, so no delta ever carried them.
+    describe('an invitation writer moves the change tag', () => {
+        const ORGANIZER = 'external_l43.organizer@external.com';
+
+        async function seedInvitation(uid: string, rrule: string | null): Promise<{ uri: string; eventId: string }> {
+            const home = await getHome(userId);
+            const eventId = await home.calendar.receiveInvitation({
+                uid,
+                title: 'Linked series',
+                description: null,
+                location: null,
+                startTime: new Date('2026-05-04T09:00:00Z'),
+                endTime: new Date('2026-05-04T10:00:00Z'),
+                allDay: false,
+                rrule,
+                timezone: null,
+                status: 'confirmed',
+                sequence: 0,
+                data: {
+                    organizer: { userId: ORGANIZER, email: 'l43.organizer@external.com', name: 'Org' },
+                    organizerEventId: uid,
+                    attendees: [{ email: ctx.alice.user.email, status: 'pending', role: 'required' }],
+                },
+                createByUserId: ORGANIZER,
+                organizerEventId: uid,
+                organizerUserId: ORGANIZER,
+            });
+            const uri = (await home.calendar.listResources(calendarId)).find((r) => r.uid === uid)!.uri;
+            return { uri, eventId: eventId! };
+        }
+
+        const syncToken = async (): Promise<string> =>
+            (await davSync()).match(/<D:sync-token>([^<]+)<\/D:sync-token>/)![1];
+
+        const delta = async (token: string): Promise<string> => davSync(token);
+
+        test("an organizer's update reaches the client", async () => {
+            const uid = `l43-update-${Date.now()}@external.com`;
+            const { uri } = await seedInvitation(uid, null);
+            const before = await syncToken();
+
+            await (await getHome(userId)).calendar.receiveInvitationUpdate(uid, ORGANIZER, {
+                title: 'Linked series (moved)',
+                description: null,
+                location: null,
+                startTime: new Date('2026-05-04T11:00:00Z'),
+                endTime: new Date('2026-05-04T12:00:00Z'),
+                allDay: false,
+                rrule: null,
+                status: 'confirmed',
+                sequence: 1,
+            });
+
+            expect(await delta(before)).toContain(uri);
+            expect((await davGet(uri)).ics).toContain('SUMMARY:Linked series (moved)');
+        });
+
+        test('a PARTSTAT change reaches the client, under a new etag', async () => {
+            const uid = `l43-partstat-${Date.now()}@external.com`;
+            const { uri, eventId } = await seedInvitation(uid, null);
+            const etagBefore = (await davGet(uri)).etag;
+            const before = await syncToken();
+
+            await (await getHome(userId)).calendar.updateAttendeeStatus(eventId, ctx.alice.user.email, 'accepted');
+
+            expect(await delta(before)).toContain(uri);
+            expect((await davGet(uri)).etag).not.toBe(etagBefore);
+        });
+
+        test('an occurrence RSVP on an existing exception reaches the client', async () => {
+            const uid = `l43-occurrence-${Date.now()}@external.com`;
+            const { uri, eventId } = await seedInvitation(uid, 'FREQ=WEEKLY;COUNT=5');
+            const home = await getHome(userId);
+            // The first RSVP writes the exception; the second moves the PARTSTAT on the one that exists.
+            await home.calendar.rsvpForOccurrence(eventId, ctx.alice.user.email, 'accepted', '2026-05-11');
+            const before = await syncToken();
+
+            await home.calendar.rsvpForOccurrence(eventId, ctx.alice.user.email, 'tentative', '2026-05-11');
+
+            expect(await delta(before)).toContain(uri);
+            expect((await davGet(uri)).ics).toContain('PARTSTAT=TENTATIVE');
+        });
+
+        test('declining this-and-following reaches the client', async () => {
+            const uid = `l43-following-${Date.now()}@external.com`;
+            const { uri, eventId } = await seedInvitation(uid, 'FREQ=WEEKLY;COUNT=5');
+            const before = await syncToken();
+
+            const res = await authedRequest(
+                token,
+                `/calendar/${userId}/calendars/${calendarId}/events/${eventId}/rsvp`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        status: 'declined',
+                        scope: 'this-and-following',
+                        recurrenceDate: '2026-05-18',
+                        remove: true,
+                    }),
+                },
+            );
+            expect(res.status).toBe(200);
+
+            expect(await delta(before)).toContain(uri);
+            expect((await davGet(uri)).ics).toContain('UNTIL=');
+        });
+
+        test('a cancelled invitation leaves one tombstone and no orphan rows', async () => {
+            const uid = `l43-cancel-${Date.now()}@external.com`;
+            const { uri, eventId } = await seedInvitation(uid, 'FREQ=WEEKLY;COUNT=5');
+            const home = await getHome(userId);
+            await home.calendar.rsvpForOccurrence(eventId, ctx.alice.user.email, 'accepted', '2026-05-11');
+            const before = await syncToken();
+
+            await home.calendar.removeInvitation(uid, ORGANIZER);
+
+            const xml = await delta(before);
+            expect(xml).toContain(uri);
+            expect(xml).toContain('404 Not Found');
+            // The exception row went with its master's file: no row survives the resource it came from.
+            expect(await home.calendar.getEventsByUid(uid)).toHaveLength(0);
+        });
     });
 
     test('client drag of a simple event (If-Match PUT of served bytes) sticks', async () => {
