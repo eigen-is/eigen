@@ -1,7 +1,7 @@
 # Storage & Mount System
 
 > **TLDR**: Home is the per-user singleton managing DB connections + domain services. Drive uses Mounts with pluggable
-> storage backends (LocalStorage, S3). Mail/Contacts use LocalFilesystem directly. Data lives in
+> storage backends (LocalStorage, S3). Mail, Contacts and Calendar use LocalFilesystem directly. Data lives in
 > `data/home/{userId}/`, teams in `data/team/{teamId}/`, orgs in `data/org/{orgId}/`.
 
 ## Architecture
@@ -77,8 +77,10 @@ without reading data into memory. Callers stream or buffer as needed (e.g., `fil
 EIGEN_STORAGE_FAULT=exists-delay=45000 bun --filter '*' dev
 ```
 
-**LocalFilesystem** (`apps/api/src/lib/core/local-filesystem.ts`): Separate class for Mail/Contacts with extended fs
-methods (list, listDirs, stat, dirSize, watch, etc). Exposed as `home.fs`.
+**LocalFilesystem** (`apps/api/src/lib/core/local-filesystem.ts`): Separate class for Mail, Contacts and Calendar,
+with the fs methods those domains need — `list`, `readdir`, `stat`, `dirSize`, `dirExists`, `watch`, and the
+durability family `writeAtomic` / `writeDurable` / `renameDurable` / `moveDurable` / `unlinkDurable` /
+`sweepAtomicTemps`. Exposed as `home.fs`.
 
 ## Mount System
 
