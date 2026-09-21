@@ -34,6 +34,19 @@ const parseCount = (contacts: Contacts) => contacts.cardParseCount;
 const uriOf = (db: Awaited<ReturnType<typeof makeContacts>>['db'], id: string) =>
     db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!.uri;
 
+// A restart whose contacts.db is gone while cards/ is untouched: the index has to come back from the files
+// alone. The first handle is closed before the unlink, and only that one — a home file takes a single close.
+const loseIndex = async (harness: Awaited<ReturnType<typeof makeContacts>>) => {
+    await harness.close();
+    const contactsRoot = join(harness.dir, PATHS.CONTACTS.ROOT);
+    for (const name of readdirSync(contactsRoot)) {
+        if (name.startsWith('contacts.db')) rmSync(join(contactsRoot, name));
+    }
+    const reopened = await openTestHome((home) => new Contacts(home), harness.dir, harness.user);
+    const managed = await reopened.database<typeof contactsSchema>(PATHS.CONTACTS.DB);
+    return { contacts: reopened.instance, db: managed.db, dir: harness.dir, user: harness.user };
+};
+
 // Skipped cards are logged, not thrown — capture the warnings so a test can assert them and the run stays quiet.
 const captureWarnings = async (fn: () => Promise<void>): Promise<string[]> => {
     const warnings: string[] = [];
@@ -425,17 +438,19 @@ describe('self-link ranking', () => {
         expect(readFileSync(cardPathOf(dir, '0.vcf'), 'utf8')).not.toContain('X-EIGEN-ID');
     });
 
-    test('rebuild keeps the self-link on the incumbent over an earlier owner-email twin', async () => {
-        const { contacts, db, dir, user } = await makeContacts();
-        const me = (await contacts.getMe())!;
-        writeFileSync(cardPathOf(dir, '0.vcf'), emailTwin(user.email));
-        await contacts.init(); // index the twin (loses to the clean incumbent self row)
-        const syncGenBefore = db.select().from(contactsSchema.book).get()!.syncGen;
+    test('an index rebuilt from the files hands the slot to the card that asserts X-EIGEN-ID', async () => {
+        const harness = await makeContacts();
+        const me = (await harness.contacts.getMe())!;
+        const selfUri = uriOf(harness.db, me.id);
+        writeFileSync(cardPathOf(harness.dir, '0.vcf'), emailTwin(harness.user.email));
+        await harness.contacts.init(); // index the twin (loses to the clean incumbent self row)
+        const syncGenBefore = harness.db.select().from(contactsSchema.book).get()!.syncGen;
 
-        await contacts.rebuildIndex();
+        // With every index row gone the twin sorts first, so only the self card's own X-EIGEN-ID outranks it.
+        const { db, dir, user } = await loseIndex(harness);
 
-        expect((await contacts.getMe())?.id).toBe(me.id);
-        expect(selfLinkRows(db, user.id)).toEqual([me.id]);
+        expect(selfLinkRows(db, user.id).length).toBe(1);
+        expect(uriOf(db, selfLinkRows(db, user.id)[0])).toBe(selfUri);
         const twin = db
             .select()
             .from(contactsSchema.contacts)
@@ -538,52 +553,84 @@ describe('self-link ranking', () => {
     });
 });
 
-describe('rebuildIndex', () => {
-    test('rebuilding a populated book reproduces projections + etags, rotates syncGen, clears tombstones', async () => {
-        const { contacts, db } = await makeContacts();
-        await contacts.addContact(validContact({ firstName: 'Keep', lastName: 'One', email: ['keep1@example.com'] }));
-        await contacts.addContact(validContact({ firstName: 'Keep', lastName: 'Two', email: ['keep2@example.com'] }));
-        const goneId = await contacts.addContact(validContact({ firstName: 'Gone', email: ['gone@example.com'] }));
-        await contacts.deleteContact(goneId);
-        expect(db.select().from(contactsSchema.contactTombstones).all().length).toBe(1);
+// The book row, its ctag and its syncGen live nowhere but contacts.db, so losing that file loses the
+// authoritative half of the index: it comes back from cards/ alone, under a new sync generation.
+describe('a lost index', () => {
+    const syncBody = (token: string) =>
+        `<?xml version="1.0" encoding="utf-8"?>\n<D:sync-collection xmlns:D="DAV:">\n` +
+        `<D:sync-token>${token}</D:sync-token>\n<D:prop><D:getetag/></D:prop>\n</D:sync-collection>`;
+
+    test('a token of the dead generation is refused, so clients full-resync instead of trusting a reset counter', async () => {
+        const harness = await makeContacts();
+        await harness.contacts.addContact(validContact({ firstName: 'Kept', email: ['kept@example.com'] }));
+        const before = await harness.contacts.getBook();
+        const oldToken = `urn:eigen:sync:${before.syncGen}-${before.ctag}`;
+
+        const { contacts, user } = await loseIndex(harness);
+        // Past the dead token's ctag, so the ctag-ahead guard cannot be what refuses it.
+        for (let i = 0; i <= before.ctag; i++) {
+            await contacts.addContact(validContact({ firstName: `New${i}`, email: [`new${i}@example.com`] }));
+        }
+        expect((await contacts.getBook()).ctag).toBeGreaterThanOrEqual(before.ctag);
+
+        const res = await handleCardReport(contacts, user.id, syncBody(oldToken));
+        expect(res.status).toBe(403);
+        expect(await res.text()).toContain('valid-sync-token');
+    });
+
+    test('the index comes back from the cards with the same projections and etags, and no tombstones', async () => {
+        const harness = await makeContacts();
+        await harness.contacts.addContact(
+            validContact({ firstName: 'Keep', lastName: 'One', email: ['keep1@example.com'] }),
+        );
+        await harness.contacts.addContact(
+            validContact({ firstName: 'Keep', lastName: 'Two', email: ['keep2@example.com'] }),
+        );
+        const goneId = await harness.contacts.addContact(
+            validContact({ firstName: 'Gone', email: ['gone@example.com'] }),
+        );
+        await harness.contacts.deleteContact(goneId);
+        expect(harness.db.select().from(contactsSchema.contactTombstones).all().length).toBe(1);
 
         // Compare faithfully, not byte-for-byte: an unset optional field is a dropped key from addContact's
         // toData but an '' / [] from the file-parse projection — both are empty. Drop empty optionals on both
-        // sides so a real value difference (not a representation one) is what would fail.
+        // sides, and the contact id, which a book rebuilt from the files alone mints fresh.
         const projection = (list: Contact[]) =>
             JSON.stringify(
                 list
-                    .sort((a, b) => a.id.localeCompare(b.id))
+                    .sort((a, b) => `${a.firstName}${a.lastName}`.localeCompare(`${b.firstName}${b.lastName}`))
                     .map((c) => {
                         const out: Record<string, unknown> = {};
                         for (const [k, v] of Object.entries(c)) {
-                            if (v === '' || (Array.isArray(v) && v.length === 0)) continue;
+                            if (k === 'id' || v === '' || (Array.isArray(v) && v.length === 0)) continue;
                             out[k] = v;
                         }
                         return out;
                     }),
             );
-        const projectionsBefore = projection(await contacts.getContacts());
-        const etagsBefore = new Map(
+        const projectionsBefore = projection(await harness.contacts.getContacts());
+        const etagsBefore = harness.db
+            .select()
+            .from(contactsSchema.contacts)
+            .all()
+            .map((r) => r.etag)
+            .sort();
+
+        const { contacts, db } = await loseIndex(harness);
+
+        expect(projection(await contacts.getContacts())).toBe(projectionsBefore);
+        expect(
             db
                 .select()
                 .from(contactsSchema.contacts)
                 .all()
-                .map((r) => [r.id, r.etag] as const),
-        );
-        expect(db.select().from(contactsSchema.book).get()!.syncGen).toBe(1);
-
-        await contacts.rebuildIndex();
-
-        expect(projection(await contacts.getContacts())).toBe(projectionsBefore);
-        for (const r of db.select().from(contactsSchema.contacts).all()) {
-            expect(r.etag).toBe(etagsBefore.get(r.id)!);
-        }
-        expect(db.select().from(contactsSchema.book).get()!.syncGen).toBeGreaterThan(1);
+                .map((r) => r.etag)
+                .sort(),
+        ).toEqual(etagsBefore);
         expect(db.select().from(contactsSchema.contactTombstones).all().length).toBe(0);
     });
 
-    test('init rebuilds when the book row is missing, rotating syncGen', async () => {
+    test('a book row alone going missing rotates syncGen and leaves the indexed rows in place', async () => {
         const { contacts, db } = await makeContacts();
         const me = (await contacts.getMe())!;
         db.delete(contactsSchema.book).run();
@@ -594,7 +641,7 @@ describe('rebuildIndex', () => {
         expect((await contacts.getContactById(me.id))?.eigenId).toBe(me.eigenId);
     });
 
-    test('a rebuild that lost the book row stamps the wall clock, and the generation only ever rises', async () => {
+    test('a recovered book row stamps the wall clock, so a generation of the dead history never returns', async () => {
         const { contacts, db } = await makeContacts();
         const clockBefore = Math.floor(Date.now() / 1000);
 
@@ -606,34 +653,14 @@ describe('rebuildIndex', () => {
         // so a generation derived from it alone repeats, and a client replays a token of the dead history.
         expect(first).toBeGreaterThanOrEqual(clockBefore);
 
-        // With the row in hand, the next rebuild is strictly greater however close the two run together.
-        await contacts.rebuildIndex();
-        expect(db.select().from(contactsSchema.book).get()!.syncGen).toBeGreaterThan(first);
+        db.delete(contactsSchema.book).run();
+        await contacts.init();
+        expect(db.select().from(contactsSchema.book).get()!.syncGen).toBeGreaterThanOrEqual(first);
     });
 
-    test('a same-length, timestamp-preserved replacement is missed by reconcile but caught by rebuild', async () => {
-        const { contacts, db, dir } = await makeContacts();
-        const id = await contacts.addContact(
-            validContact({ firstName: 'Same', email: ['same@example.com'], notes: 'ZZZZ' }),
-        );
-        const before = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
-        const syncGenBefore = db.select().from(contactsSchema.book).get()!.syncGen;
-
-        // Overwrite with different, same-length bytes and pin the mtime back to the indexed value.
-        const raw = readFileSync(cardPathOf(dir, before.uri), 'utf8');
-        expect(raw).toContain('ZZZZ');
-        writeFileSync(cardPathOf(dir, before.uri), raw.replace('ZZZZ', 'QQQQ'));
-        utimesSync(cardPathOf(dir, before.uri), new Date(), new Date(before.mtime));
-
-        await contacts.init(); // stat-only reconcile cannot see it
-        expect(db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!.etag).toBe(
-            before.etag,
-        );
-
-        await contacts.rebuildIndex(); // full re-read does
-        const after = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
-        expect(after.etag).not.toBe(before.etag);
-        expect(db.select().from(contactsSchema.book).get()!.syncGen).toBeGreaterThan(syncGenBefore);
+    test('a fresh book with no cards starts at the first generation', async () => {
+        const { db } = await makeContacts();
+        expect(db.select().from(contactsSchema.book).get()!.syncGen).toBe(1);
     });
 });
 
@@ -658,7 +685,7 @@ describe('per-file fault tolerance', () => {
         expect(warnings.some((w) => w.includes('garbage.vcf'))).toBe(true);
     });
 
-    test('a garbage .vcf never bumps the ctag and is counted on disk by both passes', async () => {
+    test('a garbage .vcf never bumps the ctag and its bytes still count against the book', async () => {
         const { contacts, db, dir } = await makeContacts();
         mkdirSync(cardsDirOf(dir), { recursive: true });
         writeFileSync(cardPathOf(dir, 'garbage.vcf'), 'this is not a vcard at all\r\n');
@@ -674,12 +701,7 @@ describe('per-file fault tolerance', () => {
         expect(db.select().from(contactsSchema.book).get()!.ctag).toBe(ctagBefore);
         expect(await contacts.size()).toBe(bytesAfterReconcile);
 
-        // Both passes answer the same question — how many bytes cards/ holds — so unindexable bytes count in
-        // both. Otherwise a rebuild would silently hand the user back quota the files still occupy.
-        await captureWarnings(() => contacts.rebuildIndex());
-        expect(await contacts.size()).toBe(bytesAfterReconcile);
-
-        // Deleting it gives back exactly its bytes — proof both totals really carried them.
+        // Deleting it gives back exactly its bytes — proof the total really carried them.
         rmSync(cardPathOf(dir, 'garbage.vcf'));
         await contacts.init();
         expect(await contacts.size()).toBe(bytesAfterReconcile - garbageSize);
@@ -771,15 +793,17 @@ describe('per-file fault tolerance', () => {
 // the source of truth and echoing a phone's BDAY remains a no-op.
 describe('birthday normalization at the seam', () => {
     test('addContact stores a date-only birthday as a date BDAY and round-trips it', async () => {
-        const { contacts, dir } = await makeContacts();
-        const id = await contacts.addContact(
+        const harness = await makeContacts();
+        const id = await harness.contacts.addContact(
             validContact({ firstName: 'Born', email: ['born@example.com'], birthday: '1990-01-01' }),
         );
 
-        expect(readFileSync(cardPathOf(dir, `${id}.vcf`), 'utf8')).toContain('BDAY:1990-01-01');
-        expect((await contacts.getContactById(id))?.birthday).toBe('1990-01-01');
-        await contacts.rebuildIndex();
-        expect((await contacts.getContactById(id))?.birthday).toBe('1990-01-01');
+        expect(readFileSync(cardPathOf(harness.dir, `${id}.vcf`), 'utf8')).toContain('BDAY:1990-01-01');
+        expect((await harness.contacts.getContactById(id))?.birthday).toBe('1990-01-01');
+
+        // The file is the truth, so an index re-derived from it alone reads the same date back.
+        const { contacts } = await loseIndex(harness);
+        expect((await contacts.getContacts()).find((c) => c.firstName === 'Born')?.birthday).toBe('1990-01-01');
     });
 
     test('external ISO input keeps its date prefix verbatim instead of shifting by timezone', async () => {
@@ -1440,8 +1464,8 @@ describe('crash recovery (durable journals)', () => {
             expect(labels.some((l) => l.nameKey === 'bandmates')).toBe(false);
             for (const id of ids) expect((await restarted.contacts.getContactById(id))?.labels).toEqual([labelId]);
 
-            // A rebuild re-derives labels from the files; with the files converged it re-mints nothing.
-            await restarted.contacts.rebuildIndex();
+            // The files are converged, so a further pass over them re-mints no label.
+            await restarted.contacts.init();
             expect(
                 restarted.db
                     .select()

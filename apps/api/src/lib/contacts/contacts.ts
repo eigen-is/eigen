@@ -157,10 +157,8 @@ export class Contacts {
         // owned by the reconcile/rebuild pass below.
         this.avatarsBytes = await this.storage.dirSize(PATHS.CONTACTS.AVATARS);
 
-        // Bring the index in line with cards/ before seeding: a stat-only reconcile on a healthy book, or a
-        // full rebuild if the book/sync bookkeeping is gone.
-        if (this.indexIsIntact()) await this.reconcileIndex();
-        else await this.rebuildIndex();
+        // Bring the index in line with cards/ before seeding; the pass also recovers a lost book row.
+        await this.reconcileIndex();
 
         // Then finish what a crash left half-applied — after the index pass, which guarantees the book row
         // the ctag bumps need, and before anything is served.
@@ -408,16 +406,6 @@ export class Contacts {
         }
     }
 
-    // The book/sync bookkeeping is authoritative in the DB, not derivable from cards/, so a missing book row
-    // means the index needs a from-scratch rebuild rather than a reconcile.
-    private indexIsIntact(): boolean {
-        try {
-            return !!this.db.select().from(schema.book).where(eq(schema.book.id, 1)).get();
-        } catch {
-            return false;
-        }
-    }
-
     // Read one card file into the index row + label names to (re)commit for it. The self-link is left `''`
     // here and assigned to the single ranked winner afterwards, so no loser is ever indexed as self.
     // internal — used by contacts/*.ts
@@ -458,10 +446,6 @@ export class Contacts {
 
     public async reconcileIndex(): Promise<void> {
         return reconcile.reconcileIndex(this);
-    }
-
-    public async rebuildIndex(): Promise<void> {
-        return reconcile.rebuildIndex(this);
     }
 
     // Only self-linkable when the caller-supplied id is this user's AND no row already claims it: at most one
