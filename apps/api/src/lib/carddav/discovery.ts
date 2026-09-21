@@ -8,9 +8,7 @@ import { addressbookCollectionProps, addressbookHomeProps } from './xml-builder'
 // The one fixed book: URL segment `contacts`, displayname `Contacts` — no MKADDRESSBOOK.
 export const ADDRESSBOOK_ID = 'contacts';
 
-// The book and card hrefs every CardDAV surface emits (discovery, REPORT rows, the PUT Location header), on
-// top of the home href dav/href.ts owns. Card names are client-chosen, so the resource segment is minimally
-// path-encoded via the shared dav/href encoder — the same one the CalDAV twin's eventHref uses.
+// Card names are client-chosen, so the resource segment goes through the shared dav/href encoder.
 export const bookHref = (ownerId: string) => `${addressbookHomeHref(ownerId)}${ADDRESSBOOK_ID}/`;
 export const cardHref = (ownerId: string, uri: string) => `${bookHref(ownerId)}${encodePathSegment(uri)}`;
 
@@ -33,8 +31,7 @@ export function handleAddressbookHomePropfind(
     return multistatusResponse(responses);
 }
 
-// PROPFIND /dav/addressbooks/{ownerId}/contacts/ — the book collection, plus one card per resource at Depth:1
-// (etag + content-type). The card listing comes from the index; DAV serves every card, group cards included.
+// PROPFIND /dav/addressbooks/{ownerId}/contacts/ — DAV serves every card in the index, group cards included.
 export function handleAddressbookPropfind(
     ownerId: string,
     book: CardBook,

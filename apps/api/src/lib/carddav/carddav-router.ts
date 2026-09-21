@@ -16,8 +16,7 @@ import {
 import { handleCardReport } from './report';
 import { handleDeleteCard, handleGetCard, handlePutCard } from './resource';
 
-// The shared GET/PUT/DELETE card-resource tail: fixed-book check, then sanitize the client-chosen name before
-// it can become a filename (the AGENTS.md path rule). Returns the refusal Response to serve as-is.
+// Sanitizes the client-chosen name before it can become a filename; returns the refusal Response to serve as-is.
 function resolveCardUri(parsed: CollectionPath): { uri: string } | Response {
     if (!parsed.ok) return new Response('Bad Request', { status: 400 });
     if (parsed.collection !== ADDRESSBOOK_ID) return new Response('Not Found', { status: 404 });
@@ -105,16 +104,14 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         return handleGetCard(await getContacts(user), resolved.uri);
     })
 
-    // PUT a card resource — create or replace. The name is sanitized before putCard turns it into a filename,
-    // and the If-Match / If-None-Match preconditions are evaluated inside the store's write lock.
+    // The If-Match / If-None-Match preconditions are evaluated inside the store's write lock.
     .put('/dav/addressbooks/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
         const resolved = resolveCardUri(parseCollectionPath(params['*']));
         if (resolved instanceof Response) return resolved;
 
-        // Bound the body before buffering (1 GB server cap → heap); putCard re-checks CARD_MAX_BYTES as the
-        // store guard for its non-HTTP callers.
+        // Bound the body before buffering it into the heap; putCard re-checks CARD_MAX_BYTES for its non-HTTP callers.
         const body = await readBoundedBody(request, CARD_MAX_BYTES);
         if (body === null) return davError(413, '<CARD:max-resource-size/>');
         const ifMatch = request.headers.get('If-Match');
@@ -133,9 +130,7 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         return handleDeleteCard(await getContacts(user), resolved.uri, ifMatch);
     })
 
-    // REPORT — addressbook-multiget, addressbook-query, sync-collection. Targets the book collection (a REPORT
-    // on the home collection has nothing to report on → 400, like caldav's no-calendarId branch). The body cap
-    // is enforced HERE, before the body reaches the XML parser.
+    // A REPORT targets the book collection; the body cap is enforced here, before the body reaches the XML parser.
     .route('REPORT', '/dav/addressbooks/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
