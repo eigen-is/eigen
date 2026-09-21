@@ -574,8 +574,7 @@ export function patchEvent(
     const storedTz = propTzid(vevent.getFirstProperty('dtstart'));
     const tzid = patch.timezone !== undefined ? normalizeTimezone(patch.timezone) : storedTz;
     const storedStart = vevent.getFirstProperty('dtstart')?.getFirstValue();
-    const storedAllDay = storedStart instanceof ICAL.Time && storedStart.isDate;
-    const allDay = patch.allDay ?? storedAllDay;
+    const allDay = patch.allDay ?? (storedStart instanceof ICAL.Time && storedStart.isDate);
 
     let changed = false;
     let scheduling = false;
@@ -590,22 +589,15 @@ export function patchEvent(
         changed = changed || moved;
     }
 
-    const bounds: Array<[string, Date | undefined]> = [
-        ['dtstart', patch.startTime],
-        ['dtend', patch.endTime],
-    ];
-    // WHEN the event is — the two instants and the all-day flag — because a form save restates all three
-    // on every edit and restating them unchanged moves nothing. Only a zone Eigen itself named is
-    // re-spelled: a UTC-Z, floating or client-defined DTSTART is the file's own form to keep.
-    const moves = bounds.some(([name, submitted]) => {
-        if (submitted === undefined) return false;
-        const stored = instantOf(vevent, name, storedTz);
-        return stored !== null && stored.getTime() !== submitted.getTime();
-    });
-    const whenChanged = moves || allDay !== storedAllDay;
+    // A submitted bound is one the caller found moved against the index row; a zone only Eigen named is re-spelled.
+    const whenChanged = patch.startTime !== undefined || patch.endTime !== undefined || patch.allDay !== undefined;
     const zoneChanged = storedTz !== null && tzid !== storedTz;
 
     if (whenChanged || zoneChanged) {
+        const bounds: Array<[string, Date | undefined]> = [
+            ['dtstart', patch.startTime],
+            ['dtend', patch.endTime],
+        ];
         for (const [name, submitted] of bounds) {
             const instant = submitted ?? instantOf(vevent, name, storedTz);
             if (!instant) continue;
@@ -613,6 +605,8 @@ export function patchEvent(
                 name === 'dtend' ? endProperty(instant, tzid, allDay) : timeProperty(name, instant, tzid, allDay);
             changed = setProperty(vevent, written) || changed;
         }
+        // RFC 5545 §3.6.1: a VEVENT states its length as a DTEND or as a DURATION, never both.
+        if (vevent.getFirstProperty('dtend')) changed = vevent.removeAllProperties('duration') || changed;
         // Re-spelling the same instants in another zone is a byte change, not a reason to mail the guests.
         scheduling = scheduling || whenChanged;
         syncVTimezones(resource);

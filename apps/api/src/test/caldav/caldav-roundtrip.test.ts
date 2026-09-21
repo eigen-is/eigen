@@ -224,6 +224,7 @@ describe('CalDAV round-trip fidelity', () => {
             return {
                 dtstart: vevent.getFirstProperty('dtstart')?.toJSON(),
                 dtend: vevent.getFirstProperty('dtend')?.toJSON(),
+                duration: vevent.getFirstProperty('duration')?.toJSON(),
                 sequence: vevent.getFirstPropertyValue('sequence'),
                 zones: resource.getAllSubcomponents('vtimezone').map((v) => v.getFirstPropertyValue('tzid')),
             };
@@ -235,7 +236,11 @@ describe('CalDAV round-trip fidelity', () => {
         }
 
         // A form save: the title beside the times it rendered, labelled with the browser's zone.
-        async function dialogSave(row: CalendarEvent, title: string, shiftMs = 0): Promise<CalendarEvent> {
+        async function dialogSave(
+            row: CalendarEvent,
+            title: string,
+            shift: { start?: number; end?: number } = {},
+        ): Promise<CalendarEvent> {
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
                 `/calendar/${userId}/calendars/${calendarId}/events/${row.id}`,
@@ -244,8 +249,8 @@ describe('CalDAV round-trip fidelity', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title,
-                        startTime: new Date(row.startTime.getTime() + shiftMs),
-                        endTime: new Date(row.endTime.getTime() + shiftMs),
+                        startTime: new Date(row.startTime.getTime() + (shift.start ?? 0)),
+                        endTime: new Date(row.endTime.getTime() + (shift.end ?? 0)),
                         allDay: row.allDay,
                         timezone: row.allDay ? null : 'Europe/Amsterdam',
                     }),
@@ -383,7 +388,7 @@ describe('CalDAV round-trip fidelity', () => {
 
         test('moving that event an hour later writes the time and bumps the revision', async () => {
             const row = await storedRow(ORGANIZED_UID);
-            const updated = await dialogSave(row, 'Guest event (renamed)', 3600_000);
+            const updated = await dialogSave(row, 'Guest event (renamed)', { start: 3600_000, end: 3600_000 });
 
             expect(updated.sequence).toBe(row.sequence + 1);
             expect(new Date(updated.startTime).toISOString()).toBe('2026-09-29T09:00:00.000Z');
@@ -396,12 +401,116 @@ describe('CalDAV round-trip fidelity', () => {
 
         test("a real move drops the client's zone once nothing references it", async () => {
             const row = await storedRow('rt-when-custom@client');
-            await dialogSave(row, 'Custom zone event', 3600_000);
+            await dialogSave(row, 'Custom zone event', { start: 3600_000, end: 3600_000 });
 
             expect(whenOf(await getIcs('rt-when-custom.ics'), 'rt-when-custom@client')).toMatchObject({
                 dtstart: ['dtstart', { tzid: 'Europe/Amsterdam' }, 'date-time', '2026-09-28T11:00:00'],
                 zones: ['Europe/Amsterdam'],
             });
+        });
+
+        // An event states its length as a DURATION, or states none at all and takes the hour the row draws
+        // it as. Either way the file holds no DTEND for the save to compare its new end against — only the
+        // row knows where the event ended.
+        test('an end-only move lands on an event whose length is a DURATION', async () => {
+            expect(
+                (
+                    await putIcs(
+                        'rt-when-duration.ics',
+                        vcal(
+                            [
+                                'BEGIN:VEVENT',
+                                'UID:rt-when-duration@client',
+                                'DTSTART:20260929T080000Z',
+                                'DURATION:PT1H',
+                                'SUMMARY:Duration event',
+                                'END:VEVENT',
+                            ].join('\r\n'),
+                        ),
+                    )
+                ).status,
+            ).toBe(201);
+
+            const row = await storedRow('rt-when-duration@client');
+            expect(row.endTime.toISOString()).toBe('2026-09-29T09:00:00.000Z');
+            const updated = await dialogSave(row, 'Duration event', { end: 3600_000 });
+
+            expect(new Date(updated.endTime).toISOString()).toBe('2026-09-29T10:00:00.000Z');
+            // RFC 5545 §3.6.1: the written DTEND replaces the DURATION, it never rides beside it.
+            expect(whenOf(await getIcs('rt-when-duration.ics'), 'rt-when-duration@client')).toMatchObject({
+                dtstart: ['dtstart', { tzid: 'Europe/Amsterdam' }, 'date-time', '2026-09-29T10:00:00'],
+                dtend: ['dtend', { tzid: 'Europe/Amsterdam' }, 'date-time', '2026-09-29T12:00:00'],
+                duration: undefined,
+            });
+        });
+
+        test('an end-only move lands on an event that states no end at all', async () => {
+            expect(
+                (
+                    await putIcs(
+                        'rt-when-open.ics',
+                        vcal(
+                            [
+                                'BEGIN:VEVENT',
+                                'UID:rt-when-open@client',
+                                'DTSTART:20260926T080000Z',
+                                'SUMMARY:Open-ended event',
+                                'END:VEVENT',
+                            ].join('\r\n'),
+                        ),
+                    )
+                ).status,
+            ).toBe(201);
+
+            const row = await storedRow('rt-when-open@client');
+            expect(row.endTime.toISOString()).toBe('2026-09-26T09:00:00.000Z');
+            const updated = await dialogSave(row, 'Open-ended event', { end: 3600_000 });
+
+            expect(new Date(updated.endTime).toISOString()).toBe('2026-09-26T10:00:00.000Z');
+            expect(whenOf(await getIcs('rt-when-open.ics'), 'rt-when-open@client')).toMatchObject({
+                dtend: ['dtend', { tzid: 'Europe/Amsterdam' }, 'date-time', '2026-09-26T12:00:00'],
+            });
+        });
+
+        // A UTC series moved from a dialog that labels the times "Amsterdam" means that wall clock: written
+        // back as UTC, every occurrence past the next DST switch would sit an hour off what the user saw.
+        test('a real move of a UTC series writes the zone the save names, so the series holds its wall clock', async () => {
+            expect(
+                (
+                    await putIcs(
+                        'rt-when-series.ics',
+                        vcal(
+                            [
+                                'BEGIN:VEVENT',
+                                'UID:rt-when-series@client',
+                                'DTSTART:20260928T080000Z',
+                                'DTEND:20260928T090000Z',
+                                'RRULE:FREQ=WEEKLY',
+                                'SEQUENCE:2',
+                                'SUMMARY:Weekly stand-up',
+                                'END:VEVENT',
+                            ].join('\r\n'),
+                        ),
+                    )
+                ).status,
+            ).toBe(201);
+
+            const row = await storedRow('rt-when-series@client');
+            const updated = await dialogSave(row, 'Weekly stand-up', { start: 3600_000, end: 3600_000 });
+
+            // No guest to reschedule, so the revision holds (RFC 5546).
+            expect(updated.sequence).toBe(row.sequence);
+            expect(whenOf(await getIcs('rt-when-series.ics'), 'rt-when-series@client')).toMatchObject({
+                dtstart: ['dtstart', { tzid: 'Europe/Amsterdam' }, 'date-time', '2026-09-28T11:00:00'],
+                dtend: ['dtend', { tzid: 'Europe/Amsterdam' }, 'date-time', '2026-09-28T12:00:00'],
+                zones: ['Europe/Amsterdam'],
+            });
+
+            const occs = (await getOccurrences('2026-11-01T00:00:00Z', '2026-11-08T00:00:00Z')).filter(
+                (o) => o.uid === 'rt-when-series@client',
+            );
+            // Amsterdam is on CET by then: 11:00 there is 10:00Z, not the 09:00Z a UTC DTSTART would give.
+            expect(occs.map((o) => new Date(o.startTime).toISOString())).toEqual(['2026-11-02T10:00:00.000Z']);
         });
     });
 

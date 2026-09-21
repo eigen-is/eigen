@@ -260,6 +260,13 @@ async function patchStoredEvent(
     const resource = resourceOf(calendar, id);
     if (!resource) throw new ApiError(404, 'Event not found');
 
+    // A save form restates WHEN the event is on every edit, so the patch carries only the bounds that
+    // really moved — against the row, the one reading that knows the end of an event stating a DURATION
+    // or no end at all.
+    const startMoved = input.startTime !== undefined && input.startTime.getTime() !== existing.startTime.getTime();
+    const endMoved = input.endTime !== undefined && input.endTime.getTime() !== existing.endTime.getTime();
+    const allDayMoved = input.allDay !== undefined && input.allDay !== existing.allDay;
+
     const key = existing.recurrenceDate ? storedRecurrenceKey(existing.recurrenceDate) : null;
     await patchResource(
         calendar,
@@ -269,9 +276,9 @@ async function patchStoredEvent(
             title: input.title?.trim(),
             description: input.description,
             location: input.location,
-            startTime: input.startTime,
-            endTime: input.endTime,
-            allDay: input.allDay,
+            startTime: startMoved ? input.startTime : undefined,
+            endTime: endMoved ? input.endTime : undefined,
+            allDay: allDayMoved ? input.allDay : undefined,
             rrule: input.rrule ?? undefined,
             timezone: input.timezone,
             status: input.status,
