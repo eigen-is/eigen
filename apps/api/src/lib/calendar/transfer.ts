@@ -14,6 +14,7 @@ import { buildResource, parseIcs, serializeResource } from '../ical';
 import type { IcsParseResult, ParsedEvent } from '../ical/ical-parse';
 import type { Calendar } from './calendar';
 import { eventForFile, validateEventInput } from './event-input';
+import { holdsUid } from './events';
 import type { CreateEventArgs } from './types';
 
 // Whole-file iCalendar transfer, one resource per series through the same PUT seam a CalDAV device sync
@@ -114,7 +115,7 @@ export async function importEvents(
                 continue;
             }
             // A UID the Home already holds skips like a re-import, which is what makes a partial import retryable.
-            if (await calendar.holdsUid(master.uid)) {
+            if (await holdsUid(calendar, master.uid)) {
                 result.skipped++;
                 continue;
             }
