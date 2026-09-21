@@ -202,7 +202,7 @@ export class Calendar {
             .run();
 
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_CREATED, this.home.user.id));
-        return (await this.getCalendarById(id))!;
+        return this.calendarById(id)!;
     }
 
     public async updateCalendar(
@@ -214,7 +214,7 @@ export class Calendar {
             shares?: CalendarShare[] | null;
         },
     ): Promise<CalendarItem> {
-        const existing = await this.getCalendarById(id);
+        const existing = this.calendarById(id);
         if (!existing) throw new ApiError(404, 'Calendar not found');
 
         const oldShares = existing.shares;
@@ -233,16 +233,16 @@ export class Calendar {
             .run();
 
         if (input.shares !== undefined) {
-            const updated = (await this.getCalendarById(id))!;
+            const updated = this.calendarById(id)!;
             await propagateCalendarShare(this.home, updated, oldShares);
         }
 
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_UPDATED, this.home.user.id));
-        return (await this.getCalendarById(id))!;
+        return this.calendarById(id)!;
     }
 
     public async deleteCalendar(id: string): Promise<void> {
-        const existing = await this.getCalendarById(id);
+        const existing = this.calendarById(id);
         if (!existing) throw new ApiError(404, 'Calendar not found');
         if (existing.isDefault) throw new ApiError(400, 'Cannot delete default calendar');
 
@@ -257,13 +257,13 @@ export class Calendar {
     // --- Events ---
 
     public async createEvent(calendarId: string, input: CreateEventArgs, user?: User): Promise<CalendarEvent> {
-        const cal = await this.getCalendarById(calendarId);
+        const cal = this.calendarById(calendarId);
         if (!cal) throw new ApiError(404, 'Calendar not found');
 
         validateEventInput(input);
 
         this.incrementCtag(calendarId);
-        const newCtag = (await this.getCalendarById(calendarId))!.ctag;
+        const newCtag = this.calendarById(calendarId)!.ctag;
         const event = this.insertEvent(calendarId, input, newCtag);
 
         const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_CREATED, this.home.user.id);
@@ -754,7 +754,7 @@ export class Calendar {
         });
 
         this.incrementCtag(existing.calendarId);
-        const newCtag = (await this.getCalendarById(existing.calendarId))!.ctag;
+        const newCtag = this.calendarById(existing.calendarId)!.ctag;
 
         this.db
             .update(schema.events)
@@ -786,7 +786,7 @@ export class Calendar {
 
         const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_UPDATED, this.home.user.id);
         this.home.broadcast(sseEvent);
-        const cal = await this.getCalendarById(existing.calendarId);
+        const cal = this.calendarById(existing.calendarId);
         if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {});
 
         // Only the organizer fans out invitations. An attendee editing their linked copy (guarded to
@@ -835,7 +835,7 @@ export class Calendar {
         }
 
         this.incrementCtag(existing.calendarId);
-        const newCtag = (await this.getCalendarById(existing.calendarId))!.ctag;
+        const newCtag = this.calendarById(existing.calendarId)!.ctag;
 
         this.db
             .insert(schema.eventTombstones)
@@ -854,7 +854,7 @@ export class Calendar {
         }
         const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_DELETED, this.home.user.id);
         this.home.broadcast(sseEvent);
-        const cal = await this.getCalendarById(existing.calendarId);
+        const cal = this.calendarById(existing.calendarId);
         if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {});
     }
 
@@ -875,7 +875,7 @@ export class Calendar {
             const { eventCtag: _same, ...unchanged } = existing;
             return unchanged;
         }
-        const target = await this.getCalendarById(targetCalendarId);
+        const target = this.calendarById(targetCalendarId);
         if (!target) throw new ApiError(404, 'Calendar not found');
 
         this.db.transaction((tx) => {
@@ -919,7 +919,7 @@ export class Calendar {
                 .run();
         });
 
-        const source = await this.getCalendarById(calendarId);
+        const source = this.calendarById(calendarId);
         const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_UPDATED, this.home.user.id);
         this.home.broadcast(sseEvent);
         if (source) notifySharedCalendarUsers(this.home, source, sseEvent).catch(() => {});
@@ -1244,7 +1244,7 @@ export class Calendar {
         userEmail: string,
         teamIds: string[],
     ): Promise<CalendarShare['permission'] | null> {
-        const cal = await this.getCalendarById(calendarId);
+        const cal = this.calendarById(calendarId);
         if (!cal?.shares) return null;
 
         let bestPermission: CalendarShare['permission'] | null = null;
