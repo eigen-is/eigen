@@ -351,6 +351,11 @@ stored exception — exception rows are internal and never appear as their own r
   projected rows and `patchEvent` / `putOverride` / `addExclusion` / `removeExclusion` edit a stored
   component in place, so folding, escaping and parameter quoting are ical.js's problem and an Eigen edit
   leaves every property it did not touch as the client wrote it
+- `patchEvent` compares WHEN the event is, not how the file spells it: the two instants plus the all-day
+  flag. A save restating them unchanged writes no `DTSTART`, `DTEND` or VTIMEZONE, whatever zone it
+  labelled them with, so a `DTSTART:...Z` or a client's own `TZID=` form survives a title edit; the zone
+  is re-spelled only when the stored one is a zone Eigen can name and the save names another. A zone-only
+  rewrite is not scheduling-significant — SEQUENCE holds and no guest is mailed a reschedule
 - Per-event state Eigen owns rides as `X-EIGEN-*` properties inside the VEVENT (the event id, the
   creator, the invitation link, the color, the imported organizer, one stamp per `EXDATE` carrying that
   exclusion's id and SEQUENCE). `restampResource` discards every incoming one — a group prefix and a
