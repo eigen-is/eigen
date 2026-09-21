@@ -262,6 +262,17 @@ export async function writeResource(
     return { etag, text };
 }
 
+// A UID travels into etags and sync deltas, so an unprintable or endless one is refused rather than stored.
+const MAX_UID_LENGTH = 255;
+function isStorableUid(uid: string): boolean {
+    if (uid.length > MAX_UID_LENGTH) return false;
+    for (let index = 0; index < uid.length; index++) {
+        const code = uid.charCodeAt(index);
+        if (code < 0x20 || code === 0x7f) return false;
+    }
+    return true;
+}
+
 function uidOfResource(resource: ICAL.Component): string {
     const vevents = resource.getAllSubcomponents('vevent');
     return vevents.length ? uidOf(vevents[0]) : '';
@@ -335,6 +346,7 @@ export async function putResource(
     if (uids.size > 1) return { ok: false, error: 'invalid', reason: 'object', message: 'one UID per resource' };
     const uid = [...uids][0];
     if (!uid) return { ok: false, error: 'invalid', reason: 'data', message: 'UID is required' };
+    if (!isStorableUid(uid)) return { ok: false, error: 'invalid', reason: 'data', message: 'UID is not storable' };
 
     return calendar.gate.run(async (): Promise<PutResourceResult> => {
         // Sanitizing an id is not knowing it exists, and a write would otherwise mkdir a calendar nobody owns.

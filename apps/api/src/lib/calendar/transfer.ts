@@ -24,17 +24,6 @@ import * as schema from './schema';
 // the author wrote lands as written and scheduling is the only thing taken out of it, and the export
 // hands back the stored bytes minus the lines Eigen owns.
 
-// A UID travels into etags and sync deltas, so an unprintable or endless one is refused rather than stored.
-const MAX_UID_LENGTH = 255;
-function isImportableUid(uid: string): boolean {
-    if (!uid || uid.length > MAX_UID_LENGTH) return false;
-    for (let index = 0; index < uid.length; index++) {
-        const code = uid.charCodeAt(index);
-        if (code < 0x20 || code === 0x7f) return false;
-    }
-    return true;
-}
-
 // A `.ics` may be a stream of several VCALENDAR objects (RFC 5545 §3.4), which ICAL.parse answers with an
 // array of jCal arrays rather than one.
 function parseCalendarStream(text: string): ICAL.Component[] {
@@ -131,14 +120,10 @@ export async function importEvents(
     let written = 0;
     // One list-level event for the whole file instead of one per series.
     await calendar.withBatchedEvents(async () => {
-        for (const [uid, group] of series) {
+        for (const group of series.values()) {
             // An override with no master has nothing to attach to, and the file goes on without it.
             if (!group.master) {
                 result.failed += group.overrides.length;
-                continue;
-            }
-            if (!isImportableUid(uid)) {
-                result.failed++;
                 continue;
             }
             const importedOrganizer = dropScheduling(group.master);

@@ -645,6 +645,18 @@ describe('calendar file store', () => {
         });
     });
 
+    test('a UID no index can carry is refused at the put seam, so every surface answers alike', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+
+        for (const uid of [`${'x'.repeat(256)}@eigen`, 'bell\u0007@eigen']) {
+            const result = await put(harness.instance, calendarId, 'uid.ics', vcal(event(uid, 'Unstorable')));
+            expect(result).toMatchObject({ ok: false, error: 'invalid', reason: 'data' });
+        }
+        expect(await harness.instance.listResources(calendarId)).toHaveLength(0);
+        expect(readdirSync(join(calendarsDirOf(harness.dir), calendarId))).toHaveLength(0);
+    });
+
     test('a name a file system cannot hold is refused, never rewritten', async () => {
         const harness = await makeCalendar();
         const calendarId = await defaultCalendarId(harness);
