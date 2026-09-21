@@ -605,6 +605,7 @@ describe('Calendar Invites', () => {
     // bumped SEQUENCE then outran the organizer's, the organizer's next real update was dropped by the
     // RFC 5546 replay guard (silent data-desync).
     describe('#9 attendee edit does not fan out', () => {
+        const CAROL = 'carol.external@example.org';
         let bobCalId: string;
         let linkedId: string;
 
@@ -647,7 +648,7 @@ describe('Calendar Invites', () => {
                         data: {
                             attendees: [
                                 { email: ctx.bob.user.email, status: 'pending', role: 'required' },
-                                { email: 'carol.external@example.org', status: 'pending', role: 'required' },
+                                { email: CAROL, status: 'pending', role: 'required' },
                             ],
                         },
                     }),
@@ -673,13 +674,31 @@ describe('Calendar Invites', () => {
                 },
             );
             const updated = await assertJson<CalendarEvent>(res);
-            // The spoofed update would ride on the same call this read settles: once Bob's copy carries the
-            // reminder, a mail that was going to be sent has been.
-            await untilBob((e) => e.id === linkedId && e.data?.reminders?.length === 1);
+
+            // The fan-out is fire-and-forget, so absence only counts behind a mail that IS expected: the
+            // organizer's own edit, made second, mails Carol through the very path Bob's edit must not take.
+            const orig = findOrFail(
+                await rangeFor(ctx.alice.user.sessionToken, ctx.alice.user.id),
+                (e) => e.title === 'Fanout Meeting',
+            );
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${orig.id}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ location: 'Room A' }),
+                },
+            );
+            const toCarol = () => spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === CAROL));
+            await eventually(
+                async () => toCarol().some((c) => c[0].from?.address === ctx.alice.user.email) || undefined,
+                "the organizer's own update to reach Carol",
+            );
 
             expect(updated.sequence).toBe(0); // pre-fix: 1
-            const updateMails = spy.mock.calls.filter((c) => c[0].subject === 'Updated invitation: Fanout Meeting');
-            expect(updateMails).toHaveLength(0); // pre-fix: an iMIP update to Carol, ORGANIZER=Bob
+            // pre-fix: a second one, ORGANIZER=Bob, composed before the organizer's own
+            expect(toCarol()).toHaveLength(1);
             spy.mockRestore();
         });
 
@@ -826,9 +845,14 @@ describe('Delete-as-decline is for attendees only', () => {
         calendarId = findOrFail(await assertJson<CalendarItem[]>(res), (c) => c.isDefault).id;
     });
 
+    const STRANGER = 'stranger@external.com';
+    // The control's own organizer: a second delete whose decline IS expected, so absence is measured
+    // against a mail that arrived rather than against nothing at all.
+    const CONTROL = 'control@external.com';
+
     // The client cannot declare itself an invitee (EventDataSchema strips organizer), so the linked copy is
     // seeded through the domain, the way a CalDAV PUT or an import would leave one behind.
-    const seed = async (title: string, attendeeEmail: string) => {
+    const seed = async (title: string, attendeeEmail: string, organizer = STRANGER) => {
         const home = await getHome(ctx.bob.user.id);
         return home.calendar.createEvent(calendarId, {
             title,
@@ -836,7 +860,7 @@ describe('Delete-as-decline is for attendees only', () => {
             endTime: new Date('2026-12-01T10:00:00Z'),
             allDay: false,
             data: {
-                organizer: { userId: '', email: 'stranger@external.com', name: 'Stranger' },
+                organizer: { userId: '', email: organizer, name: 'Stranger' },
                 organizerEventId: `stranger-${randomUUID()}`,
                 attendees: [{ email: attendeeEmail, status: 'pending', role: 'required' }],
             },
@@ -852,15 +876,16 @@ describe('Delete-as-decline is for attendees only', () => {
         const mailer = await import('../../lib/core/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
         spy.mockClear();
+        const mailsTo = (address: string) =>
+            spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === address)).length;
+
         expect((await removeEvent(id)).status).toBe(200);
-        // A decline would ride on the same call the delete answers: once the row is gone, it has either
-        // been composed or never will be.
-        const home = await getHome(ctx.bob.user.id);
-        await eventually(
-            async () => ((await home.calendar.getRawEvents(calendarId)).some((e) => e.id === id) ? undefined : true),
-            'the deleted event to be gone',
-        );
-        const count = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === 'stranger@external.com')).length;
+        // Deleted second, so its decline is composed behind whatever the first delete owed.
+        const control = await seed('Control meeting', ctx.bob.user.email, CONTROL);
+        expect((await removeEvent(control.id)).status).toBe(200);
+        await eventually(async () => mailsTo(CONTROL) || undefined, "the control delete's decline");
+
+        const count = mailsTo(STRANGER);
         spy.mockRestore();
         return count;
     };
