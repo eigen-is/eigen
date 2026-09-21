@@ -4,6 +4,7 @@ import {
     DRIVE_MIME_SHEETS,
     DRIVE_MIME_SLIDES,
     DRIVE_MIME_VECTOR,
+    isEmlFile,
     isIcsFile,
     isVCardFile,
 } from '../types/drive';
@@ -74,6 +75,9 @@ export function getBytesTextPreviewMode(mimeType: string, fileName: string): Byt
     if (isVCardFile(mimeType, fileName)) return null;
     // A calendar is text too, and reads as folded property lines nobody wants: it previews as its events.
     if (isIcsFile(mimeType, fileName)) return null;
+    // A saved message is text under any of three mimes, and reads as headers and boundaries: it previews
+    // as the message it holds.
+    if (isEmlFile(mimeType, fileName)) return null;
     const ext = getExtension(fileName);
     if (mimeType === 'text/markdown' || ext === '.md' || ext === '.markdown') return 'markdown';
     if (mimeType === 'text/plain' || ext === '.txt') return 'plaintext';

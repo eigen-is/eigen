@@ -84,20 +84,20 @@ describe('isInvitationFromOthers', () => {
 
     test('an organizer with the owner address is the owner, whatever its case', () => {
         const event = withOrganizer({ userId: '', email: 'Alice@Example.com', name: 'Alice' });
-        expect(isInvitationFromOthers(event, { email: 'alice@example.com' })).toBe(false);
+        expect(isInvitationFromOthers(event, 'alice@example.com')).toBe(false);
     });
 
     test('an owner without an address matches nobody', () => {
         // A team Home's synthetic user has no address, so a member-organized event on its calendar
         // stays a locked invitation rather than silently becoming the team's own event.
         const event = withOrganizer({ userId: 'team_7', email: 'someone@example.com' });
-        expect(isInvitationFromOthers(event, { email: '' })).toBe(true);
+        expect(isInvitationFromOthers(event, '')).toBe(true);
     });
 
     test('another address is an invitation, and an event without an organizer never is', () => {
         const event = withOrganizer({ userId: 'bob-id', email: 'bob@example.com' });
-        expect(isInvitationFromOthers(event, { email: 'alice@example.com' })).toBe(true);
-        expect(isInvitationFromOthers({ data: null }, { email: 'alice@example.com' })).toBe(false);
+        expect(isInvitationFromOthers(event, 'alice@example.com')).toBe(true);
+        expect(isInvitationFromOthers({ data: null }, 'alice@example.com')).toBe(false);
     });
 });
 

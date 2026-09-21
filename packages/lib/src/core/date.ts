@@ -8,13 +8,29 @@ export function formatTime(date: Date | string | number): string {
     return `${hour}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
+// Constructing an Intl.DateTimeFormat costs about as much as formatting a thousand dates, and a Drive
+// listing or a month of cards formats one per row. Keyed by the options that make the formatter; the map
+// is dropped whole past its cap, because a time zone is a string an .ics file chose.
+const DATE_FORMATTERS = new Map<string, Intl.DateTimeFormat>();
+const MAX_DATE_FORMATTERS = 64;
+
+export function dateFormatter(options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+    const key = JSON.stringify(options);
+    const cached = DATE_FORMATTERS.get(key);
+    if (cached) return cached;
+    const formatter = new Intl.DateTimeFormat('en', options);
+    if (DATE_FORMATTERS.size >= MAX_DATE_FORMATTERS) DATE_FORMATTERS.clear();
+    DATE_FORMATTERS.set(key, formatter);
+    return formatter;
+}
+
 // Day-month-year from the 'en' locale's parts: 'en-GB' would give the order for free, but its short
 // September is "Sept" under full ICU (browsers) and "Sep" under Bun's, so the order is assembled here.
 export function formatDayMonth(
     date: Date,
     options: { year?: boolean; weekday?: 'long' | 'short'; timeZone?: string } = {},
 ): string {
-    const parts = new Intl.DateTimeFormat('en', {
+    const parts = dateFormatter({
         weekday: options.weekday,
         day: 'numeric',
         month: 'short',

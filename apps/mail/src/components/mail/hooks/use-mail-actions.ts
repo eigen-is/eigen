@@ -14,7 +14,7 @@ import {
     useToggleReadEmail,
     useUpdateDraft,
 } from '@workspace/lib/mail';
-import type { DraftInput, DraftUpdateOptions, Email, NewDraft } from '@workspace/lib/types/mail';
+import type { DraftInput, DraftUpdateOptions, Email, EmailSummary, NewDraft } from '@workspace/lib/types/mail';
 import { useRef } from 'react';
 import { toast } from 'sonner';
 import { Route } from '../../../routes/_auth.$filterType.$filterId';
@@ -307,27 +307,24 @@ export function useMailActions() {
 
     // Batch read/flag: fire each mutation, then record ONE Undoable holding every changed item so `z`
     // reverts all N (a per-item loop would leave the slot holding only the last). Skips items already
-    // at the target — same pre-guard as the single-id versions.
-    const setReadByIds = async (items: { id: string; currentIsRead: boolean }[], isRead: boolean) => {
+    // at the target — same pre-guard as the single-id versions. The rows are what the mutation wants,
+    // so a select-all fetches nothing.
+    const setReadByIds = (rows: EmailSummary[], isRead: boolean) => {
         const undoItems: { emailId: string; prevIsRead: boolean }[] = [];
-        for (const it of items) {
-            if (it.currentIsRead === isRead) continue;
-            const email = await getEmailById(it.id);
-            if (!email) continue;
-            toggleMailRead.mutate({ email: { ...email, isRead: it.currentIsRead }, isRead });
-            undoItems.push({ emailId: it.id, prevIsRead: it.currentIsRead });
+        for (const row of rows) {
+            if (row.isRead === isRead) continue;
+            toggleMailRead.mutate({ email: row, isRead });
+            undoItems.push({ emailId: row.id, prevIsRead: row.isRead });
         }
         if (undoItems.length > 0) lastAction.current = { kind: 'read', items: undoItems };
     };
 
-    const setFlaggedByIds = async (items: { id: string; currentFlagged: boolean }[], flagged: boolean) => {
+    const setFlaggedByIds = (rows: EmailSummary[], flagged: boolean) => {
         const undoItems: { emailId: string; prevIsFlagged: boolean }[] = [];
-        for (const it of items) {
-            if (it.currentFlagged === flagged) continue;
-            const email = await getEmailById(it.id);
-            if (!email) continue;
-            toggleMailFlagged.mutate({ email: { ...email, isFlagged: it.currentFlagged }, isFlagged: flagged });
-            undoItems.push({ emailId: it.id, prevIsFlagged: it.currentFlagged });
+        for (const row of rows) {
+            if (row.isFlagged === flagged) continue;
+            toggleMailFlagged.mutate({ email: row, isFlagged: flagged });
+            undoItems.push({ emailId: row.id, prevIsFlagged: row.isFlagged });
         }
         if (undoItems.length > 0) lastAction.current = { kind: 'flag', items: undoItems };
     };
