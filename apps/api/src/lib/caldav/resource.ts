@@ -37,7 +37,7 @@ export async function handlePut(
 ): Promise<Response> {
     if (uri.length > MAX_URI_LENGTH) return new Response('Bad Request', { status: 400 });
 
-    const existingEvent = calendar.getEventByUri(calendarId, uri);
+    const existingEvent = await calendar.getEventByUri(calendarId, uri);
     const currentEtag = existingEvent ? `"${existingEvent.etag}"` : null;
 
     // RFC 7232 preconditions against the state the write overwrites (mirrors CardDAV's putCard): If-None-Match
@@ -73,7 +73,7 @@ export async function handlePut(
     const seriesEvents = events.filter((e) => e.uid === masterParsed.uid);
 
     if (existingEvent) {
-        const updatedEvent = calendar.updateEvent(calendarId, existingEvent.id, {
+        const updatedEvent = await calendar.updateEvent(calendarId, existingEvent.id, {
             title: masterParsed.title,
             startTime: masterParsed.startTime,
             endTime: masterParsed.endTime,
@@ -87,18 +87,18 @@ export async function handlePut(
             data: masterParsed.data,
         });
 
-        syncExceptionEvents(calendar, calendarId, updatedEvent, seriesEvents, userId);
+        await syncExceptionEvents(calendar, calendarId, updatedEvent, seriesEvents, userId);
 
         // Exception sync touches the master's etag — re-read so the response ETag matches storage
         // (a stale ETag would fail the client's next If-Match).
         return new Response(null, {
             status: 204,
-            headers: { ETag: `"${calendar.getEventByUri(calendarId, uri)!.etag}"` },
+            headers: { ETag: `"${(await calendar.getEventByUri(calendarId, uri))!.etag}"` },
         });
     }
 
     // Create new event — use UID from ICS and URI from the request path so subsequent GET/DELETE work
-    const newEvent = calendar.createEvent(calendarId, {
+    const newEvent = await calendar.createEvent(calendarId, {
         title: masterParsed.title,
         startTime: masterParsed.startTime,
         endTime: masterParsed.endTime,
@@ -115,12 +115,12 @@ export async function handlePut(
         uri,
     });
 
-    syncExceptionEvents(calendar, calendarId, newEvent, seriesEvents, userId);
+    await syncExceptionEvents(calendar, calendarId, newEvent, seriesEvents, userId);
 
     return new Response(null, {
         status: 201,
         headers: {
-            ETag: `"${calendar.getEventByUri(calendarId, uri)!.etag}"`,
+            ETag: `"${(await calendar.getEventByUri(calendarId, uri))!.etag}"`,
             Location: eventHref(ownerId, calendarId, uri),
         },
     });
@@ -128,16 +128,16 @@ export async function handlePut(
 
 // The recurrence overrides of ONE series, written against a stored master. `seriesEvents` carries that
 // UID's VEVENTs and nothing else: a foreign UID's override must not land on this master.
-function syncExceptionEvents(
+async function syncExceptionEvents(
     calendar: Calendar,
     calendarId: string,
     masterEvent: CalendarEvent,
     seriesEvents: ParsedEvent[],
     userId: string,
-) {
+): Promise<void> {
     const exceptionParsed = seriesEvents.filter((e) => e.recurrenceDate);
 
-    const existingExceptions = calendar.getExceptionsForParent(masterEvent.id);
+    const existingExceptions = await calendar.getExceptionsForParent(masterEvent.id);
 
     const existingByRecurrenceDate = new Map<string, CalendarEventRow>();
     for (const exc of existingExceptions) {
@@ -149,7 +149,7 @@ function syncExceptionEvents(
         const existing = exc.recurrenceDate ? existingByRecurrenceDate.get(exc.recurrenceDate) : null;
 
         if (existing) {
-            calendar.updateEvent(calendarId, existing.id, {
+            await calendar.updateEvent(calendarId, existing.id, {
                 title: exc.title,
                 startTime: exc.startTime,
                 endTime: exc.endTime,
@@ -166,7 +166,7 @@ function syncExceptionEvents(
                 data: exc.data,
             });
         } else {
-            calendar.createEvent(calendarId, {
+            await calendar.createEvent(calendarId, {
                 title: exc.title,
                 startTime: exc.startTime,
                 endTime: exc.endTime,
@@ -201,7 +201,7 @@ function syncExceptionEvents(
         const key = storedRecurrenceKey(e.recurrenceDate);
         return !key || !parsedKeys.has(key);
     });
-    calendar.deleteExceptions(
+    await calendar.deleteExceptions(
         calendarId,
         masterEvent.id,
         stale.map((e) => e.id),
@@ -209,8 +209,13 @@ function syncExceptionEvents(
 }
 
 // DELETE /dav/calendars/:ownerId/:calendarId/:uri
-export function handleDelete(calendar: Calendar, calendarId: string, uri: string, ifMatch: string | null): Response {
-    const event = calendar.getEventByUri(calendarId, uri);
+export async function handleDelete(
+    calendar: Calendar,
+    calendarId: string,
+    uri: string,
+    ifMatch: string | null,
+): Promise<Response> {
+    const event = await calendar.getEventByUri(calendarId, uri);
     if (!event) {
         return new Response('Not Found', { status: 404 });
     }
@@ -219,6 +224,6 @@ export function handleDelete(calendar: Calendar, calendarId: string, uri: string
         return new Response('Precondition Failed', { status: 412 });
     }
 
-    calendar.deleteByUri(calendarId, uri);
+    await calendar.deleteByUri(calendarId, uri);
     return new Response(null, { status: 204 });
 }

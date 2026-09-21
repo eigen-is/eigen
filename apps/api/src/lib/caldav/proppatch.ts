@@ -28,11 +28,16 @@ function extractCalendarProps(prop: XmlNode): { name?: string; color?: string } 
 }
 
 // MKCALENDAR /dav/calendars/:ownerId/:calendarId/ — creates the calendar at the client-chosen id.
-export function handleMkcalendar(calendar: Calendar, ownerId: string, calendarId: string, body: string): Response {
+export async function handleMkcalendar(
+    calendar: Calendar,
+    ownerId: string,
+    calendarId: string,
+    body: string,
+): Promise<Response> {
     const id = sanitizeCalendarId(calendarId);
     if (!id) return new Response('Bad Request', { status: 400 });
     // MKCALENDAR on an existing collection is a precondition failure (RFC 5689 / WebDAV MKCOL semantics).
-    if (calendar.getCalendarById(id)) return new Response('Method Not Allowed', { status: 405 });
+    if (await calendar.getCalendarById(id)) return new Response('Method Not Allowed', { status: 405 });
 
     let props: { name?: string; color?: string } = {};
     if (body?.trim()) {
@@ -46,7 +51,7 @@ export function handleMkcalendar(calendar: Calendar, ownerId: string, calendarId
         }
     }
 
-    calendar.createCalendar({ id, name: props.name ?? id, color: props.color ?? '#4285f4' });
+    await calendar.createCalendar({ id, name: props.name ?? id, color: props.color ?? '#4285f4' });
     return new Response(null, { status: 201, headers: { Location: calendarHref(ownerId, id) } });
 }
 
@@ -72,7 +77,7 @@ export async function handleProppatch(
     ownerId: string,
     body: string,
 ): Promise<Response> {
-    const calendarItem = calendar.getCalendarById(calendarId);
+    const calendarItem = await calendar.getCalendarById(calendarId);
     if (!calendarItem) return new Response('Not Found', { status: 404 });
 
     const updates: { name?: string; color?: string } = {};
