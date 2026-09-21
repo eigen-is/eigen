@@ -8,21 +8,9 @@ import type { CreateContactInput } from '@workspace/lib/types/contact';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
 import { createVCard, mergeVCard } from '../../lib/carddav/vcard-serialize';
-import {
-    CARD_MAX_BYTES,
-    CARDS_DIR,
-    cardPath,
-    cleanupTempCardFiles,
-    computeCardEtag,
-    labelColorFor,
-    listCardUris,
-    normalizeLabelName,
-    sanitizeCardUri,
-    uriKeyOf,
-    writeCardFile,
-} from '../../lib/contacts/card-store';
+import { CARD_MAX_BYTES, cardPath, labelColorFor, normalizeLabelName } from '../../lib/contacts/card-store';
 import * as contactsSchema from '../../lib/contacts/schema';
-import { LocalFilesystem } from '../../lib/core';
+import { computeResourceEtag, LocalFilesystem, PATHS, uriKeyOf } from '../../lib/core';
 import { parseVCard } from '../../lib/vcard';
 import { CONTACTS_TEST_ROOT, cardsDirOf, makeContacts, validContact } from '../contacts-test-helpers';
 
@@ -107,61 +95,11 @@ describe('writeAtomic', () => {
     });
 });
 
-describe('sanitizeCardUri', () => {
-    test('accepts well-formed .vcf resource names', () => {
-        expect(sanitizeCardUri('ABC-123.vcf')).toBe('ABC-123.vcf');
-        expect(sanitizeCardUri('a.b@c.vcf')).toBe('a.b@c.vcf');
-    });
-
-    test('rejects traversal, hidden, slash, trailing-space and control chars', () => {
-        expect(sanitizeCardUri('../x.vcf')).toBeNull();
-        expect(sanitizeCardUri('.hidden.vcf')).toBeNull();
-        expect(sanitizeCardUri('a/b.vcf')).toBeNull();
-        expect(sanitizeCardUri('x.vcf ')).toBeNull();
-        expect(sanitizeCardUri('a\nb.vcf')).toBeNull();
-        expect(sanitizeCardUri('x .vcf')).toBeNull();
-    });
-
-    test('requires the literal lowercase .vcf suffix', () => {
-        expect(sanitizeCardUri('x.VCF')).toBeNull();
-        expect(sanitizeCardUri('x.txt')).toBeNull();
-    });
-
-    test('rejects empty and over-long names', () => {
-        expect(sanitizeCardUri('')).toBeNull();
-        expect(sanitizeCardUri(`${'a'.repeat(256)}.vcf`)).toBeNull();
-        // The cap is 200 (spec § 4) so writeAtomic's `.`-prefixed temp name stays under NAME_MAX. The bound
-        // lives in the length check alone (the regex owns only the charset): 200 chars pass, 201 fail.
-        expect(sanitizeCardUri(`${'a'.repeat(210)}.vcf`)).toBeNull();
-        expect(sanitizeCardUri(`${'a'.repeat(196)}.vcf`)).toBe(`${'a'.repeat(196)}.vcf`);
-        expect(sanitizeCardUri(`${'a'.repeat(197)}.vcf`)).toBeNull();
-    });
-});
-
-describe('uriKeyOf', () => {
-    test('lowercases the uri', () => {
-        expect(uriKeyOf('AbC.vcf')).toBe('abc.vcf');
-    });
-
-    test('NFC-normalizes before lowercasing', () => {
-        // Decomposed A + combining ring above and composed Å collapse to one key.
-        expect(uriKeyOf('Å.vcf')).toBe(uriKeyOf('Å.vcf'));
-    });
-});
-
-describe('computeCardEtag', () => {
-    test('is the sha256 hex of the bytes', () => {
-        expect(computeCardEtag(new TextEncoder().encode('x'))).toBe(
-            '2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881',
-        );
-    });
-});
-
 describe('normalizeLabelName', () => {
     test('trims, lowercases and NFC-normalizes', () => {
         expect(normalizeLabelName('  Work  ')).toBe('work');
         // Decomposed "café" (e + combining acute) and composed é normalize to the same key.
-        expect(normalizeLabelName('Café')).toBe(normalizeLabelName('Café'));
+        expect(normalizeLabelName('Café')).toBe(normalizeLabelName('Café'));
         expect(normalizeLabelName('Café')).toBe('café');
     });
 });
@@ -176,47 +114,7 @@ describe('labelColorFor', () => {
 
 describe('card file helpers', () => {
     test('cardPath joins under the cards directory', () => {
-        expect(cardPath('a.vcf')).toBe(`${CARDS_DIR}/a.vcf`);
-    });
-
-    test('writeCardFile persists the bytes and reports size', async () => {
-        const { store } = nextStore();
-        const bytes = new TextEncoder().encode('BEGIN:VCARD\r\nUID:1\r\nEND:VCARD\r\n');
-        const { mtime, size } = await writeCardFile(store, 'card.vcf', bytes);
-
-        expect(size).toBe(bytes.byteLength);
-        expect(mtime).toBeGreaterThan(0);
-        expect(new Uint8Array(await store.file('cards/card.vcf').arrayBuffer())).toEqual(bytes);
-    });
-
-    test('cleanupTempCardFiles removes only the dot-prefixed .tmp- leftovers', async () => {
-        const { store, base } = nextStore();
-        await store.mkdir('cards');
-        const cardsDir = join(base, 'cards');
-        writeFileSync(join(cardsDir, 'real.vcf'), 'x');
-        writeFileSync(join(cardsDir, '.real.vcf.tmp-abc'), 'x');
-        // A stray non-`.vcf` (README, csv, a mixed-case .VCF) is NOT temp debris — it survives the sweep and is
-        // warn-skipped by reconcile/rebuild instead of being silently deleted. A hand-placed dotfile without
-        // the `.tmp-` infix (a `.backup.vcf`) is not writeAtomic debris either and must survive.
-        writeFileSync(join(cardsDir, 'stray.txt'), 'x');
-        writeFileSync(join(cardsDir, 'x.VCF'), 'x');
-        writeFileSync(join(cardsDir, '.backup.vcf'), 'x');
-
-        await cleanupTempCardFiles(store);
-
-        expect(readdirSync(cardsDir).sort()).toEqual(['.backup.vcf', 'real.vcf', 'stray.txt', 'x.VCF']);
-    });
-
-    test('a cards directory holding nothing but temp debris survives the sweep', async () => {
-        const { store, base } = nextStore();
-        await store.mkdir(CARDS_DIR);
-        writeFileSync(join(base, CARDS_DIR, `.x.vcf.tmp-${randomUUID()}`), 'x');
-
-        await cleanupTempCardFiles(store);
-
-        // Emptying the directory must not take it with it: the very same init enumerates it next.
-        expect(existsSync(join(base, CARDS_DIR))).toBe(true);
-        expect(await listCardUris(store)).toEqual([]);
+        expect(cardPath('a.vcf')).toBe(`${PATHS.CONTACTS.CARDS}/a.vcf`);
     });
 });
 
@@ -653,7 +551,7 @@ describe('Contacts label membership (CATEGORIES)', () => {
                 eigenId: '',
                 isGroup: false,
                 data: { email: [], phone: [] },
-                etag: computeCardEtag(bytes),
+                etag: computeResourceEtag(bytes),
                 cardCtag: 0,
                 mtime: 0,
                 size: bytes.byteLength,

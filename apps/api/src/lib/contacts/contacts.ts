@@ -5,12 +5,22 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
-import { Semaphore } from '../../utils/semaphore';
 import { type CardEdits, createVCard, mergeVCard } from '../carddav/vcard-serialize';
 import { enforceMailAndContactsQuota } from '../config/enforcement';
 import { getServerSettings } from '../config/server-settings';
 import type { ManagedDatabase } from '../core';
-import { ApiError, DEFAULT_LABELS, LocalFilesystem, PATHS } from '../core';
+import {
+    ApiError,
+    cleanupTempFiles,
+    computeResourceEtag,
+    DEFAULT_LABELS,
+    LocalFilesystem,
+    PATHS,
+    statResourceFile,
+    uriKeyOf,
+    WriteGate,
+    writeResourceFile,
+} from '../core';
 import type { Home } from '../home';
 import { atHome, getHome } from '../home';
 import { pushUserProfile } from '../home/home-relay';
@@ -24,17 +34,12 @@ import type { CardData, CardRowInput } from './card-store';
 import {
     avatarNameOf,
     CARD_MAX_BYTES,
-    CARDS_DIR,
     cardPath,
     cardUpdateSet,
-    cleanupTempCardFiles,
-    computeCardEtag,
     isCardPhotoCacheOf,
     labelColorFor,
     normalizeLabelName,
     parsedToData,
-    uriKeyOf,
-    writeCardFile,
 } from './card-store';
 import type { CardBook, CardRow, DeleteCardResult, PutCardResult } from './dav-store';
 import * as davStore from './dav-store';
@@ -102,14 +107,10 @@ export class Contacts {
     home: Home; // internal — used by contacts/*.ts
     storage: LocalFilesystem; // internal — used by contacts/*.ts
 
-    // Every card mutation (REST and DAV) serializes through one slot, so a file write and its index commit
-    // stay a pair and etag preconditions are evaluated against the state they'll overwrite.
-    writeLock = new Semaphore(1); // internal — used by contacts/*.ts
-
-    // A card whose file wrote but whose index commit threw lands here; the next public call (mutation OR read)
-    // re-indexes it before it observes the index. Process death takes this set with it, which is what
-    // `pending_card_writes` is for.
-    private dirtyCards = new Set<string>();
+    // Every card mutation (REST and DAV) serializes through the gate's one slot, and a card whose file wrote
+    // but whose index commit threw is re-indexed by the next call in — mutation or read — before it observes
+    // the index. Process death takes the gate's dirty set with it, which is what `pending_card_writes` is for.
+    gate = new WriteGate((uris, settled) => this.drainDirty(uris, settled)); // internal — used by contacts/*.ts
 
     // Only the reconcile/rebuild/drain machinery bumps this; the mutation paths parse for their own merges.
     private cardParses = 0;
@@ -166,8 +167,8 @@ export class Contacts {
         this.managedDb = await getContactsDatabase(this.home);
         this.db = this.managedDb.db;
 
-        await this.storage.mkdir(CARDS_DIR);
-        await cleanupTempCardFiles(this.storage);
+        await this.storage.mkdir(PATHS.CONTACTS.CARDS);
+        await cleanupTempFiles(this.storage, PATHS.CONTACTS.CARDS);
 
         // Seeded from disk once; every avatar write/delete adjusts it by delta thereafter. cardsBytes is
         // owned by the reconcile/rebuild pass below.
@@ -180,7 +181,7 @@ export class Contacts {
 
         // Then finish what a crash left half-applied — after the index pass, which guarantees the book row
         // the ctag bumps need, and before anything is served.
-        await this.writeLock.run(() => this.recoverPendingWork());
+        await this.recoverPendingWork();
 
         // Each seed is guarded independently, so a crash between them doesn't skip a later one forever.
         const existingLabels = this.db.select().from(schema.labels).all();
@@ -339,12 +340,11 @@ export class Contacts {
         for (const id of createdLabelIds) this.emitLabel(SSEventType.LABEL_CREATED, id);
     }
 
-    // A commit that threw after its file was already persisted left the index behind that file: re-commit
-    // each recorded uri (or tombstone a vanished one) before the caller reads the index. Caller holds the lock.
-    // internal — used by contacts/*.ts
-    async drainDirty(): Promise<void> {
-        if (this.dirtyCards.size === 0) return;
-        for (const uri of [...this.dirtyCards]) {
+    // The gate's re-index: a commit that threw after its file was already persisted left the index behind
+    // that file, so re-commit each dirty uri (or tombstone a vanished one) before the caller reads the index.
+    // Caller holds the lock.
+    private async drainDirty(uris: string[], settled: (uri: string) => void): Promise<void> {
+        for (const uri of uris) {
             const existing = this.db
                 .select()
                 .from(schema.contacts)
@@ -370,13 +370,8 @@ export class Contacts {
             // Covers the tombstoned and nothing-left-to-do branches; commitCard already dropped the durable
             // marker for a re-indexed card.
             this.clearCardWrite(uri);
-            this.dirtyCards.delete(uri);
+            settled(uri);
         }
-    }
-
-    // internal — used by contacts/*.ts
-    markCardDirty(uri: string): void {
-        this.dirtyCards.add(uri);
     }
 
     // Durable write intent: while the row exists, the index owes that uri a commit.
@@ -390,35 +385,22 @@ export class Contacts {
     }
 
     // Init's recovery seam: finish the work a process death cut in half. Neither half may be fatal — a home
-    // whose init throws is a home the user cannot open at all — so an unrecoverable card is dropped with a
-    // warning and left on disk for the next reconcile, and a rename that cannot finish stays recorded for
-    // the next label mutation to retry. Caller holds the writeLock.
+    // whose init throws is a home the user cannot open at all — so an unrecoverable card keeps its journal
+    // row for the next init, and a rename that cannot finish stays recorded for the next label mutation.
     private async recoverPendingWork(): Promise<void> {
-        for (const { uri } of this.db.select().from(schema.pendingCardWrites).all()) {
-            this.markCardDirty(uri);
-            try {
-                await this.drainDirty();
-            } catch (e) {
-                // Only the in-memory marker goes. The durable intent stays: a same-stat rewrite is invisible
-                // to every other pass, so forfeiting it on a transient failure strands the stale row until
-                // a rebuild.
-                console.warn(`contacts: could not recover the pending write of ${uri}: ${e}`);
-                this.dirtyCards.delete(uri);
-            }
-        }
+        await this.gate.recoverPending(
+            this.db
+                .select()
+                .from(schema.pendingCardWrites)
+                .all()
+                .map((row) => row.uri),
+        );
 
         try {
-            await this.resumeLabelRenames();
+            await this.gate.run(() => this.resumeLabelRenames());
         } catch (e) {
             console.warn(`contacts: could not resume a pending label rename: ${e}`);
         }
-    }
-
-    // The fail-closed read guard: no read is served past a failed pair. Free on the hot path — an empty set
-    // takes no lock. Mutations already drain inside their own lock, so only lock-free reads call this.
-    // internal — used by contacts/*.ts
-    async ensureDrained(): Promise<void> {
-        if (this.dirtyCards.size) await this.writeLock.run(() => this.drainDirty());
     }
 
     // The book/sync bookkeeping is authoritative in the DB, not derivable from cards/, so a missing book row
@@ -446,7 +428,7 @@ export class Contacts {
         // drift, or a rebuild after a cache wipe.
         const avatar = await this.deriveCardPhotoCache(id, parsed.photo);
 
-        const stat = await this.storage.stat(cardPath(uri));
+        const { mtime, size } = await statResourceFile(this.storage, cardPath(uri));
         return {
             row: {
                 id,
@@ -458,9 +440,9 @@ export class Contacts {
                 eigenId: '',
                 isGroup: parsed.isGroup,
                 data: parsedToData(parsed, avatar),
-                etag: computeCardEtag(bytes),
-                mtime: Math.round(stat.mtimeMs),
-                size: stat.size,
+                etag: computeResourceEtag(bytes),
+                mtime,
+                size,
             },
             categories: parsed.categories,
             parsed,
@@ -490,7 +472,7 @@ export class Contacts {
     }
 
     // The resource ceiling (it bounds what a device sync and every later reconcile has to parse) plus the
-    // mail+contacts quota, credited with the bytes of the card this one replaces. Called inside the writeLock
+    // mail+contacts quota, credited with the bytes of the card this one replaces. Called inside the gate
     // and before any write intent is recorded, so a refusal leaves nothing for a drain to chase.
     // internal — used by contacts/*.ts
     async enforceCardBudget(bytes: Uint8Array, creditBytes: number): Promise<void> {
@@ -507,8 +489,7 @@ export class Contacts {
     }
 
     public async addContact(contact: CreateContactInput): Promise<string> {
-        return this.writeLock.run(async () => {
-            await this.drainDirty();
+        return this.gate.run(async () => {
             normalizeContactInput(contact);
 
             const id = randomUUID();
@@ -544,7 +525,7 @@ export class Contacts {
             // drain and rethrows, and the durable intent recorded first covers a process death.
             try {
                 this.recordCardWrite(uri);
-                const { mtime, size } = await writeCardFile(this.storage, uri, bytes);
+                const { mtime, size } = await writeResourceFile(this.storage, cardPath(uri), bytes);
                 // The projection stores the promoted webp's hashed URL, or '' when there is no photo.
                 const avatar = staged ? await this.promoteAvatarCache(id, staged) : '';
                 this.commitCard({
@@ -558,15 +539,15 @@ export class Contacts {
                         eigenId: this.resolveSelfLink(contact.eigenId),
                         isGroup: false,
                         data: toData({ ...contact, avatar }),
-                        etag: computeCardEtag(bytes),
-                        mtime: Math.round(mtime),
+                        etag: computeResourceEtag(bytes),
+                        mtime,
                         size,
                     },
                     categories,
                 });
                 this.cardsBytes += size;
             } catch (e) {
-                this.markCardDirty(uri);
+                this.gate.markDirty(uri);
                 throw e;
             }
 
@@ -576,8 +557,7 @@ export class Contacts {
     }
 
     public async updateContact(id: string, contact: CreateContactInput, expectedEtag?: string): Promise<void> {
-        return this.writeLock.run(async () => {
-            await this.drainDirty();
+        return this.gate.run(async () => {
             // Runs before the self-card own-email prepend below, so that email can't be dropped as a blank.
             normalizeContactInput(contact);
 
@@ -640,7 +620,7 @@ export class Contacts {
             let avatar = contact.avatar ?? '';
             try {
                 this.recordCardWrite(row.uri);
-                const { mtime, size } = await writeCardFile(this.storage, row.uri, bytes);
+                const { mtime, size } = await writeResourceFile(this.storage, cardPath(row.uri), bytes);
                 if (avatarChanged) {
                     avatar = staged ? await this.promoteAvatarCache(id, staged) : '';
                 }
@@ -655,15 +635,15 @@ export class Contacts {
                         eigenId: row.eigenId,
                         isGroup: row.isGroup,
                         data: toData({ ...contact, avatar }),
-                        etag: computeCardEtag(bytes),
-                        mtime: Math.round(mtime),
+                        etag: computeResourceEtag(bytes),
+                        mtime,
                         size,
                     },
                     categories,
                 });
                 this.cardsBytes += size - row.size;
             } catch (e) {
-                this.markCardDirty(row.uri);
+                this.gate.markDirty(row.uri);
                 throw e;
             }
 
@@ -681,7 +661,7 @@ export class Contacts {
         });
     }
 
-    // The delete tail shared by REST deleteContact and DAV deleteCard. Callers hold the writeLock and have
+    // The delete tail shared by REST deleteContact and DAV deleteCard. Callers hold the gate and have
     // already run their own guards (self-delete, preconditions).
     // internal — used by contacts/*.ts
     async purgeCard(row: typeof schema.contacts.$inferSelect): Promise<void> {
@@ -699,7 +679,7 @@ export class Contacts {
                 this.tombstone(tx, row.uri, row.uriKey, ctag);
             });
         } catch (e) {
-            this.markCardDirty(row.uri);
+            this.gate.markDirty(row.uri);
             throw e;
         }
 
@@ -722,9 +702,7 @@ export class Contacts {
     }
 
     public async deleteContact(id: string, expectedEtag?: string): Promise<void> {
-        return this.writeLock.run(async () => {
-            await this.drainDirty();
-
+        return this.gate.run(async () => {
             const row = this.db.select().from(schema.contacts).where(eq(schema.contacts.id, id)).get();
             // Idempotent, and the etag is not evaluated for a resource that no longer exists.
             if (!row) return;
@@ -776,7 +754,7 @@ export class Contacts {
     }
 
     public async getContactById(id: string): Promise<Contact | null> {
-        await this.ensureDrained();
+        await this.gate.ensureDrained();
         const row = this.db.select().from(schema.contacts).where(eq(schema.contacts.id, id)).get();
         if (!row || row.isGroup) return null;
         const labelIds = this.db
@@ -789,7 +767,7 @@ export class Contacts {
     }
 
     public async getContacts(): Promise<Contact[]> {
-        await this.ensureDrained();
+        await this.gate.ensureDrained();
         // Groups are DAV-only aggregates; the app's contact list never shows them.
         const rows = this.db.select().from(schema.contacts).where(eq(schema.contacts.isGroup, false)).all();
 
@@ -866,7 +844,7 @@ export class Contacts {
     }
 
     public async getMe(): Promise<Contact | null> {
-        await this.ensureDrained();
+        await this.gate.ensureDrained();
         const found = this.selfRow();
         if (found) {
             return this.getContactById(found.id);

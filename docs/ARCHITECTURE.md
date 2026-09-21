@@ -12,6 +12,7 @@
 | **DB schemas**        | `apps/api/src/lib/[domain]/schema.ts`        | Drizzle ORM schemas                                                                                        |
 | **DB config**         | `apps/api/src/lib/[domain]/db-config.ts`     | `DatabaseConfig` with versioned migrations                                                                 |
 | **ManagedDatabase**   | `apps/api/src/lib/core/managed-database.ts`  | WAL mode, versioning, auto-sync, dirty tracking                                                            |
+| **Indexed file store** | `apps/api/src/lib/core/indexed-file-store.ts` | SQL-free files-as-truth core: the `WriteGate`, the file/key helpers, the stat diff, the uid guard. See [CONTACTS.md](CONTACTS.md) |
 | **Collab storage**    | `apps/api/src/lib/collab/`                   | One `CollabDocument` per open doc; Yjs updates + snapshots as zstd BLOBs in `data.db`. See [COLLAB.md](COLLAB.md) |
 | **Storage backends**  | `apps/api/src/lib/storage/`                  | Two classes — `LocalStorage` (serves both `local` + `local-key` modes) and `S3Storage`                     |
 | **Errors**            | `apps/api/src/lib/core/errors.ts`            | `throw new ApiError(status, message)`                                                                      |

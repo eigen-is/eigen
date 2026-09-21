@@ -58,22 +58,23 @@ seed-scale, and zero export code beats carrying a legacy path forever).
 
 `apps/api/src/lib/contacts/contacts.ts` (`class Contacts`) keeps the REST method signatures
 (`addContact`/`updateContact`/`deleteContact`/`getContacts`/`getContactById`/`getMe` + the label methods) and
-adds the CardDAV store seam. Every mutation serializes through a one-slot `writeLock` (`Semaphore(1)`) — the
-same job `MaildirStore.storeLock` does — so a file+index pair never straddles a reconcile or a racing write.
+adds the CardDAV store seam. Every mutation serializes through a one-slot write gate (`WriteGate`, a
+`Semaphore(1)` in `lib/core/indexed-file-store.ts`) — the same job `MaildirStore.storeLock` does — so a
+file+index pair never straddles a reconcile or a racing write.
 
 **Atomic, fail-closed writes.** Each card write goes temp file → `fsync` → rename via
 `LocalFilesystem.writeAtomic` (the one place in the API that fsyncs — the maildir delivery precedent), then a
 single SQLite transaction (`commitCard`) commits the index row, label junction, `cardCtag`, book `ctag` and
-tombstone changes together. The exact sequence every mutation runs: `drainDirty()` → `enforceCardBudget` (the
-quota gate, *before* any intent is recorded) → `recordCardWrite(uri)` → `writeCardFile` → (photo cache) →
-`commitCard` inside `try/catch`, and on any failure `markCardDirty(uri)` + rethrow. `commitCard` is the single
+tombstone changes together. The exact sequence every mutation runs: `gate.run()` (which drains first) → `enforceCardBudget`
+(the quota gate, *before* any intent is recorded) → `recordCardWrite(uri)` → `writeResourceFile` → (photo cache) →
+`commitCard` inside `try/catch`, and on any failure `gate.markDirty(uri)` + rethrow. `commitCard` is the single
 index-write seam: ctag bump, junction rebuild (`syncCardLabels`), tombstone clear by `uriKey`, and the
 pending-write clear, all in one transaction.
 
 **Two failure windows, two guards.** If the index step throws *after* a successful rename, the uri is marked
-in an in-memory `dirtyCards` set and the book **fails closed**: the next public call — mutation *or read* —
-runs `ensureDrained()`/`drainDirty()` and re-indexes that card before observing the index, so no read is ever
-served past a torn write. Process death takes `dirtyCards` with it, which is what `pending_card_writes` is
+in the gate's in-memory dirty set and the book **fails closed**: the next public call — mutation *or read* — drains it
+(`gate.run()` at its entry, `gate.ensureDrained()` for a lock-free read) and re-indexes that card before observing
+the index, so no read is served past a torn write. A uri leaves the dirty set as its own re-index settles, so one card that can never recover does not re-commit the healthy ones — and the book `ctag` — on every later drain; `gate.run()` refuses re-entry outright and `gate.ensureDrained()` from inside the lock is a no-op. Process death takes that set with it, which is what `pending_card_writes` is
 for: a uri recorded there before its file was renamed and cleared inside the commit that settled the pair; a
 survivor means the pair never completed, so `recoverPendingWork` at init re-indexes it. This covers the one
 case a stat-only reconcile cannot see — a replacement carrying the very same `mtime` and `size`.
@@ -147,7 +148,7 @@ more honest than the calendar's field-hash, and it lets reconcile detect out-of-
 
 **Preconditions inside the lock.** `If-Match`/`If-None-Match` are **not** checked handler-side (the CalDAV
 code is race-free only because nothing awaits between check and write — a property an async file write loses).
-`putCard`/`deleteCard` evaluate them *inside* the `writeLock`, against the state the write overwrites, so two
+`putCard`/`deleteCard` evaluate them *inside* the write gate, against the state the write overwrites, so two
 racing `If-Match` PUTs serialize and the loser gets a typed precondition result → 412. UID is required and
 immutable: a PUT changing an existing resource's UID, or a UID already owned by another resource, → 412
 `CARDDAV:no-uid-conflict` (never a raw constraint 500). Oversize → 413 `CARDDAV:max-resource-size`
@@ -301,7 +302,7 @@ CardDAV address card next to CalDAV/IMAP/WebDAV, carrying the address-book URL.
 
 ## Where the code lives
 
-- **`apps/api/src/lib/contacts/`** — the domain, split Mount-style: `contacts.ts` (the `Contacts` facade — the write lock, the dirty/journal machinery, REST contact CRUD and the self card; every sibling call goes through it) with sibling modules of plain functions over the facade: `dav-store.ts` (the CardDAV store seam — the index reads plus `putCard`/`deleteCard` and the seam types), `reconcile.ts` (the stat-only reconcile, the from-scratch rebuild, and the self-link ranking), `labels.ts` (label definitions + the CATEGORIES fan-out and rename journal), `avatars.ts` (avatar staging + the derived photo cache). Beside them: `card-store.ts` (the file/key helpers — `sanitizeCardUri`, `writeCardFile`, `avatarCacheName`, `uriKeyOf`), `transfer.ts` (whole-file vCard export and import, above), `schema.ts`, `db-config.ts`, `sse-events.ts`.
+- **`apps/api/src/lib/contacts/`** — the domain, split Mount-style: `contacts.ts` (the `Contacts` facade — the write gate, the dirty/journal machinery, REST contact CRUD and the self card; every sibling call goes through it) with sibling modules of plain functions over the facade: `dav-store.ts` (the CardDAV store seam — the index reads plus `putCard`/`deleteCard` and the seam types), `reconcile.ts` (the stat-only reconcile, the from-scratch rebuild, and the self-link ranking), `labels.ts` (label definitions + the CATEGORIES fan-out and rename journal), `avatars.ts` (avatar staging + the derived photo cache). Beside them: `card-store.ts` (what `.vcf` and `cards/` mean — `sanitizeCardUri`, `listCardUris`, `cardPath`, `avatarCacheName` — over the domain-neutral machinery in `apps/api/src/lib/core/indexed-file-store.ts`: the write gate, the file/key helpers (`sanitizeResourceUri`, `uriKeyOf`, `computeResourceEtag`, `writeResourceFile`, `statResourceFile`, `readResourceFile`, `cleanupTempFiles`, `listResourceUris`), the stat diff `diffFileStats` and the uid guard `dedupeByUid`, none of which knows SQL), `transfer.ts` (whole-file vCard export and import, above), `schema.ts`, `db-config.ts`, `sse-events.ts`.
 - **`apps/api/src/lib/carddav/`** — the protocol layer: `carddav-router.ts`, `discovery.ts`, `resource.ts`, `report.ts`, `query-filter.ts`, `address-data.ts`, `vcard-serialize.ts` (the merge/create seam Eigen-owned edits go through), and `xml-builder.ts`/`xml-parser.ts`. The shared XML envelope and principal props live in `dav/xml.ts`, the OPTIONS header and realm in `app.ts`; the fold/escape/C0-strip primitives both the vCard and iCalendar serializers ride on live in `packages/lib/src/core/content-line.ts`, imported as `@workspace/lib/content-line`.
 - **`apps/api/src/lib/vcard/`** — the format itself: `ast.ts` (content-line parse/serialize, single-card envelope), `split.ts` (a multi-card file into one text per card), `parse.ts` (the `ParsedCard` projection), `to-contact.ts` (a parsed card as the `Contact` shape the app renders, for preview only), `transcode.ts` (vCard 4.0 -> 3.0), behind the `index.ts` barrel; the parser's own `VCardLine`/`ParsedCard`/`ParsedCardPhoto` types live in `types.ts` beside it, while `Contact` and `Address` stay shared in `packages/lib/src/types/contact.ts`.
 - **`apps/api/src/routes/contacts.ts`** — thin REST bindings: contact and label CRUD with the conditional-write `etag`, avatar staging, and the three transfer routes above.

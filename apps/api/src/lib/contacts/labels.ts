@@ -3,10 +3,10 @@ import type { Label } from '@workspace/lib/types/label';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq, inArray, sql } from 'drizzle-orm';
 import { mergeVCard } from '../carddav/vcard-serialize';
-import { ApiError } from '../core';
+import { ApiError, computeResourceEtag, writeResourceFile } from '../core';
 import { parseVCard } from '../vcard';
 import type { ParsedCard } from '../vcard/types';
-import { computeCardEtag, normalizeLabelName, writeCardFile } from './card-store';
+import { cardPath, normalizeLabelName } from './card-store';
 import type { Contacts } from './contacts';
 import * as schema from './schema';
 
@@ -38,7 +38,7 @@ export function labelNamesFor(contacts: Contacts, labelIds: string[]): string[] 
 
 // Projected to the DTO: nameKey and the timestamps are index bookkeeping, not part of the wire contract.
 export async function getLabels(contacts: Contacts): Promise<Label[]> {
-    await contacts.ensureDrained();
+    await contacts.gate.ensureDrained();
     return contacts.db
         .select({ id: schema.labels.id, name: schema.labels.name, color: schema.labels.color })
         .from(schema.labels)
@@ -58,7 +58,7 @@ function labelMemberIds(contacts: Contacts, labelIds: string[]): string[] {
 // A label rename/delete fans out to its member cards so CATEGORIES stays the membership truth: each card
 // is re-read, its category names remapped by `transform`, then written and re-indexed through the same
 // file→commit pipeline as a contact edit (its etag/cardCtag bump, so DAV clients re-fetch). Callers hold
-// the writeLock and drive it directly rather than via updateContact, which would re-enter the
+// the write gate and drive it directly rather than via updateContact, which would re-enter the
 // non-reentrant lock.
 async function rewriteCardCategories(
     contacts: Contacts,
@@ -91,7 +91,7 @@ async function rewriteCardCategories(
 
         try {
             contacts.recordCardWrite(row.uri);
-            const { mtime, size } = await writeCardFile(contacts.storage, row.uri, bytes);
+            const { mtime, size } = await writeResourceFile(contacts.storage, cardPath(row.uri), bytes);
             contacts.commitCard({
                 row: {
                     id: row.id,
@@ -105,15 +105,15 @@ async function rewriteCardCategories(
                     // Deliberately the stored projection, not the fresh parse: committing the parse with
                     // the rewritten file's stats hides an out-of-band edit from the stat-only reconcile.
                     data: row.data,
-                    etag: computeCardEtag(bytes),
-                    mtime: Math.round(mtime),
+                    etag: computeResourceEtag(bytes),
+                    mtime,
                     size,
                 },
                 categories,
             });
             contacts.cardsBytes += size - row.size;
         } catch (e) {
-            contacts.markCardDirty(row.uri);
+            contacts.gate.markDirty(row.uri);
             throw e;
         }
 
@@ -126,7 +126,7 @@ async function rewriteCardCategories(
 // carrying either spelling is remapped onto it (a forward fan-out resumes, a half-compensated one rolls
 // back, a case-only rename still lands its casing). The transform is keyed on the name, so re-running it
 // rewrites nothing once the cards agree, and the record clears only after every member committed. Caller
-// holds the writeLock, as drainDirty's callers do.
+// holds the write gate, as every other fan-out does.
 export async function resumeLabelRenames(contacts: Contacts): Promise<void> {
     for (const pending of contacts.db.select().from(schema.pendingLabelRenames).all()) {
         // The record cascades with its label row, so the label is always there.
@@ -165,8 +165,7 @@ export async function addLabel(contacts: Contacts, label: Omit<Label, 'id'>): Pr
     const nameKey = normalizeLabelName(label.name);
     if (!nameKey) throw new ApiError(400, 'Label name is required');
 
-    return contacts.writeLock.run(async () => {
-        await contacts.drainDirty();
+    return contacts.gate.run(async () => {
         await resumeLabelRenames(contacts);
         const labelId = randomUUID();
 
@@ -195,8 +194,7 @@ export async function updateLabel(contacts: Contacts, id: string, label: Omit<La
     const nameKey = normalizeLabelName(label.name);
     if (!nameKey) throw new ApiError(400, 'Label name is required');
 
-    return contacts.writeLock.run(async () => {
-        await contacts.drainDirty();
+    return contacts.gate.run(async () => {
         await resumeLabelRenames(contacts);
 
         const before = contacts.db.select().from(schema.labels).where(eq(schema.labels.id, id)).get();
@@ -271,8 +269,7 @@ export async function updateLabel(contacts: Contacts, id: string, label: Omit<La
 }
 
 export async function deleteLabel(contacts: Contacts, id: string): Promise<void> {
-    return contacts.writeLock.run(async () => {
-        await contacts.drainDirty();
+    return contacts.gate.run(async () => {
         // Converge a half-applied rename first, so the delete below removes the name the cards actually
         // carry. The pending record itself cascades away with the label row.
         await resumeLabelRenames(contacts);

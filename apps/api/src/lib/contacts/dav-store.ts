@@ -2,27 +2,27 @@ import { randomUUID } from 'node:crypto';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq, gt } from 'drizzle-orm';
 import { mergeVCard } from '../carddav/vcard-serialize';
-import { ApiError, matchesIfMatch, matchesIfNoneMatch } from '../core';
+import {
+    ApiError,
+    computeResourceEtag,
+    matchesIfMatch,
+    matchesIfNoneMatch,
+    readResourceFile,
+    uriKeyOf,
+    writeResourceFile,
+} from '../core';
 import { pushUserProfile } from '../home/home-relay';
 import { parseVCard, transcodeTo30 } from '../vcard';
 import type { ParsedCard } from '../vcard/types';
 import { deriveCardPhotoCache, downloadAvatar } from './avatars';
-import {
-    avatarNameOf,
-    CARD_MAX_BYTES,
-    computeCardEtag,
-    parsedToData,
-    sanitizeCardUri,
-    uriKeyOf,
-    writeCardFile,
-} from './card-store';
+import { avatarNameOf, CARD_MAX_BYTES, cardPath, parsedToData, sanitizeCardUri } from './card-store';
 import type { Contacts } from './contacts';
 import { selfClaimRank } from './reconcile';
 import * as schema from './schema';
 
 // The CardDAV store seam over the Contacts facade: the index reads the protocol handlers sit on, and the
 // PUT/DELETE write seams behind them — preconditions, UID rules, the quota gate and the self-link decision,
-// all evaluated inside the facade's write lock. See docs/CONTACTS.md § CardDAV surface.
+// all evaluated inside the facade's write gate. See docs/CONTACTS.md § CardDAV surface.
 
 // The index projection the sync layer reads for a resource; the etag is the hash the handler quotes.
 export type CardRow = { uri: string; etag: string };
@@ -46,26 +46,26 @@ export type DeleteCardResult = { ok: true } | { ok: false; error: 'not-found' | 
 // synchronous.
 
 export async function getBook(contacts: Contacts): Promise<CardBook> {
-    await contacts.ensureDrained();
+    await contacts.gate.ensureDrained();
     const book = contacts.db.select().from(schema.book).where(eq(schema.book.id, 1)).get()!;
     return { ctag: book.ctag, syncGen: book.syncGen };
 }
 
 // Every resource in the book — group cards included, since DAV serves the whole book (the app list hides them).
 export async function listCards(contacts: Contacts): Promise<CardRow[]> {
-    await contacts.ensureDrained();
+    await contacts.gate.ensureDrained();
     return contacts.db.select(CARD_ROW).from(schema.contacts).all();
 }
 
 // The rows changed after book token N — the sync-collection delta (cardCtag is stamped on every change).
 export async function getChangedCardsSince(contacts: Contacts, sinceCtag: number): Promise<CardRow[]> {
-    await contacts.ensureDrained();
+    await contacts.gate.ensureDrained();
     return contacts.db.select(CARD_ROW).from(schema.contacts).where(gt(schema.contacts.cardCtag, sinceCtag)).all();
 }
 
 // The uris removed after book token N — the sync-collection 404 rows (one row per uri, no duplicate hrefs).
 export async function getDeletedCardsSince(contacts: Contacts, sinceCtag: number): Promise<{ uri: string }[]> {
-    await contacts.ensureDrained();
+    await contacts.gate.ensureDrained();
     return contacts.db
         .select({ uri: schema.contactTombstones.uri })
         .from(schema.contactTombstones)
@@ -76,28 +76,25 @@ export async function getDeletedCardsSince(contacts: Contacts, sinceCtag: number
 // The stored bytes for a resource (GET/multiget). A row whose file has vanished is not a 500: mark it so the
 // next drain tombstones it and answer this request as a miss.
 export async function getCard(contacts: Contacts, uri: string): Promise<{ bytes: Uint8Array; etag: string } | null> {
-    await contacts.ensureDrained();
+    await contacts.gate.ensureDrained();
     const row = contacts.db
         .select(CARD_ROW)
         .from(schema.contacts)
         .where(eq(schema.contacts.uriKey, uriKeyOf(uri)))
         .get();
     if (!row) return null;
-    try {
-        return { bytes: await contacts.readCardBytes(row.uri), etag: row.etag };
-    } catch (e) {
-        if (e instanceof Error && 'code' in e && e.code === 'ENOENT') {
-            contacts.markCardDirty(row.uri);
-            return null;
-        }
-        throw e;
+    const bytes = await readResourceFile(contacts.storage, cardPath(row.uri));
+    if (!bytes) {
+        contacts.gate.markDirty(row.uri);
+        return null;
     }
+    return { bytes, etag: row.etag };
 }
 
 // The single-resource PROPFIND read: an indexed single-row lookup, unlike a `listCards().find()` over the
 // whole book, and unlike getCard it doesn't read the file bytes a PROPFIND never returns.
 export async function getCardMeta(contacts: Contacts, uri: string): Promise<CardRow | null> {
-    await contacts.ensureDrained();
+    await contacts.gate.ensureDrained();
     return (
         contacts.db
             .select(CARD_ROW)
@@ -137,7 +134,7 @@ function resolveSelfLinkOnPut(
 }
 
 // A DAV PUT: store the client's card verbatim (after the 4.0→3.0 transcode), with every precondition, UID
-// rule, quota gate and self-link decision evaluated INSIDE the writeLock against the state the write
+// rule, quota gate and self-link decision evaluated INSIDE the write gate against the state the write
 // overwrites. The router already sanitizes the client-chosen uri, but this is a public method that turns it
 // into a filesystem path, so it re-validates before any write.
 export async function putCard(
@@ -147,9 +144,7 @@ export async function putCard(
     pre: { ifMatch: string | null; ifNoneMatch: string | null },
 ): Promise<PutCardResult> {
     if (sanitizeCardUri(uri) !== uri) return { ok: false, error: 'invalid' };
-    return contacts.writeLock.run(async (): Promise<PutCardResult> => {
-        await contacts.drainDirty();
-
+    return contacts.gate.run(async (): Promise<PutCardResult> => {
         // Bounded before any parse, so a hostile multi-MiB payload never reaches the AST unfolder.
         if (Buffer.byteLength(body) > CARD_MAX_BYTES) return { ok: false, error: 'too-large' };
 
@@ -216,8 +211,8 @@ export async function putCard(
         let etag = '';
         try {
             contacts.recordCardWrite(storedUri);
-            const { mtime, size } = await writeCardFile(contacts.storage, storedUri, bytes);
-            etag = computeCardEtag(bytes);
+            const { mtime, size } = await writeResourceFile(contacts.storage, cardPath(storedUri), bytes);
+            etag = computeResourceEtag(bytes);
             // Regenerates only when the hash-named file is missing, so an unchanged-photo re-PUT keeps the
             // promoted first-generation cache.
             projectionAvatar = await deriveCardPhotoCache(contacts, id, parsed.photo);
@@ -233,7 +228,7 @@ export async function putCard(
                     isGroup: parsed.isGroup,
                     data: parsedToData(parsed, projectionAvatar),
                     etag,
-                    mtime: Math.round(mtime),
+                    mtime,
                     size,
                 },
                 categories: parsed.categories,
@@ -242,7 +237,7 @@ export async function putCard(
             });
             contacts.cardsBytes += size - (existing?.size ?? 0);
         } catch (e) {
-            contacts.markCardDirty(storedUri);
+            contacts.gate.markDirty(storedUri);
             throw e;
         }
 
@@ -278,8 +273,7 @@ export async function deleteCard(
     uri: string,
     pre: { ifMatch: string | null },
 ): Promise<DeleteCardResult> {
-    return contacts.writeLock.run(async (): Promise<DeleteCardResult> => {
-        await contacts.drainDirty();
+    return contacts.gate.run(async (): Promise<DeleteCardResult> => {
         const row = contacts.db
             .select()
             .from(schema.contacts)

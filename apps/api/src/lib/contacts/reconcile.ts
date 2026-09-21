@@ -2,18 +2,18 @@ import { randomUUID } from 'node:crypto';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
 import { mergeVCard } from '../carddav/vcard-serialize';
-import { PATHS } from '../core';
+import {
+    computeResourceEtag,
+    dedupeByUid,
+    diffFileStats,
+    PATHS,
+    statResourceFile,
+    uriKeyOf,
+    writeResourceFile,
+} from '../core';
 import type { ParsedCard } from '../vcard/types';
 import type { CardRowInput } from './card-store';
-import {
-    avatarNameOf,
-    cardPath,
-    cardUpdateSet,
-    computeCardEtag,
-    listCardUris,
-    uriKeyOf,
-    writeCardFile,
-} from './card-store';
+import { avatarNameOf, cardPath, cardUpdateSet, listCardUris } from './card-store';
 import type { Contacts } from './contacts';
 import * as schema from './schema';
 
@@ -67,29 +67,16 @@ async function applySelfLink(contacts: Contacts, winner: CardCandidate): Promise
     winner.row.eigenId = contacts.home.user.id;
     if (winner.parsed.eigenId === contacts.home.user.id) return;
     const bytes = new TextEncoder().encode(mergeVCard(winner.parsed, { eigenId: contacts.home.user.id }));
-    await writeCardFile(contacts.storage, winner.row.uri, bytes);
-    const stat = await contacts.storage.stat(cardPath(winner.row.uri));
-    winner.row.etag = computeCardEtag(bytes);
-    winner.row.mtime = Math.round(stat.mtimeMs);
-    winner.row.size = stat.size;
+    const { mtime, size } = await writeResourceFile(contacts.storage, cardPath(winner.row.uri), bytes);
+    winner.row.etag = computeResourceEtag(bytes);
+    winner.row.mtime = mtime;
+    winner.row.size = size;
 }
 
-// Drop prepared rows whose uid is already owned by a row the transaction will leave in place — the
-// idx_contacts_uid UNIQUE would otherwise throw inside the write and brick the whole pass. `uidOwner` maps
-// each uid to the row id that will hold it after the pass; a candidate updating its own incumbent keeps that
-// row's slot, any other collision is skipped-and-warned with the earliest uri winning.
-function dedupeByUid(candidates: CardCandidate[], uidOwner: Map<string, string>): CardCandidate[] {
-    const kept: CardCandidate[] = [];
-    for (const c of candidates) {
-        const owner = uidOwner.get(c.row.uid);
-        if (owner !== undefined && owner !== c.row.id) {
-            console.warn(`contacts: skipping ${c.row.uri} — UID ${c.row.uid} already claimed by another card`);
-            continue;
-        }
-        uidOwner.set(c.row.uid, c.row.id);
-        kept.push(c);
-    }
-    return kept;
+// A card's uid is unique across the whole book (the idx_contacts_uid UNIQUE), so the collision scope is the
+// uid itself.
+function dedupeCardsByUid(candidates: CardCandidate[], uidOwner: Map<string, string>): CardCandidate[] {
+    return dedupeByUid(candidates, uidOwner, (c) => ({ scope: c.row.uid, id: c.row.id, uri: c.row.uri }));
 }
 
 // Phase 1 of both passes: prepare each entry into a candidate row without touching the self-link, ranking its
@@ -114,14 +101,13 @@ async function buildCandidates(
 // derived avatar cache is gone. A fully clean pass parses nothing and bumps nothing. A same-size,
 // timestamp-preserving replacement is invisible here — that needs `rebuildIndex`.
 export async function reconcileIndex(contacts: Contacts): Promise<void> {
-    return contacts.writeLock.run(async () => {
+    return contacts.gate.run(async () => {
         const present = new Map<string, { uri: string; mtime: number; size: number }>();
         // A stat that failed (transient IO, not a real removal) must not tombstone a live row.
         const skipped = new Set<string>();
         for (const { uri, key } of await listCardUris(contacts.storage)) {
             try {
-                const stat = await contacts.storage.stat(cardPath(uri));
-                present.set(key, { uri, mtime: Math.round(stat.mtimeMs), size: stat.size });
+                present.set(key, { uri, ...(await statResourceFile(contacts.storage, cardPath(uri))) });
             } catch (e) {
                 // Listed but un-stattable: skip it this pass, the next one catches up.
                 skipped.add(key);
@@ -145,20 +131,23 @@ export async function reconcileIndex(contacts: Contacts): Promise<void> {
             .all();
         const rowByKey = new Map(rows.map((r) => [r.uriKey, r] as const));
 
-        // Without this, restoring cards/ + contacts.db without avatars/ leaves stat-clean cards whose avatar
-        // URL 404s forever: no card drifts on its own, so nothing would ever regenerate the cache.
+        // A stat-clean card whose derived avatar cache is gone counts as drifted too: restoring cards/ +
+        // contacts.db without avatars/ would otherwise leave its avatar URL 404ing forever, since no card
+        // drifts on its own and nothing would ever regenerate the cache.
         const avatarFiles = new Set(await contacts.storage.list(PATHS.CONTACTS.AVATARS));
+        const diff = diffFileStats(present, rowByKey, (row) => {
+            const avatarName = row.data?.avatar ? avatarNameOf(row.data.avatar) : undefined;
+            return !!avatarName && !avatarFiles.has(avatarName);
+        });
 
-        const reindex: { uri: string; existing?: (typeof rows)[number] }[] = [];
-        for (const [key, info] of present) {
-            const existing = rowByKey.get(key);
-            const avatarName = existing?.data?.avatar ? avatarNameOf(existing.data.avatar) : undefined;
-            const cacheMissing = !!avatarName && !avatarFiles.has(avatarName);
-            if (!existing || info.mtime !== existing.mtime || info.size !== existing.size || cacheMissing) {
-                reindex.push({ uri: info.uri, existing });
-            }
-        }
-        const vanished = rows.filter((r) => !present.has(r.uriKey) && !skipped.has(r.uriKey));
+        // Re-read in the listing's sorted order: this pass's tie-breaks — the self-link winner, a uid
+        // collision — take the earliest uri.
+        const reindex = [
+            ...diff.added.map((file) => ({ uri: file.uri, existing: undefined })),
+            ...diff.changed.map(({ file, row }) => ({ uri: file.uri, existing: row })),
+        ].sort((a, b) => (a.uri < b.uri ? -1 : a.uri > b.uri ? 1 : 0));
+        // A stat that failed is not a removal, so a skipped key keeps its row.
+        const vanished = diff.vanished.filter((r) => !skipped.has(r.uriKey));
 
         // Unindexable bytes count too: the file occupies storage (and quota) whether or not the index can
         // make sense of it, and rebuildIndex counts the same way.
@@ -178,7 +167,7 @@ export async function reconcileIndex(contacts: Contacts): Promise<void> {
         // same-UID card must lose to it rather than trip the UNIQUE index inside the transaction.
         const vanishedIds = new Set(vanished.map((r) => r.id));
         const uidOwner = new Map(rows.filter((r) => !vanishedIds.has(r.id)).map((r) => [r.uid, r.id] as const));
-        const prepared = dedupeByUid(candidates, uidOwner);
+        const prepared = dedupeCardsByUid(candidates, uidOwner);
 
         // Nothing survived to commit and nothing vanished. A card that can never be indexed drifts into this
         // set on every restart, so running the transaction here would bump the ctag for a book that never
@@ -247,7 +236,7 @@ export async function reconcileIndex(contacts: Contacts): Promise<void> {
 // tombstones, and rotate book.syncGen so old sync tokens die and clients full-resync (RFC 6578 recovery).
 // Runs when init's integrity check fails, and catches the same-stat replacement a reconcile cannot.
 export async function rebuildIndex(contacts: Contacts): Promise<void> {
-    return contacts.writeLock.run(async () => {
+    return contacts.gate.run(async () => {
         // id/uid preserve identity, eigenId ranks the self-link claim; `data` is re-derived from the file.
         const existingByKey = new Map(
             contacts.db
@@ -274,7 +263,7 @@ export async function rebuildIndex(contacts: Contacts): Promise<void> {
         }));
         const candidates = await buildCandidates(contacts, entries);
         // The whole index is cleared below, so two files sharing a UID resolve purely first-by-uri.
-        const prepared = dedupeByUid(candidates, new Map());
+        const prepared = dedupeCardsByUid(candidates, new Map());
 
         // Phase 2: the highest-ranked card claims the single self-link; only an email-only winner is rewritten.
         const winner = pickSelfWinner(prepared);

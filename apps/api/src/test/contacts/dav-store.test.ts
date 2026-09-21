@@ -2,9 +2,10 @@ import { afterAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { readdirSync, rmSync } from 'node:fs';
 import { eq } from 'drizzle-orm';
-import { CARD_MAX_BYTES, computeCardEtag, uriKeyOf } from '../../lib/contacts/card-store';
+import { CARD_MAX_BYTES } from '../../lib/contacts/card-store';
 import type { Contacts } from '../../lib/contacts/contacts';
 import * as contactsSchema from '../../lib/contacts/schema';
+import { computeResourceEtag, uriKeyOf } from '../../lib/core';
 import { CONTACTS_TEST_ROOT, cardsDirOf, makeContacts } from '../contacts-test-helpers';
 
 afterAll(() => {
@@ -52,7 +53,7 @@ describe('putCard — create and read', () => {
 
         const res = await put(contacts, uri, body);
 
-        expect(res).toEqual({ ok: true, etag: computeCardEtag(new TextEncoder().encode(body)), created: true });
+        expect(res).toEqual({ ok: true, etag: computeResourceEtag(new TextEncoder().encode(body)), created: true });
     });
 
     test('getCard returns a 3.0 body byte-identically, folded X-props and all', async () => {
@@ -166,7 +167,7 @@ describe('putCard — 4.0 transcode', () => {
         expect(stored).toContain('VERSION:3.0');
         expect(stored).toContain('PHOTO;ENCODING=b');
         // The etag hashes the stored 3.0 bytes, not the 4.0 input, so an honest client re-converges on GET.
-        expect((res as { etag: string }).etag).toBe(computeCardEtag((await contacts.getCard(uri))!.bytes));
+        expect((res as { etag: string }).etag).toBe(computeResourceEtag((await contacts.getCard(uri))!.bytes));
     });
 });
 
@@ -449,7 +450,7 @@ describe('putCard — self-link', () => {
         expect(after.id).toBe(self.id);
         const stored = new TextDecoder().decode((await contacts.getCard(self.uri))!.bytes);
         expect(stored).toContain(`X-EIGEN-ID:${user.id}`);
-        expect((res as { etag: string }).etag).toBe(computeCardEtag(new TextEncoder().encode(stored)));
+        expect((res as { etag: string }).etag).toBe(computeResourceEtag(new TextEncoder().encode(stored)));
         expect((await contacts.getMe())?.id).toBe(self.id);
     });
 
