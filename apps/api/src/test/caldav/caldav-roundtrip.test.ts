@@ -1360,9 +1360,16 @@ describe('CalDAV round-trip fidelity', () => {
         });
 
         test('a non-IANA TZID degrades to the floating UTC mapping', () => {
-            const parsed = parseIcs(floatingVcal('DTSTART;TZID=W. Europe Standard Time:20260211T230000')).events[0];
+            const parsed = parseIcs(floatingVcal('DTSTART;TZID=Customer Standard Time:20260211T230000')).events[0];
             expect(parsed.startTime.toISOString()).toBe('2026-02-11T23:00:00.000Z');
             expect(parsed.timezone).toBeNull();
+        });
+
+        test('a Windows TZID is interpreted in the IANA zone CLDR names for it', () => {
+            const parsed = parseIcs(floatingVcal('DTSTART;TZID=W. Europe Standard Time:20260211T230000')).events[0];
+            // 23:00 CET = 22:00Z, the clock the author named
+            expect(parsed.startTime.toISOString()).toBe('2026-02-11T22:00:00.000Z');
+            expect(parsed.timezone).toBe('Europe/Berlin');
         });
 
         test('floating EXDATE and RECURRENCE-ID key consistently with floating expansion', () => {
