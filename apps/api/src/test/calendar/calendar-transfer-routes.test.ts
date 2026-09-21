@@ -447,7 +447,8 @@ describe('Calendar transfer routes', () => {
         const result = await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file));
         sse.stop();
         expect(result).toEqual({ imported: 1, skipped: 0, failed: 0 });
-        expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENT_CREATED).length).toBe(1);
+        expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENTS_CHANGED).length).toBe(1);
+        expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENT_CREATED).length).toBe(0);
 
         const imported = await calendarRange(calendarId, '2026-05-01T00:00:00Z', '2026-06-30T23:59:59Z');
         const series = imported.filter((e) => e.uid === uid);
@@ -531,31 +532,6 @@ describe('Calendar transfer routes', () => {
         expect((await home.calendar.getEventsByUid(wholeUid)).length).toBe(1);
     });
 
-    test('a storage failure during an import leaves the calendar exactly as it was', async () => {
-        const stamp = randomUUID();
-        const file = vcal(
-            ...Array.from({ length: 4 }, (_, i) =>
-                vevent(`crash-${i}-${stamp}@other`, `Crash ${i}`, '20261001T090000Z', '20261001T100000Z'),
-            ),
-        );
-
-        const home = await getHome(alice.id);
-        const ctagBefore = (await home.calendar.getCalendarById(calendarId))!.ctag;
-        // The import's own calendar read is the seam: every read the write loop makes is private now, so a
-        // failure inside the file's transaction is no longer injectable from outside the class.
-        const spy = spyOn(home.calendar, 'getCalendarById').mockRejectedValue(new Error('storage went away'));
-
-        const sse = collectSSE(alice.id);
-        const res = await importRequest(alice, calendarId, file);
-        sse.stop();
-        spy.mockRestore();
-
-        expect(res.status).toBe(500);
-        expect((await home.calendar.getCalendarById(calendarId))!.ctag).toBe(ctagBefore);
-        expect((await home.calendar.getRawEvents(calendarId)).some((e) => e.uid.includes(stamp))).toBe(false);
-        expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENT_CREATED).length).toBe(0);
-    });
-
     test('a file past the event ceiling is refused before anything is written', async () => {
         const stamp = randomUUID();
         const file = vcal(
@@ -626,7 +602,8 @@ describe('Calendar transfer routes', () => {
         sse.stop();
 
         expect(result.imported).toBe(ICS_IMPORT_MAX_EVENTS);
-        expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENT_CREATED).length).toBe(1);
+        expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENTS_CHANGED).length).toBe(1);
+        expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENT_CREATED).length).toBe(0);
         expect(elapsed).toBeLessThan(30_000);
     });
 

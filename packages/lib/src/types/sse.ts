@@ -41,6 +41,7 @@ export const SSEventType = {
     CALENDAR_INVITE_UPDATED: 'calendar:invite-updated',
     CALENDAR_INVITE_CANCELLED: 'calendar:invite-cancelled',
     CALENDAR_INVITE_RSVP: 'calendar:invite-rsvp',
+    CALENDAR_EVENTS_CHANGED: 'calendar:events-changed',
     // Space events
     SPACE_SETTINGS_UPDATED: 'space:settings-updated',
     // Team events

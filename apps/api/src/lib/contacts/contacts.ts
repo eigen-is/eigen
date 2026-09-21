@@ -10,6 +10,7 @@ import { getServerSettings } from '../config/server-settings';
 import type { ManagedDatabase, PutResourceResult } from '../core';
 import {
     ApiError,
+    BroadcastBatch,
     computeResourceEtag,
     DEFAULT_LABELS,
     LocalFilesystem,
@@ -121,8 +122,7 @@ export class Contacts {
     private meteredIngest = false;
 
     // Bulk writes in flight; while any runs, per-card events are held and the last one out closes them.
-    private batchDepth = 0;
-    private heldContactEvents = false;
+    private readonly batch = new BroadcastBatch(() => this.home.broadcast(buildContactsChangedEvent()));
 
     constructor(home: Home) {
         this.home = home;
@@ -131,28 +131,14 @@ export class Contacts {
 
     // internal — used by contacts/*.ts
     emitContact(type: Parameters<typeof buildContactEvent>[0], contactId: string): void {
-        if (this.batchDepth > 0) {
-            this.heldContactEvents = true;
-            return;
-        }
+        if (this.batch.hold()) return;
         this.home.broadcast(buildContactEvent(type, contactId));
     }
 
     // internal — used by contacts/*.ts
-    // A bulk write (a whole-file import) broadcasts one list-level event for every card event it held back,
-    // even when `fn` throws: the cards that landed before the throw still have to reach the tabs. A card
-    // written by something else in the window loses nothing — its invalidation is owner-wide too.
+    // A card written by something else inside the window loses nothing: its invalidation is owner-wide too.
     async withBatchedEvents<T>(fn: () => Promise<T>): Promise<T> {
-        this.batchDepth++;
-        try {
-            return await fn();
-        } finally {
-            this.batchDepth--;
-            if (this.batchDepth === 0 && this.heldContactEvents) {
-                this.heldContactEvents = false;
-                this.home.broadcast(buildContactsChangedEvent());
-            }
-        }
+        return this.batch.run(fn);
     }
 
     // internal — used by contacts/*.ts

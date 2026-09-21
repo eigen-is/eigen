@@ -165,6 +165,36 @@ export function dedupeByUid<T>(
     return kept;
 }
 
+// A bulk write (a whole-file import, a device sync) broadcasts ONE list-level event for the per-resource
+// events it held back, instead of one per resource — a thousand cards were a thousand broadcasts. The flush
+// runs even when the body throws: what landed before it still has to reach the tabs.
+export class BroadcastBatch {
+    private depth = 0;
+    private held = false;
+
+    constructor(private readonly flush: () => void) {}
+
+    // True when the caller's event was held for the batch, false when it is the caller's to broadcast now.
+    hold(): boolean {
+        if (this.depth === 0) return false;
+        this.held = true;
+        return true;
+    }
+
+    async run<T>(fn: () => Promise<T>): Promise<T> {
+        this.depth++;
+        try {
+            return await fn();
+        } finally {
+            this.depth--;
+            if (this.depth === 0 && this.held) {
+                this.held = false;
+                this.flush();
+            }
+        }
+    }
+}
+
 // One slot, so a file write and its index commit stay a pair; a torn write's key stays dirty until a drain settles it.
 export class WriteGate {
     private readonly lock = new Semaphore(1);

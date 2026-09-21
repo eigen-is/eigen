@@ -18,17 +18,13 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { and, count, eq, gte, isNull, lte, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
-import ICAL from 'ical.js';
+import type ICAL from 'ical.js';
 import { RRule } from 'rrule';
 import {
     ApiError,
+    BroadcastBatch,
     computeResourceEtag,
-    decodeUtf8Strict,
-    ICS_IMPORT_MAX_EVENTS,
-    ICS_IMPORT_MAX_REMINDERS,
     type LocalFilesystem,
-    NOT_A_CALENDAR_FILE,
-    NOT_UTF8_FILE,
     PATHS,
     type PutResourceResult,
     readResourceFile,
@@ -38,23 +34,14 @@ import {
 import type { DeleteResourceResult, ManagedDatabase } from '../core/';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
-import {
-    addExclusion,
-    buildResource,
-    parseIcs,
-    parseResource,
-    patchEvent,
-    putOverride,
-    removeExclusion,
-} from '../ical';
-import type { IcsParseResult, ParsedEvent } from '../ical/ical-parse';
+import { addExclusion, buildResource, parseResource, patchEvent, putOverride, removeExclusion } from '../ical';
 import { clampRangeEnd, isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../ical/recurrence-limits';
-import { normalizeTimezone } from '../ical/timezone';
 import { computeOccurrenceTimes, storedRecurrenceKey, utcToLocal } from '../ical/wall-clock';
 import { actorDisplayName, type User } from '../user';
 import type { ResourceCommit, ResourceRow } from './calendar-store';
 import * as store from './calendar-store';
 import { CALENDAR_DB_CONFIG } from './db-config';
+import { eventForFile, validateEventInput } from './event-input';
 import { composeRsvpReply } from './imip';
 import { propagateCancellation, propagateDecline, propagateInvitation, propagateRsvp } from './invite-propagation';
 import { dbCalendarToCalendarItem, dbEventToCalendarEvent, dbRowToSharedCalendar } from './mappers';
@@ -72,7 +59,8 @@ import {
 } from './resource-store';
 import * as schema from './schema';
 import { notifySharedCalendarUsers, propagateCalendarShare } from './share-propagation';
-import { buildCalendarEvent } from './sse-events';
+import { buildCalendarEvent, buildEventsChangedEvent } from './sse-events';
+import { importEvents } from './transfer';
 
 import type {
     CreateEventArgs,
@@ -92,84 +80,6 @@ type Tx = Parameters<Parameters<BunSQLiteDatabase<typeof schema>['transaction']>
 // An event row and the file it was projected from — what every read of a stored event answers with.
 type JoinedEvent = { events: typeof schema.events.$inferSelect; resources: typeof schema.resources.$inferSelect };
 
-// What a create refuses before it writes anything, so a refused event leaves the collection untouched.
-function validateEventInput(input: CreateEventArgs): void {
-    const rruleStr = input.rrule ?? null;
-    if (rruleStr) {
-        try {
-            RRule.parseString(rruleStr);
-        } catch {
-            throw new ApiError(400, 'Invalid RRULE');
-        }
-        // Reject sub-daily recurrence at the write boundary (see recurrence-limits): it is never a
-        // real calendar event and lets a single range query block the event loop for everyone.
-        if (isSubDailyRrule(rruleStr)) throw new ApiError(400, 'Sub-daily recurrence is not supported');
-        // Same DoS class: a recurring dtstart outside the sane range makes rrule iterate
-        // dtstart→window at any frequency (see recurrence-limits).
-        if (isOutOfRangeRecurrenceStart(input.startTime)) {
-            throw new ApiError(400, 'Recurring event start time is out of range');
-        }
-    }
-    // Reject reversed intervals. REST and CalDAV PUT funnel through here, so both are covered; both are
-    // interactive protocols where a 400 is actionable. Inbound iMIP bypasses createEvent/updateEvent and
-    // clamps instead (imip.ts) — dropping an emailed invite is worse than a zero-length event. Zero
-    // duration stays legal — RFC 5545 §3.6.1 permits DTEND == DTSTART, and the importers rely on it.
-    if (input.endTime < input.startTime) throw new ApiError(400, 'Event end time cannot be before start time');
-}
-
-// A UID the home can key an event by. The file's own UID is kept so a re-import recognizes it, and it
-// travels into etags and sync deltas — so an unprintable or endless one is refused rather than stored.
-const MAX_UID_LENGTH = 255;
-function isImportableUid(uid: string): boolean {
-    if (!uid || uid.length > MAX_UID_LENGTH) return false;
-    for (let index = 0; index < uid.length; index++) {
-        const code = uid.charCodeAt(index);
-        if (code < 0x20 || code === 0x7f) return false;
-    }
-    return true;
-}
-
-// An imported event as this Home's own: no organizer, no attendees, a handful of reminders.
-function importable(event: ParsedEvent): ParsedEvent {
-    const reminders = event.data?.reminders?.slice(0, ICS_IMPORT_MAX_REMINDERS);
-    return { ...event, data: reminders?.length ? { reminders } : null };
-}
-
-// The component-level shape of a row that is about to be written: buildResource reads these fields, and
-// the file it produces is what the index re-derives its rows from.
-function eventForFile(args: {
-    id: string;
-    calendarId: string;
-    uid: string;
-    input: CreateEventArgs;
-    now: Date;
-}): CalendarEvent {
-    const { id, calendarId, uid, input, now } = args;
-    return {
-        id,
-        calendarId,
-        uid,
-        uri: '',
-        title: input.title.trim(),
-        description: input.description ?? null,
-        location: input.location ?? null,
-        startTime: input.startTime,
-        endTime: input.endTime,
-        allDay: input.allDay,
-        rrule: input.rrule ?? null,
-        timezone: normalizeTimezone(input.timezone),
-        parentEventId: input.parentEventId ?? null,
-        recurrenceDate: input.recurrenceDate ?? null,
-        status: input.status ?? 'confirmed',
-        sequence: input.sequence ?? 0,
-        etag: '',
-        data: input.data ?? null,
-        createByUserId: input.createByUserId ?? null,
-        createdAt: now,
-        updatedAt: now,
-    };
-}
-
 export class Calendar {
     private managedDb!: ManagedDatabase<typeof schema>;
     db!: BunSQLiteDatabase<typeof schema>; // internal — used by calendar/*.ts
@@ -181,6 +91,9 @@ export class Calendar {
 
     // Bytes on disk under `calendars/`, unindexable files included; size() answers from here and never drains.
     eventsBytes = 0; // internal — used by calendar/*.ts
+
+    // Bulk writes in flight; while any runs, per-resource events are held and the last one out closes them.
+    private readonly batch = new BroadcastBatch(() => this.home.broadcast(buildEventsChangedEvent(this.home.user.id)));
 
     // Only the reconcile/drain machinery bumps this; the mutation paths parse for their own merges.
     private parses = 0;
@@ -777,10 +690,29 @@ export class Calendar {
     // --- Events (writes) ---
 
     private announce(calendarId: string, type: Parameters<typeof buildCalendarEvent>[0]): void {
+        if (this.batch.hold()) return;
         const sseEvent = buildCalendarEvent(type, this.home.user.id);
         this.home.broadcast(sseEvent);
         const cal = this.calendarById(calendarId);
         if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {});
+    }
+
+    // A bulk write (a whole-file import) tells the tabs once instead of per resource.
+    // internal — used by calendar/*.ts
+    withBatchedEvents<T>(fn: () => Promise<T>): Promise<T> {
+        return this.batch.run(fn);
+    }
+
+    // The UID rule is Home-wide here, where the index only keeps it unique per calendar: a re-import of a
+    // series already filed under another calendar is a re-import, not a second copy.
+    // internal — used by calendar/*.ts
+    async holdsUid(uid: string): Promise<boolean> {
+        await this.gate.ensureDrained();
+        return !!this.db
+            .select({ uid: schema.resources.uid })
+            .from(schema.resources)
+            .where(eq(schema.resources.uid, uid))
+            .get();
     }
 
     // The stored component of a resource, or null when the file is gone under a row that still names it.
@@ -1085,136 +1017,9 @@ export class Calendar {
         return this.eventById(id)!;
     }
 
-    // A whole `.ics` into one calendar of this Home, bytes in, every event landing as this user's own
-    // (docs/CALENDAR.md § Importing an .ics). One file per series, so a crash mid-import is retryable:
-    // the series already written are skipped by UID.
+    // A whole `.ics` into one calendar of this Home (docs/CALENDAR.md § Importing an .ics).
     public async importEvents(calendarId: string, bytes: Uint8Array): Promise<ImportCountsResult> {
-        const cal = this.calendarById(calendarId);
-        if (!cal) throw new ApiError(404, 'Calendar not found');
-
-        // iCalendar is UTF-8, so another encoding is its own answer rather than "not a calendar" — the
-        // same pair a vCard import gives (contacts/transfer.ts).
-        const text = decodeUtf8Strict(bytes);
-        if (text === null) throw new ApiError(400, NOT_UTF8_FILE);
-
-        // Counted on the text before ical.js builds a component tree per VEVENT: the route runs with the
-        // idle timeout off on the thread that serves every app, and a file far past the ceiling answers
-        // this 413 either way. A folded line starts with a space, so a line that starts with the property
-        // name is a VEVENT of its own.
-        if ((text.match(/^BEGIN:VEVENT\r?$/gim)?.length ?? 0) > ICS_IMPORT_MAX_EVENTS) {
-            throw new ApiError(413, 'Too many events');
-        }
-
-        let parsed: IcsParseResult;
-        try {
-            parsed = parseIcs(text);
-        } catch (e) {
-            if (e instanceof ICAL.parse.ParserError) throw new ApiError(400, NOT_A_CALENDAR_FILE);
-            throw e;
-        }
-
-        // Every VEVENT is a row, overrides included: one master with 37 000 RECURRENCE-IDs is the same
-        // write volume as 37 000 masters.
-        if (parsed.events.length > ICS_IMPORT_MAX_EVENTS) throw new ApiError(413, 'Too many events');
-
-        // One occurrence is one exception row: a file naming the same RECURRENCE-ID twice keeps the last.
-        const masters: ParsedEvent[] = [];
-        const overridesByUid = new Map<string, Map<string, ParsedEvent>>();
-        for (const event of parsed.events) {
-            if (!event.recurrenceDate) {
-                masters.push(event);
-                continue;
-            }
-            const series = overridesByUid.get(event.uid);
-            if (series) series.set(event.recurrenceDate, event);
-            else overridesByUid.set(event.uid, new Map([[event.recurrenceDate, event]]));
-        }
-
-        // A VEVENT the parser could not read, and an override whose master the file does not hold — it
-        // has no series to attach to — are members the import cannot write, counted as the failures they
-        // are rather than dropped in silence.
-        const masterUids = new Set(masters.map((event) => event.uid));
-        let unwritable = parsed.skipped;
-        for (const [uid, overrides] of overridesByUid) {
-            if (!masterUids.has(uid)) unwritable += overrides.size;
-        }
-
-        const result: ImportCountsResult = { imported: 0, skipped: 0, failed: unwritable };
-        for (const parsedMaster of masters) {
-            const master = importable(parsedMaster);
-            if (!isImportableUid(master.uid)) {
-                result.failed++;
-                continue;
-            }
-            // A UID this calendar already holds skips like a re-import, which is what makes a partial
-            // import retryable.
-            if (this.uidHolder(calendarId, master.uid)) {
-                result.skipped++;
-                continue;
-            }
-            try {
-                await this.gate.run(async () => {
-                    const now = new Date();
-                    const masterId = randomUUID();
-                    const events = [
-                        eventForFile({
-                            id: masterId,
-                            calendarId,
-                            uid: master.uid,
-                            input: this.importArgs(master),
-                            now,
-                        }),
-                    ];
-                    for (const override of overridesByUid.get(master.uid)?.values() ?? []) {
-                        const args = this.importArgs(importable(override));
-                        events.push(
-                            eventForFile({
-                                id: randomUUID(),
-                                calendarId,
-                                uid: master.uid,
-                                // The master's zone when the override names none, or it serializes in Z
-                                // form and keys against a different wall-clock day (audit #24).
-                                input: {
-                                    ...args,
-                                    rrule: null,
-                                    timezone: args.timezone ?? master.timezone,
-                                    parentEventId: masterId,
-                                    recurrenceDate: override.recurrenceDate,
-                                },
-                                now,
-                            }),
-                        );
-                    }
-                    validateEventInput(this.importArgs(master));
-                    await store.writeResource(this, calendarId, `${randomUUID()}.ics`, buildResource(events), null);
-                });
-            } catch {
-                result.failed++;
-                continue;
-            }
-            result.imported++;
-        }
-
-        this.announce(calendarId, SSEventType.CALENDAR_EVENT_CREATED);
-        return result;
-    }
-
-    private importArgs(event: ParsedEvent): CreateEventArgs {
-        return {
-            title: event.title,
-            description: event.description,
-            location: event.location,
-            startTime: event.startTime,
-            endTime: event.endTime,
-            allDay: event.allDay,
-            rrule: event.rrule,
-            timezone: event.timezone,
-            status: event.status,
-            sequence: event.sequence,
-            data: event.data,
-            uid: event.uid,
-            createByUserId: this.home.user.id,
-        };
+        return importEvents(this, calendarId, bytes);
     }
 
     // --- Shared calendars ---

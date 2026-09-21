@@ -14,30 +14,13 @@ import {
 import { join } from 'node:path';
 import { Calendar } from '../../lib/calendar/calendar';
 import { calendarStorage } from '../../lib/calendar/resource-store';
-import { LocalFilesystem, PATHS } from '../../lib/core';
-import { CALENDAR_TEST_ROOT, calendarsDirOf, makeCalendar } from '../calendar-test-helpers';
+import { PATHS } from '../../lib/core';
+import { CALENDAR_TEST_ROOT, calendarsDirOf, DyingFilesystem, makeCalendar } from '../calendar-test-helpers';
 import { makeTestHome, type TestHome } from '../home-test-helpers';
 import { vcal } from '../ics-test-helpers';
 
 // The file store behind every calendar write: what lands on disk, what the index says about it, and what
 // each of them looks like after a crash. See docs/CALENDAR.md § Storage.
-
-// A filesystem that dies exactly where a process can: after the rename that made a write durable, and
-// after the unlink that made a delete durable — both before the index commit that settles the pair.
-class DyingFilesystem extends LocalFilesystem {
-    dieAfterWrite = false;
-    dieAfterUnlink = false;
-
-    override async writeAtomic(filePath: string, data: Buffer | Uint8Array | string): Promise<void> {
-        await super.writeAtomic(filePath, data);
-        if (this.dieAfterWrite) throw new Error('the process died after the rename');
-    }
-
-    override async unlinkDurable(filePath: string): Promise<void> {
-        await super.unlinkDurable(filePath);
-        if (this.dieAfterUnlink) throw new Error('the process died after the unlink');
-    }
-}
 
 // A home whose index transaction fails where a real one can: the Home-wide phase of the reconcile.
 class TombstoneFailingCalendar extends Calendar {
