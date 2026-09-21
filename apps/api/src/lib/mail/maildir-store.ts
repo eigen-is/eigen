@@ -229,10 +229,16 @@ export class MaildirStore implements MailStore {
 
     async append(mailbox: string, message: Buffer, opts?: { skipSync?: boolean; arrival?: boolean }): Promise<string> {
         const uniqueId = createUniqueMessageId();
-        // Recorded before the file lands: arriving is a property of the message, not of the sync that finds it.
+        // Recorded before the file lands: a watcher-driven sync can reach the file before this continues,
+        // and must find the flag. A delivery that never lands leaves none.
         this.deliveries.set(uniqueId, opts?.arrival ?? true);
-        // Lock covers only the delivery — the follow-up sync takes the lock itself.
-        await this.storeLock.run(() => this.deliverAtomic(message, mailbox, uniqueId));
+        try {
+            // Lock covers only the delivery — the follow-up sync takes the lock itself.
+            await this.storeLock.run(() => this.deliverAtomic(message, mailbox, uniqueId));
+        } catch (e) {
+            this.deliveries.delete(uniqueId);
+            throw e;
+        }
         if (!opts?.skipSync) await this.syncMailbox(mailbox);
         return uniqueId;
     }
@@ -345,9 +351,7 @@ export class MaildirStore implements MailStore {
 
         const dbRecords = this.db.getAllEmails(mailbox);
         const dbById = new Map(dbRecords.map((r) => [r.id, r]));
-        // A mailbox with no rows yet is being indexed for the first time — an old IMAP folder, or a home
-        // whose mail.db was lost — so a file this store did not just deliver was discovered, not delivered,
-        // and must not raise a new-mail notification.
+        // A mailbox with no rows yet is indexed for the first time: what it finds was discovered, not delivered.
         const indexed = dbRecords.length > 0;
 
         // New messages (on disk but not in DB): parse in chunks, then bulk-insert each chunk in
@@ -372,6 +376,7 @@ export class MaildirStore implements MailStore {
                     p.filename = fileName;
                     parsed.push(p);
                 } catch (e: unknown) {
+                    this.deliveries.delete(id);
                     if (!(e instanceof Error && 'code' in e && e.code === 'ENOENT'))
                         console.warn(`syncMailbox: failed to parse ${fileName}:`, e instanceof Error ? e.message : e);
                 }
@@ -452,6 +457,9 @@ export class MaildirStore implements MailStore {
     }
 
     async deleteDraftMeta(draftId: string): Promise<void> {
+        // Mirrors readDraftMeta: no sidecar can exist under an id Eigen did not mint, and the delete of a
+        // message carrying one runs after the row and the file are already gone.
+        if (!isSafePathSegment(draftId)) return;
         const metaPath = this.getDraftMetaPath(draftId);
         try {
             if (await this.storage.exists(metaPath)) {
