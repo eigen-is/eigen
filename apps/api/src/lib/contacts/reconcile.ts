@@ -100,7 +100,8 @@ async function buildCandidates(
 }
 
 // Stat-only reconcile: compare (mtime,size) to the index and re-read only what drifted, plus any row whose
-// derived avatar cache is gone. A fully clean pass parses nothing and bumps nothing. A same-size,
+// derived avatar cache is gone. A fully clean pass parses nothing and bumps nothing, and so does a pass whose
+// drifted files all hash back to what the index holds (the restore rule below). A same-size,
 // timestamp-preserving replacement is invisible here — that needs `rebuildIndex`.
 export async function reconcileIndex(contacts: Contacts): Promise<void> {
     return contacts.gate.run(async () => {
