@@ -773,14 +773,28 @@ describe('CalDAV round-trip fidelity', () => {
 
             expect((await putIcs(uri, ics('Quiet sync'))).status).toBe(201);
             expect((await putIcs(uri, ics('Quiet sync (moved)'))).status).toBe(204);
-            // A device sync mails nobody, so there is no mail to wait for: the stored move is the moment
-            // one would have been composed.
+
+            // A device sync mails nobody, so there is nothing of its own to wait for. The control is a web
+            // edit of the same event, made second: it mails the guest through the path a PUT must not take.
+            const occs = await getOccurrences('2026-05-01T00:00:00Z', '2026-06-01T00:00:00Z');
+            const occ = findOrFail(occs, (o) => o.uid === 'rt-organizer-silent@eigen');
+            const web = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${userId}/calendars/${calendarId}/events/${occ.id}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: 'Quiet sync (web)' }),
+                },
+            );
+            expect(web.status).toBe(200);
             await eventually(
-                async () => (await getIcs(uri)).includes('Quiet sync (moved)') || undefined,
-                'the second PUT to be stored',
+                async () =>
+                    spy.mock.calls.some((c) => c[0].subject === 'Updated invitation: Quiet sync (web)') || undefined,
+                "the web edit's update mail to the guest",
             );
 
-            expect(spy.mock.calls.map((c) => c[0].subject)).toEqual([]);
+            expect(spy.mock.calls.map((c) => c[0].subject)).toEqual(['Updated invitation: Quiet sync (web)']);
             spy.mockRestore();
         });
 
@@ -796,23 +810,21 @@ describe('CalDAV round-trip fidelity', () => {
                 { method: 'DELETE' },
             );
             expect(res.status).toBe(200);
-            // The decline would ride on the same call the delete answers: once the resource is a 404, it
-            // has either been composed or never will be.
-            const gone = await eventually(async () => {
-                const read = await app.handle(
-                    new Request(`http://localhost/dav/calendars/${userId}/${calendarId}/rt-own-organizer.ics`, {
-                        method: 'GET',
-                        headers: { Authorization: basicAuth(ctx.alice.user.email) },
-                    }),
-                );
-                return read.status === 404 ? read : undefined;
-            }, 'the deleted resource to be gone');
-            expect(gone.status).toBe(404);
-            // The organizer deleting cancels for the guests; a decline REPLY would mean the row was
-            // read as someone else's invitation.
-            const subjects = spy.mock.calls.map((c) => c[0].subject);
-            expect(subjects).toContain('Canceled: Design review (web)'); // pre-fix: 'Declined: …'
-            expect(subjects.some((s) => s.startsWith('Declined:'))).toBe(false);
+            const read = await app.handle(
+                new Request(`http://localhost/dav/calendars/${userId}/${calendarId}/rt-own-organizer.ics`, {
+                    method: 'GET',
+                    headers: { Authorization: basicAuth(ctx.alice.user.email) },
+                }),
+            );
+            expect(read.status).toBe(404);
+
+            // The organizer deleting cancels for the guests: that mail is the control this fan-out does owe,
+            // and a decline REPLY beside it would mean the row was read as someone else's invitation.
+            await eventually(
+                async () => spy.mock.calls.some((c) => c[0].subject === 'Canceled: Design review (web)') || undefined,
+                'the cancellation mail to the guests', // pre-fix: 'Declined: …' instead
+            );
+            expect(spy.mock.calls.map((c) => c[0].subject).some((s) => s.startsWith('Declined:'))).toBe(false);
             spy.mockRestore();
         });
 
