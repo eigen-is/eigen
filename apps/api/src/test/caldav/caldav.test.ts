@@ -1910,12 +1910,26 @@ describe('CalDAV', () => {
             expect(await res.text()).not.toContain('<D:response>');
         });
 
-        test('a filter the server cannot evaluate is refused, never answered with a superset', async () => {
-            const res = await query(
-                '<C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:prop-filter name="SUMMARY"><C:text-match>Present</C:text-match></C:prop-filter></C:comp-filter></C:comp-filter>',
+        test('a VEVENT filter that says the component is not defined matches nothing', async () => {
+            expect((await putIcs('caldav-not-defined.ics', ics('caldav-not-defined@eigen', 'Present'))).status).toBe(
+                201,
             );
-            expect(res.status).toBe(403);
-            expect(await res.text()).toContain('supported-filter');
+            const res = await query(
+                '<C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:is-not-defined/></C:comp-filter></C:comp-filter>',
+            );
+            expect(res.status).toBe(207);
+            expect(await res.text()).not.toContain('<D:response>');
+        });
+
+        test('a lookup by UID is answered, the text-match it carries ignored rather than refused', async () => {
+            // python-caldav's event_by_uid, and Evolution's every query: RFC 4791 § 9.7 makes prop-filter
+            // and text-match part of the mandatory grammar, so a 403 takes the whole collection with it.
+            expect((await putIcs('caldav-by-uid.ics', ics('caldav-by-uid@eigen', 'By UID'))).status).toBe(201);
+            const res = await query(
+                '<C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:prop-filter name="UID"><C:text-match>caldav-by-uid@eigen</C:text-match></C:prop-filter></C:comp-filter></C:comp-filter>',
+            );
+            expect(res.status).toBe(207);
+            expect(await res.text()).toContain('By UID');
         });
 
         test('a multiget href folds to the stored resource the way a GET does', async () => {
