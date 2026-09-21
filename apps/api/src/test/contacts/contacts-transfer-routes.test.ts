@@ -142,6 +142,16 @@ describe('Contacts transfer routes', () => {
         expect(disposition.length).toBeLessThan(300);
     });
 
+    // The clamp cuts at a UTF-16 unit, so an FN whose 200th unit is half an emoji reaches the header as a
+    // lone surrogate — which is not a string a percent-encoder can spell.
+    test('an emoji at the filename clamp still exports', async () => {
+        const id = await createContact(`${'a'.repeat(199)}😀tail`, 'Long', 'emoji@vcard-routes.example');
+
+        const res = await exportRequest(alice, alice.id, { ids: [id] });
+        expect(res.status).toBe(200);
+        expect(res.headers.get('content-disposition')).toContain('.vcf');
+    });
+
     test('import-from-drive on own drive imports', async () => {
         const text =
             card('Ken Thompson', 'ken@vcard-routes.example') + card('Dennis Ritchie', 'dennis@vcard-routes.example');

@@ -26,7 +26,6 @@ import {
     pullEventsInRange,
     updateEventAt,
 } from '../lib/home/home-relay';
-import { parseResource } from '../lib/ical';
 import { storedRecurrenceKey } from '../lib/ical/wall-clock';
 import { getMemberships, type User } from '../lib/user';
 import { betterAuth } from './auth';
@@ -392,12 +391,9 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             const text = await cal.exportEvents(body.calendarId, body.ids);
             // A one-event export is named after the event itself, a whole calendar after the calendar.
             // contentDisposition sanitizes whatever comes back before it reaches the header; the clamp
-            // keeps one absurd SUMMARY from filling it.
-            let name = cal.calendarRow(body.calendarId)?.name ?? '';
-            if (body.ids?.length === 1) {
-                const vevent = parseResource(text).getFirstSubcomponent('vevent');
-                name = String(vevent?.getFirstPropertyValue('summary') ?? '');
-            }
+            // keeps one absurd title from filling it.
+            const only = body.ids?.length === 1 ? await cal.getEventById(body.ids[0]) : null;
+            const name = only ? only.title : (cal.calendarRow(body.calendarId)?.name ?? '');
             set.headers['Content-Type'] = ICS_CONTENT_TYPE;
             set.headers['Content-Disposition'] = contentDisposition(
                 'attachment',

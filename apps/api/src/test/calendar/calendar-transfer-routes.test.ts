@@ -1357,8 +1357,8 @@ describe('Calendar transfer routes', () => {
 
             const res = await exportRequest(alice, alice.id, exportCalendarId, [override.id]);
             expect(res.status).toBe(200);
-            // The name comes from the series the id named, not from a raw string in the header.
-            expect(res.headers.get('Content-Disposition')).toBe('attachment; filename="Series.ics"');
+            // The name comes from the row the id named, not from a re-parse of the file being served.
+            expect(res.headers.get('Content-Disposition')).toBe('attachment; filename="Series moved.ics"');
             const text = await res.text();
             expect(text).toContain('SUMMARY:Series moved');
             expect(text).toContain('RRULE:FREQ=DAILY;COUNT=3');
@@ -1368,6 +1368,21 @@ describe('Calendar transfer routes', () => {
         test('an unknown event id is 404 and an unknown calendar is 404', async () => {
             expect((await exportRequest(alice, alice.id, exportCalendarId, [randomUUID()])).status).toBe(404);
             expect((await exportRequest(alice, alice.id, randomUUID())).status).toBe(404);
+        });
+
+        // The clamp cuts at a UTF-16 unit, so a title whose 200th unit is half an emoji reaches the header
+        // as a lone surrogate — which is not a string a percent-encoder can spell.
+        test('an emoji at the filename clamp still exports', async () => {
+            const uid = 'export-emoji@client';
+            const summary = `${'a'.repeat(199)}😀tail`;
+            const file = vcal(vevent(uid, summary, '20270701T090000Z', '20270701T093000Z'));
+            expect((await putIcs(exportCalendarId, 'export-emoji.ics', file)).status).toBe(201);
+
+            const home = await getHome(alice.id);
+            const row = findOrFail(await home.calendar.getEventsByUid(uid), (e) => e.recurrenceDate === null);
+            const res = await exportRequest(alice, alice.id, exportCalendarId, [row.id]);
+            expect(res.status).toBe(200);
+            expect(res.headers.get('Content-Disposition')).toContain('.ics');
         });
 
         test("bob cannot export alice's calendar, and a guest cannot export at all", async () => {

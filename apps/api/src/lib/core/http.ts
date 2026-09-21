@@ -137,12 +137,14 @@ export async function rangeResponse(
 }
 
 export function contentDisposition(type: 'attachment' | 'inline', fileName: string): string {
-    const ascii = fileName.replace(/[^\x20-\x7E]/g, '_');
-    const encoded = encodeURIComponent(fileName);
-    if (ascii === fileName) {
+    // A caller clamping a name by length cuts between a surrogate pair, and a lone surrogate is a string
+    // no percent-encoder can spell: this header is built from user text, so it never throws on one.
+    const name = fileName.toWellFormed();
+    const ascii = name.replace(/[^\x20-\x7E]/g, '_');
+    if (ascii === name) {
         return `${type}; filename="${ascii.replace(/["\\]/g, '_')}"`;
     }
-    return `${type}; filename="${ascii.replace(/["\\]/g, '_')}"; filename*=UTF-8''${encoded}`;
+    return `${type}; filename="${ascii.replace(/["\\]/g, '_')}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 }
 
 // An uploaded HTML/SVG/XML served INLINE from the API's own origin could run script with the viewer's
