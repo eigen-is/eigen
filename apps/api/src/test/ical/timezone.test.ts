@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { normalizeTimezone } from '../../lib/calendar/timezone';
+import { normalizeTimezone } from '../../lib/ical/timezone';
 
 // Every stored timezone, every parsed TZID and every serialized VEVENT passes through here, and one
 // calendar file names the same handful of zones on every event it holds. The TZIDs are a stranger's

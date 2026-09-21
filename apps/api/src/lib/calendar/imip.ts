@@ -8,9 +8,10 @@ import { EMAIL_MUTED, EMAIL_TEXT, renderEigenEmail } from '../core/mail-template
 import type { OutboundICalEvent, OutboundMail } from '../core/mailer';
 import type { Home } from '../home';
 import { parseIcs, serializeEventForImip } from '../ical';
+import { normalizeTimezone } from '../ical/timezone';
+import { computeOccurrenceTimes } from '../ical/wall-clock';
 import { verifyImipSender } from '../mail/imip-auth';
-import { computeOccurrenceTimes } from './recurrence';
-import { normalizeTimezone } from './timezone';
+
 import type { ReceiveInvitationPayload } from './types';
 
 type Organizer = NonNullable<EventData['organizer']>;

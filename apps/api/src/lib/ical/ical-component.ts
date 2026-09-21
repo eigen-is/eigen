@@ -7,8 +7,6 @@ import { randomUUID } from 'node:crypto';
 import { stripControlChars, stripLineBreaks } from '@workspace/lib/content-line';
 import type { Attendee, CalendarEvent, ImipMethod, Reminder, UpdateEventInput } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
-import { computeOccurrenceTimes, localToUtc, storedRecurrenceKey, utcToLocal } from '../calendar/recurrence';
-import { normalizeTimezone } from '../calendar/timezone';
 import {
     calAddress,
     EIGEN,
@@ -24,7 +22,9 @@ import {
     seriesTimezones,
     uidOf,
 } from './ical-parse';
+import { normalizeTimezone } from './timezone';
 import { buildVTimezone } from './vtimezone';
+import { computeOccurrenceTimes, localToUtc, storedRecurrenceKey, utcToLocal } from './wall-clock';
 
 const PRODID = '-//Eigen//CalDAV//EN';
 

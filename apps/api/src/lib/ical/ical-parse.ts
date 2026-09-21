@@ -6,9 +6,9 @@
 import type { Attendee, EventData, Reminder } from '@workspace/lib/types/calendar';
 import { IMIP_METHODS, type ImipMethod } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
-import { localToUtc, storedRecurrenceKey, utcToLocal } from '../calendar/recurrence';
-import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../calendar/recurrence-limits';
-import { normalizeTimezone } from '../calendar/timezone';
+import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from './recurrence-limits';
+import { normalizeTimezone } from './timezone';
+import { localToUtc, storedRecurrenceKey, utcToLocal } from './wall-clock';
 
 // Every line Eigen owns inside a VEVENT. One source of truth, because a reader, the builder, the
 // re-stamp and the strip all have to spell them the same way. Lowercase: ical.js lowercases names.

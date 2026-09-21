@@ -11,7 +11,6 @@ import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { checkCalendarAccess, resolveCalendar, syncTeamCalendars } from '../lib/calendar/get-calendar';
-import { storedRecurrenceKey } from '../lib/calendar/recurrence';
 import { ApiError, NOT_A_CALENDAR_FILE } from '../lib/core';
 import { requireNonGuest, requireSelf } from '../lib/core/access';
 import { readBoundedBodyBytes } from '../lib/core/http';
@@ -26,6 +25,7 @@ import {
     pullEventsInRange,
     updateEventAt,
 } from '../lib/home/home-relay';
+import { storedRecurrenceKey } from '../lib/ical/wall-clock';
 import { getMemberships } from '../lib/user';
 import { betterAuth } from './auth';
 import { importFromDriveSchema } from './shared-schemas';
