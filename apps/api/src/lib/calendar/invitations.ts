@@ -434,7 +434,8 @@ async function decideInboundRequest(
         startTime: parsed.startTime,
     });
     const stored = calendar.joinedEvents().where(eq(schema.events.uid, parsed.uid)).all().map(toEvent);
-    const linked = stored.find((e) => e.data?.organizer && e.data?.organizerEventId);
+    // The master alone, as findLinkedEvent does: an exception inherits the link and would answer for the series.
+    const linked = stored.find((e) => !e.parentEventId && e.data?.organizer && e.data?.organizerEventId);
 
     if (linked) {
         // An update binds to the STORED organizer, so a co-attendee cannot hijack the invitation.

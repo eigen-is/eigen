@@ -249,6 +249,60 @@ describe('relayed invitation', () => {
         expect(ics).not.toContain('DTEND');
     });
 
+    // A file may list its override before its master, so the linked lookup takes the master or a series
+    // update would find an exception and read as "an occurrence copy the series now replaces".
+    test('a series REQUEST updates the linked series whose file lists its override first', async () => {
+        const harness = await makeCalendar();
+        const id = (await harness.instance.getCalendars())[0].id;
+        const link = [`X-EIGEN-ORGANIZER-EVENT:${UID}`, `X-EIGEN-ORGANIZER-USER:external_${ORG}`];
+        const planted = `${vcal(
+            [
+                'BEGIN:VEVENT',
+                `UID:${UID}`,
+                'SUMMARY:Moved occurrence',
+                'RECURRENCE-ID:20260502T090000Z',
+                'DTSTART:20260502T110000Z',
+                'DTEND:20260502T120000Z',
+                'SEQUENCE:2',
+                `ORGANIZER;CN=Ext Org:mailto:${ORG}`,
+                ...link,
+                'X-EIGEN-EVENT-ID:11111111-1111-4111-8111-111111111111',
+                'DTSTAMP:20260101T000000Z',
+                'END:VEVENT',
+            ],
+            [
+                'BEGIN:VEVENT',
+                `UID:${UID}`,
+                'SUMMARY:The series',
+                'DTSTART:20260501T090000Z',
+                'DTEND:20260501T100000Z',
+                'RRULE:FREQ=DAILY;COUNT=5',
+                'SEQUENCE:2',
+                `ORGANIZER;CN=Ext Org:mailto:${ORG}`,
+                ...link,
+                'X-EIGEN-EVENT-ID:22222222-2222-4222-8222-222222222222',
+                'DTSTAMP:20260101T000000Z',
+                'END:VEVENT',
+            ],
+        )}\r\n`;
+        mkdirSync(join(calendarsDirOf(harness.dir), id), { recursive: true });
+        writeFileSync(join(calendarsDirOf(harness.dir), id, 'linked.ics'), planted);
+
+        const restarted = await harness.reopen();
+        try {
+            const series = request(['RRULE:FREQ=DAILY;COUNT=5'])
+                .replace('SEQUENCE:2', 'SEQUENCE:3')
+                .replace('SUMMARY:Quarterly review', 'SUMMARY:Renamed series');
+            await restarted.instance.receiveImipRequest(parsedOf(series), ORG);
+
+            const rows = await restarted.instance.getEventsByUid(UID);
+            expect(rows.find((r) => !r.parentEventId)?.title).toBe('Renamed series');
+            expect(rows.find((r) => r.parentEventId)?.title).toBe('Moved occurrence');
+        } finally {
+            await restarted.close();
+        }
+    });
+
     test('the organizer an event in another calendar names adopts it in place', async () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;
