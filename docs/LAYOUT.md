@@ -181,7 +181,7 @@ shared-with-me view for free.
 MIME → icon is not a Drive concern: `getFileIconComponent` / `getFilePresentation` live in
 `packages/lib/src/core/file-presentation.ts` (DOM-free, so lib callers like the palette can use them),
 with the JSX wrapper `getFileIcon` re-exported from `drive/file-presentation.tsx`.
-Both take the file name beside the mime: a `.vcf` is often stored as `application/octet-stream`, and it carries the Contacts app's icon and color the way an eigendoc carries its own app's.
+Both take the file name beside the mime: a `.vcf`, a `.eml` and a `.ics` are often stored as `application/octet-stream`, and each carries its app's icon and color — Contacts, Mail and Calendar — the way an eigendoc carries its own app's. `APP_FORMATS` in that file is the one list; the icon, the tint behind a Drive tile and hero, and the format badge all read it.
 
 ## List Patterns
 
