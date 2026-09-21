@@ -63,8 +63,14 @@ export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
                     (await pullCalendarPermission(teamOwner, tc.id, user.email, memberships.teamIds)) || 'read';
                 await cal.ensureSharedEntry(teamOwner, tc.id, tc.name, permission);
             }
-        } catch {
-            await cal.removeSharedEntriesForOwner(teamOwner);
+        } catch (error) {
+            // Only an answer removes: a team whose calendar is switched off has none to share. Any other
+            // failure says nothing about the share, so the entries this Home holds outlive it.
+            if (error instanceof ApiError && error.status === 404) {
+                await cal.removeSharedEntriesForOwner(teamOwner);
+                continue;
+            }
+            console.warn(`calendar: could not read the calendars of ${teamOwner}`, error);
         }
     }
 

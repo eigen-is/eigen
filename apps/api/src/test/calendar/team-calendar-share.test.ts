@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { teamOwnerId } from '@workspace/lib/types';
 import type {
     CalendarEvent,
@@ -7,6 +7,7 @@ import type {
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
 import { getServerConfig } from '../../lib/config/server-config';
+import * as relay from '../../lib/home/home-relay';
 import { assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
 
 describe('Team Calendar Share (push to existing members)', () => {
@@ -223,6 +224,21 @@ describe('Team Calendar Share (push to existing members)', () => {
         const shared2 = await assertJson<SharedCalendar[]>(sharedRes2);
         const teamCal2 = shared2.find((s: SharedCalendar) => s.ownerUserId === `team_${teamId}`);
         expect(teamCal2).toBeDefined();
+    });
+
+    // A relay failure says nothing about the share: only an answer — a team with no calendar — removes.
+    test('a relay failure leaves the shared entries alone', async () => {
+        const before = await assertJson<SharedCalendar[]>(
+            await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/shared`),
+        );
+        expect(before.find((s) => s.ownerUserId === teamOwnerId(teamId))).toBeDefined();
+
+        const spy = spyOn(relay, 'pullCalendars').mockRejectedValue(new Error('the team home is unreachable'));
+        const sharedRes = await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/shared`);
+        const shared = await assertJson<SharedCalendar[]>(sharedRes);
+        spy.mockRestore();
+
+        expect(shared.find((s) => s.ownerUserId === teamOwnerId(teamId))).toBeDefined();
     });
 
     test('team settings require team membership', async () => {

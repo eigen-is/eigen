@@ -14,6 +14,10 @@ import { verifyImipSender } from '../mail/imip-auth';
 
 type Organizer = NonNullable<EventData['organizer']>;
 
+// A scheduling message is about one meeting and the occurrences around it; a body carrying more than
+// this is a calendar export somebody mailed, and it does not get to write a Home once per VEVENT.
+export const IMIP_MAX_EVENTS = 50;
+
 // Invitation mail has no viewer, so a timed event that stored no usable zone (CalDAV/iMIP import,
 // API create) cannot borrow the browser's viewer zone or the server's own — either would name a wall
 // clock nobody agreed to. It renders in UTC and labels it, so the recipient can convert.
@@ -244,7 +248,11 @@ export async function processInboundImip(
 
     const calendar = home.calendar;
 
-    for (const parsed of events) {
+    if (events.length > IMIP_MAX_EVENTS) {
+        console.info(`iMIP: acting on the first ${IMIP_MAX_EVENTS} of ${events.length} events from ${sender}`);
+    }
+
+    for (const parsed of events.slice(0, IMIP_MAX_EVENTS)) {
         // Untrusted external ICS: clamp a reversed interval to zero-duration rather than reject the whole
         // invite (mirrors the parser degrading a malformed rrule/tzid). iMIP is fire-and-forget email —
         // there's no synchronous 400 to return, so dropping the invitation would be worse for the user than

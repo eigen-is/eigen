@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { CalendarEventOccurrence } from '@workspace/lib/types/calendar';
+import { IMIP_MAX_EVENTS } from '../../lib/calendar/imip';
 import { getMailDomain } from '../../lib/config/server-config';
 import { domainsAligned, verifyImipSender } from '../../lib/mail/imip-auth';
 import { assertJson, authedRequest, getTestContext } from '../setup';
@@ -151,6 +152,35 @@ describe('iMIP inbound authentication (integration)', () => {
         const uid = 'verif-a@partner.com';
         await deliver('REQUEST', invite(uid, 'REQUEST', 'Partner Meeting A'), [pass()]);
         expect(await eventExists(uid)).toBe(true);
+    });
+
+    // A verified sender still does not get to write a Home once per VEVENT of a mailed calendar export.
+    test('(a2) a REQUEST body past the event ceiling files only the ceiling', async () => {
+        const uids = Array.from({ length: IMIP_MAX_EVENTS + 3 }, (_, i) => `verif-bulk-${i}@partner.com`);
+        const body = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REQUEST',
+            'PRODID:-//Partner//Calendar//EN',
+            ...uids.flatMap((uid, i) => [
+                'BEGIN:VEVENT',
+                `UID:${uid}`,
+                `SUMMARY:Bulk ${i}`,
+                'DTSTART:20261105T140000Z',
+                'DTEND:20261105T150000Z',
+                'SEQUENCE:0',
+                'STATUS:CONFIRMED',
+                'ORGANIZER;CN="Alice Partner":mailto:alice@partner.com',
+                `ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION:mailto:${ctx.charlie.user.email}`,
+                'END:VEVENT',
+            ]),
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        await deliver('REQUEST', body, [pass()]);
+
+        expect(await eventExists(uids[IMIP_MAX_EVENTS - 1])).toBe(true);
+        expect(await eventExists(uids[IMIP_MAX_EVENTS])).toBe(false);
     });
 
     test('(b) a REQUEST with no Authentication-Results is not processed', async () => {
