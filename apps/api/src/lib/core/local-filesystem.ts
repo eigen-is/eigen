@@ -8,6 +8,11 @@ import { resolveWithinBase } from './path-utils';
 // Once per process: the mount is the same for every home, so a line per message would be the whole log.
 let warnedDirSyncUnsupported = false;
 
+// "The file is gone" is the only fs error a caller may treat as an outcome; anything else, errno or not, is real.
+export function isEnoent(e: unknown): boolean {
+    return e instanceof Error && 'code' in e && e.code === 'ENOENT';
+}
+
 export class LocalFilesystem {
     private baseDir: string;
 
@@ -82,7 +87,7 @@ export class LocalFilesystem {
         try {
             await fsPromises.unlink(this.getFilePath(filePath));
         } catch (error) {
-            if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+            if (!isEnoent(error)) throw error;
         }
         await this.syncDir(path.dirname(filePath));
     }

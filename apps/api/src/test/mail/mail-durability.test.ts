@@ -217,6 +217,22 @@ describe('Maildir write durability', () => {
         expect(readdirSync(join(box(''), 'new'))).toEqual([]);
     });
 
+    test('a new/ rename that fails without an errno fails the sync instead of vanishing', async () => {
+        const home = await getHome(userId);
+        const realRename = fsPromises.rename;
+        // Only the new/ → cur/ sweep; the delivery's own tmp/ → new/ rename still has to land.
+        const spy = spyOn(fsPromises, 'rename').mockImplementation(async (from, to) => {
+            if (String(from).includes('/new/')) throw new Error('rename refused');
+            return realRename(from, to);
+        });
+
+        try {
+            await expect(home.mail.mailboxDeliver(eml('Code-less rename'))).rejects.toThrow('rename refused');
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
     test('a tmp/ file a crash left behind is swept after 36 hours', async () => {
         const home = await getHome(userId);
         const store = (home.mail as unknown as { store: { cleanupStaleDraftTemps: () => Promise<void> } }).store;

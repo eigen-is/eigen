@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { Semaphore } from '../../utils/semaphore';
-import type { LocalFilesystem } from './local-filesystem';
+import { isEnoent, type LocalFilesystem } from './local-filesystem';
 import { isSafePathSegment } from './path-utils';
 
 // The domain-neutral half of a file+index store, with no SQL. See docs/CONTACTS.md § Storage model — files as truth.
@@ -59,7 +59,7 @@ export async function readResourceFile(storage: LocalFilesystem, filePath: strin
     try {
         return await storage.file(filePath).bytes();
     } catch (e) {
-        if (e instanceof Error && 'code' in e && e.code === 'ENOENT') return null;
+        if (isEnoent(e)) return null;
         throw e;
     }
 }

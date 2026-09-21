@@ -11,7 +11,7 @@ import {
 import type { Attachment, DraftAttachmentUpload, Email, EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import type { BunFile, FileSink } from 'bun';
 import { Semaphore } from '../../utils/semaphore';
-import { ApiError, isSafePathSegment, LocalFilesystem, PATHS } from '../core';
+import { ApiError, isEnoent, isSafePathSegment, LocalFilesystem, PATHS } from '../core';
 import type { Home } from '../home';
 import { parseEml, parseEmlBytes, parseEmlForReader } from './mail-parse';
 import type { DraftMeta, MailFlag, MailSearchOptions, MailStore, MailStoreEvents } from './mail-store';
@@ -378,7 +378,7 @@ export class MaildirStore implements MailStore {
                     parsed.push(p);
                 } catch (e: unknown) {
                     this.deliveries.delete(id);
-                    if (!(e instanceof Error && 'code' in e && e.code === 'ENOENT'))
+                    if (!isEnoent(e))
                         console.warn(`syncMailbox: failed to parse ${fileName}:`, e instanceof Error ? e.message : e);
                 }
             }
@@ -703,7 +703,8 @@ export class MaildirStore implements MailStore {
                 await this.storage.rename(src, path.join(curPath, curName));
                 moved++;
             } catch (e: unknown) {
-                if (e instanceof Error && 'code' in e && e.code !== 'ENOENT') throw e;
+                // A message another sync already moved is gone, not a failure; anything else fails the pass.
+                if (!isEnoent(e)) throw e;
             }
         }
         // The guarantee is per directory, not per rename, so a cold sync of a large new/ pays one fsync.
