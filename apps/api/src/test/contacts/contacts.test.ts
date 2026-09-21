@@ -605,7 +605,7 @@ describe('Contacts', () => {
             ...over,
         });
 
-        test('a create overflows at 507, a growing update too, and a shrinking rewrite still fits', async () => {
+        test('a create overflows at 507, a growing update too, and an edit or a shrink still fits', async () => {
             const token = ctx.alice.user.sessionToken;
             const url = `/contacts/${ctx.alice.user.id}/contacts`;
             const originalMaxMB = getServerSettings().quotas.mailAndContactsMaxMB;
@@ -642,10 +642,22 @@ describe('Contacts', () => {
                 });
                 expect(grow.status).toBe(507);
 
+                // A correction on a card the budget has no room for: the edit grace is what keeps a book at
+                // its ceiling editable, and cleanable, at all.
+                const edit = await authedRequest(token, `${url}/${fatId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(
+                        body({ notes: 'n'.repeat(2 * MB), jobTitle: 'Head of Storage', etag: fat.etag }),
+                    ),
+                });
+                expect(edit.status).toBe(200);
+
+                const edited = await assertJson<Contact>(await authedRequest(token, `${url}/${fatId}`));
                 const shrink = await authedRequest(token, `${url}/${fatId}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body({ notes: '', etag: fat.etag })),
+                    body: JSON.stringify(body({ notes: '', etag: edited.etag })),
                 });
                 expect(shrink.status).toBe(200);
             } finally {

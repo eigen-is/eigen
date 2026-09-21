@@ -50,12 +50,53 @@ function eventBody(title: string, padding: number) {
     };
 }
 
-function createEvent(user: TestUser, calendarId: string, title: string, padding = 0): Promise<Response> {
+function postEvent(user: TestUser, calendarId: string, body: Record<string, unknown>): Promise<Response> {
     return authedRequest(user.sessionToken, `/calendar/${user.id}/calendars/${calendarId}/events`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(eventBody(title, padding)),
+        body: JSON.stringify(body),
     });
+}
+
+function putJson(user: TestUser, url: string, body: Record<string, unknown>): Promise<Response> {
+    return authedRequest(user.sessionToken, url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+}
+
+function createEvent(user: TestUser, calendarId: string, title: string, padding = 0): Promise<Response> {
+    return postEvent(user, calendarId, eventBody(title, padding));
+}
+
+// A series somebody else organizes, landed the way the relay lands one: the RSVP routes take no other kind.
+async function inviteFromAlice(user: TestUser, uid: string): Promise<CalendarEvent> {
+    await sendToHome(user.id, {
+        type: 'calendar:invitation',
+        payload: {
+            uid,
+            title: 'Invited weekly',
+            description: null,
+            location: null,
+            startTime: new Date('2026-05-04T16:00:00Z'),
+            endTime: new Date('2026-05-04T17:00:00Z'),
+            allDay: false,
+            rrule: 'FREQ=WEEKLY;COUNT=4',
+            timezone: null,
+            status: 'confirmed',
+            sequence: 0,
+            data: {
+                organizer: { userId: ctx.alice.user.id, email: ctx.alice.user.email, name: 'Alice' },
+                attendees: [{ email: user.email, status: 'pending', role: 'required' }],
+            },
+            createByUserId: ctx.alice.user.id,
+            organizerEventId: `${uid}-org-event`,
+            organizerUserId: ctx.alice.user.id,
+        },
+    });
+    const home = await getHome(user.id);
+    return findOrFail(await home.calendar.getEventsByUid(uid), (e) => !e.parentEventId);
 }
 
 const setBudget = (mb: number) => updateServerSettings({ quotas: { mailAndContactsMaxMB: mb } });
@@ -67,6 +108,13 @@ async function fillBudget(user: TestUser): Promise<void> {
     await setBudget(Math.floor((await home.size()).mailAndContacts.used / MB));
 }
 
+// A whole MB under what the Home holds: the state an admin who lowered a quota leaves behind, where even a
+// rewrite that adds nothing projects over the ceiling.
+async function overfillBudget(user: TestUser): Promise<void> {
+    const home = await getHome(user.id);
+    await setBudget(Math.floor((await home.size()).mailAndContacts.used / MB) - 1);
+}
+
 // The ceiling is one server-wide setting, so whatever a test does to it, the next test starts where it did.
 async function restoringBudget<T>(run: () => Promise<T>): Promise<T> {
     const original = getServerSettings().quotas.mailAndContactsMaxMB;
@@ -75,6 +123,85 @@ async function restoringBudget<T>(run: () => Promise<T>): Promise<T> {
     } finally {
         await setBudget(original);
     }
+}
+
+const weeklyIcs = (uid: string, exdate: string | null) =>
+    [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//Test//EN',
+        'BEGIN:VEVENT',
+        `UID:${uid}`,
+        'SUMMARY:Dav weekly',
+        'DTSTART:20260504T090000Z',
+        'DTEND:20260504T093000Z',
+        'RRULE:FREQ=WEEKLY;COUNT=6',
+        ...(exdate ? [`EXDATE:${exdate}`] : []),
+        'END:VEVENT',
+        'END:VCALENDAR',
+    ].join('\r\n');
+
+// Every edit below rewrites a resource the Home already stores, which the edit grace takes at any budget.
+// The create and the 2 KiB growth beside them are what proves the meter is still on.
+async function expectEditsFit(user: TestUser, calendarId: string, fill: () => Promise<void>): Promise<void> {
+    const eventsUrl = `/calendar/${user.id}/calendars/${calendarId}/events`;
+    const davPut = (body: string) =>
+        app.handle(
+            new Request(`http://localhost/dav/calendars/${user.id}/${calendarId}/dav-edit.ics`, {
+                method: 'PUT',
+                headers: { Authorization: basicAuth(user.email), 'Content-Type': 'text/calendar' },
+                body,
+            }),
+        );
+
+    const series = await assertJson<CalendarEvent>(
+        await postEvent(user, calendarId, { ...eventBody('Weekly', 1.5 * MB), rrule: 'FREQ=WEEKLY;COUNT=8' }),
+    );
+    const exception = await assertJson<CalendarEvent>(
+        await postEvent(user, calendarId, {
+            ...eventBody('Moved', 0),
+            startTime: new Date('2026-05-11T12:00:00Z'),
+            endTime: new Date('2026-05-11T13:00:00Z'),
+            parentEventId: series.id,
+            recurrenceDate: '2026-05-11',
+        }),
+    );
+    expect((await davPut(weeklyIcs('dav-edit@test', null))).status).toBe(201);
+    const linked = await inviteFromAlice(user, `edits-${user.id}@test`);
+
+    await fill();
+
+    expect((await createEvent(user, calendarId, 'Refused')).status).toBe(507);
+    const grown = { description: 'x'.repeat(1.5 * MB + 2048) };
+    expect((await putJson(user, `${eventsUrl}/${series.id}`, grown)).status).toBe(507);
+
+    expect((await putJson(user, `${eventsUrl}/${series.id}`, { title: 'Weekly renamed' })).status).toBe(200);
+    expect((await putJson(user, `${eventsUrl}/${linked.id}/rsvp`, { status: 'accepted' })).status).toBe(200);
+
+    // Deleting one occurrence of an own series: an EXDATE plus its stamp, a few bytes MORE on disk.
+    const excluded = await postEvent(user, calendarId, {
+        ...eventBody('Weekly', 0),
+        startTime: new Date('2026-05-18T10:00:00Z'),
+        endTime: new Date('2026-05-18T11:00:00Z'),
+        parentEventId: series.id,
+        recurrenceDate: '2026-05-18',
+        status: 'cancelled',
+    });
+    expect(excluded.status).toBe(200);
+    expect((await putJson(user, `${eventsUrl}/${exception.id}`, { status: 'cancelled' })).status).toBe(200);
+
+    const truncated = await putJson(user, `${eventsUrl}/${linked.id}/rsvp`, {
+        status: 'declined',
+        scope: 'this-and-following',
+        recurrenceDate: '2026-05-18',
+        remove: true,
+    });
+    expect(truncated.status).toBe(200);
+
+    expect((await davPut(weeklyIcs('dav-edit@test', '20260511T090000Z'))).status).toBe(204);
+
+    const shrunk = { description: 'x'.repeat(1.5 * MB - 512) };
+    expect((await putJson(user, `${eventsUrl}/${series.id}`, shrunk)).status).toBe(200);
 }
 
 const icsResource = (uid: string, summary: string, padding = 0) =>
@@ -124,25 +251,13 @@ describe('Calendar storage quota', () => {
         const user = await makeUser();
         const calendarId = await defaultCalendarOf(user);
         const eventsUrl = `/calendar/${user.id}/calendars/${calendarId}/events`;
-        const post = (body: Record<string, unknown>) =>
-            authedRequest(user.sessionToken, eventsUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            });
-        const put = (path: string, body: Record<string, unknown>) =>
-            authedRequest(user.sessionToken, path, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            });
 
         await restoringBudget(async () => {
             const series = await assertJson<CalendarEvent>(
-                await post({ ...eventBody('Weekly', 1.5 * MB), rrule: 'FREQ=WEEKLY;COUNT=6' }),
+                await postEvent(user, calendarId, { ...eventBody('Weekly', 1.5 * MB), rrule: 'FREQ=WEEKLY;COUNT=6' }),
             );
             const exception = await assertJson<CalendarEvent>(
-                await post({
+                await postEvent(user, calendarId, {
                     ...eventBody('Moved', 0),
                     startTime: new Date('2026-05-11T12:00:00Z'),
                     endTime: new Date('2026-05-11T13:00:00Z'),
@@ -150,37 +265,13 @@ describe('Calendar storage quota', () => {
                     recurrenceDate: '2026-05-11',
                 }),
             );
-            await sendToHome(user.id, {
-                type: 'calendar:invitation',
-                payload: {
-                    uid: 'remove-quota@test',
-                    title: 'Invited weekly',
-                    description: null,
-                    location: null,
-                    startTime: new Date('2026-05-04T16:00:00Z'),
-                    endTime: new Date('2026-05-04T17:00:00Z'),
-                    allDay: false,
-                    rrule: 'FREQ=WEEKLY;COUNT=4',
-                    timezone: null,
-                    status: 'confirmed',
-                    sequence: 0,
-                    data: {
-                        organizer: { userId: ctx.alice.user.id, email: ctx.alice.user.email, name: 'Alice' },
-                        attendees: [{ email: user.email, status: 'pending', role: 'required' }],
-                    },
-                    createByUserId: ctx.alice.user.id,
-                    organizerEventId: 'remove-quota-org-event',
-                    organizerUserId: ctx.alice.user.id,
-                },
-            });
-            const home = await getHome(user.id);
-            const linked = findOrFail(await home.calendar.getEventsByUid('remove-quota@test'), (e) => !e.parentEventId);
+            const linked = await inviteFromAlice(user, 'remove-quota@test');
 
             await fillBudget(user);
             expect((await createEvent(user, calendarId, 'Refused')).status).toBe(507);
 
             // Deleting one occurrence of an own series: an EXDATE plus its stamp, a few bytes MORE on disk.
-            const excluded = await post({
+            const excluded = await postEvent(user, calendarId, {
                 ...eventBody('Weekly', 0),
                 startTime: new Date('2026-05-18T10:00:00Z'),
                 endTime: new Date('2026-05-18T11:00:00Z'),
@@ -190,9 +281,9 @@ describe('Calendar storage quota', () => {
             });
             expect(excluded.status).toBe(200);
 
-            expect((await put(`${eventsUrl}/${exception.id}`, { status: 'cancelled' })).status).toBe(200);
+            expect((await putJson(user, `${eventsUrl}/${exception.id}`, { status: 'cancelled' })).status).toBe(200);
 
-            const removed = await put(`${eventsUrl}/${linked.id}/rsvp`, {
+            const removed = await putJson(user, `${eventsUrl}/${linked.id}/rsvp`, {
                 status: 'declined',
                 scope: 'this',
                 recurrenceDate: '2026-05-11',
@@ -200,6 +291,20 @@ describe('Calendar storage quota', () => {
             });
             expect(removed.status).toBe(200);
         });
+    });
+
+    test('a full budget takes every rewrite of a stored resource, on REST and on CalDAV alike', async () => {
+        const user = await makeUser();
+        const calendarId = await defaultCalendarOf(user);
+
+        await restoringBudget(() => expectEditsFit(user, calendarId, () => fillBudget(user)));
+    });
+
+    test('a budget lowered below what the Home holds still takes those rewrites', async () => {
+        const user = await makeUser();
+        const calendarId = await defaultCalendarOf(user);
+
+        await restoringBudget(() => expectEditsFit(user, calendarId, () => overfillBudget(user)));
     });
 
     // On a budget the body overflows too, so the two refusals really do race and the ceiling wins.
