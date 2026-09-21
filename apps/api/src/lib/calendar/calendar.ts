@@ -544,7 +544,7 @@ export class Calendar {
             .filter((e) => e.data?.attendees?.some((a) => a.email.toLowerCase() === email.toLowerCase()));
     }
 
-    // --- Events (writes — implementation in calendar/events.ts) ---
+    // --- Announcements ---
 
     announce(calendarId: string, type: Parameters<typeof buildCalendarEvent>[0]): void {
         if (this.batch.hold()) {
@@ -574,6 +574,8 @@ export class Calendar {
     withBatchedEvents<T>(fn: () => Promise<T>): Promise<T> {
         return this.batch.run(fn);
     }
+
+    // --- Events (writes — implementation in calendar/events.ts) ---
 
     public async createEvent(calendarId: string, input: CreateEventArgs, user?: User): Promise<CalendarEvent> {
         return events.createEvent(this, calendarId, input, user);
