@@ -58,21 +58,22 @@ function createEvent(user: TestUser, calendarId: string, title: string, padding 
     });
 }
 
+const setBudget = (mb: number) => updateServerSettings({ quotas: { mailAndContactsMaxMB: mb } });
+
 // The budget the writes below are judged against: what the Home already holds, floored to the whole MB the
 // setting is spelled in, so anything that adds bytes overflows and only a shrinking rewrite fits.
 async function fillBudget(user: TestUser): Promise<void> {
     const home = await getHome(user.id);
-    const used = (await home.size()).mailAndContacts.used;
-    await updateServerSettings({ quotas: { mailAndContactsMaxMB: Math.floor(used / MB) } });
+    await setBudget(Math.floor((await home.size()).mailAndContacts.used / MB));
 }
 
-async function withBudget<T>(mb: number | null, run: () => Promise<T>): Promise<T> {
+// The ceiling is one server-wide setting, so whatever a test does to it, the next test starts where it did.
+async function restoringBudget<T>(run: () => Promise<T>): Promise<T> {
     const original = getServerSettings().quotas.mailAndContactsMaxMB;
     try {
-        if (mb !== null) await updateServerSettings({ quotas: { mailAndContactsMaxMB: mb } });
         return await run();
     } finally {
-        await updateServerSettings({ quotas: { mailAndContactsMaxMB: original } });
+        await setBudget(original);
     }
 }
 
@@ -96,7 +97,7 @@ describe('Calendar storage quota', () => {
         const user = await makeUser();
         const calendarId = await defaultCalendarOf(user);
 
-        await withBudget(null, async () => {
+        await restoringBudget(async () => {
             const fat = await assertJson<CalendarEvent>(await createEvent(user, calendarId, 'Fat', 1.5 * MB));
             await fillBudget(user);
 
@@ -136,7 +137,7 @@ describe('Calendar storage quota', () => {
                 body: JSON.stringify(body),
             });
 
-        await withBudget(null, async () => {
+        await restoringBudget(async () => {
             const series = await assertJson<CalendarEvent>(
                 await post({ ...eventBody('Weekly', 1.5 * MB), rrule: 'FREQ=WEEKLY;COUNT=6' }),
             );
@@ -201,17 +202,22 @@ describe('Calendar storage quota', () => {
         });
     });
 
+    // On a budget the body overflows too, so the two refusals really do race and the ceiling wins.
     test('a REST create past the resource ceiling is still a 413, not a 507', async () => {
         const user = await makeUser();
         const calendarId = await defaultCalendarOf(user);
-        expect((await createEvent(user, calendarId, 'Too big', EVENT_MAX_BYTES)).status).toBe(413);
+
+        await restoringBudget(async () => {
+            await fillBudget(user);
+            expect((await createEvent(user, calendarId, 'Too big', EVENT_MAX_BYTES)).status).toBe(413);
+        });
     });
 
     test('a CalDAV PUT over the budget answers 507', async () => {
         const user = await makeUser();
         const calendarId = await defaultCalendarOf(user);
 
-        await withBudget(null, async () => {
+        await restoringBudget(async () => {
             await assertJson<CalendarEvent>(await createEvent(user, calendarId, 'Fat', 1.5 * MB));
             await fillBudget(user);
 
@@ -230,7 +236,7 @@ describe('Calendar storage quota', () => {
         const user = await makeUser();
         const calendarId = await defaultCalendarOf(user);
 
-        await withBudget(null, async () => {
+        await restoringBudget(async () => {
             const fat = await assertJson<CalendarEvent>(await createEvent(user, calendarId, 'Fat', 1.5 * MB));
             await fillBudget(user);
             expect((await createEvent(user, calendarId, 'Refused')).status).toBe(507);
@@ -257,7 +263,7 @@ describe('Calendar storage quota', () => {
             }),
         );
 
-        await withBudget(null, async () => {
+        await restoringBudget(async () => {
             const fat = await assertJson<CalendarEvent>(await createEvent(user, calendarId, 'Fat', 1.5 * MB));
             await fillBudget(user);
             // The budget really is full: the move below passes because it adds no bytes, not because nothing
@@ -309,13 +315,13 @@ describe('Calendar storage quota', () => {
                 body: file,
             });
 
-        await withBudget(2, async () => {
+        await restoringBudget(async () => {
+            await setBudget(2);
             const refused = await importOnce();
             expect(refused.status).toBe(507);
             expect(await refused.text()).toContain('after importing 1 events');
-        });
 
-        await withBudget(50, async () => {
+            await setBudget(50);
             const finished = await assertJson<ImportCountsResult>(await importOnce());
             expect(finished).toEqual({ imported: 1, skipped: 1, failed: 0 });
         });
@@ -360,7 +366,7 @@ describe('Calendar storage quota', () => {
             '--imip-quota--',
         ].join('\r\n');
 
-        await withBudget(null, async () => {
+        await restoringBudget(async () => {
             await assertJson<CalendarEvent>(await createEvent(user, calendarId, 'Fat', 1.5 * MB));
             await fillBudget(user);
 
@@ -396,7 +402,7 @@ describe('Calendar storage quota', () => {
                 body: JSON.stringify({ ...eventBody(title, padding), ...extra, data: { attendees } }),
             });
 
-        await withBudget(null, async () => {
+        await restoringBudget(async () => {
             // The REPLY to the series files a whole new override, description and all, where the REPLY to
             // the single event moves one PARTSTAT.
             const series = await assertJson<CalendarEvent>(
@@ -410,8 +416,8 @@ describe('Calendar storage quota', () => {
             );
 
             const home = await getHome(user.id);
-            const used = (await home.size()).mailAndContacts.used;
-            await updateServerSettings({ quotas: { mailAndContactsMaxMB: (used + 256 * 1024) / MB } });
+            // Room for a PARTSTAT and nothing near an override of a 2 MB event.
+            await setBudget(((await home.size()).mailAndContacts.used + 256 * 1024) / MB);
 
             const reply = (uid: string, recurrenceId: string[]) => [
                 'BEGIN:VEVENT',
@@ -470,7 +476,7 @@ describe('Calendar storage quota', () => {
         const user = await makeUser();
         const calendarId = await defaultCalendarOf(user);
 
-        await withBudget(null, async () => {
+        await restoringBudget(async () => {
             await assertJson<CalendarEvent>(await createEvent(user, calendarId, 'Fat', 1.5 * MB));
             await fillBudget(user);
 
@@ -554,7 +560,8 @@ describe('Calendar storage quota', () => {
         const harness = await makeCalendar();
         const unregistered = (await harness.instance.getCalendars())[0].id;
 
-        await withBudget(0, async () => {
+        await restoringBudget(async () => {
+            await setBudget(0);
             expect((await createEvent(user, calendarId, 'Refused')).status).toBe(507);
 
             const stored = await harness.instance.putResource(
@@ -577,7 +584,7 @@ describe('Calendar storage quota', () => {
         const reopened = await getHome(user.id);
         expect(await reopened.calendar.size()).toBeGreaterThan(MB);
 
-        await withBudget(null, async () => {
+        await restoringBudget(async () => {
             await fillBudget(user);
             expect((await createEvent(user, calendarId, 'Refused')).status).toBe(507);
         });
@@ -622,7 +629,7 @@ describe('Team calendar storage quota', () => {
             body: JSON.stringify({ shares: [{ targetId: ownerId, permission: 'write' }] }),
         });
 
-        await withBudget(null, async () => {
+        await restoringBudget(async () => {
             const fat = await authedRequest(
                 ctx.alice.user.sessionToken,
                 `/calendar/${ownerId}/calendars/${calendarId}/events`,
@@ -635,9 +642,7 @@ describe('Team calendar storage quota', () => {
             expect(fat.status).toBe(200);
 
             const home = await getHome(ownerId);
-            await updateServerSettings({
-                quotas: { mailAndContactsMaxMB: Math.floor((await home.calendar.size()) / MB) },
-            });
+            await setBudget(Math.floor((await home.calendar.size()) / MB));
 
             const refused = await authedRequest(
                 ctx.alice.user.sessionToken,
