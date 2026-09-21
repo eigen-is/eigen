@@ -6,8 +6,7 @@ const CONTACTS_ROOT = 'eigen.contacts';
 const CALENDAR_ROOT = 'eigen.calendar';
 
 export const PATHS = {
-    // The home's own settings file, at the root of every home folder — and so of every archive and
-    // safety copy of one.
+    // At the root of every home folder, and so of every archive and safety copy of one.
     SETTINGS: 'settings.json',
     DRIVE: {
         ROOT: DRIVE_ROOT,
@@ -38,8 +37,7 @@ export const PATHS = {
     CALENDAR: {
         ROOT: CALENDAR_ROOT,
         DB: `${CALENDAR_ROOT}/calendar.db`,
-        // The fixed parent of every calendar directory, so a client-chosen calendar id can never be a
-        // sibling of calendar.db and a future sibling directory is not mistaken for a calendar.
+        // A fixed parent, so a client-chosen calendar id can never be a sibling of calendar.db.
         CALENDARS: 'calendars',
     },
     NOTIFICATIONS: {

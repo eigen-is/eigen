@@ -35,8 +35,7 @@ export class LocalFilesystem {
         return await Bun.write(fullPath, data);
     }
 
-    // A rename or unlink reaches the platter only once its directory is fsynced, and a mount that refuses the
-    // fsync must not fail an operation that already happened.
+    // A rename or unlink reaches the platter only once its directory is fsynced, and a mount that refuses the fsync must not fail it.
     async syncDir(dirPath: string): Promise<void> {
         try {
             const handle = await fsPromises.open(this.getFilePath(dirPath), 'r');
@@ -145,8 +144,7 @@ export class LocalFilesystem {
         return await this.file(filePath).exists();
     }
 
-    // For the reader that has to hand a real path to a library instead of going through this class
-    // (bun:sqlite opens a file by name); still resolved within the base.
+    // For a library that opens a file by name (bun:sqlite) instead of going through this class; still resolved within the base.
     absolutePath(filePath: string): string {
         return this.getFilePath(filePath);
     }
