@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { type DrivePath, VCARD_MIMES } from '@workspace/lib/types/drive';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { splitVCards } from '../../lib/vcard';
 import {
@@ -16,6 +16,7 @@ import {
     getTestContext,
     type TestUser,
 } from '../setup';
+import { importFromDriveRequest, importRaw } from '../transfer-test-helpers';
 
 const PASSWORD = 'testpassword123';
 
@@ -49,22 +50,9 @@ describe('Contacts transfer routes', () => {
         });
 
     const importRequest = (user: TestUser, body: BodyInit, headers: Record<string, string> = {}) =>
-        authedRequest(user.sessionToken, `/contacts/${user.id}/import`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/vcard', ...headers },
-            body,
-        });
+        importRaw(user, 'contacts', VCARD_MIMES[0], body, { headers });
 
-    const importFromDrive = (user: TestUser, source: DrivePath) =>
-        authedRequest(user.sessionToken, `/contacts/${user.id}/import-from-drive`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                sourceOwnerId: source.ownerId,
-                sourceMountId: source.mountId,
-                sourcePathId: source.id,
-            }),
-        });
+    const importFromDrive = (user: TestUser, source: DrivePath) => importFromDriveRequest(user, 'contacts', source);
 
     const createContact = async (firstName: string, lastName: string, email: string): Promise<string> => {
         const res = await authedRequest(alice.sessionToken, `/contacts/${alice.id}/contacts`, {

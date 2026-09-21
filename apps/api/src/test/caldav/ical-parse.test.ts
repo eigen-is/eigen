@@ -1,10 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { parseIcs } from '../../lib/caldav/ical-parse';
+import { vcal } from '../ics-test-helpers';
 
 // A CalDAV resource holds one UID, but a preview and an import feed the parser whole files: a calendar
 // export carries every series the calendar holds, each in the timezone its author kept it in.
-
-const vcal = (lines: string[]) => ['BEGIN:VCALENDAR', 'VERSION:2.0', ...lines, 'END:VCALENDAR'].join('\r\n');
 
 // Two weekly series, both starting 2 March 2026 at 09:00 local, each with one occurrence moved. The
 // RECURRENCE-IDs are the UTC-Z form Exchange-lineage clients emit, so each one keys to a wall-clock date

@@ -7,14 +7,12 @@ import {
 } from '../../lib/core/transfer';
 import { toTransferableText } from '../../lib/document/transform/protocol';
 import { buildIcsPreviewPayload } from '../../lib/preview/ics-preview';
+import { vcal } from '../ics-test-helpers';
 
 // The payload the quick look reads. Every value in it came from a file a stranger wrote, and the card
 // that draws it must never fetch anything the file named.
 
 const HOSTILE = 'evil.example';
-
-const vcal = (lines: string[], head: string[] = []) =>
-    ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Test//EN', ...head, ...lines, 'END:VCALENDAR'].join('\r\n');
 
 const payloadOf = (text: string) => buildIcsPreviewPayload(toTransferableText(text));
 
@@ -40,19 +38,6 @@ const THUNDERBIRD = vcal([
 
 // An Apple-style invitation: METHOD:REQUEST, an ORGANIZER, ATTENDEEs, a VALARM and a VTIMEZONE.
 const APPLE_INVITE = vcal(
-    event('invite@eigen', [
-        'DTSTART;TZID=America/New_York:20260420T140000',
-        'DTEND;TZID=America/New_York:20260420T150000',
-        'SUMMARY:Design review',
-        'LOCATION:Studio B',
-        'ORGANIZER;CN=Ada Lovelace:mailto:ada@external.com',
-        'ATTENDEE;CN=Bob;PARTSTAT=ACCEPTED;ROLE=REQ-PARTICIPANT:mailto:bob@example.com',
-        'ATTENDEE;PARTSTAT=NEEDS-ACTION;ROLE=OPT-PARTICIPANT:MAILTO:carol@example.com',
-        'BEGIN:VALARM',
-        'ACTION:DISPLAY',
-        'TRIGGER:-PT15M',
-        'END:VALARM',
-    ]),
     [
         'METHOD:REQUEST',
         'BEGIN:VTIMEZONE',
@@ -71,6 +56,19 @@ const APPLE_INVITE = vcal(
         'END:DAYLIGHT',
         'END:VTIMEZONE',
     ],
+    event('invite@eigen', [
+        'DTSTART;TZID=America/New_York:20260420T140000',
+        'DTEND;TZID=America/New_York:20260420T150000',
+        'SUMMARY:Design review',
+        'LOCATION:Studio B',
+        'ORGANIZER;CN=Ada Lovelace:mailto:ada@external.com',
+        'ATTENDEE;CN=Bob;PARTSTAT=ACCEPTED;ROLE=REQ-PARTICIPANT:mailto:bob@example.com',
+        'ATTENDEE;PARTSTAT=NEEDS-ACTION;ROLE=OPT-PARTICIPANT:MAILTO:carol@example.com',
+        'BEGIN:VALARM',
+        'ACTION:DISPLAY',
+        'TRIGGER:-PT15M',
+        'END:VALARM',
+    ]),
 );
 
 describe('buildIcsPreviewPayload', () => {
