@@ -5,3 +5,8 @@ export const MAX_SEND_REFERENCES = 20;
 
 // Length of the list preview (`EmailSummary.textShort`) as stored for drafts and as served by the list route.
 export const MAIL_PREVIEW_CHARS = 200;
+
+// One whole `.eml`, shared FE/BE: the preview guard and the import refuse a bigger file. The same 25 MiB
+// a single outgoing attachment is capped at (config/enforcement.ts), which is what a message of this size
+// would be made of — a separate fact, so a separate constant.
+export const EML_MAX_BYTES = 25 * 1024 * 1024;

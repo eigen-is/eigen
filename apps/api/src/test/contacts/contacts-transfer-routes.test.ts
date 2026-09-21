@@ -1,8 +1,8 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
-import type { ImportContactsResult } from '@workspace/lib/types/contact';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
+import { type DrivePath, VCARD_MIMES } from '@workspace/lib/types/drive';
+import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { splitVCards } from '../../lib/vcard';
 import {
     app,
@@ -10,11 +10,13 @@ import {
     authedRequest,
     createTestUser,
     driveGet,
+    drivePost,
     driveUpload,
     firstMountId,
     getTestContext,
     type TestUser,
 } from '../setup';
+import { importFromDriveRequest, importRaw } from '../transfer-test-helpers';
 
 const PASSWORD = 'testpassword123';
 
@@ -48,22 +50,9 @@ describe('Contacts transfer routes', () => {
         });
 
     const importRequest = (user: TestUser, body: BodyInit, headers: Record<string, string> = {}) =>
-        authedRequest(user.sessionToken, `/contacts/${user.id}/import`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/vcard', ...headers },
-            body,
-        });
+        importRaw(user, 'contacts', VCARD_MIMES[0], body, { headers });
 
-    const importFromDrive = (user: TestUser, source: DrivePath) =>
-        authedRequest(user.sessionToken, `/contacts/${user.id}/import-from-drive`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                sourceOwnerId: source.ownerId,
-                sourceMountId: source.mountId,
-                sourcePathId: source.id,
-            }),
-        });
+    const importFromDrive = (user: TestUser, source: DrivePath) => importFromDriveRequest(user, 'contacts', source);
 
     const createContact = async (firstName: string, lastName: string, email: string): Promise<string> => {
         const res = await authedRequest(alice.sessionToken, `/contacts/${alice.id}/contacts`, {
@@ -121,14 +110,14 @@ describe('Contacts transfer routes', () => {
             card('Barbara Liskov', 'barbara@vcard-routes.example');
 
         const res = await importRequest(alice, text);
-        expect(await assertJson<ImportContactsResult>(res)).toEqual({ imported: 2, skipped: 0, failed: 0 });
+        expect(await assertJson<ImportCountsResult>(res)).toEqual({ imported: 2, skipped: 0, failed: 0 });
     });
 
-    test('raw import over IMPORT_MAX_BYTES is 413 before the body is read', async () => {
+    test('raw import over VCARD_MAX_BYTES is 413 before the body is read', async () => {
         // The body is a fragment no importer would accept (a 400 if it were ever parsed), so a 413
         // can only come from the Content-Length check that runs first.
         const res = await importRequest(alice, new Blob([new TextEncoder().encode('BEGIN:VCARD\r\n')]), {
-            'Content-Length': String(IMPORT_MAX_BYTES + 1),
+            'Content-Length': String(VCARD_MAX_BYTES + 1),
         });
         expect(res.status).toBe(413);
     });
@@ -161,7 +150,7 @@ describe('Contacts transfer routes', () => {
         const uploaded = await driveUpload(alice.sessionToken, alice.id, mountId, rootId, file);
 
         const res = await importFromDrive(alice, uploaded);
-        expect(await assertJson<ImportContactsResult>(res)).toEqual({ imported: 2, skipped: 0, failed: 0 });
+        expect(await assertJson<ImportCountsResult>(res)).toEqual({ imported: 2, skipped: 0, failed: 0 });
     });
 
     test('import-from-drive on a .txt is 400', async () => {
@@ -188,6 +177,15 @@ describe('Contacts transfer routes', () => {
         const res = await importFromDrive(alice, uploaded);
         expect(res.status).toBe(400);
         expect(await res.text()).toContain('UTF-8');
+    });
+
+    test('import-from-drive on a folder named like a vCard is 400', async () => {
+        const folder = await drivePost<DrivePath>(alice.sessionToken, alice.id, mountId, `folder/${rootId}`, {
+            folderName: `folder-${randomUUID()}.vcf`,
+        });
+
+        const res = await importFromDrive(alice, folder);
+        expect(res.status).toBe(400);
     });
 
     test("import-from-drive on bob's unshared file is 403", async () => {

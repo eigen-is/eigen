@@ -30,7 +30,9 @@ export function createUniqueMessageId(): string {
     const usec = (now % 1000) * 1000;
     const pid = process.pid;
     const seq = deliveryCounter++;
-    const host = hostname().replace(/\//g, '\\057').replace(/:/g, '\\072');
+    // The id names a Maildir file, a draft sidecar and a staged part, so the host part is reduced to what
+    // `isSafePathSegment` accepts — Maildir's own `\057`/`\072` escapes for `/` and `:` would fail it.
+    const host = hostname().replace(/[^A-Za-z0-9._-]/g, '-');
     return `${time}.M${usec}P${pid}Q${seq}.${host}`;
 }
 

@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export const emails = sqliteTable('emails', {
     id: text('id').primaryKey(),
@@ -22,26 +22,3 @@ export const emails = sqliteTable('emails', {
     createdAt: integer('createdAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
     updatedAt: integer('updatedAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });
-
-export const emailLabels = sqliteTable('email_labels', {
-    id: text('id').primaryKey(),
-    name: text('name').notNull(),
-    color: text('color').notNull(),
-    createdAt: integer('createdAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
-    updatedAt: integer('updatedAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
-});
-
-export const emailsToLabels = sqliteTable(
-    'emails_to_labels',
-    {
-        emailId: text('emailId')
-            .notNull()
-            .references(() => emails.id, { onDelete: 'cascade' }),
-        labelId: text('labelId')
-            .notNull()
-            .references(() => emailLabels.id, { onDelete: 'cascade' }),
-    },
-    (table) => ({
-        pk: primaryKey({ columns: [table.emailId, table.labelId] }),
-    }),
-);

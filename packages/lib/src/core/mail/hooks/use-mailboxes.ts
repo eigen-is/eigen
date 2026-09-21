@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { mailApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
+import { isStandardMailbox } from '@workspace/lib/constants/mailboxes';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import { AppError } from '../../api-error';
 import { usePublicConfig } from '../../public';
@@ -22,6 +23,9 @@ export function useMailboxes() {
             return response.data;
         },
         staleTime: STALE_TIME.ONE_MINUTE,
+        // A folder outside the standard six has no file watcher: each listing reconciles it server-side.
+        refetchInterval: (query) =>
+            query.state.data?.some((mailbox) => !isStandardMailbox(mailbox.path)) ? STALE_TIME.ONE_MINUTE : false,
         retry: 1,
         enabled: config?.mailEnabled === true && !!ownerId,
     });

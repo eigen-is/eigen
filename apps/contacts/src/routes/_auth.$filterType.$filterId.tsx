@@ -3,7 +3,7 @@ import {
     useContacts,
     useDeleteContact,
     useImportContacts,
-    useImportContactsFromDrive,
+    useImportContactsFile,
     useLabels,
     useUpdateContact,
 } from '@workspace/lib/contacts';
@@ -45,7 +45,7 @@ function ContactsRoute() {
     const deleteMutation = useDeleteContact();
     const updateContactMutation = useUpdateContact();
     const importMutation = useImportContacts();
-    const importFromDriveMutation = useImportContactsFromDrive();
+    const importFileMutation = useImportContactsFile();
 
     const [importOpen, setImportOpen] = useState(false);
     const [deleteTargets, setDeleteTargets] = useState<Contact[]>([]);
@@ -232,10 +232,8 @@ function ContactsRoute() {
                 canPick={(item) => isVCardFile(item.mimeType, item.name)}
                 onDeviceFile={(file) => importMutation.mutate(file)}
                 onDrivePick={(item) =>
-                    importFromDriveMutation.mutate({
-                        sourceOwnerId: item.ownerId,
-                        sourceMountId: item.mountId,
-                        sourcePathId: item.id,
+                    importFileMutation.mutate({
+                        drive: { sourceOwnerId: item.ownerId, sourceMountId: item.mountId, sourcePathId: item.id },
                     })
                 }
             />

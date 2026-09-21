@@ -2,7 +2,7 @@
 // which re-exports React-query hooks) so the API stays free of React in its module graph.
 
 import { randomUUID } from 'node:crypto';
-import { occurrenceDateToString, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
+import { isInvitationFromOthers, occurrenceDateToString, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import type {
     Attendee,
@@ -15,10 +15,21 @@ import type {
 } from '@workspace/lib/types/calendar';
 import { isExternalOwnerId, parseOwnerId } from '@workspace/lib/types/owner';
 import { SSEventType } from '@workspace/lib/types/sse';
+import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { and, count, eq, gt, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
+import ICAL from 'ical.js';
 import { RRule } from 'rrule';
-import { ApiError, PATHS } from '../core';
+import { type IcsParseResult, type ParsedEvent, parseIcs } from '../caldav/ical-parse';
+import {
+    ApiError,
+    decodeUtf8Strict,
+    ICS_IMPORT_MAX_EVENTS,
+    ICS_IMPORT_MAX_REMINDERS,
+    NOT_A_CALENDAR_FILE,
+    NOT_UTF8_FILE,
+    PATHS,
+} from '../core';
 import type { ManagedDatabase } from '../core/';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
@@ -56,6 +67,71 @@ import type {
 
 function getCalendarDatabase(home: Home): Promise<ManagedDatabase<typeof schema>> {
     return home.getLocalDatabase(CALENDAR_DB_CONFIG, PATHS.CALENDAR.DB);
+}
+
+// What a create refuses before it writes a row, so a refused event leaves the collection untouched.
+function validateEventInput(input: CreateEventArgs): void {
+    const rruleStr = input.rrule ?? null;
+    if (rruleStr) {
+        try {
+            RRule.parseString(rruleStr);
+        } catch {
+            throw new ApiError(400, 'Invalid RRULE');
+        }
+        // Reject sub-daily recurrence at the write boundary (see recurrence-limits): it is never a
+        // real calendar event and lets a single range query block the event loop for everyone.
+        if (isSubDailyRrule(rruleStr)) throw new ApiError(400, 'Sub-daily recurrence is not supported');
+        // Same DoS class: a recurring dtstart outside the sane range makes rrule iterate
+        // dtstart→window at any frequency (see recurrence-limits).
+        if (isOutOfRangeRecurrenceStart(input.startTime)) {
+            throw new ApiError(400, 'Recurring event start time is out of range');
+        }
+    }
+    // Reject reversed intervals. REST and CalDAV PUT funnel through here, so both are covered; both are
+    // interactive protocols where a 400 is actionable. Inbound iMIP bypasses createEvent/updateEvent and
+    // clamps instead (imip.ts) — dropping an emailed invite is worse than a zero-length event. Zero
+    // duration stays legal — RFC 5545 §3.6.1 permits DTEND == DTSTART, and the importers rely on it.
+    if (input.endTime < input.startTime) throw new ApiError(400, 'Event end time cannot be before start time');
+}
+
+// A UID the home can key an event by. The file's own UID is kept so a re-import recognizes it, and it
+// travels into etags and sync deltas — so an unprintable or endless one is refused rather than stored.
+const MAX_UID_LENGTH = 255;
+function isImportableUid(uid: string): boolean {
+    if (!uid || uid.length > MAX_UID_LENGTH) return false;
+    for (let index = 0; index < uid.length; index++) {
+        const code = uid.charCodeAt(index);
+        if (code < 0x20 || code === 0x7f) return false;
+    }
+    return true;
+}
+
+// An imported event as this Home's own: no organizer, no attendees, a handful of reminders.
+function importable(event: ParsedEvent): ParsedEvent {
+    const reminders = event.data?.reminders?.slice(0, ICS_IMPORT_MAX_REMINDERS);
+    return { ...event, data: reminders?.length ? { reminders } : null };
+}
+
+// The row an imported VEVENT lands as, master and override alike: what the file said, written by this
+// user. Never the file's UID as the resource name — it is the author's string, and two files that share
+// one collide on the (calendarId, uri) unique index.
+function importArgs(event: ParsedEvent, userId: string): CreateEventArgs {
+    return {
+        title: event.title,
+        description: event.description,
+        location: event.location,
+        startTime: event.startTime,
+        endTime: event.endTime,
+        allDay: event.allDay,
+        rrule: event.rrule,
+        timezone: event.timezone,
+        status: event.status,
+        sequence: event.sequence,
+        data: event.data,
+        uid: event.uid,
+        createByUserId: userId,
+        uri: `${randomUUID()}.ics`,
+    };
 }
 
 export class Calendar {
@@ -172,6 +248,26 @@ export class Calendar {
         const cal = this.getCalendarById(calendarId);
         if (!cal) throw new ApiError(404, 'Calendar not found');
 
+        validateEventInput(input);
+
+        this.incrementCtag(calendarId);
+        const newCtag = this.getCalendarById(calendarId)!.ctag;
+        const event = this.insertEvent(calendarId, input, newCtag);
+
+        const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_CREATED, this.home.user.id);
+        this.home.broadcast(sseEvent);
+        notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {});
+
+        if (user && event.data?.attendees?.length) {
+            propagateInvitation(this.home, event, user, [], event.data.attendees).catch(console.error);
+        }
+
+        return event;
+    }
+
+    // The row behind every create, stamped with the ctag the caller bumped: createEvent bumps and
+    // announces per event, importEvents once for a whole file. Input is validated before it gets here.
+    private insertEvent(calendarId: string, input: CreateEventArgs, ctag: number): CalendarEvent {
         const id = randomUUID();
         // Exceptions must share the parent's UID (CalDAV groups events by UID)
         let uid = input.uid || '';
@@ -181,26 +277,6 @@ export class Calendar {
         }
         if (!uid) uid = randomUUID();
         const rruleStr = input.rrule ?? null;
-        if (rruleStr) {
-            try {
-                RRule.parseString(rruleStr);
-            } catch {
-                throw new ApiError(400, 'Invalid RRULE');
-            }
-            // Reject sub-daily recurrence at the write boundary (see recurrence-limits): it is never a
-            // real calendar event and lets a single range query block the event loop for everyone.
-            if (isSubDailyRrule(rruleStr)) throw new ApiError(400, 'Sub-daily recurrence is not supported');
-            // Same DoS class: a recurring dtstart outside the sane range makes rrule iterate
-            // dtstart→window at any frequency (see recurrence-limits).
-            if (isOutOfRangeRecurrenceStart(input.startTime)) {
-                throw new ApiError(400, 'Recurring event start time is out of range');
-            }
-        }
-        // Reject reversed intervals. REST and CalDAV PUT funnel through here, so both are covered; both are
-        // interactive protocols where a 400 is actionable. Inbound iMIP bypasses createEvent/updateEvent and
-        // clamps instead (imip.ts) — dropping an emailed invite is worse than a zero-length event. Zero
-        // duration stays legal — RFC 5545 §3.6.1 permits DTEND == DTSTART, and the importers rely on it.
-        if (input.endTime < input.startTime) throw new ApiError(400, 'Event end time cannot be before start time');
         const timezone = normalizeTimezone(input.timezone);
         const status = input.status ?? 'confirmed';
         const etag = computeEtag({
@@ -215,9 +291,6 @@ export class Calendar {
             status,
             data: input.data,
         });
-
-        this.incrementCtag(calendarId);
-        const newCtag = this.getCalendarById(calendarId)!.ctag;
 
         const uri =
             input.uri ||
@@ -253,7 +326,7 @@ export class Calendar {
                 etag,
                 data: input.data ?? null,
                 createByUserId: input.createByUserId ?? null,
-                eventCtag: newCtag,
+                eventCtag: ctag,
             })
             .run();
         const event = this.getEventById(id)!;
@@ -263,16 +336,126 @@ export class Calendar {
             this.touchEvent(input.parentEventId);
         }
 
+        const { eventCtag: _ctag, ...calendarEvent } = event;
+        return calendarEvent;
+    }
+
+    // A whole `.ics` into one calendar of this Home, bytes in, every event landing as this user's own
+    // (docs/CALENDAR.md § Importing an .ics).
+    public importEvents(calendarId: string, bytes: Uint8Array): ImportCountsResult {
+        const cal = this.getCalendarById(calendarId);
+        if (!cal) throw new ApiError(404, 'Calendar not found');
+
+        // iCalendar is UTF-8, so another encoding is its own answer rather than "not a calendar" — the
+        // same pair a vCard import gives (contacts/transfer.ts).
+        const text = decodeUtf8Strict(bytes);
+        if (text === null) throw new ApiError(400, NOT_UTF8_FILE);
+
+        // Counted on the text before ical.js builds a component tree per VEVENT: the route runs with the
+        // idle timeout off on the thread that serves every app, and a file far past the ceiling answers
+        // this 413 either way. A folded line starts with a space, so a line that starts with the property
+        // name is a VEVENT of its own.
+        if ((text.match(/^BEGIN:VEVENT\r?$/gim)?.length ?? 0) > ICS_IMPORT_MAX_EVENTS) {
+            throw new ApiError(413, 'Too many events');
+        }
+
+        let parsed: IcsParseResult;
+        try {
+            parsed = parseIcs(text);
+        } catch (e) {
+            if (e instanceof ICAL.parse.ParserError) throw new ApiError(400, NOT_A_CALENDAR_FILE);
+            throw e;
+        }
+
+        // Every VEVENT is a row, overrides included: one master with 37 000 RECURRENCE-IDs is the same
+        // write volume as 37 000 masters.
+        if (parsed.events.length > ICS_IMPORT_MAX_EVENTS) throw new ApiError(413, 'Too many events');
+
+        // One occurrence is one exception row: a file naming the same RECURRENCE-ID twice keeps the last
+        // VEVENT, where a repeated CalDAV PUT of it converges (caldav/resource.ts § syncExceptionEvents).
+        const masters: ParsedEvent[] = [];
+        const overridesByUid = new Map<string, Map<string, ParsedEvent>>();
+        for (const event of parsed.events) {
+            if (!event.recurrenceDate) {
+                masters.push(event);
+                continue;
+            }
+            const series = overridesByUid.get(event.uid);
+            if (series) series.set(event.recurrenceDate, event);
+            else overridesByUid.set(event.uid, new Map([[event.recurrenceDate, event]]));
+        }
+
+        // A VEVENT the parser could not read, and an override whose master the file does not hold — it
+        // has no series to attach to — are members the import cannot write, counted as the failures they
+        // are rather than dropped in silence.
+        const masterUids = new Set(masters.map((event) => event.uid));
+        let unwritable = parsed.skipped;
+        for (const [uid, overrides] of overridesByUid) {
+            if (!masterUids.has(uid)) unwritable += overrides.size;
+        }
+
+        const result: ImportCountsResult = { imported: 0, skipped: 0, failed: unwritable };
+        // One transaction for the file: a crash mid-loop would otherwise leave masters behind that a
+        // retry skips, so a series would lose its overrides for good.
+        this.db.transaction((tx) => {
+            // One ctag bump, one broadcast and one shared-calendar notification for the file: a thousand
+            // events through createEvent were a thousand of each.
+            this.incrementCtag(calendarId);
+            const newCtag = this.getCalendarById(calendarId)!.ctag;
+
+            for (const parsedMaster of masters) {
+                const master = importable(parsedMaster);
+                if (!isImportableUid(master.uid)) {
+                    result.failed++;
+                    continue;
+                }
+                // Queried per event, so the loop's own writes count: a UID repeated in the file skips like a
+                // re-import, and a UID an invitation already linked never gets a twin.
+                if (this.getEventsByUid(master.uid).length) {
+                    result.skipped++;
+                    continue;
+                }
+
+                const args = importArgs(master, this.home.user.id);
+
+                try {
+                    // A savepoint per series, so an override the calendar refuses takes its master's row
+                    // with it instead of leaving half a series behind.
+                    tx.transaction(() => {
+                        validateEventInput(args);
+                        const event = this.insertEvent(calendarId, args, newCtag);
+                        // A fresh master has no stored exceptions to reconcile against, so every override is
+                        // a plain insert: the row a CalDAV PUT writes, under a resource name of its own.
+                        for (const parsedOverride of overridesByUid.get(master.uid)?.values() ?? []) {
+                            const override = importable(parsedOverride);
+                            const overrideArgs: CreateEventArgs = {
+                                ...importArgs(override, this.home.user.id),
+                                // One occurrence of its master's series, never a series of its own.
+                                rrule: null,
+                                // The master's zone when the override names none, or it serializes in Z
+                                // form and its etag stops hashing like the create/update paths (audit #24).
+                                timezone: override.timezone ?? event.timezone,
+                                parentEventId: event.id,
+                                recurrenceDate: override.recurrenceDate,
+                                uid: event.uid,
+                            };
+                            validateEventInput(overrideArgs);
+                            this.insertEvent(calendarId, overrideArgs, newCtag);
+                        }
+                    });
+                } catch {
+                    result.failed++;
+                    continue;
+                }
+                result.imported++;
+            }
+        });
+
         const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_CREATED, this.home.user.id);
         this.home.broadcast(sseEvent);
         notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {});
 
-        if (user && event.data?.attendees?.length) {
-            propagateInvitation(this.home, event, user, [], event.data.attendees).catch(console.error);
-        }
-
-        const { eventCtag: _ctag, ...calendarEvent } = event;
-        return calendarEvent;
+        return result;
     }
 
     public getEventsByUid(uid: string): CalendarEvent[] {
@@ -477,7 +660,7 @@ export class Calendar {
         if (!existing || existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
 
         // Linked event guard: attendees can only change local fields (reminders, color)
-        if (existing.data?.organizer) {
+        if (isInvitationFromOthers(existing, this.home.user.email)) {
             const localData: EventData = { ...existing.data };
             if (input.data) {
                 localData.reminders = input.data.reminders ?? localData.reminders;
@@ -495,7 +678,18 @@ export class Calendar {
         const allDay = input.allDay ?? existing.allDay;
         const status = input.status ?? existing.status;
         const sequence = input.sequence ?? existing.sequence;
-        const data = input.data !== undefined ? input.data : existing.data;
+        const inputData = input.data !== undefined ? input.data : existing.data;
+        // organizer and organizerEventId are server-owned and absent from the HTTP schema, so an HTTP
+        // edit (the call that carries `user`) keeps the stored pair instead of erasing it. A CalDAV PUT
+        // stays a full-resource replace: a payload without ORGANIZER removes it.
+        const data =
+            user && inputData
+                ? {
+                      ...inputData,
+                      organizer: existing.data?.organizer,
+                      organizerEventId: existing.data?.organizerEventId,
+                  }
+                : inputData;
 
         // Same interval invariant as createEvent, on the resolved (possibly dragged) times.
         if (endTime < startTime) throw new ApiError(400, 'Event end time cannot be before start time');
@@ -577,7 +771,7 @@ export class Calendar {
         // reminders/color above) must NOT bump SEQUENCE or send iMIP — doing so spoofs the attendee as
         // organizer AND outruns the organizer's SEQUENCE, so the RFC 5546 replay guard later drops the
         // organizer's real updates. Mirror the attendee discriminator at the top of updateEvent.
-        if (user && !existing.data?.organizer && updated.data?.attendees?.length) {
+        if (user && !isInvitationFromOthers(existing, this.home.user.email) && updated.data?.attendees?.length) {
             this.incrementSequence(id);
             const withSequence = this.getEventById(id)!;
             propagateInvitation(this.home, withSequence, user, oldAttendees, withSequence.data!.attendees!).catch(
@@ -596,17 +790,25 @@ export class Calendar {
         // 404 (not 403) on calendar mismatch so a share on one calendar can't oracle event ids in another.
         if (!existing || existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
 
-        if (user && existing.data?.organizer) {
-            // Attendee deleting linked copy = decline
-            const orgUserId = existing.data.organizer.userId;
-            if (isExternalOwnerId(orgUserId)) {
+        const invitation = isInvitationFromOthers(existing, this.home.user.email) ? existing.data : null;
+        // Attendee deleting a linked copy = decline, and only an attendee has an RSVP to give: a file or a
+        // CalDAV client can hang any ORGANIZER on an event, so a user who is not on the list just deletes
+        // their row rather than telling a stranger they declined a meeting they were never invited to.
+        const declining =
+            user && invitation?.attendees?.some((a) => a.email.toLowerCase() === user.email.toLowerCase());
+        if (user && declining && invitation?.organizer) {
+            const orgUserId = invitation.organizer.userId;
+            // A CalDAV- or iMIP-parsed organizer is known by address only; with no Eigen id to relay to,
+            // the decline takes the same REPLY path an external organizer takes.
+            if (!orgUserId || isExternalOwnerId(orgUserId)) {
                 const mail = composeRsvpReply(existing, user.email, user.name ?? user.email, 'declined');
                 sendMail(mail).catch(console.error);
             } else {
-                propagateDecline(orgUserId, existing.data.organizerEventId!, user.email).catch(console.error);
+                propagateDecline(orgUserId, invitation.organizerEventId!, user.email).catch(console.error);
             }
-        } else if (existing.data?.attendees?.length) {
-            // Organizer deleting = cancel for all attendees
+        } else if (!invitation && existing.data?.attendees?.length) {
+            // Organizer deleting = cancel for all attendees, which is what an event with no foreign
+            // organizer makes this user.
             propagateCancellation(this.home, existing).catch(console.error);
         }
 
@@ -1500,7 +1702,9 @@ export class Calendar {
     ): void {
         const event = this.getEventById(eventId);
         if (!event) throw new ApiError(404, 'Event not found');
-        if (!event.data?.organizer) throw new ApiError(400, 'Not a linked event');
+        if (!event.data?.organizer || !isInvitationFromOthers(event, this.home.user.email)) {
+            throw new ApiError(400, 'Not a linked event');
+        }
 
         const isAttendee = event.data.attendees?.some((a) => a.email.toLowerCase() === user.email.toLowerCase());
         if (!isAttendee) throw new ApiError(403, 'Not an attendee');

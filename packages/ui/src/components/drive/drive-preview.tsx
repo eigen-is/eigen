@@ -1,17 +1,22 @@
 import { getDriveItemThumbnail } from '@workspace/lib/api';
+import { formatEventWhen, viewerTimeZone } from '@workspace/lib/calendar';
 import { CANVAS_PREVIEW_WIDTH, getTextPreviewMode, type TextPreviewMode } from '@workspace/lib/constants';
-import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
-import { droppedLine, remainingLine } from '@workspace/lib/contacts';
+import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
+import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
+import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
+import { formatDateTime } from '@workspace/lib/date';
 import { A4_WIDTH_PX } from '@workspace/lib/docs/eigendoc';
-import { useTextPreview, useVCardPreview } from '@workspace/lib/drive';
+import { useEmlPreview, useIcsPreview, useTextPreview, useVCardPreview } from '@workspace/lib/drive';
+import { NO_SUBJECT } from '@workspace/lib/mail';
 import type { Contact } from '@workspace/lib/types/contact';
-import { type DrivePath, isVCardFile } from '@workspace/lib/types/drive';
+import { type DrivePath, isEmlFile, isIcsFile, isVCardFile } from '@workspace/lib/types/drive';
 import type { LucideIcon } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useElementSize } from '../../hooks/use-element-size';
 import { cn, IMAGE_CHECKERBOARD_STYLE } from '../../lib/utils';
 import { UserAvatar } from '../user/user-avatar';
 import { getFilePresentation } from './file-presentation';
+import { PreviewCounts } from './preview-pane';
 
 type DrivePreviewProps = {
     path: DrivePath;
@@ -24,7 +29,9 @@ export function DrivePreview({ path, onActivate, className }: DrivePreviewProps)
     const presentation = getFilePresentation(path.mimeType, path.type, path.name);
     const hasTextPreview = getTextPreviewMode(path.mimeType, path.name) !== null;
     // Same guard as the quick look: a file an import would refuse never gets a preview either.
-    const hasVCardPreview = isVCardFile(path.mimeType, path.name) && path.size <= IMPORT_MAX_BYTES;
+    const hasVCardPreview = isVCardFile(path.mimeType, path.name) && path.size <= VCARD_MAX_BYTES;
+    const hasEmlPreview = isEmlFile(path.mimeType, path.name) && path.size <= EML_MAX_BYTES;
+    const hasIcsPreview = isIcsFile(path.mimeType, path.name) && path.size <= ICS_MAX_BYTES;
     const { showThumbnail, thumbnailUrl } = getDriveItemThumbnail(path);
 
     const interactive = !!onActivate;
@@ -65,6 +72,10 @@ export function DrivePreview({ path, onActivate, className }: DrivePreviewProps)
                 </>
             ) : hasVCardPreview ? (
                 <VCardHero path={path} icon={presentation.icon} color={presentation.colorVar} />
+            ) : hasEmlPreview ? (
+                <EmlHero path={path} icon={presentation.icon} color={presentation.colorVar} />
+            ) : hasIcsPreview ? (
+                <IcsHero path={path} icon={presentation.icon} color={presentation.colorVar} />
             ) : hasTextPreview ? (
                 <HtmlPreview path={path} tintColor={presentation.colorVar} />
             ) : (
@@ -85,6 +96,16 @@ function IconFallback({ icon: Icon, color }: { icon: LucideIcon; color: string }
 // What fits the 16:9 box at reading size, badge and counted lines included.
 const HERO_CARD_LIMIT = 3;
 
+// The body every format that reads its file composes into: rows centred under the format badge, on the
+// app tint the wrapper already paints.
+function HeroBody({ children }: { children: ReactNode }) {
+    return (
+        <div className="absolute inset-0 flex flex-col justify-center gap-2 overflow-hidden px-4 pt-8 pb-3">
+            {children}
+        </div>
+    );
+}
+
 // The quick look reads a column of full cards; the hero shows the first three as compact rows, off the
 // same query — which is why a .vcf never asks for its text preview here.
 function VCardHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; color: string }) {
@@ -99,13 +120,72 @@ function VCardHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; c
     const remaining = data.total - data.dropped - contacts.length;
 
     return (
-        <div className="absolute inset-0 flex flex-col justify-center gap-2 overflow-hidden px-4 pt-8 pb-3">
+        <HeroBody>
             {contacts.map(({ contact }, index) => (
                 <VCardRow key={index} contact={contact} />
             ))}
-            {remaining > 0 && <p className="truncate text-xs text-muted-foreground">{remainingLine(remaining)}</p>}
-            {data.dropped > 0 && <p className="truncate text-xs text-muted-foreground">{droppedLine(data.dropped)}</p>}
-        </div>
+            <PreviewCounts remaining={remaining} dropped={data.dropped} noun="contact" className="truncate text-xs" />
+        </HeroBody>
+    );
+}
+
+// The quick look reads the whole message; the hero shows what a mail list row shows, off the same query.
+function EmlHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; color: string }) {
+    const { data, isLoading } = useEmlPreview(path.ownerId, path.mountId, path.id, path.updatedAt, path.size);
+
+    // Loading reads as the empty tinted box, the same as a text hero with no body yet.
+    if (isLoading) return null;
+    if (!data) return <IconFallback icon={icon} color={color} />;
+
+    const sender = data.from?.value[0];
+    const senderName = sender?.name || sender?.address || 'Unknown';
+
+    return (
+        <HeroBody>
+            <div className="flex min-w-0 items-center gap-3">
+                <UserAvatar name={senderName} email={sender?.address ?? ''} />
+                <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-foreground">{senderName}</p>
+                    {data.date && <p className="truncate text-xs text-muted-foreground">{formatDateTime(data.date)}</p>}
+                </div>
+            </div>
+            <p className="truncate text-sm text-foreground">{data.subject || NO_SUBJECT}</p>
+            {data.text && <p className="line-clamp-2 text-xs text-muted-foreground">{data.text}</p>}
+        </HeroBody>
+    );
+}
+
+// The quick look reads every event as a card; the hero shows the first three as one line each — the
+// title and when it happens — off the same query.
+function IcsHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; color: string }) {
+    const { data, isLoading } = useIcsPreview(path.ownerId, path.mountId, path.id, path.updatedAt, path.size);
+    const events = data?.events.slice(0, HERO_CARD_LIMIT) ?? [];
+
+    // Loading reads as the empty tinted box, the same as a text hero with no body yet.
+    if (isLoading) return null;
+    if (!data || events.length === 0) return <IconFallback icon={icon} color={color} />;
+
+    // The masters the file holds that this hero shows no line for — the unreadable ones get their own line.
+    const remaining = data.total - data.dropped - events.length;
+
+    return (
+        <HeroBody>
+            {events.map((event, index) => (
+                <div key={index} className="min-w-0">
+                    <p className="truncate text-sm font-medium text-foreground">{event.title}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                        {formatEventWhen(
+                            new Date(event.start),
+                            new Date(event.end),
+                            event.allDay,
+                            event.timezone,
+                            viewerTimeZone(),
+                        )}
+                    </p>
+                </div>
+            ))}
+            <PreviewCounts remaining={remaining} dropped={data.dropped} noun="event" className="truncate text-xs" />
+        </HeroBody>
     );
 }
 

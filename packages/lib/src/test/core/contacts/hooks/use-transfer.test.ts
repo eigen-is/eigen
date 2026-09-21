@@ -1,36 +1,22 @@
-// What an import run tells the user. Both import paths (a file from the disk, a file from Drive) report
-// their three counts through one copy, so the message is pinned here rather than in each caller.
+// What an import run tells the user. Every import path (a file from the disk, a file from Drive, the
+// bytes behind a subject with no Drive path) reports its three counts through one copy, so the message is
+// pinned here rather than in each caller.
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { QueryClient } from '@tanstack/react-query';
-import type { ImportContactsResult } from '@workspace/lib/types/contact';
-import { installHappyDom } from '../../../happy-dom';
+import type { ImportCountsResult } from '@workspace/lib/types/transfer';
+import {
+    fetchCalls,
+    installTransferHarness,
+    OWNER,
+    renderHook,
+    served,
+    toasts,
+    trackingClient,
+} from '../../../transfer-harness';
 
-const OWNER = 'a1b2c3d4';
+installTransferHarness();
 
-// react-dom needs a DOM to render the hooks into.
-installHappyDom();
-
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-
-// The hooks read the signed-in user from the auth context; there is no provider here.
-const realAuthContextModule = await import('../../../../core/auth/auth-context');
-mock.module('../../../../core/auth/auth-context', () => ({
-    useAuth: () => ({ user: { id: OWNER } }),
-}));
-
-// The toasts are this file's subject, so sonner is swapped for a recorder. Restored in afterAll.
-const toasts: string[] = [];
-const realSonnerModule = await import('sonner');
-mock.module('sonner', () => ({
-    toast: {
-        success: (message: string) => toasts.push(`success: ${message}`),
-        error: (message: string) => toasts.push(`error: ${message}`),
-    },
-}));
-
-// The Eden client, stubbed to the one call the drive-import path makes. Recipe: the use-backup test.
-let driveImportResult: ImportContactsResult = { imported: 0, skipped: 0, failed: 0 };
+// The Eden client, stubbed to the one call the drive-import path makes.
+let driveImportResult: ImportCountsResult = { imported: 0, skipped: 0, failed: 0 };
 const realApiModule = await import('../../../../core/api');
 mock.module('../../../../core/api', () => ({
     ...realApiModule,
@@ -41,47 +27,15 @@ mock.module('../../../../core/api', () => ({
     }),
 }));
 
-// The import POSTs a file and reads its three counts back as JSON; the from-url path fetches the file's
-// bytes through the same stub first, so the calls are recorded in order.
-const realFetch = g.fetch;
-const fetchCalls: { url: string; body: BodyInit | null | undefined }[] = [];
-let fileImportResult: ImportContactsResult = { imported: 0, skipped: 0, failed: 0 };
-g.fetch = async (url: string, init?: RequestInit) => {
-    fetchCalls.push({ url, body: init?.body });
-    return new Response(JSON.stringify(fileImportResult), { status: 200 });
-};
-
 afterAll(() => {
-    g.fetch = realFetch;
     mock.module('../../../../core/api', () => realApiModule);
-    mock.module('../../../../core/auth/auth-context', () => realAuthContextModule);
-    mock.module('sonner', () => realSonnerModule);
 });
 
-// One React root for every hook that has to be rendered to be observed. Recipe: the use-backup test.
-async function renderHook<T>(use: () => T, queryClient: QueryClient): Promise<{ latest: T; unmount: () => void }> {
-    const { act, createElement } = await import('react');
-    const { createRoot } = await import('react-dom/client');
-    const { QueryClientProvider } = await import('@tanstack/react-query');
-
-    const seen: { latest: T | null } = { latest: null };
-    function Harness() {
-        seen.latest = use();
-        return null;
-    }
-    const container = document.createElement('div');
-    const root = createRoot(container);
-    await act(async () => {
-        root.render(createElement(QueryClientProvider, { client: queryClient }, createElement(Harness, null)));
-    });
-    return { latest: seen.latest as T, unmount: () => root.unmount() };
-}
-
-async function importFile(result: ImportContactsResult): Promise<string> {
+async function importFile(result: ImportCountsResult): Promise<string> {
     const { act } = await import('react');
     const { useImportContacts } = await import('../../../../core/contacts/hooks/use-transfer');
-    fileImportResult = result;
-    const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    served.importResponse = result;
+    const { queryClient } = trackingClient();
     const { latest, unmount } = await renderHook(() => useImportContacts(), queryClient);
 
     await act(async () => {
@@ -122,36 +76,33 @@ describe('useImportContacts', () => {
     });
 });
 
-describe('useImportContactsFromDrive', () => {
+describe('useImportContactsFile', () => {
     beforeEach(() => {
         toasts.length = 0;
+        fetchCalls.length = 0;
     });
 
     test('a file picked from Drive reports through the same copy as a file picked from the disk', async () => {
         const { act } = await import('react');
-        const { useImportContactsFromDrive } = await import('../../../../core/contacts/hooks/use-transfer');
+        const { useImportContactsFile } = await import('../../../../core/contacts/hooks/use-transfer');
         driveImportResult = { imported: 1, skipped: 1, failed: 1 };
-        const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
-        const { latest, unmount } = await renderHook(() => useImportContactsFromDrive(), queryClient);
+        const { queryClient } = trackingClient();
+        const { latest, unmount } = await renderHook(() => useImportContactsFile(), queryClient);
 
         await act(async () => {
-            await latest.mutateAsync({ sourceOwnerId: OWNER, sourceMountId: 'm1', sourcePathId: 'p1' });
+            await latest.mutateAsync({ drive: { sourceOwnerId: OWNER, sourceMountId: 'm1', sourcePathId: 'p1' } });
         });
         await act(() => unmount());
 
         expect(toasts.at(-1)).toBe('success: Imported 1 contact, skipped 1 duplicate, 1 unreadable');
     });
-});
 
-describe('useImportContactsFromUrl', () => {
-    test('a subject with no Drive path behind it posts the bytes it fetched, named after the subject', async () => {
+    test('a subject with no Drive path behind it posts the bytes it fetched', async () => {
         const { act } = await import('react');
-        const { useImportContactsFromUrl } = await import('../../../../core/contacts/hooks/use-transfer');
-        toasts.length = 0;
-        fetchCalls.length = 0;
-        fileImportResult = { imported: 2, skipped: 0, failed: 0 };
-        const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
-        const { latest, unmount } = await renderHook(() => useImportContactsFromUrl(), queryClient);
+        const { useImportContactsFile } = await import('../../../../core/contacts/hooks/use-transfer');
+        served.importResponse = { imported: 2, skipped: 0, failed: 0 };
+        const { queryClient } = trackingClient();
+        const { latest, unmount } = await renderHook(() => useImportContactsFile(), queryClient);
 
         await act(async () => {
             await latest.mutateAsync({ url: '/mail/owner/message/m1/attachment/0' });

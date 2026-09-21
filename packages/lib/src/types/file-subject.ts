@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import type { DrivePath } from './drive';
+import type { DriveImportSource, DrivePath } from './drive';
 import type { Attachment } from './mail';
 
 // One file a surface can act on, whatever holds it: its identity, and nothing that follows from it.
@@ -34,7 +34,10 @@ export type SubjectInfo = {
     thumbnailUrl?: string;
 };
 
-export type PreviewMode = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'vcard' | 'fallback';
+export type PreviewMode = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'vcard' | 'eml' | 'ics' | 'fallback';
+
+// Where an import reads its bytes: the Drive file itself, copied server-side, or the URL behind them.
+export type FileImportSource = { drive: DriveImportSource; url?: undefined } | { drive?: undefined; url: string };
 
 export type FileActionId =
     | 'quick-look'
@@ -42,7 +45,9 @@ export type FileActionId =
     | 'save-to-drive'
     | 'convert-to-sheet'
     | 'convert-to-document'
-    | 'import-contacts';
+    | 'import-contacts'
+    | 'import-mail'
+    | 'import-calendar';
 
 export type FileAction = {
     id: FileActionId;
@@ -50,4 +55,7 @@ export type FileAction = {
     icon: LucideIcon;
     // Derived facts first: most rows decide on those alone and never look at what holds the file.
     applies: (info: SubjectInfo, subject: FileSubject) => boolean;
+    // The route behind the row refuses a guest, so the row is hidden for one. `applies` cannot answer
+    // this: it is handed the file, never the user.
+    guestDenied?: true;
 };

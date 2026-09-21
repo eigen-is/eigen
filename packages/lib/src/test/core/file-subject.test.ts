@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { TEXT_PREVIEW_MAX_BYTES } from '../../constants/preview';
+import { getBytesTextPreviewMode, getTextPreviewMode, TEXT_PREVIEW_MAX_BYTES } from '../../constants/preview';
 import {
     getDriveDownloadUrl,
     getDriveEmbedUrl,
@@ -7,8 +7,14 @@ import {
     getMailAttachmentEmbedUrl,
     getMailAttachmentUrl,
 } from '../../core/api';
-import { getPreviewMode, subjectFromMailAttachment, subjectFromPath, subjectInfo } from '../../core/file-subject';
-import type { DrivePath, DrivePathType } from '../../types/drive';
+import {
+    getPreviewMode,
+    importSourceOf,
+    subjectFromMailAttachment,
+    subjectFromPath,
+    subjectInfo,
+} from '../../core/file-subject';
+import { type DrivePath, type DrivePathType, EML_MIME, ICS_MIME } from '../../types/drive';
 import type { FileSubject } from '../../types/file-subject';
 
 function path(p: Partial<DrivePath> & { name: string; type: DrivePathType }): DrivePath {
@@ -117,12 +123,31 @@ describe('getPreviewMode', () => {
         expect(getPreviewMode(mailSubject('shoot.cr2', 'application/octet-stream'))).toBe('fallback');
     });
 
-    test('the text and card previews answer for a Drive item and a mail part alike', () => {
+    test('the text, card and message previews answer for a Drive item and a mail part alike', () => {
         for (const subject of [driveSubject, mailSubject]) {
             expect(getPreviewMode(subject('notes.txt', 'text/plain'))).toBe('text');
             expect(getPreviewMode(subject('readme.md', 'text/markdown'))).toBe('text');
             expect(getPreviewMode(subject('team.vcf', 'text/vcard'))).toBe('vcard');
+            expect(getPreviewMode(subject('forwarded.eml', EML_MIME))).toBe('eml');
+            // An exporter that names the file but not the type is still a message.
+            expect(getPreviewMode(subject('forwarded.eml', 'application/octet-stream'))).toBe('eml');
+            expect(getPreviewMode(subject('festival.ics', 'text/calendar'))).toBe('ics');
+            // A calendar part names its purpose in the type's parameters and often carries no filename.
+            expect(getPreviewMode(subject('attachment-1', 'text/calendar; method=REQUEST'))).toBe('ics');
         }
+    });
+
+    // A message reads as its headers and body, never as its raw MIME source: the text route answers for
+    // neither, so a path never carries two cached preview artifacts (pruneOldVersions is not format-scoped).
+    test('a message has no text mode to be rendered under', () => {
+        expect(getBytesTextPreviewMode(EML_MIME, 'forwarded.eml')).toBeNull();
+        expect(getTextPreviewMode(EML_MIME, 'forwarded.eml')).toBeNull();
+    });
+
+    // Same rule for a calendar, whose mime would otherwise read as code and cache a second artifact.
+    test('a calendar has no text mode to be rendered under', () => {
+        expect(getBytesTextPreviewMode(ICS_MIME, 'festival.ics')).toBeNull();
+        expect(getTextPreviewMode(ICS_MIME, 'festival.ics')).toBeNull();
     });
 
     // A mime is the uploader's or the sender's word; only a real container earns the document modes,
@@ -154,6 +179,26 @@ describe('getPreviewMode', () => {
 });
 
 const part = { contentType: 'application/pdf', filename: 'invoice.pdf', size: 1234 };
+
+// One derivation behind every import row and behind the calendar target picker: a file at a Drive
+// location is copied server-side, anything else hands the route the bytes behind its download URL.
+describe('importSourceOf', () => {
+    test('names the Drive file an import-from-drive route reads', () => {
+        expect(importSourceOf(subjectFromPath(path({ name: 'team.vcf', type: 'file' })))).toEqual({
+            drive: { sourceOwnerId: 'owner-1', sourceMountId: 'mount-1', sourcePathId: 'path-1' },
+        });
+    });
+
+    test('hands a mail part its own download URL', () => {
+        expect(importSourceOf(subjectFromMailAttachment('owner-1', 'msg-1', 0, part))).toEqual({
+            url: getMailAttachmentUrl('owner-1', 'msg-1', 0, 'invoice.pdf'),
+        });
+    });
+
+    test('answers nothing for an item with no bytes to read', () => {
+        expect(importSourceOf(subjectFromPath(path({ name: 'Photos', type: 'folder' })))).toBeNull();
+    });
+});
 
 describe('subjectFromMailAttachment', () => {
     test('stores the part reference, the part itself and nothing else', () => {

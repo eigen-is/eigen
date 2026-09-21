@@ -1,31 +1,25 @@
 import type { FSWatcher } from 'node:fs';
 import * as path from 'node:path';
 import {
+    isStandardMailbox,
     MAILBOX_DRAFTS,
     MAILBOX_INBOX,
     MAILBOX_INBOX_IMAP,
     mailboxListFlags,
     STANDARD_MAILBOXES,
 } from '@workspace/lib/constants/mailboxes';
-import type {
-    Attachment,
-    DraftAttachmentUpload,
-    Email,
-    EmailSummary,
-    MaildirMailbox,
-    RecipientSummary,
-} from '@workspace/lib/types/mail';
+import type { Attachment, DraftAttachmentUpload, Email, EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import type { BunFile, FileSink } from 'bun';
 import { Semaphore } from '../../utils/semaphore';
-import { invalidateMailSize } from '../config/enforcement';
-import { ApiError, LocalFilesystem, PATHS } from '../core';
+import { ApiError, isSafePathSegment, LocalFilesystem, PATHS } from '../core';
 import type { Home } from '../home';
-import { parseEml, parseEmlBytes } from './mail-parse';
+import { parseEml, parseEmlBytes, parseEmlForReader } from './mail-parse';
 import type { DraftMeta, MailFlag, MailSearchOptions, MailStore, MailStoreEvents } from './mail-store';
 import MailDB from './maildb';
 import {
     applyFlagsFromFilename,
     buildMaildirFilename,
+    buildRecipientSummary,
     createUniqueMessageId,
     getMailIDfromFileName,
     parseFlagsFromFilename,
@@ -33,6 +27,43 @@ import {
 } from './mailutils';
 
 const STALE_DRAFT_TEMP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+// The Maildir spec's own age: a `tmp/` file older than this is a crash leftover, never an in-flight write.
+const STALE_MAILDIR_TEMP_MAX_AGE_MS = 36 * 60 * 60 * 1000;
+// Every mail SSE event re-lists the mailboxes, so the reconcile a listing kicks for a folder outside
+// the standard six is due at most this often — a rescan of every folder per event is the whole cost.
+const BACKGROUND_RECONCILE_INTERVAL_MS = 60 * 1000;
+// Sibling of the Maildir tree (not inside it) so Dovecot IMAP doesn't see it as a folder.
+const DRAFT_ATTACHMENTS_DIR = 'draft-attachments';
+
+// Staged attachments are charged to the mail quota, and both surfaces that report it walk them here.
+export function readDraftStagingSize(homeFs: LocalFilesystem): Promise<number> {
+    return homeFs.dirSize(path.join(PATHS.MAIL.ROOT, DRAFT_ATTACHMENTS_DIR));
+}
+
+// A segment is a directory name under the Maildir root, so the rule is what breaks a path or the hierarchy,
+// not an allowlist: Dovecot spells `&` and everything outside printable ASCII in modified UTF-7
+// (`Ärger` is `.&AMQ-rger`), and an allowlist dropped those folders from the listing. Splitting on both
+// delimiters leaves no separator inside a segment, so `..` and a leading dot are empty segments here.
+const MAILBOX_SEGMENT_MAX_CHARS = 200;
+const CONTROL_CHARACTER = /\p{Cc}/u;
+
+function isValidMailboxPath(mailbox: string): boolean {
+    return mailbox
+        .split(/[./]/)
+        .every(
+            (segment) =>
+                segment.length > 0 &&
+                segment.length <= MAILBOX_SEGMENT_MAX_CHARS &&
+                !CONTROL_CHARACTER.test(segment) &&
+                segment.trim() === segment,
+        );
+}
+
+// Refused, never mapped onto a safe name: two mapped ids would collide on one file.
+function safeFileId(id: string): string {
+    if (!isSafePathSegment(id)) throw new ApiError(400, `Invalid mail id: ${id}`);
+    return id;
+}
 
 export class MaildirStore implements MailStore {
     readonly basePath: string;
@@ -40,9 +71,17 @@ export class MaildirStore implements MailStore {
     private db!: MailDB;
     private events!: MailStoreEvents;
     private syncingMailboxes = new Map<string, Promise<void>>();
+    private lastSyncStartedAt = new Map<string, number>();
+    // Each id this store delivered, and whether it was an arrival — read by whichever sync reaches the
+    // file first, this append's own or a watcher's.
+    private deliveries = new Map<string, boolean>();
     // Reconciliation (doSyncMailbox) must not straddle a mutation's fs+db pair, or its delete phase drops just-moved rows.
     private storeLock = new Semaphore(1);
     private watchers: FSWatcher[] = [];
+    // Running byte totals so size() answers from memory — the mail+contacts quota gate calls it on every
+    // metered write, and an index sum plus a staging walk per call would make an N-card device sync O(N²).
+    private indexBytes = 0;
+    private stagedBytes = 0;
 
     constructor(private home: Home) {
         this.basePath = PATHS.MAIL.MAILDIR;
@@ -59,9 +98,14 @@ export class MaildirStore implements MailStore {
         }
         this.db = new MailDB(this.home);
         await this.db.init();
+        // Seeded once from the index and the staging dir; every row and staged file adjusts it thereafter.
+        this.indexBytes = this.db.size();
+        await this.recountStaged();
         return isNew;
     }
 
+    // The standard six only: a watcher per folder would cost a home with hundreds of IMAP folders
+    // hundreds of handles against a per-user inotify limit every home shares.
     watch(): void {
         for (const mailbox of STANDARD_MAILBOXES) {
             const mailboxPath = this.mailboxDir(mailbox);
@@ -81,7 +125,7 @@ export class MaildirStore implements MailStore {
     async unwatch(): Promise<void> {
         for (const watcher of this.watchers) watcher.close();
         this.watchers = [];
-        // Let any in-flight mailbox sync (kicked fire-and-forget by the watcher) finish before
+        // Let any in-flight mailbox sync (kicked fire-and-forget by a watcher or a listing) finish before
         // the domain flushes drafts and the db closes — later sync phases would hit a closed db.
         await Promise.allSettled([...this.syncingMailboxes.values()]);
     }
@@ -94,7 +138,13 @@ export class MaildirStore implements MailStore {
     }
 
     async size(): Promise<number> {
-        return this.db.size();
+        return this.indexBytes + this.stagedBytes;
+    }
+
+    // The staging dir holds one compose session's attachments at most, so a re-walk per change costs
+    // nothing next to writing the attachment and — unlike a delta per partial write — cannot drift.
+    private async recountStaged(): Promise<void> {
+        this.stagedBytes = await readDraftStagingSize(this.home.fs);
     }
 
     search(opts: MailSearchOptions): EmailSummary[] {
@@ -105,10 +155,12 @@ export class MaildirStore implements MailStore {
 
     async mailboxesList(): Promise<MaildirMailbox[]> {
         const mailboxes: MaildirMailbox[] = [];
-        for (const name of STANDARD_MAILBOXES) {
-            if (await this.mailboxDirExists(name)) {
-                mailboxes.push(this.getMailboxInfo(name));
+        for (const name of await this.listMailboxPaths()) {
+            // Counts come from the index; a folder without a watcher reconciles here, in the background.
+            if (!isStandardMailbox(name) && this.reconcileDue(name)) {
+                this.syncMailbox(name).catch((err) => console.error('maildir: background mailbox sync failed', err));
             }
+            mailboxes.push(this.getMailboxInfo(name));
         }
         return mailboxes;
     }
@@ -154,7 +206,11 @@ export class MaildirStore implements MailStore {
         const cached = this.db.getEmail(messageId);
         if (!cached) return null;
 
-        const parsed = await this.readAndParse(messageId, cached.mailbox, cached.filename);
+        const parsed = await parseEmlForReader(
+            messageId,
+            cached.mailbox,
+            this.getMessageFile(cached.mailbox, cached.filename),
+        );
         applyFlagsFromFilename(parsed, cached.filename);
         return { ...parsed, ...cached };
     }
@@ -168,13 +224,22 @@ export class MaildirStore implements MailStore {
     async getAttachments(messageId: string): Promise<Attachment[]> {
         const email = this.db.getEmail(messageId);
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
-        const parsed = await this.readAndParse(messageId, email.mailbox, email.filename);
+        const parsed = await parseEml(messageId, email.mailbox, this.getMessageFile(email.mailbox, email.filename));
         return parsed.attachments;
     }
 
-    async append(mailbox: string, message: Buffer, opts?: { skipSync?: boolean }): Promise<string> {
-        // Lock covers only the delivery — the follow-up sync takes the lock itself.
-        const { uniqueId } = await this.storeLock.run(() => this.deliverAtomic(message, mailbox));
+    async append(mailbox: string, message: Buffer, opts?: { skipSync?: boolean; arrival?: boolean }): Promise<string> {
+        const uniqueId = createUniqueMessageId();
+        // Recorded before the file lands: a watcher-driven sync can reach the file before this continues,
+        // and must find the flag. A delivery that never lands leaves none.
+        this.deliveries.set(uniqueId, opts?.arrival ?? true);
+        try {
+            // Lock covers only the delivery — the follow-up sync takes the lock itself.
+            await this.storeLock.run(() => this.deliverAtomic(message, mailbox, uniqueId));
+        } catch (e) {
+            this.deliveries.delete(uniqueId);
+            throw e;
+        }
         if (!opts?.skipSync) await this.syncMailbox(mailbox);
         return uniqueId;
     }
@@ -194,7 +259,10 @@ export class MaildirStore implements MailStore {
             applyFlagsFromFilename(parsed, filename);
             parsed.filename = filename;
             parsed.mailbox = MAILBOX_DRAFTS;
+            // A full save rewrites the draft under its own id, so the row it replaces is credited back.
+            const replaced = this.db.getEmail(messageId)?.size ?? 0;
             this.db.addEmail(parsed);
+            this.indexBytes += parsed.size - replaced;
             return parsed;
         });
     }
@@ -206,8 +274,7 @@ export class MaildirStore implements MailStore {
 
             await this.deleteMessage(email.mailbox, email.filename);
             this.db.deleteEmail(messageId);
-            // Freed bytes must reach the next mail+contacts quota check, not a cached pre-delete figure.
-            invalidateMailSize(this.home.user.id);
+            this.indexBytes -= email.size;
         });
     }
 
@@ -245,16 +312,22 @@ export class MaildirStore implements MailStore {
         });
     }
 
-    updateDraftContent(id: string, subject: string, text: string, recipients?: RecipientSummary): void {
-        this.db.updateDraftContent(id, subject, text, recipients);
+    applyDraftMeta(draftId: string, meta: DraftMeta): void {
+        this.db.updateDraftContent(draftId, meta.subject, meta.text, buildRecipientSummary(meta.to, meta.cc));
     }
 
     // -- Sync --
+
+    private reconcileDue(mailbox: string): boolean {
+        const last = this.lastSyncStartedAt.get(mailbox);
+        return last === undefined || Date.now() - last >= BACKGROUND_RECONCILE_INTERVAL_MS;
+    }
 
     private async syncMailbox(mailbox: string): Promise<void> {
         // Don't start a sync once teardown has begun — the watcher can fire one fire-and-forget
         // (watch()) and doSyncMailbox's later phases would query a closed db (see destruct).
         if (this.home.destructing) return;
+        this.lastSyncStartedAt.set(mailbox, Date.now());
         const running = this.syncingMailboxes.get(mailbox);
         if (running) return running;
 
@@ -277,8 +350,10 @@ export class MaildirStore implements MailStore {
             }
         }
 
-        const dbRecords = this.db.getAllEmails(mailbox);
+        const dbRecords = this.db.listSyncRows(mailbox);
         const dbById = new Map(dbRecords.map((r) => [r.id, r]));
+        // A mailbox with no rows yet is indexed for the first time: what it finds was discovered, not delivered.
+        const indexed = dbRecords.length > 0;
 
         // New messages (on disk but not in DB): parse in chunks, then bulk-insert each chunk in
         // one transaction — with `addEmail` at ~71% of a 92s cold sync of 100k messages, batching
@@ -302,12 +377,27 @@ export class MaildirStore implements MailStore {
                     p.filename = fileName;
                     parsed.push(p);
                 } catch (e: unknown) {
+                    this.deliveries.delete(id);
                     if (!(e instanceof Error && 'code' in e && e.code === 'ENOENT'))
                         console.warn(`syncMailbox: failed to parse ${fileName}:`, e instanceof Error ? e.message : e);
                 }
             }
+            // Upsert, so a chunk can re-home a row that already exists: credit what it replaces.
+            const replaced = this.db.sumSizes(parsed.map((p) => p.id));
             this.db.insertEmails(parsed);
-            for (const p of parsed) this.events.received(p, true);
+            this.indexBytes += parsed.reduce((sum, p) => sum + p.size, 0) - replaced;
+            // A fast save leaves the .eml stale, so a row rebuilt from it carries the last full save.
+            if (mailbox === MAILBOX_DRAFTS) {
+                for (const p of parsed) {
+                    const meta = await this.readDraftMeta(p.id);
+                    if (meta) this.applyDraftMeta(p.id, meta);
+                }
+            }
+            for (const p of parsed) {
+                const delivered = this.deliveries.get(p.id);
+                this.deliveries.delete(p.id);
+                this.events.received(p, delivered ?? indexed);
+            }
         }
 
         // Flag changes (on disk with different filename)
@@ -330,9 +420,10 @@ export class MaildirStore implements MailStore {
         }
 
         // Deleted messages (in DB but not on disk)
-        for (const [id] of dbById) {
+        for (const [id, record] of dbById) {
             if (!diskFiles.has(id)) {
                 this.db.deleteEmail(id);
+                this.indexBytes -= record.size;
                 this.events.deleted(id, mailbox);
             }
         }
@@ -345,28 +436,31 @@ export class MaildirStore implements MailStore {
     }
 
     private getDraftMetaPath(draftId: string): string {
-        return path.join(this.getDraftMetaDir(), `${this.sanitizeTempId(draftId)}.json`);
-    }
-
-    private async ensureDraftMetaDir(): Promise<void> {
-        const dir = this.getDraftMetaDir();
-        if (!(await this.storage.dirExists(dir))) {
-            await this.storage.mkdir(dir);
-        }
+        return path.join(this.getDraftMetaDir(), `${safeFileId(draftId)}.json`);
     }
 
     async writeDraftMeta(draftId: string, meta: DraftMeta): Promise<void> {
-        await this.ensureDraftMetaDir();
-        await this.storage.write(this.getDraftMetaPath(draftId), JSON.stringify(meta));
+        await this.storage.writeAtomic(this.getDraftMetaPath(draftId), JSON.stringify(meta));
     }
 
     async readDraftMeta(draftId: string): Promise<DraftMeta | null> {
+        // The Drafts sync reads ids off disk, where another MDA's filename can hold characters no id Eigen
+        // writes a sidecar under ever has: no sidecar can exist for one, and one file must not fail the sync.
+        if (!isSafePathSegment(draftId)) return null;
         const metaPath = this.getDraftMetaPath(draftId);
         if (!(await this.storage.exists(metaPath))) return null;
-        return this.storage.file(metaPath).json();
+        try {
+            return await this.storage.file(metaPath).json();
+        } catch {
+            // Torn bytes from a crash read as absent, so the caller falls back to the .eml.
+            return null;
+        }
     }
 
     async deleteDraftMeta(draftId: string): Promise<void> {
+        // Mirrors readDraftMeta: no sidecar can exist under an id Eigen did not mint, and the delete of a
+        // message carrying one runs after the row and the file are already gone.
+        if (!isSafePathSegment(draftId)) return;
         const metaPath = this.getDraftMetaPath(draftId);
         try {
             if (await this.storage.exists(metaPath)) {
@@ -408,6 +502,7 @@ export class MaildirStore implements MailStore {
             await this.cleanupDraftTemp(tempId);
             throw e;
         }
+        await this.recountStaged();
         return { tempId, ...meta };
     }
 
@@ -440,24 +535,14 @@ export class MaildirStore implements MailStore {
         };
     }
 
-    private getDraftTempDir(): string {
-        // Sibling of the Maildir tree (not inside it) so Dovecot IMAP doesn't see it as a folder.
-        return 'draft-attachments';
-    }
-
     private async ensureDraftTempDir(): Promise<void> {
-        const dir = this.getDraftTempDir();
-        if (!(await this.storage.dirExists(dir))) {
-            await this.storage.mkdir(dir);
+        if (!(await this.storage.dirExists(DRAFT_ATTACHMENTS_DIR))) {
+            await this.storage.mkdir(DRAFT_ATTACHMENTS_DIR);
         }
     }
 
-    private sanitizeTempId(tempId: string): string {
-        return tempId.replace(/[^a-zA-Z0-9-_]/g, '_');
-    }
-
     private getDraftTempPath(tempId: string): string {
-        return path.join(this.getDraftTempDir(), this.sanitizeTempId(tempId));
+        return path.join(DRAFT_ATTACHMENTS_DIR, safeFileId(tempId));
     }
 
     private getDraftTempMetaPath(tempId: string): string {
@@ -477,20 +562,41 @@ export class MaildirStore implements MailStore {
                 await this.storage.unlink(metaPath);
             }
         } catch {}
+        await this.recountStaged();
     }
 
     async cleanupStaleDraftTemps(): Promise<void> {
-        const dir = this.getDraftTempDir();
-        if (!(await this.storage.dirExists(dir))) return;
+        await this.cleanupStaleMaildirTemps();
+        if (await this.storage.dirExists(DRAFT_ATTACHMENTS_DIR)) {
+            const now = Date.now();
+            for (const name of await this.storage.readdir(DRAFT_ATTACHMENTS_DIR)) {
+                const filePath = path.join(DRAFT_ATTACHMENTS_DIR, name);
+                try {
+                    const stat = await this.storage.stat(filePath);
+                    if (now - stat.mtimeMs > STALE_DRAFT_TEMP_MAX_AGE_MS) {
+                        await this.storage.unlink(filePath);
+                    }
+                } catch {}
+            }
+        }
+        await this.recountStaged();
+    }
+
+    // A crash between a staged write and its rename leaves a file in a mailbox's `tmp/` that no name
+    // outside it points at; in standalone mode no Dovecot comes past to sweep it.
+    private async cleanupStaleMaildirTemps(): Promise<void> {
         const now = Date.now();
-        for (const name of await this.storage.readdir(dir)) {
-            const filePath = path.join(dir, name);
-            try {
-                const stat = await this.storage.stat(filePath);
-                if (now - stat.mtimeMs > STALE_DRAFT_TEMP_MAX_AGE_MS) {
-                    await this.storage.unlink(filePath);
-                }
-            } catch {}
+        for (const mailbox of await this.listMailboxPaths()) {
+            const tmpDir = path.join(this.mailboxDir(mailbox), PATHS.MAIL.TMP);
+            for (const name of await this.storage.list(tmpDir)) {
+                const filePath = path.join(tmpDir, name);
+                try {
+                    const stat = await this.storage.stat(filePath);
+                    if (now - stat.mtimeMs > STALE_MAILDIR_TEMP_MAX_AGE_MS) {
+                        await this.storage.unlink(filePath);
+                    }
+                } catch {}
+            }
         }
     }
 
@@ -508,37 +614,55 @@ export class MaildirStore implements MailStore {
         }
 
         const subscriptions = `${STANDARD_MAILBOXES.filter((m) => m !== MAILBOX_INBOX).join('\n')}\n`;
-        await this.storage.write(path.join(this.basePath, 'subscriptions'), subscriptions);
+        await this.storage.writeAtomic(path.join(this.basePath, 'subscriptions'), subscriptions);
     }
 
     private async mailboxDirExists(mailbox: string): Promise<boolean> {
         return this.storage.dirExists(this.mailboxDir(mailbox));
     }
 
+    // A `.Folder` whose name Eigen cannot address is skipped: Dovecot accepts names this store does not.
+    private async listMailboxPaths(): Promise<string[]> {
+        const standard: string[] = [];
+        for (const name of STANDARD_MAILBOXES) {
+            if (await this.mailboxDirExists(name)) standard.push(name);
+        }
+
+        const custom: string[] = [];
+        for (const entry of await this.storage.readdir(this.basePath, { withFileTypes: true })) {
+            if (!entry.isDirectory() || !entry.name.startsWith('.')) continue;
+            const mailbox = entry.name.slice(1);
+            if (isStandardMailbox(mailbox) || !isValidMailboxPath(mailbox)) continue;
+            custom.push(mailbox);
+        }
+        return [...standard, ...custom.sort()];
+    }
+
     private async createMailboxDir(mailbox: string): Promise<void> {
         const mailboxPath = this.mailboxDir(mailbox);
+        const isInbox = mailbox === MAILBOX_INBOX;
         await this.storage.mkdir(mailboxPath);
         await this.storage.mkdir(path.join(mailboxPath, PATHS.MAIL.CUR));
         await this.storage.mkdir(path.join(mailboxPath, PATHS.MAIL.NEW));
         await this.storage.mkdir(path.join(mailboxPath, PATHS.MAIL.TMP));
-        if (mailbox !== MAILBOX_INBOX) {
+        if (!isInbox) {
             await this.storage.write(path.join(mailboxPath, 'maildirfolder'), '');
         }
+        await this.storage.syncDir(mailboxPath);
+        // The root's entry for the folder: a crash that loses it strands the index rows of a folder no
+        // enumeration reaches any more.
+        if (!isInbox) await this.storage.syncDir(this.basePath);
     }
 
-    private async deliverAtomic(message: Buffer, mailbox: string): Promise<{ uniqueId: string; size: number }> {
-        const uniqueId = createUniqueMessageId();
-        const size = message.byteLength;
-        const filename = `${uniqueId},S=${size}`;
+    private async deliverAtomic(message: Buffer, mailbox: string, uniqueId: string): Promise<void> {
+        const filename = `${uniqueId},S=${message.byteLength}`;
         const mailboxPath = this.mailboxDir(mailbox);
 
         const tmpPath = path.join(mailboxPath, PATHS.MAIL.TMP, filename);
-        await this.storage.write(tmpPath, message);
+        await this.storage.writeDurable(tmpPath, message);
 
         const newPath = path.join(mailboxPath, PATHS.MAIL.NEW, filename);
-        await this.storage.rename(tmpPath, newPath);
-
-        return { uniqueId, size };
+        await this.storage.renameDurable(tmpPath, newPath);
     }
 
     private async deliverToCur(
@@ -556,10 +680,10 @@ export class MaildirStore implements MailStore {
         const mailboxPath = this.mailboxDir(mailbox);
 
         const tmpPath = path.join(mailboxPath, PATHS.MAIL.TMP, filename);
-        await this.storage.write(tmpPath, message);
+        await this.storage.writeDurable(tmpPath, message);
 
         const curPath = path.join(mailboxPath, PATHS.MAIL.CUR, filename);
-        await this.storage.rename(tmpPath, curPath);
+        await this.storage.renameDurable(tmpPath, curPath);
 
         return { uniqueId: existingId, size, filename };
     }
@@ -569,17 +693,21 @@ export class MaildirStore implements MailStore {
         const newPath = path.join(mailboxPath, PATHS.MAIL.NEW);
         if (!(await this.storage.dirExists(newPath))) return;
 
+        const curPath = path.join(mailboxPath, PATHS.MAIL.CUR);
+        let moved = 0;
         for (const fileName of await this.storage.readdir(newPath)) {
             if (fileName.startsWith('.')) continue;
             const src = path.join(newPath, fileName);
             const curName = fileName.includes(':') ? fileName : `${fileName}:2,`;
-            const dst = path.join(mailboxPath, PATHS.MAIL.CUR, curName);
             try {
-                await this.storage.rename(src, dst);
+                await this.storage.rename(src, path.join(curPath, curName));
+                moved++;
             } catch (e: unknown) {
                 if (e instanceof Error && 'code' in e && e.code !== 'ENOENT') throw e;
             }
         }
+        // The guarantee is per directory, not per rename, so a cold sync of a large new/ pays one fsync.
+        if (moved > 0) await this.storage.syncDir(curPath);
     }
 
     private async listCurFiles(mailbox: string): Promise<string[]> {
@@ -594,43 +722,39 @@ export class MaildirStore implements MailStore {
     }
 
     private async moveMessage(fromMailbox: string, fromFilename: string, toMailbox: string): Promise<void> {
-        const srcPath = path.join(this.mailboxDir(fromMailbox), PATHS.MAIL.CUR, fromFilename);
+        const srcDir = path.join(this.mailboxDir(fromMailbox), PATHS.MAIL.CUR);
         const dstPath = path.join(this.mailboxDir(toMailbox), PATHS.MAIL.CUR, fromFilename);
-        await this.storage.rename(srcPath, dstPath);
+        await this.storage.renameDurable(path.join(srcDir, fromFilename), dstPath);
+        // Both ends are indexed here: the old name must not come back after the index says it moved.
+        await this.storage.syncDir(srcDir);
     }
 
     private async renameInCur(mailbox: string, oldFilename: string, newFilename: string): Promise<void> {
         const curPath = path.join(this.mailboxDir(mailbox), PATHS.MAIL.CUR);
-        await this.storage.rename(path.join(curPath, oldFilename), path.join(curPath, newFilename));
+        await this.storage.renameDurable(path.join(curPath, oldFilename), path.join(curPath, newFilename));
     }
 
     private async deleteMessage(mailbox: string, filename: string): Promise<void> {
-        const filePath = path.join(this.mailboxDir(mailbox), PATHS.MAIL.CUR, filename);
+        const curPath = path.join(this.mailboxDir(mailbox), PATHS.MAIL.CUR);
+        const filePath = path.join(curPath, filename);
         if (await this.storage.exists(filePath)) {
             await this.storage.unlink(filePath);
+            await this.storage.syncDir(curPath);
         }
     }
 
+    // Either delimiter addresses one directory: `Clients/Acme` and `Clients.Acme` are both `.Clients.Acme`.
     private mailboxDir(mailbox: string): string {
         if (mailbox === MAILBOX_INBOX || mailbox === MAILBOX_INBOX_IMAP) return this.basePath;
-        if (/[^a-zA-Z0-9._\- /]/.test(mailbox) || mailbox.includes('..')) {
-            throw new ApiError(400, `Invalid mailbox name: ${mailbox}`);
-        }
-        return `${this.basePath}/.${mailbox.replace('/', '.')}`;
+        if (!isValidMailboxPath(mailbox)) throw new ApiError(400, `Invalid mailbox name: ${mailbox}`);
+        return `${this.basePath}/.${mailbox.replaceAll('/', '.')}`;
     }
 
     // -- Private helpers --
 
-    // A parse/read fault propagates from parseEml — callers must not treat it as "not found".
-    private async readAndParse(messageId: string, mailbox: string, filename: string): Promise<Email> {
-        return parseEml(messageId, mailbox, this.getMessageFile(mailbox, filename));
-    }
-
     private getMailboxInfo(mailboxName: string): MaildirMailbox {
         return {
             path: mailboxName,
-            name: mailboxName ? mailboxName.split('.').pop() || mailboxName : MAILBOX_INBOX_IMAP,
-            delimiter: '.',
             flags: mailboxListFlags(mailboxName),
             total: this.db.getEmailsCount(mailboxName),
             unread: this.db.getEmailsCountUnread(mailboxName),

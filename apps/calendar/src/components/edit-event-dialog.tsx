@@ -1,5 +1,6 @@
 import { useAuth } from '@workspace/lib/auth';
 import {
+    isInvitationFromOthers,
     occurrenceDateToString,
     parseOccurrenceDate,
     toLocalDateString,
@@ -15,6 +16,7 @@ import {
 import type { Attendee, CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { ConfirmDialog } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
+import { AttendeeList } from '@workspace/ui/components/calendar';
 import {
     Dialog,
     DialogContent,
@@ -25,7 +27,7 @@ import {
 } from '@workspace/ui/components/dialog';
 import { UsersRound } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { AttendeeEditor, AttendeeList } from './attendee-editor';
+import { AttendeeEditor } from './attendee-editor';
 import { buildEventTimes, useCalendarOptions } from './calendar-utils';
 import { EventFormFields } from './event-form-fields';
 import type { RecurringAction } from './recurring-action-dialog';
@@ -131,7 +133,7 @@ export function EditEventDialog({
     if (!event) return null;
 
     const isRecurring = !!event.rrule;
-    const isLinkedEvent = !!event.data?.organizer;
+    const isLinkedEvent = isInvitationFromOthers(event, eventOwnerId === user?.id ? user.email : undefined);
 
     // A cross-Home move recreates the event in the other Home and deletes the source — which fires
     // deleteEvent's iMIP side effects and can't carry exception children. Warn honestly before that

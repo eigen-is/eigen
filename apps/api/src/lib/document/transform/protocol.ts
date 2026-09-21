@@ -4,8 +4,8 @@ import type { YjsStatePayload } from '../../collab/yjs-loader';
 // Only clone-safe primitives, ArrayBuffers and Maps of primitives ride here — never
 // Mount, database, Y.Doc, or other class instances, and never module/function names
 // user input could influence. Every eigensheets/eigendoc/eigenslides/eigenvector preview,
-// every vCard preview, every HTML/PDF/XLSX/DOCX export, the xlsx and docx imports and the
-// search content extraction ride these unions.
+// every vCard, message and calendar preview, every HTML/PDF/XLSX/DOCX export, the xlsx and docx imports
+// and the search content extraction ride these unions.
 
 // `pdf-html` is the HTML stage of the PDF export — WeasyPrint stays a main-thread
 // subprocess, so the Worker returns the document it renders from.
@@ -31,9 +31,12 @@ export type CollabPreviewJob = {
     mediaUrls: Map<string, string>;
 };
 
-// A .vcf holds no collaborative document: it previews from its own bytes, which ride as a
-// transferred buffer the way an upload does.
+// A .vcf, an .eml and an .ics hold no collaborative document: they preview from their own bytes, which
+// ride as a transferred buffer the way an upload does.
 export type VCardPreviewJob = { kind: 'preview'; documentType: 'vcard' };
+export type EmlPreviewJob = { kind: 'preview'; documentType: 'eml' };
+export type IcsPreviewJob = { kind: 'preview'; documentType: 'ics' };
+export type BytesPreviewJob = VCardPreviewJob | EmlPreviewJob | IcsPreviewJob;
 
 // `title` is the document title the renderer embeds — the Worker has no DrivePath.
 // (Sheets and slides strip the eigen extension; eigendoc's <title> keeps the full
@@ -77,9 +80,9 @@ export type DocImportJob = { kind: 'import'; sourceFormat: 'docx'; targetType: '
 export type ImportTransformJob = SheetsImportJob | DocImportJob;
 
 // Preview, export and search extraction read the persisted collaborative document; the
-// bytes-sourced jobs (the vCard preview, both imports) carry their own input instead.
+// bytes-sourced jobs (the vCard, message and calendar previews, both imports) carry their own input instead.
 export type CollabTransformJob = CollabPreviewJob | ExportTransformJob | ExtractTextJob;
-export type BytesTransformJob = VCardPreviewJob | ImportTransformJob;
+export type BytesTransformJob = BytesPreviewJob | ImportTransformJob;
 
 export type DocumentTransformRequest =
     | (CollabTransformJob & { source: YjsStatePayload })

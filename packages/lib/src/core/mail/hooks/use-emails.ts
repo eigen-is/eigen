@@ -33,9 +33,9 @@ export function useEmails(mailboxPath: string) {
                 q.beforeDate = pageParam.beforeDate;
                 q.beforeId = pageParam.beforeId;
             }
-            const response = await mailApi({ ownerId })
-                .mailbox({ mailboxPath: mailboxPath.toLowerCase() })
-                .get({ query: q });
+            // Verbatim: the caller passes a route segment, which already spells the mailbox the way
+            // the server reads it — lowercasing here would lose a custom folder's case.
+            const response = await mailApi({ ownerId }).mailbox({ mailboxPath }).get({ query: q });
             if (response.error) throw new AppError(response);
             return response.data;
         },
@@ -148,7 +148,7 @@ export function useToggleReadEmail() {
     const ownerId = user?.id || '';
 
     return useMutation({
-        mutationFn: async ({ email, isRead }: { email: Email; isRead: boolean }) => {
+        mutationFn: async ({ email, isRead }: { email: EmailSummary; isRead: boolean }) => {
             if (isRead === email.isRead) {
                 return email;
             }
@@ -185,7 +185,7 @@ export function useToggleFlaggedEmail() {
     const ownerId = user?.id || '';
 
     return useMutation({
-        mutationFn: async ({ email, isFlagged }: { email: Email; isFlagged: boolean }) => {
+        mutationFn: async ({ email, isFlagged }: { email: EmailSummary; isFlagged: boolean }) => {
             if (isFlagged === email.isFlagged) {
                 return email;
             }

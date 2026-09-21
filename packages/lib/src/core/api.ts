@@ -65,6 +65,18 @@ export const vcardPreviewRoute = (ownerId: string, mountId: string, pathId: stri
 // same no-revival treaty.
 export const mailVCardPreviewRoute = (ownerId: string, messageId: string, index: number) =>
     plainApi.mail({ ownerId }).message({ id: messageId }).attachment({ index }).preview.vcard;
+// The .eml preview pair rides the same treaty for the same reason: its `date` is an ISO instant declared
+// as a string, and Eden's reviver would hand the renderer a Date the type does not admit.
+export const emlPreviewRoute = (ownerId: string, mountId: string, pathId: string) =>
+    plainApi.drive({ ownerId })({ mountId }).file({ pathId })['eml-preview'];
+export const mailEmlPreviewRoute = (ownerId: string, messageId: string, index: number) =>
+    plainApi.mail({ ownerId }).message({ id: messageId }).attachment({ index }).preview.eml;
+// The .ics pair too: an all-day event's `start` is a bare YYYY-MM-DD, and an event titled after a date
+// is a string the card prints — Eden's reviver would hand the card a Date for either.
+export const icsPreviewRoute = (ownerId: string, mountId: string, pathId: string) =>
+    plainApi.drive({ ownerId })({ mountId }).file({ pathId })['ics-preview'];
+export const mailIcsPreviewRoute = (ownerId: string, messageId: string, index: number) =>
+    plainApi.mail({ ownerId }).message({ id: messageId }).attachment({ index }).preview.ics;
 export const mailApi = api.mail;
 export const publicApi = api.p;
 export const driveApi = api.drive;
@@ -176,6 +188,9 @@ export const getDriveFileUploadUrl = (ownerId: string, mountId: string, pathId: 
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}`;
 export const getMailDraftAttachmentUploadUrl = (ownerId: string) =>
     `${API_HOST}/mail/${ownerId}/message/draft/attachment`;
+export const getMailImportUrl = (ownerId: string) => `${API_HOST}/mail/${ownerId}/import`;
+export const getCalendarImportUrl = (ownerId: string, calendarId: string) =>
+    `${API_HOST}/calendar/${ownerId}/import?calendarId=${encodeURIComponent(calendarId)}`;
 export const getDriveDownloadUrl = (ownerId: string, mountId: string, pathId: string, updatedAt?: Date) =>
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/download${updatedAt ? `?v=${updatedAt.getTime()}` : ''}`;
 export const getDriveExportUrl = (ownerId: string, mountId: string, pathId: string, format: string) =>

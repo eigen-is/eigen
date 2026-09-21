@@ -1,5 +1,6 @@
 import { EIGEN_ACCENT_COLORS } from '@workspace/lib/constants/colors';
 import { sql } from 'drizzle-orm';
+import { isSafePathSegment } from '../core';
 import type { LocalFilesystem } from '../core/local-filesystem';
 import type { ParsedCard } from '../vcard/types';
 import type * as schema from './schema';
@@ -14,13 +15,11 @@ export function cardPath(uri: string): string {
     return `${CARDS_DIR}/${uri}`;
 }
 
-// A client-chosen resource name that is safe as both a filename and a DAV href: the charset excludes `/`,
-// `..`, leading dots and control characters, and the 200-char cap keeps writeAtomic's `.`-prefixed temp name
-// under NAME_MAX. The regex owns only the charset, so the two facts can't drift.
+// Safe as both a filename and a DAV href: the shared segment rule plus the `.vcf` suffix a CardDAV
+// resource carries.
 export function sanitizeCardUri(raw: string): string | null {
     const uri = raw.normalize('NFC');
-    const valid = uri.length <= 200 && uri.endsWith('.vcf') && /^[A-Za-z0-9][A-Za-z0-9._@-]*$/.test(uri);
-    return valid ? uri : null;
+    return uri.endsWith('.vcf') && isSafePathSegment(uri) ? uri : null;
 }
 
 // Two uris that differ only in case or Unicode form are the same card, because a file system may fold either.

@@ -1,18 +1,23 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getBytesTextPreviewMode, TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants';
-import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
-import { type DrivePath, isCollabType, isVCardFile } from '@workspace/lib/types/drive';
-import type { TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
+import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
+import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
+import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
+import { type DrivePath, isCollabType, isEmlFile, isIcsFile, isVCardFile } from '@workspace/lib/types/drive';
+import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { ApiError } from '../core/errors';
+import { NOT_A_CALENDAR_FILE, NOT_A_VCARD_FILE, NOT_AN_EMAIL_FILE } from '../core/transfer';
 import { COLLAB_DOCUMENT_TYPES } from '../document/collab-types';
-import type { VCardPreviewJob } from '../document/transform/protocol';
+import type { EmlPreviewJob, IcsPreviewJob, VCardPreviewJob } from '../document/transform/protocol';
 import { runBytesTransformToText, runFileTransformToText } from '../document/transform/run-transform';
 import type { TransformPriority } from '../document/transform/runner';
 import { decodeCharset } from '../mail/mail-parser/decode';
 import type { Mount } from '../mount';
 import { generateImagePreview } from '../shared/thumbnails';
+import { parseEmlPreview } from './eml-preview';
 import { isExiftoolCandidate } from './exiftool-preview';
+import { parseIcsPreview } from './ics-preview';
 import { generateDocumentPreview } from './preview-document';
 import { inlineSvgMediaRefs } from './svg-media-inline';
 import { generateTextPreview } from './text-preview';
@@ -34,14 +39,29 @@ function screenCacheName(drivePath: DrivePath, ext: 'webp' | 'svg'): string {
 // f4: merges and conditional formatting clip to the render window (spans, window-scoped
 //     aggregates, formula-rule ceiling).
 // f5: a deck previews as canvas compositor pages, not slide divs.
-const TEXT_FORMAT = 'f5';
+export const TEXT_FORMAT = 'f5';
 
-// A .vcf preview is a different artifact for the same path — contact cards, not a body — so it carries
-// its own format and neither kind ever reads the other's file as its stale predecessor. (pruneOldVersions
-// is not format-scoped, but a .vcf has exactly one cached artifact: getTextPreviewMode declines it and
-// getScreenPreview does not answer for its mimes.) Bump on every change to the VCardPreview type: the stored
-// JSON is read back unchecked (vcard-preview.ts).
-const VCARD_FORMAT = 'vcard-f1';
+// The three typed previews below are each a different artifact for the same path — contact cards, a
+// message, a calendar's events, never a rendered body — so each carries its own format and none of them
+// ever reads another's file as its stale predecessor. (pruneOldVersions is not format-scoped, but each of
+// the three has exactly one cached artifact: getTextPreviewMode declines its mimes and getScreenPreview
+// does not answer for them.) A cached body is JSON this process wrote from a value it built, so the read
+// back is a typed assignment nothing else checks: change one of the payload types and bump its format
+// here, or a restored previewsDir serves the old shape. The payloads are built inside the transform
+// Worker (worker.ts owns execution, this module the main-thread orchestration), which is why no builder
+// may reach the Mount or the transform seam.
+export const VCARD_FORMAT = 'vcard-f1';
+
+// One more reason to bump this one: the payload's html is what a DOMPurify upgrade filters, so a cached
+// body predates every sanitizer fix (PREVIEWS.md).
+// eml-f2: CSS is refused on the `url(` token, and a data: reference survives only as a raster image.
+// eml-f3: the parts past the cap are counted as `remainingAttachments`.
+// eml-f4: CSS is read again as the color-scheme deletion a viewer makes would leave it, and a repeated
+//         To:/Cc: keeps every recipient.
+export const EML_FORMAT = 'eml-f4';
+
+// ics-f2: `dropped` is the unreadable masters alone, and an event counts its `remainingAttendees`.
+export const ICS_FORMAT = 'ics-f2';
 
 function textCacheName(drivePath: DrivePath, format: string): string {
     return `${drivePath.id}-${drivePath.updatedAt.getTime()}.${format}.json`;
@@ -380,15 +400,15 @@ export async function getBytesTextPreview(
 
 const VCARD_PREVIEW_JOB: VCardPreviewJob = { kind: 'preview', documentType: 'vcard' };
 
-// The preview parses the whole file like an import does, so it shares the import's ceiling.
+// Each of the three previews parses the whole file like an import does, so it shares the import's ceiling.
 export function assertVCardPreviewable(fileName: string, contentType: string, size: number): void {
-    if (!isVCardFile(contentType, fileName)) throw new ApiError(400, 'Not a vCard file');
-    if (size > IMPORT_MAX_BYTES) throw new ApiError(413, 'File too large to preview');
+    if (!isVCardFile(contentType, fileName)) throw new ApiError(400, NOT_A_VCARD_FILE);
+    if (size > VCARD_MAX_BYTES) throw new ApiError(413, 'File too large to preview');
 }
 
 // A .vcf reads as contact cards, never as its raw text — which is why getTextPreviewMode declines it and
-// its preview is its own route. The cards are produced in the Worker from the file's own bytes and cached
-// per file version like every other preview; the caller admits the file's size before asking.
+// its preview is its own route, cached per file version like every other preview; the caller admits the
+// file's size before asking.
 export async function getVCardPreview(mount: Mount, drivePath: DrivePath): Promise<Served<VCardPreview> | null> {
     return getOrCacheText(mount.previewsDir, drivePath, VCARD_FORMAT, parseVCardPreview, (priority) =>
         runFileTransformToText(mount, drivePath, VCARD_PREVIEW_JOB, { priority }),
@@ -398,4 +418,40 @@ export async function getVCardPreview(mount: Mount, drivePath: DrivePath): Promi
 // The same cards from bytes the caller holds (a mail part): same Worker job, no cache.
 export async function getBytesVCardPreview(data: ArrayBuffer): Promise<VCardPreview> {
     return parseVCardPreview(await runBytesTransformToText(VCARD_PREVIEW_JOB, data, {}));
+}
+
+const EML_PREVIEW_JOB: EmlPreviewJob = { kind: 'preview', documentType: 'eml' };
+
+export function assertEmlPreviewable(fileName: string, contentType: string, size: number): void {
+    if (!isEmlFile(contentType, fileName)) throw new ApiError(400, NOT_AN_EMAIL_FILE);
+    if (size > EML_MAX_BYTES) throw new ApiError(413, 'File too large to preview');
+}
+
+// An .eml reads as the message it holds, never as its raw MIME source.
+export async function getEmlPreview(mount: Mount, drivePath: DrivePath): Promise<Served<EmlPreview> | null> {
+    return getOrCacheText(mount.previewsDir, drivePath, EML_FORMAT, parseEmlPreview, (priority) =>
+        runFileTransformToText(mount, drivePath, EML_PREVIEW_JOB, { priority }),
+    );
+}
+
+export async function getBytesEmlPreview(data: ArrayBuffer): Promise<EmlPreview> {
+    return parseEmlPreview(await runBytesTransformToText(EML_PREVIEW_JOB, data, {}));
+}
+
+const ICS_PREVIEW_JOB: IcsPreviewJob = { kind: 'preview', documentType: 'ics' };
+
+export function assertIcsPreviewable(fileName: string, contentType: string, size: number): void {
+    if (!isIcsFile(contentType, fileName)) throw new ApiError(400, NOT_A_CALENDAR_FILE);
+    if (size > ICS_MAX_BYTES) throw new ApiError(413, 'File too large to preview');
+}
+
+// An .ics reads as the events it holds, never as its raw property lines.
+export async function getIcsPreview(mount: Mount, drivePath: DrivePath): Promise<Served<IcsPreview> | null> {
+    return getOrCacheText(mount.previewsDir, drivePath, ICS_FORMAT, parseIcsPreview, (priority) =>
+        runFileTransformToText(mount, drivePath, ICS_PREVIEW_JOB, { priority }),
+    );
+}
+
+export async function getBytesIcsPreview(data: ArrayBuffer): Promise<IcsPreview> {
+    return parseIcsPreview(await runBytesTransformToText(ICS_PREVIEW_JOB, data, {}));
 }

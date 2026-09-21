@@ -1,11 +1,5 @@
 import { MAIL_PREVIEW_CHARS, MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
-import {
-    MAILBOX_DRAFTS,
-    MAILBOX_INBOX,
-    MAILBOX_INBOX_KEY,
-    MAILBOX_SENT,
-    STANDARD_MAILBOXES,
-} from '@workspace/lib/constants/mailboxes';
+import { canonicalMailbox, MAILBOX_DRAFTS, MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import {
     type AddressObject,
@@ -15,6 +9,7 @@ import {
     type Email,
     type EmailDraft,
     type EmailSummary,
+    type ImportMailResult,
     isCalendarPart,
     isEmailDraft,
     type MaildirMailbox,
@@ -23,19 +18,20 @@ import {
 } from '@workspace/lib/types/mail';
 import { type SSEventMail, SSEventType } from '@workspace/lib/types/sse';
 import { processInboundImip, summarizeCalendarInvite } from '../calendar/imip';
+import { enforceMailAndContactsQuota } from '../config/enforcement';
 import { isDemo } from '../config/env';
 import { isInternalAddress } from '../config/server-config';
-import { ApiError } from '../core';
+import { ApiError, isSafePathSegment, NOT_AN_EMAIL_FILE } from '../core';
 import { renderAttachmentLinksText, renderAttachmentPills } from '../core/mail-template';
 import { type OutboundMail, sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import { MaxFileSizeExceededError, parseMultipartRequest } from '../multipart';
 import type { StorageFile } from '../storage';
 import { grantAccessForReferences } from './access-grants';
-import { parseMail } from './mail-parser';
+import { type PartHeaders, parseMail, splitMime } from './mail-parser';
 import type { DraftMeta, DraftMetaAttachment, MailSearchOptions, MailStore } from './mail-store';
 import { createEmlContent, type EmlAttachment } from './mailfile';
-import { buildRecipientSummary, createUniqueMessageId } from './mailutils';
+import { createUniqueMessageId } from './mailutils';
 import { MAX_PERSONALISED_SEND_BYTES } from './recipients';
 import { draftToOutboundMail } from './sender';
 import { buildMailEvent } from './sse-events';
@@ -43,9 +39,11 @@ import { welcomeMail } from './welcome';
 
 const FULL_SAVE_INTERVAL_MS = 5 * 60 * 1000;
 
-function canonicalMailbox(name: string): string {
-    if (name === MAILBOX_INBOX || name.toLowerCase() === MAILBOX_INBOX_KEY) return MAILBOX_INBOX;
-    return STANDARD_MAILBOXES.find((m) => m.toLowerCase() === name.toLowerCase()) ?? name;
+// A blank id normalizes to undefined, so `?? createUniqueMessageId()` bakes a `Message-ID: <@domain>` into the EML.
+function draftIdOf(email: NewDraft | EmailDraft): string | undefined {
+    const id = email.id?.trim() || undefined;
+    if (id && !isSafePathSegment(id)) throw new ApiError(400, `Invalid draft id: ${id}`);
+    return id;
 }
 
 function appendReferenceLinks(html: string, refs: AttachmentReference[], recipientEmail?: string): string {
@@ -90,7 +88,8 @@ export class Mail {
         });
         if (isNew) {
             const welcome = await welcomeMail(this.home.user.name, this.home.user.email);
-            if (welcome) await this.store.append('', welcome, { skipSync: true });
+            // Seeded, not delivered: the first sync indexes it without announcing new mail.
+            if (welcome) await this.store.append('', welcome, { skipSync: true, arrival: false });
         }
         this.store.watch();
         this.store.cleanupStaleDraftTemps().catch((err) => console.error('mail: stale draft temp cleanup failed', err));
@@ -114,11 +113,11 @@ export class Mail {
     }
 
     async mailboxCreate(mailbox: string): Promise<void> {
-        return this.store.mailboxCreate(mailbox);
+        return this.store.mailboxCreate(canonicalMailbox(mailbox));
     }
 
     async mailboxExists(mailbox: string): Promise<MaildirMailbox | false> {
-        return this.store.mailboxExists(mailbox);
+        return this.store.mailboxExists(canonicalMailbox(mailbox));
     }
 
     async mailboxDeliver(message: Buffer): Promise<string> {
@@ -136,6 +135,26 @@ export class Mail {
         }
 
         return uniqueId;
+    }
+
+    // No processInboundImip: an imported file carries no DKIM verdict, so it must never touch the calendar.
+    async messageImport(bytes: Buffer): Promise<ImportMailResult> {
+        // The gate below reads four headers, and the sync that follows the append parses the message anyway
+        // — a full parse here is a second one (103 ms against 0.05 ms on a 1.1 MiB body).
+        let headers: PartHeaders;
+        try {
+            headers = splitMime(bytes).headers;
+        } catch {
+            throw new ApiError(400, NOT_AN_EMAIL_FILE);
+        }
+        // Any bytes parse as a body; only an envelope header makes them a message.
+        if (!headers.from && !headers.date && headers.subject === undefined && !headers.messageId) {
+            throw new ApiError(400, NOT_AN_EMAIL_FILE);
+        }
+        await enforceMailAndContactsQuota(this.home.user.id, bytes.byteLength);
+
+        const id = await this.store.append('', bytes, { arrival: false });
+        return { id };
     }
 
     async mailboxGet(
@@ -235,9 +254,10 @@ export class Mail {
             throw new ApiError(404, `Target mailbox '${targetMailbox}' not found`);
         }
 
-        // Copy the raw bytes, not a `.text()` round-trip — decoding would corrupt non-UTF-8 mail.
+        // Copy the raw bytes, not a `.text()` round-trip — decoding would corrupt non-UTF-8 mail. A copy
+        // of the user's own message is not mail arriving, so it announces nothing.
         const bytes = Buffer.from(await this.store.getRawMessage(messageId));
-        await this.store.append(targetMailbox, bytes);
+        await this.store.append(targetMailbox, bytes, { arrival: false });
     }
 
     async messageSetRead(messageId: string, read: boolean): Promise<void> {
@@ -259,7 +279,7 @@ export class Mail {
     // -- Draft & Send --
 
     async messageHandleDraft(email: NewDraft | EmailDraft, options: DraftUpdateOptions = {}): Promise<EmailDraft> {
-        const existingId = email.id?.trim() || undefined;
+        const existingId = draftIdOf(email);
         const hasNewTemps = !!options.tempAttachmentIds?.length;
 
         // Fast path: when a draft with attachments already exists on disk and no attachment
@@ -319,8 +339,7 @@ export class Mail {
         await this.store.writeDraftMeta(existingId, meta);
 
         const textShort = (email.text || '').slice(0, MAIL_PREVIEW_CHARS);
-        const recipients = buildRecipientSummary(email.to, email.cc);
-        this.store.updateDraftContent(existingId, meta.subject, email.text || '', recipients);
+        this.store.applyDraftMeta(existingId, meta);
 
         this.emit(SSEventType.MAIL_DRAFT_UPDATED, { messageId: existingId, mailbox: MAILBOX_DRAFTS });
 
@@ -392,9 +411,7 @@ export class Mail {
             const keepSet = options.keepAttachmentIndexes ? new Set(options.keepAttachmentIndexes) : null;
             for (const a of attachments) {
                 if (!a.filename) continue;
-                // A keep list names the composer's chips, and a calendar part never gets one, so its
-                // absence can't mean the user removed it — carry it through every rebuild.
-                if (!isCalendarPart(a) && keepSet && !keepSet.has(a.index)) continue;
+                if (keepSet && !keepSet.has(a.index)) continue;
                 existingAttachments.push({
                     filename: a.filename,
                     content: Buffer.from(a.content),
@@ -459,9 +476,7 @@ export class Mail {
             text: email.text || '',
             html: cleanHtml,
             attachments: saved.attachments.flatMap((a) =>
-                a.filename && !isCalendarPart(a)
-                    ? [{ filename: a.filename, contentType: a.contentType, size: a.size, index: a.index }]
-                    : [],
+                a.filename ? [{ filename: a.filename, contentType: a.contentType, size: a.size, index: a.index }] : [],
             ),
             driveReferences,
             inReplyTo: email.inReplyTo,
@@ -547,9 +562,8 @@ export class Mail {
         mailToSend: NewDraft | EmailDraft,
         options?: { grantAccessRefIds?: string[] },
     ): Promise<SentMailResult> {
-        // Full EML rebuild so attachment content is available for SMTP; a blank id must normalize to
-        // undefined or `?? createUniqueMessageId()` bakes a `Message-ID: <@domain>` into the EML.
-        const mail = await this.draftFullSave(mailToSend, mailToSend.id?.trim() || undefined, {});
+        // Full EML rebuild so attachment content is available for SMTP.
+        const mail = await this.draftFullSave(mailToSend, draftIdOf(mailToSend), {});
         const message = draftToOutboundMail(mail, this.home.user.email);
         const allRecipients = [...message.to, ...(message.cc ?? []), ...(message.bcc ?? [])];
 

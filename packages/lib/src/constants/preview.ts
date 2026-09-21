@@ -4,6 +4,8 @@ import {
     DRIVE_MIME_SHEETS,
     DRIVE_MIME_SLIDES,
     DRIVE_MIME_VECTOR,
+    isEmlFile,
+    isIcsFile,
     isVCardFile,
 } from '../types/drive';
 
@@ -71,6 +73,11 @@ export function getExtension(fileName: string): string {
 export function getBytesTextPreviewMode(mimeType: string, fileName: string): BytesTextPreviewMode | null {
     // A vCard is text, but its raw body is mostly base64 photo: it previews as contact cards instead.
     if (isVCardFile(mimeType, fileName)) return null;
+    // A calendar is text too, and reads as folded property lines nobody wants: it previews as its events.
+    if (isIcsFile(mimeType, fileName)) return null;
+    // A saved message is text under any of three mimes, and reads as headers and boundaries: it previews
+    // as the message it holds.
+    if (isEmlFile(mimeType, fileName)) return null;
     const ext = getExtension(fileName);
     if (mimeType === 'text/markdown' || ext === '.md' || ext === '.markdown') return 'markdown';
     if (mimeType === 'text/plain' || ext === '.txt') return 'plaintext';
@@ -89,10 +96,11 @@ export function getTextPreviewMode(mimeType: string, fileName: string): TextPrev
 
 // Which files drive-wide content search indexes from their own bytes: the text preview modes whose RAW
 // BODY is the content, plus a .vcf, whose names and organizations the extractor pulls out of the cards
-// rather than the raw body (docs/SEARCH.md). Eigen container modes (eigendoc/eigenslides/eigensheets/
-// eigenvector) are excluded — their bodies come from the Yjs loaders via the content-reindex sweep.
+// rather than the raw body (docs/SEARCH.md), and an .ics, whose raw body carries the summaries and
+// locations a search is after. Eigen container modes (eigendoc/eigenslides/eigensheets/eigenvector) are
+// excluded — their bodies come from the Yjs loaders via the content-reindex sweep.
 export function isSearchableTextFile(mimeType: string, fileName: string): boolean {
-    if (isVCardFile(mimeType, fileName)) return true;
+    if (isVCardFile(mimeType, fileName) || isIcsFile(mimeType, fileName)) return true;
     const mode = getTextPreviewMode(mimeType, fileName);
     return mode === 'markdown' || mode === 'plaintext' || mode === 'code';
 }

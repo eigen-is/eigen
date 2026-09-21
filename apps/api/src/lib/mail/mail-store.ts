@@ -6,7 +6,6 @@ import type {
     Email,
     EmailSummary,
     MaildirMailbox,
-    RecipientSummary,
 } from '@workspace/lib/types/mail';
 import type { FileSink } from 'bun';
 
@@ -73,16 +72,19 @@ export interface MailStore {
     getMessage(messageId: string): Promise<Email | null>;
     getRawMessage(messageId: string): Promise<ArrayBuffer>;
     getAttachments(messageId: string): Promise<Attachment[]>;
-    // skipSync: leave discovery to the next sync — welcome-mail seeding surfaces on first open.
-    append(mailbox: string, message: Buffer, opts?: { skipSync?: boolean }): Promise<string>;
+    // skipSync: leave discovery to the next sync. arrival: false for a message the user placed there —
+    // indexed and broadcast, but not mail arriving, so it reaches `received` as not new.
+    append(mailbox: string, message: Buffer, opts?: { skipSync?: boolean; arrival?: boolean }): Promise<string>;
     // Writes raw draft bytes under existingId (or a fresh id), indexes them, returns the parsed result.
     saveDraft(raw: string, existingId?: string): Promise<Email>;
     delete(messageId: string): Promise<void>;
     move(messageId: string, targetMailbox: string): Promise<void>;
     setFlags(messageId: string, changes: Partial<Record<MailFlag, boolean>>): Promise<void>;
-    updateDraftContent(id: string, subject: string, text: string, recipients?: RecipientSummary): void;
+    // The one projection of a sidecar onto its index row, used by the fast save and by the Drafts sync.
+    applyDraftMeta(draftId: string, meta: DraftMeta): void;
 
     writeDraftMeta(draftId: string, meta: DraftMeta): Promise<void>;
+    // Null when no sidecar can be read, torn or absent; the caller falls back to the .eml.
     readDraftMeta(draftId: string): Promise<DraftMeta | null>;
     deleteDraftMeta(draftId: string): Promise<void>;
     listDraftMetaIds(): Promise<string[]>;

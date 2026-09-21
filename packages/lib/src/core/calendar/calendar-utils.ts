@@ -1,6 +1,6 @@
 import { RRule } from 'rrule';
-import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '../../types/calendar';
-import { formatDayMonth, formatTime } from '../date';
+import type { CalendarEventOccurrence, CalendarItem, EventData, SharedCalendar } from '../../types/calendar';
+import { dateFormatter, formatDayMonth, formatTime } from '../date';
 
 export type ViewMode = 'month' | 'week';
 
@@ -99,14 +99,25 @@ export function viewerTimeZone(): string {
 // Calendar rows stored before TZID ingestion-normalization can hold a non-IANA zone that makes Intl
 // throw RangeError; this shared FE+BE code can't import the api-side normalizeTimezone, so it reuses
 // the same Intl-construction oracle and treats a rejected zone as the no-zone case it normalizes to.
+// The verdict per zone, so a file of 10,000 events pays the construction once. Bounded and dropped
+// whole past the cap, because the zone is a string the file chose.
+const ZONE_VERDICT = new Map<string, boolean>();
+const MAX_ZONE_VERDICTS = 64;
+
 function safeTimeZone(timezone: string | null | undefined, fallback: string): string {
     if (!timezone) return fallback;
-    try {
-        new Intl.DateTimeFormat('en', { timeZone: timezone });
-        return timezone;
-    } catch {
-        return fallback;
+    let usable = ZONE_VERDICT.get(timezone);
+    if (usable === undefined) {
+        try {
+            dateFormatter({ timeZone: timezone });
+            usable = true;
+        } catch {
+            usable = false;
+        }
+        if (ZONE_VERDICT.size >= MAX_ZONE_VERDICTS) ZONE_VERDICT.clear();
+        ZONE_VERDICT.set(timezone, usable);
     }
+    return usable ? timezone : fallback;
 }
 
 // fallbackTimeZone is explicit because there is no sane default on both sides: in the browser it is
@@ -123,7 +134,7 @@ export function formatEventWhen(
     // same UTC day buckets getEventsForDay puts it in. Only timed events take the fallback.
     const tz = allDay ? 'UTC' : safeTimeZone(timezone, fallbackTimeZone);
     const date = (d: Date) => formatDayMonth(d, { weekday: 'long', year: true, timeZone: tz });
-    const dayKey = (d: Date) => d.toLocaleDateString('en', { timeZone: tz });
+    const dayKey = (d: Date) => dateFormatter({ timeZone: tz }).format(d);
     const timeOpts: Intl.DateTimeFormatOptions = {
         hour: 'numeric',
         minute: '2-digit',
@@ -140,9 +151,10 @@ export function formatEventWhen(
     }
 
     if (dayKey(start) === dayKey(end)) {
-        return `${date(start)} · ${start.toLocaleTimeString('en', timeOpts)} – ${end.toLocaleTimeString('en', timeOpts)}`;
+        const time = dateFormatter(timeOpts);
+        return `${date(start)} · ${time.format(start)} – ${time.format(end)}`;
     }
-    const when = (d: Date) => `${date(d)}, ${d.toLocaleTimeString('en', timeOpts)}`;
+    const when = (d: Date) => `${date(d)}, ${dateFormatter(timeOpts).format(d)}`;
     return `${when(start)} – ${when(end)}`;
 }
 
@@ -169,9 +181,19 @@ export function formatFreeBusyTitle(endTime: Date): string {
     return `Busy until ${formatTime(endTime)}`;
 }
 
+// The one answer to "is this row an invitation from someone else?". CalDAV clients write
+// ORGANIZER:mailto:<own address> on every event they create with guests, so a stored organizer alone
+// says nothing — the organizer is me exactly when its address is the owner's, case-insensitively. An
+// owner with no address of its own (a team Home) matches nobody, so its rows stay locked.
+export function isInvitationFromOthers(event: { data?: EventData | null }, ownerEmail?: string): boolean {
+    const organizer = event.data?.organizer;
+    if (!organizer) return false;
+    return !ownerEmail || organizer.email.toLowerCase() !== ownerEmail.toLowerCase();
+}
+
 export function getInviteStatus(event: CalendarEventOccurrence, userEmail?: string): 'pending' | 'declined' | null {
-    if (!event.data?.organizer || !userEmail) return null;
-    const attendee = event.data.attendees?.find((a) => a.email.toLowerCase() === userEmail.toLowerCase());
+    if (!userEmail || !isInvitationFromOthers(event, userEmail)) return null;
+    const attendee = event.data?.attendees?.find((a) => a.email.toLowerCase() === userEmail.toLowerCase());
     if (!attendee) return null;
     if (attendee.status === 'declined') return 'declined';
     if (attendee.status === 'pending') return 'pending';
@@ -192,6 +214,17 @@ export function occurrenceDateToString(value: unknown): string {
         return `${value.getUTCFullYear()}-${String(value.getUTCMonth() + 1).padStart(2, '0')}-${String(value.getUTCDate()).padStart(2, '0')}`;
     }
     return String(value).substring(0, 10);
+}
+
+// A recurrence in words, for every surface that describes one it does not edit. A file's own RRULE is
+// untrusted input, so a rule rrule cannot read is printed verbatim rather than swallowed.
+export function rruleToText(rrule: string | null): string | null {
+    if (!rrule) return null;
+    try {
+        return RRule.fromString(rrule).toText();
+    } catch {
+        return rrule;
+    }
 }
 
 export function truncateRRule(rruleStr: string, beforeDate: Date): string {

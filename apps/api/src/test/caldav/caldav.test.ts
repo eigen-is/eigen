@@ -945,6 +945,36 @@ describe('CalDAV', () => {
         expect(res.status).toBe(400);
     });
 
+    // A previewed or imported file drops the one VEVENT it cannot read and keeps the rest; one CalDAV
+    // resource is one series a client just wrote, so a VEVENT of it the parser refuses is a bad request.
+    test('a PUT holding a VEVENT the parser cannot read is 400', async () => {
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:caldav-unreadable@eigen',
+            'SUMMARY:Readable',
+            'DTSTART:20260901T090000Z',
+            'DTEND:20260901T100000Z',
+            'END:VEVENT',
+            'BEGIN:VEVENT',
+            'UID:caldav-unreadable@eigen',
+            'RECURRENCE-ID:20260908T090000Z',
+            'SUMMARY:No start at all',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-unreadable.ics`, {
+                method: 'PUT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'text/calendar' },
+                body: ics,
+            }),
+        );
+
+        expect(res.status).toBe(400);
+    });
+
     test('calendar-multiget with more than 500 hrefs is 400', async () => {
         const hrefs = Array.from(
             { length: 501 },

@@ -7,20 +7,22 @@
 
 ## Design Principles
 
-1. **Maildir on disk is the source of truth.** `mail.db` accelerates queries and stores parsed metadata. It can always
-   be rebuilt by scanning the Maildir, with one exception: the list row of a fast-saved draft. A fast save writes
-   subject, preview and recipients to the row and the `draft-meta/` sidecar only, and the sync rebuilds rows from the
-   `.eml` alone, so a rebuilt index shows such a draft as of its last full save until it is opened or saved again
+1. **Maildir on disk is the source of truth.** `mail.db` accelerates queries and stores parsed metadata, and is always
+   rebuilt by scanning the files: the `.eml`s, plus the `draft-meta/` sidecar a fast save writes subject, preview and
+   recipients to, which the Drafts sync projects back over the row it rebuilds from the stale `.eml`
    ([MAIL.md § Files and index](MAIL.md#files-and-index)).
 2. **Dovecot owns `new/` -> `cur/` transitions.** When Dovecot is running, it moves files from `new/` to `cur/`,
    manages flag renames, and handles expunges. Eigen delivers to `new/` (always safe) and reads from `cur/`.
 3. **Eigen writes directly to `cur/` for local operations.** Flag changes, moves, and deletes rename files in `cur/`
    directly. This can cause a Dovecot UID reassignment if Dovecot scans simultaneously -- acceptable for a self-hosted
-   single-user system and self-correcting on Dovecot's next scan.
+   single-user system and self-correcting on Dovecot's next scan. Each of those writes fsyncs the file it stages and
+   the directories its rename touches ([MAIL.md § Files and index](MAIL.md#files-and-index)).
 4. **Standalone mode.** When Dovecot is not running, Eigen handles `new/` -> `cur/` moves itself. The sync engine
-   handles both modes transparently using ENOENT-safe renames.
-5. **Fixed mailbox set.** Eigen exposes only 6 standard mailboxes. Extra folders created via IMAP are ignored by Eigen
-   but remain fully accessible through any IMAP client.
+   handles both modes transparently using ENOENT-safe renames. Housekeeping is Eigen's too: a file a crash left in a
+   mailbox's `tmp/` is swept once it is 36 hours old, the age the Maildir spec gives
+   ([MAIL.md § Files and index](MAIL.md#files-and-index)).
+5. **Six standard mailboxes, plus whatever else is on disk.** Eigen creates the standard six and lists every other
+   Maildir++ folder an IMAP client made beside them, under the name Dovecot gave it.
 
 ## Code Architecture
 
@@ -82,7 +84,8 @@ Changing a flag renames the file in `cur/` via `renameInCur()`, then updates the
 ## Mailbox Structure
 
 Six standard mailboxes, canonical case. `STANDARD_MAILBOXES = ['', 'Sent', 'Drafts', 'Trash', 'Junk', 'Archive']`.
-Empty string represents INBOX (the Maildir root).
+Empty string represents INBOX (the Maildir root). Beside them stands whatever else the Maildir holds — Dovecot
+creates a folder for any IMAP client that asks, and Eigen lists it.
 
 ```
 eigen.mail/
@@ -96,14 +99,28 @@ eigen.mail/
     .Trash/
     .Junk/
     .Archive/
+    .Projects/              # a folder an IMAP client made
+    .Clients.Acme/          # nesting is the `.` delimiter, not a nested directory
 ```
 
-`mailboxDir()` maps names: empty/`INBOX` -> `Maildir/`, others -> `Maildir/.{name}`. Mailbox names are validated
-against path traversal and special characters. `canonicalMailbox()` in `mail-domain.ts` normalizes case-insensitive
-input to canonical form.
+`mailboxDir()` maps names: empty/`INBOX` -> `Maildir/`, others -> `Maildir/.{name}`, joining a `/`-delimited name
+with `.` so `Clients/Acme` and `Clients.Acme` are one directory. Mailbox names are validated against path traversal
+and special characters (`isValidMailboxPath`, [MAIL.md § Mailboxes](MAIL.md#mailboxes-and-the-naming-gotcha)).
+`canonicalMailbox()` (`packages/lib/src/constants/mailboxes.ts`) case-folds the six standard names — `INBOX` in
+any case onto the empty inbox name — folds `/` onto `.` so one directory has one wire name, and passes any other
+name through untouched, so a folder's own spelling is the one Eigen addresses it by. The limit of that rule shows on a case-sensitive file system: a folder whose name
+differs from a standard mailbox only in case (`.archive` beside `.Archive`) is neither listed nor addressable,
+because every spelling of it canonicalizes onto the standard one ([ROADMAP.md](ROADMAP.md)).
 
-Mailbox membership is the only organization Eigen has. The `emailLabels`/`emailsToLabels` tables are
-**vestigial** — the v1 `CREATE TABLE` is the only place they appear; no code reads or writes them.
+`mailboxesList()` enumerates the Maildir: the standard six first, then every other `.Folder` by path, each with
+its `total`/`unread` read straight from the index. A directory whose name fails validation is skipped silently —
+Dovecot accepts names this store cannot address, and one of them must not break the listing. So is a directory
+whose name canonicalizes onto a standard mailbox (`.archive`, `.INBOX`): it is that mailbox under another
+spelling, not a folder of its own. Every folder outside the standard six is reconciled in the background by a
+listing, at most once a minute per folder, and the sync's own SSE events land its counts — a listing itself
+never waits on a sync.
+
+Mailbox membership is the only organization Eigen has — there are no labels.
 
 ## Delivery Flow
 
@@ -131,6 +148,13 @@ Drafts get `D`+`S` flags. Skips `new/` because Eigen knows the final flags at cr
      `insertEmails` upsert transaction, then its `received` events fire (`MAIL_RECEIVED` +
      `home.notifications`). One transaction and one SSE burst per chunk, not per message — this is the cold-index
      win. A message that fails to parse is logged and skipped so one bad `.eml` can't drop the rest of the chunk.
+     **Only the message the store delivered is new.** `append` records the id it is about to write along with
+     whether it is an arrival, and whichever sync reaches that file — its own or a watcher's — answers for that
+     one id; an import, a copy and the welcome seed pass `arrival: false` and stay silent. Every other file
+     follows the mailbox: a sync of a mailbox with no rows yet is a **cold index**, its files were already on
+     disk, so those events carry `isNew: false` and an old IMAP folder, an unindexed welcome mail or a home
+     whose `mail.db` was lost announces no new mail. In a mailbox the index already knows, a file that appears
+     is an arrival, which is how a message an IMAP client files into a folder still notifies.
    - **Flag changes** (on disk with different filename than DB): update DB flags + filename, report `flagsChanged`
      (`MAIL_FLAGS_CHANGED`).
    - **Deleted messages** (in DB, not on disk): delete from DB, report `deleted` (`MAIL_DELETED`).
@@ -140,15 +164,23 @@ Drafts get `D`+`S` flags. Skips `new/` because Eigen knows the final flags at cr
 Sync triggers: filesystem watcher events, Eigen's own writes (deliver, copy), and reads of a mailbox. **A read
 does not wait for the sync**: `listMessages` awaits `syncMailbox()` only when the mailbox has no rows yet (first
 open, so the user sees content immediately); otherwise it returns the DB rows straight away and fires the sync in
-the background with `.catch()`. Anything the background sync finds reaches the client over SSE. See
+the background with `.catch()`. `mailboxesList` never waits at all — it kicks a background reconcile of each folder
+outside the standard six, at most once a minute per folder, and reports the index's counts. Anything the background sync finds reaches the client over SSE. See
 [MAIL.md § Performance design](MAIL.md#performance-design).
 
 ## File Watching
 
-`MaildirStore.watch()` sets up `fs.watch()` on `cur/` and `new/` for each standard mailbox. Changes trigger
-`syncMailbox()` which detects new messages, flag renames, and deletions, then reports them through `MailStoreEvents`
-so the frontend updates without page refresh. `unwatch()` closes all watchers and awaits in-flight syncs on
-`Mail.destruct()`.
+`MaildirStore.watch()` sets up `fs.watch()` on `cur/` and `new/` for the standard six and nothing else — twelve
+handles per loaded home, whatever the folder count. A watcher per folder does not scale: a mailbox tree with
+hundreds of IMAP folders would cost hundreds of handles per home, against a per-user inotify limit every home on
+the host shares. Changes trigger `syncMailbox()` which detects new messages, flag renames, and deletions, then
+reports them through `MailStoreEvents` so the frontend updates without page refresh. A folder outside the standard
+six has no watcher and reconciles on two occasions instead: opening it, and the background reconcile a
+`mailboxesList()` kicks for it once the last one is a minute old. So a message an IMAP client files into
+`Projects` is picked up by a later mailbox listing (the sidebar refetches on its stale time and on every mail SSE
+event) or by opening the folder, not within milliseconds of the write. A standard folder an IMAP client deletes
+and recreates keeps its old watcher and so loses real-time updates until the home reloads, reconciling when it is
+opened ([ROADMAP.md](ROADMAP.md)). `unwatch()` closes all watchers and awaits in-flight syncs on `Mail.destruct()`.
 
 ## Dovecot Compatibility
 
@@ -165,8 +197,12 @@ so the frontend updates without page refresh. `unwatch()` closes all watchers an
 
 ### Coexistence behavior
 
-- Extra IMAP-created folders exist on disk but are not indexed or shown in Eigen. Messages moved to custom folders
-  appear as "deleted" from Eigen's perspective; moving them back triggers re-detection.
+- An IMAP-created folder is listed and openable in Eigen, under the name Dovecot gave it. A message moved
+  into one leaves its old mailbox and appears in that folder's list on the next listing or open.
+- A modified UTF-7 name (`.&AMQ-rger`, `.R&-D`) is an ordinary folder here: it lists, opens and counts under the
+  name on disk, and the sidebar decodes it for display.
+- A folder whose name Eigen's validator refuses (an empty hierarchy segment, a control character, a leading or
+  trailing space, over 200 characters) stays reachable over IMAP and is left out of Eigen's listing.
 - Simultaneous flag renames by Dovecot and Eigen: one rename fails with ENOENT, next sync corrects.
 - Dovecot assigns UIDs on its next scan of `cur/`. Moves (which land directly in target `cur/`) cause UID
   reassignment, matching IMAP MOVE semantics (COPY + EXPUNGE).
@@ -188,7 +224,7 @@ namespace inbox {
 ```
 
 `separator = .` is what makes Dovecot's folder names line up with the on-disk `.Mailbox` layout, and the
-`special_use` blocks make clients see the same six mailboxes Eigen exposes. The rest of the file is TLS
+`special_use` blocks make clients label the six standard mailboxes the way Eigen does. The rest of the file is TLS
 (`ssl = required`, plaintext auth off), the `checkpassword` passdb, running IMAP workers as `vmail` (uid 1000,
 matching the API container), and the SASL listener Postfix uses for submission.
 
@@ -221,6 +257,4 @@ the field is left out.
 
 ## Not Yet Implemented
 
-- **Stale `tmp/` cleanup.** Per Maildir spec, files in `tmp/` older than 36 hours can be safely deleted. No
-  housekeeping code exists.
-- **Labels.** The `emailLabels`/`emailsToLabels` tables exist in the v1 migration and nowhere else.
+- **Labels.** Mail has no labels at all; a message belongs to exactly one mailbox.

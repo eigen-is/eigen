@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { IMPORT_MAX_CARDS, VCARD_PREVIEW_MAX_CARDS } from '@workspace/lib/constants/contact';
 import { ApiError } from '../../lib/core/errors';
+import { VCARD_IMPORT_MAX_CARDS, VCARD_PREVIEW_MAX_CARDS } from '../../lib/core/transfer';
 import { toTransferableBuffer, toTransferableText } from '../../lib/document/transform/protocol';
 import { buildVCardPreviewPayload } from '../../lib/preview/vcard-preview';
 
@@ -97,10 +97,10 @@ describe('buildVCardPreviewPayload', () => {
 
     test('no more cards are parsed than an import would accept', () => {
         const broken = vcard(['BEGIN:VCARD', 'VERSION:3.0', 'FN:Broken', 'NO-COLON-HERE', 'END:VCARD']);
-        const payload = payloadOf(broken.repeat(IMPORT_MAX_CARDS + 5));
+        const payload = payloadOf(broken.repeat(VCARD_IMPORT_MAX_CARDS + 5));
 
-        expect(payload.dropped).toBe(IMPORT_MAX_CARDS);
-        expect(payload.total).toBe(IMPORT_MAX_CARDS + 5);
+        expect(payload.dropped).toBe(VCARD_IMPORT_MAX_CARDS);
+        expect(payload.total).toBe(VCARD_IMPORT_MAX_CARDS + 5);
     });
 
     test('a file that is not UTF-8 is a controlled failure, not a throw the runner reports as a crash', () => {

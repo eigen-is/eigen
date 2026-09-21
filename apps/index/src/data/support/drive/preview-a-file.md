@@ -6,10 +6,10 @@ category: Files
 tags: [drive, preview, files]
 related: [drive/get-started, drive/download-files]
 order: 60
-updated: 2026-09-18
+updated: 2026-09-20
 ---
 
-Drive can show you the contents of a file without opening a separate app or tab. Images, PDFs, videos, audio, text files, and contact files all have a built-in preview. Text files over 1 MB show the file card instead.
+Drive can show you the contents of a file without opening a separate app or tab. Images, PDFs, videos, audio, text files, contact files, saved emails, and calendar files all have a built-in preview. Text files over 1 MB show the file card instead.
 
 ## Open a file in the preview
 
@@ -19,6 +19,8 @@ Open a file by clicking it to select it, then clicking it again (or pressing **E
 - **Documents, spreadsheets, presentations, boards, and drawings** open straight away in their own app.
 - **Text and code files** (such as `.md`, `.txt`, `.json`) open in a text editor in the browser.
 - **Contact files** (`.vcf`) show each contact in the file as a card, which you can [import to Contacts](/support/contacts/import-contacts) from the preview.
+- **Saved emails** (`.eml`) read as the message itself: subject, sender, recipients, date, and the body. The files that came with the message are listed by name and size under the header.
+- **Calendar files** (`.ics`) list the events in the file with their times, where they repeat, their location, and their guests.
 
 ## Use Quick preview from the menu
 
@@ -52,3 +54,5 @@ Some files get extra buttons in the same bar:
 
 - **Convert to Sheet** for an Excel file (`.xlsx`), and **Convert to Document** for a Word file (`.docx`). Eigen makes a copy in its own format and opens it.
 - **Import to Contacts** for a contact file (`.vcf`). It adds the cards in the file to your contacts.
+- **Import to Mail** for a saved email (`.eml`). It puts the message back in your inbox. See [Import an email from a file](/support/mail/import-an-email).
+- **Import to Calendar** for a calendar file (`.ics`). Eigen asks which calendar the events go into. See [Import events from a calendar file](/support/calendar/import-events).

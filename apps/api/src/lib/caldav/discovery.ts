@@ -1,4 +1,5 @@
 import type { CalendarItem } from '@workspace/lib/types/calendar';
+import { isSafePathSegment } from '../core';
 import { calendarHomeHref, encodePathSegment } from '../dav/href';
 import type { PropfindRequest } from '../dav/propfind';
 import {
@@ -20,14 +21,11 @@ export const calendarHref = (ownerId: string, calendarId: string) => `/dav/calen
 export const eventHref = (ownerId: string, calendarId: string, uri: string) =>
     `${calendarHref(ownerId, calendarId)}${encodePathSegment(uri)}`;
 
-// A client-chosen calendar id (MKCALENDAR) that is safe to emit raw into an href: calendarHref does not encode
-// it, so restrict it to a leading alphanumeric then `A-Za-z0-9._@-` — which excludes `/`, `..`, leading dots and
-// control characters — NFC-normalized and capped at 200 chars. Mirrors CardDAV's sanitizeCardUri, minus the
-// `.vcf` rule. Returns null on reject.
+// A client-chosen calendar id (MKCALENDAR) goes raw into an href — calendarHref does not encode it — so it
+// takes the shared segment rule over the NFC form. Null on reject.
 export function sanitizeCalendarId(raw: string): string | null {
     const id = raw.normalize('NFC');
-    const valid = id.length <= 200 && /^[A-Za-z0-9][A-Za-z0-9._@-]*$/.test(id);
-    return valid ? id : null;
+    return isSafePathSegment(id) ? id : null;
 }
 
 // PROPFIND /dav/ — returns current-user-principal

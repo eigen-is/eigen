@@ -1,3 +1,4 @@
+import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import type {
     CalendarEvent,
     CalendarEventOccurrence,
@@ -5,12 +6,16 @@ import type {
     CalendarShare,
     FreeBusyBlock,
 } from '@workspace/lib/types/calendar';
+import { isIcsFile } from '@workspace/lib/types/drive';
+import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { checkCalendarAccess, resolveCalendar, syncTeamCalendars } from '../lib/calendar/get-calendar';
 import { storedRecurrenceKey } from '../lib/calendar/recurrence';
-import { ApiError } from '../lib/core';
+import { ApiError, NOT_A_CALENDAR_FILE } from '../lib/core';
 import { requireNonGuest, requireSelf } from '../lib/core/access';
+import { readBoundedBodyBytes } from '../lib/core/http';
+import { readImportSourceBytes } from '../lib/drive';
 import { getHome } from '../lib/home';
 import {
     createEventAt,
@@ -23,6 +28,7 @@ import {
 } from '../lib/home/home-relay';
 import { getMemberships } from '../lib/user';
 import { betterAuth } from './auth';
+import { importFromDriveSchema } from './shared-schemas';
 
 const CalendarShareSchema = t.Object({
     targetId: t.String(),
@@ -106,6 +112,15 @@ const UpdateSharedCalendarSchema = t.Object({
     color: t.Optional(t.Nullable(t.String())),
     visible: t.Optional(t.Boolean()),
 });
+
+// The calendar an import writes into, beside the Drive file it reads — the same source fields the
+// contacts and mail import-from-drive routes take.
+const ImportFromDriveIcsSchema = t.Object({
+    ...importFromDriveSchema.properties,
+    calendarId: t.String({ minLength: 1 }),
+});
+
+const ImportQuerySchema = t.Object({ calendarId: t.String({ minLength: 1 }) });
 
 // Calendar routes allow cross-owner access (shared calendars, team calendars).
 // Access control is enforced by resolveCalendar() (own/team calendars) or
@@ -350,4 +365,44 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             return { success: true };
         },
         { auth: true },
+    )
+
+    // --- Import ---
+    // A whole `.ics` into one calendar the caller's own Home holds. A calendar shared with the caller is
+    // not a target: that write crosses homes, which only the relay may do.
+    .post(
+        '/calendar/:ownerId/import',
+        async ({ params, query, request, user, server }): Promise<ImportCountsResult> => {
+            requireNonGuest(user);
+            requireSelf(params.ownerId, user.id);
+            // A file of a thousand events writes a row apiece before this answers — longer than any
+            // server-wide idleTimeout, so exempt this request.
+            server?.timeout(request, 0);
+            const bytes = await readBoundedBodyBytes(request, ICS_MAX_BYTES);
+            if (bytes === null) throw new ApiError(413, 'Upload too large');
+            const cal = await resolveCalendar(user, user.id);
+            return cal.importEvents(query.calendarId, bytes);
+        },
+        { query: ImportQuerySchema, auth: true, parse: 'none' },
+    )
+
+    .post(
+        '/calendar/:ownerId/import-from-drive',
+        async ({ params, body, request, user, server }): Promise<ImportCountsResult> => {
+            requireNonGuest(user);
+            requireSelf(params.ownerId, user.id);
+            // Same idle-timeout exemption as the raw import route: silent until the last event lands.
+            server?.timeout(request, 0);
+            const bytes = await readImportSourceBytes(user, body, {
+                accepts: isIcsFile,
+                rejection: NOT_A_CALENDAR_FILE,
+                maxBytes: ICS_MAX_BYTES,
+            });
+            const cal = await resolveCalendar(user, user.id);
+            return cal.importEvents(body.calendarId, bytes);
+        },
+        {
+            body: ImportFromDriveIcsSchema,
+            auth: true,
+        },
     );

@@ -1,4 +1,5 @@
 export * from './backup';
+export * from './calendar';
 export * from './collab';
 export * from './colors';
 export * from './comment-indicator';

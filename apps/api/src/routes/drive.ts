@@ -1,13 +1,19 @@
 import { MAX_SEND_RECIPIENTS } from '@workspace/lib/constants/mail';
 import { type DriveAccessCheckResult, type DrivePath, isConvertTarget } from '@workspace/lib/types/drive';
 import type { FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
-import type { TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
+import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { getUploadMaxSize } from '../lib/config/enforcement';
 import { ApiError } from '../lib/core';
 import { requireNonGuest, requireSelf } from '../lib/core/access';
-import { contentDisposition, readBoundedBodyBytes, scriptableInlineHeaders, setCacheHeaders } from '../lib/core/http';
+import {
+    contentDisposition,
+    readBoundedBodyBytes,
+    readBoundedStreamBytes,
+    scriptableInlineHeaders,
+    setCacheHeaders,
+} from '../lib/core/http';
 import { getDrive, getSharedDrive } from '../lib/drive';
 import { propagateAccessRequest } from '../lib/drive/access-request-propagation';
 import { aggregateMimeContents, aggregateWatches } from '../lib/drive/aggregate';
@@ -17,7 +23,11 @@ import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
 import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
 import {
+    assertEmlPreviewable,
+    assertIcsPreviewable,
     assertVCardPreviewable,
+    getEmlPreview,
+    getIcsPreview,
     getScreenPreview,
     getTextPreview,
     getVCardPreview,
@@ -25,7 +35,7 @@ import {
 import { getThumbnail } from '../lib/shared/thumbnails';
 import { SNAPSHOT_NAME_FORMAT } from '../lib/versioning/timestamp';
 import { betterAuth } from './auth';
-import { clientFileEventBody, eigenDocTypeSchema } from './shared-schemas';
+import { clientFileEventBody, eigenDocTypeSchema, importFromDriveSchema } from './shared-schemas';
 
 // One cap for every free-text share note (collaborator email + access request), so a single
 // oversized body can't be persisted or mailed.
@@ -287,16 +297,16 @@ export const driveRouter = new Elysia({ name: 'drive' })
             if (sourcePath.size > maxSize) throw new ApiError(413, 'Source file too large');
             const sourceFile = await sourceDrive.downloadFile(body.sourceMountId, body.sourcePathId);
             if (!sourceFile) throw new ApiError(404, 'Source file not found');
-            const buffer = Buffer.from(await sourceFile.arrayBuffer());
+            // The row's size is a claim: a source that grew since is cancelled as it is read, the way
+            // every other import-from-drive route reads its source (lib/drive/import-source.ts).
+            const bytes = await readBoundedStreamBytes(sourceFile.stream(), maxSize);
+            if (bytes === null) throw new ApiError(413, 'Upload too large');
+            const buffer = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
             await importIntoDocument(drive, mount, path, buffer, user, request.signal);
             return { success: true };
         },
         {
-            body: t.Object({
-                sourceOwnerId: t.String(),
-                sourceMountId: t.String(),
-                sourcePathId: t.String(),
-            }),
+            body: importFromDriveSchema,
             auth: true,
         },
     )
@@ -361,6 +371,41 @@ export const driveRouter = new Elysia({ name: 'drive' })
             assertVCardPreviewable(path.name, path.mimeType, path.size);
 
             const result = await getVCardPreview(mount, path);
+            if (!result) throw new ApiError(404, 'No preview available');
+            // Stale-while-revalidate and the long max-age work exactly as they do for a text preview.
+            if (result.stale) set.headers['Cache-Control'] = 'no-store';
+            else setCacheHeaders(set, PREVIEW_MAX_AGE_SECONDS);
+            return result.value;
+        },
+        { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
+    )
+    // An .eml answers with the message it holds — headers, sanitized body and part list (PREVIEWS.md).
+    .get(
+        '/drive/:ownerId/:mountId/file/:pathId/eml-preview',
+        async ({ params, user, set }): Promise<EmlPreview> => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
+            assertEmlPreviewable(path.name, path.mimeType, path.size);
+
+            const result = await getEmlPreview(mount, path);
+            if (!result) throw new ApiError(404, 'No preview available');
+            // The one preview route without a max-age: the URL stamps the file, not the sanitizer that
+            // filtered the body, so an EML_FORMAT bump has to reach a browser that already has one.
+            if (result.stale) set.headers['Cache-Control'] = 'no-store';
+            else set.headers['Cache-Control'] = 'private, no-cache';
+            return result.value;
+        },
+        { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
+    )
+    // An .ics answers with the events it holds — the overlay draws them as cards (PREVIEWS.md).
+    .get(
+        '/drive/:ownerId/:mountId/file/:pathId/ics-preview',
+        async ({ params, user, set }): Promise<IcsPreview> => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
+            assertIcsPreviewable(path.name, path.mimeType, path.size);
+
+            const result = await getIcsPreview(mount, path);
             if (!result) throw new ApiError(404, 'No preview available');
             // Stale-while-revalidate and the long max-age work exactly as they do for a text preview.
             if (result.stale) set.headers['Cache-Control'] = 'no-store';

@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { fileActionsFor } from '@workspace/lib/file-actions';
 import { subjectFromMailAttachment } from '@workspace/lib/file-subject';
 import type { FileAction, FileSubject } from '@workspace/lib/types/file-subject';
 import { installHappyDom } from '../../happy-dom';
@@ -20,6 +21,8 @@ async function openMenu(props: { subject: FileSubject | null }) {
     const ran: FileAction[] = [];
     const runner = {
         subject: props.subject,
+        // The host's hook decides which rows a viewer gets; the menu draws what it is handed.
+        actions: props.subject ? fileActionsFor(props.subject) : [],
         run: (action: FileAction) => ran.push(action),
         openPicker: () => {},
         dialogs: null,
@@ -51,6 +54,17 @@ async function openMenu(props: { subject: FileSubject | null }) {
 test('draws every row the registry allows, in its order', async () => {
     const { labels, cleanup } = await openMenu({ subject });
     expect(labels).toEqual(['Quick preview', 'Download', 'Save to Drive…', 'Import to Contacts']);
+    await cleanup();
+});
+
+// A calendar part carries no filename, so its media type is what the registry reads.
+test('an invitation part offers the calendar import', async () => {
+    const invite = subjectFromMailAttachment('owner-1', 'message-1', 1, {
+        contentType: 'text/calendar; method=REQUEST; charset=utf-8',
+        size: 2048,
+    });
+    const { labels, cleanup } = await openMenu({ subject: invite });
+    expect(labels).toEqual(['Quick preview', 'Download', 'Save to Drive…', 'Import to Calendar']);
     await cleanup();
 });
 

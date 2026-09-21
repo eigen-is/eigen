@@ -1,18 +1,23 @@
 import { openDocument } from '@workspace/lib/api';
-import { useImportContactsFromDrive, useImportContactsFromUrl } from '@workspace/lib/contacts';
+import { useImportContactsFile } from '@workspace/lib/contacts';
 import { triggerDownload } from '@workspace/lib/download';
 import { useConvertDocument } from '@workspace/lib/drive';
-import { subjectInfo } from '@workspace/lib/file-subject';
+import { importSourceOf, subjectInfo } from '@workspace/lib/file-subject';
+import { useImportMail } from '@workspace/lib/mail';
 import type { ConvertTarget, DrivePath } from '@workspace/lib/types/drive';
-import type { FileAction, FileSubject } from '@workspace/lib/types/file-subject';
+import type { FileAction, FileActionId, FileImportSource, FileSubject } from '@workspace/lib/types/file-subject';
 import { type ReactNode, useState } from 'react';
+import { ImportToCalendarPicker } from '../calendar/import-to-calendar-picker';
 import { ProgressDialog } from '../drive/progress-dialog';
 import { SaveToDrivePicker } from '../drive/save-to-drive-picker';
 import { usePreview } from '../preview-provider/preview-context';
+import { useFileActions } from './use-file-actions';
 
 export type FileActionRunner = {
     // The menu draws its rows from the subject the runner acts on, so a host can never pair two.
     subject: FileSubject | null;
+    // The rows to draw for this subject and this viewer, the host's own exclusions already dropped.
+    actions: FileAction[];
     run: (action: FileAction) => void;
     // For a host with a set of its own to save: the overlay's "Save all" row.
     openPicker: (subjects: FileSubject[]) => void;
@@ -22,18 +27,26 @@ export type FileActionRunner = {
     isPending: boolean;
 };
 
-// A convert on a subject with nothing in Drive to convert saves first; the label names the row that asked.
+// What a row that opens a picker acts on, snapshotted: a host whose subject is state has none left by
+// the time the picker is confirmed. A convert saves first, and its label names the row that asked.
 type PickerState = { subjects: FileSubject[]; convert?: { targetType: ConvertTarget; label: string } };
 
-// A host whose subject is state (the right-clicked chip or row) passes null while there is none.
-export function useFileActionRunner(subject: FileSubject | null, siblings?: FileSubject[]): FileActionRunner {
+// A host whose subject is state (the right-clicked chip or row) passes null while there is none;
+// `exclude` drops a row the host draws itself (the overlay is Quick Look, so it drops that one).
+export function useFileActionRunner(
+    subject: FileSubject | null,
+    siblings?: FileSubject[],
+    exclude?: readonly FileActionId[],
+): FileActionRunner {
     const { openPreview } = usePreview();
     const convertDocument = useConvertDocument();
-    const importContactsFromDrive = useImportContactsFromDrive();
-    const importContactsFromUrl = useImportContactsFromUrl();
+    const importContacts = useImportContactsFile();
+    const importMail = useImportMail();
+    const actions = useFileActions(subject, exclude);
     // Open is its own flag: the closed picker keeps its subjects so its title holds through the exit animation.
     const [picker, setPicker] = useState<PickerState>({ subjects: [] });
     const [pickerOpen, setPickerOpen] = useState(false);
+    const [calendarPickerOpen, setCalendarPickerOpen] = useState(false);
 
     const openPicker = (subjects: FileSubject[], convert?: PickerState['convert']) => {
         if (subjects.length === 0) return;
@@ -55,20 +68,12 @@ export function useFileActionRunner(subject: FileSubject | null, siblings?: File
         else convertPath(subject.drive, targetType);
     };
 
-    const runImportContacts = () => {
+    // Where the bytes come from is one derivation, shared with the calendar picker; the mutation that
+    // takes it is the only thing that differs per format.
+    const runImport = (mutate: (source: FileImportSource) => void) => {
         if (!subject) return;
-        const { drive } = subject;
-        if (drive) {
-            importContactsFromDrive.mutate({
-                sourceOwnerId: drive.ownerId,
-                sourceMountId: drive.mountId,
-                sourcePathId: drive.id,
-            });
-            return;
-        }
-        const { downloadUrl } = subjectInfo(subject);
-        if (!downloadUrl) return;
-        importContactsFromUrl.mutate({ url: downloadUrl });
+        const source = importSourceOf(subject);
+        if (source) mutate(source);
     };
 
     const run = (action: FileAction) => {
@@ -92,13 +97,24 @@ export function useFileActionRunner(subject: FileSubject | null, siblings?: File
                 convert('eigendoc', action.label);
                 return;
             case 'import-contacts':
-                runImportContacts();
+                runImport(importContacts.mutate);
+                return;
+            case 'import-mail':
+                runImport(importMail.mutate);
+                return;
+            // Unlike its siblings this import needs a target first, so the row opens the picker and
+            // the picker runs the import it chose a calendar for. Snapshotted like a save: the menu
+            // that drew the row is already closed by the time the picker is confirmed.
+            case 'import-calendar':
+                setPicker({ subjects: [subject] });
+                setCalendarPickerOpen(true);
                 return;
         }
     };
 
     return {
         subject,
+        actions,
         run,
         openPicker,
         // Mounted while closed: "Download instead" fires staggered downloads from timers the picker clears on unmount.
@@ -114,6 +130,11 @@ export function useFileActionRunner(subject: FileSubject | null, siblings?: File
                         if (picker.convert) for (const path of paths) convertPath(path, picker.convert.targetType);
                     }}
                 />
+                <ImportToCalendarPicker
+                    subject={picker.subjects[0] ?? null}
+                    open={calendarPickerOpen}
+                    onClose={() => setCalendarPickerOpen(false)}
+                />
                 <ProgressDialog
                     open={convertDocument.isPending}
                     title={
@@ -124,7 +145,7 @@ export function useFileActionRunner(subject: FileSubject | null, siblings?: File
                 />
             </>
         ),
-        isDialogOpen: pickerOpen || convertDocument.isPending,
-        isPending: convertDocument.isPending || importContactsFromDrive.isPending || importContactsFromUrl.isPending,
+        isDialogOpen: pickerOpen || calendarPickerOpen || convertDocument.isPending,
+        isPending: convertDocument.isPending || importContacts.isPending || importMail.isPending,
     };
 }

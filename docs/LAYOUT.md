@@ -181,7 +181,7 @@ shared-with-me view for free.
 MIME → icon is not a Drive concern: `getFileIconComponent` / `getFilePresentation` live in
 `packages/lib/src/core/file-presentation.ts` (DOM-free, so lib callers like the palette can use them),
 with the JSX wrapper `getFileIcon` re-exported from `drive/file-presentation.tsx`.
-Both take the file name beside the mime: a `.vcf` is often stored as `application/octet-stream`, and it carries the Contacts app's icon and color the way an eigendoc carries its own app's.
+Both take the file name beside the mime: a `.vcf`, a `.eml` and a `.ics` are often stored as `application/octet-stream`, and each carries its app's icon and color — Contacts, Mail and Calendar — the way an eigendoc carries its own app's. `APP_FORMATS` in that file is the one list; the icon, the tint behind a Drive tile and hero, and the format badge all read it.
 
 ## List Patterns
 
@@ -338,7 +338,7 @@ One scale, project-wide. Higher values are progressively rarer — if you reach 
 | Sheet canvas-internal overlays               | 8–30    | Selection, freeze handles, scrollbars, hint boxes — scoped under `cellArea` |
 | Portaled UI (dropdowns, popovers, dialogs)   | 50      | shadcn / Radix default — leave it alone                 |
 | Full-screen overlay                          | 100     | `FilePreview`, slides `PresentMode`                     |
-| Dialog above preview                         | 200     | `DialogContent` with `abovePreview` prop                |
+| Above the full-screen overlay                | 200     | `DialogContent` with `abovePreview` prop; `MessageView`'s header details popover, on the same prop, for the `.eml` quick look |
 | Toaster                                      | library | Sonner manages its own stack                            |
 
 Rules:
@@ -346,7 +346,7 @@ Rules:
 - **App-level components don't set z-index.** Use layout instead — flex sibling (slides pattern) or absolute inside a parent that establishes a stacking context (docs pattern with `position: relative overflow-hidden`). Side panels (comments, properties) belong here.
 - **`position: relative` alone does *not* establish a stacking context** — the element needs a `z-index` other than `auto` (or one of: `transform`, `opacity < 1`, `filter`, `isolation: isolate`, `will-change`). If you want to contain children's z-indices, add `isolation: isolate`.
 - **Don't override shadcn primitives' z-50.** If a portaled menu is being covered, fix the offending high z-index, don't escalate the menu.
-- **Anything > 50 needs a comment** explaining why (current exceptions are `FilePreview`, the slides `PresentMode` overlay and the `abovePreview` Dialog prop).
+- **Anything > 50 needs a comment** explaining why (current exceptions are `FilePreview`, the slides `PresentMode` overlay and the `abovePreview` Dialog prop, which `MessageView`'s details popover reads off the preview context). A layer at 200 is a `role="dialog"` of its own, which is what `useDialogOpen(overlayRef)` reads so the overlay under it stands its own keys down — and for the keydown in hand, the overlay reads where the key was pressed instead, because a layer dismisses on that event's capture phase ([PREVIEWS.md](PREVIEWS.md)).
 - **The sheet engine's `cellArea` is its own world** — overlays under it stay ≤ 30; portaled menus rely on shadcn's z-50 to land above.
 
 ## Opening Items and Links

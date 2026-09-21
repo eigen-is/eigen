@@ -1,19 +1,26 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { getDriveItemUrl, getDrivePreviewUrl } from '@workspace/lib/api';
 import { useTextPreview } from '@workspace/lib/drive';
-import { fileActionsFor } from '@workspace/lib/file-actions';
 import { getPreviewMode, subjectInfo } from '@workspace/lib/file-subject';
 import { useMailTextPreview } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileSubject, MailPartRef } from '@workspace/lib/types/file-subject';
 import type { TextPreviewResult } from '@workspace/lib/types/preview';
+import { useDialogOpen } from '@workspace/ui/hooks/use-dialog-open';
 import { useFocusTrap } from '@workspace/ui/hooks/use-focus-trap';
 import { cn, IMAGE_CHECKERBOARD_STYLE } from '@workspace/ui/lib/utils';
 import { ArrowRight, ChevronLeft, ChevronRight, FolderDown, Loader2, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
+import { EmlPreviewContent, MailEmlPreviewContent } from './eml-preview-content';
 import { getFileIcon } from './file-presentation';
-import { MailVCardPreviewContent, PREVIEW_PANE_CLASS, VCardPreviewContent } from './vcard-preview-content';
+import { IcsPreviewContent, MailIcsPreviewContent } from './ics-preview-content';
+import { PREVIEW_PANE_CLASS } from './preview-pane';
+import { MailVCardPreviewContent, VCardPreviewContent } from './vcard-preview-content';
+
+// The roles a layer above the overlay carries — Radix dialogs and alert dialogs, popovers, menus and a
+// select's listbox all render one, and all of them take focus when they open.
+const LAYER_ROLES = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]';
 
 type FilePreviewProps = {
     subject: FileSubject;
@@ -24,7 +31,8 @@ type FilePreviewProps = {
 };
 
 export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: FilePreviewProps) {
-    const runner = useFileActionRunner(subject, siblings);
+    // The overlay is Quick Look itself, so the registry's own row is the one it drops.
+    const runner = useFileActionRunner(subject, siblings, ['quick-look']);
     const { drive } = subject;
     const info = subjectInfo(subject);
     const previewMode = getPreviewMode(subject);
@@ -38,24 +46,52 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
     const hasPrev = index > 0;
     const hasNext = index >= 0 && index < siblings.length - 1;
 
-    // Both listen on document and Radix stops nothing: ungated, one Escape would close the dialog and the overlay.
-    const keysEnabled = !runner.isDialogOpen;
-    useHotkey('Escape', () => onClose(), { enabled: keysEnabled });
-    // Space closes it again, the way it opened it (Finder's Quick Look).
-    useHotkey('Space', () => onClose(), { enabled: keysEnabled, preventDefault: true });
-    const goPrev = () => {
-        if (hasPrev) onPrev();
+    // Focus stays in the overlay except while a dialog, portaled to body, holds it.
+    const overlayRef = useRef<HTMLDivElement>(null);
+    // Every layer the content can open above the overlay — a picker, the reader header's details
+    // popover, a menu, a select's listbox — handles these keys itself, and each takes focus. Where the
+    // key was pressed is what says whose it was: a layer dismisses on the capture phase of the very
+    // keydown these document-level hotkeys hear on the bubble, and React has flushed it closed by then,
+    // so "is a layer open" answers for the layer that just went. Presence still gates the steady state.
+    const keysEnabled = !useDialogOpen(overlayRef);
+    const fromLayerAbove = (event: KeyboardEvent) => {
+        const layer = event.target instanceof Element ? event.target.closest(LAYER_ROLES) : null;
+        return !!layer && layer !== overlayRef.current;
     };
-    const goNext = () => {
-        if (hasNext) onNext();
+    useHotkey(
+        'Escape',
+        (event) => {
+            if (fromLayerAbove(event)) return;
+            onClose();
+        },
+        { enabled: keysEnabled },
+    );
+    // Space closes it again, the way it opened it (Finder's Quick Look) — unless a control inside has
+    // focus, where Space is that control's own activation, which is why the lib prevents no default of
+    // its own: it does that before the callback runs, and a pressed button would never press.
+    useHotkey(
+        'Space',
+        (event) => {
+            if (fromLayerAbove(event)) return;
+            if (event.target instanceof HTMLElement && event.target.closest('button, a[href]')) return;
+            event.preventDefault();
+            onClose();
+        },
+        { enabled: keysEnabled, preventDefault: false },
+    );
+    const goPrev = (event: KeyboardEvent) => {
+        if (hasPrev && !fromLayerAbove(event)) onPrev();
+    };
+    const goNext = (event: KeyboardEvent) => {
+        if (hasNext && !fromLayerAbove(event)) onNext();
     };
     useHotkey('ArrowLeft', goPrev, { enabled: keysEnabled });
     useHotkey('ArrowUp', goPrev, { enabled: keysEnabled });
     useHotkey('ArrowRight', goNext, { enabled: keysEnabled });
     useHotkey('ArrowDown', goNext, { enabled: keysEnabled });
 
-    // Focus stays in the overlay except while a dialog, portaled to body, holds it.
-    const overlayRef = useRef<HTMLDivElement>(null);
+    // The trap stands down only for a dialog that takes focus away; a popover portaled to body keeps
+    // its own Tab cycle, and the trap never sees those keys.
     useFocusTrap(overlayRef, !runner.isDialogOpen);
 
     const openUrl = drive ? getDriveItemUrl(drive) : undefined;
@@ -143,6 +179,14 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
                     {previewMode === 'vcard' && subject.mail && (
                         <MailVCardPreviewContent part={subject.mail} size={info.size} />
                     )}
+                    {previewMode === 'eml' && drive && <EmlPreviewContent path={drive} />}
+                    {previewMode === 'eml' && subject.mail && (
+                        <MailEmlPreviewContent part={subject.mail} size={info.size} />
+                    )}
+                    {previewMode === 'ics' && drive && <IcsPreviewContent path={drive} />}
+                    {previewMode === 'ics' && subject.mail && (
+                        <MailIcsPreviewContent part={subject.mail} size={info.size} />
+                    )}
                     {previewMode === 'fallback' && (
                         <div className="flex flex-col items-center gap-4 text-white">
                             {getFileIcon(info.mimeType, drive?.type ?? 'file', info.name, {
@@ -166,8 +210,7 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
                         Open
                     </FooterButton>
                 )}
-                {/* The overlay is Quick Look itself, so the registry's own row is the one it drops. */}
-                {fileActionsFor(subject, ['quick-look']).map((action) => (
+                {runner.actions.map((action) => (
                     <FooterActionButton key={action.id} onClick={() => runner.run(action)} disabled={runner.isPending}>
                         <action.icon className="size-3.5" />
                         {action.label}

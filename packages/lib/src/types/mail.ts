@@ -1,4 +1,5 @@
 import type { ImipMethod } from './calendar';
+import { isIcsMime } from './drive';
 import type { AttachmentReference } from './drive-reference';
 
 export type EmailAddress = {
@@ -48,9 +49,9 @@ export function mailAttachmentName(att: Pick<Attachment, 'filename'>, index: num
     return name || `attachment-${index + 1}`;
 }
 
-// The one test for "belongs to the invite widget, not the chips": compose and the save can't disagree.
+// The one test for "this part is an invitation": the reader's invite widget and the iMIP paths ask it.
 export function isCalendarPart(att: Pick<Attachment, 'contentType'>): boolean {
-    return att.contentType.startsWith('text/calendar');
+    return isIcsMime(att.contentType);
 }
 
 export type ParsedMail = {
@@ -104,8 +105,6 @@ export type Email = ParsedMail &
 
 export type MaildirMailbox = {
     path: string;
-    name: string;
-    delimiter: string;
     flags: string[];
     total: number;
     unread: number;
@@ -126,6 +125,9 @@ export function isEmailDraft(email: Email | null | undefined): email is EmailDra
 // Result of a send: the finalized draft plus the addresses whose per-recipient copy failed
 // delivery. `failedRecipients` is present only when a partial failure occurred.
 export type SentMailResult = EmailDraft & { failedRecipients?: string[] };
+
+// What importing one `.eml` yields: the message it became, by the id every other mail route addresses.
+export type ImportMailResult = { id: string };
 
 export type NewDraft = {
     id?: string;

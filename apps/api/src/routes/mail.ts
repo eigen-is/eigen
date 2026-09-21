@@ -1,8 +1,15 @@
-import { MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
-import { mailAttachmentName, type NewDraft, type SentMailResult } from '@workspace/lib/types/mail';
+import { EML_MAX_BYTES, MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
+import { EML_MIME, isEmlFile } from '@workspace/lib/types/drive';
+import {
+    type ImportMailResult,
+    mailAttachmentName,
+    type NewDraft,
+    type SentMailResult,
+} from '@workspace/lib/types/mail';
 import { Elysia, type Static, status, t } from 'elysia';
-import { ApiError, contentDisposition, setCacheHeaders } from '../lib/core';
+import { ApiError, contentDisposition, NOT_AN_EMAIL_FILE, readBoundedBodyBytes, setCacheHeaders } from '../lib/core';
 import { requireLocalhost, requireNonGuest, requireSelf } from '../lib/core/access';
+import { readImportSourceBytes } from '../lib/drive';
 import {
     attachFromDrive,
     getMailClient,
@@ -13,9 +20,21 @@ import {
     uploadDraftAttachment,
 } from '../lib/mail/mail';
 import { readMailPart, serveMailPart } from '../lib/mail/serve-mail-part';
-import { assertVCardPreviewable, getBytesTextPreview, getBytesVCardPreview } from '../lib/preview/preview-cache';
+import {
+    assertEmlPreviewable,
+    assertIcsPreviewable,
+    assertVCardPreviewable,
+    EML_FORMAT,
+    getBytesEmlPreview,
+    getBytesIcsPreview,
+    getBytesTextPreview,
+    getBytesVCardPreview,
+    ICS_FORMAT,
+    TEXT_FORMAT,
+    VCARD_FORMAT,
+} from '../lib/preview/preview-cache';
 import { betterAuth } from './auth';
-import { attachmentReferenceSchema } from './shared-schemas';
+import { attachmentReferenceSchema, importFromDriveSchema } from './shared-schemas';
 
 const EmailAddressSchema = t.Object({
     address: t.Optional(t.String()),
@@ -138,7 +157,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             setCacheHeaders(set, 86400);
-            set.headers['Content-Type'] = 'message/rfc822';
+            set.headers['Content-Type'] = EML_MIME;
             set.headers['Content-Transfer-Encoding'] = 'binary';
             set.headers['Content-Disposition'] = contentDisposition('attachment', `${params.id}.eml`);
             return await (await getMailClient(user)).messageGetFile(params.id);
@@ -232,11 +251,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
         },
         {
             auth: true,
-            body: t.Object({
-                sourceOwnerId: t.String(),
-                sourceMountId: t.String(),
-                sourcePathId: t.String(),
-            }),
+            body: importFromDriveSchema,
         },
     )
     .post(
@@ -334,7 +349,14 @@ export const mailRouter = new Elysia({ name: 'mail' })
         async ({ params, request, user, set }) => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            const att = await readMailPart(await getMailClient(user), params.id, params.index, request, set);
+            const att = await readMailPart(
+                await getMailClient(user),
+                params.id,
+                params.index,
+                request,
+                set,
+                TEXT_FORMAT,
+            );
             if (!att) return status(304);
 
             const preview = await getBytesTextPreview(
@@ -353,7 +375,14 @@ export const mailRouter = new Elysia({ name: 'mail' })
         async ({ params, request, user, set }) => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            const att = await readMailPart(await getMailClient(user), params.id, params.index, request, set);
+            const att = await readMailPart(
+                await getMailClient(user),
+                params.id,
+                params.index,
+                request,
+                set,
+                VCARD_FORMAT,
+            );
             if (!att) return status(304);
 
             assertVCardPreviewable(mailAttachmentName(att, params.index), att.contentType, att.size);
@@ -361,4 +390,79 @@ export const mailRouter = new Elysia({ name: 'mail' })
             return getBytesVCardPreview(new Uint8Array(att.content).buffer);
         },
         { auth: true, params: AttachmentPreviewParamsSchema },
+    )
+    .get(
+        '/mail/:ownerId/message/:id/attachment/:index/preview/eml',
+        async ({ params, request, user, set }) => {
+            requireNonGuest(user);
+            requireSelf(params.ownerId, user.id);
+            const att = await readMailPart(
+                await getMailClient(user),
+                params.id,
+                params.index,
+                request,
+                set,
+                EML_FORMAT,
+            );
+            if (!att) return status(304);
+
+            assertEmlPreviewable(mailAttachmentName(att, params.index), att.contentType, att.size);
+            // A copy, for the reason the cards route copies: the Worker detaches the buffer it gets.
+            return getBytesEmlPreview(new Uint8Array(att.content).buffer);
+        },
+        { auth: true, params: AttachmentPreviewParamsSchema },
+    )
+    .get(
+        '/mail/:ownerId/message/:id/attachment/:index/preview/ics',
+        async ({ params, request, user, set }) => {
+            requireNonGuest(user);
+            requireSelf(params.ownerId, user.id);
+            const att = await readMailPart(
+                await getMailClient(user),
+                params.id,
+                params.index,
+                request,
+                set,
+                ICS_FORMAT,
+            );
+            if (!att) return status(304);
+
+            assertIcsPreviewable(mailAttachmentName(att, params.index), att.contentType, att.size);
+            // A copy, for the reason the cards route copies: the Worker detaches the buffer it gets.
+            return getBytesIcsPreview(new Uint8Array(att.content).buffer);
+        },
+        { auth: true, params: AttachmentPreviewParamsSchema },
+    )
+    .post(
+        '/mail/:ownerId/import',
+        async ({ params, request, user, server }): Promise<ImportMailResult> => {
+            requireNonGuest(user);
+            requireSelf(params.ownerId, user.id);
+            // The whole message uploads, parses and indexes before this answers — at EML_MAX_BYTES
+            // that outlasts any server-wide idleTimeout, so exempt this request.
+            server?.timeout(request, 0);
+            const bytes = await readBoundedBodyBytes(request, EML_MAX_BYTES);
+            if (bytes === null) throw new ApiError(413, 'Upload too large');
+            return await (await getMailClient(user)).messageImport(Buffer.from(bytes));
+        },
+        { auth: true, parse: 'none' },
+    )
+    .post(
+        '/mail/:ownerId/import-from-drive',
+        async ({ params, body, request, user, server }): Promise<ImportMailResult> => {
+            requireNonGuest(user);
+            requireSelf(params.ownerId, user.id);
+            // Same idle-timeout exemption as the raw import route: silent until the message is indexed.
+            server?.timeout(request, 0);
+            const bytes = await readImportSourceBytes(user, body, {
+                accepts: isEmlFile,
+                rejection: NOT_AN_EMAIL_FILE,
+                maxBytes: EML_MAX_BYTES,
+            });
+            return await (await getMailClient(user)).messageImport(Buffer.from(bytes));
+        },
+        {
+            body: importFromDriveSchema,
+            auth: true,
+        },
     );

@@ -1,11 +1,11 @@
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
+import { ICS_CONTENT_TYPE } from '@workspace/lib/types/drive';
 import type { Calendar } from '../calendar/calendar';
 import { storedRecurrenceKey } from '../calendar/recurrence';
 import type { CalendarEventRow } from '../calendar/types';
 import { matchesIfMatch, matchesIfNoneMatch } from '../core/http';
 import { eventHref } from './discovery';
-import type { ParsedEvent } from './ical-parse';
-import { parseIcs } from './ical-parse';
+import { type IcsParseResult, type ParsedEvent, parseIcs } from './ical-parse';
 import { eventsToIcs } from './ical-serialize';
 
 // A calendar resource runs larger than a vCard (a recurring series carries an overridden VEVENT per exception),
@@ -21,7 +21,7 @@ export function handleGet(masterEvent: CalendarEventRow, allEventsForUid: Calend
     return new Response(ics, {
         status: 200,
         headers: {
-            'Content-Type': 'text/calendar; charset=utf-8',
+            'Content-Type': ICS_CONTENT_TYPE,
             ETag: `"${masterEvent.etag}"`,
         },
     });
@@ -53,18 +53,27 @@ export async function handlePut(
         return new Response('Precondition Failed', { status: 412 });
     }
 
-    let events: ReturnType<typeof parseIcs>['events'];
+    let parsed: IcsParseResult;
     try {
-        ({ events } = parseIcs(body));
+        parsed = parseIcs(body);
     } catch {
         return new Response('Bad Request: invalid iCalendar data', { status: 400 });
     }
+    // One resource is one series a client just wrote: a VEVENT of it the parser cannot read makes the
+    // whole payload malformed, where a previewed or imported file drops that one member and keeps going.
+    if (parsed.skipped) {
+        return new Response('Bad Request: invalid iCalendar data', { status: 400 });
+    }
+    const events = parsed.events;
     if (!events.length) {
         return new Response('Bad Request: no VEVENT found', { status: 400 });
     }
 
     // Find the master event (no recurrenceDate)
     const masterParsed = events.find((e) => !e.recurrenceDate) || events[0];
+    // One resource is one series, so this is every VEVENT in a well-formed payload — and the one
+    // filter that keeps a multi-UID payload from hanging foreign overrides off this master.
+    const seriesEvents = events.filter((e) => e.uid === masterParsed.uid);
 
     if (existingEvent) {
         const updatedEvent = calendar.updateEvent(calendarId, existingEvent.id, {
@@ -81,7 +90,7 @@ export async function handlePut(
             data: masterParsed.data,
         });
 
-        syncExceptionEvents(calendar, calendarId, updatedEvent, events, userId);
+        syncExceptionEvents(calendar, calendarId, updatedEvent, seriesEvents, userId);
 
         // Exception sync touches the master's etag — re-read so the response ETag matches storage
         // (a stale ETag would fail the client's next If-Match).
@@ -109,7 +118,7 @@ export async function handlePut(
         uri,
     });
 
-    syncExceptionEvents(calendar, calendarId, newEvent, events, userId);
+    syncExceptionEvents(calendar, calendarId, newEvent, seriesEvents, userId);
 
     return new Response(null, {
         status: 201,
@@ -120,29 +129,16 @@ export async function handlePut(
     });
 }
 
-// DELETE /dav/calendars/:ownerId/:calendarId/:uri
-export function handleDelete(calendar: Calendar, calendarId: string, uri: string, ifMatch: string | null): Response {
-    const event = calendar.getEventByUri(calendarId, uri);
-    if (!event) {
-        return new Response('Not Found', { status: 404 });
-    }
-
-    if (ifMatch !== null && !matchesIfMatch(ifMatch, `"${event.etag}"`)) {
-        return new Response('Precondition Failed', { status: 412 });
-    }
-
-    calendar.deleteByUri(calendarId, uri);
-    return new Response(null, { status: 204 });
-}
-
+// The recurrence overrides of ONE series, written against a stored master. `seriesEvents` carries that
+// UID's VEVENTs and nothing else: a foreign UID's override must not land on this master.
 function syncExceptionEvents(
     calendar: Calendar,
     calendarId: string,
     masterEvent: CalendarEvent,
-    events: ParsedEvent[],
+    seriesEvents: ParsedEvent[],
     userId: string,
 ) {
-    const exceptionParsed = events.filter((e) => e.recurrenceDate);
+    const exceptionParsed = seriesEvents.filter((e) => e.recurrenceDate);
 
     const existingExceptions = calendar.getExceptionsForParent(masterEvent.id);
 
@@ -201,7 +197,7 @@ function syncExceptionEvents(
     // (audit #D). Only a payload that carries the master VEVENT is a credible full-resource
     // representation — a degenerate master-less PUT proves nothing about the exceptions it omits.
     // Unkeyable legacy rows are inert everywhere, so the replace may drop them too.
-    if (!events.some((e) => !e.recurrenceDate)) return;
+    if (!seriesEvents.some((e) => !e.recurrenceDate)) return;
     const parsedKeys = new Set(exceptionParsed.map((e) => e.recurrenceDate));
     const stale = existingExceptions.filter((e) => {
         if (!e.recurrenceDate) return false;
@@ -213,4 +209,19 @@ function syncExceptionEvents(
         masterEvent.id,
         stale.map((e) => e.id),
     );
+}
+
+// DELETE /dav/calendars/:ownerId/:calendarId/:uri
+export function handleDelete(calendar: Calendar, calendarId: string, uri: string, ifMatch: string | null): Response {
+    const event = calendar.getEventByUri(calendarId, uri);
+    if (!event) {
+        return new Response('Not Found', { status: 404 });
+    }
+
+    if (ifMatch !== null && !matchesIfMatch(ifMatch, `"${event.etag}"`)) {
+        return new Response('Precondition Failed', { status: 412 });
+    }
+
+    calendar.deleteByUri(calendarId, uri);
+    return new Response(null, { status: 204 });
 }

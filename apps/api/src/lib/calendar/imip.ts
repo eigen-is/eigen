@@ -1,4 +1,4 @@
-import { formatEventWhen } from '@workspace/lib/calendar/calendar-utils';
+import { formatEventWhen, isInvitationFromOthers } from '@workspace/lib/calendar/calendar-utils';
 import { escapeHtml } from '@workspace/lib/html';
 import type { Attendee, CalendarEvent, EventData, ImipMethod } from '@workspace/lib/types/calendar';
 import { type AddressObject, type Attachment, type CalendarInvite, isCalendarPart } from '@workspace/lib/types/mail';
@@ -317,9 +317,11 @@ export function processInboundImip(
                 calendar.removeInvitation(parsed.uid, externalOwnerId(organizerEmail));
             }
         } else if (method === 'REPLY') {
-            // Find the organizer's own MASTER (not a linked copy) by UID. Exceptions share the uid and
-            // also lack data.organizer, so a REPLY must never bind to an exception row directly.
-            const ownerEvent = calendar.getEventsByUid(parsed.uid).find((e) => !e.data?.organizer && !e.parentEventId);
+            // Find the organizer's own MASTER (not a linked copy) by UID. Exceptions share the uid, so a
+            // REPLY must never bind to an exception row directly.
+            const ownerEvent = calendar
+                .getEventsByUid(parsed.uid)
+                .find((e) => !isInvitationFromOthers(e, home.user.email) && !e.parentEventId);
             if (ownerEvent && parsed.data?.attendees) {
                 for (const attendee of parsed.data.attendees) {
                     // A REPLY may only set the PARTSTAT of the attendee who actually sent it.

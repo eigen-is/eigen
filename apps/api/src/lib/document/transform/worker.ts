@@ -1,6 +1,7 @@
 import type * as Y from 'yjs';
 import { ApiError } from '../../core/errors';
 import {
+    type BytesPreviewJob,
     type BytesTransformJob,
     type CollabPreviewJob,
     type CollabTransformJob,
@@ -83,16 +84,31 @@ async function runImport(request: ImportTransformJob & { data: ArrayBuffer }): P
     }
 }
 
-// The bytes-sourced kinds read what they were handed: an upload to import, or the .vcf a preview
-// serves as cards. Closed over the kind like every other dispatch here.
+// The bytes-sourced kinds read what they were handed: an upload to import, or the .vcf, .eml or .ics a
+// preview serves as a typed payload. Closed over the kind like every other dispatch here.
 async function runBytesRequest(request: BytesTransformJob & { data: ArrayBuffer }): Promise<DocumentTransformResponse> {
     switch (request.kind) {
         case 'import':
             return runImport(request);
-        case 'preview': {
+        case 'preview':
+            // The preview result carries a string, so the payload rides back as the JSON the route serves.
+            return { ok: true, result: { body: await buildBytesPreviewJson(request) }, warnings: [] };
+    }
+}
+
+async function buildBytesPreviewJson(request: BytesPreviewJob & { data: ArrayBuffer }): Promise<string> {
+    switch (request.documentType) {
+        case 'vcard': {
             const { buildVCardPreviewPayload } = await import('../../preview/vcard-preview');
-            // The preview result carries a string, so the cards ride back as the JSON the route serves.
-            return { ok: true, result: { body: JSON.stringify(buildVCardPreviewPayload(request.data)) }, warnings: [] };
+            return JSON.stringify(buildVCardPreviewPayload(request.data));
+        }
+        case 'eml': {
+            const { buildEmlPreviewPayload } = await import('../../preview/eml-preview');
+            return JSON.stringify(buildEmlPreviewPayload(request.data));
+        }
+        case 'ics': {
+            const { buildIcsPreviewPayload } = await import('../../preview/ics-preview');
+            return JSON.stringify(buildIcsPreviewPayload(request.data));
         }
     }
 }

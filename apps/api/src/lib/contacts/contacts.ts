@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import type { Address, Contact, CreateContactInput, ImportContactsResult } from '@workspace/lib/types/contact';
+import type { Address, Contact, CreateContactInput } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { SSEventType } from '@workspace/lib/types/sse';
+import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { Semaphore } from '../../utils/semaphore';
 import { type CardEdits, createVCard, mergeVCard } from '../carddav/vcard-serialize';
-import { enforceContactsIngest } from '../config/enforcement';
+import { enforceMailAndContactsQuota } from '../config/enforcement';
 import { getServerSettings } from '../config/server-settings';
 import type { ManagedDatabase } from '../core';
 import { ApiError, DEFAULT_LABELS, LocalFilesystem, PATHS } from '../core';
@@ -113,7 +114,7 @@ export class Contacts {
     // Only the reconcile/rebuild/drain machinery bumps this; the mutation paths parse for their own merges.
     private cardParses = 0;
 
-    // Running byte totals so size() answers from memory — enforceContactsIngest calls it on every metered
+    // Running byte totals so size() answers from memory — enforceMailAndContactsQuota calls it on every metered
     // write, and a directory walk per call would make an N-card device sync O(N²) stats.
     cardsBytes = 0; // internal — used by contacts/*.ts
     avatarsBytes = 0; // internal — used by contacts/*.ts
@@ -497,7 +498,7 @@ export class Contacts {
             throw new ApiError(413, 'Contact card is too large');
         }
         if (this.meteredIngest) {
-            await enforceContactsIngest(this.home.user.id, bytes.byteLength, creditBytes);
+            await enforceMailAndContactsQuota(this.home.user.id, bytes.byteLength, creditBytes);
         }
     }
 
@@ -918,8 +919,8 @@ export class Contacts {
         return transfer.exportCards(this, ids);
     }
 
-    public async importCards(text: string): Promise<ImportContactsResult> {
-        return transfer.importCards(this, text);
+    public async importCards(bytes: Uint8Array): Promise<ImportCountsResult> {
+        return transfer.importCards(this, bytes);
     }
 
     async destruct(): Promise<void> {

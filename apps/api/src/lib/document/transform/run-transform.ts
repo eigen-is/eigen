@@ -4,6 +4,7 @@ import { ApiError } from '../../core/errors';
 import type { Mount } from '../../mount';
 import { captureCollabSource } from './collab-source';
 import type {
+    BytesPreviewJob,
     CollabPreviewJob,
     DocImportJob,
     DocImportWorkerResult,
@@ -13,7 +14,6 @@ import type {
     SheetsImportJob,
     TransformResultFor,
     TransformWarning,
-    VCardPreviewJob,
 } from './protocol';
 import { documentTransformRunner, type RunOptions, TRANSFORM_LIMITS, type TransformPriority } from './runner';
 
@@ -132,7 +132,7 @@ export async function runTransformToBytes(
 export async function runFileTransformToText(
     mount: Mount,
     drivePath: DrivePath,
-    job: VCardPreviewJob,
+    job: BytesPreviewJob,
     opts: TransformOptions,
 ): Promise<string | null> {
     const priority = opts.priority ?? 'foreground';
@@ -152,7 +152,7 @@ export async function runFileTransformToText(
 // The same job with the bytes already in hand — a mail part has no Mount to read them from. The buffer
 // is transferred to the Worker, so the caller must own it.
 export async function runBytesTransformToText(
-    job: VCardPreviewJob,
+    job: BytesPreviewJob,
     data: ArrayBuffer,
     opts: TransformOptions & { captureMs?: number },
 ): Promise<string> {

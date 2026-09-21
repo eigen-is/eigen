@@ -12,9 +12,17 @@ import {
     Folder,
     type LucideIcon,
     Presentation,
-    UsersRound,
 } from 'lucide-react';
-import { DRIVE_TYPE_FOLDER, type DrivePathType, getEigenDocInfoByMime, isImageMime, isVCardFile } from '../types';
+import {
+    DRIVE_TYPE_FOLDER,
+    type DrivePathType,
+    getEigenDocInfoByMime,
+    isEmlFile,
+    isIcsFile,
+    isImageMime,
+    isVCardFile,
+} from '../types';
+import { apps } from './apps';
 import { EIGEN_DOC_ICONS } from './eigendoc-icons';
 
 const ARCHIVE_MIMES = new Set([
@@ -60,13 +68,28 @@ const WORD_MIMES = new Set([
 const EXECUTABLE_MIMES = new Set(['application/x-msdownload', 'application/x-executable']);
 const DB_MIMES = new Set(['application/vnd.sqlite3', 'application/x-sqlite3', 'application/vnd.ms-access']);
 
+// A .vcf belongs to Contacts, a .eml to Mail and a .ics to Calendar the way an eigendoc belongs to its
+// app, so each carries that app's icon, accent and name from the app registry.
+const APP_FORMATS = [
+    { matches: isVCardFile, app: 'contacts', filled: true },
+    // lucide draws the envelope's body after its flap, so a filled body paints over the flap.
+    { matches: isEmlFile, app: 'mail', filled: false },
+    { matches: isIcsFile, app: 'calendar', filled: true },
+] as const;
+
+function getAppFormat(mimeType: string, name: string) {
+    const format = APP_FORMATS.find(({ matches }) => matches(mimeType, name));
+    const app = format && apps.find((entry) => entry.name.toLowerCase() === format.app);
+    return format && app ? { ...format, icon: app.icon, color: app.color, label: app.name } : undefined;
+}
+
 export function getFileIconComponent(mimeType: string, type: string, name: string): LucideIcon {
     if (type === DRIVE_TYPE_FOLDER) return Folder;
 
     const eigenInfo = getEigenDocInfoByMime(mimeType);
     if (eigenInfo) return EIGEN_DOC_ICONS[eigenInfo.type];
-    // A .vcf belongs to Contacts the way an eigendoc belongs to its app, so it carries that app's icon.
-    if (isVCardFile(mimeType, name)) return UsersRound;
+    const appFormat = getAppFormat(mimeType, name);
+    if (appFormat) return appFormat.icon;
 
     if (!mimeType) return File;
     if (isImageMime(mimeType)) return FileImage;
@@ -118,13 +141,15 @@ export function getFilePresentation(mimeType: string, type: DrivePathType, name:
         };
     }
 
-    if (isVCardFile(mimeType, name)) {
+    const appFormat = getAppFormat(mimeType, name);
+    if (appFormat) {
+        const softColorVar = `var(--app-${appFormat.app}-color-soft)`;
         return {
-            icon: UsersRound,
-            colorVar: 'var(--app-contacts-color)',
-            softColorVar: 'var(--app-contacts-color-soft)',
-            fillColorVar: 'var(--app-contacts-color-soft)',
-            label: 'Contacts',
+            icon: appFormat.icon,
+            colorVar: appFormat.color,
+            softColorVar,
+            fillColorVar: appFormat.filled ? softColorVar : 'none',
+            label: appFormat.label,
         };
     }
 

@@ -257,19 +257,11 @@ in `lib/export/` is weasyprint-specific), so this small policy lives in
 
 **Through the file-action registry (2026-09-20).** A `.ics` reaches a user as a Drive file, a mail attachment or a chat attachment far more often than as a file on their disk, so the entry point is an `import-to-calendar` row in `FILE_ACTIONS` (`packages/lib/src/core/file-actions.ts`), beside `import-contacts`, and every menu and the quick-look footer pick it up. The routes mirror contacts (`routes/contacts.ts`): a raw-body `POST /calendar/:ownerId/import` for bytes the browser already holds (a mail part, a picked file) and `POST /calendar/:ownerId/import-from-drive`, which reads the Drive subject server-side through `getSharedDrive` so the bytes never round-trip through the browser. Both carry the target described in step 1 below and a shared FE/BE byte ceiling, checked before the bytes are read. The sidebar's "Import from file…" dialog stays as the entry point for a file on disk and posts to the raw-body route; it is not a second pipeline. The `.ics` quick look, the mail-reader chip for a calendar part and the shared event card are specified in [PROPOSAL_CALENDAR_ICS_FILES.md § Files everywhere](PROPOSAL_CALENDAR_ICS_FILES.md#files-everywhere-import-export-and-quick-look). The numbered steps below describe the import itself and hold for both routes; read "multipart upload" as the raw body.
 
-Reuse `parseIcs()`. The `POST /calendar/:ownerId/imports` route:
+Reuse `parseIcs()`. Both routes:
 
-1. Accepts a multipart upload with the `.ics` file plus fields specifying the target: either
-   `{ mode: 'new', name?: string, color?: string }` or `{ mode: 'existing', calendarId: string }`.
-2. Parses, then either creates a new owned calendar (default name from `X-WR-CALNAME` or the
-   filename minus extension; default color from `X-APPLE-CALENDAR-COLOR` if present) or resolves
-   the existing calendar — rejecting subscribed targets via the read-only guard.
-3. Bulk-inserts through the same snapshot primitive's insert path (single transaction, one ctag
-   bump, one SSE broadcast), with two import-specific rules: `data.organizer` is **stripped**
-   (otherwise `updateEvent`'s linked-event guard would treat the imported copy as an attendee's
-   linked event and lock its fields to reminders/color), and no invitation propagation runs
-   (attendee lists are kept as display data only).
-4. Returns the calendar plus inserted-event count.
+1. Take the target as a `calendarId` — a query parameter on the raw-body route, a body field beside the Drive source on the other. It names an existing calendar the Home owns; "New calendar" in the picker is the existing `useCreateCalendar` followed by the import, so there is no multipart body and no `mode` union. A subscribed target is rejected by the read-only guard.
+2. Parse, then write the masters in file order under one ctag bump and one SSE broadcast, with the import-specific rules: `data.organizer` **and** `data.attendees` are stripped (a stored organizer makes `updateEvent`'s linked-event guard treat the copy as an attendee's, and an attendee list mails the file author's addresses on every later edit), `METHOD` is ignored, and no invitation propagation runs.
+3. Answer the three counts (`ImportCountsResult`), as a vCard import does.
 
 Once imported, events are normal owned events — no `subscription`, fully editable, identical to
 hand-created ones.

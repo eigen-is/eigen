@@ -1,12 +1,25 @@
+import { Database } from 'bun:sqlite';
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { MAILBOX_ARCHIVE, MAILBOX_INBOX_KEY } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary } from '@workspace/lib/types/mail';
+import type { Notification } from '@workspace/lib/types/notification';
 import type { SearchResponse } from '@workspace/lib/types/search';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { app, assertJson, authedRequest, collectSSE, ensureServer, TEST_DATA_DIR } from '../setup';
+import { boxDir, mailRootOf, makeEml, seedMaildirFile } from '../mail-test-helpers';
+import {
+    app,
+    assertJson,
+    authedRequest,
+    collectSSE,
+    createTestUser,
+    ensureServer,
+    findOrFail,
+    type TestUser,
+} from '../setup';
 
-// createTestUser below hits the auth DB directly, so the setup wizard (which creates the auth schema and
+// createTestUser hits the auth DB directly, so the setup wizard (which creates the auth schema and
 // configures the org) must have run first. Under --parallel each file boots its own server; gate on it.
 beforeAll(async () => {
     await ensureServer();
@@ -14,50 +27,10 @@ beforeAll(async () => {
 
 const isWindows = process.platform === 'win32';
 
-function userMaildir(userId: string) {
-    return join(TEST_DATA_DIR, 'home', userId, 'eigen.mail', 'Maildir');
-}
-
-function curDir(userId: string, mailbox: string) {
-    const base = userMaildir(userId);
-    return mailbox === '' ? join(base, 'cur') : join(base, `.${mailbox}`, 'cur');
-}
-
-function makeEml(subject: string, body: string, from = 'sender@example.com', to = 'recipient@test.eigen.is') {
-    return [
-        `From: ${from}`,
-        `To: ${to}`,
-        `Subject: ${subject}`,
-        `Date: ${new Date().toUTCString()}`,
-        `Message-ID: <${Date.now()}.${Math.random()}@test>`,
-        'MIME-Version: 1.0',
-        'Content-Type: text/plain; charset=utf-8',
-        '',
-        body,
-    ].join('\r\n');
-}
-
-// Writes a synthetic maildir file straight into `mailbox`'s cur/ — bypassing delivery/sync, same
-// as a bulk mail-client drop or Dovecot placing files (pattern from mail-imap.test.ts).
-function seedCurFile(userId: string, mailbox: string, uniqueId: string, eml: string, flags = 'S'): void {
-    const size = Buffer.byteLength(eml, 'utf-8');
-    writeFileSync(join(curDir(userId, mailbox), `${uniqueId},S=${size}:2,${flags}`), eml);
-}
-
 // Seeds a directory (not a file) shaped like a maildir entry — reading it throws EISDIR, a
 // genuinely "unreadable .eml" fault distinct from ENOENT, exercising the per-message skip.
 function seedUnreadableCurEntry(userId: string, mailbox: string, uniqueId: string): void {
-    mkdirSync(join(curDir(userId, mailbox), `${uniqueId},S=10:2,S`));
-}
-
-async function createTestUser(email: string, name: string): Promise<{ id: string; sessionToken: string }> {
-    const { auth } = await import('../../lib/auth/auth');
-    const signUp = await auth.api.signUpEmail({ body: { email, password: 'testpassword123', name } });
-    const signIn = await auth.api.signInEmail({ returnHeaders: true, body: { email, password: 'testpassword123' } });
-    const setCookie = signIn.headers.get('set-cookie') || '';
-    const match = setCookie.match(/better-auth\.session_token=([^;]+)/);
-    if (!match) throw new Error(`Session token not found in set-cookie header: ${setCookie}`);
-    return { id: signUp.user.id, sessionToken: match[1] };
+    mkdirSync(join(boxDir(userId, mailbox), 'cur', `${uniqueId},S=10:2,S`));
 }
 
 async function createMailbox(token: string, ownerId: string, mailbox: string): Promise<void> {
@@ -74,7 +47,7 @@ async function listBox(token: string, ownerId: string, box: string, limit: numbe
 }
 
 async function deliverEmail(to: string, subject: string, body: string): Promise<void> {
-    const eml = makeEml(subject, body, 'sender@example.com', to);
+    const eml = makeEml(subject, { to, body });
     const res = await app.handle(
         new Request(`http://localhost/mail/deliver/${to}`, {
             method: 'POST',
@@ -85,13 +58,52 @@ async function deliverEmail(to: string, subject: string, body: string): Promise<
     if (res.status !== 200) throw new Error(`Delivery failed: ${res.status}`);
 }
 
+// Empties the index the way a lost mail.db does: the next sync rebuilds it from every file on disk.
+function clearIndex(userId: string): void {
+    const db = new Database(join(mailRootOf(userId), 'mail.db'));
+    try {
+        db.run('DELETE FROM emails');
+    } finally {
+        db.close();
+    }
+}
+
+async function mailNewRows(user: TestUser): Promise<Notification[]> {
+    const rows = await assertJson<Notification[]>(await authedRequest(user.sessionToken, `/notifications/${user.id}`));
+    return rows.filter((row) => row.tag === 'mail:new');
+}
+
+async function dismissMailNotifications(user: TestUser): Promise<void> {
+    for (const row of await mailNewRows(user)) {
+        const res = await authedRequest(user.sessionToken, `/notifications/${user.id}/${row.id}`, { method: 'DELETE' });
+        expect(res.status).toBe(200);
+    }
+}
+
+// The subject each mail:new broadcast carries. Announcements coalesce onto one row, so the broadcast
+// (the first of the window) and the row (the last one wins) together name both ends of the batch.
+async function announcedWhile(user: TestUser, act: () => Promise<void>): Promise<string[]> {
+    const sse = collectSSE(user.id);
+    await Bun.sleep(50);
+    await act();
+    await Bun.sleep(100);
+    sse.stop();
+    return sse.events.flatMap((event) =>
+        event.type === SSEventType.NOTIFICATION_CREATED && event.tag === 'mail:new' ? [event.body ?? ''] : [],
+    );
+}
+
+async function initHome(user: TestUser): Promise<void> {
+    expect((await authedRequest(user.sessionToken, `/home/${user.id}/size`)).status).toBe(200);
+}
+
 describe.skipIf(isWindows)('Mail sync (Step 3: non-blocking sync + batched cold-index inserts)', () => {
     let userId: string;
     let token: string;
 
     beforeAll(async () => {
         const userEmail = `mailsync-${Date.now()}@test.eigen.is`;
-        const user = await createTestUser(userEmail, 'Mail Sync Test');
+        const user = await createTestUser(userEmail, 'testpassword123', 'Mail Sync Test');
         userId = user.id;
         token = user.sessionToken;
         // Initialize the home — delivers welcome mail (skipSync) and creates the Maildir tree.
@@ -104,7 +116,7 @@ describe.skipIf(isWindows)('Mail sync (Step 3: non-blocking sync + batched cold-
         await createMailbox(token, userId, box);
 
         // First open (empty DB) — blocking path, gives us one known indexed row.
-        seedCurFile(userId, box, `${Date.now()}.first`, makeEml('Seed', 'seed body'));
+        seedMaildirFile(userId, box, `${Date.now()}.first`, makeEml('Seed', { body: 'seed body' }));
         const first = await listBox(token, userId, box, 500);
         expect(first.length).toBe(1);
 
@@ -112,7 +124,7 @@ describe.skipIf(isWindows)('Mail sync (Step 3: non-blocking sync + batched cold-
         // must NOT be awaited before the route responds.
         const BURST = 80;
         for (let i = 0; i < BURST; i++) {
-            seedCurFile(userId, box, `${Date.now()}.burst${i}`, makeEml(`Burst ${i}`, `body ${i}`));
+            seedMaildirFile(userId, box, `${Date.now()}.burst${i}`, makeEml(`Burst ${i}`, { body: `body ${i}` }));
         }
 
         const stale = await listBox(token, userId, box, 500);
@@ -147,7 +159,9 @@ describe.skipIf(isWindows)('Mail sync (Step 3: non-blocking sync + batched cold-
             const isFlagged = i === 3;
             const hasNeedle = i === 200;
             const body = hasNeedle ? `${'lorem ipsum '.repeat(5)}${NEEDLE} end` : `body ${i}`;
-            seedCurFile(userId, box, id, makeEml(`Cold ${i}`, body), isFlagged ? 'F' : i % 2 === 0 ? 'S' : '');
+            seedMaildirFile(userId, box, id, makeEml(`Cold ${i}`, { body }), {
+                flags: isFlagged ? 'F' : i % 2 === 0 ? 'S' : '',
+            });
             if (isFlagged) flaggedId = id;
             if (hasNeedle) needleId = id;
         }
@@ -180,7 +194,7 @@ describe.skipIf(isWindows)('Mail sync (Step 3: non-blocking sync + batched cold-
         const goodIds: string[] = [];
         for (let i = 0; i < 5; i++) {
             const id = `${Date.now()}.good${i}`;
-            seedCurFile(userId, box, id, makeEml(`Good ${i}`, `body ${i}`));
+            seedMaildirFile(userId, box, id, makeEml(`Good ${i}`, { body: `body ${i}` }));
             goodIds.push(id);
         }
         // A directory shaped like a maildir entry: reading it throws EISDIR, not ENOENT — a
@@ -204,7 +218,7 @@ describe.skipIf(isWindows)('Mail sync (Step 3: non-blocking sync + batched cold-
 
         beforeAll(async () => {
             coalesceEmail = `mailsync-coalesce-${Date.now()}@test.eigen.is`;
-            const user = await createTestUser(coalesceEmail, 'Mail Sync Coalesce Test');
+            const user = await createTestUser(coalesceEmail, 'testpassword123', 'Mail Sync Coalesce Test');
             coalesceUserId = user.id;
             coalesceToken = user.sessionToken;
             const sizeRes = await authedRequest(coalesceToken, `/home/${coalesceUserId}/size`);
@@ -235,5 +249,74 @@ describe.skipIf(isWindows)('Mail sync (Step 3: non-blocking sync + batched cold-
             expect(mailRows.length).toBe(1);
             expect(mailRows[0].title).toContain('sender@example.com'.split('@')[0]);
         });
+    });
+});
+
+describe.skipIf(isWindows)('Only the delivered message is new', () => {
+    test('a first index announces the delivery alone, not the welcome mail beside it', async () => {
+        const userEmail = `mailcold-${Date.now()}@test.eigen.is`;
+        const user = await createTestUser(userEmail, 'testpassword123', 'Mail Cold Index Test');
+        // Writes the welcome mail into the inbox without indexing it (skipSync), so the delivery below
+        // is the sync that indexes them both.
+        await initHome(user);
+
+        const broadcast = await announcedWhile(user, () => deliverEmail(userEmail, 'The real arrival', 'body'));
+        expect(broadcast).toEqual(['The real arrival']);
+        expect((await mailNewRows(user)).map((row) => row.body)).toEqual(['The real arrival']);
+
+        // Silent, not unindexed: the welcome mail is listed alongside the delivery.
+        const inbox = await listBox(user.sessionToken, user.id, MAILBOX_INBOX_KEY, 50);
+        expect(inbox.map((message) => message.subject)).toContain('The real arrival');
+        expect(inbox.length).toBeGreaterThan(1);
+    });
+
+    test('a delivery after the index is lost re-announces nothing but itself', async () => {
+        const userEmail = `mailreindex-${Date.now()}@test.eigen.is`;
+        const user = await createTestUser(userEmail, 'testpassword123', 'Mail Reindex Test');
+        await initHome(user);
+
+        await deliverEmail(userEmail, 'Old one', 'a');
+        await deliverEmail(userEmail, 'Old two', 'b');
+        expect((await listBox(user.sessionToken, user.id, MAILBOX_INBOX_KEY, 50)).length).toBeGreaterThanOrEqual(2);
+
+        // A row still inside the coalesce window suppresses the next broadcast.
+        await dismissMailNotifications(user);
+
+        // Emptied with the delivery, so no watcher-driven sync reindexes the inbox in between.
+        const broadcast = await announcedWhile(user, () => {
+            clearIndex(user.id);
+            return deliverEmail(userEmail, 'After the loss', 'c');
+        });
+        expect(broadcast).toEqual(['After the loss']);
+        expect((await mailNewRows(user)).map((row) => row.body)).toEqual(['After the loss']);
+
+        const inbox = await listBox(user.sessionToken, user.id, MAILBOX_INBOX_KEY, 50);
+        expect(inbox.map((message) => message.subject)).toContain('Old one');
+        expect(inbox.map((message) => message.subject)).toContain('Old two');
+    });
+
+    test('a copy is not an arrival', async () => {
+        const userEmail = `mailcopy-${Date.now()}@test.eigen.is`;
+        const user = await createTestUser(userEmail, 'testpassword123', 'Mail Copy Test');
+        await initHome(user);
+
+        await deliverEmail(userEmail, 'The original', 'body');
+        const inbox = await listBox(user.sessionToken, user.id, MAILBOX_INBOX_KEY, 50);
+        const original = findOrFail(inbox, (message) => message.subject === 'The original');
+        await dismissMailNotifications(user);
+
+        const broadcast = await announcedWhile(user, async () => {
+            const res = await authedRequest(user.sessionToken, `/mail/${user.id}/message/copy`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ messageId: original.id, targetMailbox: MAILBOX_ARCHIVE }),
+            });
+            expect(res.status).toBe(200);
+        });
+
+        expect(broadcast).toEqual([]);
+        expect(await mailNewRows(user)).toEqual([]);
+        const archive = await listBox(user.sessionToken, user.id, MAILBOX_ARCHIVE, 50);
+        expect(archive.map((row) => row.subject)).toEqual(['The original']);
     });
 });

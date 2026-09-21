@@ -1,80 +1,62 @@
-import { IMPORT_MAX_BYTES } from '@workspace/lib/constants/contact';
-import { droppedLine, remainingLine } from '@workspace/lib/contacts';
+import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { useVCardPreview } from '@workspace/lib/drive';
-import { formatFileSize } from '@workspace/lib/format';
 import { useMailVCardPreview } from '@workspace/lib/mail';
+import { previewCountLines } from '@workspace/lib/transfer';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { MailPartRef } from '@workspace/lib/types/file-subject';
 import type { VCardPreview } from '@workspace/lib/types/preview';
-import { cn } from '@workspace/ui/lib/utils';
+import { cn } from '../../lib/utils';
 import { EmptyState } from '../layout/app/empty-state';
-import { ErrorState } from '../layout/app/error-state';
-import { LoadingState } from '../layout/app/loading-state';
 import { ContactDetailCard } from '../user/contact-detail-card';
-
-// The box every non-image preview fills: the overlay's content area minus its header and footer. Lives
-// here rather than in file-preview.tsx because that shell already imports this module.
-export const PREVIEW_PANE_CLASS = 'w-[80vw] h-[calc(100vh-7rem)]';
+import { PREVIEW_BODY_CLASS, PreviewCounts, PreviewPane, type PreviewStatus } from './preview-pane';
 
 // The served cards, whichever route served them. Drive and mail each have their own component, so exactly
 // one query hook runs per render and the overlay picks by the subject it holds.
 export function VCardPreviewContent({ path }: { path: DrivePath }) {
-    const { data, isLoading } = useVCardPreview(path.ownerId, path.mountId, path.id, path.updatedAt, path.size);
-    return <VCardCards data={data} isLoading={isLoading} oversize={path.size > IMPORT_MAX_BYTES} />;
+    const { data, status } = useVCardPreview(path.ownerId, path.mountId, path.id, path.updatedAt, path.size);
+    return <VCardCards data={data} status={status} oversize={path.size > VCARD_MAX_BYTES} />;
 }
 
 export function MailVCardPreviewContent({ part, size }: { part: MailPartRef; size: number }) {
-    const oversize = size > IMPORT_MAX_BYTES;
-    const { data, isLoading } = useMailVCardPreview(part.ownerId, part.messageId, part.index, !oversize);
-    return <VCardCards data={data} isLoading={isLoading} oversize={oversize} />;
+    const oversize = size > VCARD_MAX_BYTES;
+    const { data, status } = useMailVCardPreview(part.ownerId, part.messageId, part.index, !oversize);
+    return <VCardCards data={data} status={status} oversize={oversize} />;
 }
 
 // Both routes serve one shape, so one renderer reads it.
 function VCardCards({
     data,
-    isLoading,
+    status,
     oversize,
 }: {
     data: VCardPreview | undefined;
-    isLoading: boolean;
+    status: PreviewStatus;
     oversize: boolean;
 }) {
     // The cards the file holds that this preview shows no card for — the unreadable ones get their own line.
     const remaining = data ? data.total - data.dropped - data.cards.length : 0;
-    // Both counts, for the empty state: a file whose every readable card failed still says how many it
-    // never opened.
-    const counts = [
-        ...(remaining > 0 ? [remainingLine(remaining)] : []),
-        ...(data && data.dropped > 0 ? [droppedLine(data.dropped)] : []),
-    ];
 
     return (
-        <div className={cn(PREVIEW_PANE_CLASS, 'overflow-auto rounded bg-background')}>
-            {oversize ? (
-                <EmptyState
-                    message="File too large to preview"
-                    hint={`A file over ${formatFileSize(IMPORT_MAX_BYTES)} can’t be imported either.`}
-                />
-            ) : isLoading ? (
-                <LoadingState />
-            ) : !data ? (
-                <ErrorState message="Could not read this file" />
-            ) : data.cards.length === 0 ? (
-                <EmptyState message="No contacts in this file" hint={counts.join(' · ') || undefined} />
-            ) : (
-                <div className="max-w-3xl mx-auto flex flex-col gap-8 p-8">
-                    {data.cards.map(({ contact, categories }, index) => (
-                        <ContactDetailCard
-                            key={index}
-                            contact={contact}
-                            labels={categories.map((name) => ({ name }))}
-                            className="border-b pb-8 last:border-b-0 last:pb-0"
-                        />
-                    ))}
-                    {remaining > 0 && <p className="text-sm text-muted-foreground">{remainingLine(remaining)}</p>}
-                    {data.dropped > 0 && <p className="text-sm text-muted-foreground">{droppedLine(data.dropped)}</p>}
-                </div>
-            )}
-        </div>
+        <PreviewPane oversize={oversize} maxBytes={VCARD_MAX_BYTES} status={status}>
+            {data &&
+                (data.cards.length === 0 ? (
+                    <EmptyState
+                        message="No contacts in this file"
+                        hint={previewCountLines(remaining, data.dropped, 'contact').join(' · ') || undefined}
+                    />
+                ) : (
+                    <div className={cn('max-w-3xl mx-auto flex flex-col gap-8', PREVIEW_BODY_CLASS)}>
+                        {data.cards.map(({ contact, categories }, index) => (
+                            <ContactDetailCard
+                                key={index}
+                                contact={contact}
+                                labels={categories.map((name) => ({ name }))}
+                                className="border-b pb-8 last:border-b-0 last:pb-0"
+                            />
+                        ))}
+                        <PreviewCounts remaining={remaining} dropped={data.dropped} noun="contact" />
+                    </div>
+                ))}
+        </PreviewPane>
     );
 }

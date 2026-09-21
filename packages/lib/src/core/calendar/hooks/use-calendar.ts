@@ -26,7 +26,7 @@ import {
 
 // --- Calendar CRUD ---
 
-export function useCalendars(ownerId: string) {
+export function useCalendars(ownerId: string, enabled = true) {
     return useQuery({
         queryKey: calendarKeys.calendarList(ownerId),
         queryFn: async () => {
@@ -35,7 +35,7 @@ export function useCalendars(ownerId: string) {
             return response.data;
         },
         staleTime: STALE_TIME.FIVE_MINUTES,
-        enabled: !!ownerId,
+        enabled: enabled && !!ownerId,
     });
 }
 

@@ -1,6 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { formatEventWhen, getEventsForDay, viewerTimeZone } from '../../../core/calendar/calendar-utils';
-import type { CalendarEventOccurrence } from '../../../types/calendar';
+import {
+    formatEventWhen,
+    getEventsForDay,
+    isInvitationFromOthers,
+    rruleToText,
+    viewerTimeZone,
+} from '../../../core/calendar/calendar-utils';
+import type { CalendarEventOccurrence, EventData } from '../../../types/calendar';
 
 function occurrence(occurrenceDate: string, startTime: Date, endTime: Date): CalendarEventOccurrence {
     return {
@@ -73,6 +79,28 @@ describe('getEventsForDay', () => {
     });
 });
 
+describe('isInvitationFromOthers', () => {
+    const withOrganizer = (organizer: NonNullable<EventData['organizer']>) => ({ data: { organizer } });
+
+    test('an organizer with the owner address is the owner, whatever its case', () => {
+        const event = withOrganizer({ userId: '', email: 'Alice@Example.com', name: 'Alice' });
+        expect(isInvitationFromOthers(event, 'alice@example.com')).toBe(false);
+    });
+
+    test('an owner without an address matches nobody', () => {
+        // A team Home's synthetic user has no address, so a member-organized event on its calendar
+        // stays a locked invitation rather than silently becoming the team's own event.
+        const event = withOrganizer({ userId: 'team_7', email: 'someone@example.com' });
+        expect(isInvitationFromOthers(event, '')).toBe(true);
+    });
+
+    test('another address is an invitation, and an event without an organizer never is', () => {
+        const event = withOrganizer({ userId: 'bob-id', email: 'bob@example.com' });
+        expect(isInvitationFromOthers(event, 'alice@example.com')).toBe(true);
+        expect(isInvitationFromOthers({ data: null }, 'alice@example.com')).toBe(false);
+    });
+});
+
 describe('formatEventWhen', () => {
     const start = new Date('2026-09-10T09:00:00Z');
     const end = new Date('2026-09-10T10:00:00Z');
@@ -111,5 +139,20 @@ describe('formatEventWhen', () => {
         expect(formatEventWhen(start, end, false, 'W. Europe Standard Time', 'Europe/Amsterdam')).toBe(
             formatEventWhen(start, end, false, null, 'Europe/Amsterdam'),
         );
+    });
+});
+
+describe('rruleToText', () => {
+    test('says a recurrence in words', () => {
+        expect(rruleToText('FREQ=WEEKLY;BYDAY=SU')).toBe('every week on Sunday');
+    });
+
+    test('an event that does not repeat has nothing to say', () => {
+        expect(rruleToText(null)).toBeNull();
+    });
+
+    // A file's own RRULE is untrusted input: the card prints it verbatim rather than nothing.
+    test('a rule rrule cannot read comes back as itself', () => {
+        expect(rruleToText('FREQ=NEVER')).toBe('FREQ=NEVER');
     });
 });

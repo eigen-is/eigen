@@ -5,8 +5,8 @@ import {
     isExiftoolExtension,
     TEXT_PREVIEW_MAX_BYTES,
 } from '../constants/preview';
-import { type DrivePath, isCollabType, isImageMime, isVCardFile } from '../types/drive';
-import type { FileSubject, MailPartRef, PreviewMode, SubjectInfo } from '../types/file-subject';
+import { type DrivePath, isCollabType, isEmlFile, isIcsFile, isImageMime, isVCardFile } from '../types/drive';
+import type { FileImportSource, FileSubject, MailPartRef, PreviewMode, SubjectInfo } from '../types/file-subject';
 import { type Attachment, mailAttachmentName } from '../types/mail';
 import {
     getDriveDownloadUrl,
@@ -71,8 +71,21 @@ function mailInfo(
     };
 }
 
+// Where an import route reads this file: a file at a Drive location is copied server-side, anything else
+// hands the route the bytes behind its download URL. Null for a subject with no bytes at all (a folder,
+// an Eigen container), which no import row applies to.
+export function importSourceOf(subject: FileSubject): FileImportSource | null {
+    const { downloadUrl } = subjectInfo(subject);
+    if (!downloadUrl) return null;
+    const { drive } = subject;
+    return drive
+        ? { drive: { sourceOwnerId: drive.ownerId, sourceMountId: drive.mountId, sourcePathId: drive.id } }
+        : { url: downloadUrl };
+}
+
 // A Drive image is resized by /preview; any other <img> shows the original bytes, so only a browser-decodable
-// mime is an image. Text and vCard previews are served for Drive files and mail parts alike (PREVIEWS.md).
+// mime is an image. The text, card, message and calendar previews are served for Drive files and mail parts
+// alike (PREVIEWS.md).
 export function getPreviewMode(subject: FileSubject): PreviewMode {
     const { name, mimeType: mime, size } = subjectInfo(subject);
     const isImage = subject.drive ? isImageMime(mime) || isExiftoolExtension(name) : BROWSER_IMAGE_MIMES.has(mime);
@@ -81,6 +94,8 @@ export function getPreviewMode(subject: FileSubject): PreviewMode {
     if (mime.startsWith('audio/')) return 'audio';
     if (mime === 'application/pdf') return 'pdf';
     if (isVCardFile(mime, name)) return 'vcard';
+    if (isEmlFile(mime, name)) return 'eml';
+    if (isIcsFile(mime, name)) return 'ics';
     // The gate the preview routes run: a container renders from its Yjs body, everything else from its
     // bytes, and an eigen mime on loose bytes is only the uploader's or the sender's word.
     const container = subject.drive !== undefined && isCollabType(subject.drive.type);

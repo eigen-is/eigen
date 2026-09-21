@@ -358,6 +358,37 @@ export function isVCardFile(mimeType: string, name: string): boolean {
     return name.toLowerCase().endsWith('.vcf') || VCARD_MIMES.some((m) => m === mimeType);
 }
 
+// The media type one whole message is carried under, everywhere: the download route, an attached message
+// part (mail-parser/split.ts), and a stored .eml file.
+export const EML_MIME = 'message/rfc822';
+
+// Mail clients that write a saved message to disk disagree on the MIME the way vCard exporters do
+// (Outlook drags out application/octet-stream), so the .eml extension counts on its own.
+export function isEmlFile(mimeType: string, name: string): boolean {
+    return name.toLowerCase().endsWith('.eml') || mimeType === EML_MIME;
+}
+
+// The media type an iCalendar body is carried under, everywhere: a stored .ics file, a calendar part of
+// an invitation mail, a CalDAV resource.
+export const ICS_MIME = 'text/calendar';
+
+// The media type an iCalendar byte stream is served under (CalDAV GET, PROPFIND getcontenttype, export).
+export const ICS_CONTENT_TYPE = `${ICS_MIME}; charset=utf-8`;
+
+// The media type with its own parameters, because a calendar body names its purpose in them
+// (`text/calendar; method=REQUEST; charset=utf-8`) — but a type that merely starts with those letters
+// is another media type. The one rule for "these bytes are iCalendar", so a stored file and a mail part
+// (isCalendarPart) can never disagree.
+export function isIcsMime(mimeType: string): boolean {
+    return mimeType === ICS_MIME || mimeType.startsWith(`${ICS_MIME};`);
+}
+
+// A part of an invitation carries no filename at all, so the media type is all there is to go on; the
+// .ics extension counts on its own, as it does for the other two formats.
+export function isIcsFile(mimeType: string, name: string): boolean {
+    return name.toLowerCase().endsWith('.ics') || isIcsMime(mimeType);
+}
+
 export type ImageDimensions = {
     width: number;
     height: number;
@@ -402,6 +433,11 @@ export type DriveViewMode = 'list' | 'grid';
 export type DriveSortKey = 'name' | 'modified' | 'size';
 export type DriveSortDir = 'asc' | 'desc';
 export type DriveViewPreferences = { mode: DriveViewMode; sortKey: DriveSortKey; sortDir: DriveSortDir };
+
+// The Drive file an import-from-drive request names: the picked file's owner, mount and path, and
+// nothing about where it lands. One type for every format, so the contacts, mail and calendar hooks and
+// the routes behind them cannot drift apart on the body they post (importFromDriveSchema mirrors it).
+export type DriveImportSource = { sourceOwnerId: string; sourceMountId: string; sourcePathId: string };
 
 // The identity subset of DrivePath needed to resolve a URL or open an item
 // (getDriveItemUrl, openDocument). DrivePath is assignable to it.

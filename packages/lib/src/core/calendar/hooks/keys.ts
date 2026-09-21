@@ -1,5 +1,4 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { invalidateHomeSize } from '../../home';
 
 export const calendarKeys = {
     all: ['calendar'] as const,
@@ -25,7 +24,6 @@ export const calendarKeys = {
 
 export function invalidateCalendarCreated(queryClient: QueryClient, ownerId: string): void {
     queryClient.invalidateQueries({ queryKey: calendarKeys.calendarList(ownerId) });
-    invalidateHomeSize(queryClient, ownerId);
 }
 
 export function invalidateCalendarUpdated(queryClient: QueryClient, ownerId: string): void {
@@ -35,10 +33,14 @@ export function invalidateCalendarUpdated(queryClient: QueryClient, ownerId: str
 export function invalidateCalendarDeleted(queryClient: QueryClient, ownerId: string): void {
     queryClient.invalidateQueries({ queryKey: calendarKeys.calendarList(ownerId) });
     queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
-    invalidateHomeSize(queryClient, ownerId);
 }
 
 export function invalidateEventCreated(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
+}
+
+// A whole file of events landed in one calendar: every range query is stale.
+export function invalidateEventsImported(queryClient: QueryClient, ownerId: string): void {
     queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
 }
 

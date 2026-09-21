@@ -1,15 +1,13 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { MAILBOX_DRAFTS, mailboxRouteSegment } from '@workspace/lib/constants/mailboxes';
+import { MAILBOX_DRAFTS, MAILBOX_INBOX, mailboxRouteSegment } from '@workspace/lib/constants/mailboxes';
+import { invalidateHomeSize } from '../../home';
 
 export const emailKeys = {
     all: ['emails'] as const,
     owner: (ownerId: string) => [...emailKeys.all, ownerId] as const,
     lists: (ownerId: string) => [...emailKeys.owner(ownerId), 'list'] as const,
-    // Normalize the mailbox so every spelling of a box maps to one key. toLowerCase() reconciles the
-    // lowercase sidebar URLs (/box/sent) with the canonical-case SSE events ('Sent'); the ''→'inbox'
-    // step reconciles the server-canonical inbox ('') that rides on EmailSummary.mailbox with the
-    // 'inbox' the route mounts under. Without it, invalidating list(ownerId, '') on a move/undo INTO
-    // the inbox would miss the open {mailbox:'inbox'} query and the row wouldn't reappear.
+    // Through `mailboxRouteSegment`, so a canonical-case SSE event ('Sent', or '' for the inbox) and the
+    // sidebar URL it belongs to (/box/sent, /box/inbox) land on the one key.
     list: (ownerId: string, mailbox: string) =>
         [...emailKeys.lists(ownerId), { mailbox: mailboxRouteSegment(mailbox) }] as const,
     details: (ownerId: string) => [...emailKeys.owner(ownerId), 'detail'] as const,
@@ -22,6 +20,10 @@ export const emailKeys = {
         [...emailKeys.previews(ownerId, messageId), 'text', index] as const,
     vcardPreview: (ownerId: string, messageId: string, index: number) =>
         [...emailKeys.previews(ownerId, messageId), 'vcard', index] as const,
+    emlPreview: (ownerId: string, messageId: string, index: number) =>
+        [...emailKeys.previews(ownerId, messageId), 'eml', index] as const,
+    icsPreview: (ownerId: string, messageId: string, index: number) =>
+        [...emailKeys.previews(ownerId, messageId), 'ics', index] as const,
 };
 
 export const mailboxKeys = {
@@ -37,6 +39,14 @@ export function invalidateMailboxes(queryClient: QueryClient, ownerId: string): 
 
 export function invalidateMailReceived(queryClient: QueryClient, ownerId: string, mailbox: string): void {
     queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, mailbox) });
+}
+
+// An imported message lands unread in the inbox, so the open list and the unread counts both refresh, and
+// its bytes are metered against the home the way a saved draft's are.
+export function invalidateMailImported(queryClient: QueryClient, ownerId: string): void {
+    invalidateMailReceived(queryClient, ownerId, MAILBOX_INBOX);
+    invalidateMailboxes(queryClient, ownerId);
+    invalidateHomeSize(queryClient, ownerId);
 }
 
 export function invalidateMailDeleted(

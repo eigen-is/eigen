@@ -29,6 +29,13 @@ nowhere else and survives in backups: label ids + colors, the one-row `book` (`c
 authoritative half — so any from-scratch rebuild **rotates `syncGen`** (below), forcing clients into a full
 resync rather than trusting a counter that reset under them.
 
+| | Lives in | Rebuilds from the files |
+|---|---|---|
+| A contact's names, fields, photo and `CATEGORIES` | `cards/<uri>.vcf` | yes — the bytes a CardDAV GET serves back |
+| `contacts` rows, the `data` projection, the content-hash etags, label membership | `contacts.db` | yes, by the reconcile |
+| Label ids and colors, the `book` row (`ctag`, `syncGen`, `ownerSeeded`), `contact_tombstones`, the two journals | `contacts.db` | no — database-only, which is why a from-scratch rebuild rotates `syncGen` |
+| Avatar renditions | `avatars/` | yes, re-derived from each card's `PHOTO` |
+
 The index is reshaped for this by a **v2 migration** on `contacts.db` (`db-config.ts`, `currentVersion: 4`)
 that **drops the v1 tables** and creates the cards-as-truth shape; the emptied book reseeds through the normal
 fresh-account path (yourself, plus the org owner if `onboarding.autoAddOwnerContact`). v3 heals an early
@@ -145,9 +152,9 @@ racing `If-Match` PUTs serialize and the loser gets a typed precondition result 
 immutable: a PUT changing an existing resource's UID, or a UID already owned by another resource, → 412
 `CARDDAV:no-uid-conflict` (never a raw constraint 500). Oversize → 413 `CARDDAV:max-resource-size`
 (`CARD_MAX_BYTES` = 5 MiB). The client-chosen name becomes a filename, so `sanitizeCardUri` runs before any
-store call: NFC-normalized, leading alphanumeric, then only `A-Za-z0-9._@-` (excludes `/`, `..`, leading dots,
-control chars), ≤ 200 chars, must end `.vcf`; a case/NFC-colliding name can't alias one file. Anything else →
-400.
+store call: NFC-normalized, then `isSafePathSegment` (`lib/core/path-utils.ts`, the one rule every
+client-chosen segment takes — mail draft ids and calendar ids included) plus the `.vcf` suffix; a case/NFC-colliding
+name can't alias one file. Anything else → 400.
 
 ### The three REPORTs
 
@@ -227,10 +234,9 @@ Non-goals). Staged orphans — both siblings — are swept by `cleanupAvatarImag
 
 Two ceilings guard the PUT path. `CARD_MAX_BYTES` (5 MiB) is the whole-vCard safety ceiling — checked on the
 raw body before any parse and re-checked on the stored bytes (413 / `max-resource-size`). Beyond it, contacts
-share the **mail + contacts** storage budget: `enforceCardBudget` runs `enforceContactsIngest`, crediting the
+share the **mail + contacts** storage budget: `enforceCardBudget` runs `enforceMailAndContactsQuota`, crediting the
 size of the card being replaced, and a projection over budget → 507. `Contacts.size()` answers from in-memory
-byte counters (`cardsBytes + avatarsBytes`), so contact growth is always exact. The mail half of the budget is `SUM(emails.size)` over the message index (`MailDB.size`), not a maildir walk, and is **memoized per user for 15 s** (`mailSizeCache`, `config/enforcement.ts`): an initial device sync that PUTs hundreds of cards reads it once, and the contacts half stays live. REST avatar upload shares the one cache (accepted drift — only
-recently-delivered mail can read stale, bounded by the same window).
+byte counters (`cardsBytes + avatarsBytes`), so contact growth is always exact. The mail half of the budget is the index sum plus the bytes staged in `draft-attachments/`, both answered from in-memory counters `MaildirStore` keeps live (`MaildirStore.size()`), not a maildir walk and nothing memoized, so a device sync that PUTs hundreds of cards costs no query per card and every write is charged to the very next check ([QUOTA.md](QUOTA.md)).
 
 ## vCard import / export
 
@@ -244,7 +250,7 @@ POST /contacts/:ownerId/import-from-drive  { sourceOwnerId, sourceMountId, sourc
 
 All three are `requireNonGuest` + `requireSelf`, like every other contacts route.
 
-**Caps.** `IMPORT_MAX_BYTES` (20 MiB) and `IMPORT_MAX_CARDS` (1000) live in `packages/lib/src/constants/contact.ts`, shared FE/BE so the Drive quick look — the same parser, served as contact cards ([PREVIEWS.md](PREVIEWS.md)) — bounds itself by the same two numbers. `/import` reads the body itself (`parse: 'none'`) through `readBoundedBodyBytes`, which checks `Content-Length` before anything is buffered and cancels the stream the moment the running total crosses the cap, because the header can be missing or lying. Both import routes then decode through `decodeVCardFile`, which uses `new TextDecoder('utf-8', { fatal: true })`: a file in another encoding is a 400 ("File is not UTF-8 encoded") rather than a book of names stored with replacement characters. `/import-from-drive` resolves its source through `getSharedDrive`, so the ACL decides what a user may read; a name and mime `isVCardFile` doesn't recognize is a 400, a stored size over the ceiling a 413. `importCards` refuses a file holding more than `IMPORT_MAX_CARDS` cards right after the split, and the export body schema caps `ids` at the same number, so one selection can't outgrow one file. The per-card `CARD_MAX_BYTES` (5 MiB) still applies: every imported card goes through `putCard`, which checks it on the raw body and again on the stored bytes. Both import routes exempt themselves from the server idle timeout (`server?.timeout(request, 0)`), because a whole book replays card by card and answers nothing until the last one lands.
+**Caps.** `VCARD_MAX_BYTES` (20 MiB) lives in `packages/lib/src/constants/contact.ts`, shared FE/BE so a surface refuses an oversize file before uploading it; `VCARD_IMPORT_MAX_CARDS` (1000) is the server's own, in `apps/api/src/lib/core/transfer.ts` with the other whole-file transfer ceilings. The Drive quick look — the same parser, served as contact cards ([PREVIEWS.md](PREVIEWS.md)) — bounds itself by the same two numbers. `/import` reads the body itself (`parse: 'none'`) through `readBoundedBodyBytes`, which checks `Content-Length` before anything is buffered and cancels the stream the moment the running total crosses the cap, because the header can be missing or lying. Both import routes hand the bytes to `Contacts.importCards(bytes)`, which owns the decode as the mail and calendar imports own theirs: `new TextDecoder('utf-8', { fatal: true })`, so a file in another encoding is a 400 ("File is not UTF-8 encoded") rather than a book of names stored with replacement characters. `/import-from-drive` reads its source through the shared `readImportSourceBytes` ([ARCHITECTURE.md](ARCHITECTURE.md)), so the ACL decides what a user may read; a folder or Eigen container, or a name and mime `isVCardFile` doesn't recognize, is a 400 (`NOT_A_VCARD_FILE`, spelled once for every whole-file transfer in `apps/api/src/lib/core/transfer.ts`), a size over the ceiling a 413 — on the stored size and again on the bytes as they are read. `importCards` refuses a file holding more than `VCARD_IMPORT_MAX_CARDS` cards right after the split, and the export body schema caps `ids` at the same number, so one selection can't outgrow one file. The per-card `CARD_MAX_BYTES` (5 MiB) still applies: every imported card goes through `putCard`, which checks it on the raw body and again on the stored bytes. Both import routes exempt themselves from the server idle timeout (`server?.timeout(request, 0)`), because a whole book replays card by card and answers nothing until the last one lands.
 
 **Export** drains dirty cards, then reads each card's file bytes and joins them, normalizing every terminator to exactly one CRLF so the concatenation is one well-formed directory whatever the writers left behind. The bytes are otherwise the ones on disk, `PHOTO` and unknown properties included. Without `ids` it exports the whole book in `getContacts` order, which excludes group cards — symmetric with import skipping them; an unknown id is a 404. A one-card export is named after the card's own `FN`, clamped to 200 characters, and a multi-card one `contacts.vcf`, with `contentDisposition` sanitizing whatever comes back before it reaches the header.
 
@@ -254,7 +260,7 @@ All three are `requireNonGuest` + `requireSelf`, like every other contacts route
 
 **One import, one event.** The import runs inside `Contacts.withBatchedEvents()`, which holds the per-card events back and closes on a single `contacts:changed`, the list-level event that stands for the whole burst. It carries no ids: a card change invalidates the owner's whole list either way, so a thousand of them would be payload no handler reads. It fires from a `finally`, so the cards committed before a quota refusal still reach the open tabs, and it is skipped when no card event was held back. Whatever sets the flag owes that event, which is what makes swallowing a concurrent write's event safe — the batch that follows invalidates the same keys. A CardDAV bulk sync keeps its per-card `contacts:contact-created`: a device PUT is one request and nothing spans them server-side, so the client is what collapses that burst. `handleContactsSSEvent` (`packages/lib/src/core/contacts/sse-handlers.ts`) debounces the owner-wide half of the invalidation — `invalidateContactList`, which covers the list, `me` and the home size — by 250 ms per owner, and the batched event takes the very same path. The detail pane renders from that list (`apps/contacts` `contact-detail.tsx`), so the debounced refetch is the whole invalidation; the importing tab's own `onSuccess` invalidation is unchanged.
 
-**The counters say what happened.** `ImportContactsResult` is `{ imported, skipped, failed }`. `skipped` is the duplicate and group cases above, plus a `uid-conflict` from `putCard`. `failed` is a card that is its own problem — one that won't transcode or parse, or that `putCard` refuses as `invalid`, `too-large` or on a precondition — and the file continues past it. Only the shared storage budget stops the run: a `quota` refusal throws `507` naming how many cards went in before it, and those cards stay committed, because every later card would be refused the same way.
+**The counters say what happened.** `ImportCountsResult` (`packages/lib/src/types/transfer.ts`) is `{ imported, skipped, failed }`. `skipped` is the duplicate and group cases above, plus a `uid-conflict` from `putCard`. `failed` is a card that is its own problem — one that won't transcode or parse, or that `putCard` refuses as `invalid`, `too-large` or on a precondition — and the file continues past it. Only the shared storage budget stops the run: a `quota` refusal throws `507` naming how many cards went in before it, and those cards stay committed, because every later card would be refused the same way.
 
 **`splitVCards` is the only multi-card entry point.** `parseVCardLines` refuses any payload holding a second `BEGIN:VCARD`, so the DAV single-card invariant holds regardless: a two-card `PUT` is a 400.
 
@@ -299,6 +305,6 @@ CardDAV address card next to CalDAV/IMAP/WebDAV, carrying the address-book URL.
 - **`apps/api/src/lib/carddav/`** — the protocol layer: `carddav-router.ts`, `discovery.ts`, `resource.ts`, `report.ts`, `query-filter.ts`, `address-data.ts`, `vcard-serialize.ts` (the merge/create seam Eigen-owned edits go through), and `xml-builder.ts`/`xml-parser.ts`. The shared XML envelope and principal props live in `dav/xml.ts`, the OPTIONS header and realm in `app.ts`; the fold/escape/C0-strip primitives both the vCard and iCalendar serializers ride on live in `packages/lib/src/core/content-line.ts`, imported as `@workspace/lib/content-line`.
 - **`apps/api/src/lib/vcard/`** — the format itself: `ast.ts` (content-line parse/serialize, single-card envelope), `split.ts` (a multi-card file into one text per card), `parse.ts` (the `ParsedCard` projection), `to-contact.ts` (a parsed card as the `Contact` shape the app renders, for preview only), `transcode.ts` (vCard 4.0 -> 3.0), behind the `index.ts` barrel; the parser's own `VCardLine`/`ParsedCard`/`ParsedCardPhoto` types live in `types.ts` beside it, while `Contact` and `Address` stay shared in `packages/lib/src/types/contact.ts`.
 - **`apps/api/src/routes/contacts.ts`** — thin REST bindings: contact and label CRUD with the conditional-write `etag`, avatar staging, and the three transfer routes above.
-- **`packages/lib/src/core/contacts/`** — FE hooks + SSE handlers, including `hooks/use-transfer.ts` (`useExportContacts`, `useImportContacts`, `useImportContactsFromUrl`, `useImportContactsFromDrive`) and `preview-lines.ts` (the two counted lines the Drive vCard preview ends on — [PREVIEWS.md](PREVIEWS.md)); shared types in `packages/lib/src/types/contact.ts`.
+- **`packages/lib/src/core/contacts/`** — FE hooks + SSE handlers, including `hooks/use-transfer.ts` (`useExportContacts`, `useImportContacts` for a picked file, `useImportContactsFile` for a `FileImportSource`); the counted lines the Drive vCard preview ends on come from `core/transfer.ts` ([PREVIEWS.md](PREVIEWS.md)); shared types in `packages/lib/src/types/contact.ts`.
 
 Storage layout: [STORAGE.md](STORAGE.md). Database inventory: [DATABASE.md](DATABASE.md).

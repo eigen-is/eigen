@@ -113,6 +113,19 @@ export default class MailDB {
         return this.db.select({ size: sql<number>`SUM(size)` }).from(schema.emails).get()?.size || 0;
     }
 
+    // What an upsert chunk is about to replace, in one query — the store's byte counter needs it before
+    // insertEmails runs, and a per-row select is what that path exists to avoid.
+    sumSizes(ids: string[]): number {
+        if (ids.length === 0) return 0;
+        return (
+            this.db
+                .select({ size: sql<number>`SUM(size)` })
+                .from(schema.emails)
+                .where(inArray(schema.emails.id, ids))
+                .get()?.size || 0
+        );
+    }
+
     getEmailsCount(mailbox: string) {
         return this.db.select({ count: count() }).from(schema.emails).where(eq(schema.emails.mailbox, mailbox)).get()!
             .count;
@@ -169,25 +182,29 @@ export default class MailDB {
     // `text` is the full draft body, but emails.textShort stores a truncated preview for
     // list views — the same shape as received mail. The FTS5 trigger on emails picks up
     // whatever lands in textShort, so drafts get indexed at preview granularity.
-    updateDraftContent(id: string, subject: string, text: string, recipients?: RecipientSummary): void {
+    updateDraftContent(id: string, subject: string, text: string, recipients: RecipientSummary): void {
         this.db
             .update(schema.emails)
             .set({
                 subject,
                 textShort: text.slice(0, MAIL_PREVIEW_CHARS),
                 updatedAt: new Date(),
-                ...(recipients && {
-                    toShort: recipients.toShort,
-                    toAddress: recipients.toAddress,
-                    recipientsAll: recipients.recipientsAll,
-                }),
+                toShort: recipients.toShort,
+                toAddress: recipients.toAddress,
+                recipientsAll: recipients.recipientsAll,
             })
             .where(eq(schema.emails.id, id))
             .run();
     }
 
-    getAllEmails(mailbox: string) {
-        return this.db.select().from(schema.emails).where(eq(schema.emails.mailbox, mailbox)).all();
+    // The three columns the sync diff reads. A `SELECT *` would carry every row's `textShort` — the whole
+    // body, kept for FTS — so a 100k-message mailbox paid 417 MiB to compare filenames.
+    listSyncRows(mailbox: string) {
+        return this.db
+            .select({ id: schema.emails.id, filename: schema.emails.filename, size: schema.emails.size })
+            .from(schema.emails)
+            .where(eq(schema.emails.mailbox, mailbox))
+            .all();
     }
 
     // Keyset pagination, newest-first. Composite (date, id) cursor because `date` has duplicate
