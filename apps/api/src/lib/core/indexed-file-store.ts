@@ -42,7 +42,7 @@ export type PutResourceResult =
 export type DeleteResourceResult = { ok: true } | { ok: false; error: 'not-found' | 'precondition' };
 
 // The mtime is rounded here, once, so a writer and every later pass compare the same number.
-export type ResourceStat = { mtime: number; size: number };
+type ResourceStat = { mtime: number; size: number };
 
 export async function statResourceFile(storage: LocalFilesystem, filePath: string): Promise<ResourceStat> {
     const stat = await storage.stat(filePath);
@@ -69,7 +69,7 @@ export async function readResourceFile(storage: LocalFilesystem, filePath: strin
 }
 
 // Sorted, because callers tie-break on this order — a key collision must resolve the same way every pass.
-export async function listResourceUris(
+async function listResourceUris(
     storage: LocalFilesystem,
     dir: string,
     suffix: string,
