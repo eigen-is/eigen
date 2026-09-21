@@ -5,6 +5,8 @@ import { getContacts } from '../contacts/contacts';
 import { requireSelf } from '../core/access';
 import { readBoundedBody } from '../core/http';
 import { type CollectionPath, parseCollectionPath } from '../dav/href';
+import { DAV_BODY_MAX_BYTES, parsePropfind, wantsBrief } from '../dav/propfind';
+import { davError } from '../dav/xml';
 import {
     ADDRESSBOOK_ID,
     handleAddressbookHomePropfind,
@@ -13,7 +15,6 @@ import {
 } from './discovery';
 import { handleCardReport } from './report';
 import { handleDeleteCard, handleGetCard, handlePutCard } from './resource';
-import { DAV_BODY_MAX_BYTES, davError, parsePropfind, wantsBrief } from './xml-builder';
 
 // The shared GET/PUT/DELETE card-resource tail: fixed-book check, then sanitize the client-chosen name before
 // it can become a filename (the AGENTS.md path rule). Returns the refusal Response to serve as-is.

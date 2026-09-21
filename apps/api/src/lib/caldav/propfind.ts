@@ -1,7 +1,9 @@
 import type { CalendarEvent, CalendarItem } from '@workspace/lib/types/calendar';
-import type { PropfindRequest } from '../dav/propfind';
+import { ICS_CONTENT_TYPE } from '@workspace/lib/types/drive';
+import { type PropfindRequest, selectProps } from '../dav/propfind';
+import { memberRowProps, multistatusResponse, response } from '../dav/xml';
 import { calendarHref, eventHref } from './discovery';
-import { calendarCollectionProps, eventRowProps, multistatusResponse, response, selectProps } from './xml-builder';
+import { calendarCollectionProps } from './xml-builder';
 
 export function handleCalendarPropfind(
     ownerId: string,
@@ -26,7 +28,7 @@ export function handleCalendarPropfind(
             responses.push(
                 response(
                     eventHref(ownerId, calendar.id, event.uri),
-                    selectProps(eventRowProps(event.etag), request, brief),
+                    selectProps(memberRowProps(event.etag, ICS_CONTENT_TYPE), request, brief),
                 ),
             );
         }
@@ -45,6 +47,9 @@ export function handleEventPropfind(
     brief: boolean,
 ): Response {
     return multistatusResponse([
-        response(eventHref(ownerId, calendarId, uri), selectProps(eventRowProps(etag), request, brief)),
+        response(
+            eventHref(ownerId, calendarId, uri),
+            selectProps(memberRowProps(etag, ICS_CONTENT_TYPE), request, brief),
+        ),
     ]);
 }

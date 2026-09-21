@@ -1,20 +1,13 @@
 import type { CalendarItem } from '@workspace/lib/types/calendar';
+import { ICS_CONTENT_TYPE } from '@workspace/lib/types/drive';
 import type { Calendar } from '../calendar/calendar';
 import type { CalendarEventRow } from '../calendar/types';
 import { MULTIGET_HREF_LIMIT, resolveMultigetHrefs } from '../dav/href';
+import { invalidSyncToken } from '../dav/sync-token';
+import { memberProps, multistatusResponse, notFoundRow, propstatOk, removedRow, response } from '../dav/xml';
 import { calendarHref, eventHref } from './discovery';
 import { eventsToIcs } from './ical-component';
-import {
-    calendarDataProp,
-    eventEtagProp,
-    formatSyncToken,
-    invalidSyncToken,
-    multistatusResponse,
-    parseSyncToken,
-    propstatNotFound,
-    propstatOk,
-    response,
-} from './xml-builder';
+import { calendarDataProp, formatSyncToken, parseSyncToken } from './xml-builder';
 import { parseReport, type ReportRequest } from './xml-parser';
 
 // REPORT on /dav/calendars/:ownerId/:calendarId/
@@ -95,7 +88,7 @@ function handleCalendarMultiget(
         if (uri && foundUris.has(uri)) {
             const master = masterByUri.get(uri);
             if (!master) continue; // uri exists only as an exception (part of a master .ics) — no own row
-            const props = [...eventEtagProp(master.etag)];
+            const props = memberProps(master.etag, ICS_CONTENT_TYPE);
             if (wantsData) {
                 const group = eventsByUid.get(master.uid) ?? [master];
                 props.push(calendarDataProp(eventsToIcs(group)));
@@ -104,7 +97,7 @@ function handleCalendarMultiget(
         } else {
             // Missing but in-collection → 404 on the event href; unresolvable → 404 echoing the original href.
             const row = uri ? eventHref(ownerId, calendarId, uri) : href;
-            responses.push(response(row, [propstatNotFound(['<D:getetag/>'])]));
+            responses.push(notFoundRow(row));
         }
     }
 
@@ -139,16 +132,16 @@ function handleSyncCollection(
         for (const event of changed) {
             if (event.parentEventId) continue;
             responses.push(
-                response(eventHref(ownerId, calendarId, event.uri), [propstatOk(eventEtagProp(event.etag))]),
+                response(eventHref(ownerId, calendarId, event.uri), [
+                    propstatOk(memberProps(event.etag, ICS_CONTENT_TYPE)),
+                ]),
             );
         }
 
         // Deleted events
         const deleted = calendar.getDeletedEventsSince(calendarId, token.since);
         for (const d of deleted) {
-            responses.push(
-                response(eventHref(ownerId, calendarId, d.uri), [`<D:status>HTTP/1.1 404 Not Found</D:status>`]),
-            );
+            responses.push(removedRow(eventHref(ownerId, calendarId, d.uri)));
         }
     }
 
@@ -174,7 +167,7 @@ function buildEventResponses(
 
     for (const event of events) {
         if (event.parentEventId) continue; // Skip exceptions
-        const props = [...eventEtagProp(event.etag)];
+        const props = memberProps(event.etag, ICS_CONTENT_TYPE);
         if (includeData) {
             const group = eventsByUid.get(event.uid) ?? [event];
             props.push(calendarDataProp(eventsToIcs(group)));

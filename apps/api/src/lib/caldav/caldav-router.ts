@@ -3,13 +3,14 @@ import { authenticateBasic } from '../auth/protocol-auth';
 import { requireSelf } from '../core/access';
 import { readBoundedBody } from '../core/http';
 import { parseCollectionPath } from '../dav/href';
+import { DAV_BODY_MAX_BYTES, parsePropfind, wantsBrief } from '../dav/propfind';
+import { davError } from '../dav/xml';
 import { getHome } from '../home';
 import { handleCalendarHomePropfind, handlePrincipalPropfind, handleRootPropfind } from './discovery';
 import { handleCalendarPropfind, handleEventPropfind } from './propfind';
 import { handleDeleteCalendar, handleMkcalendar, handleProppatch } from './proppatch';
 import { handleReport } from './report';
 import { EVENT_MAX_BYTES, handleDelete, handleGet, handlePut } from './resource';
-import { DAV_BODY_MAX_BYTES, davError, parsePropfind, wantsBrief } from './xml-builder';
 
 export const caldavRouter = new Elysia({ name: 'caldav' })
     // PROPFIND /dav/ — discovery root
