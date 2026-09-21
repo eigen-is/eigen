@@ -296,15 +296,19 @@ async function applyInvitationUpdate(
     return true;
 }
 
-// What an organizer's REQUEST is allowed to move on the attendee's copy.
+// What an organizer's REQUEST is allowed to move on the attendee's copy. An organizer's client restates
+// WHEN the event is in every message, so the patch carries only the bounds that really moved — against
+// the row, the one reading that knows the end of an event stating a DURATION or no end at all.
 function invitationPatch(linked: CalendarEvent, payload: InvitationUpdatePayload, rrule: string | null): EventPatch {
+    const moved = payload.startTime.getTime() !== linked.startTime.getTime();
+    const ended = payload.endTime.getTime() !== linked.endTime.getTime();
     return {
         title: payload.title,
         description: payload.description,
         location: payload.location,
-        startTime: payload.startTime,
-        endTime: payload.endTime,
-        allDay: payload.allDay,
+        startTime: moved ? payload.startTime : undefined,
+        endTime: ended ? payload.endTime : undefined,
+        allDay: payload.allDay !== linked.allDay ? payload.allDay : undefined,
         rrule: rrule ?? undefined,
         timezone: payload.timezone !== undefined ? payload.timezone : undefined,
         status: payload.status,
