@@ -5,6 +5,7 @@ import type { Calendar } from '../../lib/calendar/calendar';
 import type { ReceiveInvitationPayload } from '../../lib/calendar/types';
 import { parseIcs } from '../../lib/ical';
 import type { ParsedEvent } from '../../lib/ical/ical-parse';
+import { makeSyntheticUser } from '../../lib/user';
 import { CALENDAR_TEST_ROOT, makeCalendar } from '../calendar-test-helpers';
 import { vcal } from '../ics-test-helpers';
 
@@ -15,8 +16,9 @@ import { vcal } from '../ics-test-helpers';
 const ORG = 'organizer@external.com';
 const UID = 'replay-guard@external.com';
 const ORG_USER = `external_${ORG}`;
+const GUEST = 'guest@test.local';
 
-const request = (summary: string, sequence: number, dtstamp: string, extra: string[] = []): string =>
+const request = (summary: string, sequence: number, dtstamp: string, extra: string[] = [], attendee = GUEST): string =>
     vcal([
         'BEGIN:VEVENT',
         `UID:${UID}`,
@@ -26,7 +28,7 @@ const request = (summary: string, sequence: number, dtstamp: string, extra: stri
         'RRULE:FREQ=DAILY;COUNT=5',
         `SEQUENCE:${sequence}`,
         `ORGANIZER;CN=Ext Org:mailto:${ORG}`,
-        'ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:guest@test.local',
+        `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${attendee}`,
         `DTSTAMP:${dtstamp}`,
         ...extra,
         'END:VEVENT',
@@ -169,6 +171,28 @@ describe('inbound message ordering', () => {
         await calendar.receiveImipRequest(parsedOf(occurrence('Moved once', 2, '20260401T110000Z')), ORG);
 
         expect((await exceptionOf(calendar))?.title).toBe('Moved twice');
+    });
+
+    // The attendee's own copy mirrors the organizer's SEQUENCE, so a local edit of it — here, dropping one
+    // occurrence — must leave that number alone; a bump would outrank every later message at the same one.
+    test("an attendee removing one occurrence does not outrank the organizer's next update", async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const me = makeSyntheticUser(harness.user.id, harness.user.name, harness.user.email);
+        const invite = (summary: string, dtstamp: string) => parsedOf(request(summary, 2, dtstamp, [], me.email));
+        await calendar.receiveImipRequest(invite('Title A', '20260401T100000Z'), ORG);
+
+        await calendar.rsvp((await masterOf(calendar)).id, me, {
+            status: 'declined',
+            scope: 'this',
+            recurrenceDate: '2026-05-02',
+            remove: true,
+        });
+
+        await calendar.receiveImipRequest(invite('Title B', '20260401T120000Z'), ORG);
+
+        expect((await masterOf(calendar)).title).toBe('Title B');
+        expect((await exceptionOf(calendar))?.status).toBe('cancelled');
     });
 
     test('a CANCEL redelivered behind the REQUEST that reinstated the occurrence does not re-cancel it', async () => {

@@ -96,6 +96,12 @@ export function writeContext(actorIsOrganizer: boolean, dtstamp?: Date | null): 
     return { now: new Date(), actorIsOrganizer, dtstamp };
 }
 
+// A resource carrying the organizer link is somebody else's event, so the local user never writes it as its
+// organizer: a SEQUENCE bump here would outrank the organizer's next message at the same revision.
+function actorIsOrganizer(event: CalendarEvent): boolean {
+    return !event.data?.organizerEventId;
+}
+
 export async function createEvent(
     calendar: Calendar,
     calendarId: string,
@@ -153,7 +159,7 @@ async function writeOverride(calendar: Calendar, calendarId: string, input: Crea
     });
     await editResource(calendar, resource, (component) => {
         if (override.status === 'cancelled') {
-            addExclusion(component, parent, override, writeContext(true, input.dtstamp));
+            addExclusion(component, parent, override, writeContext(actorIsOrganizer(parent), input.dtstamp));
         } else {
             putOverride(component, parent, override);
         }
@@ -309,10 +315,12 @@ async function eraseStoredEvent(calendar: Calendar, calendarId: string, id: stri
     if (!resource) throw new ApiError(404, 'Event not found');
 
     if (existing.parentEventId) {
+        // A synthetic exclusion row carries no data of its own, so the link is the master's to state.
+        const parent = eventById(calendar, existing.parentEventId)!;
         // Deleting one occurrence is a write of its master's file, never a delete of the resource.
         await editResource(calendar, resource, (component) => {
             const key = existing.recurrenceDate ? storedRecurrenceKey(existing.recurrenceDate) : null;
-            if (key) removeExclusion(component, key, writeContext(true));
+            if (key) removeExclusion(component, key, writeContext(actorIsOrganizer(parent)));
         });
     } else {
         await calendar.purgeResource(resource);
