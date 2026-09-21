@@ -426,7 +426,7 @@ export class Calendar {
 
         await this.gate.run(async () => {
             const staged = `${PATHS.CALENDAR.CALENDARS}/.${id}.deleting-${randomUUID()}`;
-            // What the directory holds, not what the index indexed: the counter carries every file on disk.
+            // What the directory holds, not what the index indexed: the counter carries every `.ics` on disk.
             const scan = await statCalendarDir(this.storage, id);
             const bytes = [...scan.files.values()].reduce((sum, file) => sum + file.size, 0);
             // Staged first, committed second: the init sweep decides by the row, so a crash in between rolls back.

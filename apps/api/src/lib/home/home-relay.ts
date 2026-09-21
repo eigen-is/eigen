@@ -32,6 +32,7 @@ import type {
 } from '../calendar/types';
 import { getAvatarsDir, getUserHomePath } from '../config/paths';
 import { resolveUserQuotas } from '../config/quota';
+import { readCardsTotalSize } from '../contacts/card-store';
 import { LocalFilesystem, PATHS } from '../core';
 import { readMailTotalSize } from '../mail/maildb';
 import { readDraftStagingSize } from '../mail/maildir-store';
@@ -179,7 +180,7 @@ export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeRespons
     // A user who has never signed in has no home folder yet, and sizing must not create one.
     const homeFs = fs.existsSync(homeDir) ? new LocalFilesystem(homeDir) : null;
     const [cards, avatars, staged, calendars] = await Promise.all([
-        homeFs?.dirSize(`${PATHS.CONTACTS.ROOT}/${PATHS.CONTACTS.CARDS}`) ?? 0,
+        homeFs ? readCardsTotalSize(homeFs) : 0,
         homeFs?.dirSize(`${PATHS.CONTACTS.ROOT}/${PATHS.CONTACTS.AVATARS}`) ?? 0,
         homeFs ? readDraftStagingSize(homeFs) : 0,
         homeFs ? readCalendarTotalSize(homeFs) : 0,

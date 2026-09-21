@@ -1,11 +1,15 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
+import { getUserHomePath } from '../../lib/config/paths';
 import { getMailDomain, getServerConfig } from '../../lib/config/server-config';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
+import { PATHS } from '../../lib/core';
 import { evictHome, getHome } from '../../lib/home/get-home';
 import { pullHomeSize, sendToHome } from '../../lib/home/home-relay';
 import { basicAuth } from '../dav-test-helpers';
@@ -446,6 +450,14 @@ describe('Calendar storage quota', () => {
             method: 'DELETE',
         });
         const afterDelete = await agree();
+
+        // A file no calendar reader indexes. Neither reader counts it, so a stray note cannot make the admin
+        // Users page report a figure the owner's own settings page never shows.
+        await writeFile(
+            path.join(getUserHomePath(user.id), PATHS.CALENDAR.ROOT, PATHS.CALENDAR.CALENDARS, calendarId, 'note.txt'),
+            'n'.repeat(4096),
+        );
+        expect(await agree()).toBe(afterDelete);
 
         await authedRequest(user.sessionToken, `/calendar/${user.id}/calendars/${extra.id}`, { method: 'DELETE' });
         expect(await agree()).toBeLessThan(afterDelete);
