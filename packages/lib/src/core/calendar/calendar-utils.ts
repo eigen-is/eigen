@@ -1,4 +1,5 @@
 import { RRule } from 'rrule';
+import { DEFAULT_CALENDAR_COLOR } from '../../constants/calendar';
 import type { CalendarEventOccurrence, CalendarItem, EventData, SharedCalendar } from '../../types/calendar';
 import { dateFormatter, formatDayMonth, formatTime } from '../date';
 
@@ -170,7 +171,7 @@ export function getCalendarColor(
         const sc = sharedCalendars.find((s) => s.calendarId === event.calendarId);
         if (sc) return sc.color || sc.calendarColor;
     }
-    return '#4285f4';
+    return DEFAULT_CALENDAR_COLOR;
 }
 
 export function isFreeBusyEvent(event: CalendarEventOccurrence): boolean {

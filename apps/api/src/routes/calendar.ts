@@ -1,4 +1,4 @@
-import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
+import { CALENDAR_NAME_MAX_LENGTH, ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { parseOwnerId } from '@workspace/lib/types';
 import type {
     CalendarEvent,
@@ -6,12 +6,14 @@ import type {
     CalendarItem,
     CalendarShare,
     FreeBusyBlock,
+    SharedCalendar,
 } from '@workspace/lib/types/calendar';
 import { ICS_CONTENT_TYPE, isIcsFile } from '@workspace/lib/types/drive';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { checkCalendarAccess, resolveCalendar, syncTeamCalendars } from '../lib/calendar/get-calendar';
+import { EVENT_MAX_BYTES } from '../lib/calendar/resource-store';
 import { ApiError, ICS_IMPORT_MAX_EVENTS, NOT_A_CALENDAR_FILE } from '../lib/core';
 import { requireNonGuest, requireSelf, requireTeamAdmin } from '../lib/core/access';
 import { contentDisposition, readBoundedBodyBytes } from '../lib/core/http';
@@ -31,21 +33,28 @@ import { getMemberships, type User } from '../lib/user';
 import { betterAuth } from './auth';
 import { importFromDriveSchema } from './shared-schemas';
 
+// Field bounds in front of the ceiling the write seam enforces on the assembled event: generous enough that
+// no real event meets them, tight enough that no single value can be the whole event. Free text is capped at
+// the event ceiling itself — a value that cannot fit in an event is never worth parsing.
+const TEXT = { maxLength: 512 };
+const FREE_TEXT = { maxLength: EVENT_MAX_BYTES };
+const NAME = { maxLength: CALENDAR_NAME_MAX_LENGTH };
+
 const CalendarShareSchema = t.Object({
-    targetId: t.String(),
+    targetId: t.String(TEXT),
     permission: t.Union([t.Literal('free-busy'), t.Literal('read'), t.Literal('write')]),
 });
 
 const CreateCalendarSchema = t.Object({
-    name: t.String(),
-    color: t.String(),
+    name: t.String(NAME),
+    color: t.Optional(t.String(TEXT)),
 });
 
 const UpdateCalendarSchema = t.Object({
-    name: t.Optional(t.String()),
-    color: t.Optional(t.String()),
+    name: t.Optional(t.String(NAME)),
+    color: t.Optional(t.String(TEXT)),
     visible: t.Optional(t.Boolean()),
-    shares: t.Optional(t.Nullable(t.Array(CalendarShareSchema))),
+    shares: t.Optional(t.Nullable(t.Array(CalendarShareSchema, { maxItems: 100 }))),
 });
 
 const ReminderSchema = t.Object({
@@ -55,16 +64,16 @@ const ReminderSchema = t.Object({
 
 const AttendeeSchema = t.Object({
     email: t.String({ maxLength: MAX_EMAIL_LENGTH }),
-    name: t.Optional(t.String()),
+    name: t.Optional(t.String(TEXT)),
     status: t.Union([t.Literal('pending'), t.Literal('accepted'), t.Literal('declined'), t.Literal('tentative')]),
     role: t.Union([t.Literal('required'), t.Literal('optional')]),
 });
 
 const EventDataSchema = t.Object({
-    reminders: t.Optional(t.Array(ReminderSchema)),
-    attendees: t.Optional(t.Array(AttendeeSchema)),
-    url: t.Optional(t.String()),
-    color: t.Optional(t.String()),
+    reminders: t.Optional(t.Array(ReminderSchema, { maxItems: 50 })),
+    attendees: t.Optional(t.Array(AttendeeSchema, { maxItems: 100 })),
+    url: t.Optional(t.String(TEXT)),
+    color: t.Optional(t.String(TEXT)),
 });
 
 // recurrenceDate is a wall-clock occurrence key (YYYY-MM-DD, docs/CALENDAR.md § Recurrence), but
@@ -77,39 +86,39 @@ function requireRecurrenceKey(value: string): string {
 }
 
 const CreateEventSchema = t.Object({
-    title: t.String(),
+    title: t.String(TEXT),
     startTime: t.Date(),
     endTime: t.Date(),
     allDay: t.Boolean(),
-    description: t.Optional(t.Nullable(t.String())),
-    location: t.Optional(t.Nullable(t.String())),
-    rrule: t.Optional(t.Nullable(t.String())),
-    timezone: t.Optional(t.Nullable(t.String())),
-    parentEventId: t.Optional(t.Nullable(t.String())),
-    recurrenceDate: t.Optional(t.Nullable(t.String())),
+    description: t.Optional(t.Nullable(t.String(FREE_TEXT))),
+    location: t.Optional(t.Nullable(t.String(TEXT))),
+    rrule: t.Optional(t.Nullable(t.String(TEXT))),
+    timezone: t.Optional(t.Nullable(t.String(TEXT))),
+    parentEventId: t.Optional(t.Nullable(t.String(TEXT))),
+    recurrenceDate: t.Optional(t.Nullable(t.String(TEXT))),
     status: t.Optional(t.Union([t.Literal('confirmed'), t.Literal('tentative'), t.Literal('cancelled')])),
     data: t.Optional(t.Nullable(EventDataSchema)),
 });
 
 const UpdateEventSchema = t.Object({
-    title: t.Optional(t.String()),
+    title: t.Optional(t.String(TEXT)),
     startTime: t.Optional(t.Date()),
     endTime: t.Optional(t.Date()),
     allDay: t.Optional(t.Boolean()),
-    description: t.Optional(t.Nullable(t.String())),
-    location: t.Optional(t.Nullable(t.String())),
-    rrule: t.Optional(t.Nullable(t.String())),
-    timezone: t.Optional(t.Nullable(t.String())),
+    description: t.Optional(t.Nullable(t.String(FREE_TEXT))),
+    location: t.Optional(t.Nullable(t.String(TEXT))),
+    rrule: t.Optional(t.Nullable(t.String(TEXT))),
+    timezone: t.Optional(t.Nullable(t.String(TEXT))),
     status: t.Optional(t.Union([t.Literal('confirmed'), t.Literal('tentative'), t.Literal('cancelled')])),
     data: t.Optional(t.Nullable(EventDataSchema)),
 });
 
 const MoveEventSchema = t.Object({
-    targetCalendarId: t.String(),
+    targetCalendarId: t.String(TEXT),
 });
 
 const UpdateSharedCalendarSchema = t.Object({
-    color: t.Optional(t.Nullable(t.String())),
+    color: t.Optional(t.Nullable(t.String(TEXT))),
     visible: t.Optional(t.Boolean()),
 });
 
@@ -117,10 +126,10 @@ const UpdateSharedCalendarSchema = t.Object({
 // contacts and mail import-from-drive routes take.
 const ImportFromDriveIcsSchema = t.Object({
     ...importFromDriveSchema.properties,
-    calendarId: t.String({ minLength: 1 }),
+    calendarId: t.String({ ...TEXT, minLength: 1 }),
 });
 
-const ImportQuerySchema = t.Object({ calendarId: t.String({ minLength: 1 }) });
+const ImportQuerySchema = t.Object({ calendarId: t.String({ ...TEXT, minLength: 1 }) });
 
 // The Home a transfer runs against, once the caller may read (an export) or write (an import) the calendar
 // they named. A team home is the only Home here that is not the caller's own: any other owner is refused
@@ -167,7 +176,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
 
     .post(
         '/calendar/:ownerId/calendars',
-        async ({ params, body, user }) => {
+        async ({ params, body, user }): Promise<CalendarItem> => {
             requireNonGuest(user);
             const cal = await resolveAdministeredCalendar(user, params.ownerId);
             return cal.createCalendar(body);
@@ -177,7 +186,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
 
     .put(
         '/calendar/:ownerId/calendars/:calId',
-        async ({ params, body, user }) => {
+        async ({ params, body, user }): Promise<CalendarItem> => {
             requireNonGuest(user);
             const cal = await resolveAdministeredCalendar(user, params.ownerId);
             return await cal.updateCalendar(params.calId, body);
@@ -187,7 +196,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
 
     .delete(
         '/calendar/:ownerId/calendars/:calId',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<{ success: boolean }> => {
             requireNonGuest(user);
             const cal = await resolveAdministeredCalendar(user, params.ownerId);
             await cal.deleteCalendar(params.calId);
@@ -250,7 +259,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
 
     .post(
         '/calendar/:ownerId/calendars/:calId/events',
-        async ({ params, body, user }) => {
+        async ({ params, body, user }): Promise<CalendarEvent> => {
             requireNonGuest(user);
             const { permission } = await checkCalendarAccess(user, params.ownerId, params.calId);
             if (permission !== 'write') throw new ApiError(403, 'Write permission required');
@@ -269,7 +278,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
 
     .put(
         '/calendar/:ownerId/calendars/:calId/events/:id',
-        async ({ params, body, user }) => {
+        async ({ params, body, user }): Promise<CalendarEvent> => {
             requireNonGuest(user);
             const { permission } = await checkCalendarAccess(user, params.ownerId, params.calId);
             if (permission !== 'write') throw new ApiError(403, 'Write permission required');
@@ -280,7 +289,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
 
     .delete(
         '/calendar/:ownerId/calendars/:calId/events/:id',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<{ success: boolean }> => {
             requireNonGuest(user);
             const { permission } = await checkCalendarAccess(user, params.ownerId, params.calId);
             if (permission !== 'write') throw new ApiError(403, 'Write permission required');
@@ -309,7 +318,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
     // --- RSVP ---
     .put(
         '/calendar/:ownerId/calendars/:calId/events/:id/rsvp',
-        async ({ params, body, user }) => {
+        async ({ params, body, user }): Promise<{ success: boolean }> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             const home = await getHome(user.id);
@@ -323,7 +332,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             body: t.Object({
                 status: t.Union([t.Literal('accepted'), t.Literal('declined'), t.Literal('tentative')]),
                 scope: t.Optional(t.Union([t.Literal('this'), t.Literal('this-and-following'), t.Literal('all')])),
-                recurrenceDate: t.Optional(t.String()),
+                recurrenceDate: t.Optional(t.String(TEXT)),
                 remove: t.Optional(t.Boolean()),
             }),
             auth: true,
@@ -347,7 +356,10 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
     // Response is filtered to only include shares matching the caller's email/teams.
     .get(
         '/calendar/:ownerId/shared-with-me',
-        async ({ params, user }) => {
+        async ({
+            params,
+            user,
+        }): Promise<{ calendarId: string; name: string; color: string; permission: CalendarShare['permission'] }[]> => {
             requireNonGuest(user);
             const memberships = await getMemberships(user.id);
             return pullCalendarShares(params.ownerId, user.email, memberships.teamIds);
@@ -360,7 +372,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
     // then returns all shared calendars (both team and individually shared).
     .get(
         '/calendar/:ownerId/shared',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<SharedCalendar[]> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return syncTeamCalendars(user);
@@ -370,7 +382,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
 
     .put(
         '/calendar/:ownerId/shared/:id',
-        async ({ params, body, user }) => {
+        async ({ params, body, user }): Promise<SharedCalendar> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             const cal = await resolveCalendar(user, user.id);
@@ -381,7 +393,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
 
     .delete(
         '/calendar/:ownerId/shared/:id',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<{ success: boolean }> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             const cal = await resolveCalendar(user, user.id);
@@ -415,8 +427,8 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
         {
             // The same event ceiling the import side enforces: one selection can't outgrow one file.
             body: t.Object({
-                calendarId: t.String({ minLength: 1 }),
-                ids: t.Optional(t.Array(t.String(), { maxItems: ICS_IMPORT_MAX_EVENTS })),
+                calendarId: t.String({ ...TEXT, minLength: 1 }),
+                ids: t.Optional(t.Array(t.String(TEXT), { maxItems: ICS_IMPORT_MAX_EVENTS })),
             }),
             auth: true,
         },

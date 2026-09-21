@@ -103,6 +103,75 @@ describe('Calendar', () => {
             );
             expect(res.status).toBe(400);
         });
+
+        const createCalendarRequest = (body: unknown) =>
+            authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+
+        test('a color that is not a hex color is refused', async () => {
+            const res = await createCalendarRequest({ name: 'Hostile', color: 'javascript:alert(1)' });
+            expect(res.status).toBe(400);
+
+            const listRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars`,
+            );
+            const calendars = await assertJson<CalendarItem[]>(listRes);
+            expect(calendars.find((c) => c.name === 'Hostile')).toBeUndefined();
+        });
+
+        test('a 3 000-character name is refused', async () => {
+            const res = await createCalendarRequest({ name: 'x'.repeat(3000), color: '#34a853' });
+            expect(res.status).toBeGreaterThanOrEqual(400);
+
+            const listRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars`,
+            );
+            const calendars = await assertJson<CalendarItem[]>(listRes);
+            expect(calendars.find((c) => c.name.length > 200)).toBeUndefined();
+        });
+
+        test('a calendar created without a color gets the default one', async () => {
+            const created = await assertJson<CalendarItem>(await createCalendarRequest({ name: 'No Color' }));
+            expect(created.color).toBe('#4285f4');
+
+            await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars/${created.id}`, {
+                method: 'DELETE',
+            });
+        });
+
+        test('an update refuses a bad color and a bad name, and keeps the stored ones', async () => {
+            const created = await assertJson<CalendarItem>(
+                await createCalendarRequest({ name: 'Bounded', color: '#34a853' }),
+            );
+            const update = (body: unknown) =>
+                authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars/${created.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+
+            expect((await update({ color: 'javascript:alert(1)' })).status).toBe(400);
+            expect((await update({ name: 'y'.repeat(3000) })).status).toBeGreaterThanOrEqual(400);
+            // Apple writes the eight-digit form; it stays valid.
+            expect((await update({ color: '#34a85380' })).status).toBe(200);
+
+            const listRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars`,
+            );
+            const stored = findOrFail(await assertJson<CalendarItem[]>(listRes), (c) => c.id === created.id);
+            expect(stored.name).toBe('Bounded');
+            expect(stored.color).toBe('#34a85380');
+
+            await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars/${created.id}`, {
+                method: 'DELETE',
+            });
+        });
     });
 
     describe('Event CRUD', () => {

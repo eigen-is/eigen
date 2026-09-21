@@ -48,13 +48,14 @@ export async function handleMkcalendar(
     }
 
     try {
-        await calendar.createCalendar({ id, name: props.name ?? id, color: props.color ?? '#4285f4' });
+        await calendar.createCalendar({ id, name: props.name ?? id, color: props.color });
     } catch (error) {
+        if (!(error instanceof ApiError)) throw error;
         // MKCALENDAR over a collection that exists — under this name or a case variant of it, since one
         // directory is one calendar — is a precondition failure (RFC 5689 / WebDAV MKCOL semantics).
-        if (error instanceof ApiError && error.status === 409) {
-            return new Response('Method Not Allowed', { status: 405 });
-        }
+        if (error.status === 409) return new Response('Method Not Allowed', { status: 405 });
+        // A property value the domain refuses is WebDAV's 403 on a property the server will not set.
+        if (error.status === 400) return new Response('Forbidden', { status: 403 });
         throw error;
     }
     return new Response(null, { status: 201, headers: { Location: calendarHref(ownerId, id) } });
@@ -109,7 +110,15 @@ export async function handleProppatch(
     }
 
     if (Object.keys(updates).length > 0) {
-        await calendar.updateCalendar(calendarId, updates);
+        try {
+            await calendar.updateCalendar(calendarId, updates);
+        } catch (error) {
+            // A property value the domain refuses is WebDAV's 403 on a property the server will not set.
+            if (error instanceof ApiError && error.status === 400) {
+                return new Response('Forbidden', { status: 403 });
+            }
+            throw error;
+        }
     }
 
     return multistatusResponse([response(calendarHref(ownerId, calendarId), [propstatOk(updatedProps)])]);

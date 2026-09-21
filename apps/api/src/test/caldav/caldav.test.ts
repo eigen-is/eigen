@@ -1492,6 +1492,60 @@ describe('CalDAV', () => {
         expect(await propRes.text()).toContain('<D:displayname>0612</D:displayname>');
     });
 
+    test('MKCALENDAR refuses a color that is not a hex color and creates nothing', async () => {
+        const calId = 'hostile-color-cal';
+        const body = `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:ICAL="http://apple.com/ns/ical/"><D:set><D:prop><D:displayname>Hostile</D:displayname><ICAL:calendar-color>javascript:alert(1)</ICAL:calendar-color></D:prop></D:set></C:mkcalendar>`;
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'MKCALENDAR',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body,
+            }),
+        );
+        expect(res.status).toBe(403);
+        const propRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+            }),
+        );
+        expect(propRes.status).toBe(404);
+    });
+
+    test('PROPPATCH refuses a hostile color and a 3 000-character displayname, and keeps the stored ones', async () => {
+        const calId = 'bounded-props-cal';
+        await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'MKCALENDAR',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:ICAL="http://apple.com/ns/ical/"><D:set><D:prop><D:displayname>Bounded</D:displayname><ICAL:calendar-color>#34a853</ICAL:calendar-color></D:prop></D:set></C:mkcalendar>`,
+            }),
+        );
+        const proppatch = (props: string) =>
+            app.handle(
+                new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                    method: 'PROPPATCH',
+                    headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                    body: `<?xml version="1.0"?><D:propertyupdate xmlns:D="DAV:" xmlns:ICAL="http://apple.com/ns/ical/"><D:set><D:prop>${props}</D:prop></D:set></D:propertyupdate>`,
+                }),
+            );
+
+        expect((await proppatch('<ICAL:calendar-color>javascript:alert(1)</ICAL:calendar-color>')).status).toBe(403);
+        expect((await proppatch(`<D:displayname>${'x'.repeat(3000)}</D:displayname>`)).status).toBe(403);
+        // Apple writes the eight-digit form; it stays valid.
+        expect((await proppatch('<ICAL:calendar-color>#34a85380</ICAL:calendar-color>')).status).toBe(207);
+
+        const propRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+            }),
+        );
+        const xml = await propRes.text();
+        expect(xml).toContain('<D:displayname>Bounded</D:displayname>');
+        expect(xml).toContain('<ICAL:calendar-color>#34a85380</ICAL:calendar-color>');
+    });
+
     test('MKCALENDAR with an empty <displayname/> falls back to the URL segment', async () => {
         const calId = 'empty-name-cal';
         const body = `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:set><D:prop><D:displayname/></D:prop></D:set></C:mkcalendar>`;
