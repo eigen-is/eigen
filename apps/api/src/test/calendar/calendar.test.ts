@@ -1745,20 +1745,7 @@ describe('Calendar', () => {
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
                 `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
-                exceptionBody('garbage', 'irrelevant-rejected-first'),
-            );
-            expect(res.status).toBe(400);
-        });
-
-        test('rsvp with a garbage recurrenceDate returns 400', async () => {
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/any-id/rsvp`,
-                {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ status: 'accepted', scope: 'this', recurrenceDate: 'garbage' }),
-                },
+                exceptionBody('garbage', aliceRecurringEventId),
             );
             expect(res.status).toBe(400);
         });

@@ -276,6 +276,22 @@ describe('Occurrence edits of an invited series', () => {
         }
     });
 
+    test('an RSVP to one occurrence refuses a recurrenceDate that names no occurrence', async () => {
+        const { series } = await seeded('Weekly Occurrence Bad Key');
+        const bobMaster = findOrFail(await bobOccurrences(series.uid), (e) => !e.parentEventId);
+
+        const res = await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/calendar/${ctx.bob.user.id}/calendars/${bobCalendarId}/events/${bobMaster.id}/rsvp`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'accepted', scope: 'this', recurrenceDate: 'garbage' }),
+            },
+        );
+        expect(res.status).toBe(400);
+    });
+
     // An override that names nobody is a client that did not restate the guest list — a stored VEVENT
     // cannot tell that apart from "this occurrence has no guests" — so an override moves the occurrence
     // and never changes who is invited to it.
