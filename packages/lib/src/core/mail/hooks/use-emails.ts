@@ -148,7 +148,7 @@ export function useToggleReadEmail() {
     const ownerId = user?.id || '';
 
     return useMutation({
-        mutationFn: async ({ email, isRead }: { email: Email; isRead: boolean }) => {
+        mutationFn: async ({ email, isRead }: { email: EmailSummary; isRead: boolean }) => {
             if (isRead === email.isRead) {
                 return email;
             }
@@ -185,7 +185,7 @@ export function useToggleFlaggedEmail() {
     const ownerId = user?.id || '';
 
     return useMutation({
-        mutationFn: async ({ email, isFlagged }: { email: Email; isFlagged: boolean }) => {
+        mutationFn: async ({ email, isFlagged }: { email: EmailSummary; isFlagged: boolean }) => {
             if (isFlagged === email.isFlagged) {
                 return email;
             }

@@ -64,11 +64,6 @@ export const FILE_ACTIONS: readonly FileAction[] = [
     },
 ];
 
-// The rows a guest may not run, read off the registry itself so a new one is covered by declaring it.
-export const GUEST_DENIED_ACTIONS: readonly FileActionId[] = FILE_ACTIONS.filter((action) => action.guestDenied).map(
-    (action) => action.id,
-);
-
 export function fileActionsFor(subject: FileSubject, exclude?: readonly FileActionId[]): FileAction[] {
     const info = subjectInfo(subject);
     return FILE_ACTIONS.filter((action) => !exclude?.includes(action.id) && action.applies(info, subject));

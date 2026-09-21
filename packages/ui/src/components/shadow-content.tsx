@@ -57,8 +57,29 @@ type ShadowContentProps = {
     highlightTerm?: string;
 };
 
-// Injects the HTML it is handed, unchanged: every caller passes a body the API sanitized with DOMPurify
-// as it parsed it. Shadow DOM provides style isolation; script isolation is handled by BE sanitization.
+const COLOR_SCHEME_CONDITION = {
+    light: /prefers-color-scheme\s*:\s*light/i,
+    dark: /prefers-color-scheme\s*:\s*dark/i,
+};
+
+// Drop the @media (prefers-color-scheme: …) rules that disagree with the canvas we draw on: the queries
+// read the OS preference, not what we render. Through the CSSOM, once the browser has parsed the sheet,
+// never over the style element's text — the server refuses a sanitized `<style>` on tokens (`url(`,
+// `@import`), so deleting a span of text can splice the halves around it into the token it refused
+// (`ur` + `@media (prefers-color-scheme: dark){}` + `l(https://…)`). Parsed, a split token is garbage.
+function dropColorSchemeRules(parent: CSSStyleSheet | CSSGroupingRule, scheme: 'light' | 'dark'): void {
+    for (let i = parent.cssRules.length - 1; i >= 0; i--) {
+        const rule = parent.cssRules[i];
+        if (rule instanceof CSSMediaRule && COLOR_SCHEME_CONDITION[scheme].test(rule.conditionText))
+            parent.deleteRule(i);
+        else if (rule instanceof CSSGroupingRule) dropColorSchemeRules(rule, scheme);
+    }
+}
+
+// Renders the HTML it is handed inside a closed shadow root: every caller passes a body the API sanitized
+// with DOMPurify as it parsed it, and its text is never rewritten here — what this changes, it changes on
+// the parsed tree (color-scheme rules through the CSSOM, ?q= matches into <mark>). Shadow DOM provides
+// style isolation; script isolation is handled by BE sanitization.
 export function ShadowContent({
     content,
     className,
@@ -111,21 +132,6 @@ export function ShadowContent({
         // Add content based on type
         if (contentType === 'html') {
             contentContainer.innerHTML = content;
-
-            // Strip @media (prefers-color-scheme) blocks that conflict with the rendered
-            // canvas. The media queries check the OS preference, not what we render on:
-            // a forced-light canvas must drop the dark blocks; theme-native content drops
-            // whichever side disagrees with the app theme.
-            const renderDark = scheme === 'theme' && document.documentElement.classList.contains('dark');
-            const removeScheme = renderDark ? 'light' : 'dark';
-            const mqRegex = new RegExp(
-                `@media\\s*\\([^)]*prefers-color-scheme:\\s*${removeScheme}[^)]*\\)\\s*\\{[^{}]*(?:\\{[^{}]*\\}[^{}]*)*\\}`,
-                'gi',
-            );
-            for (const style of contentContainer.querySelectorAll('style')) {
-                if (!style.textContent) continue;
-                style.textContent = style.textContent.replace(mqRegex, '');
-            }
         } else {
             contentContainer.textContent = content;
             contentContainer.style.whiteSpace = 'pre-wrap';
@@ -160,6 +166,13 @@ export function ShadowContent({
         // Append style and content to shadow DOM
         shadowRoot.appendChild(styleElement);
         shadowRoot.appendChild(contentContainer);
+
+        // A forced-light canvas drops the dark rules whatever the app theme; theme-native content drops
+        // whichever side disagrees with it. Only now: a style element parses no sheet until it is in a tree.
+        const renderDark = scheme === 'theme' && document.documentElement.classList.contains('dark');
+        for (const style of contentContainer.querySelectorAll('style')) {
+            if (style.sheet) dropColorSchemeRules(style.sheet, renderDark ? 'light' : 'dark');
+        }
 
         // Same trick as the doc canvas: content wider than the host is scaled down to fit
         // instead of overflowing. offset* metrics ignore the transform, so the observer

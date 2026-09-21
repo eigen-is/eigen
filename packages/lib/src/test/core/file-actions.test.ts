@@ -3,7 +3,7 @@ import { ICS_MAX_BYTES } from '../../constants/calendar';
 import { VCARD_MAX_BYTES } from '../../constants/contact';
 import { EML_MAX_BYTES } from '../../constants/mail';
 import { DOCX_MIME, XLSX_MIME } from '../../constants/mime';
-import { fileActionsFor, GUEST_DENIED_ACTIONS } from '../../core/file-actions';
+import { fileActionsFor } from '../../core/file-actions';
 import { subjectFromMailAttachment, subjectFromPath } from '../../core/file-subject';
 import { type DrivePath, type DrivePathType, EML_MIME, ICS_MIME } from '../../types/drive';
 import type { FileActionId, FileSubject } from '../../types/file-subject';
@@ -194,19 +194,26 @@ describe('fileActionsFor on an attachment subject', () => {
 });
 
 // The import routes refuse a guest (requireNonGuest) and a registry predicate cannot see the user, so
-// the rows a guest may not run are named once here and excluded by the one caller that knows who is asking.
-describe('GUEST_DENIED_ACTIONS', () => {
-    test('names every import row and nothing else', () => {
-        expect([...GUEST_DENIED_ACTIONS]).toEqual(['import-contacts', 'import-mail', 'import-calendar']);
+// each such row declares `guestDenied` and the one caller that knows who is asking drops them.
+describe('guestDenied', () => {
+    test('marks every import row and nothing else', () => {
+        const denied = fileActionsFor(subjectFromPath(path({ name: 'x', type: 'file', mimeType: 'text/plain' })));
+        expect(denied.filter((action) => action.guestDenied)).toEqual([]);
     });
 
-    test('excluding them leaves a .vcf, an .eml and an .ics with what a guest may run', () => {
+    test('dropping them leaves a .vcf, an .eml and an .ics with what a guest may run', () => {
         const vcard = path({ name: 'team.vcf', type: 'file', mimeType: 'text/vcard' });
         const eml = path({ name: 'notes.eml', type: 'file', mimeType: EML_MIME });
         const ics = path({ name: 'festival.ics', type: 'file', mimeType: ICS_MIME });
         for (const item of [vcard, eml, ics]) {
-            const ids = fileActionsFor(subjectFromPath(item), GUEST_DENIED_ACTIONS).map((action) => action.id);
-            expect(ids).toEqual(['quick-look', 'download']);
+            const rows = fileActionsFor(subjectFromPath(item));
+            expect(rows.filter((action) => action.guestDenied).map((action) => action.id)).toEqual([
+                item === vcard ? 'import-contacts' : item === eml ? 'import-mail' : 'import-calendar',
+            ]);
+            expect(rows.filter((action) => !action.guestDenied).map((action) => action.id)).toEqual([
+                'quick-look',
+                'download',
+            ]);
         }
     });
 });

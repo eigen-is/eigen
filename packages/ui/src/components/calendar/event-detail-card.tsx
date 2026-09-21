@@ -1,16 +1,17 @@
-import { formatEventWhen, remainingGuestsLine, rruleToText, viewerTimeZone } from '@workspace/lib/calendar';
+import { formatEventWhen, rruleToText, viewerTimeZone } from '@workspace/lib/calendar';
+import { remainingLine } from '@workspace/lib/transfer';
 import type { Attendee, CalendarEvent, EventData } from '@workspace/lib/types/calendar';
 import { AlignLeft, Clock, MapPin, Repeat, UsersRound } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Badge } from '../badge';
 import { AttendeeList } from './attendee-list';
 
+// `title` is omitted by a caller that heads its own surface with it (the detail dialog's DialogTitle);
+// the bounds are instants, so a payload carrying strings converts once, where they enter; and
+// `remainingAttendees` is the guests the payload capped away.
 export type EventDetailCardProps = {
-    // Omitted by a caller that already heads its own surface with it (the detail dialog's DialogTitle).
     title?: string;
-    // A cancelled occurrence must not read as a live one; the dialog passes the event's own status.
     status?: CalendarEvent['status'] | null;
-    // Instants, so a payload that carries its bounds as strings converts once, where they enter.
     start: Date;
     end: Date;
     allDay: boolean;
@@ -20,7 +21,6 @@ export type EventDetailCardProps = {
     description?: string | null;
     organizer?: EventData['organizer'] | null;
     attendees?: Attendee[];
-    // Guests the event holds that `attendees` does not list, counted by the payload that capped it.
     remainingAttendees?: number;
     className?: string;
 };
@@ -43,7 +43,9 @@ export function EventDetailCard({
     remainingAttendees = 0,
     className,
 }: EventDetailCardProps) {
-    const recurrenceText = rruleToText(rrule ?? null);
+    const recurrence = rruleToText(rrule ?? null);
+    // Sentence case here, not CSS `capitalize`, which title-cases every word of "every week on Sunday".
+    const recurrenceText = recurrence && recurrence[0].toUpperCase() + recurrence.slice(1);
     const cancelled = status === 'cancelled';
 
     return (
@@ -51,7 +53,7 @@ export function EventDetailCard({
             {(title || cancelled) && (
                 <div className="flex items-center gap-2">
                     {title && <h3 className={cn('text-lg font-medium', cancelled && 'line-through')}>{title}</h3>}
-                    {cancelled && <Badge variant="destructive">Cancelled</Badge>}
+                    {cancelled && <Badge variant="destructive">Canceled</Badge>}
                 </div>
             )}
 
@@ -70,7 +72,7 @@ export function EventDetailCard({
             {recurrenceText && (
                 <div className="flex items-start gap-3 text-sm">
                     <Repeat className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                    <span className="capitalize">{recurrenceText}</span>
+                    <span>{recurrenceText}</span>
                 </div>
             )}
 
@@ -92,10 +94,10 @@ export function EventDetailCard({
                 <div className="flex items-start gap-3 text-sm">
                     <UsersRound className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
                     <div className="flex-1">
-                        <AttendeeList attendees={attendees} organizer={organizer} />
+                        <AttendeeList attendees={attendees} organizer={organizer} remaining={remainingAttendees} />
                         {remainingAttendees > 0 && (
                             <p className="mt-1 text-xs text-muted-foreground">
-                                {remainingGuestsLine(remainingAttendees)}
+                                {remainingLine(remainingAttendees, 'guest')}
                             </p>
                         )}
                     </div>

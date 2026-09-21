@@ -321,7 +321,7 @@ export function processInboundImip(
             // REPLY must never bind to an exception row directly.
             const ownerEvent = calendar
                 .getEventsByUid(parsed.uid)
-                .find((e) => !isInvitationFromOthers(e, home.user) && !e.parentEventId);
+                .find((e) => !isInvitationFromOthers(e, home.user.email) && !e.parentEventId);
             if (ownerEvent && parsed.data?.attendees) {
                 for (const attendee of parsed.data.attendees) {
                     // A REPLY may only set the PARTSTAT of the attendee who actually sent it.

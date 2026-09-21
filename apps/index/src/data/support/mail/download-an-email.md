@@ -6,11 +6,10 @@ category: Basics
 tags: [mail, email, download, eml]
 related: [mail/import-an-email, mail/read-and-reply, mail/get-started]
 order: 80
-updated: 2026-09-20
+updated: 2026-09-21
 ---
 
-You can save any message from Mail to your computer as a file. The file is in `.eml` format, the standard format
-for a single email, so other mail programs can open it and you can keep it as a record.
+You can save any message from Mail to your computer as a file. The file is in `.eml` format, the standard format for a single email, so other mail programs can open it and you can keep it as a record.
 
 ## Download a message you're reading
 
@@ -27,18 +26,15 @@ You don't have to open a message first.
 1. Right-click the message in the list.
 2. Choose **Download** from the menu.
 
-This works when you have one message selected. If you've selected several at once, **Download** doesn't appear,
-so pick a single message.
+This works when you have one message selected. If you've selected several at once, **Download** doesn't appear, so pick a single message.
 
 ## What you get
 
-The file is the whole message, in `.eml` format. That includes the sender, the recipients, the subject, the date,
-the full text, and any attachments, all in one file.
+The file is the whole message, in `.eml` format. That includes the sender, the recipients, the subject, the date, the full text, and any attachments, all in one file.
 
 <div class="eigen-callout">
 
-`.eml` is a standard format, so the file opens in most desktop mail programs (such as Apple Mail or Outlook) and
-in many other apps. Keep one as your own copy of an important message, or move a message to another mail account.
+`.eml` is a standard format, so the file opens in most desktop mail programs (such as Apple Mail or Outlook) and in many other apps. Keep one as your own copy of an important message, or move a message to another mail account.
 
 </div>
 
@@ -48,5 +44,4 @@ The file is named with the message's identifier. You can rename it to anything y
 
 An `.eml` file can go the other way too. See [Import an email from a file](/support/mail/import-an-email).
 
-If you only want the files that came with a message, not the whole message, open the attachment from the reading
-pane instead. See [Read and reply to email](/support/mail/read-and-reply).
+If you only want the files that came with a message, not the whole message, open the attachment from the reading pane instead. See [Read and reply to email](/support/mail/read-and-reply).

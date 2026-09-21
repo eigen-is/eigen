@@ -647,7 +647,7 @@ export class Calendar {
         if (!existing || existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
 
         // Linked event guard: attendees can only change local fields (reminders, color)
-        if (isInvitationFromOthers(existing, this.home.user)) {
+        if (isInvitationFromOthers(existing, this.home.user.email)) {
             const localData: EventData = { ...existing.data };
             if (input.data) {
                 localData.reminders = input.data.reminders ?? localData.reminders;
@@ -758,7 +758,7 @@ export class Calendar {
         // reminders/color above) must NOT bump SEQUENCE or send iMIP — doing so spoofs the attendee as
         // organizer AND outruns the organizer's SEQUENCE, so the RFC 5546 replay guard later drops the
         // organizer's real updates. Mirror the attendee discriminator at the top of updateEvent.
-        if (user && !isInvitationFromOthers(existing, this.home.user) && updated.data?.attendees?.length) {
+        if (user && !isInvitationFromOthers(existing, this.home.user.email) && updated.data?.attendees?.length) {
             this.incrementSequence(id);
             const withSequence = this.getEventById(id)!;
             propagateInvitation(this.home, withSequence, user, oldAttendees, withSequence.data!.attendees!).catch(
@@ -777,7 +777,7 @@ export class Calendar {
         // 404 (not 403) on calendar mismatch so a share on one calendar can't oracle event ids in another.
         if (!existing || existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
 
-        const invitation = isInvitationFromOthers(existing, this.home.user) ? existing.data : null;
+        const invitation = isInvitationFromOthers(existing, this.home.user.email) ? existing.data : null;
         // Attendee deleting a linked copy = decline, and only an attendee has an RSVP to give: a file or a
         // CalDAV client can hang any ORGANIZER on an event, so a user who is not on the list just deletes
         // their row rather than telling a stranger they declined a meeting they were never invited to.
@@ -1689,7 +1689,7 @@ export class Calendar {
     ): void {
         const event = this.getEventById(eventId);
         if (!event) throw new ApiError(404, 'Event not found');
-        if (!event.data?.organizer || !isInvitationFromOthers(event, this.home.user)) {
+        if (!event.data?.organizer || !isInvitationFromOthers(event, this.home.user.email)) {
             throw new ApiError(400, 'Not a linked event');
         }
 

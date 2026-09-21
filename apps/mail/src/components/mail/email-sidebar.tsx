@@ -131,7 +131,6 @@ export function EmailSidebar({
                 </SidebarSection>
             )}
 
-            {/* Storage usage indicator at the bottom of sidebar */}
             <StorageUsage className="mt-auto" condensed={condensed} />
         </SidebarBody>
     );

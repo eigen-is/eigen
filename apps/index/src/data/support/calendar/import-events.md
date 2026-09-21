@@ -6,7 +6,7 @@ category: Basics
 tags: [calendar, import, ics]
 related: [calendar/get-started, calendar/external-invitations, drive/preview-a-file]
 order: 90
-updated: 2026-09-20
+updated: 2026-09-21
 ---
 
 Most calendar programs can save events as an `.ics` file, the standard calendar format. Eigen reads those files, so you can bring a conference schedule, a season of matches, or a whole calendar from another provider into one of your own calendars.
@@ -24,7 +24,7 @@ To read the file before you import it, select it and press **Space**, or choose 
 
 ## Choose the calendar
 
-The dialog lists the calendars you own, with your default one already selected. Choose **New calendar** instead to make a fresh one for the file. Eigen names it after the file, and you can change the name before you import.
+The dialog lists the calendars you own, with your default one already selected. Choose **New calendar** instead to make a fresh one for the file. Eigen names it after the file, and you can change the name before you import. If nothing ends up going in, because every event in the file was already in your calendar, the new calendar is removed again.
 
 A calendar someone shared with you is not in the list. You can only import into a calendar of your own. That holds for a file in a team drive too: the events land in one of your own calendars, the same way an imported email lands in your own inbox.
 

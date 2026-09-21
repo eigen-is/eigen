@@ -2,10 +2,11 @@
 title: "Import contacts from a vCard file"
 description: "Bring contacts into Eigen from a .vcf file, either from your computer or from a file already in Drive."
 type: how-to
+category: Basics
 tags: [contacts, import, vcard, vcf]
-related: [contacts/export-contacts, contacts/get-started, connect/contacts-client]
+related: [contacts/export-contacts, contacts/get-started, connect/contacts-client, drive/preview-a-file]
 order: 90
-updated: 2026-09-14
+updated: 2026-09-21
 ---
 
 Most address books can save contacts as a vCard file, which has the extension `.vcf`. Contacts reads those files, so you can bring people over from a phone, from another mail provider, or from a colleague who sent you a card.
@@ -23,15 +24,15 @@ Eigen reads the file and tells you what it did, for example "Imported 12 contact
 
 The **⋮** button is not there when you are looking at a team. Team members are managed by whoever administers the team, so there is nothing to import into.
 
-## Import a file that is already in Drive
+## Import a file you already have in Eigen
 
-If the `.vcf` file is in Drive, you can import it without opening Contacts.
+You can import a `.vcf` file without opening Contacts.
 
-1. Open [Drive](/drive) and find the `.vcf` file.
-2. Right-click the file, or click its **⋮** button.
+1. Find the file in [Drive](/drive), or as an attachment on an email, a chat message, or a card.
+2. In Drive, right-click the file or click its **⋮** button. For an attachment, right-click the chip, or press and hold it on a phone.
 3. Click **Import to Contacts**.
 
-You can also look inside the file first. Select it and press **Space**, or choose **Quick preview** from the same menu. The preview shows each contact in the file as a card, with photo, addresses, and labels, up to the first 200. The bar at the bottom of the preview has an **Import to Contacts** button, which imports the file you are looking at.
+You can also look inside the file first. Select it and press **Space**, or choose **Quick preview** from the same menu. The preview shows each contact in the file as a card, with photo, addresses, and labels, up to the first 200. The bar at the bottom has the same **Import to Contacts** button. See [Preview a file](/support/drive/preview-a-file).
 
 ## What comes across
 

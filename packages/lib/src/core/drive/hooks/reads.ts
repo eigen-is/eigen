@@ -268,8 +268,6 @@ export function useEmlPreview(ownerId: string, mountId: string, pathId: string, 
     return useQuery({
         queryKey: driveKeys.emlPreview(ownerId, mountId, pathId, updatedAt),
         queryFn: async () => {
-            // emlPreviewRoute, not driveApi: `date` is an ISO instant declared as a string, and the
-            // default treaty's reviver would hand the renderer a Date the type does not admit (api.ts).
             const response = await emlPreviewRoute(ownerId, mountId, pathId).get({
                 query: { updatedAt: updatedAt.toISOString() },
             });
@@ -288,8 +286,6 @@ export function useIcsPreview(ownerId: string, mountId: string, pathId: string, 
     return useQuery({
         queryKey: driveKeys.icsPreview(ownerId, mountId, pathId, updatedAt),
         queryFn: async () => {
-            // icsPreviewRoute, not driveApi: an all-day bound is a bare YYYY-MM-DD and an event titled
-            // after a date is a string the card prints — the reviver would make a Date of either (api.ts).
             const response = await icsPreviewRoute(ownerId, mountId, pathId).get({
                 query: { updatedAt: updatedAt.toISOString() },
             });

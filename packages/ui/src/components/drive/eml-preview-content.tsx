@@ -1,44 +1,39 @@
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { useEmlPreview } from '@workspace/lib/drive';
 import { formatFileSize } from '@workspace/lib/format';
-import { remainingAttachmentsLine, useMailEmlPreview } from '@workspace/lib/mail';
+import { useMailEmlPreview } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { MailPartRef } from '@workspace/lib/types/file-subject';
 import { mailAttachmentName } from '@workspace/lib/types/mail';
 import type { EmlPreview } from '@workspace/lib/types/preview';
 import { SimpleAttachmentChip } from '../attachment/simple-attachment-chip';
 import { MessageView } from '../mail/message-view';
-import { PreviewPane } from './preview-pane';
+import { PREVIEW_BODY_CLASS, PreviewCounts, PreviewPane, type PreviewStatus } from './preview-pane';
 
-// The served message, whichever route served it. Drive and mail each have their own component, so exactly
-// one query hook runs per render and the overlay picks by the subject it holds.
 export function EmlPreviewContent({ path }: { path: DrivePath }) {
-    const { data, isPending, isError } = useEmlPreview(path.ownerId, path.mountId, path.id, path.updatedAt, path.size);
-    return <EmlMessage data={data} isPending={isPending} isError={isError} oversize={path.size > EML_MAX_BYTES} />;
+    const { data, status } = useEmlPreview(path.ownerId, path.mountId, path.id, path.updatedAt, path.size);
+    return <EmlMessage data={data} status={status} oversize={path.size > EML_MAX_BYTES} />;
 }
 
 export function MailEmlPreviewContent({ part, size }: { part: MailPartRef; size: number }) {
     const oversize = size > EML_MAX_BYTES;
-    const { data, isPending, isError } = useMailEmlPreview(part.ownerId, part.messageId, part.index, !oversize);
-    return <EmlMessage data={data} isPending={isPending} isError={isError} oversize={oversize} />;
+    const { data, status } = useMailEmlPreview(part.ownerId, part.messageId, part.index, !oversize);
+    return <EmlMessage data={data} status={status} oversize={oversize} />;
 }
 
-// Both routes serve one shape, so one renderer reads it.
 function EmlMessage({
     data,
-    isPending,
-    isError,
+    status,
     oversize,
 }: {
     data: EmlPreview | undefined;
-    isPending: boolean;
-    isError: boolean;
+    status: PreviewStatus;
     oversize: boolean;
 }) {
     return (
-        <PreviewPane oversize={oversize} maxBytes={EML_MAX_BYTES} isPending={isPending} unreadable={isError}>
+        <PreviewPane oversize={oversize} maxBytes={EML_MAX_BYTES} status={status}>
             {data && (
-                <div className="p-8">
+                <div className={PREVIEW_BODY_CLASS}>
                     <MessageView
                         subject={data.subject}
                         from={data.from}
@@ -47,7 +42,6 @@ function EmlMessage({
                         date={data.date}
                         html={data.html}
                         text={data.text}
-                        abovePreview
                         attachments={<PreviewAttachments data={data} />}
                     />
                 </div>
@@ -71,9 +65,7 @@ function PreviewAttachments({ data }: { data: EmlPreview }) {
                     />
                 ))}
             </div>
-            {data.remainingAttachments > 0 && (
-                <p className="text-sm text-muted-foreground">{remainingAttachmentsLine(data.remainingAttachments)}</p>
-            )}
+            <PreviewCounts remaining={data.remainingAttachments} dropped={0} noun="attachment" />
         </div>
     );
 }

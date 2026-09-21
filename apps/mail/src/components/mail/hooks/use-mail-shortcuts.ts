@@ -60,8 +60,8 @@ type UseMailShortcutsOptions = {
     moveEmailByIdOnly: (emailId: string, mailbox: string) => Promise<void>;
     setReadById: (emailId: string, isRead: boolean, currentIsRead: boolean) => void | Promise<void>;
     setFlaggedById: (emailId: string, flagged: boolean, currentFlagged: boolean) => void | Promise<void>;
-    setReadByIds: (items: { id: string; currentIsRead: boolean }[], isRead: boolean) => void | Promise<void>;
-    setFlaggedByIds: (items: { id: string; currentFlagged: boolean }[], flagged: boolean) => void | Promise<void>;
+    setReadByIds: (rows: EmailSummary[], isRead: boolean) => void;
+    setFlaggedByIds: (rows: EmailSummary[], flagged: boolean) => void;
     archiveEmailsByIds: (emailIds: string[]) => void | Promise<void>;
     reportSpamByIds: (emailIds: string[]) => void | Promise<void>;
     deleteEmailsByIds: (emailIds: string[]) => void | Promise<void>;
@@ -323,10 +323,7 @@ export function useMailShortcuts({
             // Collapse the toggle to a single direction so ONE Undoable covers the whole batch: flag
             // all if any is unflagged, otherwise unflag all (matches the all-same cases exactly).
             const flagged = selectedRows.some((e) => !e.isFlagged);
-            void setFlaggedByIds(
-                selectedRows.map((e) => ({ id: e.id, currentFlagged: e.isFlagged })),
-                flagged,
-            );
+            setFlaggedByIds(selectedRows, flagged);
             return;
         }
         if (cursorId) {
@@ -354,10 +351,7 @@ export function useMailShortcuts({
             return;
         }
         if (selectedRows.length > 0) {
-            void setReadByIds(
-                selectedRows.map((e) => ({ id: e.id, currentIsRead: e.isRead })),
-                isRead,
-            );
+            setReadByIds(selectedRows, isRead);
             return;
         }
         if (cursorId) {

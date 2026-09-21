@@ -7,6 +7,11 @@ describe('isSearchableTextFile', () => {
         expect(isSearchableTextFile('text/markdown', 'README.md')).toBe(true);
         expect(isSearchableTextFile('application/json', 'data.json')).toBe(true);
     });
+    // An .eml renders as the message it holds, so its raw body is not what a search would read either.
+    test('a saved message is not content-indexed, whatever its mime', () => {
+        expect(isSearchableTextFile('message/rfc822', 'notes.eml')).toBe(false);
+        expect(isSearchableTextFile('text/plain', 'notes.eml')).toBe(false);
+    });
     test('eigen container mimes are NOT plaintext-searchable (handled via onSync)', () => {
         expect(isSearchableTextFile('application/eigendoc', 'doc.eigendoc')).toBe(false);
         expect(isSearchableTextFile('application/eigensheets', 's.eigensheets')).toBe(false);
@@ -53,8 +58,15 @@ describe('getBytesTextPreviewMode', () => {
         expect(getBytesTextPreviewMode('application/json', 'data.json')).toBe('code');
         expect(getBytesTextPreviewMode('text/vcard', 'team.vcf')).toBeNull();
     });
-    // A calendar reads as its events, never as its raw body: the text route answers for neither mime, so
-    // a path never carries two cached preview artifacts (pruneOldVersions is not format-scoped).
+    // A message reads as the message it is, never as its raw body: the text route answers for neither
+    // mime, so a path never carries two cached preview artifacts (pruneOldVersions is not format-scoped).
+    test('a saved message has no text mode to be rendered under', () => {
+        expect(getBytesTextPreviewMode('message/rfc822', 'notes.eml')).toBeNull();
+        expect(getBytesTextPreviewMode('text/plain', 'notes.eml')).toBeNull();
+        expect(getBytesTextPreviewMode('application/octet-stream', 'notes.eml')).toBeNull();
+        expect(getTextPreviewMode('message/rfc822', 'notes.eml')).toBeNull();
+    });
+    // A calendar reads as its events, never as its raw body: same rule.
     test('a calendar file has no text mode to be rendered under', () => {
         expect(getBytesTextPreviewMode('text/calendar', 'festival.ics')).toBeNull();
         expect(getBytesTextPreviewMode('text/calendar; method=REQUEST', 'invite.ics')).toBeNull();

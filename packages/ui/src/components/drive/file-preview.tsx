@@ -18,6 +18,10 @@ import { IcsPreviewContent, MailIcsPreviewContent } from './ics-preview-content'
 import { PREVIEW_PANE_CLASS } from './preview-pane';
 import { MailVCardPreviewContent, VCardPreviewContent } from './vcard-preview-content';
 
+// The roles a layer above the overlay carries — Radix dialogs and alert dialogs, popovers, menus and a
+// select's listbox all render one, and all of them take focus when they open.
+const LAYER_ROLES = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]';
+
 type FilePreviewProps = {
     subject: FileSubject;
     siblings: FileSubject[];
@@ -45,26 +49,41 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
     // Focus stays in the overlay except while a dialog, portaled to body, holds it.
     const overlayRef = useRef<HTMLDivElement>(null);
     // Every layer the content can open above the overlay — a picker, the reader header's details
-    // popover — is a role="dialog" of its own, and each handles Escape itself; these listen on
-    // document and Radix stops nothing, so ungated one Escape would close both.
+    // popover, a menu, a select's listbox — handles these keys itself, and each takes focus. Where the
+    // key was pressed is what says whose it was: a layer dismisses on the capture phase of the very
+    // keydown these document-level hotkeys hear on the bubble, and React has flushed it closed by then,
+    // so "is a layer open" answers for the layer that just went. Presence still gates the steady state.
     const keysEnabled = !useDialogOpen(overlayRef);
-    useHotkey('Escape', () => onClose(), { enabled: keysEnabled });
-    // Space closes it again, the way it opened it (Finder's Quick Look) — unless a control inside has
-    // focus, where Space is that control's own activation.
+    const fromLayerAbove = (event: KeyboardEvent) => {
+        const layer = event.target instanceof Element ? event.target.closest(LAYER_ROLES) : null;
+        return !!layer && layer !== overlayRef.current;
+    };
     useHotkey(
-        'Space',
+        'Escape',
         (event) => {
-            if (event.target instanceof HTMLElement && event.target.closest('button, a[href]')) return;
-            event.preventDefault();
+            if (fromLayerAbove(event)) return;
             onClose();
         },
         { enabled: keysEnabled },
     );
-    const goPrev = () => {
-        if (hasPrev) onPrev();
+    // Space closes it again, the way it opened it (Finder's Quick Look) — unless a control inside has
+    // focus, where Space is that control's own activation, which is why the lib prevents no default of
+    // its own: it does that before the callback runs, and a pressed button would never press.
+    useHotkey(
+        'Space',
+        (event) => {
+            if (fromLayerAbove(event)) return;
+            if (event.target instanceof HTMLElement && event.target.closest('button, a[href]')) return;
+            event.preventDefault();
+            onClose();
+        },
+        { enabled: keysEnabled, preventDefault: false },
+    );
+    const goPrev = (event: KeyboardEvent) => {
+        if (hasPrev && !fromLayerAbove(event)) onPrev();
     };
-    const goNext = () => {
-        if (hasNext) onNext();
+    const goNext = (event: KeyboardEvent) => {
+        if (hasNext && !fromLayerAbove(event)) onNext();
     };
     useHotkey('ArrowLeft', goPrev, { enabled: keysEnabled });
     useHotkey('ArrowUp', goPrev, { enabled: keysEnabled });

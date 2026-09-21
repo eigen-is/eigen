@@ -133,9 +133,7 @@ export function EditEventDialog({
     if (!event) return null;
 
     const isRecurring = !!event.rrule;
-    const isLinkedEvent = isInvitationFromOthers(event, {
-        email: eventOwnerId === user?.id ? user.email : undefined,
-    });
+    const isLinkedEvent = isInvitationFromOthers(event, eventOwnerId === user?.id ? user.email : undefined);
 
     // A cross-Home move recreates the event in the other Home and deletes the source — which fires
     // deleteEvent's iMIP side effects and can't carry exception children. Warn honestly before that
