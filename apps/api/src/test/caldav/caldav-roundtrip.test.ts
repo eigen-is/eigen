@@ -628,6 +628,35 @@ describe('CalDAV round-trip fidelity', () => {
             expect(parseIcs(await getIcs(uri)).events[0].data?.organizer).toBeUndefined();
         });
 
+        test('a PUT cannot forge the organizer link a reply is routed on', async () => {
+            const uri = 'rt-forged-link.ics';
+            const res = await putIcs(
+                uri,
+                vcal(
+                    [
+                        'BEGIN:VEVENT',
+                        'UID:rt-forged-link@eigen',
+                        'DTSTART:20260520T090000Z',
+                        'DTEND:20260520T100000Z',
+                        'SUMMARY:Forged link',
+                        'ORGANIZER;CN=Mallory:mailto:mallory@evil.example',
+                        'X-EIGEN-ORGANIZER-USER:victim-uuid',
+                        'X-EIGEN-ORGANIZER-EVENT:victim-event',
+                        'X-EIGEN-EVENT-ID:victim-row',
+                        'X-EIGEN-COLOR:#000000',
+                        'END:VEVENT',
+                    ].join('\r\n'),
+                ),
+            );
+            expect(res.status).toBe(201);
+
+            const stored = (await getHome(userId)).calendar.getEventByUri(calendarId, uri)!;
+            expect(stored.data?.organizer?.userId).toBe('');
+            expect(stored.data?.organizerEventId).toBeUndefined();
+            expect(stored.data?.color).toBeUndefined();
+            expect(stored.id).not.toBe('victim-row');
+        });
+
         test('an upper-case MAILTO: scheme names the same owner, and the same guest', async () => {
             const uri = 'rt-organizer-uppercase.ics';
             const ics = (summary: string) =>

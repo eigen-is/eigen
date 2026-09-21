@@ -18,7 +18,7 @@ import {
     serializeResource,
     stripEigenStamps,
 } from '../../lib/caldav/ical-component';
-import { parseIcs } from '../../lib/caldav/ical-parse';
+import { parseIcs, parseResource, projectResource } from '../../lib/caldav/ical-parse';
 import { vcal } from '../ics-test-helpers';
 
 const CTX = { now: new Date('2026-06-01T10:00:00Z'), actorIsOrganizer: true };
@@ -347,6 +347,7 @@ describe('stamp trust', () => {
         'DTEND;TZID=Europe/Amsterdam:20260415T130000',
         'RRULE:FREQ=WEEKLY;COUNT=8',
         'EXDATE:20260429T100000Z',
+        'ORGANIZER;CN=Alice:mailto:alice@eigen.example',
         'X-EIGEN-EVENT-ID:forged-id',
         'X-EIGEN-CREATED-BY:mallory',
         'X-EIGEN-ORGANIZER-EVENT:forged-org-event',
@@ -356,6 +357,36 @@ describe('stamp trust', () => {
         'DTSTART;X-EIGEN-EVENT-ID=forged-param:20260415T100000Z',
         'END:VEVENT',
     ];
+
+    test('the untrusted entry reads no stamp the body carries', () => {
+        const { events } = parseIcs(vcal(VTZ_AMS, forged));
+        const [master, exclusion] = events;
+
+        expect(master.data?.organizer?.userId).toBe('');
+        expect(master.data?.organizerEventId).toBeUndefined();
+        expect(master.data?.color).toBeUndefined();
+        expect(Object.keys(master)).not.toContain('eventId');
+        expect(Object.keys(master)).not.toContain('createByUserId');
+        expect(Object.keys(master)).not.toContain('importedOrganizer');
+        // The forged exclusion stamp named id `forged-exc` and SEQUENCE 99; an untrusted EXDATE inherits
+        // the master's.
+        expect(exclusion.recurrenceDate).toBe('2026-04-29');
+        expect(exclusion.sequence).toBe(3);
+        expect(Object.keys(exclusion)).not.toContain('eventId');
+    });
+
+    test('the trusted projection of the same bytes reads every stamp', () => {
+        const { events } = projectResource(parseResource(vcal(VTZ_AMS, forged)));
+        const [master, exclusion] = events;
+
+        expect(master.eventId).toBe('forged-id');
+        expect(master.createByUserId).toBe('mallory');
+        expect(master.data?.organizer?.userId).toBe('mallory');
+        expect(master.data?.organizerEventId).toBe('forged-org-event');
+        expect(master.data?.color).toBe('#000000');
+        expect(exclusion.eventId).toBe('forged-exc');
+        expect(exclusion.sequence).toBe(99);
+    });
 
     test('every forged stamp is discarded and the stored one comes back', () => {
         const incoming = parse(vcal(VTZ_AMS, forged));
@@ -520,7 +551,7 @@ describe('stamp trust', () => {
         expect(stamp.getFirstParameter('x-eigen-event-id')).toMatch(/^[0-9a-f-]{36}$/);
         expect(stamp.getFirstParameter('x-eigen-seq')).toBe('0');
 
-        expect(parseIcs(serializeResource(storedJunk)).events[1].sequence).toBe(0);
+        expect(projectResource(storedJunk).events[1].sequence).toBe(0);
     });
 
     test('with no stored resource everything is minted and only trusted organizer stamps are set', () => {
@@ -568,7 +599,7 @@ describe('round trip build → serialize → project', () => {
             const override = { ...OVERRIDE, allDay: master.allDay, timezone: master.timezone };
             const exclusion = { ...EXCLUSION, allDay: master.allDay, timezone: master.timezone };
             const ics = serializeResource(buildResource([master, override, exclusion]));
-            const { events } = parseIcs(ics);
+            const { events } = projectResource(parseResource(ics));
 
             const back = events.find((e) => !e.recurrenceDate)!;
             expect(back.eventId).toBe('evt-master');
@@ -678,6 +709,7 @@ describe('stripping', () => {
 });
 
 describe('hasUnindexedRecurrence', () => {
+    const flagged = (ics: string): boolean => projectResource(parseResource(ics)).hasUnindexedRecurrence;
     const series = (...extra: string[]) => [
         'BEGIN:VEVENT',
         'UID:flagged@client',
@@ -690,7 +722,7 @@ describe('hasUnindexedRecurrence', () => {
     ];
 
     test('true for a sub-daily rule', () => {
-        expect(parseIcs(vcal(series('RRULE:FREQ=HOURLY;COUNT=4'))).hasUnindexedRecurrence).toBe(true);
+        expect(flagged(vcal(series('RRULE:FREQ=HOURLY;COUNT=4')))).toBe(true);
     });
 
     test('true for an out-of-range recurrence start', () => {
@@ -704,14 +736,14 @@ describe('hasUnindexedRecurrence', () => {
             'RRULE:FREQ=DAILY',
             'END:VEVENT',
         ];
-        expect(parseIcs(vcal(ancient)).hasUnindexedRecurrence).toBe(true);
+        expect(flagged(vcal(ancient))).toBe(true);
     });
 
     test('true for an RDATE', () => {
-        expect(parseIcs(vcal(series('RDATE:20260501T100000Z'))).hasUnindexedRecurrence).toBe(true);
+        expect(flagged(vcal(series('RDATE:20260501T100000Z')))).toBe(true);
     });
 
     test('false for a plain weekly rule', () => {
-        expect(parseIcs(vcal(series('RRULE:FREQ=WEEKLY;COUNT=4'))).hasUnindexedRecurrence).toBe(false);
+        expect(flagged(vcal(series('RRULE:FREQ=WEEKLY;COUNT=4')))).toBe(false);
     });
 });
