@@ -5,7 +5,7 @@ type: how-to
 tags: [calendar, rsvp, invitations, attendees]
 related: [calendar/invite-people, calendar/external-invitations, calendar/create-event]
 order: 50
-updated: 2026-09-13
+updated: 2026-09-22
 ---
 
 When someone invites you to an event, it appears in your calendar straight away. You can accept,
@@ -13,8 +13,9 @@ decline, or say maybe from the event detail in Calendar.
 
 ## Respond to an invitation
 
-1. Open [Calendar](/calendar) and find the event in your calendar. Pending invitations appear with a
-   dashed outline; declined events appear faded.
+1. Open [Calendar](/calendar) and find the event in your calendar. An invitation you have not answered
+   yet stands out: an all-day one gets a dashed outline, and a timed one gets a hollow dot instead of a
+   filled one. An event you declined appears faded.
 2. Click the event to open its detail dialog.
 3. Scroll down to the **RSVP** section, which appears near the bottom of the dialog. You will see
    three buttons: **Accept**, **Maybe**, and **Decline**.
