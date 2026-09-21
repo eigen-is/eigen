@@ -141,7 +141,7 @@ Drafts get `D`+`S` flags. Skips `new/` because Eigen knows the final flags at cr
 1. **Move `new/` -> `cur/`** -- standalone mode fallback. Appends `:2,` (empty flags). ENOENT-safe if Dovecot already
    moved the file.
 2. **Build disk state** -- lists all files in `cur/`, builds a `Map<messageId, filename>`.
-3. **Reconcile with DB** -- diff the disk map against `getAllEmails(mailbox)`. Each discovery is reported through
+3. **Reconcile with DB** -- diff the disk map against `listSyncRows(mailbox)`. Each discovery is reported through
    `MailStoreEvents`; the `Mail` domain class turns them into SSE events + notifications:
    - **New messages** (on disk, not in DB): processed in **chunks of 250**. A chunk is parsed first (file via
      `getMessageFile()` → `BunFile`, `parseEml`, flags applied from the filename), then written by a single

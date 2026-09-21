@@ -1,16 +1,17 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { LocalFilesystem } from '../../lib/core';
 import {
-    cleanupTempFiles,
     computeResourceEtag,
     dedupeByUid,
     diffFileStats,
     listResourceUris,
     nextSyncGen,
+    type ResourceScan,
+    type ResourceStat,
     sanitizeResourceUri,
+    statResourceDir,
     uriKeyOf,
     WriteGate,
     writeResourceFile,
@@ -145,36 +146,6 @@ describe('resource file helpers', () => {
         expect(new Uint8Array(await store.file(`${DIR}/card.vcf`).arrayBuffer())).toEqual(bytes);
     });
 
-    test('cleanupTempFiles removes only the dot-prefixed .tmp- leftovers', async () => {
-        const { store, base } = nextStore();
-        await store.mkdir(DIR);
-        const cardsDir = join(base, DIR);
-        writeFileSync(join(cardsDir, 'real.vcf'), 'x');
-        writeFileSync(join(cardsDir, '.real.vcf.tmp-abc'), 'x');
-        // A stray non-`.vcf` (README, csv, a mixed-case .VCF) is NOT temp debris — it survives the sweep and is
-        // warn-skipped by reconcile/rebuild instead of being silently deleted. A hand-placed dotfile without
-        // the `.tmp-` infix (a `.backup.vcf`) is not writeAtomic debris either and must survive.
-        writeFileSync(join(cardsDir, 'stray.txt'), 'x');
-        writeFileSync(join(cardsDir, 'x.VCF'), 'x');
-        writeFileSync(join(cardsDir, '.backup.vcf'), 'x');
-
-        await cleanupTempFiles(store, DIR);
-
-        expect(readdirSync(cardsDir).sort()).toEqual(['.backup.vcf', 'real.vcf', 'stray.txt', 'x.VCF']);
-    });
-
-    test('a resource directory holding nothing but temp debris survives the sweep', async () => {
-        const { store, base } = nextStore();
-        await store.mkdir(DIR);
-        writeFileSync(join(base, DIR, `.x.vcf.tmp-${randomUUID()}`), 'x');
-
-        await cleanupTempFiles(store, DIR);
-
-        // Emptying the directory must not take it with it: the very same init enumerates it next.
-        expect(existsSync(join(base, DIR))).toBe(true);
-        expect(await listResourceUris(store, DIR, SUFFIX)).toEqual([]);
-    });
-
     test('listResourceUris sorts, keys and warn-skips a non-conforming name', async () => {
         const { store, base } = nextStore();
         await store.mkdir(DIR);
@@ -196,28 +167,72 @@ describe('resource file helpers', () => {
     });
 });
 
+describe('statResourceDir', () => {
+    test('keys every listed resource by its folded uri and carries the rounded stat', async () => {
+        const { store, base } = nextStore();
+        await store.mkdir(DIR);
+        writeFileSync(join(base, DIR, 'A.vcf'), 'xx');
+        writeFileSync(join(base, DIR, 'b.vcf'), 'xxxx');
+
+        const scan = await statResourceDir(store, DIR, SUFFIX);
+
+        expect([...scan.files.keys()]).toEqual(['a.vcf', 'b.vcf']);
+        expect(scan.files.get('a.vcf')?.uri).toBe('A.vcf');
+        expect(scan.files.get('a.vcf')?.size).toBe(2);
+        expect(Number.isInteger(scan.files.get('a.vcf')?.mtime)).toBe(true);
+        expect(scan.skipped.size).toBe(0);
+    });
+
+    test('a listed resource whose stat fails is skipped, not absent', async () => {
+        const { store, base } = nextStore();
+        await store.mkdir(DIR);
+        writeFileSync(join(base, DIR, 'a.vcf'), 'x');
+        writeFileSync(join(base, DIR, 'b.vcf'), 'x');
+        // A stat that raises anything but "the file is gone" is transient IO, so pin the general case.
+        const realStat = store.stat.bind(store);
+        store.stat = (filePath: string) => {
+            if (filePath.endsWith('b.vcf')) throw new Error('EIO: could not stat');
+            return realStat(filePath);
+        };
+
+        let scan: ResourceScan = { files: new Map(), skipped: new Set() };
+        const warnings = await captureWarnings(async () => {
+            scan = await statResourceDir(store, DIR, SUFFIX);
+        });
+
+        expect([...scan.files.keys()]).toEqual(['a.vcf']);
+        expect([...scan.skipped]).toEqual(['b.vcf']);
+        expect(warnings.some((w) => w.includes('b.vcf'))).toBe(true);
+    });
+});
+
 describe('diffFileStats', () => {
+    const scanOf = (files: Record<string, ResourceStat>, skipped: string[] = []): ResourceScan => ({
+        files: new Map(Object.entries(files).map(([key, stat]) => [key, { uri: key, ...stat }])),
+        skipped: new Set(skipped),
+    });
+
     test('splits a listing against the index into changed, added and vanished', () => {
-        const files = new Map([
-            ['same', { mtime: 10, size: 1 }],
-            ['drifted', { mtime: 20, size: 2 }],
-            ['new', { mtime: 30, size: 3 }],
-        ]);
         const rows = new Map([
             ['same', { mtime: 10, size: 1, id: 'same' }],
             ['drifted', { mtime: 19, size: 2, id: 'drifted' }],
             ['gone', { mtime: 40, size: 4, id: 'gone' }],
         ]);
 
-        const diff = diffFileStats(files, rows);
+        const diff = diffFileStats(
+            scanOf({ same: { mtime: 10, size: 1 }, drifted: { mtime: 20, size: 2 }, new: { mtime: 30, size: 3 } }),
+            rows,
+        );
 
-        expect(diff.changed).toEqual([{ file: { mtime: 20, size: 2 }, row: { mtime: 19, size: 2, id: 'drifted' } }]);
-        expect(diff.added).toEqual([{ mtime: 30, size: 3 }]);
+        expect(diff.changed).toEqual([
+            { file: { uri: 'drifted', mtime: 20, size: 2 }, row: { mtime: 19, size: 2, id: 'drifted' } },
+        ]);
+        expect(diff.added).toEqual([{ uri: 'new', mtime: 30, size: 3 }]);
         expect(diff.vanished).toEqual([{ mtime: 40, size: 4, id: 'gone' }]);
     });
 
     test('a size-only drift is changed too', () => {
-        const diff = diffFileStats(new Map([['a', { mtime: 10, size: 9 }]]), new Map([['a', { mtime: 10, size: 1 }]]));
+        const diff = diffFileStats(scanOf({ a: { mtime: 10, size: 9 } }), new Map([['a', { mtime: 10, size: 1 }]]));
 
         expect(diff.changed).toHaveLength(1);
         expect(diff.added).toEqual([]);
@@ -225,19 +240,26 @@ describe('diffFileStats', () => {
     });
 
     test('a same-stat pair is none of the three', () => {
-        const diff = diffFileStats(new Map([['a', { mtime: 10, size: 1 }]]), new Map([['a', { mtime: 10, size: 1 }]]));
+        const diff = diffFileStats(scanOf({ a: { mtime: 10, size: 1 } }), new Map([['a', { mtime: 10, size: 1 }]]));
 
         expect(diff).toEqual({ changed: [], added: [], vanished: [] });
     });
 
     test('a same-stat pair the domain calls stale is changed', () => {
         const diff = diffFileStats(
-            new Map([['a', { mtime: 10, size: 1 }]]),
+            scanOf({ a: { mtime: 10, size: 1 } }),
             new Map([['a', { mtime: 10, size: 1 }]]),
             () => true,
         );
 
         expect(diff.changed).toHaveLength(1);
+    });
+
+    test('a row whose file was only skipped has not vanished', () => {
+        const rows = new Map([['a', { mtime: 10, size: 1, id: 'a' }]]);
+
+        expect(diffFileStats(scanOf({}, ['a']), rows).vanished).toEqual([]);
+        expect(diffFileStats(scanOf({}), rows).vanished).toHaveLength(1);
     });
 });
 

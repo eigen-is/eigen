@@ -8,6 +8,14 @@ import { resolveWithinBase } from './path-utils';
 // Once per process: the mount is the same for every home, so a line per message would be the whole log.
 let warnedDirSyncUnsupported = false;
 
+// What marks a staged file as `writeAtomic`'s, for the writer and the sweep alike.
+const ATOMIC_TEMP_INFIX = '.tmp-';
+
+// "The file is gone" is the only fs error a caller may treat as an outcome; anything else, errno or not, is real.
+export function isEnoent(e: unknown): boolean {
+    return e instanceof Error && 'code' in e && e.code === 'ENOENT';
+}
+
 export class LocalFilesystem {
     private baseDir: string;
 
@@ -82,21 +90,33 @@ export class LocalFilesystem {
         try {
             await fsPromises.unlink(this.getFilePath(filePath));
         } catch (error) {
-            if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+            if (!isEnoent(error)) throw error;
         }
         await this.syncDir(path.dirname(filePath));
     }
 
     // A reader only ever sees the whole old file or the whole new one; the temp is `.`-prefixed so a sweep finds it.
     async writeAtomic(filePath: string, data: Buffer | Uint8Array | string): Promise<void> {
-        const tempPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.tmp-${randomUUID()}`);
+        const tempPath = path.join(
+            path.dirname(filePath),
+            `.${path.basename(filePath)}${ATOMIC_TEMP_INFIX}${randomUUID()}`,
+        );
         try {
             await this.writeDurable(tempPath, data);
             await this.renameDurable(tempPath, filePath);
         } catch (error) {
-            // A failure before the rename leaves the staged temp behind, and only cards/ sweeps its own.
+            // A process death before this unlink is what sweepAtomicTemps reclaims.
             await fsPromises.unlink(this.getFilePath(tempPath)).catch(() => {});
             throw error;
+        }
+    }
+
+    // Unlinks rather than deletes: `delete` reaps a newly-empty parent, taking the swept directory with it.
+    async sweepAtomicTemps(dir: string): Promise<void> {
+        for (const name of await this.list(dir)) {
+            if (name.startsWith('.') && name.includes(ATOMIC_TEMP_INFIX)) {
+                await this.unlink(`${dir}/${name}`);
+            }
         }
     }
 

@@ -11,7 +11,6 @@ import { getServerSettings } from '../config/server-settings';
 import type { ManagedDatabase, PutResourceResult } from '../core';
 import {
     ApiError,
-    cleanupTempFiles,
     computeResourceEtag,
     DEFAULT_LABELS,
     LocalFilesystem,
@@ -167,7 +166,7 @@ export class Contacts {
         this.db = this.managedDb.db;
 
         await this.storage.mkdir(PATHS.CONTACTS.CARDS);
-        await cleanupTempFiles(this.storage, PATHS.CONTACTS.CARDS);
+        await this.storage.sweepAtomicTemps(PATHS.CONTACTS.CARDS);
 
         // Seeded from disk once; every avatar write/delete adjusts it by delta thereafter. cardsBytes is
         // owned by the reconcile/rebuild pass below.
@@ -239,10 +238,9 @@ export class Contacts {
         this.cleanupAvatarImages().catch((e) => console.warn(`contacts: avatar sweep failed: ${e}`));
     }
 
-    // Answered purely from the in-memory counters, and it must NEVER drain or take the write lock:
-    // enforceCardBudget reaches size() from INSIDE the lock on every metered mutation, so draining here would
-    // re-acquire the non-reentrant Semaphore(1) and deadlock the home. A pending drain perturbs the counters
-    // by at most one card's delta and the quota is soft, so it answers directly.
+    // Answered purely from the in-memory counters, and it must NEVER drain: enforceCardBudget reaches size()
+    // from INSIDE the write lock on every metered mutation, where a drain is a no-op anyway, and a pending
+    // one perturbs the counters by at most one card's delta against a soft quota.
     public async size(): Promise<number> {
         return this.cardsBytes + this.avatarsBytes;
     }
@@ -265,9 +263,13 @@ export class Contacts {
             .run();
     }
 
+    // The one path a card's bytes are read on; a file the index lists but that is gone is a torn pair, so
+    // the miss throws into each caller's unreadable-card branch.
     // internal — used by contacts/*.ts
-    readCardBytes(uri: string): Promise<Uint8Array> {
-        return this.storage.file(cardPath(uri)).bytes();
+    async readCardBytes(uri: string): Promise<Uint8Array> {
+        const bytes = await readResourceFile(this.storage, cardPath(uri));
+        if (!bytes) throw new Error(`contacts: card file ${uri} is missing`);
+        return bytes;
     }
 
     // Rebuild a card's label junction from its CATEGORIES inside `tx`, minting a missing label with its
@@ -419,7 +421,7 @@ export class Contacts {
         id: string,
         existingUid: string | undefined,
     ): Promise<{ row: CardRowInput; categories: string[]; parsed: ParsedCard }> {
-        const bytes = new Uint8Array(await this.storage.file(cardPath(uri)).arrayBuffer());
+        const bytes = await this.readCardBytes(uri);
         const parsed = this.parseCardFile(bytes);
 
         // Regenerated only when the file has an inline photo whose hashed cache file is missing — out-of-band

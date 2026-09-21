@@ -8,13 +8,12 @@ import {
     diffFileStats,
     nextSyncGen,
     PATHS,
-    statResourceFile,
     uriKeyOf,
     writeResourceFile,
 } from '../core';
 import type { ParsedCard } from '../vcard/types';
 import type { CardRowInput } from './card-store';
-import { avatarNameOf, cardPath, cardUpdateSet, listCardUris } from './card-store';
+import { avatarNameOf, cardPath, cardUpdateSet, statCardDir } from './card-store';
 import type { Contacts } from './contacts';
 import * as schema from './schema';
 
@@ -99,18 +98,8 @@ async function buildCandidates(
 // Stat-only, so a same-size timestamp-preserving replacement is invisible here — that one needs `rebuildIndex`.
 export async function reconcileIndex(contacts: Contacts): Promise<void> {
     return contacts.gate.run(async () => {
-        const present = new Map<string, { uri: string; mtime: number; size: number }>();
-        // A stat that failed (transient IO, not a real removal) must not tombstone a live row.
-        const skipped = new Set<string>();
-        for (const { uri, key } of await listCardUris(contacts.storage)) {
-            try {
-                present.set(key, { uri, ...(await statResourceFile(contacts.storage, cardPath(uri))) });
-            } catch (e) {
-                // Listed but un-stattable: skip it this pass, the next one catches up.
-                skipped.add(key);
-                console.warn(`contacts: skipping ${uri} — could not stat card file: ${e}`);
-            }
-        }
+        const scan = await statCardDir(contacts.storage);
+        const { files: present, skipped } = scan;
 
         // Only the scalars the pass reads — no card file is read, so a clean init still parses nothing.
         const rows = contacts.db
@@ -139,20 +128,19 @@ export async function reconcileIndex(contacts: Contacts): Promise<void> {
                 })
                 .map((row) => row.uriKey),
         );
-        const diff = diffFileStats(present, rowByKey, (row) => cacheMissing.has(row.uriKey));
+        const diff = diffFileStats(scan, rowByKey, (row) => cacheMissing.has(row.uriKey));
 
         // Sorted, so this pass's tie-breaks — the self-link winner, a uid collision — take the earliest uri.
         const reindex = [
             ...diff.added.map((file) => ({ uri: file.uri, existing: undefined })),
             ...diff.changed.map(({ file, row }) => ({ uri: file.uri, existing: row })),
         ].sort((a, b) => (a.uri < b.uri ? -1 : a.uri > b.uri ? 1 : 0));
-        const vanished = diff.vanished.filter((r) => !skipped.has(r.uriKey));
 
         // Unindexable bytes count too: the file occupies storage (and quota) whether or not the index can
         // make sense of it, and rebuildIndex counts the same way.
         const presentBytes = [...present.values()].reduce((sum, p) => sum + p.size, 0);
 
-        if (reindex.length === 0 && vanished.length === 0) {
+        if (reindex.length === 0 && diff.vanished.length === 0) {
             contacts.cardsBytes = presentBytes;
             return; // clean pass: zero parses, zero bump
         }
@@ -164,14 +152,14 @@ export async function reconcileIndex(contacts: Contacts): Promise<void> {
         // Seed the uid→owner guard with every row that will REMAIN after the vanished deletes, not just the
         // untouched ones: a reindexing incumbent whose candidate is skipped keeps its stored uid, so a new
         // same-UID card must lose to it rather than trip the UNIQUE index inside the transaction.
-        const vanishedIds = new Set(vanished.map((r) => r.id));
+        const vanishedIds = new Set(diff.vanished.map((r) => r.id));
         const uidOwner = new Map(rows.filter((r) => !vanishedIds.has(r.id)).map((r) => [r.uid, r.id] as const));
         const prepared = dedupeCardsByUid(candidates, uidOwner);
 
         // Nothing survived to commit and nothing vanished. A card that can never be indexed drifts into this
         // set on every restart, so running the transaction here would bump the ctag for a book that never
         // changed and send every client into a no-op delta poll per restart.
-        if (prepared.length === 0 && vanished.length === 0) {
+        if (prepared.length === 0 && diff.vanished.length === 0) {
             contacts.cardsBytes = presentBytes;
             return;
         }
@@ -211,10 +199,10 @@ export async function reconcileIndex(contacts: Contacts): Promise<void> {
                     .run();
             }
             // A pass that only refreshed stats is a clean pass for sync purposes: no bump, so no delta.
-            if (changed.length > 0 || vanished.length > 0) {
+            if (changed.length > 0 || diff.vanished.length > 0) {
                 const ctag = contacts.bumpCtag(tx);
                 // Vanished first, or a card renamed within this pass collides with itself on the uid UNIQUE index.
-                for (const r of vanished) {
+                for (const r of diff.vanished) {
                     tx.delete(schema.contacts).where(eq(schema.contacts.id, r.id)).run();
                     contacts.tombstone(tx, r.uri, r.uriKey, ctag);
                 }
@@ -247,7 +235,7 @@ export async function reconcileIndex(contacts: Contacts): Promise<void> {
         for (const { row, existing } of changed) {
             contacts.emitContact(existing ? SSEventType.CONTACT_UPDATED : SSEventType.CONTACT_CREATED, row.id);
         }
-        for (const r of vanished) contacts.emitContact(SSEventType.CONTACT_DELETED, r.id);
+        for (const r of diff.vanished) contacts.emitContact(SSEventType.CONTACT_DELETED, r.id);
     });
 }
 
@@ -277,11 +265,8 @@ export async function rebuildIndex(contacts: Contacts): Promise<void> {
 
         // Pair each listed uri with its pre-clear incumbent, so a surviving self row still outranks an
         // email-only twin that sorts earlier.
-        const entries = (await listCardUris(contacts.storage)).map(({ uri, key }) => ({
-            uri,
-            key,
-            existing: existingByKey.get(key),
-        }));
+        const { files } = await statCardDir(contacts.storage);
+        const entries = [...files].map(([key, file]) => ({ uri: file.uri, key, existing: existingByKey.get(key) }));
         const candidates = await buildCandidates(contacts, entries);
         // The whole index is cleared below, so two files sharing a UID resolve purely first-by-uri.
         const prepared = dedupeCardsByUid(candidates, new Map());
@@ -311,8 +296,8 @@ export async function rebuildIndex(contacts: Contacts): Promise<void> {
         // passes never disagree about the book's size.
         const indexedKeys = new Set(prepared.map((p) => p.row.uriKey));
         let bytes = prepared.reduce((sum, p) => sum + p.row.size, 0);
-        for (const { uri, key } of entries) {
-            if (!indexedKeys.has(key)) bytes += (await contacts.storage.size(cardPath(uri))) ?? 0;
+        for (const [key, file] of files) {
+            if (!indexedKeys.has(key)) bytes += file.size;
         }
         contacts.cardsBytes = bytes;
 

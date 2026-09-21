@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import * as fsPromises from 'node:fs/promises';
 import { open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { LocalFilesystem } from '../../lib/core';
@@ -40,6 +41,60 @@ async function syncProto(): Promise<{ sync: () => Promise<void> }> {
     await probe.close();
     return proto;
 }
+
+describe('sweepAtomicTemps', () => {
+    test('removes only the dot-prefixed .tmp- leftovers writeAtomic stages', async () => {
+        const store = nextStore();
+        const base = join(TEST_DIR, `store-${counter - 1}`, 'cards');
+        await store.mkdir('cards');
+        writeFileSync(join(base, 'real.vcf'), 'x');
+        writeFileSync(join(base, '.real.vcf.tmp-abc'), 'x');
+        // A stray file is not temp debris — it survives and is warn-skipped by the domain's listing instead of
+        // being silently deleted. A hand-placed dotfile without the `.tmp-` infix is not debris either.
+        writeFileSync(join(base, 'stray.txt'), 'x');
+        writeFileSync(join(base, '.backup.vcf'), 'x');
+
+        await store.sweepAtomicTemps('cards');
+
+        expect(readdirSync(base).sort()).toEqual(['.backup.vcf', 'real.vcf', 'stray.txt']);
+    });
+
+    test('a directory holding nothing but temp debris survives its own sweep', async () => {
+        const store = nextStore();
+        const base = join(TEST_DIR, `store-${counter - 1}`, 'cards');
+        await store.mkdir('cards');
+        writeFileSync(join(base, '.x.vcf.tmp-abc'), 'x');
+
+        await store.sweepAtomicTemps('cards');
+
+        // Emptying the directory must not take it with it: the very same init enumerates it next.
+        expect(existsSync(base)).toBe(true);
+        expect(readdirSync(base)).toEqual([]);
+    });
+
+    test('the sweep reclaims exactly the name writeAtomic stages', async () => {
+        const store = nextStore();
+        const base = join(TEST_DIR, `store-${counter - 1}`, 'meta');
+        await store.mkdir('meta');
+        // What a crash between the staged write and its rename leaves: the rename fails and the tidy-up
+        // unlink never runs.
+        const renameSpy = spyOn(store, 'renameDurable').mockImplementation(async () => {
+            throw new Error('EIO: rename');
+        });
+        const unlinkSpy = spyOn(fsPromises, 'unlink').mockImplementation(async () => {});
+        try {
+            await expect(store.writeAtomic('meta/draft.json', '{}')).rejects.toThrow('EIO');
+        } finally {
+            renameSpy.mockRestore();
+            unlinkSpy.mockRestore();
+        }
+        expect(readdirSync(base)).toHaveLength(1);
+
+        await store.sweepAtomicTemps('meta');
+
+        expect(readdirSync(base)).toEqual([]);
+    });
+});
 
 describe('unlinkDurable', () => {
     test('removes the file and fsyncs the directory that held its name', async () => {
