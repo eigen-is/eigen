@@ -35,6 +35,7 @@ export type ResourceRow = {
     uri: string;
     uid: string;
     etag: string;
+    size: number;
     hasUnindexedRecurrence: boolean;
 };
 
@@ -43,6 +44,7 @@ const RESOURCE_ROW = {
     uri: schema.resources.uri,
     uid: schema.resources.uid,
     etag: schema.resources.etag,
+    size: schema.resources.size,
     hasUnindexedRecurrence: schema.resources.hasUnindexedRecurrence,
 };
 
@@ -300,7 +302,7 @@ export async function putResource(
 
     return calendar.gate.run(async (): Promise<PutResourceResult> => {
         // Sanitizing an id is not knowing it exists, and a write would otherwise mkdir a calendar nobody owns.
-        if (!calendar.calendarRow(calendarId)) return { ok: false, error: 'invalid', message: 'Calendar not found' };
+        if (!calendar.calendarRow(calendarId)) return { ok: false, error: 'no-collection' };
 
         // Bounded before any parse, so a hostile payload never reaches the component builder.
         if (Buffer.byteLength(body) > EVENT_MAX_BYTES) return { ok: false, error: 'too-large' };
@@ -309,16 +311,16 @@ export async function putResource(
         try {
             incoming = parseResource(body);
         } catch {
-            return { ok: false, error: 'invalid', message: 'invalid iCalendar data' };
+            return { ok: false, error: 'invalid', reason: 'data', message: 'invalid iCalendar data' };
         }
 
         const vevents = incoming.getAllSubcomponents('vevent');
-        if (!vevents.length) return { ok: false, error: 'invalid', message: 'no VEVENT found' };
+        if (!vevents.length) return { ok: false, error: 'invalid', reason: 'component', message: 'no VEVENT found' };
         // One resource is one series: a second UID's overrides would otherwise hang off this master.
         const uids = new Set(vevents.map(uidOf));
-        if (uids.size > 1) return { ok: false, error: 'invalid', message: 'one UID per resource' };
+        if (uids.size > 1) return { ok: false, error: 'invalid', reason: 'object', message: 'one UID per resource' };
         const uid = [...uids][0];
-        if (!uid) return { ok: false, error: 'invalid', message: 'UID is required' };
+        if (!uid) return { ok: false, error: 'invalid', reason: 'data', message: 'UID is required' };
 
         // Two racing If-Match PUTs serialize through the gate, so the loser sees the winner's new etag here.
         const existing = calendar.db
@@ -367,11 +369,18 @@ export async function putResource(
         // One resource is one series a client just wrote: a VEVENT of it Eigen cannot read makes the whole
         // payload malformed, where a previewed or imported file drops that one member and keeps going.
         if (projection.skipped || projection.duplicateMaster) {
-            return { ok: false, error: 'invalid', message: 'invalid iCalendar data' };
+            return { ok: false, error: 'invalid', reason: 'object', message: 'invalid iCalendar data' };
         }
 
         const text = serializeResource(resource);
         if (Buffer.byteLength(text) > EVENT_MAX_BYTES) return { ok: false, error: 'too-large' };
+
+        // Re-PUTting what is already stored changes nothing: writing it would bump the ctag and send every
+        // other client back for a resource that never moved.
+        const stamped = computeResourceEtag(new TextEncoder().encode(text));
+        if (existing && stamped === existing.etag) {
+            return { ok: true, etag: text === body ? stamped : null, created: false };
+        }
 
         const { etag } = await writeResource(calendar, calendarId, storedUri, resource, existing ?? null);
 

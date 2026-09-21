@@ -723,7 +723,10 @@ describe('CalDAV round-trip fidelity', () => {
             spy.mockRestore();
         });
 
-        test("control: an event organized by someone else stays locked against the client's PUT", async () => {
+        // The PUT path follows the organizer stamp the server writes, and a resource a client created
+        // carries none: the ORGANIZER address it names is its own to rewrite. The web edit lock is the
+        // separate, address-based rule the decline below still takes.
+        test("control: an ORGANIZER address of its own does not lock a client's resource", async () => {
             const foreignIcs = (summary: string) =>
                 vcal(
                     [
@@ -742,7 +745,7 @@ describe('CalDAV round-trip fidelity', () => {
 
             const occs = await getOccurrences('2026-05-01T00:00:00Z', '2026-06-01T00:00:00Z');
             const occ = findOrFail(occs, (o) => o.uid === 'rt-foreign-organizer@eigen');
-            expect(occ.title).toBe('Partner sync');
+            expect(occ.title).toBe('Partner sync (hijacked)');
         });
 
         // A CalDAV-parsed organizer is known by address only (no Eigen user id), so the decline takes the
@@ -762,7 +765,7 @@ describe('CalDAV round-trip fidelity', () => {
             expect(res.status).toBe(200);
             await new Promise((r) => setTimeout(r, 300));
 
-            const declines = spy.mock.calls.filter((c) => c[0].subject === 'Declined: Partner sync');
+            const declines = spy.mock.calls.filter((c) => c[0].subject === 'Declined: Partner sync (hijacked)');
             expect(declines.flatMap((c) => c[0].to.map((t) => t.address))).toEqual(['ext-organizer@external.com']);
             spy.mockRestore();
         });

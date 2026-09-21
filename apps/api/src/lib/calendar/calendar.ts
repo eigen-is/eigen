@@ -574,8 +574,10 @@ export class Calendar {
         body: string,
         pre: { ifMatch: string | null; ifNoneMatch: string | null; actor?: string | null },
     ): Promise<PutResourceResult> {
+        const ctagBefore = this.calendarRow(calendarId)?.ctag;
         const result = await store.putResource(this, calendarId, uri, body, pre);
-        if (result.ok) {
+        // A PUT of what is already stored commits nothing, so there is nothing to tell the clients about.
+        if (result.ok && this.calendarRow(calendarId)?.ctag !== ctagBefore) {
             this.announce(
                 calendarId,
                 result.created ? SSEventType.CALENDAR_EVENT_CREATED : SSEventType.CALENDAR_EVENT_UPDATED,
