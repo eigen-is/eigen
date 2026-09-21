@@ -213,26 +213,69 @@ export async function getResource(
 
 // ---- Writes ----
 
-// The one pair of file write + index commit. The caller holds the gate and owns the component; a throw
-// anywhere after the rename leaves the key dirty for the next drain.
-export async function writeResource(
+// What a write computes before it can land: the rows the file projects to, the bytes that would be stored
+// and their hash. Whoever judges a resource before writing it prepares it once and writes that.
+export type PreparedResource = {
+    id: string;
+    uid: string;
+    text: string;
+    bytes: Uint8Array;
+    etag: string;
+    rows: EventRowInput[];
+    hasUnindexedRecurrence: boolean;
+    skipped: number;
+    duplicateMaster: boolean;
+};
+
+export function prepareResource(
+    calendarId: string,
+    resource: ICAL.Component,
+    existingId: string | null,
+): PreparedResource {
+    const id = existingId ?? randomUUID();
+    const text = serializeResource(resource);
+    const bytes = new TextEncoder().encode(text);
+    return {
+        id,
+        uid: uidOfResource(resource),
+        text,
+        bytes,
+        etag: computeResourceEtag(bytes),
+        ...projectRows(calendarId, id, resource),
+    };
+}
+
+export function writeResource(
     calendar: Calendar,
     calendarId: string,
     uri: string,
     resource: ICAL.Component,
     existing: { id: string; size: number } | null,
-): Promise<{ etag: string; text: string }> {
-    const id = existing?.id ?? randomUUID();
-    const projection = projectRows(calendarId, id, resource);
-    const text = serializeResource(resource);
-    const bytes = new TextEncoder().encode(text);
+): Promise<void> {
+    return writePrepared(
+        calendar,
+        calendarId,
+        uri,
+        prepareResource(calendarId, resource, existing?.id ?? null),
+        existing,
+    );
+}
+
+// The one pair of file write + index commit. The caller holds the gate and owns the component; a throw
+// anywhere after the rename leaves the key dirty for the next drain.
+export async function writePrepared(
+    calendar: Calendar,
+    calendarId: string,
+    uri: string,
+    prepared: PreparedResource,
+    existing: { id: string; size: number } | null,
+): Promise<void> {
     // Both ceilings hold on the bytes that would land, before any write intent is recorded, so a refusal
     // leaves nothing for a drain to chase. The stored resource's size is the credit the edit grace reads.
-    if (bytes.byteLength > EVENT_MAX_BYTES) throw new ApiError(413, 'Event is too large');
+    if (prepared.bytes.byteLength > EVENT_MAX_BYTES) throw new ApiError(413, 'Event is too large');
     if (calendar.meteredIngest) {
-        await enforceHomeDataQuota(calendar.home.user.id, bytes.byteLength, existing?.size ?? 0);
+        await enforceHomeDataQuota(calendar.home.user.id, prepared.bytes.byteLength, existing?.size ?? 0);
     }
-    const etag = computeResourceEtag(bytes);
     // A name no row holds can still be a file: a dedupe loser, an unparseable resource, a calendar whose
     // index phase threw. A create that replaced it would destroy bytes nothing carries any more.
     if (!existing && (await calendar.storage.exists(resourcePath(calendarId, uri)))) {
@@ -242,24 +285,27 @@ export async function writeResource(
     try {
         // Only a replacement can land bytes a later stat diff cannot see; a new name is always visible.
         if (existing) calendar.recordPendingWrite(calendarId, uri);
-        const { mtime, size } = await writeResourceFile(calendar.storage, resourcePath(calendarId, uri), bytes);
+        const { mtime, size } = await writeResourceFile(
+            calendar.storage,
+            resourcePath(calendarId, uri),
+            prepared.bytes,
+        );
         calendar.commitResource({
-            id,
+            id: prepared.id,
             calendarId,
             uri,
-            uid: uidOfResource(resource),
-            etag,
+            uid: prepared.uid,
+            etag: prepared.etag,
             mtime,
             size,
-            rows: projection.rows,
-            hasUnindexedRecurrence: projection.hasUnindexedRecurrence,
+            rows: prepared.rows,
+            hasUnindexedRecurrence: prepared.hasUnindexedRecurrence,
         });
         calendar.eventsBytes += size - (existing?.size ?? 0);
     } catch (e) {
         calendar.gate.markDirty(gateKey(calendarId, uri));
         throw e;
     }
-    return { etag, text };
 }
 
 // A UID travels into etags and sync deltas, so an unprintable or endless one is refused rather than stored.
@@ -402,34 +448,33 @@ export async function putResource(
             resource = incoming;
         }
 
-        const id = existing?.id ?? randomUUID();
-        const projection = projectRows(calendarId, id, resource);
+        // Prepared once here: the write below lands exactly the rows, bytes and hash these refusals judged.
+        const prepared = prepareResource(calendarId, resource, existing?.id ?? null);
         // One resource is one series a client just wrote: a VEVENT of it Eigen cannot read makes the whole
         // payload malformed, where a previewed or imported file drops that one member and keeps going.
-        if (projection.skipped || projection.duplicateMaster) {
+        if (prepared.skipped || prepared.duplicateMaster) {
             return { ok: false, error: 'invalid', reason: 'object', message: 'invalid iCalendar data' };
         }
         // The interval invariant the REST write holds, so both surfaces answer alike. A zero-length event
         // is legal (RFC 5545 §3.6.1) and common; one that ends before it starts is nobody's real event.
-        if (projection.rows.some((row) => row.endTime < row.startTime)) {
+        if (prepared.rows.some((row) => row.endTime < row.startTime)) {
             return { ok: false, error: 'invalid', reason: 'data', message: 'event ends before it starts' };
         }
 
-        const text = serializeResource(resource);
+        // A client whose bytes are not what got stored has nothing to attach a validator to (RFC 4791 § 5.3.4).
+        const validator = prepared.text === body ? prepared.etag : null;
 
         // Re-PUTting what is already stored changes nothing: writing it would bump the ctag and send every
         // other client back for a resource that never moved. Judged against the bytes, never the row: a
         // stale row would answer a PUT that does change the file with a no-op nobody ever learns about.
-        const stamped = computeResourceEtag(new TextEncoder().encode(text));
-        if (storedBytes && stamped === computeResourceEtag(storedBytes)) {
-            return { ok: true, etag: text === body ? stamped : null, created: false };
+        if (storedBytes && prepared.etag === computeResourceEtag(storedBytes)) {
+            return { ok: true, etag: validator, created: false };
         }
 
         // The stamps and the stored alarms decide the bytes, so both refusals are raised below the accepted
         // body — and each is a client error the protocol has an element for, not a 500.
-        let etag: string;
         try {
-            ({ etag } = await writeResource(calendar, calendarId, storedUri, resource, existing ?? null));
+            await writePrepared(calendar, calendarId, storedUri, prepared, existing ?? null);
         } catch (e) {
             if (e instanceof ApiError && e.status === 413) return { ok: false, error: 'too-large' };
             if (e instanceof ApiError && e.status === 507) return { ok: false, error: 'quota' };
@@ -438,8 +483,7 @@ export async function putResource(
             throw e;
         }
 
-        // A client whose bytes are not what got stored has nothing to attach a validator to (RFC 4791 § 5.3.4).
-        return { ok: true, etag: text === body ? etag : null, created: !existing };
+        return { ok: true, etag: validator, created: !existing };
     });
 }
 
