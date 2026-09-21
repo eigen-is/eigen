@@ -101,6 +101,20 @@ export function useEvents(ownerId: string, from: number, to: number, enabled = t
     });
 }
 
+// A range read answers occurrences; only the stored row says where the series itself starts.
+export function useEvent(ownerId: string, calendarId: string, id: string, enabled = true) {
+    return useQuery({
+        queryKey: calendarKeys.event(ownerId, calendarId, id),
+        queryFn: async (): Promise<CalendarEvent> => {
+            const response = await calendarApi({ ownerId }).calendars({ calId: calendarId }).events({ id }).get();
+            if (response.error) throw new AppError(response);
+            return response.data;
+        },
+        staleTime: STALE_TIME.TWO_MINUTES,
+        enabled: enabled && !!ownerId && !!calendarId && !!id,
+    });
+}
+
 export function useCreateEvent(ownerId: string) {
     const queryClient = useQueryClient();
 

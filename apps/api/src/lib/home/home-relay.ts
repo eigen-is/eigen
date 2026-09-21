@@ -228,6 +228,15 @@ export async function pullCalendarById(ownerUserId: string, calendarId: string):
     return home.calendar.getCalendarById(calendarId);
 }
 
+export async function pullEventById(
+    ownerUserId: string,
+    calendarId: string,
+    eventId: string,
+): Promise<CalendarEvent | null> {
+    const home = await getHome(ownerUserId);
+    return home.calendar.getEventById(calendarId, eventId);
+}
+
 export async function createEventAt(
     ownerUserId: string,
     calendarId: string,

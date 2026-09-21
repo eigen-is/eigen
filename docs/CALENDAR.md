@@ -274,6 +274,7 @@ External organizers have no Eigen user id, so `organizerUserId` is `external_{or
 - Expansion runs in memory per query via the `rrule` package; **expanded occurrences are never stored**.
 - **Exceptions** are override VEVENTs in the same file, projected to rows with `parentEventId` + `recurrenceDate`. A cancellation is an `EXDATE`, projected to a `status: 'cancelled'` row.
 - **Occurrence keys are wall-clock dates** (`YYYY-MM-DD` in the series' timezone). A substituted modified occurrence renders with the exception's **stored** `recurrenceDate` — never the UTC date of its possibly-moved `startTime` — so the FE can round-trip `occurrenceDate` into a `scope='this'` RSVP.
+- **A series-wide edit travels as a delta.** The edit dialog opens on the occurrence the user clicked but saves on the master, so "All events in series" sends only what changed: the master's start and end shift by the dialog's own delta (dialog time minus the clicked occurrence's time), and a title, description or location rides along only when the user retyped it — otherwise an override's own title would become the series'. `seriesEditFromOccurrence` (`packages/lib/src/core/calendar/calendar-utils.ts`) is that patch, and the master it shifts comes from `useEvent`.
 - **A range read is bounded by its window**, never by the size of the Home: it loads the non-recurring events that overlap the window, the masters that start at or before its end (rrule never steps back before DTSTART, so a later one has no occurrence inside it), and the exceptions of those masters plus any exception whose own times overlap — which is how an occurrence moved *into* the window shows there. The masters ride into the exception query as a subquery, because one bound variable per master would pass SQLite's cap on a large calendar. A cancelled occurrence is dropped from the answer, and so is the parent occurrence any exception replaces.
 
 ### Recurrence limits
@@ -345,6 +346,7 @@ PUT    /calendar/:ownerId/calendars/:calId        (includes shares)
 DELETE /calendar/:ownerId/calendars/:calId
 GET    /calendar/:ownerId/event-range/:from/:to   (all calendars)
 GET    /calendar/:ownerId/calendars/:calId/event-range/:from/:to
+GET    /calendar/:ownerId/calendars/:calId/events/:id  (one stored row, not an occurrence)
 POST   /calendar/:ownerId/calendars/:calId/events
 PUT    /calendar/:ownerId/calendars/:calId/events/:id
 DELETE /calendar/:ownerId/calendars/:calId/events/:id
@@ -400,6 +402,7 @@ All in `packages/lib/src/core/calendar/hooks/use-calendar.ts`:
 | `useUpdateCalendar(ownerId)` | update calendar (name/color/shares/visible) |
 | `useDeleteCalendar(ownerId)` | delete calendar |
 | `useEvents(ownerId, from, to)` | all events in a range (all calendars) |
+| `useEvent(ownerId, calId, id)` | one stored row — the master an edit dialog opened on an occurrence saves on |
 | `useCreateEvent(ownerId)` / `useUpdateEvent(ownerId)` / `useDeleteEvent(ownerId)` | the event mutations |
 | `useMoveEvent(ownerId)` | re-home one event to another calendar |
 | `useCalendarAccess(ownerId, calId)` | calendar shares (with `write` permission) |

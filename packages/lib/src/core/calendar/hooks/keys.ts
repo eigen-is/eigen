@@ -17,6 +17,8 @@ export const calendarKeys = {
                 to,
             },
         ] as const,
+    event: (ownerId: string, calendarId: string, id: string) =>
+        [...calendarKeys.events(ownerId), calendarId, id] as const,
     sharedCalendars: (ownerId: string) => [...calendarKeys.owner(ownerId), 'shared'] as const,
     access: (ownerId: string, calendarId: string) => [...calendarKeys.owner(ownerId), 'access', calendarId] as const,
 };

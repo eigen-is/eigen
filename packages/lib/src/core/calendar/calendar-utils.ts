@@ -221,6 +221,46 @@ export function rruleToText(rrule: string | null): string | null {
     }
 }
 
+export type SeriesEdit = {
+    title: string;
+    description: string | null;
+    location: string | null;
+    allDay: boolean;
+    startTime: Date;
+    endTime: Date;
+};
+
+export type SeriesEditPatch = {
+    title?: string;
+    description?: string | null;
+    location?: string | null;
+    allDay?: boolean;
+    startTime?: Date;
+    endTime?: Date;
+};
+
+// "All events in series" is edited from one occurrence but saved on the master, so what the user changed travels
+// as a delta: taking the dialog's own times would drop every occurrence before the one they opened.
+export function seriesEditFromOccurrence(
+    occurrence: SeriesEdit,
+    master: Pick<SeriesEdit, 'startTime' | 'endTime'>,
+    edited: SeriesEdit,
+): SeriesEditPatch {
+    const patch: SeriesEditPatch = {};
+    if (edited.title !== occurrence.title) patch.title = edited.title;
+    if (edited.description !== occurrence.description) patch.description = edited.description;
+    if (edited.location !== occurrence.location) patch.location = edited.location;
+
+    const startDelta = edited.startTime.getTime() - occurrence.startTime.getTime();
+    const endDelta = edited.endTime.getTime() - occurrence.endTime.getTime();
+    // A timed series turning all-day restates both bounds, because midnight-UTC bounds mean nothing beside the old ones.
+    const allDayChanged = edited.allDay !== occurrence.allDay;
+    if (allDayChanged) patch.allDay = edited.allDay;
+    if (startDelta !== 0 || allDayChanged) patch.startTime = new Date(master.startTime.getTime() + startDelta);
+    if (endDelta !== 0 || allDayChanged) patch.endTime = new Date(master.endTime.getTime() + endDelta);
+    return patch;
+}
+
 export function truncateRRule(rruleStr: string, beforeDate: Date): string {
     const options = RRule.parseString(rruleStr);
     const until = new Date(beforeDate);
