@@ -9,6 +9,9 @@ type MessageRevision = {
 
 export type ReceiveInvitationPayload = MessageRevision & {
     uid: string;
+    // Set when the message addresses ONE occurrence of the series: the wall-clock key its RECURRENCE-ID
+    // names, so the receiver attaches it as an exception instead of replacing the whole series.
+    recurrenceDate?: string | null;
     title: string;
     description: string | null;
     location: string | null;
@@ -25,6 +28,8 @@ export type ReceiveInvitationPayload = MessageRevision & {
 };
 
 export type InvitationUpdatePayload = MessageRevision & {
+    // Same rule as ReceiveInvitationPayload: an update naming an occurrence moves that instance only.
+    recurrenceDate?: string | null;
     title: string;
     description: string | null;
     location: string | null;

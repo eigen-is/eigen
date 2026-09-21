@@ -160,6 +160,31 @@ describe('inbound message ordering', () => {
         expect((await masterOf(calendar)).title).toBe('Title B');
     });
 
+    // The relay's occurrence messages are ordered per occurrence, against the exception's own revision.
+    test('a relayed occurrence edit redelivered behind a newer one does not revert the occurrence', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        await calendar.receiveInvitation(relayPayload('Title A', 2, new Date('2026-04-01T10:00:00Z')));
+
+        const occurrenceEdit = (title: string, dtstamp: string): ReceiveInvitationPayload => ({
+            ...relayPayload(title, 2, new Date(dtstamp)),
+            recurrenceDate: '2026-05-02',
+            rrule: null,
+            startTime: new Date('2026-05-02T11:00:00Z'),
+            endTime: new Date('2026-05-02T12:00:00Z'),
+        });
+
+        await calendar.receiveInvitation(occurrenceEdit('Moved once', '2026-04-01T11:00:00Z'));
+        await calendar.receiveInvitation(occurrenceEdit('Moved twice', '2026-04-01T12:00:00Z'));
+        expect((await exceptionOf(calendar))?.title).toBe('Moved twice');
+
+        await calendar.receiveInvitation(occurrenceEdit('Moved once', '2026-04-01T11:00:00Z'));
+
+        expect((await exceptionOf(calendar))?.title).toBe('Moved twice');
+        // The series itself never took the occurrence's title.
+        expect((await masterOf(calendar)).title).toBe('Title A');
+    });
+
     test('a genuinely newer REQUEST at the same SEQUENCE still applies', async () => {
         const { calendar } = await seeded();
 

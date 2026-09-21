@@ -79,7 +79,8 @@ function relayedRequest(payload: ReceiveInvitationPayload): ParsedEvent {
         status: payload.status,
         sequence: payload.sequence,
         dtstamp: payload.dtstamp ?? null,
-        recurrenceDate: null,
+        recurrenceDate: payload.recurrenceDate ?? null,
+        // A relayed key is already the series' own wall date, so there is no UTC-Z instant to re-key from.
         recurrenceInstant: null,
         data: payload.data,
     };
@@ -231,7 +232,18 @@ export async function receiveInvitationUpdate(
         () =>
             calendar.gate.run(async () => {
                 const linked = findLinkedEvent(calendar, orgEventId, orgUserId);
-                return linked && (await applyInvitationUpdate(calendar, linked, payload)) ? linked : null;
+                if (!linked) return null;
+                // One occurrence attaches as an exception, exactly as a REQUEST carrying a RECURRENCE-ID
+                // does — a full update would collapse the series.
+                const applied = payload.recurrenceDate
+                    ? await applyInvitationException(calendar, linked, {
+                          ...payload,
+                          recurrenceDate: payload.recurrenceDate,
+                          recurrenceInstant: null,
+                          timezone: payload.timezone ?? null,
+                      })
+                    : await applyInvitationUpdate(calendar, linked, payload);
+                return applied ? linked : null;
             }),
         null,
     );

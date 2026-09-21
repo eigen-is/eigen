@@ -54,7 +54,13 @@ export type HomeMessage =
       }
     | { type: 'calendar:invitation'; payload: ReceiveInvitationPayload }
     | { type: 'calendar:invitation-update'; orgEventId: string; orgUserId: string; payload: InvitationUpdatePayload }
-    | { type: 'calendar:invitation-removal'; orgEventId: string; orgUserId: string }
+    | {
+          type: 'calendar:invitation-removal';
+          orgEventId: string;
+          orgUserId: string;
+          // Set when only ONE occurrence goes, with the revision the RFC 5546 ordering guard compares.
+          occurrence?: { recurrenceDate: string; sequence: number; dtstamp: Date };
+      }
     | {
           type: 'calendar:rsvp';
           eventId: string;
@@ -114,7 +120,17 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
             break;
         case 'calendar:invitation-removal':
             if (!home.hasCalendar) break;
-            await home.calendar.removeInvitation(message.orgEventId, message.orgUserId);
+            if (message.occurrence) {
+                await home.calendar.cancelInvitationOccurrence(
+                    message.orgEventId,
+                    message.orgUserId,
+                    message.occurrence.recurrenceDate,
+                    null,
+                    message.occurrence,
+                );
+            } else {
+                await home.calendar.removeInvitation(message.orgEventId, message.orgUserId);
+            }
             break;
         case 'calendar:rsvp':
             if (!home.hasCalendar) break;
