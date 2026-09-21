@@ -74,6 +74,17 @@ export class LocalFilesystem {
         await this.syncDir(path.dirname(newPath));
     }
 
+    // Removes a name for good: a file already gone is the outcome the caller wanted, and the directory that
+    // held the name is fsynced after so a power loss cannot resurrect it under an acknowledged delete.
+    async unlinkDurable(filePath: string): Promise<void> {
+        try {
+            await fsPromises.unlink(this.getFilePath(filePath));
+        } catch (error) {
+            if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+        }
+        await this.syncDir(path.dirname(filePath));
+    }
+
     // Durable, crash-safe write: stage a sibling temp file, fsync it, rename over the target so a
     // reader ever only sees the whole old file or the whole new one, then fsync the directory that
     // holds the rename — without it a power loss can resurrect the old file under an acknowledged

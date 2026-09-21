@@ -735,12 +735,7 @@ export class MaildirStore implements MailStore {
     }
 
     private async deleteMessage(mailbox: string, filename: string): Promise<void> {
-        const curPath = path.join(this.mailboxDir(mailbox), PATHS.MAIL.CUR);
-        const filePath = path.join(curPath, filename);
-        if (await this.storage.exists(filePath)) {
-            await this.storage.unlink(filePath);
-            await this.storage.syncDir(curPath);
-        }
+        await this.storage.unlinkDurable(path.join(this.mailboxDir(mailbox), PATHS.MAIL.CUR, filename));
     }
 
     // Either delimiter addresses one directory: `Clients/Acme` and `Clients.Acme` are both `.Clients.Acme`.

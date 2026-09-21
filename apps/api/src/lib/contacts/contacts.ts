@@ -665,11 +665,7 @@ export class Contacts {
     // already run their own guards (self-delete, preconditions).
     // internal — used by contacts/*.ts
     async purgeCard(row: typeof schema.contacts.$inferSelect): Promise<void> {
-        try {
-            await this.storage.unlink(cardPath(row.uri));
-        } catch (e) {
-            if (!(e instanceof Error && 'code' in e && e.code === 'ENOENT')) throw e;
-        }
+        await this.storage.unlinkDurable(cardPath(row.uri));
         // Fail closed if the index step throws after the file is already gone: the next drain's
         // vanished-file branch tombstones it.
         try {

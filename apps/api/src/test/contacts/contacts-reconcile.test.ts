@@ -11,7 +11,7 @@ import { labelColorFor, normalizeLabelName } from '../../lib/contacts/card-store
 import { Contacts } from '../../lib/contacts/contacts';
 import { CONTACTS_DB_CONFIG } from '../../lib/contacts/db-config';
 import * as contactsSchema from '../../lib/contacts/schema';
-import { ManagedDatabase, uriKeyOf } from '../../lib/core';
+import { ManagedDatabase, PATHS, uriKeyOf } from '../../lib/core';
 import type { Home } from '../../lib/home';
 import { parseVCard } from '../../lib/vcard';
 import {
@@ -830,22 +830,41 @@ describe('self-profile propagation', () => {
 });
 
 describe('canonical file operation failures', () => {
+    test('a card delete fsyncs the directory that held its name', async () => {
+        const { contacts, db, dir } = await makeContacts();
+        const id = await contacts.addContact(validContact({ firstName: 'Durable', email: ['durable@example.com'] }));
+        const uri = uriOf(db, id);
+        const synced: string[] = [];
+        const spy = spyOn(contacts.storage, 'syncDir').mockImplementation(async (dirPath: string) => {
+            synced.push(dirPath);
+        });
+
+        try {
+            await contacts.deleteContact(id);
+        } finally {
+            spy.mockRestore();
+        }
+
+        // Without it a power loss resurrects the card under an acknowledged delete, and the next reconcile
+        // re-indexes a contact the user removed.
+        expect(synced).toContain(PATHS.CONTACTS.CARDS);
+        expect(existsSync(cardPathOf(dir, uri))).toBe(false);
+    });
+
     test('a non-ENOENT unlink failure leaves the row, ctag, tombstones, and file untouched', async () => {
         const { contacts, db, dir } = await makeContacts();
         const id = await contacts.addContact(validContact({ firstName: 'Keep', email: ['keep-unlink@example.com'] }));
         const row = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
         const ctagBefore = db.select().from(contactsSchema.book).get()!.ctag;
         const tombstonesBefore = db.select().from(contactsSchema.contactTombstones).all();
-        const storage = (contacts as unknown as { storage: { unlink: (filePath: string) => Promise<void> } }).storage;
-        const originalUnlink = storage.unlink;
-        storage.unlink = async () => {
+        const spy = spyOn(contacts.storage, 'unlinkDurable').mockImplementation(async () => {
             throw Object.assign(new Error('unlink boom'), { code: 'EIO' });
-        };
+        });
 
         try {
             await expect(contacts.deleteContact(id)).rejects.toThrow('unlink boom');
         } finally {
-            storage.unlink = originalUnlink;
+            spy.mockRestore();
         }
 
         expect(existsSync(cardPathOf(dir, row.uri))).toBe(true);
