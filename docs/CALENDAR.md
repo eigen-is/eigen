@@ -289,7 +289,7 @@ All hooks in `packages/lib/src/core/calendar/hooks/use-calendar.ts`:
 | `useDeleteSharedCalendar(ownerId)` | Remove shared calendar entry          |
 | `useRsvp(ownerId)`            | RSVP mutation (accept/decline/tentative)   |
 
-The two import hooks live beside them in `use-transfer.ts`: `useImportCalendarFromUrl` (bytes the browser holds) and `useImportCalendarFromDrive` (a picked Drive file), both taking the target `calendarId` in their mutation variables and reporting the three counts in one toast.
+The import hook lives beside them in `use-transfer.ts`: `useImportCalendar` takes a `FileImportSource` (a Drive file, or the download URL of bytes the browser fetches) plus the target `calendarId` in its mutation variables and reports the three counts in one toast.
 
 **Query keys**: `calendarKeys` with `ownerId`-scoped hierarchy — `all > owner(ownerId) > calendars/events/shared`.
 SSE handler in `packages/lib/src/core/calendar/sse-handlers.ts` routes events to invalidation functions.
@@ -427,7 +427,7 @@ Both follow from storing columns and re-synthesizing the resource on GET, and bo
   `ical-parse.ts`, `vtimezone.ts`, `resource.ts`.
 - **`apps/api/src/routes/calendar.ts`** — thin route bindings.
 - **`packages/lib/src/core/calendar/`** — FE hooks + SSE handlers, `calendar-utils.ts` (`formatEventWhen`,
-  `rruleToText`, `viewerTimeZone`) and `preview-lines.ts` (the counted line and the method labels an `.ics`
+  `rruleToText`, `viewerTimeZone`) and `preview-lines.ts` (the method labels an `.ics`
   quick look shows); shared types in `packages/lib/src/types/calendar.ts`.
 - **`packages/ui/src/components/calendar/`** — what draws an event outside the calendar app too:
   `EventDetailCard` (one event, read-only, from data alone — the detail dialog's body and the `.ics` quick

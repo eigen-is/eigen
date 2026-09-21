@@ -51,10 +51,8 @@ const INLINE_IMAGE = new RegExp(`^\\s*${RASTER_DATA_URI}`, 'i');
 const CSS_REMOTE_URL = new RegExp(`url\\((?!\\s*(?:['"]\\s*)?${RASTER_DATA_URI})`, 'i');
 const DATA_URI = /data:[^\s"'<>)]+/g;
 
-// A viewer renders on a canvas of its own and drops the color-scheme rules that disagree with it
-// (ShadowContent, packages/ui), one scheme or the other. Deleting such a block rejoins whatever it was
-// written between — `ur@media (prefers-color-scheme: dark){}l(https://…)` carries no token until it is
-// gone — so the text each of those two deletions would leave behind is read as its own CSS.
+// Defense in depth: a viewer that deleted a color-scheme block as text would rejoin what surrounds it
+// (`ur@media (prefers-color-scheme: dark){}l(https://…)`), so the text each deletion would leave is checked too.
 const schemeMediaBlock = (scheme: string) =>
     new RegExp(
         String.raw`@media\s*\([^)]*prefers-color-scheme:\s*${scheme}[^)]*\)\s*\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}`,

@@ -62,11 +62,8 @@ const COLOR_SCHEME_CONDITION = {
     dark: /prefers-color-scheme\s*:\s*dark/i,
 };
 
-// Drop the @media (prefers-color-scheme: …) rules that disagree with the canvas we draw on: the queries
-// read the OS preference, not what we render. Through the CSSOM, once the browser has parsed the sheet,
-// never over the style element's text — the server refuses a sanitized `<style>` on tokens (`url(`,
-// `@import`), so deleting a span of text can splice the halves around it into the token it refused
-// (`ur` + `@media (prefers-color-scheme: dark){}` + `l(https://…)`). Parsed, a split token is garbage.
+// The queries read the OS preference, not the canvas we draw on. Through the CSSOM, never over the style
+// text: deleting a span of sanitized text can splice its neighbours into a token the server refused.
 function dropColorSchemeRules(parent: CSSStyleSheet | CSSGroupingRule, scheme: 'light' | 'dark'): void {
     for (let i = parent.cssRules.length - 1; i >= 0; i--) {
         const rule = parent.cssRules[i];

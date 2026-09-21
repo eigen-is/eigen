@@ -9,9 +9,7 @@ import { buildRecipientSummary } from './mailutils';
 // can post the reader's input anywhere.
 export const READER_SANITIZE_CONFIG = { FORCE_BODY: true, ADD_ATTR: ['target'], FORBID_TAGS: ['form'] };
 
-// The parse everything but the reader takes. Sanitizing dominates a parse — 9.4 ms against 2.5 ms on a
-// 25 KiB message — and the index, the sync and the part routes read summary fields and attachments, never a
-// body; `html: null` in the type is what makes serving an unsanitized one impossible rather than forgettable.
+// Everything but the reader: `html: null` by type, so an unsanitized body cannot be served by mistake.
 export type IndexedEmail = Email & { html: null };
 
 // Throws on a genuine parse/read fault (unreadable .eml, disk EIO, malformed MIME). Callers

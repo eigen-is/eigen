@@ -12,8 +12,7 @@ import { Separator } from '../separator';
 import { ShadowContent } from '../shadow-content';
 import { UserAvatar } from '../user/user-avatar';
 
-// A header field as either source carries it: the reader reads a stored `Email`, whose ParsedMail fields
-// may be a list, and the quick look reads an `EmlPreview`, whose fields are one object or null.
+// A repeated header parses to a list, a single one to an object.
 type AddressField = AddressObject | AddressObject[] | null | undefined;
 
 type MessageViewProps = {
