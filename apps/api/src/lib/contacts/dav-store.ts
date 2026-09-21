@@ -83,8 +83,12 @@ export async function getCard(contacts: Contacts, uri: string): Promise<{ bytes:
         .where(eq(schema.contacts.uriKey, uriKeyOf(uri)))
         .get();
     if (!row) return null;
-    const bytes = await readResourceFile(contacts.storage, cardPath(row.uri), contacts.gate, row.uri);
-    return bytes ? { bytes, etag: row.etag } : null;
+    const bytes = await readResourceFile(contacts.storage, cardPath(row.uri));
+    if (!bytes) {
+        contacts.gate.markDirty(row.uri);
+        return null;
+    }
+    return { bytes, etag: row.etag };
 }
 
 // The single-resource PROPFIND read: an indexed single-row lookup, unlike a `listCards().find()` over the

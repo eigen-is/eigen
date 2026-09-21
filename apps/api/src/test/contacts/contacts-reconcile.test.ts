@@ -931,14 +931,16 @@ describe('fail-closed drain guard', () => {
         const { contacts } = await makeContacts();
 
         let drainCalls = 0;
-        const proto = Object.getPrototypeOf(contacts) as { drainDirty: (uris: string[]) => Promise<void> };
+        type Drain = (uris: string[], settled: (uri: string) => void) => Promise<void>;
+        const proto = Object.getPrototypeOf(contacts) as { drainDirty: Drain };
         const origDrain = proto.drainDirty;
-        (contacts as unknown as { drainDirty: (uris: string[]) => Promise<void> }).drainDirty = function (
+        (contacts as unknown as { drainDirty: Drain }).drainDirty = function (
             this: Contacts,
             uris: string[],
+            settled: (uri: string) => void,
         ) {
             drainCalls++;
-            return origDrain.call(this, uris);
+            return origDrain.call(this, uris, settled);
         };
 
         // Clean book: the guard short-circuits on the empty set — no drain, no lock, no file touch.
@@ -1018,14 +1020,16 @@ describe('fail-closed drain guard', () => {
 
         // Spy AFTER the failure so we can prove which read drains.
         let drainCalls = 0;
-        const proto = Object.getPrototypeOf(contacts) as { drainDirty: (uris: string[]) => Promise<void> };
+        type Drain = (uris: string[], settled: (uri: string) => void) => Promise<void>;
+        const proto = Object.getPrototypeOf(contacts) as { drainDirty: Drain };
         const origDrain = proto.drainDirty;
-        (contacts as unknown as { drainDirty: (uris: string[]) => Promise<void> }).drainDirty = function (
+        (contacts as unknown as { drainDirty: Drain }).drainDirty = function (
             this: Contacts,
             uris: string[],
+            settled: (uri: string) => void,
         ) {
             drainCalls++;
-            return origDrain.call(this, uris);
+            return origDrain.call(this, uris, settled);
         };
 
         // size() must NEVER drain: it is reachable from the in-lock quota gate, so draining here would re-enter
@@ -1039,6 +1043,37 @@ describe('fail-closed drain guard', () => {
         expect((await contacts.getContacts()).some((c) => c.firstName === 'Sized')).toBe(true);
         expect(drainCalls).toBe(1);
         expect(await contacts.size()).toBeGreaterThan(sizeBefore);
+    });
+
+    test('a card that can never drain does not re-commit a healthy one on every read', async () => {
+        const { contacts, db, dir } = await makeContacts();
+        const id = await contacts.addContact(validContact({ firstName: 'Healthy', email: ['healthy@example.com'] }));
+        const uri = uriOf(db, id);
+
+        // A poison card: its file is there, so the drain takes the re-index branch and throws every time.
+        writeFileSync(
+            cardPathOf(dir, 'poison.vcf'),
+            'BEGIN:VCARD\r\nVERSION:3.0\r\nUID:poison\r\nFN:Poison\r\nEND:VCARD\r\n',
+        );
+        const priv = contacts as unknown as {
+            gate: { markDirty(uri: string): void };
+            prepareCardRow: (uri: string, id: string, uid: string | undefined) => Promise<unknown>;
+        };
+        const origPrepare = priv.prepareCardRow;
+        priv.prepareCardRow = function (this: Contacts, u: string, cardId: string, uid: string | undefined) {
+            if (u === 'poison.vcf') throw new Error('prepare boom');
+            return origPrepare.call(this, u, cardId, uid);
+        };
+
+        priv.gate.markDirty(uri);
+        priv.gate.markDirty('poison.vcf');
+        const ctagBefore = db.select().from(contactsSchema.book).get()!.ctag;
+
+        for (let i = 0; i < 3; i++) await expect(contacts.getContacts()).rejects.toThrow('prepare boom');
+
+        // The healthy card settled on the first drain. Re-committing it behind the poison card would bump the
+        // ctag on every read and send every CardDAV client into a no-op delta poll.
+        expect(db.select().from(contactsSchema.book).get()!.ctag).toBe(ctagBefore + 1);
     });
 });
 

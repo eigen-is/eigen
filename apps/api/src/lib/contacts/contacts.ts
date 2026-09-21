@@ -110,7 +110,7 @@ export class Contacts {
     // Every card mutation (REST and DAV) serializes through the gate's one slot, and a card whose file wrote
     // but whose index commit threw is re-indexed by the next call in — mutation or read — before it observes
     // the index. Process death takes the gate's dirty set with it, which is what `pending_card_writes` is for.
-    gate = new WriteGate((uris) => this.drainDirty(uris)); // internal — used by contacts/*.ts
+    gate = new WriteGate((uris, settled) => this.drainDirty(uris, settled)); // internal — used by contacts/*.ts
 
     // Only the reconcile/rebuild/drain machinery bumps this; the mutation paths parse for their own merges.
     private cardParses = 0;
@@ -343,7 +343,7 @@ export class Contacts {
     // The gate's re-index: a commit that threw after its file was already persisted left the index behind
     // that file, so re-commit each dirty uri (or tombstone a vanished one) before the caller reads the index.
     // Caller holds the lock.
-    private async drainDirty(uris: string[]): Promise<void> {
+    private async drainDirty(uris: string[], settled: (uri: string) => void): Promise<void> {
         for (const uri of uris) {
             const existing = this.db
                 .select()
@@ -370,6 +370,7 @@ export class Contacts {
             // Covers the tombstoned and nothing-left-to-do branches; commitCard already dropped the durable
             // marker for a re-indexed card.
             this.clearCardWrite(uri);
+            settled(uri);
         }
     }
 

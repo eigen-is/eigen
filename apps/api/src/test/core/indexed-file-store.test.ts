@@ -275,8 +275,9 @@ describe('dedupeByUid', () => {
 describe('WriteGate', () => {
     test('run drains the whole dirty key list before it runs the body', async () => {
         const order: string[] = [];
-        const gate = new WriteGate(async (keys) => {
+        const gate = new WriteGate(async (keys, settled) => {
             order.push(`recover ${keys.join(',')}`);
+            for (const key of keys) settled(key);
         });
         gate.markDirty('a');
         gate.markDirty('b');
@@ -303,9 +304,10 @@ describe('WriteGate', () => {
     test('a failed recovery keeps the key dirty and the next ensureDrained retries it', async () => {
         const seen: string[][] = [];
         let fail = true;
-        const gate = new WriteGate(async (keys) => {
+        const gate = new WriteGate(async (keys, settled) => {
             seen.push(keys);
             if (fail) throw new Error('recover boom');
+            for (const key of keys) settled(key);
         });
         gate.markDirty('a');
 
@@ -318,11 +320,30 @@ describe('WriteGate', () => {
         expect(seen).toEqual([['a'], ['a']]);
     });
 
+    test('a key settled before the recovery throws is not recovered again', async () => {
+        const seen: string[][] = [];
+        const gate = new WriteGate(async (keys, settled) => {
+            seen.push(keys);
+            settled('good');
+            throw new Error('recover boom');
+        });
+        gate.markDirty('good');
+        gate.markDirty('bad');
+
+        await expect(gate.ensureDrained()).rejects.toThrow('recover boom');
+        await expect(gate.ensureDrained()).rejects.toThrow('recover boom');
+        await expect(gate.ensureDrained()).rejects.toThrow('recover boom');
+
+        // Re-committing a settled key on every later drain would bump the domain's ctag each time.
+        expect(seen).toEqual([['good', 'bad'], ['bad'], ['bad']]);
+    });
+
     test('recoverPending drops a key it cannot recover and keeps going', async () => {
         const seen: string[][] = [];
-        const gate = new WriteGate(async (keys) => {
+        const gate = new WriteGate(async (keys, settled) => {
             seen.push(keys);
             if (keys.includes('bad')) throw new Error('recover boom');
+            for (const key of keys) settled(key);
         });
 
         const warnings = await captureWarnings(() => gate.recoverPending(['bad', 'good']));
@@ -335,19 +356,69 @@ describe('WriteGate', () => {
         expect(seen).toHaveLength(2);
     });
 
-    test('ensureDrained inside run is the empty-set fast path, so it cannot re-enter the lock', async () => {
-        const gate = new WriteGate(async () => {});
-        gate.markDirty('a');
+    test('ensureDrained called by the body that holds the lock returns instead of re-entering it', async () => {
+        let calls = 0;
+        const gate = new WriteGate(async (keys, settled) => {
+            calls++;
+            for (const key of keys) settled(key);
+        });
 
         await completesWithin(
-            gate.run(() => gate.ensureDrained()),
+            gate.run(async () => {
+                // readResourceFile marks a key dirty and returns null, so a body really can reach a non-empty set.
+                gate.markDirty('a');
+                await gate.ensureDrained();
+            }),
             2000,
             'ensureDrained() self-deadlocked inside run()',
         );
+
+        expect(calls).toBe(0);
     });
 
-    test('run serializes bodies through one slot', async () => {
+    test('a nested run is refused and the outer run still releases the lock', async () => {
         const gate = new WriteGate(async () => {});
+        let nested: unknown;
+
+        await completesWithin(
+            gate.run(async () => {
+                nested = await gate.run(async () => 'inner').catch((e) => e);
+            }),
+            2000,
+            'a nested run() deadlocked its own outer run()',
+        );
+
+        expect(nested).toBeInstanceOf(Error);
+        expect((nested as Error).message).toContain('not reentrant');
+        await completesWithin(
+            gate.run(async () => {}),
+            2000,
+            'the refused nested run() left the lock held',
+        );
+    });
+
+    test('work that outlives its run takes the gate as an outside caller', async () => {
+        const gate = new WriteGate(async () => {});
+        let detached!: Promise<void>;
+        let release!: () => void;
+        const afterRun = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+
+        await gate.run(async () => {
+            detached = afterRun.then(() => gate.run(async () => {}));
+        });
+        release();
+
+        await completesWithin(detached, 2000, 'a continuation that outlived its run() was refused the gate');
+    });
+
+    test('run serializes bodies through one slot, each draining from its own context', async () => {
+        const seen: string[][] = [];
+        const gate = new WriteGate(async (keys, settled) => {
+            seen.push(keys);
+            for (const key of keys) settled(key);
+        });
         const order: string[] = [];
         let release!: () => void;
         const held = new Promise<void>((resolve) => {
@@ -356,6 +427,7 @@ describe('WriteGate', () => {
 
         const first = gate.run(async () => {
             order.push('first in');
+            gate.markDirty('a');
             await held;
             order.push('first out');
         });
@@ -363,8 +435,10 @@ describe('WriteGate', () => {
             order.push('second in');
         });
         release();
-        await Promise.all([first, second]);
+        await completesWithin(Promise.all([first, second]), 2000, 'two independent run() calls deadlocked');
 
         expect(order).toEqual(['first in', 'first out', 'second in']);
+        // The queued caller is an outside caller: it drains what the first body left behind.
+        expect(seen).toEqual([['a']]);
     });
 });

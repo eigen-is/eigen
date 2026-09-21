@@ -313,7 +313,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
             contacts.addContact(validContact({ firstName: 'NoPic', avatar: `contacts/${user.id}/avatar/gone.webp` })),
         ).rejects.toThrow('Avatar upload could not be found');
 
-        // The guard fires before writeCardFile — no new card landed on disk, and nothing was indexed.
+        // The guard fires before writeResourceFile — no new card landed on disk, and nothing was indexed.
         const after = existsSync(cardsDir) ? readdirSync(cardsDir).length : 0;
         expect(after).toBe(before);
         expect((await contacts.getContacts()).some((c) => c.firstName === 'NoPic')).toBe(false);
