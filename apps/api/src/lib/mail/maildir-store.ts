@@ -13,7 +13,7 @@ import type { BunFile, FileSink } from 'bun';
 import { Semaphore } from '../../utils/semaphore';
 import { ApiError, isSafePathSegment, LocalFilesystem, PATHS } from '../core';
 import type { Home } from '../home';
-import { parseEml, parseEmlBytes } from './mail-parse';
+import { parseEml, parseEmlBytes, parseEmlForReader } from './mail-parse';
 import type { DraftMeta, MailFlag, MailSearchOptions, MailStore, MailStoreEvents } from './mail-store';
 import MailDB from './maildb';
 import {
@@ -40,12 +40,23 @@ export function readDraftStagingSize(homeFs: LocalFilesystem): Promise<number> {
     return homeFs.dirSize(path.join(PATHS.MAIL.ROOT, DRAFT_ATTACHMENTS_DIR));
 }
 
-// A mailbox name is user-visible, so a segment may hold interior spaces — but never the `.` Maildir++
-// delimiter, and never nothing at all.
-const MAILBOX_SEGMENT = /^[A-Za-z0-9_\- ]+$/;
+// A segment is a directory name under the Maildir root, so the rule is what breaks a path or the hierarchy,
+// not an allowlist: Dovecot spells `&` and everything outside printable ASCII in modified UTF-7
+// (`Ärger` is `.&AMQ-rger`), and an allowlist dropped those folders from the listing. Splitting on both
+// delimiters leaves no separator inside a segment, so `..` and a leading dot are empty segments here.
+const MAILBOX_SEGMENT_MAX_CHARS = 200;
+const CONTROL_CHARACTER = /\p{Cc}/u;
 
 function isValidMailboxPath(mailbox: string): boolean {
-    return mailbox.split(/[./]/).every((segment) => MAILBOX_SEGMENT.test(segment) && segment.trim() === segment);
+    return mailbox
+        .split(/[./]/)
+        .every(
+            (segment) =>
+                segment.length > 0 &&
+                segment.length <= MAILBOX_SEGMENT_MAX_CHARS &&
+                !CONTROL_CHARACTER.test(segment) &&
+                segment.trim() === segment,
+        );
 }
 
 // Refused, never mapped onto a safe name: two mapped ids would collide on one file.
@@ -198,7 +209,11 @@ export class MaildirStore implements MailStore {
         const cached = this.db.getEmail(messageId);
         if (!cached) return null;
 
-        const parsed = await this.readAndParse(messageId, cached.mailbox, cached.filename);
+        const parsed = await parseEmlForReader(
+            messageId,
+            cached.mailbox,
+            this.getMessageFile(cached.mailbox, cached.filename),
+        );
         applyFlagsFromFilename(parsed, cached.filename);
         return { ...parsed, ...cached };
     }
@@ -212,16 +227,22 @@ export class MaildirStore implements MailStore {
     async getAttachments(messageId: string): Promise<Attachment[]> {
         const email = this.db.getEmail(messageId);
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
-        const parsed = await this.readAndParse(messageId, email.mailbox, email.filename);
+        const parsed = await parseEml(messageId, email.mailbox, this.getMessageFile(email.mailbox, email.filename));
         return parsed.attachments;
     }
 
     async append(mailbox: string, message: Buffer, opts?: { skipSync?: boolean; arrival?: boolean }): Promise<string> {
         const uniqueId = createUniqueMessageId();
-        // Recorded before the file lands: arriving is a property of the message, not of the sync that finds it.
+        // Recorded before the file lands: a watcher-driven sync can reach the file before this continues,
+        // and must find the flag. A delivery that never lands leaves none.
         this.deliveries.set(uniqueId, opts?.arrival ?? true);
-        // Lock covers only the delivery — the follow-up sync takes the lock itself.
-        await this.storeLock.run(() => this.deliverAtomic(message, mailbox, uniqueId));
+        try {
+            // Lock covers only the delivery — the follow-up sync takes the lock itself.
+            await this.storeLock.run(() => this.deliverAtomic(message, mailbox, uniqueId));
+        } catch (e) {
+            this.deliveries.delete(uniqueId);
+            throw e;
+        }
         if (!opts?.skipSync) await this.syncMailbox(mailbox);
         return uniqueId;
     }
@@ -332,11 +353,9 @@ export class MaildirStore implements MailStore {
             }
         }
 
-        const dbRecords = this.db.getAllEmails(mailbox);
+        const dbRecords = this.db.listSyncRows(mailbox);
         const dbById = new Map(dbRecords.map((r) => [r.id, r]));
-        // A mailbox with no rows yet is being indexed for the first time — an old IMAP folder, or a home
-        // whose mail.db was lost — so a file this store did not just deliver was discovered, not delivered,
-        // and must not raise a new-mail notification.
+        // A mailbox with no rows yet is indexed for the first time: what it finds was discovered, not delivered.
         const indexed = dbRecords.length > 0;
 
         // New messages (on disk but not in DB): parse in chunks, then bulk-insert each chunk in
@@ -361,6 +380,7 @@ export class MaildirStore implements MailStore {
                     p.filename = fileName;
                     parsed.push(p);
                 } catch (e: unknown) {
+                    this.deliveries.delete(id);
                     if (!(e instanceof Error && 'code' in e && e.code === 'ENOENT'))
                         console.warn(`syncMailbox: failed to parse ${fileName}:`, e instanceof Error ? e.message : e);
                 }
@@ -441,6 +461,9 @@ export class MaildirStore implements MailStore {
     }
 
     async deleteDraftMeta(draftId: string): Promise<void> {
+        // Mirrors readDraftMeta: no sidecar can exist under an id Eigen did not mint, and the delete of a
+        // message carrying one runs after the row and the file are already gone.
+        if (!isSafePathSegment(draftId)) return;
         const metaPath = this.getDraftMetaPath(draftId);
         try {
             if (await this.storage.exists(metaPath)) {
@@ -731,11 +754,6 @@ export class MaildirStore implements MailStore {
     }
 
     // -- Private helpers --
-
-    // A parse/read fault propagates from parseEml — callers must not treat it as "not found".
-    private async readAndParse(messageId: string, mailbox: string, filename: string): Promise<Email> {
-        return parseEml(messageId, mailbox, this.getMessageFile(mailbox, filename));
-    }
 
     private getMailboxInfo(mailboxName: string): MaildirMailbox {
         return {

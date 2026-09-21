@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import { MAILBOX_ARCHIVE, STANDARD_MAILBOXES } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import type { Notification } from '@workspace/lib/types/notification';
-import { app, assertJson, authedRequest, createTestUser, ensureServer, findOrFail, TEST_DATA_DIR } from '../setup';
+import { boxDir, makeEml, seedMaildirFile } from '../mail-test-helpers';
+import { app, assertJson, authedRequest, createTestUser, ensureServer, findOrFail } from '../setup';
 
 const isWindows = process.platform === 'win32';
 
@@ -13,36 +14,12 @@ beforeAll(async () => {
     await ensureServer();
 });
 
-function maildirOf(userId: string) {
-    return join(TEST_DATA_DIR, 'home', userId, 'eigen.mail', 'Maildir');
-}
-
 // Fabricates a Maildir++ folder the way Dovecot does: a dot-prefixed directory with cur/new/tmp and
 // the `maildirfolder` marker, never touched by Eigen's own mailbox creation.
-function seedMaildirFolder(userId: string, dirName: string): string {
-    const folder = join(maildirOf(userId), dirName);
+function seedMaildirFolder(userId: string, mailbox: string): void {
+    const folder = boxDir(userId, mailbox);
     for (const sub of ['cur', 'new', 'tmp']) mkdirSync(join(folder, sub), { recursive: true });
     writeFileSync(join(folder, 'maildirfolder'), '');
-    return folder;
-}
-
-function makeEml(subject: string, to: string) {
-    return [
-        'From: sender@example.com',
-        `To: ${to}`,
-        `Subject: ${subject}`,
-        `Date: ${new Date().toUTCString()}`,
-        `Message-ID: <${Date.now()}.${Math.random()}@test>`,
-        'MIME-Version: 1.0',
-        'Content-Type: text/plain; charset=utf-8',
-        '',
-        `Body of ${subject}`,
-    ].join('\r\n');
-}
-
-// A message an IMAP client delivered: it lands in new/ with no flag suffix, so it is unread.
-function seedNewFile(folder: string, uniqueId: string, eml: string): void {
-    writeFileSync(join(folder, 'new', `${uniqueId},S=${Buffer.byteLength(eml, 'utf-8')}`), eml);
 }
 
 function listMailboxes(token: string, userId: string): Promise<MaildirMailbox[]> {
@@ -74,24 +51,27 @@ describe.skipIf(isWindows)('Mailboxes outside the standard six', () => {
     let userId: string;
     let token: string;
     let projectsId: string;
+    let email: string;
 
     beforeAll(async () => {
-        const email = `custombox-${Date.now()}@test.eigen.is`;
+        email = `custombox-${Date.now()}@test.eigen.is`;
         const user = await createTestUser(email, 'testpassword123', 'Custom Box Test');
         userId = user.id;
         token = user.sessionToken;
         // Initialize the home: creates the Maildir tree before anything is seeded into it.
         expect((await authedRequest(token, `/home/${userId}/size`)).status).toBe(200);
 
-        const projects = seedMaildirFolder(userId, '.Projects');
+        seedMaildirFolder(userId, 'Projects');
         projectsId = `${Date.now()}.projects`;
-        seedNewFile(projects, projectsId, makeEml('From an IMAP client', email));
-        seedMaildirFolder(userId, '.Clients.Acme');
-        seedMaildirFolder(userId, '.My Stuff');
+        seedMaildirFile(userId, 'Projects', projectsId, makeEml('From an IMAP client', { to: email }), {
+            dir: 'new',
+        });
+        seedMaildirFolder(userId, 'Clients.Acme');
+        seedMaildirFolder(userId, 'My Stuff');
         // Names Eigen refuses: an empty hierarchy segment and a control character. Dovecot may hold
         // either; both are skipped rather than failing the whole listing.
-        seedMaildirFolder(userId, '.bad..name');
-        seedMaildirFolder(userId, '.ctrl\u0001name');
+        seedMaildirFolder(userId, 'bad..name');
+        seedMaildirFolder(userId, 'ctrl\u0001name');
     });
 
     test('a folder an IMAP client created is listed at once, and indexed in the background', async () => {
@@ -141,6 +121,43 @@ describe.skipIf(isWindows)('Mailboxes outside the standard six', () => {
         expect(messages[0].isRead).toBe(false);
     });
 
+    test('a nested folder addressed with / is the one dotted folder everywhere', async () => {
+        const raw = makeEml('Filed under a slash', { to: email });
+        expect(
+            (
+                await app.handle(
+                    new Request(`http://localhost/mail/deliver/${email}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'message/rfc822' },
+                        body: new TextEncoder().encode(raw).buffer as ArrayBuffer,
+                    }),
+                )
+            ).status,
+        ).toBe(200);
+
+        const inbox = await assertJson<EmailSummary[]>(await authedRequest(token, `/mail/${userId}/mailbox/inbox`));
+        const moved = findOrFail(inbox, (message) => message.subject === 'Filed under a slash');
+
+        const res = await authedRequest(token, `/mail/${userId}/message/move`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messageId: moved.id, targetMailbox: 'Clients/Acme' }),
+        });
+        expect(res.status).toBe(200);
+
+        // Before anything opens the folder — a listing never syncs, so it reports the row exactly as the
+        // move wrote it: under the one dotted name, not a second spelling nothing enumerates.
+        const boxes = await listMailboxes(token, userId);
+        expect(boxes.filter((box) => box.path.startsWith('Clients')).map((box) => box.path)).toEqual(['Clients.Acme']);
+        expect(findOrFail(boxes, (box) => box.path === 'Clients.Acme').total).toBe(1);
+
+        const dotted = await assertJson<EmailSummary[]>(
+            await authedRequest(token, `/mail/${userId}/mailbox/Clients.Acme`),
+        );
+        expect(dotted.map((message) => message.id)).toEqual([moved.id]);
+        expect(dotted[0].mailbox).toBe('Clients.Acme');
+    });
+
     test('a folder name with a space is addressed percent-encoded in the URL', async () => {
         const res = await authedRequest(token, `/mail/${userId}/mailbox/My%20Stuff`);
         expect(res.status).toBe(200);
@@ -164,6 +181,140 @@ describe.skipIf(isWindows)('Mailboxes outside the standard six', () => {
     });
 });
 
+// Dovecot writes a name holding `&` or anything outside printable ASCII in modified UTF-7, and leaves the
+// rest of printable ASCII alone: all of these are folder names Eigen must list, open and move into.
+describe.skipIf(isWindows)('A folder name outside the ASCII letters and digits', () => {
+    const NAMES = ['&AMQ-rger', 'R&-D', "O'Brien", 'C++'];
+    let userId: string;
+    let token: string;
+    let email: string;
+
+    const openBox = (name: string) =>
+        authedRequest(token, `/mail/${userId}/mailbox/${encodeURIComponent(name)}`).then((res) =>
+            assertJson<EmailSummary[]>(res),
+        );
+
+    beforeAll(async () => {
+        email = `oddname-${Date.now()}@test.eigen.is`;
+        const user = await createTestUser(email, 'testpassword123', 'Odd Name Test');
+        userId = user.id;
+        token = user.sessionToken;
+        expect((await authedRequest(token, `/home/${userId}/size`)).status).toBe(200);
+
+        for (const name of NAMES) {
+            seedMaildirFolder(userId, name);
+            seedMaildirFile(
+                userId,
+                name,
+                `${Date.now()}.${NAMES.indexOf(name)}.odd`,
+                makeEml(`Filed under ${name}`, { to: email }),
+                { dir: 'new' },
+            );
+        }
+    });
+
+    test('every such folder is listed, opens, and counts what it holds', async () => {
+        const boxes = await listMailboxes(token, userId);
+        expect(boxes.map((box) => box.path)).toEqual(expect.arrayContaining(NAMES));
+
+        for (const name of NAMES) {
+            const box = await mailboxWhenCounting(token, userId, name, 1);
+            expect(box.unread).toBe(1);
+            expect((await openBox(name)).map((message) => message.subject)).toEqual([`Filed under ${name}`]);
+        }
+    });
+
+    test('a message moves into such a folder and is listed there', async () => {
+        const raw = makeEml('Moved by hand', { to: email });
+        expect(
+            (
+                await app.handle(
+                    new Request(`http://localhost/mail/deliver/${email}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'message/rfc822' },
+                        body: new TextEncoder().encode(raw).buffer as ArrayBuffer,
+                    }),
+                )
+            ).status,
+        ).toBe(200);
+
+        const inbox = await assertJson<EmailSummary[]>(await authedRequest(token, `/mail/${userId}/mailbox/inbox`));
+        const moved = findOrFail(inbox, (message) => message.subject === 'Moved by hand');
+
+        const res = await authedRequest(token, `/mail/${userId}/message/move`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messageId: moved.id, targetMailbox: "O'Brien" }),
+        });
+        expect(res.status).toBe(200);
+        expect((await openBox("O'Brien")).map((message) => message.id)).toContain(moved.id);
+    });
+});
+
+// Anything that would break a path or the Maildir++ hierarchy, refused at every entry that builds a
+// directory from a name — never mapped onto a safe one, which would make two names one folder.
+describe.skipIf(isWindows)('A folder name that cannot address a directory', () => {
+    const REFUSED = ['..', '.hidden', 'a/../b', 'ctrl\u0001name', 'bad..name', ' leading', 'trailing '];
+    let userId: string;
+    let token: string;
+    let messageId: string;
+
+    beforeAll(async () => {
+        const email = `badname-${Date.now()}@test.eigen.is`;
+        const user = await createTestUser(email, 'testpassword123', 'Bad Name Test');
+        userId = user.id;
+        token = user.sessionToken;
+        expect((await authedRequest(token, `/home/${userId}/size`)).status).toBe(200);
+
+        const raw = makeEml('Stays where it is', { to: email });
+        await app.handle(
+            new Request(`http://localhost/mail/deliver/${email}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'message/rfc822' },
+                body: new TextEncoder().encode(raw).buffer as ArrayBuffer,
+            }),
+        );
+        const inbox = await assertJson<EmailSummary[]>(await authedRequest(token, `/mail/${userId}/mailbox/inbox`));
+        messageId = findOrFail(inbox, (message) => message.subject === 'Stays where it is').id;
+    });
+
+    test('creating one is refused', async () => {
+        for (const mailbox of REFUSED) {
+            const res = await authedRequest(token, `/mail/${userId}/mailbox`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mailbox }),
+            });
+            expect([mailbox, res.status]).toEqual([mailbox, 400]);
+        }
+    });
+
+    test('opening one is refused', async () => {
+        // `..` never reaches the route: the URL it spells normalizes away the segment, so the router 404s.
+        for (const mailbox of REFUSED.filter((name) => name !== '..')) {
+            const res = await authedRequest(
+                token,
+                `/mail/${userId}/mailbox/${encodeURIComponent(mailbox).replaceAll('.', '%2E')}`,
+            );
+            expect([mailbox, res.status]).toEqual([mailbox, 400]);
+        }
+    });
+
+    test('moving a message into one is refused and leaves the message where it was', async () => {
+        for (const targetMailbox of REFUSED) {
+            const res = await authedRequest(token, `/mail/${userId}/message/move`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ messageId, targetMailbox }),
+            });
+            expect([targetMailbox, res.status]).toEqual([targetMailbox, 400]);
+        }
+
+        const inbox = await assertJson<EmailSummary[]>(await authedRequest(token, `/mail/${userId}/mailbox/inbox`));
+        expect(inbox.map((message) => message.id)).toContain(messageId);
+    });
+});
+
 describe.skipIf(isWindows)('A .INBOX folder is the Maildir root, not a mailbox of its own', () => {
     let userId: string;
     let token: string;
@@ -176,7 +327,7 @@ describe.skipIf(isWindows)('A .INBOX folder is the Maildir root, not a mailbox o
         token = user.sessionToken;
         expect((await authedRequest(token, `/home/${userId}/size`)).status).toBe(200);
 
-        const eml = makeEml('Delivered to the real inbox', email);
+        const eml = makeEml('Delivered to the real inbox', { to: email });
         const delivered = await app.handle(
             new Request(`http://localhost/mail/deliver/${email}`, {
                 method: 'POST',
@@ -187,7 +338,7 @@ describe.skipIf(isWindows)('A .INBOX folder is the Maildir root, not a mailbox o
         expect(delivered.status).toBe(200);
 
         // Dovecot never makes this folder, but a restore or a stray client can leave one behind.
-        seedMaildirFolder(userId, '.INBOX');
+        seedMaildirFolder(userId, 'INBOX');
     });
 
     test('listing twice leaves the inbox holding its message and lists no INBOX folder', async () => {
@@ -206,7 +357,6 @@ describe.skipIf(isWindows)('A folder outside the standard six stays fresh withou
     let userId: string;
     let token: string;
     let email: string;
-    let folder: string;
     const filedId = `${Date.now()}.filed`;
 
     beforeAll(async () => {
@@ -216,8 +366,14 @@ describe.skipIf(isWindows)('A folder outside the standard six stays fresh withou
         token = user.sessionToken;
         expect((await authedRequest(token, `/home/${userId}/size`)).status).toBe(200);
 
-        folder = seedMaildirFolder(userId, '.Filed');
-        seedNewFile(folder, `${Date.now()}.first`, makeEml('Filed before the first listing', email));
+        seedMaildirFolder(userId, 'Filed');
+        seedMaildirFile(
+            userId,
+            'Filed',
+            `${Date.now()}.first`,
+            makeEml('Filed before the first listing', { to: email }),
+            { dir: 'new' },
+        );
     });
 
     test('listings inside the interval kick no second reconcile', async () => {
@@ -225,7 +381,7 @@ describe.skipIf(isWindows)('A folder outside the standard six stays fresh withou
         // The reconcile that listing kicked reads the directory before the message below is written.
         await Bun.sleep(100);
 
-        seedNewFile(folder, filedId, makeEml('Filed by an IMAP client', email));
+        seedMaildirFile(userId, 'Filed', filedId, makeEml('Filed by an IMAP client', { to: email }), { dir: 'new' });
 
         // No watcher on this folder, and its reconcile is due again only after a minute: every listing
         // reports the index as it stands, and none of them rescans the folder.
@@ -248,7 +404,9 @@ describe.skipIf(isWindows)('A folder outside the standard six stays fresh withou
 
     test('a folder opened again picks up what was filed while it was closed', async () => {
         const openedId = `${Date.now()}.opened`;
-        seedNewFile(folder, openedId, makeEml('Filed while the folder was closed', email));
+        seedMaildirFile(userId, 'Filed', openedId, makeEml('Filed while the folder was closed', { to: email }), {
+            dir: 'new',
+        });
 
         let messages: EmailSummary[] = [];
         for (let attempt = 0; attempt < 100; attempt++) {

@@ -184,19 +184,20 @@ console.log(
     `[incr] +${fmt(INCREMENTAL)} new synced in ${incT.toFixed(0)} ms  (inbox now ${fmt(internals.db.getEmailsCount(''))})\n`,
 );
 
-// 5) List query (the DB read behind GET list) + payload size — median of 3
+// 5) List query (every row of the inbox, the shape the list had before keyset pagination) + payload size
+const wholeInbox = () => internals.db.listMessages('', { limit: Number.MAX_SAFE_INTEGER });
 const listTimes: number[] = [];
 let listRows: EmailSummary[] = [];
 for (let i = 0; i < 3; i++) {
     const t = performance.now();
-    listRows = internals.db.getAllEmails('');
+    listRows = wholeInbox();
     listTimes.push(performance.now() - t);
 }
 const payload = Buffer.byteLength(JSON.stringify(listRows));
-results[`list query getAllEmails (${fmt(INBOX)})`] = `${median(listTimes).toFixed(1)} ms  |  ${listRows.length} rows`;
+results[`list query whole inbox (${fmt(INBOX)})`] = `${median(listTimes).toFixed(1)} ms  |  ${listRows.length} rows`;
 results[`list JSON payload (${fmt(INBOX)} inbox)`] =
     `${(payload / 1024 / 1024).toFixed(2)} MB  (${(payload / listRows.length).toFixed(0)} B/row)`;
-console.log(`[list] getAllEmails('') median ${median(listTimes).toFixed(1)} ms, ${fmt(listRows.length)} rows`);
+console.log(`[list] whole inbox median ${median(listTimes).toFixed(1)} ms, ${fmt(listRows.length)} rows`);
 console.log(
     `[list] JSON.stringify payload ${(payload / 1024 / 1024).toFixed(2)} MB  (${(payload / listRows.length).toFixed(0)} B/row)`,
 );
@@ -211,12 +212,12 @@ console.log(`[list] listMessages('') route path ${listMsgFull.toFixed(0)} ms (sy
 const moveTimes: number[] = [];
 const flagTimes: number[] = [];
 for (let i = 0; i < 3; i++) {
-    const victims = internals.db.getAllEmails('');
+    const victims = wholeInbox();
     const id = victims[victims.length - 1 - i]!.id;
     moveTimes.push(await ms(() => store.move(id, 'Archive')));
 }
 for (let i = 0; i < 3; i++) {
-    const rows = internals.db.getAllEmails('');
+    const rows = wholeInbox();
     const row = rows[i]!;
     flagTimes.push(await ms(() => store.setFlags(row.id, { seen: !row.isRead })));
 }

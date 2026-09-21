@@ -1,4 +1,4 @@
-import type { Email } from '@workspace/lib/types/mail';
+import type { Email, ParsedMail } from '@workspace/lib/types/mail';
 import type { BunFile } from 'bun';
 import DOMPurify from 'isomorphic-dompurify';
 import { parseMail } from './mail-parser';
@@ -9,24 +9,40 @@ import { buildRecipientSummary } from './mailutils';
 // can post the reader's input anywhere.
 export const READER_SANITIZE_CONFIG = { FORCE_BODY: true, ADD_ATTR: ['target'], FORBID_TAGS: ['form'] };
 
+// The parse everything but the reader takes. Sanitizing dominates a parse — 9.4 ms against 2.5 ms on a
+// 25 KiB message — and the index, the sync and the part routes read summary fields and attachments, never a
+// body; `html: null` in the type is what makes serving an unsanitized one impossible rather than forgettable.
+export type IndexedEmail = Email & { html: null };
+
 // Throws on a genuine parse/read fault (unreadable .eml, disk EIO, malformed MIME). Callers
 // decide the policy: single-message reads (messageGet) let it propagate → Elysia 500; bulk
 // sweeps (syncMailbox) wrap it in a logged try/catch so one bad message can't abort the batch.
 // It must never mask a fault as a missing message.
-export async function parseEml(messageId: string, mailbox: string, file: BunFile): Promise<Email> {
+export async function parseEml(messageId: string, mailbox: string, file: BunFile): Promise<IndexedEmail> {
     return parseEmlBytes(messageId, mailbox, Buffer.from(await file.arrayBuffer()), file.size);
 }
 
 // Same parse over in-memory bytes — lets the draft hot path skip the disk read-back (the bytes it
 // writes are exactly what parseEml would read back). `size` is the byte length of those bytes.
-export async function parseEmlBytes(messageId: string, mailbox: string, bytes: Buffer, size: number): Promise<Email> {
-    const parsedMail = parseMail(bytes);
+export async function parseEmlBytes(
+    messageId: string,
+    mailbox: string,
+    bytes: Buffer,
+    size: number,
+): Promise<IndexedEmail> {
+    return { ...toEmail(messageId, mailbox, parseMail(bytes), size), html: null };
+}
 
+// The one entry that hands out a body, sanitized: every surface that renders a message reads its result.
+export async function parseEmlForReader(messageId: string, mailbox: string, file: BunFile): Promise<Email> {
+    const parsedMail = parseMail(Buffer.from(await file.arrayBuffer()));
     if (parsedMail.html) {
-        parsedMail.html = DOMPurify.sanitize(parsedMail.html, READER_SANITIZE_CONFIG);
-        parsedMail.html = parsedMail.html.replace(/\s+/g, ' ').trim();
+        parsedMail.html = DOMPurify.sanitize(parsedMail.html, READER_SANITIZE_CONFIG).replace(/\s+/g, ' ').trim();
     }
+    return toEmail(messageId, mailbox, parsedMail, file.size);
+}
 
+function toEmail(messageId: string, mailbox: string, parsedMail: ParsedMail, size: number): Email {
     const { toShort, toAddress, recipientsAll } = buildRecipientSummary(parsedMail.to, parsedMail.cc);
 
     return {

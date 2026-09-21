@@ -1,13 +1,13 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { mailRootOf } from '../mail-test-helpers';
 import { assertJson, authedRequest, getTestContext, putDraft, uploadDraftAttachment } from '../setup';
 
 const isWindows = process.platform === 'win32';
 
 // The store names the sidecar after the draft id, which a client only ever gets from the server.
-const sidecarPath = (ownerId: string, draftId: string) =>
-    join(process.env['EIGEN_DATA_ROOT']!, 'home', ownerId, 'eigen.mail', 'draft-meta', `${draftId}.json`);
+const sidecarPath = (ownerId: string, draftId: string) => join(mailRootOf(ownerId), 'draft-meta', `${draftId}.json`);
 
 describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -702,13 +702,7 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
 
         // Manually create a stale temp file by writing directly to the temp dir.
         // The temp dir is inside the user's home at <home>/eigen.mail/draft-attachments/.
-        const homeDir = join(
-            process.env['EIGEN_DATA_ROOT']!,
-            'home',
-            ctx.alice.user.id,
-            'eigen.mail',
-            'draft-attachments',
-        );
+        const homeDir = join(mailRootOf(ctx.alice.user.id), 'draft-attachments');
         const staleId = 'stale-temp-id';
         writeFileSync(join(homeDir, staleId), 'old-data');
         writeFileSync(join(homeDir, `${staleId}.json`), JSON.stringify({ filename: 'stale.txt' }));

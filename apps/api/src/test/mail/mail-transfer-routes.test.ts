@@ -204,6 +204,18 @@ describe('Mail transfer routes', () => {
         expect((await inbox(alice)).filter((m) => m.subject === subject).length).toBe(2);
     });
 
+    // An editor that saves an .eml as UTF-8 can put a BOM in front of the headers; the first one is the
+    // envelope header the import gate reads, so losing it turns a valid message into a 400.
+    test('a message saved with a UTF-8 BOM imports and keeps its sender', async () => {
+        const raw = ['From: Ada Lovelace <ada@eml-import.example>', 'Content-Type: text/plain', '', 'Bom.'].join(
+            '\r\n',
+        );
+        const body = new Blob([new Uint8Array([0xef, 0xbb, 0xbf]), new TextEncoder().encode(raw)]);
+
+        const { id } = await assertJson<ImportMailResult>(await importRequest(alice, body));
+        expect(findOrFail(await inbox(alice), (m) => m.id === id).fromAddress).toBe('ada@eml-import.example');
+    });
+
     test('a file that is not a message is 400 and nothing is written', async () => {
         const before = (await inbox(alice)).length;
 

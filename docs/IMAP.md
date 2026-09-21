@@ -107,8 +107,8 @@ eigen.mail/
 with `.` so `Clients/Acme` and `Clients.Acme` are one directory. Mailbox names are validated against path traversal
 and special characters (`isValidMailboxPath`, [MAIL.md § Mailboxes](MAIL.md#mailboxes-and-the-naming-gotcha)).
 `canonicalMailbox()` (`packages/lib/src/constants/mailboxes.ts`) case-folds the six standard names — `INBOX` in
-any case onto the empty inbox name — and passes any other name through untouched, so a folder's own spelling is
-the one Eigen addresses it by. The limit of that rule shows on a case-sensitive file system: a folder whose name
+any case onto the empty inbox name — folds `/` onto `.` so one directory has one wire name, and passes any other
+name through untouched, so a folder's own spelling is the one Eigen addresses it by. The limit of that rule shows on a case-sensitive file system: a folder whose name
 differs from a standard mailbox only in case (`.archive` beside `.Archive`) is neither listed nor addressable,
 because every spelling of it canonicalizes onto the standard one ([ROADMAP.md](ROADMAP.md)).
 
@@ -199,8 +199,10 @@ opened ([ROADMAP.md](ROADMAP.md)). `unwatch()` closes all watchers and awaits in
 
 - An IMAP-created folder is listed and openable in Eigen, under the name Dovecot gave it. A message moved
   into one leaves its old mailbox and appears in that folder's list on the next listing or open.
-- A folder whose name Eigen's validator refuses (an empty hierarchy segment, a character outside `A-Za-z0-9_- `)
-  stays reachable over IMAP and is left out of Eigen's listing.
+- A modified UTF-7 name (`.&AMQ-rger`, `.R&-D`) is an ordinary folder here: it lists, opens and counts under the
+  name on disk, and the sidebar decodes it for display.
+- A folder whose name Eigen's validator refuses (an empty hierarchy segment, a control character, a leading or
+  trailing space, over 200 characters) stays reachable over IMAP and is left out of Eigen's listing.
 - Simultaneous flag renames by Dovecot and Eigen: one rename fails with ENOENT, next sync corrects.
 - Dovecot assigns UIDs on its next scan of `cur/`. Moves (which land directly in target `cur/`) cause UID
   reassignment, matching IMAP MOVE semantics (COPY + EXPUNGE).
