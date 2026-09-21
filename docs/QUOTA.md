@@ -23,7 +23,7 @@ Calendar data is **unmetered**: nothing counts `calendar.db` against either buck
 server default, the mount's own config, and all team memberships, then taking the maximum.
 
 ```
-mailAndContactsMax = max(server default, ...team overrides where set)
+homeDataMax = max(server default, ...team overrides where set)
 mountMax           = max(mountConfig.maxSizeMB ?? server default, ...team overrides where set)
 ```
 
@@ -41,7 +41,7 @@ Rules:
 
 ```typescript
 type ResolvedQuotas = {
-    mailAndContactsMax: number;   // bytes
+    homeDataMax: number;   // bytes
     mountMax: number;             // bytes
 };
 ```
@@ -95,7 +95,7 @@ The mail half of that bucket is the index sum plus the staging directory: `SUM(e
 ### `enforceAvatarUpload(userId, fileSize)`
 
 Runs `enforceMaxUploadSize` (413 on an oversized file), then checks combined mail + contacts usage against
-`mailAndContactsMax` (507).
+`homeDataMax` (507).
 
 ### `getMountQuotaState(ownerId, userId, mountId)`
 
@@ -108,7 +108,7 @@ reports quota-used / quota-available from `getMountQuotaState` in `lib/webdav/pr
 `enforceMountQuota` in `routes/editor.ts`, crediting the size of the file being replaced. Mail draft
 attachments and mail-to-drive saves use `getMailUploadMaxSize` / `getUploadMaxSize` in `lib/mail/mail.ts`.
 
-Contact-card writes and `.eml` imports share one gate on the mail + contacts half of the budget, `enforceMailAndContactsQuota(userId, addBytes, creditBytes)`: `enforceCardBudget` (`lib/contacts/contacts.ts`) and `Mail.messageImport` (`lib/mail/mail-domain.ts`) both run it before writing, 507 on a projection over budget.
+Contact-card writes and `.eml` imports share one gate on the mail + contacts half of the budget, `enforceHomeDataQuota(userId, addBytes, creditBytes)`: `enforceCardBudget` (`lib/contacts/contacts.ts`) and `Mail.messageImport` (`lib/mail/mail-domain.ts`) both run it before writing, 507 on a projection over budget.
 
 ## Over-Quota Behavior
 

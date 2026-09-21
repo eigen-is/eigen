@@ -57,15 +57,15 @@ const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 // The other half of the storage budget — mail and contacts share one quota. Mirrors getMountQuotaState.
 // Both halves answer from in-memory byte counters (MaildirStore.size, Contacts.size), so a CardDAV device
 // sync metering every card it PUTs costs no query per card and every write is charged to the next check.
-async function getMailAndContactsQuotaState(userId: string): Promise<{ used: number; max: number }> {
+async function getHomeDataQuotaState(userId: string): Promise<{ used: number; max: number }> {
     const { home, quotas } = await resolveQuotas(userId, userId, 'default');
     const used = ((await home.mail?.size()) || 0) + ((await home.contacts?.size()) || 0);
-    return { used, max: quotas.mailAndContactsMax };
+    return { used, max: quotas.homeDataMax };
 }
 
 export async function getMailUploadMaxSize(userId: string): Promise<number> {
     const maxUpload = Math.min(getMaxUploadSize(), MAX_ATTACHMENT_SIZE);
-    const { used, max } = await getMailAndContactsQuotaState(userId);
+    const { used, max } = await getHomeDataQuotaState(userId);
     const remainingQuota = max - used;
     if (remainingQuota <= 0) {
         throw new ApiError(507, 'Insufficient Storage');
@@ -81,7 +81,7 @@ export function enforceMaxUploadSize(fileSize: number): void {
 
 export async function enforceAvatarUpload(userId: string, fileSize: number): Promise<void> {
     enforceMaxUploadSize(fileSize);
-    const { used, max } = await getMailAndContactsQuotaState(userId);
+    const { used, max } = await getHomeDataQuotaState(userId);
     if (used + fileSize > max) {
         throw new ApiError(507, 'Insufficient Storage');
     }
@@ -90,8 +90,8 @@ export async function enforceAvatarUpload(userId: string, fileSize: number): Pro
 // Bytes about to be written into the mail+contacts half of the budget — a contact card, an imported
 // message: addBytes is what lands, creditBytes the size of what it replaces (subtracted from the
 // projection, so a rewrite that shrinks a card is never refused). Same credit convention as enforceMountQuota.
-export async function enforceMailAndContactsQuota(userId: string, addBytes: number, creditBytes = 0): Promise<void> {
-    const { used, max } = await getMailAndContactsQuotaState(userId);
+export async function enforceHomeDataQuota(userId: string, addBytes: number, creditBytes = 0): Promise<void> {
+    const { used, max } = await getHomeDataQuotaState(userId);
     if (used + addBytes - creditBytes > max) {
         throw new ApiError(507, 'Insufficient Storage');
     }

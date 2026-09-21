@@ -172,11 +172,11 @@ export class Home {
         const mailAndContactsUsed = (mail || 0) + (contacts || 0);
 
         return {
-            mailAndContacts: { used: mailAndContactsUsed, max: quotas.mailAndContactsMax },
+            mailAndContacts: { used: mailAndContactsUsed, max: quotas.homeDataMax },
             drive: { default: { used: driveDefault, max: quotas.mountMax } },
             total: {
                 used: mailAndContactsUsed + driveDefault,
-                max: quotas.mailAndContactsMax + quotas.mountMax,
+                max: quotas.homeDataMax + quotas.mountMax,
             },
         };
     }

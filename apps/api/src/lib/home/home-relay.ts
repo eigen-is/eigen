@@ -198,9 +198,9 @@ export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeRespons
 
     const mailAndContactsUsed = mail + cards + avatars;
     return {
-        mailAndContacts: { used: mailAndContactsUsed, max: quotas.mailAndContactsMax },
+        mailAndContacts: { used: mailAndContactsUsed, max: quotas.homeDataMax },
         drive: { default: { used: driveUsed, max: quotas.mountMax } },
-        total: { used: mailAndContactsUsed + driveUsed, max: quotas.mailAndContactsMax + quotas.mountMax },
+        total: { used: mailAndContactsUsed + driveUsed, max: quotas.homeDataMax + quotas.mountMax },
     };
 }
 

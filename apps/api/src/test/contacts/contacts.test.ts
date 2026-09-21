@@ -726,7 +726,7 @@ describe('Contacts', () => {
     });
 });
 
-// enforceMailAndContactsQuota's mail half is a live byte counter, so mail that arrives between two metered
+// enforceHomeDataQuota's mail half is a live byte counter, so mail that arrives between two metered
 // card writes is charged to the second one. makeContacts homes are deliberately unmetered (never registered,
 // so atHome is false), so this pins it against a real registered home where putCard's quota gate runs.
 describe('CardDAV quota gate', () => {
