@@ -28,6 +28,8 @@ const masterOf = (resource: ICAL.Component): ICAL.Component =>
     resource.getAllSubcomponents('vevent').find((v) => !v.getFirstProperty('recurrence-id'))!;
 const overridesOf = (resource: ICAL.Component): ICAL.Component[] =>
     resource.getAllSubcomponents('vevent').filter((v) => v.getFirstProperty('recurrence-id'));
+const tzidsOf = (resource: ICAL.Component): string[] =>
+    resource.getAllSubcomponents('vtimezone').map((v) => String(v.getFirstPropertyValue('tzid')));
 
 // Every property of a component tree in jCal form, keyed by name so parameter order and property
 // order never decide equality.
@@ -120,6 +122,21 @@ const KITCHEN_OVERRIDE = [
 ];
 
 const KITCHEN_SINK = vcal(VTZ_AMS, KITCHEN_MASTER, KITCHEN_OVERRIDE);
+
+// The series a client PUTs back: the same UID, summary, zone and rule Eigen's own rows project to, plus
+// whatever shape the case under test hangs on it.
+const clientSeries = (...extra: string[]) => [
+    'BEGIN:VEVENT',
+    'UID:series@eigen',
+    'DTSTAMP:20260101T000000Z',
+    'SUMMARY:Weekly sync',
+    'SEQUENCE:3',
+    'DTSTART;TZID=Europe/Amsterdam:20260415T120000',
+    'DTEND;TZID=Europe/Amsterdam:20260415T130000',
+    'RRULE:FREQ=WEEKLY;COUNT=8',
+    ...extra,
+    'END:VEVENT',
+];
 
 const MASTER: CalendarEvent = {
     id: 'evt-master',
@@ -236,6 +253,27 @@ describe('kitchen-sink fidelity under a patch', () => {
         );
     });
 
+    test('an address the client listed twice has every one of its properties updated', () => {
+        const resource = parse(
+            vcal(VTZ_AMS, [
+                ...KITCHEN_MASTER.slice(0, -1),
+                'ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;CN=Bob:mailto:BOB@x.com',
+                'END:VEVENT',
+            ]),
+        );
+        patchEvent(
+            resource,
+            null,
+            { data: { attendees: [{ email: 'bob@x.com', name: 'Bob', status: 'accepted', role: 'required' }] } },
+            CTX,
+        );
+
+        const partstats = masterOf(resource)
+            .getAllProperties('attendee')
+            .map((a) => a.getFirstParameter('partstat'));
+        expect(partstats).toEqual(['ACCEPTED', 'ACCEPTED']);
+    });
+
     test('a null rrule in the patch does not remove the sub-daily RRULE', () => {
         const resource = parse(KITCHEN_SINK);
         patchEvent(resource, null, { title: 'Renamed sink', rrule: null }, CTX);
@@ -337,15 +375,7 @@ describe('stamp trust', () => {
     const stored = () => parse(serializeResource(buildResource([MASTER, OVERRIDE, EXCLUSION])));
 
     // A client that rewrote every EXDATE into the UTC-Z comma-joined form and forged Eigen's own lines.
-    const forged = [
-        'BEGIN:VEVENT',
-        'UID:series@eigen',
-        'DTSTAMP:20260101T000000Z',
-        'SUMMARY:Weekly sync',
-        'SEQUENCE:3',
-        'DTSTART;TZID=Europe/Amsterdam:20260415T120000',
-        'DTEND;TZID=Europe/Amsterdam:20260415T130000',
-        'RRULE:FREQ=WEEKLY;COUNT=8',
+    const forged = clientSeries(
         'EXDATE:20260429T100000Z',
         'ORGANIZER;CN=Alice:mailto:alice@eigen.example',
         'X-EIGEN-EVENT-ID:forged-id',
@@ -353,10 +383,10 @@ describe('stamp trust', () => {
         'X-EIGEN-ORGANIZER-EVENT:forged-org-event',
         'X-EIGEN-ORGANIZER-USER:mallory',
         'X-EIGEN-COLOR:#000000',
+        'X-EIGEN-IMPORTED-ORGANIZER:mallory@evil.example',
         'X-EIGEN-EXDATE;X-EIGEN-EVENT-ID=forged-exc;X-EIGEN-SEQ=99:2026-04-29',
         'DTSTART;X-EIGEN-EVENT-ID=forged-param:20260415T100000Z',
-        'END:VEVENT',
-    ];
+    );
 
     test('the untrusted entry reads no stamp the body carries', () => {
         const { events } = parseIcs(vcal(VTZ_AMS, forged));
@@ -375,6 +405,21 @@ describe('stamp trust', () => {
         expect(Object.keys(exclusion)).not.toContain('eventId');
     });
 
+    test('one occurrence excluded in several forms is one cancelled row', () => {
+        const repeated = clientSeries(
+            'EXDATE:20260429T100000Z,20260429T100000Z',
+            'EXDATE;TZID=Europe/Amsterdam:20260429T120000',
+            'X-EIGEN-EXDATE;X-EIGEN-EVENT-ID=evt-exclusion;X-EIGEN-SEQ=5:2026-04-29',
+        );
+
+        expect(parseIcs(vcal(VTZ_AMS, repeated)).events.filter((e) => e.status === 'cancelled')).toHaveLength(1);
+        const cancelled = projectResource(parseResource(vcal(VTZ_AMS, repeated))).events.filter(
+            (e) => e.status === 'cancelled',
+        );
+        expect(cancelled).toHaveLength(1);
+        expect(cancelled[0].eventId).toBe('evt-exclusion');
+    });
+
     test('the trusted projection of the same bytes reads every stamp', () => {
         const { events } = projectResource(parseResource(vcal(VTZ_AMS, forged)));
         const [master, exclusion] = events;
@@ -384,6 +429,7 @@ describe('stamp trust', () => {
         expect(master.data?.organizer?.userId).toBe('mallory');
         expect(master.data?.organizerEventId).toBe('forged-org-event');
         expect(master.data?.color).toBe('#000000');
+        expect(master.importedOrganizer).toBe('mallory@evil.example');
         expect(exclusion.eventId).toBe('forged-exc');
         expect(exclusion.sequence).toBe(99);
     });
@@ -410,6 +456,89 @@ describe('stamp trust', () => {
         expect(serializeResource(incoming)).not.toContain('forged-param');
     });
 
+    // vCard-style property groups: `A.X-EIGEN-EVENT-ID` is the same property under a label, and ical.js
+    // keeps the group in the name.
+    test('a grouped X-EIGEN property and parameter are discarded too', () => {
+        const incoming = parse(
+            vcal(
+                VTZ_AMS,
+                clientSeries('A.X-EIGEN-EVENT-ID:pwned', 'DTEND;B.X-EIGEN-ORGANIZER-USER=pwned:20260415T130000Z'),
+            ),
+        );
+        restampResource(incoming, stored());
+        expect(serializeResource(incoming)).not.toContain('pwned');
+
+        const bare = parse(vcal(VTZ_AMS, clientSeries('A.X-EIGEN-EVENT-ID:pwned')));
+        stripEigenStamps(bare);
+        expect(serializeResource(bare)).not.toContain('pwned');
+    });
+
+    test('the imported organizer rides across a PUT like every other server-owned line', () => {
+        const storedImport = parse(vcal(VTZ_AMS, clientSeries('X-EIGEN-IMPORTED-ORGANIZER:ada@external.com')));
+        const incoming = parse(vcal(VTZ_AMS, clientSeries()));
+        restampResource(incoming, storedImport);
+
+        expect(masterOf(incoming).getFirstPropertyValue('x-eigen-imported-organizer')).toBe('ada@external.com');
+        expect(projectResource(incoming).events[0].importedOrganizer).toBe('ada@external.com');
+    });
+
+    test('two VEVENTs that key alike never share one stored id', () => {
+        const twins = parse(
+            vcal(VTZ_AMS, clientSeries('EXDATE:20260429T100000Z'), clientSeries('EXDATE:20260429T100000Z')),
+        );
+        restampResource(twins, stored());
+
+        const ids = twins.getAllSubcomponents('vevent').map((v) => v.getFirstPropertyValue('x-eigen-event-id'));
+        expect(new Set(ids).size).toBe(ids.length);
+        const exclusionIds = twins
+            .getAllSubcomponents('vevent')
+            .flatMap((v) => v.getAllProperties('x-eigen-exdate').map((s) => s.getFirstParameter('x-eigen-event-id')));
+        expect(exclusionIds).toHaveLength(2);
+        expect(new Set(exclusionIds).size).toBe(2);
+    });
+
+    test('two overrides of one occurrence in two date forms never share one stored id', () => {
+        const override = (recurrenceId: string) => [
+            'BEGIN:VEVENT',
+            'UID:series@eigen',
+            'DTSTAMP:20260101T000000Z',
+            'SUMMARY:Weekly sync (moved)',
+            `RECURRENCE-ID;${recurrenceId}`,
+            'DTSTART;TZID=Europe/Amsterdam:20260422T140000',
+            'DTEND;TZID=Europe/Amsterdam:20260422T150000',
+            'END:VEVENT',
+        ];
+        const incoming = parse(
+            vcal(
+                VTZ_AMS,
+                clientSeries(),
+                override('TZID=Europe/Amsterdam:20260422T120000'),
+                override('VALUE=DATE-TIME:20260422T100000Z'),
+            ),
+        );
+        restampResource(incoming, stored());
+
+        const ids = overridesOf(incoming).map((v) => v.getFirstPropertyValue('x-eigen-event-id'));
+        expect(ids).toHaveLength(2);
+        expect(new Set(ids).size).toBe(2);
+        expect(ids).toContain('evt-override');
+    });
+
+    test('a body carrying twenty thousand EXDATEs re-stamps in well under a second', () => {
+        const exdates: string[] = [];
+        for (let day = 0; day < 20_000; day++) {
+            const when = new Date(Date.UTC(2026, 3, 29) + day * 86400_000);
+            exdates.push(`EXDATE:${when.toISOString().replace(/[-:]|\.\d{3}/g, '')}`);
+            exdates.push(`X-EIGEN-EXDATE;X-EIGEN-EVENT-ID=exc-${day};X-EIGEN-SEQ=1:${when.toISOString().slice(0, 10)}`);
+        }
+        const incoming = parse(vcal(VTZ_AMS, clientSeries(...exdates)));
+
+        const started = performance.now();
+        restampResource(incoming, stored());
+        expect(performance.now() - started).toBeLessThan(1500);
+        expect(masterOf(incoming).getAllProperties('x-eigen-exdate')).toHaveLength(20_000);
+    });
+
     test('a body that stripped every X- line gets its ids and links back', () => {
         const bare = parse(serializeResource(buildResource([MASTER, OVERRIDE, EXCLUSION])));
         stripEigenStamps(bare);
@@ -429,19 +558,7 @@ describe('stamp trust', () => {
             EXCLUSION,
             { ...EXCLUSION, id: 'evt-exclusion-2', recurrenceDate: '2026-05-06', sequence: 7 },
         ]);
-        const client = [
-            'BEGIN:VEVENT',
-            'UID:series@eigen',
-            'DTSTAMP:20260101T000000Z',
-            'SUMMARY:Weekly sync',
-            'SEQUENCE:3',
-            'DTSTART;TZID=Europe/Amsterdam:20260415T120000',
-            'DTEND;TZID=Europe/Amsterdam:20260415T130000',
-            'RRULE:FREQ=WEEKLY;COUNT=8',
-            'EXDATE:20260429T100000Z,20260506T100000Z',
-            'END:VEVENT',
-        ];
-        const incoming = parse(vcal(VTZ_AMS, client));
+        const incoming = parse(vcal(VTZ_AMS, clientSeries('EXDATE:20260429T100000Z,20260506T100000Z')));
         restampResource(incoming, parse(serializeResource(twoExclusions)));
 
         const stamps = masterOf(incoming).getAllProperties('x-eigen-exdate');
@@ -452,20 +569,15 @@ describe('stamp trust', () => {
     });
 
     test('an EXDATE the client added gets a fresh id and the master sequence', () => {
-        const client = [
-            'BEGIN:VEVENT',
-            'UID:series@eigen',
-            'DTSTAMP:20260101T000000Z',
-            'SUMMARY:Weekly sync',
-            'SEQUENCE:3',
-            'DTSTART;TZID=Europe/Amsterdam:20260415T120000',
-            'DTEND;TZID=Europe/Amsterdam:20260415T130000',
-            'RRULE:FREQ=WEEKLY;COUNT=8',
-            'EXDATE;TZID=Europe/Amsterdam:20260429T120000',
-            'EXDATE;TZID=Europe/Amsterdam:20260513T120000',
-            'END:VEVENT',
-        ];
-        const incoming = parse(vcal(VTZ_AMS, client));
+        const incoming = parse(
+            vcal(
+                VTZ_AMS,
+                clientSeries(
+                    'EXDATE;TZID=Europe/Amsterdam:20260429T120000',
+                    'EXDATE;TZID=Europe/Amsterdam:20260513T120000',
+                ),
+            ),
+        );
         restampResource(incoming, stored());
 
         const byKey = new Map(
@@ -480,18 +592,7 @@ describe('stamp trust', () => {
     });
 
     test('an EXDATE the client removed loses its stamp', () => {
-        const client = [
-            'BEGIN:VEVENT',
-            'UID:series@eigen',
-            'DTSTAMP:20260101T000000Z',
-            'SUMMARY:Weekly sync',
-            'SEQUENCE:3',
-            'DTSTART;TZID=Europe/Amsterdam:20260415T120000',
-            'DTEND;TZID=Europe/Amsterdam:20260415T130000',
-            'RRULE:FREQ=WEEKLY;COUNT=8',
-            'END:VEVENT',
-        ];
-        const incoming = parse(vcal(VTZ_AMS, client));
+        const incoming = parse(vcal(VTZ_AMS, clientSeries()));
         restampResource(incoming, stored());
         expect(masterOf(incoming).getAllProperties('x-eigen-exdate')).toHaveLength(0);
     });
@@ -647,6 +748,138 @@ describe('round trip build → serialize → project', () => {
     });
 });
 
+describe('timezone fidelity', () => {
+    const zoned = (start: string, end: string) => [
+        'BEGIN:VEVENT',
+        'UID:zoned@client',
+        'DTSTAMP:20260101T000000Z',
+        'SUMMARY:Zoned',
+        `DTSTART;TZID=Europe/Amsterdam:${start}`,
+        `DTEND;TZID=Europe/Amsterdam:${end}`,
+        'END:VEVENT',
+    ];
+    const single = (start: Date, end: Date): CalendarEvent => ({
+        ...MASTER,
+        rrule: null,
+        data: null,
+        startTime: start,
+        endTime: end,
+    });
+    const startOf = (ics: string): string => parseIcs(ics).events[0].startTime.toISOString();
+
+    test('an ambiguous wall time names the same instant with and without a VTIMEZONE', () => {
+        const lines = zoned('20261025T023000', '20261025T033000');
+        // RFC 5545 resolves the repeated hour to its first pass, which is what the builder writes.
+        expect(startOf(vcal(VTZ_AMS, lines))).toBe('2026-10-25T00:30:00.000Z');
+        expect(startOf(vcal(lines))).toBe('2026-10-25T00:30:00.000Z');
+    });
+
+    test('a row ending in the second pass through the repeated hour round-trips exactly', () => {
+        const [back] = parseIcs(
+            eventsToIcs([single(new Date('2026-10-25T00:30:00Z'), new Date('2026-10-25T01:30:00Z'))]),
+        ).events;
+
+        expect(back.startTime.toISOString()).toBe('2026-10-25T00:30:00.000Z');
+        expect(back.endTime.toISOString()).toBe('2026-10-25T01:30:00.000Z');
+    });
+
+    test('a start in the spring-forward gap reads as a real instant and settles on the second pass', () => {
+        const [first] = parseIcs(vcal(VTZ_AMS, zoned('20260329T023000', '20260329T033000'))).events;
+        expect(Number.isNaN(first.startTime.getTime())).toBe(false);
+
+        const rebuilt = eventsToIcs([single(first.startTime, new Date(first.startTime.getTime() + 3600_000))]);
+        expect(startOf(rebuilt)).toBe(first.startTime.toISOString());
+    });
+
+    test('a TZID Intl rejects still resolves through the VTIMEZONE the file carries', () => {
+        const vtzCustom = [
+            'BEGIN:VTIMEZONE',
+            'TZID:Customer Standard Time',
+            'BEGIN:STANDARD',
+            'DTSTART:19700101T000000',
+            'TZOFFSETFROM:+0500',
+            'TZOFFSETTO:+0500',
+            'END:STANDARD',
+            'END:VTIMEZONE',
+        ];
+        const custom = [
+            'BEGIN:VEVENT',
+            'UID:custom@client',
+            'DTSTAMP:20260101T000000Z',
+            'SUMMARY:Custom zone',
+            'DTSTART;TZID=Customer Standard Time:20260415T120000',
+            'DTEND;TZID=Customer Standard Time:20260415T130000',
+            'END:VEVENT',
+        ];
+
+        expect(startOf(vcal(vtzCustom, custom))).toBe('2026-04-15T07:00:00.000Z');
+    });
+
+    test('a timezone patch brings the VTIMEZONE it needs and drops the one nothing names', () => {
+        const resource = buildResource([{ ...MASTER, data: null }]);
+        expect(tzidsOf(resource)).toEqual(['Europe/Amsterdam']);
+
+        patchEvent(resource, null, { timezone: 'America/New_York' }, CTX);
+
+        expect(tzidsOf(resource)).toEqual(['America/New_York']);
+        expect(parseIcs(serializeResource(resource)).events[0].startTime.toISOString()).toBe(
+            MASTER.startTime.toISOString(),
+        );
+    });
+
+    test('a VTIMEZONE another property still names stays, definition untouched', () => {
+        const resource = parse(KITCHEN_SINK);
+        const before = resource.getAllSubcomponents('vtimezone')[0].toJSON();
+
+        patchEvent(resource, '2026-04-22', { timezone: 'America/New_York' }, CTX);
+
+        expect(tzidsOf(resource).sort()).toEqual(['America/New_York', 'Europe/Amsterdam']);
+        const kept = resource
+            .getAllSubcomponents('vtimezone')
+            .find((v) => String(v.getFirstPropertyValue('tzid')) === 'Europe/Amsterdam')!;
+        expect(kept.toJSON()).toEqual(before);
+    });
+});
+
+describe('the outbound iMIP body', () => {
+    test('carries no VALARM, whatever the method', () => {
+        for (const method of ['REQUEST', 'REPLY', 'CANCEL'] as const) {
+            expect(serializeEventForImip(MASTER, method)).not.toContain('BEGIN:VALARM');
+        }
+    });
+
+    // An ACTION:EMAIL alarm names its own ATTENDEE, so every guest's client would mail the organizer.
+    test('never ships an email reminder as an alarm naming the organizer', () => {
+        const body = serializeEventForImip(
+            { ...MASTER, data: { ...MASTER.data, reminders: [{ type: 'email', minutes: 10 }] } },
+            'REQUEST',
+        );
+
+        expect(body).not.toContain('BEGIN:VALARM');
+        expect(body).not.toContain('ACTION:EMAIL');
+    });
+
+    test('a REQUEST asks the guests to reply and rides the organizer along as accepted', () => {
+        const vevent = parseResource(serializeEventForImip(MASTER, 'REQUEST')).getAllSubcomponents('vevent')[0];
+        const byAddress = new Map(
+            vevent.getAllProperties('attendee').map((a) => [String(a.getFirstValue()).toLowerCase(), a]),
+        );
+
+        expect(byAddress.get('mailto:bob@x.com')!.getFirstParameter('rsvp')).toBe('TRUE');
+        expect(byAddress.get('mailto:bob@x.com')!.getFirstParameter('partstat')).toBe('NEEDS-ACTION');
+        expect(byAddress.get('mailto:alice@eigen.example')!.getFirstParameter('partstat')).toBe('ACCEPTED');
+        expect(byAddress.get('mailto:alice@eigen.example')!.getFirstParameter('rsvp')).toBeUndefined();
+        expect(vevent.getFirstPropertyValue('url')).toBe('https://example.com/meeting');
+    });
+
+    test('a REPLY asks nobody to reply', () => {
+        const vevent = parseResource(serializeEventForImip(MASTER, 'REPLY')).getAllSubcomponents('vevent')[0];
+        for (const attendee of vevent.getAllProperties('attendee')) {
+            expect(attendee.getFirstParameter('rsvp')).toBeUndefined();
+        }
+    });
+});
+
 describe('structural edits', () => {
     test('addExclusion writes an EXDATE with its stamp and drops the override of that key', () => {
         const resource = buildResource([MASTER, OVERRIDE]);
@@ -659,6 +892,18 @@ describe('structural edits', () => {
         expect(stamp.getFirstValue()).toBe('2026-04-22');
         expect(stamp.getFirstParameter('x-eigen-event-id')).toBe('evt-cancel');
         expect(String(masterOf(resource).getFirstPropertyValue('last-modified'))).toBe('2026-06-01T10:00:00Z');
+    });
+
+    test('cancelling one occurrence twice leaves one EXDATE and one stamp', () => {
+        const resource = buildResource([MASTER]);
+        addExclusion(resource, MASTER, { ...EXCLUSION, id: 'evt-cancel-1', recurrenceDate: '2026-04-22' }, CTX);
+        addExclusion(resource, MASTER, { ...EXCLUSION, id: 'evt-cancel-2', recurrenceDate: '2026-04-22' }, CTX);
+
+        const master = masterOf(resource);
+        expect(master.getAllProperties('exdate').flatMap((p) => p.getValues())).toHaveLength(1);
+        const stamps = master.getAllProperties('x-eigen-exdate');
+        expect(stamps).toHaveLength(1);
+        expect(stamps[0].getFirstParameter('x-eigen-event-id')).toBe('evt-cancel-2');
     });
 
     test('removeExclusion drops the EXDATE value and its stamp', () => {

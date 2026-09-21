@@ -182,10 +182,10 @@ function readResource(comp: ICAL.Component): ReadResult {
                 startTime = new Date(Date.UTC(s.year, s.month - 1, s.day));
                 endTime = new Date(Date.UTC(e.year, e.month - 1, e.day));
             } else {
-                startTime = icalTimeToInstant(event.startDate, tzid);
+                startTime = icalTimeToInstant(event.startDate, tzid, null);
                 endTime =
                     dtend || vevent.getFirstProperty('duration')
-                        ? icalTimeToInstant(event.endDate, propTzid(dtend) ?? tzid)
+                        ? icalTimeToInstant(event.endDate, propTzid(dtend), tzid)
                         : new Date(startTime.getTime() + 3600_000);
             }
 
@@ -283,12 +283,17 @@ function readResource(comp: ICAL.Component): ReadResult {
             // SEQUENCE, which is what the RFC 5546 replay guard compares.
             if (rrule) {
                 const stamps = readExclusionStamps(vevent);
+                // One occurrence is one cancelled row: clients repeat an EXDATE value and rewrite it
+                // between TZID, UTC and comma-joined forms, and only the key names the occurrence.
+                const excluded = new Set<string>();
                 for (const exdateProp of vevent.getAllProperties('exdate')) {
-                    const exTzid = propTzid(exdateProp) ?? tzid;
+                    const exTzid = propTzid(exdateProp);
                     for (const exVal of exdateProp.getValues()) {
                         if (!(exVal instanceof ICAL.Time)) continue;
                         const isDateOnly = exVal.isDate;
                         const exDateStr = icalTimeToRecurrenceKey(exVal, tzid);
+                        if (excluded.has(exDateStr)) continue;
+                        excluded.add(exDateStr);
                         const stamp = stamps.get(exDateStr);
 
                         let exStartTime: Date;
@@ -297,7 +302,7 @@ function readResource(comp: ICAL.Component): ReadResult {
                             exStartTime = new Date(Date.UTC(exVal.year, exVal.month - 1, exVal.day));
                             exEndTime = new Date(exStartTime.getTime() + 86400_000);
                         } else {
-                            exStartTime = icalTimeToInstant(exVal, exTzid);
+                            exStartTime = icalTimeToInstant(exVal, exTzid, tzid);
                             exEndTime = new Date(exStartTime.getTime() + (endTime.getTime() - startTime.getTime()));
                         }
 
