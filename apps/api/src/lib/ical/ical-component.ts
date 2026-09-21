@@ -4,6 +4,7 @@
 // quoting are the library's problem and an Eigen edit leaves every property it did not touch as the
 // client wrote it.
 import { randomUUID } from 'node:crypto';
+import { normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
 import { stripControlChars, stripLineBreaks } from '@workspace/lib/content-line';
 import type { Attendee, CalendarEvent, ImipMethod, Reminder, UpdateEventInput } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
@@ -25,7 +26,6 @@ import {
     uidOf,
     utcStampString,
 } from './ical-parse';
-import { normalizeTimezone } from './timezone';
 import { buildVTimezone } from './vtimezone';
 import { computeOccurrenceTimes, localToUtc, storedRecurrenceKey, utcToLocal } from './wall-clock';
 

@@ -3,11 +3,11 @@
 // result type cannot name a single `X-EIGEN-*` fact, so a forged organizer link, color or row id has
 // nowhere to land. `projectResource` is the trusted one, for a resource the store itself wrote, and
 // reads the lines Eigen owns on top of the same projection. Nothing here writes.
+import { normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
 import type { Attendee, EventData, Reminder } from '@workspace/lib/types/calendar';
 import { IMIP_METHODS, type ImipMethod } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
 import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from './recurrence-limits';
-import { normalizeTimezone } from './timezone';
 import { localToUtc, storedRecurrenceKey, utcToLocal } from './wall-clock';
 
 // Every line Eigen owns inside a VEVENT. One source of truth, because a reader, the builder, the

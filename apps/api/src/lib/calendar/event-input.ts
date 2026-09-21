@@ -1,9 +1,9 @@
+import { normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import { RRule } from 'rrule';
 import { ApiError } from '../core';
 import { clampStamp } from '../ical/ical-component';
 import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../ical/recurrence-limits';
-import { normalizeTimezone } from '../ical/timezone';
 import type { CreateEventArgs } from './types';
 
 // The invariants a stored event has to satisfy, and the row shape `buildResource` reads.

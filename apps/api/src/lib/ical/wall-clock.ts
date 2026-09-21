@@ -1,8 +1,8 @@
 // Deep import (not the @workspace/lib/calendar barrel) to keep React out of the API module graph.
+import { normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import { RRule } from 'rrule';
 import { isOutOfRangeRecurrenceStart, isSubDailyRrule, MAX_OCCURRENCES } from './recurrence-limits';
-import { normalizeTimezone } from './timezone';
 
 // Wall-clock arithmetic and the occurrence one recurrence key names. Both the format layer and the
 // calendar domain compute times with these, so they live on the format side of the one-way edge:

@@ -1,4 +1,4 @@
-import { formatEventWhen, isInvitationFromOthers } from '@workspace/lib/calendar/calendar-utils';
+import { formatEventWhen, isInvitationFromOthers, normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
 import { escapeHtml } from '@workspace/lib/html';
 import type { Attendee, CalendarEvent, EventData, ImipMethod } from '@workspace/lib/types/calendar';
 import { type AddressObject, type Attachment, type CalendarInvite, isCalendarPart } from '@workspace/lib/types/mail';
@@ -8,7 +8,6 @@ import { EMAIL_MUTED, EMAIL_TEXT, renderEigenEmail } from '../core/mail-template
 import type { OutboundICalEvent, OutboundMail } from '../core/mailer';
 import type { Home } from '../home';
 import { parseIcs, serializeEventForImip } from '../ical';
-import { normalizeTimezone } from '../ical/timezone';
 import { computeOccurrenceTimes } from '../ical/wall-clock';
 import { verifyImipSender } from '../mail/imip-auth';
 
