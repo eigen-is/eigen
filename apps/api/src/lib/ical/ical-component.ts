@@ -492,7 +492,11 @@ function shapeForImip(vevent: ICAL.Component, event: CalendarEvent, method: Imip
 export function serializeEventForImip(event: CalendarEvent, method: ImipMethod, series?: CalendarEvent): string {
     const vcalendar = newVCalendar();
     vcalendar.addPropertyWithValue('method', method);
-    for (const vtimezone of vtimezoneComponents([event])) vcalendar.addSubcomponent(vtimezone);
+    // The RECURRENCE-ID of an occurrence names its instant in the SERIES' zone, which the occurrence's own
+    // may not be.
+    for (const vtimezone of vtimezoneComponents(series ? [event, series] : [event])) {
+        vcalendar.addSubcomponent(vtimezone);
+    }
     const vevent = buildVEvent(event, { master: series });
     shapeForImip(vevent, event, method);
     vcalendar.addSubcomponent(vevent);

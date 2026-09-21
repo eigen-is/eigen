@@ -930,6 +930,16 @@ describe('the outbound iMIP body', () => {
         expect(vevent.getFirstPropertyValue('url')).toBe('https://example.com/meeting');
     });
 
+    // A body for one occurrence names the instance in the SERIES' zone, so it has to define that zone —
+    // an exception of its own carries none.
+    test('an occurrence body defines the zone its RECURRENCE-ID names', () => {
+        const resource = parseResource(serializeEventForImip({ ...OVERRIDE, timezone: null }, 'REQUEST', MASTER));
+
+        const recurrenceId = overridesOf(resource)[0].getFirstProperty('recurrence-id')!;
+        expect(recurrenceId.getFirstParameter('tzid')).toBe('Europe/Amsterdam');
+        expect(tzidsOf(resource)).toContain('Europe/Amsterdam');
+    });
+
     test('a REPLY asks nobody to reply', () => {
         const vevent = parseResource(serializeEventForImip(MASTER, 'REPLY')).getAllSubcomponents('vevent')[0];
         for (const attendee of vevent.getAllProperties('attendee')) {
