@@ -6,49 +6,30 @@ import { CARD_MAX_BYTES, cardPath } from '../../lib/contacts/card-store';
 import { computeResourceEtag, PATHS } from '../../lib/core';
 import { encodePathSegment } from '../../lib/dav/href';
 import { getHome } from '../../lib/home';
+import { basicAuth, davRequest } from '../dav-test-helpers';
 import { app, getTestContext } from '../setup';
 
 describe('CardDAV', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     let userId: string;
 
-    const basicAuth = (email: string, password = 'testpassword123') => `Basic ${btoa(`${email}:${password}`)}`;
-
     const propfind = (path: string, depth: string) =>
-        app.handle(
-            new Request(`http://localhost${path}`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: depth },
-            }),
-        );
+        davRequest('PROPFIND', path, { email: ctx.alice.user.email, headers: { Depth: depth } });
 
-    const cardUrl = (uri: string) => `http://localhost/dav/addressbooks/${userId}/contacts/${uri}`;
+    const cardPathname = (uri: string) => `/dav/addressbooks/${userId}/contacts/${uri}`;
+    const cardUrl = (uri: string) => `http://localhost${cardPathname(uri)}`;
 
     const putCard = (uri: string, body: string, headers: Record<string, string> = {}) =>
-        app.handle(
-            new Request(cardUrl(uri), {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/vcard; charset=utf-8',
-                    ...headers,
-                },
-                body,
-            }),
-        );
+        davRequest('PUT', cardPathname(uri), {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/vcard; charset=utf-8', ...headers },
+            body,
+        });
 
-    const getCard = (uri: string) =>
-        app.handle(
-            new Request(cardUrl(uri), { method: 'GET', headers: { Authorization: basicAuth(ctx.alice.user.email) } }),
-        );
+    const getCard = (uri: string) => davRequest('GET', cardPathname(uri), { email: ctx.alice.user.email });
 
     const deleteCard = (uri: string, headers: Record<string, string> = {}) =>
-        app.handle(
-            new Request(cardUrl(uri), {
-                method: 'DELETE',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), ...headers },
-            }),
-        );
+        davRequest('DELETE', cardPathname(uri), { email: ctx.alice.user.email, headers });
 
     // A minimal well-formed 3.0 card; extra lines splice in unowned/grouped properties for the fidelity cases.
     const vcard = (uid: string, extra: string[] = []) =>

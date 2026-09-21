@@ -4,14 +4,13 @@ import { EVENT_MAX_BYTES } from '../../lib/caldav/resource';
 import { Calendar } from '../../lib/calendar/calendar';
 import { ApiError } from '../../lib/core';
 import { getHome } from '../../lib/home/get-home';
+import { basicAuth } from '../dav-test-helpers';
 import { app, getTestContext } from '../setup';
 
 describe('CalDAV', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     let userId: string;
     let defaultCalendarId: string;
-
-    const basicAuth = (email: string, password = 'testpassword123') => `Basic ${btoa(`${email}:${password}`)}`;
 
     beforeAll(async () => {
         ctx = await getTestContext();
