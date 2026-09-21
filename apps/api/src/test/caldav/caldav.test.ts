@@ -2017,6 +2017,8 @@ describe('CalDAV', () => {
             expect(withheld).toBeGreaterThan(0);
             expect(served + withheld).toBe(count);
             expect(xml.length).toBeLessThan(REPORT_DATA_BUDGET_BYTES);
+            // The bulk bytes are a third of the shared home's data budget: give them back to the suites that follow.
+            await home.calendar.deleteCalendar(bulk.id);
         }, 120_000);
 
         test('a row whose file vanished is a 404 row, never a 200 without its data', async () => {
