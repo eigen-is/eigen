@@ -594,13 +594,13 @@ export function patchEvent(
         ['dtstart', patch.startTime],
         ['dtend', patch.endTime],
     ];
-    // WHEN the event is: the two instants and the all-day flag. A save that states them all over again
-    // unchanged states no move, so it writes no time property — which is what keeps an HTTP title edit
-    // from rewriting a client's DTSTART form. Only a zone Eigen itself named can be re-stated into
-    // another one: a UTC-Z, floating or client-defined DTSTART is the file's own form to keep.
+    // WHEN the event is — the two instants and the all-day flag — because a form save restates all three
+    // on every edit and restating them unchanged moves nothing. Only a zone Eigen itself named is
+    // re-spelled: a UTC-Z, floating or client-defined DTSTART is the file's own form to keep.
     const moves = bounds.some(([name, submitted]) => {
+        if (submitted === undefined) return false;
         const stored = instantOf(vevent, name, storedTz);
-        return submitted !== undefined && stored !== null && stored.getTime() !== submitted.getTime();
+        return stored !== null && stored.getTime() !== submitted.getTime();
     });
     const whenChanged = moves || allDay !== storedAllDay;
     const zoneChanged = storedTz !== null && tzid !== storedTz;
