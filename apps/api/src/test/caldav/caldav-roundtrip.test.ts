@@ -826,7 +826,6 @@ describe('CalDAV round-trip fidelity', () => {
                 rrule: 'FREQ=DAILY;COUNT=5',
                 timezone: 'America/New_York',
                 uid: 'legacy-rid@eigen',
-                uri: 'legacy-rid.ics',
                 createByUserId: userId,
             });
             await calendar.createEvent(calendarId, {
@@ -841,7 +840,7 @@ describe('CalDAV round-trip fidelity', () => {
                 createByUserId: userId,
             });
 
-            const ics = await getIcs('legacy-rid.ics'); // pre-fix: 500 (RRule.between throws on the raw key)
+            const ics = await getIcs(master.uri); // pre-fix: 500 (RRule.between throws on the raw key)
             // The truncated key '2026-06-04' names the Jun 4 23:00 NY occurrence — the same
             // instance the app-side expansion substitutes for this row.
             expect(ics).toContain('RECURRENCE-ID;TZID=America/New_York:20260604T230000');
@@ -857,7 +856,6 @@ describe('CalDAV round-trip fidelity', () => {
                 rrule: 'FREQ=DAILY;COUNT=5',
                 timezone: 'America/New_York',
                 uid: 'legacy-garbage@eigen',
-                uri: 'legacy-garbage.ics',
                 createByUserId: userId,
             });
 
@@ -877,7 +875,7 @@ describe('CalDAV round-trip fidelity', () => {
                 }),
             ).rejects.toThrow('Invalid occurrence date');
 
-            const ics = await getIcs('legacy-garbage.ics');
+            const ics = await getIcs(master.uri);
             expect(ics).not.toContain('EXDATE');
         });
     });

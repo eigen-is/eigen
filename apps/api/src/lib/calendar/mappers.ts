@@ -22,7 +22,7 @@ export function dbEventToCalendarEvent(
         timezone: row.timezone ?? null,
         parentEventId: row.parentEventId ?? null,
         recurrenceDate: row.recurrenceDate ?? null,
-        status: row.status as CalendarEvent['status'],
+        status: row.status,
         sequence: row.sequence,
         etag: resource.etag,
         data: row.data ?? null,
@@ -35,7 +35,7 @@ export function dbEventToCalendarEvent(
 // An event row and the file it was projected from — what every read of a stored event answers with.
 export type JoinedEvent = {
     events: typeof schema.events.$inferSelect;
-    resources: typeof schema.resources.$inferSelect;
+    resources: { uri: string; etag: string };
 };
 
 export function toEvent(row: JoinedEvent): CalendarEvent {
@@ -63,7 +63,7 @@ export function dbRowToSharedCalendar(row: typeof schema.sharedCalendars.$inferS
         calendarId: row.calendarId,
         calendarName: row.calendarName,
         calendarColor: row.calendarColor,
-        permission: row.permission as SharedCalendar['permission'],
+        permission: row.permission,
         color: row.color ?? null,
         visible: row.visible,
         createdAt: row.createdAt,

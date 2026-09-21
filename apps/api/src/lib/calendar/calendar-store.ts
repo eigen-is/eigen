@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq, gt, inArray } from 'drizzle-orm';
+import { and, eq, gt, inArray, or } from 'drizzle-orm';
 import type ICAL from 'ical.js';
 import { enforceHomeDataQuota } from '../config/enforcement';
 import {
@@ -157,6 +157,27 @@ export async function getResourcesByUris(
         .all();
 }
 
+// The resources a range read answers with: the ones its matched uris name, plus every resource the index
+// cannot expand — a stripped rule or an RDATE still has occurrences to sync.
+export async function getResourcesInRange(
+    calendar: Calendar,
+    calendarId: string,
+    matched: string[],
+): Promise<ResourceRow[]> {
+    await calendar.gate.ensureDrained();
+    const unindexed = eq(schema.resources.hasUnindexedRecurrence, true);
+    return calendar.db
+        .select(RESOURCE_ROW)
+        .from(schema.resources)
+        .where(
+            and(
+                eq(schema.resources.calendarId, calendarId),
+                matched.length ? or(inArray(schema.resources.uriKey, matched.map(uriKeyOf)), unindexed) : unindexed,
+            ),
+        )
+        .all();
+}
+
 // The resources changed after collection token N — one indexed scan, the sync-collection delta.
 export async function getChangedResourcesSince(
     calendar: Calendar,
@@ -191,16 +212,14 @@ export async function getDeletedResourcesSince(
 
 // ---- Bytes ----
 
-// Hashing the bytes just read keeps body and validator one revision; a durably stale row would otherwise
-// 412 every conditional write forever.
-export async function getResource(
+// The bytes of a resource whose row the caller already read — a REPORT holds one per member. Hashing the
+// bytes just read keeps body and validator one revision; a durably stale row would otherwise 412 every
+// conditional write forever.
+export async function readResource(
     calendar: Calendar,
     calendarId: string,
-    uri: string,
+    row: { uri: string; etag: string },
 ): Promise<{ bytes: Uint8Array; etag: string } | null> {
-    await calendar.gate.ensureDrained();
-    const row = resourceRowOf(calendar, calendarId, uri);
-    if (!row) return null;
     const bytes = await readResourceFile(calendar.storage, resourcePath(calendarId, row.uri));
     if (!bytes) {
         calendar.gate.markDirty(gateKey(calendarId, row.uri));
@@ -211,55 +230,126 @@ export async function getResource(
     return { bytes, etag };
 }
 
+export async function getResource(
+    calendar: Calendar,
+    calendarId: string,
+    uri: string,
+): Promise<{ bytes: Uint8Array; etag: string } | null> {
+    await calendar.gate.ensureDrained();
+    const row = resourceRowOf(calendar, calendarId, uri);
+    return row ? readResource(calendar, calendarId, row) : null;
+}
+
 // ---- Writes ----
 
-// The one pair of file write + index commit. The caller holds the gate and owns the component; a throw
-// anywhere after the rename leaves the key dirty for the next drain.
-export async function writeResource(
+// What a write computes before it can land: the rows the file projects to, the bytes that would be stored
+// and their hash. Whoever judges a resource before writing it prepares it once and writes that.
+export type PreparedResource = {
+    id: string;
+    uid: string;
+    text: string;
+    bytes: Uint8Array;
+    etag: string;
+    rows: EventRowInput[];
+    hasUnindexedRecurrence: boolean;
+    skipped: number;
+    duplicateMaster: boolean;
+};
+
+export function prepareResource(
+    calendarId: string,
+    resource: ICAL.Component,
+    existingId: string | null,
+): PreparedResource {
+    const id = existingId ?? randomUUID();
+    const text = serializeResource(resource);
+    const bytes = new TextEncoder().encode(text);
+    return {
+        id,
+        uid: uidOfResource(resource),
+        text,
+        bytes,
+        etag: computeResourceEtag(bytes),
+        ...projectRows(calendarId, id, resource),
+    };
+}
+
+export function writeResource(
     calendar: Calendar,
     calendarId: string,
     uri: string,
     resource: ICAL.Component,
     existing: { id: string; size: number } | null,
-): Promise<{ etag: string; text: string }> {
-    const id = existing?.id ?? randomUUID();
-    const projection = projectRows(calendarId, id, resource);
-    const text = serializeResource(resource);
-    const bytes = new TextEncoder().encode(text);
+): Promise<void> {
+    return writePrepared(
+        calendar,
+        calendarId,
+        uri,
+        prepareResource(calendarId, resource, existing?.id ?? null),
+        existing,
+    );
+}
+
+// The one pair of file write + index commit. The caller holds the gate and owns the component; a throw
+// anywhere after the rename leaves the key dirty for the next drain.
+export async function writePrepared(
+    calendar: Calendar,
+    calendarId: string,
+    uri: string,
+    prepared: PreparedResource,
+    existing: { id: string; size: number } | null,
+): Promise<void> {
     // Both ceilings hold on the bytes that would land, before any write intent is recorded, so a refusal
     // leaves nothing for a drain to chase. The stored resource's size is the credit the edit grace reads.
-    if (bytes.byteLength > EVENT_MAX_BYTES) throw new ApiError(413, 'Event is too large');
+    if (prepared.bytes.byteLength > EVENT_MAX_BYTES) throw new ApiError(413, 'Event is too large');
     if (calendar.meteredIngest) {
-        await enforceHomeDataQuota(calendar.home.user.id, bytes.byteLength, existing?.size ?? 0);
+        await enforceHomeDataQuota(calendar.home.user.id, prepared.bytes.byteLength, existing?.size ?? 0);
     }
-    const etag = computeResourceEtag(bytes);
+    // A name no row holds can still be a file: a dedupe loser, an unparseable resource, a calendar whose
+    // index phase threw. A create that replaced it would destroy bytes nothing carries any more.
+    if (!existing && (await calendar.storage.exists(resourcePath(calendarId, uri)))) {
+        throw new ApiError(412, 'A file already exists under this name');
+    }
 
     try {
         // Only a replacement can land bytes a later stat diff cannot see; a new name is always visible.
         if (existing) calendar.recordPendingWrite(calendarId, uri);
-        const { mtime, size } = await writeResourceFile(calendar.storage, resourcePath(calendarId, uri), bytes);
+        const { mtime, size } = await writeResourceFile(
+            calendar.storage,
+            resourcePath(calendarId, uri),
+            prepared.bytes,
+        );
         calendar.commitResource({
-            id,
+            id: prepared.id,
             calendarId,
             uri,
-            uid: uidOfResource(resource),
-            etag,
+            uid: prepared.uid,
+            etag: prepared.etag,
             mtime,
             size,
-            rows: projection.rows,
-            hasUnindexedRecurrence: projection.hasUnindexedRecurrence,
+            rows: prepared.rows,
+            hasUnindexedRecurrence: prepared.hasUnindexedRecurrence,
         });
         calendar.eventsBytes += size - (existing?.size ?? 0);
     } catch (e) {
         calendar.gate.markDirty(gateKey(calendarId, uri));
         throw e;
     }
-    return { etag, text };
+}
+
+// A UID travels into etags and sync deltas, so an unprintable or endless one is refused rather than stored.
+const MAX_UID_LENGTH = 255;
+function isStorableUid(uid: string): boolean {
+    if (uid.length > MAX_UID_LENGTH) return false;
+    for (let index = 0; index < uid.length; index++) {
+        const code = uid.charCodeAt(index);
+        if (code < 0x20 || code === 0x7f) return false;
+    }
+    return true;
 }
 
 function uidOfResource(resource: ICAL.Component): string {
-    const vevents = resource.getAllSubcomponents('vevent');
-    return vevents.length ? uidOf(vevents[0]) : '';
+    return uidOf(resource.getAllSubcomponents('vevent')[0]);
 }
 
 // A copy of somebody else's event, which the owner may re-alarm and nothing more: the organizer stamp the
@@ -295,9 +385,9 @@ export type PutResourceOptions = {
     ifMatch: string | null;
     ifNoneMatch: string | null;
     actor?: string | null;
-    importedOrganizer?: string | null;
-    // An import files one UID once per Home, where a device syncs one calendar and owns only that one.
-    uidUniqueInHome?: boolean;
+    // Set by a whole-file import alone: it files one UID once per Home, where a device syncs one calendar
+    // and owns only that one, and it carries the ORGANIZER address it took out of the file.
+    import?: { organizer: string | null };
 };
 
 // Preconditions, the UID rules, re-stamping and the linked-copy restriction are all decided here, inside
@@ -307,7 +397,7 @@ export async function putResource(
     calendarId: string,
     uri: string,
     body: string,
-    pre: PutResourceOptions,
+    options: PutResourceOptions,
 ): Promise<PutResourceResult> {
     if (sanitizeCalendarId(calendarId) !== calendarId) return { ok: false, error: 'invalid' };
     if (sanitizeEventUri(uri) !== uri) return { ok: false, error: 'invalid' };
@@ -330,6 +420,7 @@ export async function putResource(
     if (uids.size > 1) return { ok: false, error: 'invalid', reason: 'object', message: 'one UID per resource' };
     const uid = [...uids][0];
     if (!uid) return { ok: false, error: 'invalid', reason: 'data', message: 'UID is required' };
+    if (!isStorableUid(uid)) return { ok: false, error: 'invalid', reason: 'data', message: 'UID is not storable' };
 
     return calendar.gate.run(async (): Promise<PutResourceResult> => {
         // Sanitizing an id is not knowing it exists, and a write would otherwise mkdir a calendar nobody owns.
@@ -342,10 +433,10 @@ export async function putResource(
             .where(and(eq(schema.resources.calendarId, calendarId), eq(schema.resources.uriKey, uriKeyOf(uri))))
             .get();
         const currentEtag = existing ? `"${existing.etag}"` : null;
-        if (pre.ifNoneMatch !== null && matchesIfNoneMatch(pre.ifNoneMatch, currentEtag)) {
+        if (options.ifNoneMatch !== null && matchesIfNoneMatch(options.ifNoneMatch, currentEtag)) {
             return { ok: false, error: 'precondition' };
         }
-        if (pre.ifMatch !== null && !matchesIfMatch(pre.ifMatch, currentEtag)) {
+        if (options.ifMatch !== null && !matchesIfMatch(options.ifMatch, currentEtag)) {
             return { ok: false, error: 'precondition' };
         }
 
@@ -355,7 +446,7 @@ export async function putResource(
             .select({ id: schema.resources.id, uri: schema.resources.uri })
             .from(schema.resources)
             .where(
-                pre.uidUniqueInHome
+                options.import
                     ? eq(schema.resources.uid, uid)
                     : and(eq(schema.resources.calendarId, calendarId), eq(schema.resources.uid, uid)),
             )
@@ -379,43 +470,48 @@ export async function putResource(
             // Nothing the body says about an Eigen line is trusted: the stamps come back from the stored
             // resource, and only a resource nobody wrote before takes the caller's own stamps.
             restampResource(incoming, stored, {
-                createByUserId: stored ? undefined : (pre.actor ?? undefined),
-                importedOrganizer: stored ? undefined : (pre.importedOrganizer ?? undefined),
+                createByUserId: stored ? undefined : (options.actor ?? undefined),
+                importedOrganizer: stored ? undefined : (options.import?.organizer ?? undefined),
             });
             resource = incoming;
         }
 
-        const id = existing?.id ?? randomUUID();
-        const projection = projectRows(calendarId, id, resource);
+        // Prepared once here: the write below lands exactly the rows, bytes and hash these refusals judged.
+        const prepared = prepareResource(calendarId, resource, existing?.id ?? null);
         // One resource is one series a client just wrote: a VEVENT of it Eigen cannot read makes the whole
         // payload malformed, where a previewed or imported file drops that one member and keeps going.
-        if (projection.skipped || projection.duplicateMaster) {
+        if (prepared.skipped || prepared.duplicateMaster) {
             return { ok: false, error: 'invalid', reason: 'object', message: 'invalid iCalendar data' };
         }
+        // The interval invariant the REST write holds, so both surfaces answer alike. A zero-length event
+        // is legal (RFC 5545 §3.6.1) and common; one that ends before it starts is nobody's real event.
+        if (prepared.rows.some((row) => row.endTime < row.startTime)) {
+            return { ok: false, error: 'invalid', reason: 'data', message: 'event ends before it starts' };
+        }
 
-        const text = serializeResource(resource);
+        // A client whose bytes are not what got stored has nothing to attach a validator to (RFC 4791 § 5.3.4).
+        const validator = prepared.text === body ? prepared.etag : null;
 
         // Re-PUTting what is already stored changes nothing: writing it would bump the ctag and send every
         // other client back for a resource that never moved. Judged against the bytes, never the row: a
         // stale row would answer a PUT that does change the file with a no-op nobody ever learns about.
-        const stamped = computeResourceEtag(new TextEncoder().encode(text));
-        if (storedBytes && stamped === computeResourceEtag(storedBytes)) {
-            return { ok: true, etag: text === body ? stamped : null, created: false };
+        if (storedBytes && prepared.etag === computeResourceEtag(storedBytes)) {
+            return { ok: true, etag: validator, created: false };
         }
 
         // The stamps and the stored alarms decide the bytes, so both refusals are raised below the accepted
         // body — and each is a client error the protocol has an element for, not a 500.
-        let etag: string;
         try {
-            ({ etag } = await writeResource(calendar, calendarId, storedUri, resource, existing ?? null));
+            await writePrepared(calendar, calendarId, storedUri, prepared, existing ?? null);
         } catch (e) {
             if (e instanceof ApiError && e.status === 413) return { ok: false, error: 'too-large' };
             if (e instanceof ApiError && e.status === 507) return { ok: false, error: 'quota' };
+            // The same answer a create gets when the name is taken: the client re-reads and picks another.
+            if (e instanceof ApiError && e.status === 412) return { ok: false, error: 'precondition' };
             throw e;
         }
 
-        // A client whose bytes are not what got stored has nothing to attach a validator to (RFC 4791 § 5.3.4).
-        return { ok: true, etag: text === body ? etag : null, created: !existing };
+        return { ok: true, etag: validator, created: !existing };
     });
 }
 

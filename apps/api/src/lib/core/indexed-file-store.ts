@@ -105,16 +105,32 @@ export type ResourceFile = ResourceStat & { uri: string };
 // key is remembered separately and the diff below refuses to call it vanished.
 export type ResourceScan = { files: Map<string, ResourceFile>; skipped: Set<string> };
 
+// One stat per file is a syscall round trip, and this pass runs over every resource on every Home open, so
+// they go out in flight together. The answers are collected by position, so the scan keeps its sorted order.
+const STAT_CONCURRENCY = 16;
+
 export async function statResourceDir(storage: LocalFilesystem, dir: string, suffix: string): Promise<ResourceScan> {
+    const entries = await listResourceUris(storage, dir, suffix);
+    const inFlight = new Semaphore(STAT_CONCURRENCY);
+    const stats = await Promise.all(
+        entries.map(({ uri }) =>
+            inFlight.run(async () => {
+                try {
+                    return await statResourceFile(storage, `${dir}/${uri}`);
+                } catch (e) {
+                    console.warn(`indexed-file-store: skipping ${uri} — could not stat it: ${e}`);
+                    return null;
+                }
+            }),
+        ),
+    );
+
     const files = new Map<string, ResourceFile>();
     const skipped = new Set<string>();
-    for (const { uri, key } of await listResourceUris(storage, dir, suffix)) {
-        try {
-            files.set(key, { uri, ...(await statResourceFile(storage, `${dir}/${uri}`)) });
-        } catch (e) {
-            skipped.add(key);
-            console.warn(`indexed-file-store: skipping ${uri} — could not stat it: ${e}`);
-        }
+    for (const [index, { uri, key }] of entries.entries()) {
+        const stat = stats[index];
+        if (stat) files.set(key, { uri, ...stat });
+        else skipped.add(key);
     }
     return { files, skipped };
 }

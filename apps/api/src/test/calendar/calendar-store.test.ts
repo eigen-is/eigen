@@ -13,8 +13,9 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { eq, sql } from 'drizzle-orm';
+import { getTableConfig } from 'drizzle-orm/sqlite-core';
 import { Calendar } from '../../lib/calendar/calendar';
-import { calendarStorage, EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
+import { EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
 import * as schema from '../../lib/calendar/schema';
 import { LocalFilesystem, PATHS } from '../../lib/core';
 import { CALENDAR_TEST_ROOT, calendarsDirOf, DyingFilesystem, makeCalendar } from '../calendar-test-helpers';
@@ -32,6 +33,18 @@ class MoveFailingFilesystem extends LocalFilesystem {
         if (MoveFailingFilesystem.failNextMove) {
             MoveFailingFilesystem.failNextMove = false;
             throw new Error('the directory move failed');
+        }
+        await super.moveDurable(from, to);
+    }
+}
+
+// A filesystem whose move out of one directory fails, which is what leaves a roll-back owed.
+class RollbackFailingFilesystem extends LocalFilesystem {
+    static failFrom: string | null = null;
+
+    override async moveDurable(from: string, to: string): Promise<void> {
+        if (RollbackFailingFilesystem.failFrom && from.includes(RollbackFailingFilesystem.failFrom)) {
+            throw new Error('the roll-back move failed');
         }
         await super.moveDurable(from, to);
     }
@@ -508,6 +521,20 @@ describe('calendar file store', () => {
         expect((await harness.instance.getCollection(calendarId))!.ctag).toBeGreaterThan(ctag);
     });
 
+    test('a create never replaces a file the index does not know', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        // What a dedupe loser, an unparseable file or a calendar whose index phase threw leaves behind.
+        const planted = vcal(event('planted@eigen', 'Planted'));
+        writeFileSync(fileOf(harness, calendarId, 'planted.ics'), planted);
+
+        const result = await put(harness.instance, calendarId, 'planted.ics', vcal(event('new@eigen', 'New')));
+
+        expect(result).toEqual({ ok: false, error: 'precondition' });
+        expect(readFileSync(fileOf(harness, calendarId, 'planted.ics'), 'utf8')).toBe(planted);
+        expect(await harness.instance.listResources(calendarId)).toHaveLength(0);
+    });
+
     test('a linked copy takes the alarms a client sends, never the Eigen lines inside them', async () => {
         const harness = await makeCalendar();
         const calendarId = await defaultCalendarId(harness);
@@ -543,6 +570,112 @@ describe('calendar file store', () => {
         expect(stored).toContain('TRIGGER:-PT10M');
         expect(stored).toContain('SUMMARY:Linked');
         expect(stored).not.toContain('forged-by-the-client');
+    });
+
+    // A file that drifted out of band is read again by the drain the read that noticed it scheduled. Foreign
+    // bytes are a skip-and-warn there, as in every other pass over them: a throw would escape the gate and
+    // make every later read and write of the Home rethrow it.
+    describe('a drifted file the drain cannot index', () => {
+        const drifted = async (harness: TestHome<Calendar>, calendarId: string, uri: string, bytes: string) => {
+            writeFileSync(fileOf(harness, calendarId, uri), bytes);
+            // The GET hashes what it read, so the row and the bytes disagreeing is what marks the key.
+            await harness.instance.getResource(calendarId, uri);
+        };
+
+        test('bytes that no longer parse leave the row as it was, and the next write still lands', async () => {
+            const harness = await makeCalendar();
+            const calendarId = await defaultCalendarId(harness);
+            await put(harness.instance, calendarId, 'garbled.ics', vcal(event('garbled@eigen', 'Garbled')));
+            await put(harness.instance, calendarId, 'intact.ics', vcal(event('intact@eigen', 'Intact')));
+
+            await drifted(harness, calendarId, 'garbled.ics', 'BEGIN:VCALENDAR\r\nnot really\r\n');
+
+            expect((await harness.instance.getRawEvents(calendarId)).map((r) => r.title).sort()).toEqual([
+                'Garbled',
+                'Intact',
+            ]);
+            expect((await put(harness.instance, calendarId, 'later.ics', vcal(event('later@eigen', 'Later')))).ok).toBe(
+                true,
+            );
+        });
+
+        test('a UID another resource owns is skipped, and the home keeps serving', async () => {
+            const harness = await makeCalendar();
+            const calendarId = await defaultCalendarId(harness);
+            await put(harness.instance, calendarId, 'first.ics', vcal(event('shared-uid@eigen', 'First')));
+            await put(harness.instance, calendarId, 'second.ics', vcal(event('second@eigen', 'Second')));
+
+            const stored = readFileSync(fileOf(harness, calendarId, 'second.ics'), 'utf8');
+            await drifted(
+                harness,
+                calendarId,
+                'second.ics',
+                stored.replace('UID:second@eigen', 'UID:shared-uid@eigen'),
+            );
+
+            expect((await harness.instance.getRawEvents(calendarId)).map((r) => r.uid).sort()).toEqual([
+                'second@eigen',
+                'shared-uid@eigen',
+            ]);
+            expect((await put(harness.instance, calendarId, 'later.ics', vcal(event('later@eigen', 'Later')))).ok).toBe(
+                true,
+            );
+        });
+
+        test("a file claiming another file's event id is skipped, and the home keeps serving", async () => {
+            const harness = await makeCalendar();
+            const calendarId = await defaultCalendarId(harness);
+            await put(harness.instance, calendarId, 'owner.ics', vcal(event('owner@eigen', 'Owner')));
+            await put(harness.instance, calendarId, 'thief.ics', vcal(event('thief@eigen', 'Thief')));
+            const claimed = (await harness.instance.getRawEvents(calendarId)).find((r) => r.uid === 'owner@eigen')!.id;
+
+            const stored = readFileSync(fileOf(harness, calendarId, 'thief.ics'), 'utf8');
+            await drifted(
+                harness,
+                calendarId,
+                'thief.ics',
+                stored.replace(/X-EIGEN-EVENT-ID:[^\r\n]+/, `X-EIGEN-EVENT-ID:${claimed}`),
+            );
+
+            const rows = await harness.instance.getRawEvents(calendarId);
+            expect(rows.map((r) => r.title).sort()).toEqual(['Owner', 'Thief']);
+            expect(rows.filter((r) => r.id === claimed)).toHaveLength(1);
+            expect((await put(harness.instance, calendarId, 'later.ics', vcal(event('later@eigen', 'Later')))).ok).toBe(
+                true,
+            );
+        });
+    });
+
+    test('a UID no index can carry is refused at the put seam, so every surface answers alike', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+
+        for (const uid of [`${'x'.repeat(256)}@eigen`, 'bell\u0007@eigen']) {
+            const result = await put(harness.instance, calendarId, 'uid.ics', vcal(event(uid, 'Unstorable')));
+            expect(result).toMatchObject({ ok: false, error: 'invalid', reason: 'data' });
+        }
+        expect(await harness.instance.listResources(calendarId)).toHaveLength(0);
+        expect(readdirSync(join(calendarsDirOf(harness.dir), calendarId))).toHaveLength(0);
+    });
+
+    test('a resource that ends before it starts is refused, where a zero-length one is stored', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        const bounds = (uid: string, lines: string[]) =>
+            vcal(['BEGIN:VEVENT', `UID:${uid}`, ...lines, 'SUMMARY:Bounded', 'END:VEVENT']);
+
+        for (const [uid, lines] of [
+            ['reversed@eigen', ['DTSTART:20260401T110000Z', 'DTEND:20260401T100000Z']],
+            ['negative@eigen', ['DTSTART:20260401T110000Z', 'DURATION:-PT1H']],
+        ] as const) {
+            const result = await put(harness.instance, calendarId, 'bounds.ics', bounds(uid, [...lines]));
+            expect(result).toMatchObject({ ok: false, error: 'invalid', reason: 'data' });
+        }
+
+        // RFC 5545 §3.6.1 allows DTEND = DTSTART, and clients in the wild write it.
+        const zero = bounds('zero@eigen', ['DTSTART:20260401T100000Z', 'DTEND:20260401T100000Z']);
+        expect((await put(harness.instance, calendarId, 'zero.ics', zero)).ok).toBe(true);
+        expect((await harness.instance.listResources(calendarId)).map((r) => r.uri)).toEqual(['zero.ics']);
     });
 
     test('a name a file system cannot hold is refused, never rewritten', async () => {
@@ -628,10 +761,7 @@ describe('calendar file store', () => {
     });
 
     test('an index transaction that fails leaves the index stale and still opens the home', async () => {
-        const harness = await makeTestHome(
-            (home) => new TombstoneFailingCalendar(home, calendarStorage(home.homeDir)),
-            CALENDAR_TEST_ROOT,
-        );
+        const harness = await makeTestHome((home) => new TombstoneFailingCalendar(home), CALENDAR_TEST_ROOT);
         const calendarId = await defaultCalendarId(harness);
         await put(harness.instance, calendarId, 'vanishing.ics', vcal(event('vanishing@eigen', 'Vanishing')));
 
@@ -900,6 +1030,71 @@ describe('calendar file store', () => {
             expect(names).toContain('taken.ics');
             expect(await harness.instance.listResources(source)).toHaveLength(0);
         });
+
+        test('a name the target holds as a file the index does not know becomes a fresh one', async () => {
+            const harness = await makeCalendar();
+            const source = await defaultCalendarId(harness);
+            const target = (await harness.instance.createCalendar({ name: 'Target', color: '#2563eb' })).id;
+            const moved = await seriesOf(harness, source, 'move-6@eigen', 'planted.ics');
+            const planted = vcal(event('planted@eigen', 'Planted'));
+            writeFileSync(join(calendarsDirOf(harness.dir), target, 'planted.ics'), planted);
+
+            await harness.instance.moveEvent(source, moved.id, target);
+
+            expect(readFileSync(join(calendarsDirOf(harness.dir), target, 'planted.ics'), 'utf8')).toBe(planted);
+            expect(readdirSync(join(calendarsDirOf(harness.dir), target))).toHaveLength(2);
+            expect((await harness.instance.getRawEvents(target)).map((e) => e.id)).toEqual([moved.id]);
+        });
+
+        test('a transaction that fails after the rename puts the file back where its row still names it', async () => {
+            const harness = await makeCalendar();
+            const source = await defaultCalendarId(harness);
+            const target = (await harness.instance.createCalendar({ name: 'Target', color: '#2563eb' })).id;
+            const moved = await seriesOf(harness, source, 'move-4@eigen', 'rolled-back.ics');
+
+            harness.instance.db.run(
+                sql`CREATE TRIGGER refuse_move BEFORE UPDATE ON resources BEGIN SELECT RAISE(ABORT, 'the index transaction failed'); END`,
+            );
+            await expect(harness.instance.moveEvent(source, moved.id, target)).rejects.toThrow(
+                'the index transaction failed',
+            );
+            harness.instance.db.run(sql`DROP TRIGGER refuse_move`);
+
+            expect(readdirSync(join(calendarsDirOf(harness.dir), source))).toEqual(['rolled-back.ics']);
+            expect(readdirSync(join(calendarsDirOf(harness.dir), target))).toEqual([]);
+            expect((await harness.instance.getRawEvents(source)).map((e) => e.id)).toEqual([moved.id]);
+            expect((await harness.instance.getResource(source, 'rolled-back.ics'))!.etag).toBe(
+                (await harness.instance.listResources(source))[0].etag,
+            );
+        });
+
+        test('a roll-back that fails too leaves both names for the drain, and the event lands in its target', async () => {
+            const harness = await makeCalendar(
+                (homeDir) => new RollbackFailingFilesystem(`${homeDir}/${PATHS.CALENDAR.ROOT}`),
+            );
+            const source = await defaultCalendarId(harness);
+            const target = (await harness.instance.createCalendar({ name: 'Target', color: '#2563eb' })).id;
+            const moved = await seriesOf(harness, source, 'move-5@eigen', 'stranded.ics');
+            const sourceCtag = (await harness.instance.getCollection(source))!.ctag;
+
+            harness.instance.db.run(
+                sql`CREATE TRIGGER refuse_move BEFORE UPDATE ON resources BEGIN SELECT RAISE(ABORT, 'the index transaction failed'); END`,
+            );
+            RollbackFailingFilesystem.failFrom = target;
+            await expect(harness.instance.moveEvent(source, moved.id, target)).rejects.toThrow(
+                'the index transaction failed',
+            );
+            RollbackFailingFilesystem.failFrom = null;
+            harness.instance.db.run(sql`DROP TRIGGER refuse_move`);
+
+            // Both keys are dirty, so the next read re-indexes the file where it lies and drops the row it left.
+            const rows = await harness.instance.getRawEvents(target);
+            expect(rows.map((e) => e.id)).toEqual([moved.id]);
+            expect(await harness.instance.listResources(source)).toHaveLength(0);
+            expect((await harness.instance.getDeletedResourcesSince(source, sourceCtag)).map((d) => d.uri)).toEqual([
+                'stranded.ics',
+            ]);
+        });
     });
 
     // The window between the staged rename and the row delete: the sweep decides by the row, so a crash
@@ -975,6 +1170,23 @@ describe('calendar file store', () => {
             expect(exceptions.map((e) => e.title)).toEqual(['Second take']);
             expect(await harness.instance.listResources(calendarId)).toHaveLength(1);
         });
+    });
+
+    // The DDL creates the indexes and the drizzle schema is what a query plan is read against, so a query
+    // can only be proven to seek if the two name the same set.
+    test('the migration and the schema name the same indexes', async () => {
+        const harness = await makeCalendar();
+        const declared = Object.values(schema)
+            .flatMap((table) => getTableConfig(table).indexes.map((index) => index.config.name))
+            .sort();
+        const created = harness.instance.db
+            .all<{
+                name: string;
+            }>(sql.raw("SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%'"))
+            .map((row) => row.name)
+            .sort();
+
+        expect(created).toEqual(declared);
     });
 
     // An import asks "does this Home already hold the UID?" once per series, up to ICS_IMPORT_MAX_EVENTS

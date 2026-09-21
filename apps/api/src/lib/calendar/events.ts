@@ -19,7 +19,7 @@ import { eventForFile, validateEventInput } from './event-input';
 import { composeRsvpReply } from './imip';
 import { propagateCancellation, propagateDecline, propagateInvitation } from './invite-propagation';
 import { toEvent } from './mappers';
-import { gateKey, resourcePath, sanitizeEventUri } from './resource-store';
+import { gateKey, resourcePath } from './resource-store';
 import * as schema from './schema';
 import type { CreateEventArgs, UpdateEventArgs } from './types';
 
@@ -141,8 +141,8 @@ export async function writeEvent(
     validateEventInput(input);
     if (input.parentEventId) return writeOverride(calendar, calendarId, input);
 
-    const uri = input.uri ?? `${randomUUID()}.ics`;
-    if (sanitizeEventUri(uri) !== uri) throw new ApiError(400, 'Invalid event name');
+    // Eigen mints every name it writes: a UID is its author's string and may carry `/`, `..` or quotes.
+    const uri = `${randomUUID()}.ics`;
     const uid = input.uid || randomUUID();
     if (uidHolder(calendar, calendarId, uid)) throw new ApiError(409, 'An event with this UID already exists');
     const event = eventForFile({ id: randomUUID(), calendarId, uid, input, now: new Date() });
@@ -364,41 +364,58 @@ export async function moveEvent(
         if (uidHolder(calendar, targetCalendarId, resource.uid)) {
             throw new ApiError(409, 'The target calendar already holds this event');
         }
-        // A name the target already uses becomes a fresh one; a client sees a delete plus a create either way.
-        const targetUri = store.resourceRowOf(calendar, targetCalendarId, resource.uri)
-            ? `${randomUUID()}.ics`
-            : resource.uri;
+        // A name the target already uses becomes a fresh one; a client sees a delete plus a create either
+        // way. A file no row of the target holds counts as used too, or the rename would destroy it.
+        const taken =
+            !!store.resourceRowOf(calendar, targetCalendarId, resource.uri) ||
+            (await calendar.storage.exists(resourcePath(targetCalendarId, resource.uri)));
+        const targetUri = taken ? `${randomUUID()}.ics` : resource.uri;
         await calendar.storage.moveDurable(
             resourcePath(calendarId, resource.uri),
             resourcePath(targetCalendarId, targetUri),
         );
-        calendar.db.transaction((tx) => {
-            const sourceCtag = calendar.bumpCtag(tx, calendarId);
-            calendar.tombstone(tx, calendarId, resource.uri, resource.uriKey, sourceCtag);
-            const targetCtag = calendar.bumpCtag(tx, targetCalendarId);
-            // Moving A→B then B→A must not leave A listing the uri as both a 200 and a 404.
-            tx.delete(schema.resourceTombstones)
-                .where(
-                    and(
-                        eq(schema.resourceTombstones.calendarId, targetCalendarId),
-                        eq(schema.resourceTombstones.uriKey, uriKeyOf(targetUri)),
-                    ),
-                )
-                .run();
-            tx.update(schema.resources)
-                .set({
-                    calendarId: targetCalendarId,
-                    uri: targetUri,
-                    uriKey: uriKeyOf(targetUri),
-                    resourceCtag: targetCtag,
-                })
-                .where(eq(schema.resources.id, resource.id))
-                .run();
-            tx.update(schema.events)
-                .set({ calendarId: targetCalendarId })
-                .where(eq(schema.events.resourceId, resource.id))
-                .run();
-        });
+        try {
+            calendar.db.transaction((tx) => {
+                const sourceCtag = calendar.bumpCtag(tx, calendarId);
+                calendar.tombstone(tx, calendarId, resource.uri, resource.uriKey, sourceCtag);
+                const targetCtag = calendar.bumpCtag(tx, targetCalendarId);
+                // Moving A→B then B→A must not leave A listing the uri as both a 200 and a 404.
+                tx.delete(schema.resourceTombstones)
+                    .where(
+                        and(
+                            eq(schema.resourceTombstones.calendarId, targetCalendarId),
+                            eq(schema.resourceTombstones.uriKey, uriKeyOf(targetUri)),
+                        ),
+                    )
+                    .run();
+                tx.update(schema.resources)
+                    .set({
+                        calendarId: targetCalendarId,
+                        uri: targetUri,
+                        uriKey: uriKeyOf(targetUri),
+                        resourceCtag: targetCtag,
+                    })
+                    .where(eq(schema.resources.id, resource.id))
+                    .run();
+                tx.update(schema.events)
+                    .set({ calendarId: targetCalendarId })
+                    .where(eq(schema.events.resourceId, resource.id))
+                    .run();
+            });
+        } catch (e) {
+            // A live process rolls its own rename back; if even that fails, both keys settle the pair —
+            // source first, because the row dropped there frees the event ids the target file carries.
+            try {
+                await calendar.storage.moveDurable(
+                    resourcePath(targetCalendarId, targetUri),
+                    resourcePath(calendarId, resource.uri),
+                );
+            } catch {
+                calendar.gate.markDirty(gateKey(calendarId, resource.uri));
+                calendar.gate.markDirty(gateKey(targetCalendarId, targetUri));
+            }
+            throw e;
+        }
         return true;
     });
 

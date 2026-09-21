@@ -1,6 +1,5 @@
 import type { UserSettings } from '@workspace/lib/types/settings';
 import { Calendar } from '../calendar/calendar';
-import { calendarStorage } from '../calendar/resource-store';
 import { getUserHomePath } from '../config/paths';
 import { getServerSettings, mapStorageType } from '../config/server-settings';
 import { Contacts } from '../contacts/contacts';
@@ -24,7 +23,7 @@ export class UserHome extends Home {
         this._contacts = new Contacts(this);
         this._mail = new Mail(this, new MaildirStore(this));
         this._drive = new Drive(this);
-        this._calendar = new Calendar(this, calendarStorage(this.homeDir));
+        this._calendar = new Calendar(this);
         this._notifications = new NotificationCenter(this);
     }
 

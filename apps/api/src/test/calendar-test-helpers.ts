@@ -1,6 +1,5 @@
 import { join } from 'node:path';
 import { Calendar } from '../lib/calendar/calendar';
-import { calendarStorage } from '../lib/calendar/resource-store';
 import { LocalFilesystem } from '../lib/core';
 import { makeTestHome, type TestHome } from './home-test-helpers';
 
@@ -37,12 +36,14 @@ export const CALENDAR_TEST_ROOT = join(import.meta.dir, `../../../../data-test/t
 
 // Isolated Calendar instance over a temp home dir — see home-test-helpers.ts for the stub Home under it, and
 // `reopen()` on the harness for the restart simulation. `storageOf` is how a fault-injection suite hands the
-// instance a filesystem that dies where a real one would: the production seam is the same parameter the two
-// Home classes pass their own filesystem through.
-export function makeCalendar(
-    storageOf: (homeDir: string) => LocalFilesystem = calendarStorage,
-): Promise<TestHome<Calendar>> {
-    return makeTestHome((home) => new Calendar(home, storageOf(home.homeDir)), CALENDAR_TEST_ROOT);
+// instance a filesystem that dies where a real one would: the public field is assigned before `init`, which
+// is the first call to touch it.
+export function makeCalendar(storageOf?: (homeDir: string) => LocalFilesystem): Promise<TestHome<Calendar>> {
+    return makeTestHome((home) => {
+        const calendar = new Calendar(home);
+        if (storageOf) calendar.storage = storageOf(home.homeDir);
+        return calendar;
+    }, CALENDAR_TEST_ROOT);
 }
 
 // Where a harness home keeps its calendar directories — one spelling of the layout for every calendar test

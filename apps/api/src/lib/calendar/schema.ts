@@ -1,4 +1,4 @@
-import type { CalendarShare, EventData } from '@workspace/lib/types/calendar';
+import type { CalendarEvent, CalendarShare, EventData } from '@workspace/lib/types/calendar';
 import { sql } from 'drizzle-orm';
 import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
@@ -68,7 +68,7 @@ export const events = sqliteTable(
         timezone: text('timezone'),
         parentEventId: text('parentEventId'),
         recurrenceDate: text('recurrenceDate'),
-        status: text('status').notNull().default('confirmed'),
+        status: text('status').$type<CalendarEvent['status']>().notNull().default('confirmed'),
         data: text('data', { mode: 'json' }).$type<EventData | null>(),
         organizerEventId: text('organizerEventId'),
         organizerUserId: text('organizerUserId'),
@@ -119,15 +119,21 @@ export const pendingWrites = sqliteTable(
     }),
 );
 
-export const sharedCalendars = sqliteTable('shared_calendars', {
-    id: text('id').primaryKey(),
-    ownerUserId: text('ownerUserId').notNull(),
-    calendarId: text('calendarId').notNull(),
-    calendarName: text('calendarName').notNull(),
-    calendarColor: text('calendarColor').notNull(),
-    permission: text('permission').notNull(),
-    color: text('color'),
-    visible: integer('visible', { mode: 'boolean' }).notNull().default(true),
-    createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
-    updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
-});
+export const sharedCalendars = sqliteTable(
+    'shared_calendars',
+    {
+        id: text('id').primaryKey(),
+        ownerUserId: text('ownerUserId').notNull(),
+        calendarId: text('calendarId').notNull(),
+        calendarName: text('calendarName').notNull(),
+        calendarColor: text('calendarColor').notNull(),
+        permission: text('permission').$type<CalendarShare['permission']>().notNull(),
+        color: text('color'),
+        visible: integer('visible', { mode: 'boolean' }).notNull().default(true),
+        createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+        updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+    },
+    (table) => ({
+        owner: index('idx_shared_calendars_ownerUserId').on(table.ownerUserId),
+    }),
+);

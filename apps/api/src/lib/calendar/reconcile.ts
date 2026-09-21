@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
-import { and, eq, inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import type ICAL from 'ical.js';
 import {
     computeResourceEtag,
@@ -10,13 +10,20 @@ import {
     PATHS,
     type ResourceFile,
     readResourceFile,
-    uriKeyOf,
     writeResourceFile,
 } from '../core';
 import { remintEventIds, serializeResource } from '../ical';
 import type { Calendar } from './calendar';
 import { projectRows } from './calendar-store';
-import { calendarDir, type EventRowInput, resourcePath, sanitizeCalendarId, statCalendarDir } from './resource-store';
+import {
+    calendarDir,
+    clearPendingWrite,
+    type EventRowInput,
+    indexResource,
+    resourcePath,
+    sanitizeCalendarId,
+    statCalendarDir,
+} from './resource-store';
 import * as schema from './schema';
 
 // The index pass over `calendars/`: files are the truth, so it runs before anything is served and re-reads
@@ -136,8 +143,10 @@ function recoverCalendarRows(calendar: Calendar, orphans: string[]): void {
 }
 
 // A row id another resource already holds means this file is a copy of one, so it gets fresh ids. Only the
-// candidates the dedupe kept run it: a discarded one holds no ids to lose.
-function applyCopyRule(calendar: Calendar, candidate: Candidate, resource: ICAL.Component, owners: IdOwners): void {
+// candidates the dedupe kept run it: a discarded one holds no ids to lose, and a restore parsed nothing.
+function applyCopyRule(calendar: Calendar, candidate: Candidate, owners: IdOwners): void {
+    const resource = candidate.resource;
+    if (!resource) return;
     const ids = candidate.rows.map((row) => row.id);
     const indexed = calendar.db
         .select({ id: schema.events.id, resourceId: schema.events.resourceId })
@@ -227,16 +236,6 @@ async function buildCandidates(
     return candidates;
 }
 
-// A uid is unique per calendar, so the collision scope is the calendar plus the uid. A loser is skipped and
-// logged, never deleted: two files with one UID is the ordinary result of copying one by hand.
-function dedupeCandidates(candidates: Candidate[], uidOwner: Map<string, string>): Candidate[] {
-    return dedupeByUid(candidates, uidOwner, (c) => ({
-        scope: `${c.calendarId}|${c.uid}`,
-        id: c.id,
-        uri: `${c.calendarId}/${c.file.uri}`,
-    }));
-}
-
 // The bytes the copy rule reminted go back to disk before their rows are indexed, so file and index agree.
 // Returns the byte delta against what the stat pass counted.
 async function rewriteCopies(calendar: Calendar, candidates: Candidate[]): Promise<number> {
@@ -273,40 +272,26 @@ function writeIndexed(calendar: Calendar, calendarId: string, candidates: Candid
         if (changed.length > 0) {
             const ctag = calendar.bumpCtag(tx, calendarId);
             for (const c of changed) {
-                const row = {
-                    uri: c.file.uri,
-                    uriKey: uriKeyOf(c.file.uri),
-                    uid: c.uid,
-                    etag: c.etag,
-                    mtime: c.file.mtime,
-                    size: c.file.size,
-                    resourceCtag: ctag,
-                    hasUnindexedRecurrence: c.hasUnindexedRecurrence,
-                };
-                tx.insert(schema.resources)
-                    .values({ id: c.id, calendarId, ...row })
-                    .onConflictDoUpdate({ target: schema.resources.id, set: row })
-                    .run();
-                tx.delete(schema.events).where(eq(schema.events.resourceId, c.id)).run();
-                for (const event of c.rows) tx.insert(schema.events).values(event).run();
-                // A present file is alive again, so one re-planted at a deleted uri drops its stale removal.
-                tx.delete(schema.resourceTombstones)
-                    .where(
-                        and(
-                            eq(schema.resourceTombstones.calendarId, calendarId),
-                            eq(schema.resourceTombstones.uriKey, row.uriKey),
-                        ),
-                    )
-                    .run();
+                indexResource(
+                    tx,
+                    {
+                        id: c.id,
+                        calendarId,
+                        uri: c.file.uri,
+                        uid: c.uid,
+                        etag: c.etag,
+                        mtime: c.file.mtime,
+                        size: c.file.size,
+                        resourceCtag: ctag,
+                        hasUnindexedRecurrence: c.hasUnindexedRecurrence,
+                    },
+                    c.rows,
+                );
             }
         }
 
         // This pass settled every prepared uri, so the recovery drain behind init owes their intents nothing.
-        for (const c of candidates) {
-            tx.delete(schema.pendingWrites)
-                .where(and(eq(schema.pendingWrites.calendarId, calendarId), eq(schema.pendingWrites.uri, c.file.uri)))
-                .run();
-        }
+        for (const c of candidates) clearPendingWrite(tx, calendarId, c.file.uri);
     });
 }
 
@@ -415,10 +400,15 @@ export async function reconcileIndex(calendar: Calendar): Promise<void> {
                         .all()
                         .map((r) => [`${pass.calendarId}|${r.uid}`, r.id] as const),
                 );
-                const prepared = dedupeCandidates(candidates, uidOwner);
-                for (const candidate of prepared) {
-                    if (candidate.resource) applyCopyRule(calendar, candidate, candidate.resource, owners);
-                }
+                // A uid is unique per calendar, so the collision scope is the calendar plus the uid. A loser
+                // is skipped and logged, never deleted: two files with one UID is what copying one by hand
+                // ordinarily leaves.
+                const prepared = dedupeByUid(candidates, uidOwner, (c) => ({
+                    scope: `${pass.calendarId}|${c.uid}`,
+                    id: c.id,
+                    uri: `${pass.calendarId}/${c.file.uri}`,
+                }));
+                for (const candidate of prepared) applyCopyRule(calendar, candidate, owners);
                 bytes += await rewriteCopies(calendar, prepared);
                 writeIndexed(calendar, pass.calendarId, prepared);
             } catch (e) {

@@ -10,14 +10,14 @@ import type {
 } from '@workspace/lib/types/calendar';
 import { type SSEvent, SSEventType } from '@workspace/lib/types/sse';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, getTableColumns, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import type ICAL from 'ical.js';
 import {
     ApiError,
     BroadcastBatch,
     computeResourceEtag,
-    type LocalFilesystem,
+    LocalFilesystem,
     PATHS,
     type PutResourceResult,
     readResourceFile,
@@ -39,10 +39,12 @@ import * as invitations from './invitations';
 import { dbCalendarToCalendarItem, toEvent } from './mappers';
 import * as occurrences from './occurrences';
 import { reconcileIndex, stagedDeletesOf } from './reconcile';
-import type { CalendarCollection } from './resource-store';
+import type { CalendarCollection, Tx } from './resource-store';
 import {
     calendarDir,
+    clearPendingWrite,
     gateKey,
+    indexResource,
     parseGateKey,
     resourcePath,
     sanitizeCalendarId,
@@ -60,14 +62,11 @@ function getCalendarDatabase(home: Home): Promise<ManagedDatabase<typeof schema>
     return home.getLocalDatabase(CALENDAR_DB_CONFIG, PATHS.CALENDAR.DB);
 }
 
-// The transaction handle drizzle hands a `db.transaction(cb)` callback.
-type Tx = Parameters<Parameters<BunSQLiteDatabase<typeof schema>['transaction']>[0]>[0];
-
 export class Calendar {
     private managedDb!: ManagedDatabase<typeof schema>;
     db!: BunSQLiteDatabase<typeof schema>;
     home: Home;
-    storage: LocalFilesystem;
+    storage: LocalFilesystem; // internal — used by calendar/*.ts
 
     // Process death takes the gate's dirty set with it, which is what `pending_writes` is for.
     gate = new WriteGate((keys, settled) => this.drainDirty(keys, settled));
@@ -87,9 +86,9 @@ export class Calendar {
     // Only the reconcile/drain machinery bumps this; the mutation paths parse for their own merges.
     private parses = 0;
 
-    constructor(home: Home, storage: LocalFilesystem) {
+    constructor(home: Home) {
         this.home = home;
-        this.storage = storage;
+        this.storage = new LocalFilesystem(`${home.homeDir}/${PATHS.CALENDAR.ROOT}`);
     }
 
     public async init(): Promise<void> {
@@ -166,13 +165,6 @@ export class Calendar {
         this.db.insert(schema.pendingWrites).values({ calendarId, uri }).onConflictDoNothing().run();
     }
 
-    private clearPendingWrite(calendarId: string, uri: string): void {
-        this.db
-            .delete(schema.pendingWrites)
-            .where(and(eq(schema.pendingWrites.calendarId, calendarId), eq(schema.pendingWrites.uri, uri)))
-            .run();
-    }
-
     parseResourceFile(bytes: Uint8Array): ICAL.Component {
         this.parses++;
         return parseResource(new TextDecoder().decode(bytes));
@@ -185,43 +177,11 @@ export class Calendar {
 
     // The single index-write seam: the ctag, the resource row, its event rows, the tombstone, all in one transaction.
     commitResource(commit: ResourceCommit): void {
-        const uriKey = uriKeyOf(commit.uri);
+        const { rows, ...resource } = commit;
         this.db.transaction((tx) => {
-            const ctag = this.bumpCtag(tx, commit.calendarId);
-            const row = {
-                uri: commit.uri,
-                uriKey,
-                uid: commit.uid,
-                etag: commit.etag,
-                mtime: commit.mtime,
-                size: commit.size,
-                resourceCtag: ctag,
-                hasUnindexedRecurrence: commit.hasUnindexedRecurrence,
-            };
-            tx.insert(schema.resources)
-                .values({ id: commit.id, calendarId: commit.calendarId, ...row })
-                .onConflictDoUpdate({ target: schema.resources.id, set: row })
-                .run();
-            tx.delete(schema.events).where(eq(schema.events.resourceId, commit.id)).run();
-            for (const event of commit.rows) tx.insert(schema.events).values(event).run();
-            // So no href is ever both a 200 and a 404 in one sync response.
-            tx.delete(schema.resourceTombstones)
-                .where(
-                    and(
-                        eq(schema.resourceTombstones.calendarId, commit.calendarId),
-                        eq(schema.resourceTombstones.uriKey, uriKey),
-                    ),
-                )
-                .run();
+            indexResource(tx, { ...resource, resourceCtag: this.bumpCtag(tx, commit.calendarId) }, rows);
             // The write intent settles in the very transaction that settles the pair; a crash earlier leaves it for init.
-            tx.delete(schema.pendingWrites)
-                .where(
-                    and(
-                        eq(schema.pendingWrites.calendarId, commit.calendarId),
-                        eq(schema.pendingWrites.uri, commit.uri),
-                    ),
-                )
-                .run();
+            clearPendingWrite(tx, commit.calendarId, commit.uri);
         });
     }
 
@@ -245,27 +205,34 @@ export class Calendar {
     private async drainDirty(keys: string[], settled: (key: string) => void): Promise<void> {
         for (const key of keys) {
             const { calendarId, uri } = parseGateKey(key);
-            const existing = this.db
-                .select()
-                .from(schema.resources)
-                .where(and(eq(schema.resources.calendarId, calendarId), eq(schema.resources.uriKey, uriKeyOf(uri))))
-                .get();
-            const bytes = this.calendarRow(calendarId)
-                ? await readResourceFile(this.storage, resourcePath(calendarId, existing?.uri ?? uri))
-                : null;
-            // A file the row already describes settles without a commit: a lock-free read that raced a write
-            // marks a pair that is whole, and a commit would bump a ctag for nothing.
-            if (bytes) {
-                await this.indexIfChanged(calendarId, existing?.uri ?? uri, bytes, existing);
-            } else if (existing) {
-                this.db.transaction((tx) => {
-                    const ctag = this.bumpCtag(tx, calendarId);
-                    tx.delete(schema.resources).where(eq(schema.resources.id, existing.id)).run();
-                    this.tombstone(tx, calendarId, existing.uri, existing.uriKey, ctag);
-                });
-                this.eventsBytes -= existing.size;
+            try {
+                const existing = this.db
+                    .select()
+                    .from(schema.resources)
+                    .where(and(eq(schema.resources.calendarId, calendarId), eq(schema.resources.uriKey, uriKeyOf(uri))))
+                    .get();
+                const bytes = this.calendarRow(calendarId)
+                    ? await readResourceFile(this.storage, resourcePath(calendarId, existing?.uri ?? uri))
+                    : null;
+                // A file the row already describes settles without a commit: a lock-free read that raced a
+                // write marks a pair that is whole, and a commit would bump a ctag for nothing.
+                if (bytes) {
+                    await this.indexIfChanged(calendarId, existing?.uri ?? uri, bytes, existing);
+                } else if (existing) {
+                    this.db.transaction((tx) => {
+                        const ctag = this.bumpCtag(tx, calendarId);
+                        tx.delete(schema.resources).where(eq(schema.resources.id, existing.id)).run();
+                        this.tombstone(tx, calendarId, existing.uri, existing.uriKey, ctag);
+                    });
+                    this.eventsBytes -= existing.size;
+                }
+                clearPendingWrite(this.db, calendarId, uri);
+            } catch (e) {
+                // A pass over foreign bytes skips and warns, as every other one does: rethrowing here would
+                // escape the gate and take every later read and write of this Home with it. The write intent
+                // stays behind for the next init to retry.
+                console.warn(`calendar: could not re-index ${key}:`, e);
             }
-            this.clearPendingWrite(calendarId, uri);
             settled(key);
         }
     }
@@ -469,14 +436,22 @@ export class Calendar {
         return store.getResource(this, calendarId, uri);
     }
 
+    // For a caller that already holds the row: a listing serves its members from the rows it read.
+    public async readResource(
+        calendarId: string,
+        row: ResourceRow,
+    ): Promise<{ bytes: Uint8Array; etag: string } | null> {
+        return store.readResource(this, calendarId, row);
+    }
+
     public async putResource(
         calendarId: string,
         uri: string,
         body: string,
-        pre: PutResourceOptions,
+        options: PutResourceOptions,
     ): Promise<PutResourceResult> {
         const ctagBefore = this.calendarRow(calendarId)?.ctag;
-        const result = await store.putResource(this, calendarId, uri, body, pre);
+        const result = await store.putResource(this, calendarId, uri, body, options);
         // A PUT of what is already stored commits nothing, so there is nothing to tell the clients about.
         if (result.ok && this.calendarRow(calendarId)?.ctag !== ctagBefore) {
             this.announce(
@@ -500,18 +475,19 @@ export class Calendar {
     // Plus every resource the index cannot expand: a stripped rule or an RDATE still has occurrences to sync.
     public async getResourcesInRange(calendarId: string, from: Date, to: Date): Promise<ResourceRow[]> {
         const rows = await this.getRawEventsInRange(calendarId, from, to);
-        await this.gate.ensureDrained();
-        const matched = new Set(rows.map((row) => row.uri));
-        return (await this.listResources(calendarId)).filter(
-            (resource) => matched.has(resource.uri) || resource.hasUnindexedRecurrence,
-        );
+        return store.getResourcesInRange(this, calendarId, [...new Set(rows.map((row) => row.uri))]);
     }
 
     // --- Events (reads) ---
 
+    // The file facts an event row is read with are its name and its hash, so the join carries those two
+    // columns and not every column of both tables.
     joinedEvents() {
         return this.db
-            .select()
+            .select({
+                events: getTableColumns(schema.events),
+                resources: { uri: schema.resources.uri, etag: schema.resources.etag },
+            })
             .from(schema.events)
             .innerJoin(schema.resources, eq(schema.events.resourceId, schema.resources.id));
     }

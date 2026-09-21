@@ -71,7 +71,7 @@ async function resourceRow(
         ]);
     }
 
-    const served = await calendar.getResource(calendarId, resource.uri);
+    const served = await calendar.readResource(calendarId, resource);
     // The row is there and the file is not: the drain tombstones it, and this response says it is gone.
     if (!served) return notFoundRow(href);
     budget.left -= served.bytes.length;
