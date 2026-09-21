@@ -13,6 +13,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { eq, sql } from 'drizzle-orm';
+import { getTableConfig } from 'drizzle-orm/sqlite-core';
 import { Calendar } from '../../lib/calendar/calendar';
 import { calendarStorage, EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
 import * as schema from '../../lib/calendar/schema';
@@ -1172,6 +1173,23 @@ describe('calendar file store', () => {
             expect(exceptions.map((e) => e.title)).toEqual(['Second take']);
             expect(await harness.instance.listResources(calendarId)).toHaveLength(1);
         });
+    });
+
+    // The DDL creates the indexes and the drizzle schema is what a query plan is read against, so a query
+    // can only be proven to seek if the two name the same set.
+    test('the migration and the schema name the same indexes', async () => {
+        const harness = await makeCalendar();
+        const declared = Object.values(schema)
+            .flatMap((table) => getTableConfig(table).indexes.map((index) => index.config.name))
+            .sort();
+        const created = harness.instance.db
+            .all<{
+                name: string;
+            }>(sql.raw("SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%'"))
+            .map((row) => row.name)
+            .sort();
+
+        expect(created).toEqual(declared);
     });
 
     // An import asks "does this Home already hold the UID?" once per series, up to ICS_IMPORT_MAX_EVENTS
