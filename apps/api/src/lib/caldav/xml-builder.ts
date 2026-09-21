@@ -1,5 +1,6 @@
 import { escapeXml } from '@workspace/lib/html';
 import type { CalendarItem } from '@workspace/lib/types/calendar';
+import { EVENT_MAX_BYTES } from '../calendar/calendar';
 import { calendarHomeHref, principalHref } from '../dav/href';
 import type { PropMap } from '../dav/propfind';
 import { ownershipEntries } from '../dav/xml';
@@ -36,6 +37,8 @@ export function calendarCollectionProps(cal: CalendarItem, ownerId: string): Pro
             'supported-calendar-component-set',
             `<C:supported-calendar-component-set><C:comp name="VEVENT"/></C:supported-calendar-component-set>`,
         ],
+        // RFC 4791 § 5.2.5 — the ceiling the PUT already enforces, so a client can size a resource first.
+        ['max-resource-size', `<C:max-resource-size>${EVENT_MAX_BYTES}</C:max-resource-size>`],
         // macOS Contacts/Calendar keys on supported-report-set to pick sync-collection and is documented not
         // to fall back when it's missing (spec § 4).
         [

@@ -94,6 +94,11 @@ function validateEventInput(input: CreateEventArgs): void {
     if (input.endTime < input.startTime) throw new ApiError(400, 'Event end time cannot be before start time');
 }
 
+// How large one calendar resource may be, the domain's own ceiling as CARD_MAX_BYTES is contacts'. A series
+// carries an overridden VEVENT per exception, so it is ~4x a vCard's. CalDAV bounds a PUT body against it
+// before buffering and advertises it as C:max-resource-size.
+export const EVENT_MAX_BYTES = 20_971_520;
+
 // A UID the home can key an event by. The file's own UID is kept so a re-import recognizes it, and it
 // travels into etags and sync deltas — so an unprintable or endless one is refused rather than stored.
 const MAX_UID_LENGTH = 255;

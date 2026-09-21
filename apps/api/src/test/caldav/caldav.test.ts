@@ -1,7 +1,6 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { handleDeleteCalendar } from '../../lib/caldav/proppatch';
-import { EVENT_MAX_BYTES } from '../../lib/caldav/resource';
-import { Calendar } from '../../lib/calendar/calendar';
+import { Calendar, EVENT_MAX_BYTES } from '../../lib/calendar/calendar';
 import { ApiError } from '../../lib/core';
 import { getHome } from '../../lib/home/get-home';
 import { basicAuth } from '../dav-test-helpers';
@@ -1545,6 +1544,30 @@ describe('CalDAV', () => {
         const xml = await res.text();
         expect(xml).toContain('getctag');
         expect(xml).toContain('supported-report-set');
+    });
+
+    test('the calendar collection advertises the resource ceiling its PUT enforces', async () => {
+        const propfindCalendar = (body: string) =>
+            app.handle(
+                new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                    method: 'PROPFIND',
+                    headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+                    body,
+                }),
+            );
+
+        const all = await propfindCalendar('');
+        expect(all.status).toBe(207);
+        expect(await all.text()).toContain('<C:max-resource-size>20971520</C:max-resource-size>');
+
+        // RFC 4791 § 5.2.5: a client asks for it by name to size a PUT before sending it.
+        const named = await propfindCalendar(
+            `<?xml version="1.0"?><D:propfind xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><C:max-resource-size/></D:prop></D:propfind>`,
+        );
+        expect(named.status).toBe(207);
+        const xml = await named.text();
+        expect(xml).toContain('<C:max-resource-size>20971520</C:max-resource-size>');
+        expect(xml).not.toContain('404 Not Found');
     });
 
     test('MKCALENDAR with an invalid id segment (leading dot) is 400', async () => {

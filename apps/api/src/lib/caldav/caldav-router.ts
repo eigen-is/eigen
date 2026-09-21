@@ -1,5 +1,6 @@
 import Elysia from 'elysia';
 import { authenticateBasic } from '../auth/protocol-auth';
+import { EVENT_MAX_BYTES } from '../calendar/calendar';
 import { requireSelf } from '../core/access';
 import { readBoundedBody } from '../core/http';
 import { parseCollectionPath } from '../dav/href';
@@ -10,7 +11,7 @@ import { handleCalendarHomePropfind, handlePrincipalPropfind, handleRootPropfind
 import { handleCalendarPropfind, handleEventPropfind } from './propfind';
 import { handleDeleteCalendar, handleMkcalendar, handleProppatch } from './proppatch';
 import { handleReport } from './report';
-import { EVENT_MAX_BYTES, handleDelete, handleGet, handlePut } from './resource';
+import { handleDelete, handleGet, handlePut } from './resource';
 
 export const caldavRouter = new Elysia({ name: 'caldav' })
     // PROPFIND /dav/ — discovery root
