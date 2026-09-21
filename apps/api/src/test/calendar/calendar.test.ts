@@ -2289,17 +2289,21 @@ describe('Event move across calendars (finding #1)', () => {
         // A client can't declare itself an invitee (EventDataSchema strips organizer), so seed the linked
         // copy through the domain. External organizer → the decline path would be a sendMail.
         const home = await getHome(ctx.alice.user.id);
-        const linked = await home.calendar.createEvent(sourceCalId, {
-            title: 'Invited Movable',
-            startTime: new Date('2026-11-02T09:00:00Z'),
-            endTime: new Date('2026-11-02T10:00:00Z'),
-            allDay: false,
-            data: {
-                organizer: { userId: 'external_org@example.com', email: 'org@example.com', name: 'Org' },
-                organizerEventId: 'ext-move-1',
-                attendees: [{ email: ctx.alice.user.email, status: 'accepted', role: 'required' }],
-            },
-        });
+        const seedLinked = (title: string, organizer: string, orgEventId: string) =>
+            home.calendar.createEvent(sourceCalId, {
+                title,
+                startTime: new Date('2026-11-02T09:00:00Z'),
+                endTime: new Date('2026-11-02T10:00:00Z'),
+                allDay: false,
+                data: {
+                    organizer: { userId: `external_${organizer}`, email: organizer, name: 'Org' },
+                    organizerEventId: orgEventId,
+                    attendees: [{ email: ctx.alice.user.email, status: 'accepted', role: 'required' }],
+                },
+            });
+        const linked = await seedLinked('Invited Movable', 'org@example.com', 'ext-move-1');
+        // Deleting a linked copy DOES decline, so it is the control the move's silence is measured against.
+        const control = await seedLinked('Invited Control', 'control@example.com', 'ext-move-control');
 
         const mailer = await import('../../lib/core/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
@@ -2311,15 +2315,18 @@ describe('Event move across calendars (finding #1)', () => {
             body: JSON.stringify({ targetCalendarId: targetCalId }),
         });
         const moved = await assertJson<CalendarEvent>(moveRes);
-        // The decline would ride on the same call the move answers: once the row is at the target, it has
-        // either been composed or never will be.
+
+        const removed = await authedRequest(ctx.alice.user.sessionToken, `${eventsUrl(sourceCalId)}/${control.id}`, {
+            method: 'DELETE',
+        });
+        expect(removed.status).toBe(200);
+        const mailsTo = (address: string) => spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === address));
         await eventually(
-            async () => (await home.calendar.getRawEvents(targetCalId)).find((e) => e.id === linked.id),
-            'the moved event in the target calendar',
+            async () => mailsTo('control@example.com').length || undefined,
+            "the control delete's decline",
         );
 
-        const declineCalls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === 'org@example.com'));
-        expect(declineCalls.length).toBe(0);
+        expect(mailsTo('org@example.com')).toHaveLength(0);
         spy.mockRestore();
 
         expect(moved.calendarId).toBe(targetCalId);
