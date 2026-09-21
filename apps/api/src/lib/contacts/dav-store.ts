@@ -5,8 +5,10 @@ import {
     ApiError,
     computeResourceEtag,
     type DeleteResourceResult,
+    displaceUnindexedFile,
     matchesIfMatch,
     matchesIfNoneMatch,
+    PATHS,
     type PutResourceResult,
     readResourceFile,
     uriKeyOf,
@@ -158,11 +160,6 @@ export async function putCard(
         // A case-variant PUT rewrites the existing file, or a case-sensitive fs strands the old one and the next reconcile reverts the write.
         const storedUri = existing?.uri ?? uri;
 
-        // A name free in the index may still be on disk (a dedupe loser, bytes that won't parse), and a create would destroy it.
-        if (!existing && (await contacts.storage.exists(cardPath(storedUri)))) {
-            return { ok: false, error: 'precondition' };
-        }
-
         // A UID another resource owns is a conflict the client can act on, not a raw 500 on the UNIQUE index.
         if (!parsed.uid) return { ok: false, error: 'invalid', message: 'UID is required' };
         const holder = contacts.db
@@ -196,6 +193,9 @@ export async function putCard(
 
         const id = existing?.id ?? randomUUID();
         const isSelf = eigenId === contacts.home.user.id;
+
+        // A name free in the index may still be on disk (a dedupe loser, bytes that won't parse): its bytes move aside rather than be destroyed.
+        if (!existing) await displaceUnindexedFile(contacts.storage, PATHS.CONTACTS.CARDS, storedUri);
 
         // Fail closed on the canonical write or any later step, as addContact does.
         let projectionAvatar = '';

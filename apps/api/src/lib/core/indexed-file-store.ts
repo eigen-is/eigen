@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { randomUUID } from 'node:crypto';
 import { Semaphore } from '../../utils/semaphore';
 import { isEnoent, type LocalFilesystem } from './local-filesystem';
 import { isSafePathSegment } from './path-utils';
@@ -58,6 +59,17 @@ export async function writeResourceFile(
     return statResourceFile(storage, filePath);
 }
 
+// A name free in the index can still be a file on disk (a dedupe loser, bytes that will not parse, a
+// collection whose index phase threw). Its bytes move aside under a `.`-prefixed name nothing lists, sweeps
+// or addresses, so a create destroys nothing and no name is wedged against every later verb.
+export async function displaceUnindexedFile(storage: LocalFilesystem, dir: string, uri: string): Promise<boolean> {
+    if (!(await storage.exists(`${dir}/${uri}`))) return false;
+    const displaced = `.${uri}.displaced-${randomUUID()}`;
+    await storage.renameDurable(`${dir}/${uri}`, `${dir}/${displaced}`);
+    console.warn(`indexed-file-store: ${dir}/${uri} holds no index row — displaced to ${displaced}`);
+    return true;
+}
+
 // A vanished file is not a 500: it answers as a miss, and the caller marks the key dirty for the next drain.
 export async function readResourceFile(storage: LocalFilesystem, filePath: string): Promise<Uint8Array | null> {
     try {
@@ -81,6 +93,8 @@ async function listResourceUris(
         .map((entry) => entry.name)
         .sort();
     for (const name of names) {
+        // A `.`-prefixed name is Eigen's own staging — an atomic temp, a displaced file — and never a resource.
+        if (name.startsWith('.')) continue;
         const uri = sanitizeResourceUri(name, suffix);
         if (!uri) {
             console.warn(`indexed-file-store: ignoring non-conforming entry ${name} in ${dir}/`);

@@ -521,7 +521,7 @@ describe('calendar file store', () => {
         expect((await harness.instance.getCollection(calendarId))!.ctag).toBeGreaterThan(ctag);
     });
 
-    test('a create never replaces a file the index does not know', async () => {
+    test('a create displaces a file the index does not know instead of wedging its name', async () => {
         const harness = await makeCalendar();
         const calendarId = await defaultCalendarId(harness);
         // What a dedupe loser, an unparseable file or a calendar whose index phase threw leaves behind.
@@ -530,9 +530,23 @@ describe('calendar file store', () => {
 
         const result = await put(harness.instance, calendarId, 'planted.ics', vcal(event('new@eigen', 'New')));
 
-        expect(result).toEqual({ ok: false, error: 'precondition' });
-        expect(readFileSync(fileOf(harness, calendarId, 'planted.ics'), 'utf8')).toBe(planted);
-        expect(await harness.instance.listResources(calendarId)).toHaveLength(0);
+        expect(result.ok).toBe(true);
+        expect(readFileSync(fileOf(harness, calendarId, 'planted.ics'), 'utf8')).toContain('SUMMARY:New');
+        expect(await harness.instance.listResources(calendarId)).toHaveLength(1);
+
+        // The bytes nobody indexed are still there, under a name no lister, sweep or client addresses.
+        const dir = join(calendarsDirOf(harness.dir), calendarId);
+        const displaced = readdirSync(dir).filter((name) => name.includes('.displaced-'));
+        expect(displaced).toHaveLength(1);
+        expect(readFileSync(join(dir, displaced[0]), 'utf8')).toBe(planted);
+
+        // And the budget counts the resource alone: the displaced name is no `.ics` any scan sees.
+        const restarted = await harness.reopen();
+        try {
+            expect(await restarted.instance.size()).toBe(statSync(fileOf(harness, calendarId, 'planted.ics')).size);
+        } finally {
+            await restarted.close();
+        }
     });
 
     test('a linked copy takes the alarms a client sends, never the Eigen lines inside them', async () => {
