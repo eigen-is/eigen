@@ -182,6 +182,12 @@ export function formatFreeBusyTitle(endTime: Date): string {
     return `Busy until ${formatTime(endTime)}`;
 }
 
+// The one answer to "does this row belong to a series?". A master and every occurrence expanded from it
+// carry the rule; an override carries none of its own and is recognized by its link to the master instead.
+export function isSeriesOccurrence(event: { rrule: string | null; parentEventId: string | null }): boolean {
+    return !!event.rrule || !!event.parentEventId;
+}
+
 // The one answer to "is this row an invitation from someone else?". CalDAV clients write
 // ORGANIZER:mailto:<own address> on every event they create with guests, so a stored organizer alone
 // says nothing — the organizer is me exactly when its address is the owner's, case-insensitively. An

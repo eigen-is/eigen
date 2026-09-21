@@ -3,6 +3,7 @@ import {
     formatEventWhen,
     getEventsForDay,
     isInvitationFromOthers,
+    isSeriesOccurrence,
     rruleToText,
     viewerTimeZone,
 } from '../../../core/calendar/calendar-utils';
@@ -76,6 +77,22 @@ describe('getEventsForDay', () => {
         const occ = [occurrence('2025-03-31', new Date('2025-03-30T22:30:00Z'), new Date('2025-03-30T23:00:00Z'))];
         expect(getEventsForDay(occ, new Date(2025, 2, 30))).toEqual([]);
         expect(getEventsForDay(occ, new Date(2025, 2, 31)).map((e) => e.occurrenceDate)).toEqual(['2025-03-31']);
+    });
+});
+
+describe('isSeriesOccurrence', () => {
+    const row = (rrule: string | null, parentEventId: string | null) => ({ rrule, parentEventId });
+
+    test('the master and every occurrence expanded from it belong to a series', () => {
+        expect(isSeriesOccurrence(row('FREQ=WEEKLY', null))).toBe(true);
+    });
+
+    test('an override belongs to its series even though it carries no rule of its own', () => {
+        expect(isSeriesOccurrence(row(null, 'evt-master'))).toBe(true);
+    });
+
+    test('an event that repeats nowhere and overrides nothing is on its own', () => {
+        expect(isSeriesOccurrence(row(null, null))).toBe(false);
     });
 });
 

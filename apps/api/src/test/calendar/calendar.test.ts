@@ -2564,3 +2564,85 @@ describe('Calendar interval validation (finding #2)', () => {
         expect(res.status).toBe(200);
     });
 });
+
+// What the calendar app's edit dialog sends when the user says "all events in series" from an occurrence it
+// already overrode: a PUT to the master carrying the override's own fields, `rrule: null` among them.
+describe('A series-wide edit sent from an already-overridden occurrence', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let calId: string;
+    let seriesId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        calId = findOrFail(
+            await assertJson<CalendarItem[]>(
+                await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars`),
+            ),
+            (c) => c.isDefault,
+        ).id;
+        const series = await assertJson<CalendarEvent>(
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${calId}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Weekly Sync',
+                        startTime: '2027-02-01T09:00:00Z',
+                        endTime: '2027-02-01T10:00:00Z',
+                        allDay: false,
+                        rrule: 'FREQ=WEEKLY;COUNT=4',
+                    }),
+                },
+            ),
+        );
+        seriesId = series.id;
+        await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars/${calId}/events`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: 'Moved Sync',
+                startTime: '2027-02-08T11:00:00Z',
+                endTime: '2027-02-08T12:00:00Z',
+                allDay: false,
+                rrule: null,
+                parentEventId: seriesId,
+                recurrenceDate: '2027-02-08',
+            }),
+        });
+    });
+
+    test('a null rrule leaves the series recurring, and the edit reaches every occurrence', async () => {
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${calId}/events/${seriesId}`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'Moved Sync',
+                    startTime: '2027-02-08T11:00:00Z',
+                    endTime: '2027-02-08T12:00:00Z',
+                    allDay: false,
+                    rrule: null,
+                }),
+            },
+        );
+        const updated = await assertJson<CalendarEvent>(res);
+        expect(updated.rrule).toBe('FREQ=WEEKLY;COUNT=4');
+
+        const from = Math.floor(Date.parse('2027-02-01T00:00:00Z') / 1000);
+        const to = Math.floor(Date.parse('2027-04-01T00:00:00Z') / 1000);
+        const occurrences = (
+            await assertJson<CalendarEventOccurrence[]>(
+                await authedRequest(
+                    ctx.alice.user.sessionToken,
+                    `/calendar/${ctx.alice.user.id}/event-range/${from}/${to}`,
+                ),
+            )
+        ).filter((e) => e.uid === updated.uid);
+        expect(occurrences.length).toBeGreaterThan(1);
+        expect(occurrences.every((e) => e.title === 'Moved Sync')).toBe(true);
+    });
+});

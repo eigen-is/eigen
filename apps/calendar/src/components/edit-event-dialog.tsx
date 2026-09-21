@@ -1,6 +1,7 @@
 import { useAuth } from '@workspace/lib/auth';
 import {
     isInvitationFromOthers,
+    isSeriesOccurrence,
     occurrenceDateToString,
     parseOccurrenceDate,
     toLocalDateString,
@@ -134,6 +135,10 @@ export function EditEventDialog({
     if (!event) return null;
 
     const isRecurring = !!event.rrule;
+    // An override of one occurrence carries no rule of its own, so it has no series rule to truncate and
+    // no rule to send back: without this it read as a single event and saved over the whole series unasked.
+    const isOverride = !!event.parentEventId;
+    const isPartOfSeries = isSeriesOccurrence(event);
     const isLinkedEvent = isInvitationFromOthers(event, eventOwnerId === user?.id ? user.email : undefined);
 
     // A cross-Home move recreates the event in the other Home and deletes the source — which fires
@@ -150,7 +155,7 @@ export function EditEventDialog({
         if (!title.trim()) return;
         if (crossHomeMove && moveLossReasons.length > 0) {
             setShowMoveConfirm(true);
-        } else if (isRecurring && !calendarChanged) {
+        } else if (isPartOfSeries && !calendarChanged) {
             setShowRecurringDialog(true);
         } else {
             doSave('all');
@@ -169,7 +174,7 @@ export function EditEventDialog({
             allDay,
             description: description.trim() || null,
             location: location.trim() || null,
-            rrule: rruleString,
+            rrule: isOverride ? undefined : rruleString,
             timezone,
             data: Object.values(data).some((v) => v !== undefined) ? data : null,
         };
@@ -316,6 +321,7 @@ export function EditEventDialog({
                 onOpenChange={setShowRecurringDialog}
                 title="Edit recurring event"
                 onConfirm={doSave}
+                options={isOverride ? ['this', 'all'] : undefined}
             />
 
             <ConfirmDialog

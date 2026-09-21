@@ -1,6 +1,7 @@
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import {
     isInvitationFromOthers,
+    isSeriesOccurrence,
     isTransferableCalendarHome,
     occurrenceDateToString,
     parseOccurrenceDate,
@@ -62,7 +63,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
 
     const isRecurring = !!event.rrule;
     const isException = !!event.parentEventId;
-    const isPartOfSeries = isRecurring || isException;
+    const isPartOfSeries = isSeriesOccurrence(event);
     const calendarName = calendar?.name || (sharedCalendar ? sharedCalendarLabel(sharedCalendar) : null);
     const isShared = !!sharedCalendar;
     const canEdit = !isShared || sharedCalendar?.permission === 'write';
