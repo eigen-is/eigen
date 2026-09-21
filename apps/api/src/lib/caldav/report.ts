@@ -19,9 +19,8 @@ import { calendarHref, eventHref } from './discovery';
 import { calendarDataProp } from './xml-builder';
 import { parseReport, type ReportRequest, UnsupportedFilterError } from './xml-parser';
 
-// How many bytes of calendar data one REPORT serves. A collection past it is never truncated — losing an
-// event silently is worse than a second round trip — so every further row is listed with its etag and a
-// 404 for the data, which the client fetches by multiget (RFC 4918 § 9.1).
+// How many bytes of calendar data one REPORT serves. Past it a row still appears, with its etag and a 404
+// for the data the client then multigets (RFC 4918 § 9.1): a truncated collection loses events silently.
 export const REPORT_DATA_BUDGET_BYTES = 33_554_432;
 
 // REPORT on /dav/calendars/:ownerId/:calendarId/
@@ -55,9 +54,8 @@ export async function handleReport(
 // What one REPORT may still spend on resource bodies.
 type DataBudget = { left: number };
 
-// A row that also serves the resource body quotes the etag of the bytes it read, never the index row's:
-// the two must describe one revision. Without calendar-data nothing is read, so the row's etag is what
-// there is.
+// A row that serves the body quotes the etag of the bytes it read, never the index row's: the two must
+// describe one revision.
 async function resourceRow(
     calendar: Calendar,
     calendarId: string,
@@ -156,9 +154,8 @@ async function handleSyncCollection(
     } else {
         const token = parseSyncToken(report.syncToken);
         if (!token) return invalidSyncToken();
-        // A stale generation (index rebuilt → syncGen rotated) OR a ctag ahead of the collection both force
-        // a clean full resync — answering a post-restore future token with an empty delta and a LOWER token
-        // would stall that client permanently, blind to every change until the ctag caught back up.
+        // A stale generation or a ctag ahead of the collection both force a clean resync: an empty delta
+        // under a LOWER token would stall that client permanently.
         if (token.gen !== collection.syncGen || token.since > collection.ctag) return invalidSyncToken();
 
         for (const resource of await calendar.getChangedResourcesSince(calendarId, token.since)) {

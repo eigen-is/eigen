@@ -30,9 +30,8 @@ const UUID_NAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 
 type IndexIncumbent = Pick<typeof schema.resources.$inferSelect, 'id' | 'uri' | 'uriKey' | 'uid' | 'etag'>;
 
-// One file, read and projected but not yet committed. `restored` means its bytes still hash to the stored
-// etag: only its stat columns moved, so it must not bump a ctag or tombstone anything. `rewritten` carries
-// the bytes the copy rule reminted, which go back to disk before the rows are indexed.
+// One file, read and projected but not yet committed: `restored` means its bytes still hash to the stored
+// etag (only its stat moved), `rewritten` the bytes the copy rule reminted.
 type Candidate = {
     calendarId: string;
     file: ResourceFile;
@@ -77,9 +76,8 @@ async function sweepDeleting(calendar: Calendar): Promise<void> {
     }
 }
 
-// A directory with no `calendars` row is a calendar whose metadata the index lost: the directory name is
-// the id, and the display name too unless it is a bare UUID, which says nothing to anyone. Its generation
-// rotates, so every sync token minted against the lost index is refused.
+// A directory with no `calendars` row is a calendar whose metadata the index lost: its name becomes the id
+// and, unless it is a bare UUID, the display name; its generation rotates, so stale sync tokens are refused.
 function recoverCalendarRows(calendar: Calendar, orphans: string[]): void {
     let hasDefault = !!calendar.db
         .select({ id: schema.calendars.id })
@@ -119,9 +117,8 @@ function recoverCalendarRows(calendar: Calendar, orphans: string[]): void {
     }
 }
 
-// A row id another resource of this Home already holds means this file is a copy of one: it keeps every
-// other Eigen line and gets fresh ids, so neither original loses its rows to the primary key. It runs on
-// the candidates that survived the dedupe: a discarded one holds no ids to lose.
+// A row id another resource already holds means this file is a copy of one, so it gets fresh ids. Only the
+// candidates the dedupe kept run it: a discarded one holds no ids to lose.
 function applyCopyRule(calendar: Calendar, candidate: Candidate, resource: ICAL.Component, owners: IdOwners): void {
     const ids = candidate.rows.map((row) => row.id);
     const indexed = calendar.db
@@ -296,8 +293,7 @@ function writeIndexed(calendar: Calendar, calendarId: string, candidates: Candid
 }
 
 // Home-wide, in three phases: stat every calendar directory, drop every vanished resource in ONE
-// transaction, then index what changed. Vanished before new is a Home-wide requirement — a crashed move
-// leaves the file under its target calendar while the source's rows still hold its event ids.
+// transaction, then index what changed — vanished before new, or a crashed move loses the ids it carried.
 export async function reconcileIndex(calendar: Calendar): Promise<void> {
     return calendar.gate.run(async () => {
         await sweepDeleting(calendar);

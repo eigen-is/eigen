@@ -16,7 +16,7 @@ import type {
 import { isExternalOwnerId, parseOwnerId } from '@workspace/lib/types/owner';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
-import { and, count, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
+import { and, count, eq, gte, isNull, lte, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import ICAL from 'ical.js';
 import { RRule } from 'rrule';
@@ -644,38 +644,10 @@ export class Calendar {
         return this.joinedEvents().where(eq(schema.events.calendarId, calendarId)).all().map(Calendar.toEvent);
     }
 
-    // All rows (master + exceptions) of one UID in a calendar. Calendar-scoped, uses idx_events_uid_calendar
-    // — avoids loading the whole collection to serve a single .ics.
-    public async getRawEventsByUid(calendarId: string, uid: string): Promise<CalendarEvent[]> {
-        await this.gate.ensureDrained();
-        return this.joinedEvents()
-            .where(and(eq(schema.events.calendarId, calendarId), eq(schema.events.uid, uid)))
-            .all()
-            .map(Calendar.toEvent);
-    }
-
-    public async getRawEventsByUids(calendarId: string, uids: string[]): Promise<CalendarEvent[]> {
-        if (!uids.length) return [];
-        await this.gate.ensureDrained();
-        return this.joinedEvents()
-            .where(and(eq(schema.events.calendarId, calendarId), inArray(schema.events.uid, uids)))
-            .all()
-            .map(Calendar.toEvent);
-    }
-
     // A recurring master's exception rows. Uses idx_events_parent.
     public async getExceptionsForParent(parentEventId: string): Promise<CalendarEvent[]> {
         await this.gate.ensureDrained();
         return this.joinedEvents().where(eq(schema.events.parentEventId, parentEventId)).all().map(Calendar.toEvent);
-    }
-
-    public async getEventsByUris(calendarId: string, uris: string[]): Promise<CalendarEvent[]> {
-        if (!uris.length) return [];
-        await this.gate.ensureDrained();
-        return this.joinedEvents()
-            .where(and(eq(schema.events.calendarId, calendarId), inArray(schema.resources.uriKey, uris.map(uriKeyOf))))
-            .all()
-            .map(Calendar.toEvent);
     }
 
     public async getRawEventsInRange(calendarId: string, from: Date, to: Date): Promise<CalendarEvent[]> {

@@ -15,19 +15,11 @@ import { parseResource, projectResource, restampResource, serializeResource } fr
 import { EIGEN, readStamp, recurrenceKeyOf, seriesTimezones, uidOf } from '../ical/ical-parse';
 import type { Calendar } from './calendar';
 import type { EventRowInput } from './resource-store';
-import {
-    EVENT_MAX_BYTES,
-    gateKey,
-    resourcePath,
-    sanitizeCalendarId,
-    sanitizeEventUri,
-    statCalendarDir,
-} from './resource-store';
+import { EVENT_MAX_BYTES, gateKey, resourcePath, sanitizeCalendarId, sanitizeEventUri } from './resource-store';
 import * as schema from './schema';
 
 // The store seam over the Calendar facade: one file per UID, the index behind it. Every mutation runs inside
-// the write gate against the state it overwrites; every read drains a torn pair first.
-// See docs/CALENDAR.md § Storage.
+// the write gate against the state it overwrites; every read drains a torn pair first (docs/CALENDAR.md).
 
 // The index projection the DAV layer reads for a resource; the etag is the hash the handler quotes.
 export type ResourceRow = {
@@ -61,8 +53,7 @@ export type ResourceCommit = {
     hasUnindexedRecurrence: boolean;
 };
 
-// The resource rows a file projects to, ids taken from the `X-EIGEN-EVENT-ID` the file carries. An id a
-// sibling VEVENT of the same file already claimed is minted fresh: one stored id belongs to one row.
+// The rows a file projects to, ids from its `X-EIGEN-EVENT-ID` lines: one stored id belongs to one row.
 export function projectRows(
     calendarId: string,
     resourceId: string,
@@ -198,8 +189,8 @@ export async function getDeletedResourcesSince(
 
 // ---- Bytes ----
 
-// Hashing the bytes just read keeps body and validator one revision; a disagreeing row is marked, or a
-// durably stale etag would 412 every conditional write forever.
+// Hashing the bytes just read keeps body and validator one revision; a durably stale row would otherwise
+// 412 every conditional write forever.
 export async function getResource(
     calendar: Calendar,
     calendarId: string,
@@ -258,15 +249,13 @@ export async function writeResource(
     return { etag, text };
 }
 
-export function uidOfResource(resource: ICAL.Component): string {
+function uidOfResource(resource: ICAL.Component): string {
     const vevents = resource.getAllSubcomponents('vevent');
     return vevents.length ? uidOf(vevents[0]) : '';
 }
 
-// A copy of somebody else's event, which the owner may re-alarm and nothing more. The organizer stamp the
-// server wrote is what says so: a client cannot forge it (an incoming one is stripped), where the ORGANIZER
-// address is the client's to spell — and taking that address for an answer locks a client out of its own
-// event forever the moment it writes a foreign one.
+// A copy of somebody else's event, which the owner may re-alarm and nothing more: the organizer stamp the
+// server wrote says so, where the ORGANIZER address is the client's own to spell.
 function isLinkedCopy(stored: ICAL.Component): boolean {
     return stored.getAllSubcomponents('vevent').some((vevent) => readStamp(vevent, EIGEN.organizerEvent) !== null);
 }
@@ -408,9 +397,4 @@ export async function deleteResource(
         await calendar.purgeResource(row);
         return { ok: true };
     });
-}
-
-// The whole-directory scan one reconcile pass makes of a calendar.
-export function scanCalendar(calendar: Calendar, calendarId: string) {
-    return statCalendarDir(calendar.storage, calendarId);
 }
