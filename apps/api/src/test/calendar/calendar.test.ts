@@ -8,7 +8,7 @@ import type {
 } from '@workspace/lib/types/calendar';
 import type { Notification } from '@workspace/lib/types/notification';
 import { getHome } from '../../lib/home';
-import { assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
+import { assertJson, authedRequest, eventually, findOrFail, getTestContext } from '../setup';
 
 describe('Calendar', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -1988,6 +1988,13 @@ describe('Calendar invite email to Eigen user', () => {
         );
     }
 
+    const bobHoldsInvite = async (title: string): Promise<boolean> => {
+        const home = await getHome(testCtx.bob.user.id);
+        const calendars = await home.calendar.getCalendars();
+        const rows = await Promise.all(calendars.map((c) => home.calendar.getRawEvents(c.id)));
+        return rows.flat().some((e) => e.title === title);
+    };
+
     // JsonStore is shared across the suite — reset before AND after each test.
     beforeEach(() => setToggle(true));
     afterEach(() => setToggle(true));
@@ -1999,9 +2006,11 @@ describe('Calendar invite email to Eigen user', () => {
         spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
         await createEventWithBob('Invite-toggle-on');
-        await new Promise((r) => setTimeout(r, 100));
 
-        const calls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === testCtx.bob.user.email));
+        const calls = await eventually(async () => {
+            const sent = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === testCtx.bob.user.email));
+            return sent.length ? sent : undefined;
+        }, 'the invitation mail to Bob');
         expect(calls.length).toBe(1);
         expect(calls[0][0].subject).toContain('Invitation:');
         spy.mockRestore();
@@ -2014,7 +2023,12 @@ describe('Calendar invite email to Eigen user', () => {
         spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
         await createEventWithBob('Invite-toggle-off');
-        await new Promise((r) => setTimeout(r, 100));
+        // The mail and the linked copy are two halves of one fan-out: once Bob holds the copy, a mail that
+        // was going to be sent has been.
+        await eventually(
+            async () => (await bobHoldsInvite('Invite-toggle-off')) || undefined,
+            "the invitation to reach Bob's calendar",
+        );
 
         const calls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === testCtx.bob.user.email));
         expect(calls.length).toBe(0);
@@ -2074,17 +2088,12 @@ describe('Calendar occurrence timezone consistency (audit #24)', () => {
             },
         );
 
-        // Poll for the propagated linked copy.
-        for (let i = 0; i < 40; i++) {
-            const linked = (await getBobRange('2026-03-01', '2026-03-08')).find((e) => e.title === 'Etag Series');
-            if (linked) {
-                linkedId = linked.id;
-                expect(linked.timezone).toBe(NY);
-                break;
-            }
-            await new Promise((r) => setTimeout(r, 50));
-        }
-        expect(linkedId).toBeDefined();
+        const linked = await eventually(
+            async () => (await getBobRange('2026-03-01', '2026-03-08')).find((e) => e.title === 'Etag Series'),
+            "the series to reach Bob's calendar",
+        );
+        linkedId = linked.id;
+        expect(linked.timezone).toBe(NY);
     });
 
     test('rsvpForOccurrence stores an etag that includes the timezone', async () => {
@@ -2302,7 +2311,12 @@ describe('Event move across calendars (finding #1)', () => {
             body: JSON.stringify({ targetCalendarId: targetCalId }),
         });
         const moved = await assertJson<CalendarEvent>(moveRes);
-        await new Promise((r) => setTimeout(r, 50));
+        // The decline would ride on the same call the move answers: once the row is at the target, it has
+        // either been composed or never will be.
+        await eventually(
+            async () => (await home.calendar.getRawEvents(targetCalId)).find((e) => e.id === linked.id),
+            'the moved event in the target calendar',
+        );
 
         const declineCalls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === 'org@example.com'));
         expect(declineCalls.length).toBe(0);

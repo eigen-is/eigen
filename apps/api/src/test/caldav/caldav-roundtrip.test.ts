@@ -10,7 +10,7 @@ import type ICAL from 'ical.js';
 import { getHome } from '../../lib/home';
 import { parseIcs, parseResource, serializeEventForImip } from '../../lib/ical';
 import { basicAuth, davRequest } from '../dav-test-helpers';
-import { app, assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
+import { app, assertJson, authedRequest, eventually, findOrFail, getTestContext } from '../setup';
 
 const VTZ_NY = [
     'BEGIN:VTIMEZONE',
@@ -628,13 +628,15 @@ describe('CalDAV round-trip fidelity', () => {
                 },
             );
             const updated = await assertJson<CalendarEvent>(res);
-            await new Promise((r) => setTimeout(r, 300)); // let the fire-and-forget fan-out run
+            const updates = await eventually(async () => {
+                const sent = spy.mock.calls.filter((c) => c[0].subject === 'Updated invitation: Design review (web)');
+                return sent.length ? sent : undefined;
+            }, 'the update mail to the guests');
 
             expect(updated.title).toBe('Design review (web)'); // pre-fix: the edit was dropped
             // A title is not a scheduling change (RFC 5546), so SEQUENCE holds while the guests are
             // still told about it.
             expect(updated.sequence).toBe(occ.sequence);
-            const updates = spy.mock.calls.filter((c) => c[0].subject === 'Updated invitation: Design review (web)');
             expect(updates.flatMap((c) => c[0].to.map((t) => t.address))).toContain(GUEST);
             spy.mockRestore();
         });
@@ -659,7 +661,10 @@ describe('CalDAV round-trip fidelity', () => {
                 },
             );
             expect(res.status).toBe(200);
-            await new Promise((r) => setTimeout(r, 300));
+            await eventually(
+                async () => spy.mock.calls.some((c) => c[0].subject?.startsWith('Updated invitation:')) || undefined,
+                'the update mail to the guests',
+            );
             spy.mockRestore();
 
             const served = parseIcs(await getIcs('rt-own-organizer.ics')).events[0];
@@ -768,7 +773,12 @@ describe('CalDAV round-trip fidelity', () => {
 
             expect((await putIcs(uri, ics('Quiet sync'))).status).toBe(201);
             expect((await putIcs(uri, ics('Quiet sync (moved)'))).status).toBe(204);
-            await new Promise((r) => setTimeout(r, 300));
+            // A device sync mails nobody, so there is no mail to wait for: the stored move is the moment
+            // one would have been composed.
+            await eventually(
+                async () => (await getIcs(uri)).includes('Quiet sync (moved)') || undefined,
+                'the second PUT to be stored',
+            );
 
             expect(spy.mock.calls.map((c) => c[0].subject)).toEqual([]);
             spy.mockRestore();
@@ -786,14 +796,17 @@ describe('CalDAV round-trip fidelity', () => {
                 { method: 'DELETE' },
             );
             expect(res.status).toBe(200);
-            await new Promise((r) => setTimeout(r, 300));
-
-            const gone = await app.handle(
-                new Request(`http://localhost/dav/calendars/${userId}/${calendarId}/rt-own-organizer.ics`, {
-                    method: 'GET',
-                    headers: { Authorization: basicAuth(ctx.alice.user.email) },
-                }),
-            );
+            // The decline would ride on the same call the delete answers: once the resource is a 404, it
+            // has either been composed or never will be.
+            const gone = await eventually(async () => {
+                const read = await app.handle(
+                    new Request(`http://localhost/dav/calendars/${userId}/${calendarId}/rt-own-organizer.ics`, {
+                        method: 'GET',
+                        headers: { Authorization: basicAuth(ctx.alice.user.email) },
+                    }),
+                );
+                return read.status === 404 ? read : undefined;
+            }, 'the deleted resource to be gone');
             expect(gone.status).toBe(404);
             // The organizer deleting cancels for the guests; a decline REPLY would mean the row was
             // read as someone else's invitation.
@@ -854,7 +867,10 @@ describe('CalDAV round-trip fidelity', () => {
             // The stored file does carry them — that is what makes the assertion below worth making.
             expect(await getIcs(created.uri)).toContain('X-EIGEN-');
 
-            await new Promise((resolve) => setTimeout(resolve, 300));
+            await eventually(
+                async () => spy.mock.calls.some((c) => c[0].icalEvent?.content) || undefined,
+                'the outgoing invitation',
+            );
             const bodies = spy.mock.calls.flatMap((call) => [
                 call[0].icalEvent?.content ?? '',
                 call[0].text ?? '',
@@ -880,9 +896,10 @@ describe('CalDAV round-trip fidelity', () => {
                 { method: 'DELETE' },
             );
             expect(res.status).toBe(200);
-            await new Promise((r) => setTimeout(r, 300));
-
-            const declines = spy.mock.calls.filter((c) => c[0].subject === 'Declined: Partner sync (hijacked)');
+            const declines = await eventually(async () => {
+                const sent = spy.mock.calls.filter((c) => c[0].subject === 'Declined: Partner sync (hijacked)');
+                return sent.length ? sent : undefined;
+            }, 'the decline reply to the organizer');
             expect(declines.flatMap((c) => c[0].to.map((t) => t.address))).toEqual(['ext-organizer@external.com']);
             spy.mockRestore();
         });

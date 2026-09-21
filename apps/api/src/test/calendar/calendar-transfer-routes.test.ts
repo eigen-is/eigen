@@ -159,11 +159,15 @@ describe('Calendar transfer routes', () => {
             { method: 'DELETE' },
         );
         expect(removed.status).toBe(200);
-        await new Promise((r) => setTimeout(r, 50));
+        // The cancellation mail would ride on the same call the delete answers: once the row is gone, it
+        // has either been composed or never will be.
+        await eventually(
+            async () => ((await april()).some((e) => e.uid === `plain-2-${stamp}@other`) ? undefined : true),
+            'the deleted event to be gone',
+        );
+
         expect(spy.mock.calls.length).toBe(0);
         spy.mockRestore();
-
-        expect((await april()).some((e) => e.uid === `plain-2-${stamp}@other`)).toBe(false);
     });
 
     test('re-importing the same file skips every event', async () => {
@@ -258,7 +262,12 @@ describe('Calendar transfer routes', () => {
             { method: 'DELETE' },
         );
         expect(removed.status).toBe(200);
-        await new Promise((r) => setTimeout(r, 50));
+        // Same pairing: the row being gone is the moment a decline would have been composed.
+        await eventually(
+            async () => ((await april()).some((e) => e.uid === stored.uid) ? undefined : true),
+            'the deleted event to be gone',
+        );
+
         expect(spy.mock.calls.length).toBe(0);
         spy.mockRestore();
     });

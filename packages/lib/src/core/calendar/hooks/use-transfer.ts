@@ -6,7 +6,7 @@ import type { FileImportSource } from '@workspace/lib/types/file-subject';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { AppError, onMutationError } from '../../api-error';
 import { fetchImportBlob, postImportBytes, reportImportCounts } from '../../transfer';
-import { invalidateEventsImported } from './keys';
+import { invalidateEventList } from './keys';
 
 // One import, whichever identity the file has: a Drive path the server copies out, or the download URL a
 // file with no Drive path behind it (a mail part, a chat attachment) is read from in the browser. Unlike
@@ -33,7 +33,7 @@ export function useImportCalendar() {
             return response.data;
         },
         onSuccess: (result) => {
-            invalidateEventsImported(queryClient, ownerId);
+            invalidateEventList(queryClient, ownerId);
             reportImportCounts(result, 'event');
         },
         onError: onMutationError,

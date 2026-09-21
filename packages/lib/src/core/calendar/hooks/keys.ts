@@ -32,23 +32,11 @@ export function invalidateCalendarUpdated(queryClient: QueryClient, ownerId: str
 
 export function invalidateCalendarDeleted(queryClient: QueryClient, ownerId: string): void {
     queryClient.invalidateQueries({ queryKey: calendarKeys.calendarList(ownerId) });
-    queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
+    invalidateEventList(queryClient, ownerId);
 }
 
-export function invalidateEventCreated(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
-}
-
-// A whole file of events landed in one calendar: every range query is stale.
-export function invalidateEventsImported(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
-}
-
-export function invalidateEventUpdated(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
-}
-
-export function invalidateEventDeleted(queryClient: QueryClient, ownerId: string): void {
+// Any event that moved — one create, one delete, a whole imported file — makes every range query stale.
+export function invalidateEventList(queryClient: QueryClient, ownerId: string): void {
     queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
 }
 

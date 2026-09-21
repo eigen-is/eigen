@@ -627,7 +627,9 @@ describe('Calendar Invites', () => {
                 },
             );
             const updated = await assertJson<CalendarEvent>(res);
-            await new Promise((r) => setTimeout(r, 300)); // let any fire-and-forget fan-out run
+            // The spoofed update would ride on the same call this read settles: once Bob's copy carries the
+            // reminder, a mail that was going to be sent has been.
+            await untilBob((e) => e.id === linkedId && e.data?.reminders?.length === 1);
 
             expect(updated.sequence).toBe(0); // pre-fix: 1
             const updateMails = spy.mock.calls.filter((c) => c[0].subject === 'Updated invitation: Fanout Meeting');
@@ -805,7 +807,13 @@ describe('Delete-as-decline is for attendees only', () => {
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
         spy.mockClear();
         expect((await removeEvent(id)).status).toBe(200);
-        await new Promise((r) => setTimeout(r, 50));
+        // A decline would ride on the same call the delete answers: once the row is gone, it has either
+        // been composed or never will be.
+        const home = await getHome(ctx.bob.user.id);
+        await eventually(
+            async () => ((await home.calendar.getRawEvents(calendarId)).some((e) => e.id === id) ? undefined : true),
+            'the deleted event to be gone',
+        );
         const count = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === 'stranger@external.com')).length;
         spy.mockRestore();
         return count;
