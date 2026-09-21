@@ -17,10 +17,9 @@
 > legitimate — see the MinIO-on-LAN precedent), with an admin server-setting to lock them out on
 > multi-tenant deployments. HTTP Basic auth and two-way CalDAV write-back are explicit non-goals.
 
-Status: **not started** (verified against code 2026-07-06 — no subscription/import code exists
-anywhere in `../../apps/api/src/lib/calendar` or `../../apps/api/src/routes/calendar.ts`; re-checked 2026-09-20).
+Status: **file import is built; subscriptions are a follow-up program.** § File import below describes what ships today ([CALENDAR.md](../CALENDAR.md) § iCalendar import / export is its as-built reference). Everything else on this page — the `subscription` column, the fetch policy, the refresh mechanism, the read-only rules, the subscribe dialog — is unbuilt and is the follow-up.
 
-**Depends on [PROPOSAL_CALENDAR_ICS_FILES.md](PROPOSAL_CALENDAR_ICS_FILES.md) (2026-09-20).** Calendar storage moves to one `.ics` file per UID with `calendar.db` as the index, and that move lands first. Three parts of this proposal change with it: the `subscription` column is created as part of the new `calendars` shape and needs no migration of its own (§ Migration); a feed snapshot becomes N resource writes plus one index commit, which is not atomic across a crash and needs its own commit contract (that proposal's § Risks); and file import goes through the `FILE_ACTIONS` registry, the way vCard import does (§ File import). The subscription model, the fetch policy and the read-only rules are unaffected.
+**Built on [PROPOSAL_CALENDAR_ICS_FILES.md](PROPOSAL_CALENDAR_ICS_FILES.md).** Calendar storage is one `.ics` file per UID with `calendar.db` as the index. Two consequences for the subscriptions half: the `subscription` column is an additive `ALTER TABLE` on the version-2 `calendars` shape (§ Migration), and a feed snapshot is N resource writes plus one index commit, which is not atomic across a crash and needs its own commit contract (that proposal's § Risks). The subscription model, the fetch policy and the read-only rules are unaffected.
 
 ## Goals
 
@@ -257,14 +256,15 @@ in `lib/export/` is weasyprint-specific), so this small policy lives in
 
 **Through the file-action registry (2026-09-20).** A `.ics` reaches a user as a Drive file, a mail attachment or a chat attachment far more often than as a file on their disk, so the entry point is an `import-to-calendar` row in `FILE_ACTIONS` (`packages/lib/src/core/file-actions.ts`), beside `import-contacts`, and every menu and the quick-look footer pick it up. The routes mirror contacts (`routes/contacts.ts`): a raw-body `POST /calendar/:ownerId/import` for bytes the browser already holds (a mail part, a picked file) and `POST /calendar/:ownerId/import-from-drive`, which reads the Drive subject server-side through `getSharedDrive` so the bytes never round-trip through the browser. Both carry the target described in step 1 below and a shared FE/BE byte ceiling, checked before the bytes are read. The sidebar's "Import from file…" dialog stays as the entry point for a file on disk and posts to the raw-body route; it is not a second pipeline. The `.ics` quick look, the mail-reader chip for a calendar part and the shared event card are specified in [PROPOSAL_CALENDAR_ICS_FILES.md § Files everywhere](PROPOSAL_CALENDAR_ICS_FILES.md#files-everywhere-import-export-and-quick-look). The numbered steps below describe the import itself and hold for both routes; read "multipart upload" as the raw body.
 
-Reuse `parseIcs()`. Both routes:
+Both routes:
 
-1. Take the target as a `calendarId` — a query parameter on the raw-body route, a body field beside the Drive source on the other. It names an existing calendar the Home owns; "New calendar" in the picker is the existing `useCreateCalendar` followed by the import, so there is no multipart body and no `mode` union. A subscribed target is rejected by the read-only guard.
-2. Parse, then write the masters in file order under one ctag bump and one SSE broadcast, with the import-specific rules: `data.organizer` **and** `data.attendees` are stripped (a stored organizer makes `updateEvent`'s linked-event guard treat the copy as an attendee's, and an attendee list mails the file author's addresses on every later edit), `METHOD` is ignored, and no invitation propagation runs.
-3. Answer the three counts (`ImportCountsResult`), as a vCard import does.
+1. Take the target as a `calendarId` — a query parameter on the raw-body route, a body field beside the Drive source on the other. It names a calendar the caller may write in: their own Home's, or a team home's where they hold `write`. A calendar shared out of another *user's* home is refused, because the write would run in that Home and only the relay crosses Homes ([ROADMAP.md](../ROADMAP.md)). "New calendar" in the picker is `useCreateCalendar` followed by the import, so there is no multipart body and no `mode` union. A subscribed target will be rejected by the read-only guard once subscriptions exist.
+2. Group the file's VEVENTs by UID and write one resource per series through the CalDAV PUT seam, under one batched SSE broadcast. The import moves components rather than projecting them, so every line the author wrote lands as written — alarms, `ATTACH`, `CATEGORIES`, unknown `X-` properties. **Scheduling is the one thing taken out**: every `ATTENDEE` line is dropped (a `VALARM`'s own `ATTENDEE` stays, since that is the alarm's recipient) and `ORGANIZER` is removed and kept as one inert `X-EIGEN-IMPORTED-ORGANIZER`, which the inbound-REQUEST rule later matches a verified sender against, so a genuine invitation for the same UID is adopted in place rather than twinned. `METHOD` is ignored and no invitation propagation runs.
+3. Answer the three counts (`ImportCountsResult`), as a vCard import does. A UID the Home already holds anywhere is `skipped`, which is what makes a partial import retryable; an unstorable UID, an override group with no master, and a series the put seam refuses are `failed`, and the file continues past each one.
 
-Once imported, events are normal owned events — no `subscription`, fully editable, identical to
-hand-created ones.
+Ceilings: `ICS_MAX_BYTES` (5 MiB, shared FE/BE so a surface refuses an oversize file before uploading it), `ICS_IMPORT_MAX_EVENTS` (10 000 VEVENTs per file, counted on the text before the parse and again after it) and `ICS_IMPORT_MAX_WRITTEN_BYTES`, past which the run stops the way a quota stop does.
+
+Once imported, events are normal owned events — no `subscription`, fully editable, identical to hand-created ones.
 
 ## Frontend UX
 
@@ -288,10 +288,7 @@ The "+" button in `../../apps/calendar/src/components/calendar-sidebar.tsx` beco
 
 ### Import dialog
 
-- Drag-drop or file picker for `.ics`.
-- Target: radio group "Create new calendar" / "Add to existing calendar [picker]".
-- Server-side parse for preview after file selection: event count, date range, name hint.
-- Submit → `POST /calendar/:ownerId/imports` (multipart).
+Built as `ImportToCalendarPicker` (`packages/ui/src/components/calendar/import-to-calendar-picker.tsx`), which `useFileActionRunner` opens for the registry row: the viewer's own calendars under **My Calendars**, the team calendars they may write in under **Team Calendars**, and **New calendar** with a name defaulting to the file name without its extension. No preview parse: the `.ics` quick look already answers what is in the file.
 
 Both dialogs follow the shared Dialog components used by
 `../../apps/calendar/src/components/calendar-config-dialog.tsx`.
