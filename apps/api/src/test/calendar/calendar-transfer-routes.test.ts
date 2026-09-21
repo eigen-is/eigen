@@ -11,6 +11,7 @@ import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getMailDomain } from '../../lib/config/server-config';
 import { ICS_IMPORT_MAX_EVENTS } from '../../lib/core/transfer';
 import { getHome } from '../../lib/home';
+import { basicAuth, DAV_PASSWORD } from '../dav-test-helpers';
 import { vcal } from '../ics-test-helpers';
 import {
     app,
@@ -27,8 +28,6 @@ import {
     type TestUser,
 } from '../setup';
 import { importFromDriveRequest, importRaw } from '../transfer-test-helpers';
-
-const PASSWORD = 'testpassword123';
 
 const vevent = (uid: string, summary: string, start: string, end: string, extra: string[] = []) => [
     'BEGIN:VEVENT',
@@ -91,8 +90,8 @@ describe('Calendar transfer routes', () => {
 
     beforeAll(async () => {
         await getTestContext();
-        alice = await createTestUser('ics-import-alice@test.eigen.is', PASSWORD, 'Ics Import Alice');
-        bob = await createTestUser('ics-import-bob@test.eigen.is', PASSWORD, 'Ics Import Bob');
+        alice = await createTestUser('ics-import-alice@test.eigen.is', DAV_PASSWORD, 'Ics Import Alice');
+        bob = await createTestUser('ics-import-bob@test.eigen.is', DAV_PASSWORD, 'Ics Import Bob');
 
         calendarId = (await defaultCalendarOf(alice)).id;
         bobCalendarId = (await defaultCalendarOf(bob)).id;
@@ -460,7 +459,7 @@ describe('Calendar transfer routes', () => {
         const put = await app.handle(
             new Request(`http://localhost/dav/calendars/${alice.id}/${secondCalendarId}/${randomUUID()}.ics`, {
                 method: 'PUT',
-                headers: { Authorization: `Basic ${btoa(`${alice.email}:${PASSWORD}`)}`, 'Content-Type': ICS_MIME },
+                headers: { Authorization: basicAuth(alice.email), 'Content-Type': ICS_MIME },
                 body: file,
             }),
         );
@@ -493,7 +492,7 @@ describe('Calendar transfer routes', () => {
             new Request(`http://localhost/dav/calendars/${alice.id}/${calendarId}/`, {
                 method: 'PROPFIND',
                 headers: {
-                    Authorization: `Basic ${btoa(`${alice.email}:${PASSWORD}`)}`,
+                    Authorization: basicAuth(alice.email),
                     'Content-Type': 'application/xml',
                     Depth: '1',
                 },
@@ -647,7 +646,7 @@ describe('Calendar transfer routes', () => {
                 new Request(`http://localhost/dav/calendars/${alice.id}/${calendarId}/`, {
                     method: 'REPORT',
                     headers: {
-                        Authorization: `Basic ${btoa(`${alice.email}:${PASSWORD}`)}`,
+                        Authorization: basicAuth(alice.email),
                         'Content-Type': 'application/xml',
                     },
                     body,
@@ -693,7 +692,7 @@ describe('Calendar transfer routes', () => {
         // The uri is the CalDAV resource name, so a client has to be able to fetch it back.
         const res = await app.handle(
             new Request(`http://localhost/dav/calendars/${alice.id}/${calendarId}/${imported.uri}`, {
-                headers: { Authorization: `Basic ${btoa(`${alice.email}:${PASSWORD}`)}` },
+                headers: { Authorization: basicAuth(alice.email) },
             }),
         );
         expect(res.status).toBe(200);
