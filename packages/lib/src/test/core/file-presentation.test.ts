@@ -22,7 +22,7 @@ describe('an app format carries its app icon and color', () => {
             icon: Mail,
             colorVar: 'var(--app-mail-color)',
             softColorVar: 'var(--app-mail-color-soft)',
-            fillColorVar: 'var(--app-mail-color-soft)',
+            fillColorVar: 'none',
             label: 'Mail',
         });
     });

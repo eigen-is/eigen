@@ -1,5 +1,4 @@
 import {
-    Calendar,
     File,
     FileArchive,
     FileAudio,
@@ -12,9 +11,7 @@ import {
     FileVideo,
     Folder,
     type LucideIcon,
-    Mail,
     Presentation,
-    UsersRound,
 } from 'lucide-react';
 import {
     DRIVE_TYPE_FOLDER,
@@ -25,6 +22,7 @@ import {
     isImageMime,
     isVCardFile,
 } from '../types';
+import { apps } from './apps';
 import { EIGEN_DOC_ICONS } from './eigendoc-icons';
 
 const ARCHIVE_MIMES = new Set([
@@ -71,15 +69,18 @@ const EXECUTABLE_MIMES = new Set(['application/x-msdownload', 'application/x-exe
 const DB_MIMES = new Set(['application/vnd.sqlite3', 'application/x-sqlite3', 'application/vnd.ms-access']);
 
 // A .vcf belongs to Contacts, a .eml to Mail and a .ics to Calendar the way an eigendoc belongs to its
-// app, so each carries that app's icon, accent token and name instead of the generic file treatment.
+// app, so each carries that app's icon, accent and name from the app registry.
 const APP_FORMATS = [
-    { matches: isVCardFile, icon: UsersRound, app: 'contacts', label: 'Contacts' },
-    { matches: isEmlFile, icon: Mail, app: 'mail', label: 'Mail' },
-    { matches: isIcsFile, icon: Calendar, app: 'calendar', label: 'Calendar' },
+    { matches: isVCardFile, app: 'contacts', filled: true },
+    // lucide draws the envelope's body after its flap, so a filled body paints over the flap.
+    { matches: isEmlFile, app: 'mail', filled: false },
+    { matches: isIcsFile, app: 'calendar', filled: true },
 ] as const;
 
 function getAppFormat(mimeType: string, name: string) {
-    return APP_FORMATS.find(({ matches }) => matches(mimeType, name));
+    const format = APP_FORMATS.find(({ matches }) => matches(mimeType, name));
+    const app = format && apps.find((entry) => entry.name.toLowerCase() === format.app);
+    return format && app ? { ...format, icon: app.icon, color: app.color, label: app.name } : undefined;
 }
 
 export function getFileIconComponent(mimeType: string, type: string, name: string): LucideIcon {
@@ -145,9 +146,9 @@ export function getFilePresentation(mimeType: string, type: DrivePathType, name:
         const softColorVar = `var(--app-${appFormat.app}-color-soft)`;
         return {
             icon: appFormat.icon,
-            colorVar: `var(--app-${appFormat.app}-color)`,
+            colorVar: appFormat.color,
             softColorVar,
-            fillColorVar: softColorVar,
+            fillColorVar: appFormat.filled ? softColorVar : 'none',
             label: appFormat.label,
         };
     }
