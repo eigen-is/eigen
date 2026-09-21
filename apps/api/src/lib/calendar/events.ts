@@ -372,33 +372,49 @@ export async function moveEvent(
             resourcePath(calendarId, resource.uri),
             resourcePath(targetCalendarId, targetUri),
         );
-        calendar.db.transaction((tx) => {
-            const sourceCtag = calendar.bumpCtag(tx, calendarId);
-            calendar.tombstone(tx, calendarId, resource.uri, resource.uriKey, sourceCtag);
-            const targetCtag = calendar.bumpCtag(tx, targetCalendarId);
-            // Moving A→B then B→A must not leave A listing the uri as both a 200 and a 404.
-            tx.delete(schema.resourceTombstones)
-                .where(
-                    and(
-                        eq(schema.resourceTombstones.calendarId, targetCalendarId),
-                        eq(schema.resourceTombstones.uriKey, uriKeyOf(targetUri)),
-                    ),
-                )
-                .run();
-            tx.update(schema.resources)
-                .set({
-                    calendarId: targetCalendarId,
-                    uri: targetUri,
-                    uriKey: uriKeyOf(targetUri),
-                    resourceCtag: targetCtag,
-                })
-                .where(eq(schema.resources.id, resource.id))
-                .run();
-            tx.update(schema.events)
-                .set({ calendarId: targetCalendarId })
-                .where(eq(schema.events.resourceId, resource.id))
-                .run();
-        });
+        try {
+            calendar.db.transaction((tx) => {
+                const sourceCtag = calendar.bumpCtag(tx, calendarId);
+                calendar.tombstone(tx, calendarId, resource.uri, resource.uriKey, sourceCtag);
+                const targetCtag = calendar.bumpCtag(tx, targetCalendarId);
+                // Moving A→B then B→A must not leave A listing the uri as both a 200 and a 404.
+                tx.delete(schema.resourceTombstones)
+                    .where(
+                        and(
+                            eq(schema.resourceTombstones.calendarId, targetCalendarId),
+                            eq(schema.resourceTombstones.uriKey, uriKeyOf(targetUri)),
+                        ),
+                    )
+                    .run();
+                tx.update(schema.resources)
+                    .set({
+                        calendarId: targetCalendarId,
+                        uri: targetUri,
+                        uriKey: uriKeyOf(targetUri),
+                        resourceCtag: targetCtag,
+                    })
+                    .where(eq(schema.resources.id, resource.id))
+                    .run();
+                tx.update(schema.events)
+                    .set({ calendarId: targetCalendarId })
+                    .where(eq(schema.events.resourceId, resource.id))
+                    .run();
+            });
+        } catch (e) {
+            // A live process rolls its own rename back, or the resource is in a calendar no row names and
+            // the one it left still claims it. Both keys settle it when even that fails, source first: the
+            // row the drain drops there is what frees the event ids the target file carries.
+            try {
+                await calendar.storage.moveDurable(
+                    resourcePath(targetCalendarId, targetUri),
+                    resourcePath(calendarId, resource.uri),
+                );
+            } catch {
+                calendar.gate.markDirty(gateKey(calendarId, resource.uri));
+                calendar.gate.markDirty(gateKey(targetCalendarId, targetUri));
+            }
+            throw e;
+        }
         return true;
     });
 

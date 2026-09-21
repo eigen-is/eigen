@@ -37,6 +37,18 @@ class MoveFailingFilesystem extends LocalFilesystem {
     }
 }
 
+// A filesystem whose move out of one directory fails, which is what leaves a roll-back owed.
+class RollbackFailingFilesystem extends LocalFilesystem {
+    static failFrom: string | null = null;
+
+    override async moveDurable(from: string, to: string): Promise<void> {
+        if (RollbackFailingFilesystem.failFrom && from.includes(RollbackFailingFilesystem.failFrom)) {
+            throw new Error('the roll-back move failed');
+        }
+        await super.moveDurable(from, to);
+    }
+}
+
 // A filesystem whose staging removal fails, which is what leaves a committed delete its directory.
 class RemoveFailingFilesystem extends LocalFilesystem {
     static failRemoveDir = false;
@@ -899,6 +911,56 @@ describe('calendar file store', () => {
             expect(names).toHaveLength(2);
             expect(names).toContain('taken.ics');
             expect(await harness.instance.listResources(source)).toHaveLength(0);
+        });
+
+        test('a transaction that fails after the rename puts the file back where its row still names it', async () => {
+            const harness = await makeCalendar();
+            const source = await defaultCalendarId(harness);
+            const target = (await harness.instance.createCalendar({ name: 'Target', color: '#2563eb' })).id;
+            const moved = await seriesOf(harness, source, 'move-4@eigen', 'rolled-back.ics');
+
+            harness.instance.db.run(
+                sql`CREATE TRIGGER refuse_move BEFORE UPDATE ON resources BEGIN SELECT RAISE(ABORT, 'the index transaction failed'); END`,
+            );
+            await expect(harness.instance.moveEvent(source, moved.id, target)).rejects.toThrow(
+                'the index transaction failed',
+            );
+            harness.instance.db.run(sql`DROP TRIGGER refuse_move`);
+
+            expect(readdirSync(join(calendarsDirOf(harness.dir), source))).toEqual(['rolled-back.ics']);
+            expect(readdirSync(join(calendarsDirOf(harness.dir), target))).toEqual([]);
+            expect((await harness.instance.getRawEvents(source)).map((e) => e.id)).toEqual([moved.id]);
+            expect((await harness.instance.getResource(source, 'rolled-back.ics'))!.etag).toBe(
+                (await harness.instance.listResources(source))[0].etag,
+            );
+        });
+
+        test('a roll-back that fails too leaves both names for the drain, and the event lands in its target', async () => {
+            const harness = await makeCalendar(
+                (homeDir) => new RollbackFailingFilesystem(`${homeDir}/${PATHS.CALENDAR.ROOT}`),
+            );
+            const source = await defaultCalendarId(harness);
+            const target = (await harness.instance.createCalendar({ name: 'Target', color: '#2563eb' })).id;
+            const moved = await seriesOf(harness, source, 'move-5@eigen', 'stranded.ics');
+            const sourceCtag = (await harness.instance.getCollection(source))!.ctag;
+
+            harness.instance.db.run(
+                sql`CREATE TRIGGER refuse_move BEFORE UPDATE ON resources BEGIN SELECT RAISE(ABORT, 'the index transaction failed'); END`,
+            );
+            RollbackFailingFilesystem.failFrom = target;
+            await expect(harness.instance.moveEvent(source, moved.id, target)).rejects.toThrow(
+                'the index transaction failed',
+            );
+            RollbackFailingFilesystem.failFrom = null;
+            harness.instance.db.run(sql`DROP TRIGGER refuse_move`);
+
+            // Both keys are dirty, so the next read re-indexes the file where it lies and drops the row it left.
+            const rows = await harness.instance.getRawEvents(target);
+            expect(rows.map((e) => e.id)).toEqual([moved.id]);
+            expect(await harness.instance.listResources(source)).toHaveLength(0);
+            expect((await harness.instance.getDeletedResourcesSince(source, sourceCtag)).map((d) => d.uri)).toEqual([
+                'stranded.ics',
+            ]);
         });
     });
 
