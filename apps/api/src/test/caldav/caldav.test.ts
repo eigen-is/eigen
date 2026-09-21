@@ -8,7 +8,7 @@ import { ApiError } from '../../lib/core';
 import { REPORT_DATA_BUDGET_BYTES } from '../../lib/dav/report-row';
 import { getHome } from '../../lib/home/get-home';
 import { basicAuth, davRequest } from '../dav-test-helpers';
-import { app, getTestContext } from '../setup';
+import { app, createTestUser, getTestContext } from '../setup';
 
 describe('CalDAV', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -1987,24 +1987,30 @@ describe('CalDAV', () => {
             );
 
         test('a calendar-data REPORT serves up to its byte budget and lists the rest by etag alone', async () => {
-            const home = await getHome(userId);
+            // A third of a home's data budget in bulk bytes: a fresh user, not the shared alice home.
+            const owner = await createTestUser(`caldav-budget-${Date.now()}@eigen.test`, 'testpassword123', 'Budget');
+            const home = await getHome(owner.id);
             const bulk = await home.calendar.createCalendar({ name: 'Budget', color: '#2563eb' });
             const padding = 'x'.repeat(4_000_000);
             const count = Math.ceil(REPORT_DATA_BUDGET_BYTES / 4_000_000) + 1;
             for (let i = 0; i < count; i++) {
-                const res = await putIcs(
-                    `bulk-${i}.ics`,
-                    ics(`caldav-bulk-${i}@eigen`, 'Bulk', [`DESCRIPTION:${padding}`]),
-                    {},
-                    bulk.id,
-                );
+                const res = await davRequest('PUT', `/dav/calendars/${owner.id}/${bulk.id}/bulk-${i}.ics`, {
+                    email: owner.email,
+                    headers: { 'Content-Type': 'text/calendar; charset=utf-8' },
+                    body: ics(`caldav-bulk-${i}@eigen`, 'Bulk', [`DESCRIPTION:${padding}`]),
+                });
                 expect(res.status).toBe(201);
             }
 
-            const res = await query(
-                '<C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"/></C:comp-filter>',
-                bulk.id,
-            );
+            const res = await davRequest('REPORT', `/dav/calendars/${owner.id}/${bulk.id}/`, {
+                email: owner.email,
+                headers: { 'Content-Type': 'application/xml', Depth: '1' },
+                body: `<?xml version="1.0" encoding="utf-8"?>
+<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop><D:getetag/><C:calendar-data/></D:prop>
+  <C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"/></C:comp-filter></C:filter>
+</C:calendar-query>`,
+            });
             expect(res.status).toBe(207);
             const xml = await res.text();
             // Every resource is still named; the ones past the budget carry their data as a 404 prop, so a
@@ -2017,8 +2023,6 @@ describe('CalDAV', () => {
             expect(withheld).toBeGreaterThan(0);
             expect(served + withheld).toBe(count);
             expect(xml.length).toBeLessThan(REPORT_DATA_BUDGET_BYTES);
-            // The bulk bytes are a third of the shared home's data budget: give them back to the suites that follow.
-            await home.calendar.deleteCalendar(bulk.id);
         }, 120_000);
 
         test('a row whose file vanished is a 404 row, never a 200 without its data', async () => {
