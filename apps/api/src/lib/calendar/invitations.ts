@@ -434,7 +434,8 @@ async function decideInboundRequest(
         startTime: parsed.startTime,
     });
     const stored = calendar.joinedEvents().where(eq(schema.events.uid, parsed.uid)).all().map(toEvent);
-    const linked = stored.find((e) => e.data?.organizer && e.data?.organizerEventId);
+    // The master alone, as findLinkedEvent does: an exception inherits the link and would answer for the series.
+    const linked = stored.find((e) => !e.parentEventId && e.data?.organizer && e.data?.organizerEventId);
 
     if (linked) {
         // An update binds to the STORED organizer, so a co-attendee cannot hijack the invitation.
@@ -444,8 +445,11 @@ async function decideInboundRequest(
         // A copy that is one occurrence of an unheld series gives way to the series once the organizer invites this Home to all of it.
         if (linked.recurrenceDate && !parsed.recurrenceDate) {
             const resource = events.resourceOf(calendar, linked.id);
-            if (resource) await calendar.purgeResource(resource);
-            return fileNewInvitation(calendar, parsed, link);
+            const component = resource ? await events.loadResource(calendar, resource.calendarId, resource.uri) : null;
+            if (component && !isNewerRevision(parsed, storedRevision(component, linked.recurrenceDate))) {
+                return { kind: 'dropped', reason: 'nothing newer to apply' };
+            }
+            return fileNewInvitation(calendar, parsed, link, linked);
         }
         // A "this event" edit attaches as an exception: a full update would collapse the series.
         const moved = exceptionKeyOf(linked, parsed.recurrenceDate)
@@ -477,6 +481,7 @@ async function fileNewInvitation(
     calendar: Calendar,
     parsed: ParsedEvent,
     link: InvitationLink,
+    replaces?: CalendarEvent,
 ): Promise<InboundRequestOutcome> {
     // A new invitation is attributed to its sender, so the body's ORGANIZER must be that address.
     if (parsed.data?.organizer?.email?.toLowerCase() !== link.organizerEmail) {
@@ -488,8 +493,20 @@ async function fileNewInvitation(
         .all()
         .find((row) => row.isDefault);
     if (!defaultCal) return { kind: 'dropped', reason: 'no default calendar' };
+    // Nothing the guest holds is dropped until this message is certain to file.
+    const replaced = replaces && events.resourceOf(calendar, replaces.id);
+    if (replaced) await calendar.purgeResource(replaced);
     const payload = inboundInvitationPayload(parsed, link);
-    const event = await events.writeEvent(calendar, defaultCal.id, invitationInput(payload));
+    const input = invitationInput(payload);
+    const event = await events.writeEvent(calendar, defaultCal.id, {
+        ...input,
+        // Reminders and color are the guest's own, the two fields a linked copy lets them keep.
+        data: {
+            ...input.data,
+            reminders: replaces?.data?.reminders ?? input.data?.reminders,
+            color: replaces?.data?.color ?? input.data?.color,
+        },
+    });
     return { kind: 'created', event, payload };
 }
 
@@ -771,7 +788,9 @@ export async function rsvp(
             propagateRsvp(organizerUserId, organizerEventId, user.email, status, recurrenceDate).catch(console.error);
         }
     } else if (scope === 'this-and-following' && input.remove && input.recurrenceDate) {
-        await removeThisAndFuture(calendar, eventId, input.recurrenceDate);
+        const recurrenceDate = storedRecurrenceKey(input.recurrenceDate);
+        if (!recurrenceDate) throw new ApiError(400, 'Invalid recurrenceDate');
+        await removeThisAndFuture(calendar, eventId, recurrenceDate);
         if (isExternalOrganizer) sendRsvpReply('declined');
         else propagateRsvp(organizerUserId, organizerEventId, user.email, 'declined').catch(console.error);
     } else if (input.remove) {

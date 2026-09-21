@@ -218,6 +218,8 @@ export class Calendar {
     private async drainDirty(keys: string[], settled: (key: string) => void): Promise<void> {
         for (const key of keys) {
             const { calendarId, uri } = parseGateKey(key);
+            // A file no row describes and nothing here can index stays on disk, where the next reconcile counts it.
+            let uncharged: Uint8Array | null = null;
             try {
                 const existing = this.db
                     .select()
@@ -229,7 +231,8 @@ export class Calendar {
                     : null;
                 // A file the row already describes settles without a commit: a ctag bump would resync clients for nothing.
                 if (bytes) {
-                    await this.indexIfChanged(calendarId, existing?.uri ?? uri, bytes, existing);
+                    if (!existing) uncharged = bytes;
+                    if (await this.indexIfChanged(calendarId, existing?.uri ?? uri, bytes, existing)) uncharged = null;
                 } else if (existing) {
                     this.db.transaction((tx) => {
                         const ctag = this.bumpCtag(tx, calendarId);
@@ -243,6 +246,7 @@ export class Calendar {
                 // Rethrowing escapes the gate and takes every later read and write of this Home with it; the intent stays for init to retry.
                 console.warn(`calendar: could not re-index ${key}:`, e);
             }
+            if (uncharged) this.eventsBytes += uncharged.byteLength;
             settled(key);
         }
     }

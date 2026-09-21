@@ -36,28 +36,30 @@ export async function getEventsInRange(
         .map(toEvent);
 
     // A series starting after the window has no occurrence inside it; rrule never steps back before DTSTART.
+    const isMasterInWindow = and(
+        sql`${schema.events.rrule} IS NOT NULL`,
+        isNull(schema.events.parentEventId),
+        lte(schema.events.startTime, clampedTo),
+    );
     const recurring = calendar
         .joinedEvents()
-        .where(
-            and(
-                ...scoped,
-                sql`${schema.events.rrule} IS NOT NULL`,
-                isNull(schema.events.parentEventId),
-                lte(schema.events.startTime, clampedTo),
-            ),
-        )
+        .where(and(...scoped, isMasterInWindow))
         .all()
         .map(toEvent);
 
     // An override is read twice: as the parent occurrence it replaces, and — when its own times overlap — where it was moved to.
-    const parentIds = recurring.map((event) => event.id);
+    // The parents ride as a subquery: one bound variable per master would pass SQLite's cap on a large home.
+    const masterIds = calendar.db
+        .select({ id: schema.events.id })
+        .from(schema.events)
+        .where(and(...scoped, isMasterInWindow));
     const exceptions = calendar
         .joinedEvents()
         .where(
             and(
                 ...scoped,
                 sql`${schema.events.parentEventId} IS NOT NULL`,
-                or(parentIds.length > 0 ? inArray(schema.events.parentEventId, parentIds) : undefined, overlaps),
+                or(inArray(schema.events.parentEventId, masterIds), overlaps),
             ),
         )
         .all()

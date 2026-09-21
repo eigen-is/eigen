@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { CARD_MAX_BYTES } from '../../lib/contacts/card-store';
@@ -570,7 +570,7 @@ describe('drainDirty — foreign bytes', () => {
     });
 });
 
-describe('putCard — a create never replaces an unindexed file', () => {
+describe('putCard — a create displaces an unindexed file', () => {
     test('a card the index skipped keeps its bytes when a client creates at its name', async () => {
         const { contacts, dir } = await makeContacts();
         const uri = 'ghost.vcf';
@@ -582,8 +582,20 @@ describe('putCard — a create never replaces an unindexed file', () => {
         expect(await contacts.getCardMeta(uri)).toBeNull();
 
         const uid = randomUUID();
-        expect(await put(contacts, uri, card({ uid }))).toEqual({ ok: false, error: 'precondition' });
-        expect(readFileSync(join(cardsDirOf(dir), uri), 'utf8')).toBe(stranded);
+        expect(await put(contacts, uri, card({ uid }))).toMatchObject({ ok: true, created: true });
+        expect(readFileSync(join(cardsDirOf(dir), uri), 'utf8')).toContain(`UID:${uid}`);
+
+        // The bytes nobody indexed are still there, under a name no lister, sweep or client addresses.
+        const displaced = readdirSync(cardsDirOf(dir)).filter((name) => name.includes('.displaced-'));
+        expect(displaced).toHaveLength(1);
+        expect(readFileSync(join(cardsDirOf(dir), displaced[0]), 'utf8')).toBe(stranded);
+
+        // And the budget counts the indexed cards alone: the displaced name is no `.vcf` any scan sees.
+        await contacts.reconcileIndex();
+        const indexedBytes = readdirSync(cardsDirOf(dir))
+            .filter((name) => !name.startsWith('.') && name.endsWith('.vcf'))
+            .reduce((sum, name) => sum + statSync(join(cardsDirOf(dir), name)).size, 0);
+        expect(await contacts.size()).toBe(indexedBytes);
     });
 });
 

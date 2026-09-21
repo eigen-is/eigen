@@ -2030,6 +2030,32 @@ describe('CalDAV', () => {
             expect(xml).not.toContain('Vanished Row');
         });
 
+        // RFC 6578 § 3.2: inside a sync-collection a member that is gone is a bare 404 status on the
+        // response, never the multiget's 404 propstat — a client keying on propstat keeps a ghost resource.
+        test('a row whose file vanished is a removed row inside a sync-collection', async () => {
+            const uri = 'caldav-vanished-sync.ics';
+            expect((await putIcs(uri, ics('caldav-vanished-sync@eigen', 'Vanished Sync'))).status).toBe(201);
+            const home = await getHome(userId);
+            rmSync(join(home.homeDir, 'eigen.calendar', 'calendars', defaultCalendarId, uri));
+
+            const res = await davRequest('REPORT', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                email: ctx.alice.user.email,
+                headers: { 'Content-Type': 'application/xml' },
+                body: `<?xml version="1.0" encoding="utf-8"?>
+<D:sync-collection xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:sync-token/>
+  <D:prop><D:getetag/><C:calendar-data/></D:prop>
+</D:sync-collection>`,
+            });
+            expect(res.status).toBe(207);
+            const xml = await res.text();
+            const tail = xml.slice(xml.indexOf(uri));
+            const row = tail.slice(0, tail.indexOf('</D:response>'));
+            expect(row).toContain('<D:status>HTTP/1.1 404 Not Found</D:status>');
+            expect(row).not.toContain('<D:propstat>');
+            expect(xml).not.toContain('Vanished Sync');
+        });
+
         test('a PUT into a calendar that does not exist is 409 and creates nothing', async () => {
             const missing = 'caldav-no-such-calendar';
             const res = await putIcs('anywhere.ics', ics('caldav-no-collection@eigen', 'Nowhere'), {}, missing);

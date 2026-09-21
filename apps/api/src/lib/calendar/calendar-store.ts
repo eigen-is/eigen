@@ -6,6 +6,7 @@ import {
     ApiError,
     computeResourceEtag,
     type DeleteResourceResult,
+    displaceUnindexedFile,
     matchesIfMatch,
     matchesIfNoneMatch,
     type PutResourceResult,
@@ -17,7 +18,14 @@ import { parseResource, projectResource, restampResource, serializeResource, str
 import { EIGEN, readStamp, recurrenceKeyOf, seriesTimezones, uidOf } from '../ical/ical-parse';
 import type { Calendar } from './calendar';
 import type { EventRowInput } from './resource-store';
-import { EVENT_MAX_BYTES, gateKey, resourcePath, sanitizeCalendarId, sanitizeEventUri } from './resource-store';
+import {
+    calendarDir,
+    EVENT_MAX_BYTES,
+    gateKey,
+    resourcePath,
+    sanitizeCalendarId,
+    sanitizeEventUri,
+} from './resource-store';
 import * as schema from './schema';
 
 // The store seam over the Calendar facade: every mutation runs inside the write gate, every read drains first.
@@ -296,10 +304,8 @@ export async function writePrepared(
     if (calendar.meteredIngest) {
         await enforceHomeDataQuota(calendar.home.user.id, prepared.bytes.byteLength, existing?.size ?? 0);
     }
-    // A name no row holds can still be a file (dedupe loser, unparseable resource), and a create would destroy those bytes.
-    if (!existing && (await calendar.storage.exists(resourcePath(calendarId, uri)))) {
-        throw new ApiError(412, 'A file already exists under this name');
-    }
+    // A name no row holds can still be a file (dedupe loser, unparseable resource): its bytes move aside rather than be destroyed.
+    if (!existing) await displaceUnindexedFile(calendar.storage, calendarDir(calendarId), uri);
 
     try {
         // Only a replacement can land bytes a later stat diff cannot see; a new name is always visible.

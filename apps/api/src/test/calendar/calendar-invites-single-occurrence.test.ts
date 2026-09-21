@@ -195,32 +195,135 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
 
     // The same message over the other transport: a lone VEVENT with a RECURRENCE-ID for a UID this Home
     // holds nothing under.
+    const IMIP_UID = 'single-occurrence@external.com';
+    const IMIP_ORG = 'organizer@external.com';
+
+    const imipOccurrence = (summary: string, sequence: number, dtstamp: string): ParsedEvent =>
+        parseIcs(
+            vcal([
+                'BEGIN:VEVENT',
+                `UID:${IMIP_UID}`,
+                `SUMMARY:${summary}`,
+                'RECURRENCE-ID:20280313T090000Z',
+                'DTSTART:20280313T110000Z',
+                'DTEND:20280313T120000Z',
+                `SEQUENCE:${sequence}`,
+                `ORGANIZER;CN=Ext Org:mailto:${IMIP_ORG}`,
+                'ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:guest@test.local',
+                `DTSTAMP:${dtstamp}`,
+                'END:VEVENT',
+            ]),
+        ).events[0];
+
+    const imipSeries = (summary: string, sequence: number, dtstamp: string, organizer: string[]): ParsedEvent =>
+        parseIcs(
+            vcal([
+                'BEGIN:VEVENT',
+                `UID:${IMIP_UID}`,
+                `SUMMARY:${summary}`,
+                'DTSTART:20280306T090000Z',
+                'DTEND:20280306T100000Z',
+                'RRULE:FREQ=WEEKLY;COUNT=4',
+                `SEQUENCE:${sequence}`,
+                ...organizer,
+                'ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:guest@test.local',
+                `DTSTAMP:${dtstamp}`,
+                'END:VEVENT',
+            ]),
+        ).events[0];
+
     test('an iMIP REQUEST for one occurrence of an unknown series files a standalone event', async () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;
-        const uid = 'single-occurrence@external.com';
-        const organizer = 'organizer@external.com';
-        const ics = vcal([
-            'BEGIN:VEVENT',
-            `UID:${uid}`,
-            'SUMMARY:One Instance Only',
-            'RECURRENCE-ID:20280313T090000Z',
-            'DTSTART:20280313T110000Z',
-            'DTEND:20280313T120000Z',
-            'SEQUENCE:0',
-            `ORGANIZER;CN=Ext Org:mailto:${organizer}`,
-            'ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:guest@test.local',
-            'DTSTAMP:20280301T100000Z',
-            'END:VEVENT',
-        ]);
-        const parsed: ParsedEvent = parseIcs(ics).events[0];
 
-        await calendar.receiveImipRequest(parsed, organizer);
+        await calendar.receiveImipRequest(imipOccurrence('One Instance Only', 0, '20280301T100000Z'), IMIP_ORG);
 
-        const stored = await calendar.getEventsByUid(uid);
+        const stored = await calendar.getEventsByUid(IMIP_UID);
         expect(stored).toHaveLength(1);
         expect(stored[0].title).toBe('One Instance Only');
         expect(stored[0].parentEventId).toBeNull();
-        expect(stored[0].data?.organizerEventId).toBe(uid);
+        expect(stored[0].data?.organizerEventId).toBe(IMIP_UID);
+    });
+
+    test('an iMIP series REQUEST with no ORGANIZER leaves the single occurrence alone', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        await calendar.receiveImipRequest(imipOccurrence('One Instance Only', 0, '20280301T100000Z'), IMIP_ORG);
+
+        await calendar.receiveImipRequest(imipSeries('Whole Series', 1, '20280302T100000Z', []), IMIP_ORG);
+
+        const stored = await calendar.getEventsByUid(IMIP_UID);
+        expect(stored).toHaveLength(1);
+        expect(stored[0].title).toBe('One Instance Only');
+        expect(stored[0].rrule).toBeNull();
+    });
+
+    test('a stale iMIP series REQUEST leaves the newer single occurrence alone', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        await calendar.receiveImipRequest(imipOccurrence('One Instance Only', 3, '20280303T100000Z'), IMIP_ORG);
+
+        const organizer = [`ORGANIZER;CN=Ext Org:mailto:${IMIP_ORG}`];
+        await calendar.receiveImipRequest(imipSeries('Stale Series', 1, '20280301T100000Z', organizer), IMIP_ORG);
+
+        const stored = await calendar.getEventsByUid(IMIP_UID);
+        expect(stored).toHaveLength(1);
+        expect(stored[0].title).toBe('One Instance Only');
+        expect(stored[0].rrule).toBeNull();
+    });
+
+    test('the series invitation keeps the reminder the guest set on the occurrence', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        await calendar.receiveImipRequest(imipOccurrence('One Instance Only', 0, '20280301T100000Z'), IMIP_ORG);
+        const occurrenceCopy = (await calendar.getEventsByUid(IMIP_UID))[0];
+        await calendar.updateEvent(occurrenceCopy.calendarId, occurrenceCopy.id, {
+            data: { ...occurrenceCopy.data, reminders: [{ type: 'notification', minutes: 45 }] },
+        });
+
+        const organizer = [`ORGANIZER;CN=Ext Org:mailto:${IMIP_ORG}`];
+        await calendar.receiveImipRequest(imipSeries('Whole Series', 1, '20280302T100000Z', organizer), IMIP_ORG);
+
+        const stored = await calendar.getEventsByUid(IMIP_UID);
+        expect(stored).toHaveLength(1);
+        expect(stored[0].title).toBe('Whole Series');
+        expect(stored[0].data?.reminders).toEqual([{ type: 'notification', minutes: 45 }]);
+    });
+
+    // The relay carries the same REQUEST, so it is ordered by the same rule.
+    test('a stale relayed series invitation leaves the newer single occurrence alone', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const payload = (title: string, sequence: number, dtstamp: string, recurrenceDate: string | null) => ({
+            uid: IMIP_UID,
+            recurrenceDate,
+            title,
+            description: null,
+            location: null,
+            startTime: new Date(recurrenceDate ? '2028-03-13T11:00:00Z' : '2028-03-06T09:00:00Z'),
+            endTime: new Date(recurrenceDate ? '2028-03-13T12:00:00Z' : '2028-03-06T10:00:00Z'),
+            allDay: false,
+            rrule: recurrenceDate ? null : 'FREQ=WEEKLY;COUNT=4',
+            timezone: null,
+            status: 'confirmed' as const,
+            sequence,
+            dtstamp: new Date(dtstamp),
+            data: {
+                organizer: { userId: 'organizer-home', email: IMIP_ORG, name: 'Ext Org' },
+                organizerEventId: 'organizer-event',
+                attendees: [{ email: 'guest@test.local', status: 'pending' as const, role: 'required' as const }],
+            },
+            createByUserId: 'organizer-home',
+            organizerEventId: 'organizer-event',
+            organizerUserId: 'organizer-home',
+        });
+        await calendar.receiveInvitation(payload('One Instance Only', 3, '2028-03-03T10:00:00Z', '2028-03-13'));
+
+        await calendar.receiveInvitation(payload('Stale Series', 1, '2028-03-01T10:00:00Z', null));
+
+        const stored = await calendar.getEventsByUid(IMIP_UID);
+        expect(stored).toHaveLength(1);
+        expect(stored[0].title).toBe('One Instance Only');
+        expect(stored[0].rrule).toBeNull();
     });
 });

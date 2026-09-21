@@ -1190,6 +1190,7 @@ describe('fail-closed drain guard', () => {
         priv.gate.markDirty(uri);
         priv.gate.markDirty('poison.vcf');
         const ctagBefore = db.select().from(contactsSchema.book).get()!.ctag;
+        const sizeBefore = await contacts.size();
 
         // The poison card is skipped once and warned about once — it leaves the dirty set like any settled
         // uri — and the reads it rode along with still answer.
@@ -1204,6 +1205,9 @@ describe('fail-closed drain guard', () => {
         // Re-committing it behind the poison card would bump the ctag on every read and send every CardDAV
         // client into a no-op delta poll.
         expect(db.select().from(contactsSchema.book).get()!.ctag).toBe(ctagBefore);
+
+        // The poison bytes stay on disk and the next reconcile counts them, so the budget counts them now.
+        expect(await contacts.size()).toBe(sizeBefore + statSync(cardPathOf(dir, 'poison.vcf')).size);
     });
 });
 

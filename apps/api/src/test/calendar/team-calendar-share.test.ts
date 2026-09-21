@@ -511,6 +511,36 @@ describe('Team calendar administration', () => {
         expect(calendars.some((c) => c.id === extra.id)).toBe(true);
     });
 
+    // The Admin app's team detail: the list is what it reads the default calendar and its shares off.
+    test('an org admin who is not a team member reads the team calendar list and sets its shares', async () => {
+        const listRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${teamOwnerId(adminTeamId)}/calendars`,
+        );
+        const teamDefault = findOrFail(await assertJson<CalendarItem[]>(listRes), (c) => c.isDefault);
+
+        const shareRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${teamOwnerId(adminTeamId)}/calendars/${teamDefault.id}`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shares: [{ targetId: teamOwnerId(adminTeamId), permission: 'write' }] }),
+            },
+        );
+        const updated = await assertJson<CalendarItem>(shareRes);
+        expect(updated.shares).toEqual([{ targetId: teamOwnerId(adminTeamId), permission: 'write' }]);
+
+        // The events of that calendar stay on membership plus share: administering is not reading.
+        const from = Math.floor(Date.parse('2026-01-01T00:00:00Z') / 1000);
+        const to = Math.floor(Date.parse('2026-02-01T00:00:00Z') / 1000);
+        const eventsRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${teamOwnerId(adminTeamId)}/event-range/${from}/${to}`,
+        );
+        expect(eventsRes.status).toBe(403);
+    });
+
     test('an org admin administers the team calendar', async () => {
         const createRes = await authedRequest(
             ctx.alice.user.sessionToken,

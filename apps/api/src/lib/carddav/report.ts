@@ -111,7 +111,16 @@ async function handleQuery(
     for (const { row, served } of matched) {
         // The bytes matching read are the bytes this row serves, so the budget spends them without a re-read.
         responses.push(
-            await cardRow(contacts, ownerId, row, report.wantsData, report.partialProps, budget, async () => served),
+            await cardRow(
+                contacts,
+                ownerId,
+                row,
+                report.wantsData,
+                report.partialProps,
+                budget,
+                notFoundRow,
+                async () => served,
+            ),
         );
     }
     return multistatusResponse(responses);
@@ -129,7 +138,7 @@ async function handleSyncCollection(
     if (!report.syncToken) {
         // Initial sync — the whole book as 200 rows.
         for (const card of await contacts.listCards()) {
-            responses.push(await cardRow(contacts, ownerId, card, report.wantsData, null, budget));
+            responses.push(await cardRow(contacts, ownerId, card, report.wantsData, null, budget, removedRow));
         }
     } else {
         const token = parseSyncToken(report.syncToken);
@@ -138,7 +147,7 @@ async function handleSyncCollection(
         if (token.gen !== book.syncGen || token.since > book.ctag) return invalidSyncToken();
 
         for (const card of await contacts.getChangedCardsSince(token.since)) {
-            responses.push(await cardRow(contacts, ownerId, card, report.wantsData, null, budget));
+            responses.push(await cardRow(contacts, ownerId, card, report.wantsData, null, budget, removedRow));
         }
         // One tombstone row per uri: no href may appear as both a 200 and a 404 in one response.
         for (const d of await contacts.getDeletedCardsSince(token.since)) {
@@ -158,6 +167,7 @@ async function cardRow(
     wantsData: boolean,
     partialProps: string[] | null,
     budget: DataBudget,
+    vanished: (href: string) => string = notFoundRow,
     read: () => Promise<{ bytes: Uint8Array; etag: string } | null> = () => contacts.getCard(card.uri),
 ): Promise<string> {
     return resourceDataRow({
@@ -168,6 +178,7 @@ async function cardRow(
         dataElement: '<CARD:address-data/>',
         dataProp: (text) => addressDataProp(resolveAddressData(text, partialProps)),
         read,
+        vanished,
         budget,
     });
 }
