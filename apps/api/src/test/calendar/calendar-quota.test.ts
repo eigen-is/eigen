@@ -101,18 +101,18 @@ async function inviteFromAlice(user: TestUser, uid: string): Promise<CalendarEve
 
 const setBudget = (mb: number) => updateServerSettings({ quotas: { mailAndContactsMaxMB: mb } });
 
-// The budget the writes below are judged against: what the Home already holds, floored to the whole MB the
-// setting is spelled in, so anything that adds bytes overflows and only a shrinking rewrite fits.
+// The budget the writes below are judged against: exactly what the Home already holds, so anything that adds
+// bytes overflows and only an edit inside the headroom or a shrinking rewrite fits.
 async function fillBudget(user: TestUser): Promise<void> {
     const home = await getHome(user.id);
-    await setBudget(Math.floor((await home.size()).mailAndContacts.used / MB));
+    await setBudget((await home.size()).mailAndContacts.used / MB);
 }
 
-// A whole MB under what the Home holds: the state an admin who lowered a quota leaves behind, where even a
-// rewrite that adds nothing projects over the ceiling.
+// Half a MiB under what the Home holds: the state an admin who lowered a quota leaves behind, still inside
+// the edit headroom, where a rewrite that adds a little fits and every create projects over the ceiling.
 async function overfillBudget(user: TestUser): Promise<void> {
     const home = await getHome(user.id);
-    await setBudget(Math.floor((await home.size()).mailAndContacts.used / MB) - 1);
+    await setBudget(((await home.size()).mailAndContacts.used - MB / 2) / MB);
 }
 
 // The ceiling is one server-wide setting, so whatever a test does to it, the next test starts where it did.
@@ -305,6 +305,24 @@ describe('Calendar storage quota', () => {
         const calendarId = await defaultCalendarOf(user);
 
         await restoringBudget(() => expectEditsFit(user, calendarId, () => overfillBudget(user)));
+    });
+
+    // Without a ceiling on the total, a loop of small growing rewrites walks a Home as far past its budget as
+    // it likes, and an admin lowering the quota can never freeze one.
+    test('a Home further over its budget than the edit headroom refuses a growing rewrite, and still shrinks', async () => {
+        const user = await makeUser();
+        const calendarId = await defaultCalendarOf(user);
+
+        await restoringBudget(async () => {
+            const fat = await assertJson<CalendarEvent>(await createEvent(user, calendarId, 'Fat', 1.5 * MB));
+            const url = `/calendar/${user.id}/calendars/${calendarId}/events/${fat.id}`;
+            const home = await getHome(user.id);
+            await setBudget(((await home.size()).mailAndContacts.used - 1.5 * MB) / MB);
+
+            expect((await putJson(user, url, { description: 'x'.repeat(1.5 * MB + 800) })).status).toBe(507);
+            expect((await putJson(user, url, { description: 'x'.repeat(1.5 * MB - 800) })).status).toBe(200);
+            expect((await authedRequest(user.sessionToken, url, { method: 'DELETE' })).status).toBe(200);
+        });
     });
 
     // On a budget the body overflows too, so the two refusals really do race and the ceiling wins.
