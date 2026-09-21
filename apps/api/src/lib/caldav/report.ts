@@ -51,8 +51,7 @@ function handleCalendarQuery(
         events = calendar.getRawEvents(calendarId);
     }
 
-    const wantsData = report.propNames.some((p) => p.includes('calendar-data'));
-    return multistatusResponse(buildEventResponses(events, ownerId, calendarId, wantsData));
+    return multistatusResponse(buildEventResponses(events, ownerId, calendarId, report.wantsData));
 }
 
 function handleCalendarMultiget(
@@ -68,7 +67,6 @@ function handleCalendarMultiget(
 
     const uris = resolved.map((r) => r.uri).filter((u): u is string => u !== null);
     const events = calendar.getEventsByUris(calendarId, uris);
-    const wantsData = report.propNames.some((p) => p.includes('calendar-data'));
 
     // uid→all-events map for grouping exceptions with their master — only the UIDs the client asked for.
     const requestedUids = [...new Set(events.map((e) => e.uid))];
@@ -89,7 +87,7 @@ function handleCalendarMultiget(
             const master = masterByUri.get(uri);
             if (!master) continue; // uri exists only as an exception (part of a master .ics) — no own row
             const props = memberProps(master.etag, ICS_CONTENT_TYPE);
-            if (wantsData) {
+            if (report.wantsData) {
                 const group = eventsByUid.get(master.uid) ?? [master];
                 props.push(calendarDataProp(eventsToIcs(group)));
             }
@@ -117,8 +115,7 @@ function handleSyncCollection(
     if (!report.syncToken) {
         // Initial sync — return all events
         const events = calendar.getRawEvents(calendarId);
-        const wantsData = report.propNames.some((p) => p.includes('calendar-data'));
-        responses.push(...buildEventResponses(events, ownerId, calendarId, wantsData));
+        responses.push(...buildEventResponses(events, ownerId, calendarId, report.wantsData));
     } else {
         // Incremental sync — read the since-ctag from the token.
         const token = parseSyncToken(report.syncToken);
