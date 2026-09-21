@@ -320,8 +320,7 @@ function isStorableUid(uid: string): boolean {
 }
 
 function uidOfResource(resource: ICAL.Component): string {
-    const vevents = resource.getAllSubcomponents('vevent');
-    return vevents.length ? uidOf(vevents[0]) : '';
+    return uidOf(resource.getAllSubcomponents('vevent')[0]);
 }
 
 // A copy of somebody else's event, which the owner may re-alarm and nothing more: the organizer stamp the

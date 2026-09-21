@@ -136,8 +136,10 @@ function recoverCalendarRows(calendar: Calendar, orphans: string[]): void {
 }
 
 // A row id another resource already holds means this file is a copy of one, so it gets fresh ids. Only the
-// candidates the dedupe kept run it: a discarded one holds no ids to lose.
-function applyCopyRule(calendar: Calendar, candidate: Candidate, resource: ICAL.Component, owners: IdOwners): void {
+// candidates the dedupe kept run it: a discarded one holds no ids to lose, and a restore parsed nothing.
+function applyCopyRule(calendar: Calendar, candidate: Candidate, owners: IdOwners): void {
+    const resource = candidate.resource;
+    if (!resource) return;
     const ids = candidate.rows.map((row) => row.id);
     const indexed = calendar.db
         .select({ id: schema.events.id, resourceId: schema.events.resourceId })
@@ -225,16 +227,6 @@ async function buildCandidates(
         }
     }
     return candidates;
-}
-
-// A uid is unique per calendar, so the collision scope is the calendar plus the uid. A loser is skipped and
-// logged, never deleted: two files with one UID is the ordinary result of copying one by hand.
-function dedupeCandidates(candidates: Candidate[], uidOwner: Map<string, string>): Candidate[] {
-    return dedupeByUid(candidates, uidOwner, (c) => ({
-        scope: `${c.calendarId}|${c.uid}`,
-        id: c.id,
-        uri: `${c.calendarId}/${c.file.uri}`,
-    }));
 }
 
 // The bytes the copy rule reminted go back to disk before their rows are indexed, so file and index agree.
@@ -415,10 +407,15 @@ export async function reconcileIndex(calendar: Calendar): Promise<void> {
                         .all()
                         .map((r) => [`${pass.calendarId}|${r.uid}`, r.id] as const),
                 );
-                const prepared = dedupeCandidates(candidates, uidOwner);
-                for (const candidate of prepared) {
-                    if (candidate.resource) applyCopyRule(calendar, candidate, candidate.resource, owners);
-                }
+                // A uid is unique per calendar, so the collision scope is the calendar plus the uid. A loser
+                // is skipped and logged, never deleted: two files with one UID is what copying one by hand
+                // ordinarily leaves.
+                const prepared = dedupeByUid(candidates, uidOwner, (c) => ({
+                    scope: `${pass.calendarId}|${c.uid}`,
+                    id: c.id,
+                    uri: `${pass.calendarId}/${c.file.uri}`,
+                }));
+                for (const candidate of prepared) applyCopyRule(calendar, candidate, owners);
                 bytes += await rewriteCopies(calendar, prepared);
                 writeIndexed(calendar, pass.calendarId, prepared);
             } catch (e) {
