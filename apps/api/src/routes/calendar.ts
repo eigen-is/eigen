@@ -138,6 +138,14 @@ async function resolveAdministeredCalendar(user: User, ownerId: string) {
     return (await getHome(ownerId)).calendar;
 }
 
+// A team admin sets the shares of a team calendar, so the list those shares are read off is theirs too; the events stay on membership.
+async function resolveListedCalendar(user: User, ownerId: string) {
+    const parsed = parseOwnerId(ownerId);
+    if (parsed.type !== 'team') return resolveCalendar(user, ownerId);
+    const { teamIds } = await getMemberships(user.id);
+    return teamIds.includes(parsed.id) ? resolveCalendar(user, ownerId) : resolveAdministeredCalendar(user, ownerId);
+}
+
 // These routes carry a foreign `:ownerId`, and a foreign home is only ever reached through `home-relay.ts`.
 export const calendarRouter = new Elysia({ name: 'calendar' })
     .use(betterAuth)
@@ -147,7 +155,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
         '/calendar/:ownerId/calendars',
         async ({ params, user }): Promise<CalendarItem[]> => {
             requireNonGuest(user);
-            const cal = await resolveCalendar(user, params.ownerId);
+            const cal = await resolveListedCalendar(user, params.ownerId);
             return cal.getCalendars();
         },
         { auth: true },
