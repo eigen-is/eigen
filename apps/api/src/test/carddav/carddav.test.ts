@@ -543,7 +543,9 @@ describe('CardDAV', () => {
 
         const putRes = await putCard(uri, body, { 'If-None-Match': '*' });
         expect(putRes.status).toBe(201);
-        const etag = putRes.headers.get('ETag');
+        // The server did not store what the client sent, so the create carries no validator (RFC 4918 § 9.7.2)
+        // and the client's next fetch is what hands it the 3.0 revision.
+        expect(putRes.headers.get('ETag')).toBeNull();
 
         const getRes = await getCard(uri);
         expect(getRes.status).toBe(200);
@@ -551,9 +553,7 @@ describe('CardDAV', () => {
         expect(stored).not.toBe(body);
         expect(stored).toContain('VERSION:3.0');
         expect(stored).toContain('PHOTO;ENCODING=b');
-        // The etag hashes the stored 3.0 bytes, so an honest client re-converges on the next fetch.
-        expect(getRes.headers.get('ETag')).toBe(etag);
-        expect(etag).toBe(`"${computeResourceEtag(new TextEncoder().encode(stored))}"`);
+        expect(getRes.headers.get('ETag')).toBe(`"${computeResourceEtag(new TextEncoder().encode(stored))}"`);
     });
 
     test('DELETE removes a card and a subsequent GET is 404', async () => {

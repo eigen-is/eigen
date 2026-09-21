@@ -167,8 +167,19 @@ describe('putCard — 4.0 transcode', () => {
         expect(stored).not.toBe(body);
         expect(stored).toContain('VERSION:3.0');
         expect(stored).toContain('PHOTO;ENCODING=b');
-        // The etag hashes the stored 3.0 bytes, not the 4.0 input, so an honest client re-converges on GET.
-        expect((res as { etag: string }).etag).toBe(computeResourceEtag((await contacts.getCard(uri))!.bytes));
+        // The bytes stored are not the bytes sent, so the write carries no validator and the client re-reads.
+        expect((res as { etag: string | null }).etag).toBeNull();
+    });
+
+    test('a 3.0 PUT stored verbatim still answers with the etag of its own bytes', async () => {
+        const { contacts } = await makeContacts();
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        const body = card({ uid, email: ['verbatim@example.org'] });
+
+        const res = await put(contacts, uri, body);
+
+        expect((res as { etag: string }).etag).toBe(computeResourceEtag(new TextEncoder().encode(body)));
     });
 });
 
@@ -456,7 +467,8 @@ describe('putCard — self-link', () => {
         expect(after.id).toBe(self.id);
         const stored = new TextDecoder().decode((await contacts.getCard(self.uri))!.bytes);
         expect(stored).toContain(`X-EIGEN-ID:${user.id}`);
-        expect((res as { etag: string }).etag).toBe(computeResourceEtag(new TextEncoder().encode(stored)));
+        // The restored property makes the stored bytes the server's, not the client's: no validator.
+        expect((res as { etag: string | null }).etag).toBeNull();
         expect((await contacts.getMe())?.id).toBe(self.id);
     });
 
