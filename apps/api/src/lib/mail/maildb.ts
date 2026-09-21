@@ -197,8 +197,14 @@ export default class MailDB {
             .run();
     }
 
-    getAllEmails(mailbox: string) {
-        return this.db.select().from(schema.emails).where(eq(schema.emails.mailbox, mailbox)).all();
+    // The three columns the sync diff reads. A `SELECT *` would carry every row's `textShort` — the whole
+    // body, kept for FTS — so a 100k-message mailbox paid 417 MiB to compare filenames.
+    listSyncRows(mailbox: string) {
+        return this.db
+            .select({ id: schema.emails.id, filename: schema.emails.filename, size: schema.emails.size })
+            .from(schema.emails)
+            .where(eq(schema.emails.mailbox, mailbox))
+            .all();
     }
 
     // Keyset pagination, newest-first. Composite (date, id) cursor because `date` has duplicate

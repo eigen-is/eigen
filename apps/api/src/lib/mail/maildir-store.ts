@@ -353,7 +353,7 @@ export class MaildirStore implements MailStore {
             }
         }
 
-        const dbRecords = this.db.getAllEmails(mailbox);
+        const dbRecords = this.db.listSyncRows(mailbox);
         const dbById = new Map(dbRecords.map((r) => [r.id, r]));
         // A mailbox with no rows yet is indexed for the first time: what it finds was discovered, not delivered.
         const indexed = dbRecords.length > 0;
