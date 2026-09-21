@@ -3,9 +3,11 @@ import {
     formatEventWhen,
     getEventsForDay,
     isInvitationFromOthers,
+    normalizeTimezone,
     rruleToText,
     viewerTimeZone,
 } from '../../../core/calendar/calendar-utils';
+import { WINDOWS_ZONES } from '../../../core/calendar/windows-zones';
 import type { CalendarEventOccurrence, EventData } from '../../../types/calendar';
 
 function occurrence(occurrenceDate: string, startTime: Date, endTime: Date): CalendarEventOccurrence {
@@ -136,7 +138,7 @@ describe('formatEventWhen', () => {
     });
 
     test('a non-IANA zone (pre-normalization stored TZID) falls back instead of throwing', () => {
-        expect(formatEventWhen(start, end, false, 'W. Europe Standard Time', 'Europe/Amsterdam')).toBe(
+        expect(formatEventWhen(start, end, false, 'Not/A_Zone', 'Europe/Amsterdam')).toBe(
             formatEventWhen(start, end, false, null, 'Europe/Amsterdam'),
         );
     });
@@ -154,5 +156,46 @@ describe('rruleToText', () => {
     // A file's own RRULE is untrusted input: the card prints it verbatim rather than nothing.
     test('a rule rrule cannot read comes back as itself', () => {
         expect(rruleToText('FREQ=NEVER')).toBe('FREQ=NEVER');
+    });
+});
+
+// Every stored timezone, every parsed TZID and every serialized VEVENT passes through here, and one
+// calendar file names the same handful of zones on every event it holds. The TZIDs are a stranger's
+// strings, so whatever remembers an answer stays bounded and keeps answering correctly when it fills.
+describe('normalizeTimezone', () => {
+    test('an IANA zone is kept and anything else degrades to null', () => {
+        expect(normalizeTimezone('Europe/Amsterdam')).toBe('Europe/Amsterdam');
+        expect(normalizeTimezone('Not/A_Zone')).toBeNull();
+        expect(normalizeTimezone(null)).toBeNull();
+        expect(normalizeTimezone('')).toBeNull();
+    });
+
+    test('a Windows zone name resolves to the IANA zone CLDR names for it', () => {
+        expect(normalizeTimezone('W. Europe Standard Time')).toBe('Europe/Berlin');
+        expect(normalizeTimezone('Pacific Standard Time')).toBe('America/Los_Angeles');
+        expect(normalizeTimezone('AUS Eastern Standard Time')).toBe('Australia/Sydney');
+    });
+
+    test('every zone the Windows table names is one Intl knows', () => {
+        expect([...WINDOWS_ZONES.keys()].filter((name) => normalizeTimezone(name) === null)).toEqual([]);
+    });
+
+    test('a file naming hundreds of zones still answers each of them correctly', () => {
+        for (let i = 0; i < 500; i++) {
+            expect(normalizeTimezone(`Not/A_Zone_${i}`)).toBeNull();
+            expect(normalizeTimezone('Pacific/Auckland')).toBe('Pacific/Auckland');
+        }
+
+        expect(normalizeTimezone('Europe/Amsterdam')).toBe('Europe/Amsterdam');
+        expect(normalizeTimezone('Not/A_Zone')).toBeNull();
+    });
+
+    test('the zones one file repeats cost one formatter each', () => {
+        const zones = ['Europe/Amsterdam', 'America/New_York', 'Pacific/Auckland', 'Not/A_Zone'];
+
+        const startedAt = performance.now();
+        for (let i = 0; i < 50_000; i++) normalizeTimezone(zones[i % zones.length]);
+
+        expect(performance.now() - startedAt).toBeLessThan(300);
     });
 });

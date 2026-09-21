@@ -10,7 +10,7 @@ import {
 } from '../../lib/calendar/imip';
 import { getMailDomain } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home/get-home';
-import { eventsToIcs, parseIcs, serializeEventForImip } from '../../lib/ical';
+import { buildResource, parseIcs, serializeEventForImip, serializeResource } from '../../lib/ical';
 import { basicAuth } from '../dav-test-helpers';
 import { app, assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
 
@@ -78,8 +78,8 @@ describe('iMIP Serialization', () => {
         expect(ics).toContain('DTEND;TZID=Europe/Amsterdam:20260415T130000');
     });
 
-    test('eventsToIcs does NOT include METHOD (CalDAV compat)', () => {
-        const ics = eventsToIcs([MOCK_EVENT]);
+    test('a stored resource does NOT include METHOD (CalDAV compat)', () => {
+        const ics = serializeResource(buildResource([MOCK_EVENT]));
         expect(ics).not.toContain('METHOD:');
         expect(ics).toContain('BEGIN:VCALENDAR');
     });
@@ -88,7 +88,9 @@ describe('iMIP Serialization', () => {
         // A vertical tab (0x0B) pasted into an event title is not valid XML character data; echoed into a
         // calendar-data REPORT it invalidates the XML. The shared content-line escape seam strips it (TAB stays).
         const vt = String.fromCharCode(0x0b);
-        const ics = eventsToIcs([{ ...MOCK_EVENT, title: `Stand${vt}up`, description: `daily${vt}sync` }]);
+        const ics = serializeResource(
+            buildResource([{ ...MOCK_EVENT, title: `Stand${vt}up`, description: `daily${vt}sync` }]),
+        );
         expect(ics).toContain('SUMMARY:Standup');
         expect(ics).toContain('DESCRIPTION:dailysync');
         const hasC0 = [...ics].some((ch) => {
@@ -729,7 +731,7 @@ describe('iMIP RSVP Reply to External Organizer', () => {
 });
 
 describe('Calendar timezone validation (audit P1-7b)', () => {
-    test('parseIcs degrades a Windows/non-IANA TZID to null', () => {
+    test('parseIcs degrades a TZID Intl rejects to null', () => {
         const ics = [
             'BEGIN:VCALENDAR',
             'VERSION:2.0',
@@ -737,14 +739,30 @@ describe('Calendar timezone validation (audit P1-7b)', () => {
             'BEGIN:VEVENT',
             'UID:tz-crash-uid@external.com',
             'SUMMARY:Outlook Meeting',
-            'DTSTART;TZID=W. Europe Standard Time:20260420T120000',
-            'DTEND;TZID=W. Europe Standard Time:20260420T130000',
+            'DTSTART;TZID=Customer Standard Time:20260420T120000',
+            'DTEND;TZID=Customer Standard Time:20260420T130000',
             'END:VEVENT',
             'END:VCALENDAR',
         ].join('\r\n');
 
         // Stored verbatim, this string later reaches Intl.DateTimeFormat({ timeZone }) → RangeError.
         expect(parseIcs(ics).events[0].timezone).toBeNull();
+    });
+
+    test('parseIcs resolves a Windows zone name to its IANA zone', () => {
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:tz-windows-uid@external.com',
+            'SUMMARY:Outlook Meeting',
+            'DTSTART;TZID="W. Europe Standard Time":20260420T120000',
+            'DTEND;TZID="W. Europe Standard Time":20260420T130000',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        expect(parseIcs(ics).events[0].timezone).toBe('Europe/Berlin');
     });
 
     test('parseIcs preserves a valid IANA TZID', () => {
@@ -820,12 +838,12 @@ describe('Calendar timezone crash (audit P1-7b, integration)', () => {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    title: 'Windows TZID Event',
+                    title: 'Bad TZID Event',
                     startTime: new Date('2026-05-01T10:00:00Z'),
                     endTime: new Date('2026-05-01T11:00:00Z'),
                     allDay: false,
                     rrule: 'FREQ=DAILY;COUNT=3',
-                    timezone: 'W. Europe Standard Time',
+                    timezone: 'Customer Standard Time',
                 }),
             },
         );
@@ -841,7 +859,7 @@ describe('Calendar timezone crash (audit P1-7b, integration)', () => {
             `/calendar/${ctx.alice.user.id}/event-range/${from}/${to}`,
         );
         const events = await assertJson<CalendarEventOccurrence[]>(eventsRes);
-        expect(events.some((e) => e.title === 'Windows TZID Event')).toBe(true);
+        expect(events.some((e) => e.title === 'Bad TZID Event')).toBe(true);
     });
 
     test('delivering an iMIP invite with an invalid TZID does not crash range fetch', async () => {
@@ -852,8 +870,8 @@ describe('Calendar timezone crash (audit P1-7b, integration)', () => {
             'BEGIN:VEVENT',
             'UID:tz-imip-crash@external.com',
             'SUMMARY:Outlook Invite',
-            'DTSTART;TZID=W. Europe Standard Time:20260610T090000',
-            'DTEND;TZID=W. Europe Standard Time:20260610T100000',
+            'DTSTART;TZID=Customer Standard Time:20260610T090000',
+            'DTEND;TZID=Customer Standard Time:20260610T100000',
             'RRULE:FREQ=WEEKLY;COUNT=3',
             'SEQUENCE:0',
             'STATUS:CONFIRMED',
@@ -913,7 +931,7 @@ describe('Calendar timezone read-side degrade (audit P1-7b)', () => {
             endTime: new Date('2026-09-10T10:00:00Z'),
             allDay: false,
             rrule: 'FREQ=WEEKLY;COUNT=3',
-            timezone: 'W. Europe Standard Time',
+            timezone: 'Customer Standard Time',
             status: 'confirmed',
             sequence: 0,
             data: {
@@ -972,7 +990,7 @@ describe('Calendar timezone read-side degrade (audit P1-7b)', () => {
         // An Eigen-minted resource name is a uuid, so the UID travels in the body, not in the href.
         expect(xml).toContain(`UID:${uid}`);
         // The bad zone serializes like a no-timezone event (absolute UTC), not as a bogus TZID param.
-        expect(xml).not.toContain('W. Europe Standard Time');
+        expect(xml).not.toContain('Customer Standard Time');
         expect(xml).toContain('DTSTART:20260910T090000Z');
     });
 

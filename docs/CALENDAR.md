@@ -255,7 +255,6 @@ External organizers have no Eigen user id, so `organizerUserId` is `external_{or
 | `composeUpdateEmail()` | `OutboundMail` for `METHOD:REQUEST` (update) |
 | `composeCancelEmail()` | `OutboundMail` for `METHOD:CANCEL` |
 | `composeRsvpReply()` | `OutboundMail` for `METHOD:REPLY` |
-| `extractCalendarAttachment()` | find the `text/calendar` part of a parsed mail |
 | `summarizeCalendarInvite()` | read-time `CalendarInvite` summary for the message payload |
 | `processInboundImip()` | dispatch inbound iMIP methods to calendar operations |
 
@@ -277,7 +276,7 @@ External organizers have no Eigen user id, so `organizerUserId` is `external_{or
 - **Sub-daily rules are rejected**: `HOURLY`/`MINUTELY`/`SECONDLY` are refused at the API write boundary with a 400 and silently stripped at the untrusted-ICS boundary, where a hard error would be the wrong answer. A `SECONDLY` rule starting a year before its window measured ~74 s. No mainstream client emits sub-daily recurrence.
 - **A recurring dtstart must fall in 1900–2200.** Same two seams, same reasoning; the worst case inside the range is ~110k steps.
 - **Materialized occurrences cap** at `MAX_OCCURRENCES` (10 000) per expansion.
-- **Query windows are clamped**, not rejected, to a 5-year span.
+- **Query windows are clamped**, not rejected, to a 5-year span — the range reads' own bound, in `calendar/occurrences.ts`.
 
 A rule the index stripped stays in the file, and the resource is flagged `hasUnindexedRecurrence` so a time-range REPORT answers with it for every window.
 
@@ -292,7 +291,7 @@ A rule the index stripped stays in the file, and the resource is flagged `hasUni
 - **Browser** (`EventDetailCard`, `calendar-invite-widget.tsx`) passes `viewerTimeZone()` — the runtime's own zone, which is what the month/week grid lays events out in. Any other choice makes the detail dialog name a different clock time than the slot the grid drew.
 - **API** (`imip.ts`) has no viewer and must not borrow the server's zone, so invitation mail renders a zone-less timed event in UTC and appends `(UTC)`. An event with a stored zone renders in that zone, unlabelled; the attached `.ics` carries the TZID either way.
 
-All-day events take neither fallback: `formatEventWhen` pins them to UTC, because their bounds are midnight UTC and the date portion is the answer. A stored TZID `Intl` rejects (Outlook's `W. Europe Standard Time`) takes the same fallback as no zone at all — the case `normalizeTimezone` writes as `null` at ingestion.
+All-day events take neither fallback: `formatEventWhen` pins them to UTC, because their bounds are midnight UTC and the date portion is the answer. A stored TZID `Intl` rejects takes the same fallback as no zone at all — the case `normalizeTimezone` writes as `null` at ingestion, after resolving a Windows zone name (Outlook's `W. Europe Standard Time`) through the CLDR `windowsZones` table beside it.
 
 ## Quotas
 
@@ -434,7 +433,7 @@ The same credential story as CardDAV and IMAP: HTTP Basic auth with an app passw
 ## Where the code lives
 
 - **`apps/api/src/lib/calendar/`** — the domain, split Mount-style: `calendar.ts` (the `Calendar` facade — the write gate, the index seams, the byte counter and the announcements; every sibling call goes through it) with sibling modules of plain functions over it: `calendar-store.ts` (the store seam — the index reads, `putResource`/`deleteResource`/`writeResource` and the row projection), `events.ts` (create, update, delete and move, plus the locked internals every other sibling writes an event through), `reconcile.ts` (the stat-only reconcile, the staged-delete sweep, calendar recovery and the copy rule), `invitations.ts` (every inbound scheduling message and every RSVP), `shares.ts`, `occurrences.ts` (the range reads), `transfer.ts` (whole-file export and import). Beside them: `resource-store.ts` (what `.ics` and `calendars/` mean — `sanitizeCalendarId`, `sanitizeEventUri`, `resourcePath`, `statCalendarDir`, `readCalendarTotalSize`, `EVENT_MAX_BYTES` — over the domain-neutral machinery in `lib/core/indexed-file-store.ts`: the write gate, `sanitizeResourceUri`, `uriKeyOf`, `computeResourceEtag`, `writeResourceFile`, `readResourceFile`, the directory scan `statResourceDir` and the stat diff `diffFileStats` it feeds, the rebuild generation `nextSyncGen`, the uid guard `dedupeByUid` and the `BroadcastBatch`, none of which knows SQL; the atomic-temp sweep `sweepAtomicTemps` and the durable write/rename/unlink primitives live in `core/local-filesystem.ts`), `get-calendar.ts` (access resolution, the Drive `get-drive.ts` analogue), `share-propagation.ts`, `invite-propagation.ts`, `imip.ts`, `recurrence.ts`, `event-input.ts`, `mappers.ts`, `schema.ts`, `db-config.ts`, `sse-events.ts`.
-- **`apps/api/src/lib/ical/`** — the format itself, read and written by every surface that meets an `.ics` (the store, iMIP, import, export, quick look, CalDAV): `ical-parse.ts` (the two readers, the `EIGEN` names, the address and key helpers), `ical-component.ts` (build, patch, re-stamp, strip), `vtimezone.ts`, `wall-clock.ts`, `timezone.ts`, `recurrence-limits.ts`, behind an `index.ts` barrel.
+- **`apps/api/src/lib/ical/`** — the format itself, read and written by every surface that meets an `.ics` (the store, iMIP, import, export, quick look, CalDAV): `ical-parse.ts` (the two readers, the `EIGEN` names, the address and key helpers), `ical-component.ts` (build, patch, re-stamp, strip), `blocks.ts` (the VTIMEZONE/VEVENT splice an export joins files with), `vtimezone.ts`, `wall-clock.ts`, `recurrence-limits.ts`, behind an `index.ts` barrel.
 - **`apps/api/src/lib/caldav/`** — the protocol layer only: `caldav-router.ts`, `discovery.ts`, `propfind.ts`, `proppatch.ts`, `report.ts`, `resource.ts`, `xml-builder.ts`, `xml-parser.ts`. The shared XML envelope and principal props live in `dav/xml.ts`, the PROPFIND prop selection in `dav/propfind.ts`, the store-result → HTTP mapping both write surfaces take in `dav/write-result.ts`, the sync-token grammar and the `valid-sync-token` refusal in `dav/sync-token.ts`, the href shapes and the multiget resolver in `dav/href.ts`, the OPTIONS header and realm in `app.ts`.
 - **`apps/api/src/routes/calendar.ts`** — thin REST bindings, the transfer routes included.
 - **`packages/lib/src/core/calendar/`** — FE hooks + SSE handlers, `calendar-utils.ts` (`formatEventWhen`, `rruleToText`, `viewerTimeZone`, `isInvitationFromOthers`, `truncateRRule`) and `preview-lines.ts` (the method labels an `.ics` quick look shows); shared types in `packages/lib/src/types/calendar.ts`.

@@ -2508,3 +2508,76 @@ describe('Calendar interval validation (finding #2)', () => {
         expect(res.status).toBe(200);
     });
 });
+
+// RFC 4791 § 9.9: a time range names the instances of the recurrence set with its overrides applied, so an
+// occurrence someone moved answers in the window it landed in and not in the one it left.
+describe('Occurrence moved to another window', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let calId: string;
+
+    async function range(fromIso: string, toIso: string) {
+        const from = Math.floor(new Date(fromIso).getTime() / 1000);
+        const to = Math.floor(new Date(toIso).getTime() / 1000);
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${calId}/event-range/${from}/${to}`,
+        );
+        return assertJson<CalendarEventOccurrence[]>(res);
+    }
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        calId = findOrFail(
+            await assertJson<CalendarItem[]>(
+                await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars`),
+            ),
+            (c) => c.isDefault,
+        ).id;
+
+        const url = `/calendar/${ctx.alice.user.id}/calendars/${calId}/events`;
+        const series = await assertJson<CalendarEvent>(
+            await authedRequest(ctx.alice.user.sessionToken, url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'Relocating Series',
+                    startTime: '2026-06-01T09:00:00Z',
+                    endTime: '2026-06-01T10:00:00Z',
+                    allDay: false,
+                    rrule: 'FREQ=WEEKLY;COUNT=4',
+                }),
+            }),
+        );
+
+        await authedRequest(ctx.alice.user.sessionToken, url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: 'Relocated Occurrence',
+                startTime: '2026-07-10T09:00:00Z',
+                endTime: '2026-07-10T10:00:00Z',
+                allDay: false,
+                parentEventId: series.id,
+                recurrenceDate: '2026-06-08',
+            }),
+        });
+    });
+
+    test('the window it left draws neither the moved occurrence nor the original', async () => {
+        const titles = (await range('2026-06-08T00:00:00Z', '2026-06-09T00:00:00Z')).map((e) => e.title);
+        expect(titles).not.toContain('Relocated Occurrence');
+        expect(titles).not.toContain('Relocating Series');
+    });
+
+    test('the window it moved into draws it, keyed by the occurrence it replaces', async () => {
+        const events = await range('2026-07-10T00:00:00Z', '2026-07-11T00:00:00Z');
+        const moved = findOrFail(events, (e) => e.title === 'Relocated Occurrence');
+        expect(new Date(moved.startTime).toISOString()).toBe('2026-07-10T09:00:00.000Z');
+        expect(moved.occurrenceDate).toBe('2026-06-08');
+    });
+
+    test('the untouched occurrences of the series still answer', async () => {
+        const titles = (await range('2026-06-01T00:00:00Z', '2026-06-02T00:00:00Z')).map((e) => e.title);
+        expect(titles).toContain('Relocating Series');
+    });
+});

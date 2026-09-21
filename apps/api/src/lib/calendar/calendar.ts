@@ -28,7 +28,7 @@ import type { DeleteResourceResult, ManagedDatabase } from '../core/';
 import type { Home } from '../home';
 import { atHome } from '../home';
 import { parseResource } from '../ical';
-import type { Revision } from '../ical/ical-component';
+import type { EventPatch, Revision } from '../ical/ical-component';
 import type { ParsedEvent } from '../ical/ical-parse';
 import type { User } from '../user';
 import type { PutResourceOptions, ResourceCommit, ResourceRow } from './calendar-store';
@@ -56,7 +56,7 @@ import * as shares from './shares';
 import { buildCalendarEvent, buildEventsChangedEvent } from './sse-events';
 import { exportEvents, importEvents } from './transfer';
 
-import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload, UpdateEventArgs } from './types';
+import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload } from './types';
 
 function getCalendarDatabase(home: Home): Promise<ManagedDatabase<typeof schema>> {
     return home.getLocalDatabase(CALENDAR_DB_CONFIG, PATHS.CALENDAR.DB);
@@ -474,8 +474,8 @@ export class Calendar {
 
     // Plus every resource the index cannot expand: a stripped rule or an RDATE still has occurrences to sync.
     public async getResourcesInRange(calendarId: string, from: Date, to: Date): Promise<ResourceRow[]> {
-        const rows = await this.getRawEventsInRange(calendarId, from, to);
-        return store.getResourcesInRange(this, calendarId, [...new Set(rows.map((row) => row.uri))]);
+        const matched = await occurrences.getResourceUrisInRange(this, calendarId, from, to);
+        return store.getResourcesInRange(this, calendarId, [...matched]);
     }
 
     // --- Events (reads) ---
@@ -517,10 +517,6 @@ export class Calendar {
     public async getRawEvents(calendarId: string): Promise<CalendarEvent[]> {
         await this.gate.ensureDrained();
         return this.joinedEvents().where(eq(schema.events.calendarId, calendarId)).all().map(toEvent);
-    }
-
-    public async getRawEventsInRange(calendarId: string, from: Date, to: Date): Promise<CalendarEvent[]> {
-        return occurrences.getRawEventsInRange(this, calendarId, from, to);
     }
 
     public async getEventsInRange(from: Date, to: Date, calendarId?: string): Promise<CalendarEventOccurrence[]> {
@@ -573,12 +569,7 @@ export class Calendar {
         return events.createEvent(this, calendarId, input, user);
     }
 
-    public async updateEvent(
-        calendarId: string,
-        id: string,
-        input: UpdateEventArgs,
-        user?: User,
-    ): Promise<CalendarEvent> {
+    public async updateEvent(calendarId: string, id: string, input: EventPatch, user?: User): Promise<CalendarEvent> {
         return events.updateEvent(this, calendarId, id, input, user);
     }
 

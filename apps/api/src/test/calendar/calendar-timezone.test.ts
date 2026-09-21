@@ -936,4 +936,62 @@ describe('Calendar Timezone', () => {
             expect(exceptions).toHaveLength(1); // pre-fix: 2 rows for one occurrence
         });
     });
+
+    // Every Outlook and Exchange invitation names its zone the Windows way, and a series whose zone the
+    // index dropped expands in UTC: its wall time then jumps by the offset at the next DST change.
+    describe('A series whose TZID is a Windows zone name', () => {
+        test('a weekly 10:00 Berlin series reads 10:00 on both sides of the March transition', async () => {
+            const ics = [
+                'BEGIN:VCALENDAR',
+                'VERSION:2.0',
+                'PRODID:-//Microsoft Corporation//Outlook 16.0 MIMEDIR//EN',
+                'BEGIN:VTIMEZONE',
+                'TZID:W. Europe Standard Time',
+                'BEGIN:STANDARD',
+                'DTSTART:16011028T030000',
+                'TZOFFSETFROM:+0200',
+                'TZOFFSETTO:+0100',
+                'RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=10',
+                'END:STANDARD',
+                'BEGIN:DAYLIGHT',
+                'DTSTART:16010325T020000',
+                'TZOFFSETFROM:+0100',
+                'TZOFFSETTO:+0200',
+                'RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=3',
+                'END:DAYLIGHT',
+                'END:VTIMEZONE',
+                'BEGIN:VEVENT',
+                'UID:outlook-windows-zone@test',
+                'SUMMARY:Berlin Standup',
+                'DTSTART;TZID="W. Europe Standard Time":20260302T100000',
+                'DTEND;TZID="W. Europe Standard Time":20260302T103000',
+                'RRULE:FREQ=WEEKLY;COUNT=8',
+                'DTSTAMP:20260101T000000Z',
+                'END:VEVENT',
+                'END:VCALENDAR',
+            ].join('\r\n');
+
+            const put = await davRequest(
+                'PUT',
+                `/dav/calendars/${ctx.alice.user.id}/${aliceCalendarId}/outlook-windows-zone.ics`,
+                { email: ctx.alice.user.email, headers: { 'Content-Type': 'text/calendar' }, body: ics },
+            );
+            expect([201, 204]).toContain(put.status);
+
+            const berlin = new Intl.DateTimeFormat('en-GB', {
+                timeZone: 'Europe/Berlin',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+            });
+            const from = Math.floor(new Date('2026-03-01T00:00:00Z').getTime() / 1000);
+            const to = Math.floor(new Date('2026-05-01T00:00:00Z').getTime() / 1000);
+            const occurrences = (await getEvents(ctx.alice.user.sessionToken, ctx.alice.user.id, from, to)).filter(
+                (e) => e.title === 'Berlin Standup',
+            );
+
+            expect(occurrences).toHaveLength(8);
+            expect(occurrences.map((e) => berlin.format(new Date(e.startTime)))).toEqual(Array(8).fill('10:00'));
+        });
+    });
 });

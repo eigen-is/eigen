@@ -1,6 +1,7 @@
 import { RRule } from 'rrule';
 import type { CalendarEventOccurrence, CalendarItem, EventData, SharedCalendar } from '../../types/calendar';
 import { dateFormatter, formatDayMonth, formatTime } from '../date';
+import { WINDOWS_ZONES } from './windows-zones';
 
 export type ViewMode = 'month' | 'week';
 
@@ -96,28 +97,34 @@ export function viewerTimeZone(): string {
     return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
-// Calendar rows stored before TZID ingestion-normalization can hold a non-IANA zone that makes Intl
-// throw RangeError; this shared FE+BE code can't import the api-side normalizeTimezone, so it reuses
-// the same Intl-construction oracle and treats a rejected zone as the no-zone case it normalizes to.
-// The verdict per zone, so a file of 10,000 events pays the construction once. Bounded and dropped
-// whole past the cap, because the zone is a string the file chose.
-const ZONE_VERDICT = new Map<string, boolean>();
-const MAX_ZONE_VERDICTS = 64;
+// The one zone oracle: every stored timezone, every parsed TZID and every labelled event resolves here.
+// Constructing the formatter IS the check — Intl throws RangeError on a zone it does not know — so a zone
+// it rejects degrades to null, which is what "no timezone" (floating) already means, and rows stored before
+// this guard existed heal the same way at read time. A Windows zone name resolves to its IANA zone first:
+// Intl knows none of them, and dropping one expands an Outlook series in UTC, which breaks its wall time at
+// the next DST change. The answer per zone, so a file of 10,000 events pays the construction once. Bounded
+// and dropped whole past the cap, because the zone is a string the file chose.
+const ZONE_ANSWERS = new Map<string, string | null>();
+const MAX_ZONE_ANSWERS = 64;
 
-function safeTimeZone(timezone: string | null | undefined, fallback: string): string {
-    if (!timezone) return fallback;
-    let usable = ZONE_VERDICT.get(timezone);
-    if (usable === undefined) {
-        try {
-            dateFormatter({ timeZone: timezone });
-            usable = true;
-        } catch {
-            usable = false;
-        }
-        if (ZONE_VERDICT.size >= MAX_ZONE_VERDICTS) ZONE_VERDICT.clear();
-        ZONE_VERDICT.set(timezone, usable);
+export function normalizeTimezone(timezone: string | null | undefined): string | null {
+    if (!timezone) return null;
+
+    const remembered = ZONE_ANSWERS.get(timezone);
+    if (remembered !== undefined) return remembered;
+
+    const candidate = WINDOWS_ZONES.get(timezone) ?? timezone;
+    let answer: string | null;
+    try {
+        dateFormatter({ timeZone: candidate });
+        answer = candidate;
+    } catch {
+        answer = null;
     }
-    return usable ? timezone : fallback;
+
+    if (ZONE_ANSWERS.size >= MAX_ZONE_ANSWERS) ZONE_ANSWERS.clear();
+    ZONE_ANSWERS.set(timezone, answer);
+    return answer;
 }
 
 // fallbackTimeZone is explicit because there is no sane default on both sides: in the browser it is
@@ -132,7 +139,7 @@ export function formatEventWhen(
 ): string {
     // An all-day event stores midnight UTC and its date portion IS the answer, so it never converts —
     // same UTC day buckets getEventsForDay puts it in. Only timed events take the fallback.
-    const tz = allDay ? 'UTC' : safeTimeZone(timezone, fallbackTimeZone);
+    const tz = allDay ? 'UTC' : (normalizeTimezone(timezone) ?? fallbackTimeZone);
     const date = (d: Date) => formatDayMonth(d, { weekday: 'long', year: true, timeZone: tz });
     const dayKey = (d: Date) => dateFormatter({ timeZone: tz }).format(d);
     const timeOpts: Intl.DateTimeFormatOptions = {

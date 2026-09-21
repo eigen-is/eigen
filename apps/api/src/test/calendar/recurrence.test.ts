@@ -8,13 +8,41 @@ import { localToUtc, utcToLocal } from '../../lib/ical/wall-clock';
 
 // Each zone's 2026 transition days, and the wall times its spring-forward day skips. A skipped wall
 // time resolves with the pre-transition offset, so the clock reads one gap later (RFC 5545 §3.3.5).
-const ZONES = [
-    { tz: 'America/New_York', days: ['2026-03-08', '2026-11-01'], gaps: ['2026-03-08 02:00', '2026-03-08 02:30'] },
-    { tz: 'Europe/Amsterdam', days: ['2026-03-29', '2026-10-25'], gaps: ['2026-03-29 02:00', '2026-03-29 02:30'] },
-    { tz: 'Australia/Sydney', days: ['2026-04-05', '2026-10-04'], gaps: ['2026-10-04 02:00', '2026-10-04 02:30'] },
-    { tz: 'Pacific/Auckland', days: ['2026-04-05', '2026-09-27'], gaps: ['2026-09-27 02:00', '2026-09-27 02:30'] },
-    { tz: 'Asia/Kolkata', days: ['2026-03-08', '2026-11-01'], gaps: [] },
-    { tz: 'America/Sao_Paulo', days: ['2026-03-08', '2026-11-01'], gaps: [] },
+const ZONES: { tz: string; days: string[]; gaps: Record<string, string> }[] = [
+    {
+        tz: 'America/New_York',
+        days: ['2026-03-08', '2026-11-01'],
+        gaps: { '2026-03-08 02:00': '2026-03-08 03:00', '2026-03-08 02:30': '2026-03-08 03:30' },
+    },
+    {
+        tz: 'Europe/Amsterdam',
+        days: ['2026-03-29', '2026-10-25'],
+        gaps: { '2026-03-29 02:00': '2026-03-29 03:00', '2026-03-29 02:30': '2026-03-29 03:30' },
+    },
+    {
+        tz: 'Australia/Sydney',
+        days: ['2026-04-05', '2026-10-04'],
+        gaps: { '2026-10-04 02:00': '2026-10-04 03:00', '2026-10-04 02:30': '2026-10-04 03:30' },
+    },
+    {
+        tz: 'Pacific/Auckland',
+        days: ['2026-04-05', '2026-09-27'],
+        gaps: { '2026-09-27 02:00': '2026-09-27 03:00', '2026-09-27 02:30': '2026-09-27 03:30' },
+    },
+    // The clocks do not always move by an hour: Lord Howe goes forward 30 minutes, Troll two hours.
+    { tz: 'Australia/Lord_Howe', days: ['2026-04-05', '2026-10-04'], gaps: { '2026-10-04 02:00': '2026-10-04 02:30' } },
+    {
+        tz: 'Antarctica/Troll',
+        days: ['2026-03-29', '2026-10-25'],
+        gaps: {
+            '2026-03-29 01:00': '2026-03-29 03:00',
+            '2026-03-29 01:30': '2026-03-29 03:30',
+            '2026-03-29 02:00': '2026-03-29 04:00',
+            '2026-03-29 02:30': '2026-03-29 04:30',
+        },
+    },
+    { tz: 'Asia/Kolkata', days: ['2026-03-08', '2026-11-01'], gaps: {} },
+    { tz: 'America/Sao_Paulo', days: ['2026-03-08', '2026-11-01'], gaps: {} },
 ];
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -72,7 +100,7 @@ describe('localToUtc', () => {
                     const hour = Math.floor(slot / 2);
                     const minute = (slot % 2) * 30;
                     const wall = `${date} ${pad(hour)}:${pad(minute)}`;
-                    const expected = gaps.includes(wall) ? `${date} ${pad(hour + 1)}:${pad(minute)}` : wall;
+                    const expected = gaps[wall] ?? wall;
                     const resolved = wallOf(localToUtc(tz, year, month, day, hour, minute, 0), tz);
                     if (resolved !== expected) wrong.push(`${tz} ${wall} -> ${resolved} (expected ${expected})`);
                 }
@@ -85,6 +113,9 @@ describe('localToUtc', () => {
     test('the repeated hour resolves to its first pass', () => {
         expect(localToUtc('America/New_York', 2026, 11, 1, 1, 30, 0).toISOString()).toBe('2026-11-01T05:30:00.000Z');
         expect(localToUtc('Europe/Amsterdam', 2026, 10, 25, 2, 30, 0).toISOString()).toBe('2026-10-25T00:30:00.000Z');
+        // A repeat the clocks made 30 minutes wide, and one they made two hours wide
+        expect(localToUtc('Australia/Lord_Howe', 2026, 4, 5, 1, 30, 0).toISOString()).toBe('2026-04-04T14:30:00.000Z');
+        expect(localToUtc('Antarctica/Troll', 2026, 10, 25, 1, 30, 0).toISOString()).toBe('2026-10-24T23:30:00.000Z');
     });
 
     test('a wall time whose first guess crossed a transition resolves from that guess, not from the wall', () => {

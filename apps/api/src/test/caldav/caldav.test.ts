@@ -918,6 +918,57 @@ describe('CalDAV', () => {
         expect(xml).not.toContain('TimeRange Hit');
     });
 
+    // RFC 4791 § 9.9: the filter matches the recurrence set with its overrides applied, so the resource of a
+    // moved occurrence answers in the window it landed in and not in the one it left.
+    test('REPORT calendar-query time-range follows an occurrence moved to another week', async () => {
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:caldav-moved-1@eigen',
+            'SUMMARY:Relocating Series',
+            'DTSTART:20260601T090000Z',
+            'DTEND:20260601T100000Z',
+            'RRULE:FREQ=WEEKLY;COUNT=4',
+            'END:VEVENT',
+            'BEGIN:VEVENT',
+            'UID:caldav-moved-1@eigen',
+            'RECURRENCE-ID:20260608T090000Z',
+            'SUMMARY:Relocated Occurrence',
+            'DTSTART:20260710T090000Z',
+            'DTEND:20260710T100000Z',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+        expect((await putIcs('caldav-moved-1.ics', ics)).status).toBe(201);
+
+        const query = async (start: string, end: string) => {
+            const res = await app.handle(
+                new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                    method: 'REPORT',
+                    headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                    body: `<?xml version="1.0" encoding="utf-8"?>
+<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop><D:getetag/></D:prop>
+  <C:filter>
+    <C:comp-filter name="VCALENDAR">
+      <C:comp-filter name="VEVENT">
+        <C:time-range start="${start}" end="${end}"/>
+      </C:comp-filter>
+    </C:comp-filter>
+  </C:filter>
+</C:calendar-query>`,
+                }),
+            );
+            expect(res.status).toBe(207);
+            return res.text();
+        };
+
+        expect(await query('20260710T000000Z', '20260711T000000Z')).toContain('caldav-moved-1.ics');
+        expect(await query('20260608T000000Z', '20260609T000000Z')).not.toContain('caldav-moved-1.ics');
+        expect(await query('20260601T000000Z', '20260602T000000Z')).toContain('caldav-moved-1.ics');
+    });
+
     test('PUT with a sub-daily RRULE degrades instead of 500-ing (finding 19)', async () => {
         // DTSTART far in the future so pre-fix range queries in this file never iterate toward it.
         const ics =

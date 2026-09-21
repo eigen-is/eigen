@@ -24,16 +24,12 @@ import { teamOwnerId } from '@workspace/lib/types/owner';
 import type { HomeSizeResponse, TeamSettings, UserSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { readCalendarTotalSize } from '../calendar/resource-store';
-import type {
-    CreateEventArgs,
-    InvitationUpdatePayload,
-    ReceiveInvitationPayload,
-    UpdateEventArgs,
-} from '../calendar/types';
+import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload } from '../calendar/types';
 import { getAvatarsDir, getUserHomePath } from '../config/paths';
 import { resolveUserQuotas } from '../config/quota';
 import { readCardsTotalSize } from '../contacts/card-store';
 import { LocalFilesystem, PATHS } from '../core';
+import type { EventPatch } from '../ical/ical-component';
 import { readMailTotalSize } from '../mail/maildb';
 import { readDraftStagingSize } from '../mail/maildir-store';
 import { createDefaultMountConfig, createMountConfig, readMountTotalSize } from '../mount/helpers';
@@ -267,7 +263,7 @@ export async function updateEventAt(
     ownerUserId: string,
     calendarId: string,
     eventId: string,
-    input: UpdateEventArgs,
+    input: EventPatch,
     user: User,
 ): Promise<CalendarEvent> {
     const home = await getHome(ownerUserId);

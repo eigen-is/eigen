@@ -1,4 +1,4 @@
-import type { Attendee, CalendarEvent, EventData } from '@workspace/lib/types/calendar';
+import type { Attendee, CalendarEvent, CreateEventInput, EventData } from '@workspace/lib/types/calendar';
 
 // Every scheduling message states the revision it carries: the sender's SEQUENCE and the instant it
 // stamped, which together order two messages the way RFC 5546 § 2.1.5 does.
@@ -60,41 +60,14 @@ export type InvitationExceptionPayload = MessageRevision & {
     attendees?: Attendee[];
 };
 
-// Server-side input shapes for Calendar.createEvent / updateEvent. Distinct from the shared
-// `CreateEventInput` / `UpdateEventInput` (FE wire shape — see packages/lib/src/types/calendar.ts)
-// because they (a) take calendarId as a separate positional arg and (b) carry internal CalDAV
-// fields (createByUserId, uid, sequence) that the FE must never set.
-export type CreateEventArgs = {
-    title: string;
-    startTime: Date;
-    endTime: Date;
-    allDay: boolean;
-    description?: string | null;
-    location?: string | null;
-    rrule?: string | null;
-    timezone?: string | null;
-    parentEventId?: string | null;
-    recurrenceDate?: string | null;
-    status?: CalendarEvent['status'];
+// The server-side input shape for Calendar.createEvent: the shared wire shape minus the calendarId the
+// call takes positionally, plus the internal CalDAV fields the FE must never set. An update takes
+// `EventPatch`, which is the same derivation of `UpdateEventInput` the format layer patches a VEVENT with.
+export type CreateEventArgs = Omit<CreateEventInput, 'calendarId'> & {
     sequence?: number;
     // Set only by an invitation receiver: the instant the organizer's message stamped, stored in place of
     // the local clock so the next message can be ordered against it.
     dtstamp?: Date | null;
-    data?: EventData | null;
     createByUserId?: string | null;
     uid?: string | null;
-};
-
-export type UpdateEventArgs = {
-    title?: string;
-    startTime?: Date;
-    endTime?: Date;
-    allDay?: boolean;
-    description?: string | null;
-    location?: string | null;
-    rrule?: string | null;
-    timezone?: string | null;
-    status?: CalendarEvent['status'];
-    sequence?: number;
-    data?: EventData | null;
 };

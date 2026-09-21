@@ -1,7 +1,7 @@
+export { spliceBlocks } from './blocks';
 export {
     addExclusion,
     buildResource,
-    eventsToIcs,
     isNewerRevision,
     newVCalendar,
     PRODID,
@@ -18,4 +18,3 @@ export {
     stripEigenStamps,
 } from './ical-component';
 export { parseIcs, parseResource, projectResource } from './ical-parse';
-export { buildVTimezone } from './vtimezone';
