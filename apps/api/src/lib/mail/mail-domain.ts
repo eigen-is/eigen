@@ -101,8 +101,7 @@ export class Mail {
     }
 
     search(opts: MailSearchOptions): EmailSummary[] {
-        // Canonicalise mailbox names here so callers can pass any case (e.g. `trash`,
-        // `Trash`, `inbox`) and the FTS mailbox filter matches the stored value exactly.
+        // The FTS mailbox filter matches the stored value exactly, so any caller casing is canonicalised first.
         const mailboxes = opts.mailboxes?.map(canonicalMailbox);
         return this.store.search({ ...opts, mailboxes });
     }
@@ -129,8 +128,7 @@ export class Mail {
             const parsed = parseMail(message);
             const hasCalendar = parsed.attachments.some(isCalendarPart);
             if (hasCalendar) {
-                // Delivered mail is the only mail carrying our own MTA's verdict, so the verdict the
-                // calendar acts on is computed here and nowhere else.
+                // Delivered mail alone carries our own MTA's verdict, so the calendar's verdict is computed here only.
                 const from = parsed.from?.value?.[0]?.address?.toLowerCase() ?? null;
                 const verdict = verifyImipSender(
                     parsed.authenticationResults,
@@ -148,8 +146,7 @@ export class Mail {
 
     // No processInboundImip: an imported file carries no DKIM verdict, so it must never touch the calendar.
     async messageImport(bytes: Buffer): Promise<ImportMailResult> {
-        // The gate below reads four headers, and the sync that follows the append parses the message anyway
-        // — a full parse here is a second one (103 ms against 0.05 ms on a 1.1 MiB body).
+        // The sync after the append parses the message anyway, so a full parse here is a second one (103 ms vs 0.05 ms on 1.1 MiB).
         let headers: PartHeaders;
         try {
             headers = splitMime(bytes).headers;
@@ -181,8 +178,7 @@ export class Mail {
     // -- Message operations --
 
     async messageGet(messageId: string): Promise<Email | null> {
-        // null means "not found" ONLY: no summary row. A parse/read/DB fault propagates → Elysia 500
-        // + log, never a silent 404.
+        // null means "no summary row" only: a parse, read or DB fault propagates to a 500, never a silent 404.
         const message = await this.store.getMessage(messageId);
         if (!message) return null;
 
@@ -194,8 +190,7 @@ export class Mail {
             a.content = Buffer.alloc(0);
         }
 
-        // Overlay latest values from draft-meta sidecar (written by fast-path saves).
-        // Sidecar values win over both the stale EML and the summary row.
+        // A fast-path save leaves the EML stale, so the sidecar wins over both the EML and the summary row.
         if (message.isDraft) {
             const meta = await this.store.readDraftMeta(messageId);
             if (meta) {
@@ -263,8 +258,7 @@ export class Mail {
             throw new ApiError(404, `Target mailbox '${targetMailbox}' not found`);
         }
 
-        // Copy the raw bytes, not a `.text()` round-trip — decoding would corrupt non-UTF-8 mail. A copy
-        // of the user's own message is not mail arriving, so it announces nothing.
+        // Raw bytes, not a `.text()` round-trip: decoding corrupts non-UTF-8 mail, and a copy is not mail arriving.
         const bytes = Buffer.from(await this.store.getRawMessage(messageId));
         await this.store.append(targetMailbox, bytes, { arrival: false });
     }
@@ -291,20 +285,13 @@ export class Mail {
         const existingId = draftIdOf(email);
         const hasNewTemps = !!options.tempAttachmentIds?.length;
 
-        // Fast path: when a draft with attachments already exists on disk and no attachment
-        // changes are requested, skip the expensive EML re-compose. Only write a lightweight
-        // JSON sidecar with the updated headers/body and update the DB list entry.
-        // Note: fast-path saves leave the EML stale on disk; IMAP clients reading Drafts
-        // will see old content until a full save occurs.
+        // A body-only save skips the EML re-compose, so an IMAP client reading Drafts sees stale content until a full save.
         if (existingId && !hasNewTemps && !options.forceFullSave) {
             const dbRecord = this.store.getSummary(existingId);
             if (dbRecord) {
                 const meta = await this.store.readDraftMeta(existingId);
                 if (meta && meta.attachments.length > 0) {
-                    // The keep list names raw EML parts, so the fast path only holds when the kept
-                    // set is exactly the set the sidecar lists: anything else adds or drops a part
-                    // and needs the EML rebuilt. The sidecar is unvalidated JSON on disk, so a part
-                    // whose index is not a number can't answer that and takes the full save.
+                    // The keep list names raw EML parts: anything but the sidecar's exact set, or an unvalidated index, needs a rebuild.
                     const parts = meta.attachments.flatMap((a) =>
                         typeof a.index !== 'number' ? [] : [{ ...a, index: a.index }],
                     );
@@ -393,12 +380,7 @@ export class Mail {
         // Caller-supplied refs win; otherwise carry forward whatever was last persisted.
         let driveReferences = email.driveReferences;
 
-        // When a draft-meta sidecar exists, prefer its header/body values when the request omits
-        // them (they may be newer than the stale EML from a previous fast-path save). But to/cc/bcc
-        // are taken request-verbatim: the FE sends `undefined` to mean "user cleared this field", so
-        // a `?? meta.X` fallback would resurrect a removed recipient (as draftFastSave already avoids).
-        // The staleness-flush rebuild is unaffected — it constructs `email` from meta, so those
-        // values are already present verbatim.
+        // to/cc/bcc stay request-verbatim: the FE sends `undefined` for "cleared", so a `?? meta.X` would resurrect a recipient.
         if (existingId) {
             const meta = await this.store.readDraftMeta(existingId);
             if (meta) {
@@ -446,9 +428,7 @@ export class Mail {
 
         const newId = existingId ?? createUniqueMessageId();
         const cleanHtml = email.html || '';
-        // Bake ref links into the EML body so both the Sent copy and the outbound SMTP
-        // message carry them. DraftMeta stores the *clean* html so the compose view shows
-        // what the user typed, not the rendered card block.
+        // Baked into the EML so the Sent copy and the SMTP message carry the links; the sidecar keeps the clean html for compose.
         const bakedHtml = driveReferences?.length ? appendReferenceLinks(cleanHtml, driveReferences) : cleanHtml;
         const emlContent = await createEmlContent({
             id: newId,
@@ -465,9 +445,7 @@ export class Mail {
             attachments: allAttachments.length ? allAttachments : undefined,
         });
 
-        // Persist under the id baked into the EML header (newId), not existingId: on an id-less
-        // save saveDraft would otherwise mint its own id, leaving saved.id out of sync with the
-        // header — so the wire Message-ID (buildMessageId(saved.id)) wouldn't match the Sent EML.
+        // Persist under the id baked into the EML header: a minted id leaves the wire Message-ID out of sync with the Sent EML.
         const saved = await this.store.saveDraft(emlContent, newId);
         // saveDraft always writes the D flag; the guard is what carries that invariant into the type.
         if (!isEmailDraft(saved)) throw new Error(`Draft '${saved.id}' was saved without the draft flag`);
@@ -495,15 +473,12 @@ export class Mail {
 
         this.emit(SSEventType.MAIL_DRAFT_UPDATED, { messageId: saved.id, mailbox: MAILBOX_DRAFTS });
 
-        // Overlay the clean html so the client's compose view doesn't re-render the
-        // baked card block that's in the parsed EML.
+        // The clean html goes back so compose does not re-render the baked card block.
         saved.html = cleanHtml;
-        // Mirror the threading headers so messageSend keeps them: the EML re-parse recovers them,
-        // but don't rely on it — the fast-save path sets them here too (draftFastSave).
+        // messageSend needs the threading headers, and the EML re-parse is not relied on to recover them.
         saved.inReplyTo = email.inReplyTo;
         saved.references = email.references;
-        // MailComposer strips Bcc from the compiled EML (bcc is envelope-only), so the re-parse
-        // never recovers it — mirror it too, or messageSend can't address the bcc recipients.
+        // MailComposer strips Bcc from the compiled EML, so the re-parse never recovers it and messageSend would lose those recipients.
         saved.bcc = email.bcc;
         saved.driveReferences = driveReferences ?? [];
         return saved;
@@ -544,8 +519,7 @@ export class Mail {
         contentType: string,
         maxSize: number,
     ): Promise<DraftAttachmentUpload> {
-        // Source size is known from the drive DB; the route validates it against maxSize before
-        // calling us. We still guard during streaming in case the source grows mid-read.
+        // The route already checked the drive size, so this guard is only for a source that grows mid-read.
         return this.store.persistDraftTemp(
             async (writer) => {
                 let size = 0;
@@ -576,8 +550,7 @@ export class Mail {
         const message = draftToOutboundMail(mail, this.home.user.email);
         const allRecipients = [...message.to, ...(message.cc ?? []), ...(message.bcc ?? [])];
 
-        // Capture the pre-bake bodies: external copies personalise these per-recipient, while the
-        // internal copy and the single-send path bake bare links off the same base.
+        // Pre-bake bodies: an external copy personalises its links off this base, the internal copy bakes bare ones.
         const refs = mail.driveReferences ?? [];
         const baseHtml = message.html || '';
         const baseText = message.text;
@@ -586,15 +559,12 @@ export class Mail {
         if (refs.length > MAX_SEND_REFERENCES) {
             throw new ApiError(400, `A message can have at most ${MAX_SEND_REFERENCES} attachment links`);
         }
-        // driveReferences count as content: a ref-only send (empty subject/body but with attachment
-        // links) is legitimate. Reject only when subject, body AND refs are all empty.
+        // Links count as content, so a ref-only send is legitimate and only an empty subject, body and ref list is refused.
         if (!message.subject.trim() && !message.text.trim() && !message.html && !refs.length) {
             throw new ApiError(400, 'Cannot send email with empty subject and body');
         }
 
-        // A demo box has no MTA, so this send can't leave the building. Surface that as a toast
-        // instead of silently pretending to send — draftFullSave above kept the message in Drafts.
-        // (sendMail itself still no-ops in demo, for the background share/invite/iMIP notifications.)
+        // A demo box has no MTA: fail loudly rather than pretend to send, with the message kept in Drafts.
         if (isDemo()) {
             throw new ApiError(
                 403,
@@ -602,8 +572,7 @@ export class Mail {
             );
         }
 
-        // After the demo guard (a demo send grants nothing), before delivery (a grant failure aborts the
-        // send). Grantable emails are To/Cc only, so pure-Bcc addresses stay out by construction.
+        // Between the demo guard and delivery, so a grant failure aborts the send; only To/Cc addresses are ever granted.
         if (options?.grantAccessRefIds?.length) {
             await grantAccessForReferences(
                 this.home.user,
@@ -616,8 +585,7 @@ export class Mail {
         const externals = allRecipients.filter((r) => !isInternalAddress(r.address));
         const failedRecipients: string[] = [];
 
-        // Personalising re-sends every attachment per external recipient, so an unbounded fan-out would
-        // push hundreds of megabytes through the MTA while the browser waits on us.
+        // Personalising re-sends every attachment per external recipient, so an unbounded fan-out stalls the MTA and the browser.
         const fanOutBytes =
             externals.length * (message.attachments ?? []).reduce((sum, a) => sum + Buffer.byteLength(a.content), 0);
 
@@ -629,8 +597,7 @@ export class Mail {
                 throw new ApiError(500, 'Failed to send email');
             }
         } else {
-            // Split into a bare internal copy plus one personalised copy per external recipient, each
-            // with its own SMTP envelope so a leaked `?email=` link can never reach the wrong person.
+            // One SMTP envelope per external recipient, so a leaked `?email=` link can never reach the wrong person.
             const envelopeFrom = message.from.address;
             const { bcc: _bcc, ...base } = message;
             const buildCopy = (
