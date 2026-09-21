@@ -22,9 +22,7 @@ import * as schema from './schema';
 // from-scratch rebuild that re-derives the whole index and rotates syncGen — plus the ranking machinery that
 // hands the single self-link to exactly one card. See docs/CONTACTS.md § Reconcile vs. rebuild.
 
-// The only incumbent-row scalars the candidate build reads: a stable contact id, the uid fallback, the
-// eigenId that ranks a self-link claim, and the uri + etag a drifted file is compared against — never the
-// `data` JSON, so init parses no stored projection.
+// Scalars only — never the `data` JSON, so init parses no stored projection.
 type IndexIncumbent = Pick<typeof schema.contacts.$inferSelect, 'id' | 'uri' | 'uid' | 'eigenId' | 'etag'>;
 
 // One card file, prepared but not yet committed. The incumbent rides along so the caller can tell a new
@@ -75,8 +73,7 @@ async function applySelfLink(contacts: Contacts, winner: CardCandidate): Promise
     winner.row.size = size;
 }
 
-// A card's uid is unique across the whole book (the idx_contacts_uid UNIQUE), so the collision scope is the
-// uid itself.
+// A card's uid is unique across the whole book (idx_contacts_uid), so the collision scope is the uid itself.
 function dedupeCardsByUid(candidates: CardCandidate[], uidOwner: Map<string, string>): CardCandidate[] {
     return dedupeByUid(candidates, uidOwner, (c) => ({ scope: c.row.uid, id: c.row.id, uri: c.row.uri }));
 }
@@ -99,10 +96,7 @@ async function buildCandidates(
     return candidates;
 }
 
-// Stat-only reconcile: compare (mtime,size) to the index and re-read only what drifted, plus any row whose
-// derived avatar cache is gone. A fully clean pass parses nothing and bumps nothing, and so does a pass whose
-// drifted files all hash back to what the index holds (the restore rule below). A same-size,
-// timestamp-preserving replacement is invisible here — that needs `rebuildIndex`.
+// Stat-only, so a same-size timestamp-preserving replacement is invisible here — that one needs `rebuildIndex`.
 export async function reconcileIndex(contacts: Contacts): Promise<void> {
     return contacts.gate.run(async () => {
         const present = new Map<string, { uri: string; mtime: number; size: number }>();
@@ -135,9 +129,7 @@ export async function reconcileIndex(contacts: Contacts): Promise<void> {
             .all();
         const rowByKey = new Map(rows.map((r) => [r.uriKey, r] as const));
 
-        // A stat-clean card whose derived avatar cache is gone counts as drifted too: restoring cards/ +
-        // contacts.db without avatars/ would otherwise leave its avatar URL 404ing forever, since no card
-        // drifts on its own and nothing would ever regenerate the cache.
+        // A gone avatar cache is drift too: nothing else would ever regenerate it, so the URL would 404 forever.
         const avatarFiles = new Set(await contacts.storage.list(PATHS.CONTACTS.AVATARS));
         const cacheMissing = new Set(
             rows
@@ -149,13 +141,11 @@ export async function reconcileIndex(contacts: Contacts): Promise<void> {
         );
         const diff = diffFileStats(present, rowByKey, (row) => cacheMissing.has(row.uriKey));
 
-        // Re-read in the listing's sorted order: this pass's tie-breaks — the self-link winner, a uid
-        // collision — take the earliest uri.
+        // Sorted, so this pass's tie-breaks — the self-link winner, a uid collision — take the earliest uri.
         const reindex = [
             ...diff.added.map((file) => ({ uri: file.uri, existing: undefined })),
             ...diff.changed.map(({ file, row }) => ({ uri: file.uri, existing: row })),
         ].sort((a, b) => (a.uri < b.uri ? -1 : a.uri > b.uri ? 1 : 0));
-        // A stat that failed is not a removal, so a skipped key keeps its row.
         const vanished = diff.vanished.filter((r) => !skipped.has(r.uriKey));
 
         // Unindexable bytes count too: the file occupies storage (and quota) whether or not the index can
@@ -200,11 +190,8 @@ export async function reconcileIndex(contacts: Contacts): Promise<void> {
             if (winner) await applySelfLink(contacts, winner);
         }
 
-        // The restore rule: a per-home restore does not preserve mtimes, so a drifted card whose file still
-        // hashes to the indexed etag — under the same name, holding the same self-link — changed nothing. It
-        // refreshes its stat and stays out of the delta; re-stamping it would bump the book ctag and send
-        // every client back for the whole book. A missing avatar cache is drift the stats cannot see, so
-        // such a card is here to be regenerated, not to be left alone.
+        // The restore rule: a restore drifts every mtime, so a card that still hashes the same changed nothing
+        // and only refreshes its stat — re-stamping it would send every client back for the whole book.
         const isRestored = (c: CardCandidate) =>
             !!c.existing &&
             c.existing.etag === c.row.etag &&
@@ -226,8 +213,7 @@ export async function reconcileIndex(contacts: Contacts): Promise<void> {
             // A pass that only refreshed stats is a clean pass for sync purposes: no bump, so no delta.
             if (changed.length > 0 || vanished.length > 0) {
                 const ctag = contacts.bumpCtag(tx);
-                // Vanished rows go first so a card renamed within this pass (old uri gone, new uri carrying
-                // the same UID) can't collide with the row it replaces on the uid UNIQUE index.
+                // Vanished first, or a card renamed within this pass collides with itself on the uid UNIQUE index.
                 for (const r of vanished) {
                     tx.delete(schema.contacts).where(eq(schema.contacts.id, r.id)).run();
                     contacts.tombstone(tx, r.uri, r.uriKey, ctag);
@@ -244,9 +230,7 @@ export async function reconcileIndex(contacts: Contacts): Promise<void> {
                     tx.delete(schema.contactTombstones).where(eq(schema.contactTombstones.uriKey, row.uriKey)).run();
                 }
             }
-            // This pass paid whatever write intent each settled uri carried — a drifted card by re-indexing
-            // it, a restored one because an etag match proves the file and the row are already a pair — so
-            // the recovery drain that follows init's reconcile has nothing left to do for them.
+            // This pass settled every prepared uri, so the recovery drain behind init owes their intents nothing.
             for (const { row } of prepared) {
                 tx.delete(schema.pendingCardWrites).where(eq(schema.pendingCardWrites.uri, row.uri)).run();
             }

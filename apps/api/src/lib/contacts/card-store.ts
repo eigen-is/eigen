@@ -5,10 +5,7 @@ import type { LocalFilesystem } from '../core/local-filesystem';
 import type { ParsedCard } from '../vcard/types';
 import type * as schema from './schema';
 
-// The card-shaped half of the store: what `.vcf` and `cards/` mean, the avatar cache names, and the index
-// row shapes. The domain-neutral machinery under them is `core/indexed-file-store.ts`. Each card under
-// `cards/` is one vCard whose filename is its CardDAV resource name (uri). See docs/CONTACTS.md § Storage
-// model — files as truth.
+// The card-shaped half of the store over `core/indexed-file-store.ts`. See docs/CONTACTS.md § Storage model.
 
 const CARD_SUFFIX = '.vcf';
 export const CARD_MAX_BYTES = 5_242_880;
