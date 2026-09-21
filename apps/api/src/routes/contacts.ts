@@ -3,7 +3,6 @@ import type { Contact } from '@workspace/lib/types/contact';
 import { isVCardFile } from '@workspace/lib/types/drive';
 import type { Label } from '@workspace/lib/types/label';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
-import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { enforceAvatarUpload } from '../lib/config/enforcement';
 import { CARD_MAX_BYTES } from '../lib/contacts/card-store';
@@ -17,33 +16,37 @@ import { parseVCardLines, unescapeText } from '../lib/vcard';
 import { betterAuth } from './auth';
 import { importFromDriveSchema } from './shared-schemas';
 
-// Field bounds in front of the ceiling the write seam enforces on the assembled card: generous enough that
-// no real contact meets them, tight enough that no single value can be the whole card. Free text is capped
-// at the card ceiling itself — a value that cannot fit in a card is never worth parsing.
+// Field bounds in front of the card ceiling. TEXT is for the ids and keys Eigen mints; everything a CardDAV
+// PUT may store caps at the resource ceiling itself, or the card a device wrote would be uneditable here.
 const TEXT = { maxLength: 512 };
 const FREE_TEXT = { maxLength: CARD_MAX_BYTES };
+// An address, an email, a phone or a category is one line of the file, and a file holds no more lines than it holds bytes.
+const LINES = { maxItems: CARD_MAX_BYTES };
 
+// Every ADR component is free text the card spells.
 const AddressSchema = t.Object({
-    street: t.Optional(t.String(TEXT)),
-    city: t.Optional(t.String(TEXT)),
-    state: t.Optional(t.String(TEXT)),
-    zipCode: t.Optional(t.String(TEXT)),
-    country: t.Optional(t.String(TEXT)),
+    street: t.Optional(t.String(FREE_TEXT)),
+    city: t.Optional(t.String(FREE_TEXT)),
+    state: t.Optional(t.String(FREE_TEXT)),
+    zipCode: t.Optional(t.String(FREE_TEXT)),
+    country: t.Optional(t.String(FREE_TEXT)),
 });
 
-// The client-writable fields — the create body. The id and the etag are the server's to assign.
+// The client-writable fields — the create body. The id and the etag are the server's to assign. A BDAY is
+// normalized to YYYY-MM-DD on both write paths and an avatar is the server's own cache name, so both stay
+// on TEXT; an EMAIL is stored as the card spells it, never against an address grammar.
 const CreateContactSchema = t.Object({
-    firstName: t.String(TEXT),
-    lastName: t.String(TEXT),
-    email: t.Array(t.String({ maxLength: MAX_EMAIL_LENGTH }), { maxItems: 100 }),
-    phone: t.Array(t.String(TEXT), { maxItems: 100 }),
-    company: t.Optional(t.String(TEXT)),
-    jobTitle: t.Optional(t.String(TEXT)),
-    address: t.Optional(t.Array(AddressSchema, { maxItems: 50 })),
+    firstName: t.String(FREE_TEXT),
+    lastName: t.String(FREE_TEXT),
+    email: t.Array(t.String(FREE_TEXT), LINES),
+    phone: t.Array(t.String(FREE_TEXT), LINES),
+    company: t.Optional(t.String(FREE_TEXT)),
+    jobTitle: t.Optional(t.String(FREE_TEXT)),
+    address: t.Optional(t.Array(AddressSchema, LINES)),
     birthday: t.Optional(t.String(TEXT)),
     notes: t.Optional(t.String(FREE_TEXT)),
     avatar: t.Optional(t.String(TEXT)),
-    labels: t.Optional(t.Array(t.String(TEXT), { maxItems: 200 })),
+    labels: t.Optional(t.Array(t.String(TEXT), LINES)),
     eigenId: t.Optional(t.String(TEXT)),
 });
 
@@ -54,9 +57,10 @@ const UpdateContactSchema = t.Object({
     etag: t.String({ ...TEXT, minLength: 1 }),
 });
 
+// A label is minted from a card's CATEGORIES, which the file spells however long; the color is Eigen's own.
 const LabelSchema = t.Object({
     id: t.Optional(t.String(TEXT)),
-    name: t.String(TEXT),
+    name: t.String(FREE_TEXT),
     color: t.String(TEXT),
 });
 
