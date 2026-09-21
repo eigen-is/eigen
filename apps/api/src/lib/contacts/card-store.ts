@@ -1,6 +1,6 @@
 import { EIGEN_ACCENT_COLORS } from '@workspace/lib/constants/colors';
 import { sql } from 'drizzle-orm';
-import { computeResourceEtag, listResourceUris, PATHS, sanitizeResourceUri } from '../core';
+import { computeResourceEtag, PATHS, type ResourceScan, sanitizeResourceUri, statResourceDir } from '../core';
 import type { LocalFilesystem } from '../core/local-filesystem';
 import type { ParsedCard } from '../vcard/types';
 import type * as schema from './schema';
@@ -18,8 +18,8 @@ export function sanitizeCardUri(raw: string): string | null {
     return sanitizeResourceUri(raw, CARD_SUFFIX);
 }
 
-export function listCardUris(storage: LocalFilesystem): Promise<{ uri: string; key: string }[]> {
-    return listResourceUris(storage, PATHS.CONTACTS.CARDS, CARD_SUFFIX);
+export function statCardDir(storage: LocalFilesystem): Promise<ResourceScan> {
+    return statResourceDir(storage, PATHS.CONTACTS.CARDS, CARD_SUFFIX);
 }
 
 // Hashed by the photo bytes, so a superseded photo's cache falls out of reference and the sweep reclaims it.

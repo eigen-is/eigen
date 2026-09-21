@@ -102,26 +102,46 @@ export async function listResourceUris(
     return entries;
 }
 
-export type StatDiff<F, R> = {
-    changed: { file: F; row: R }[];
-    added: F[];
+export type ResourceFile = ResourceStat & { uri: string };
+
+// What one pass over a resource directory sees. A stat that failed is transient IO, not a removal, so the
+// key is remembered separately and the diff below refuses to call it vanished.
+export type ResourceScan = { files: Map<string, ResourceFile>; skipped: Set<string> };
+
+export async function statResourceDir(storage: LocalFilesystem, dir: string, suffix: string): Promise<ResourceScan> {
+    const files = new Map<string, ResourceFile>();
+    const skipped = new Set<string>();
+    for (const { uri, key } of await listResourceUris(storage, dir, suffix)) {
+        try {
+            files.set(key, { uri, ...(await statResourceFile(storage, `${dir}/${uri}`)) });
+        } catch (e) {
+            skipped.add(key);
+            console.warn(`indexed-file-store: skipping ${uri} — could not stat it: ${e}`);
+        }
+    }
+    return { files, skipped };
+}
+
+export type StatDiff<R> = {
+    changed: { file: ResourceFile; row: R }[];
+    added: ResourceFile[];
     vanished: R[];
 };
 
 // `stale` lets the domain call a same-stat pair changed anyway, for drift the stats cannot see.
-export function diffFileStats<F extends ResourceStat, R extends ResourceStat>(
-    files: Map<string, F>,
+export function diffFileStats<R extends ResourceStat>(
+    scan: ResourceScan,
     rows: Map<string, R>,
     stale?: (row: R) => boolean,
-): StatDiff<F, R> {
-    const diff: StatDiff<F, R> = { changed: [], added: [], vanished: [] };
-    for (const [key, file] of files) {
+): StatDiff<R> {
+    const diff: StatDiff<R> = { changed: [], added: [], vanished: [] };
+    for (const [key, file] of scan.files) {
         const row = rows.get(key);
         if (!row) diff.added.push(file);
         else if (file.mtime !== row.mtime || file.size !== row.size || stale?.(row)) diff.changed.push({ file, row });
     }
     for (const [key, row] of rows) {
-        if (!files.has(key)) diff.vanished.push(row);
+        if (!scan.files.has(key) && !scan.skipped.has(key)) diff.vanished.push(row);
     }
     return diff;
 }
