@@ -17,7 +17,7 @@ import {
     ApiError,
     BroadcastBatch,
     computeResourceEtag,
-    type LocalFilesystem,
+    LocalFilesystem,
     PATHS,
     type PutResourceResult,
     readResourceFile,
@@ -39,7 +39,7 @@ import * as invitations from './invitations';
 import { dbCalendarToCalendarItem, toEvent } from './mappers';
 import * as occurrences from './occurrences';
 import { reconcileIndex, stagedDeletesOf } from './reconcile';
-import type { CalendarCollection } from './resource-store';
+import type { CalendarCollection, Tx } from './resource-store';
 import {
     calendarDir,
     clearPendingWrite,
@@ -62,14 +62,11 @@ function getCalendarDatabase(home: Home): Promise<ManagedDatabase<typeof schema>
     return home.getLocalDatabase(CALENDAR_DB_CONFIG, PATHS.CALENDAR.DB);
 }
 
-// The transaction handle drizzle hands a `db.transaction(cb)` callback.
-type Tx = Parameters<Parameters<BunSQLiteDatabase<typeof schema>['transaction']>[0]>[0];
-
 export class Calendar {
     private managedDb!: ManagedDatabase<typeof schema>;
     db!: BunSQLiteDatabase<typeof schema>;
     home: Home;
-    storage: LocalFilesystem;
+    storage: LocalFilesystem; // internal — used by calendar/*.ts
 
     // Process death takes the gate's dirty set with it, which is what `pending_writes` is for.
     gate = new WriteGate((keys, settled) => this.drainDirty(keys, settled));
@@ -89,9 +86,9 @@ export class Calendar {
     // Only the reconcile/drain machinery bumps this; the mutation paths parse for their own merges.
     private parses = 0;
 
-    constructor(home: Home, storage: LocalFilesystem) {
+    constructor(home: Home) {
         this.home = home;
-        this.storage = storage;
+        this.storage = new LocalFilesystem(`${home.homeDir}/${PATHS.CALENDAR.ROOT}`);
     }
 
     public async init(): Promise<void> {

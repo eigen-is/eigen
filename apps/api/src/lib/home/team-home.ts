@@ -3,7 +3,6 @@ import type { S3Config } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { MountSettings, TeamSettings } from '@workspace/lib/types/settings';
 import { Calendar } from '../calendar/calendar';
-import { calendarStorage } from '../calendar/resource-store';
 import { getTeamDataPath } from '../config/paths';
 import { getServerSettings, mapStorageType } from '../config/server-settings';
 import { ApiError, JsonStore, LocalFilesystem, PATHS } from '../core';
@@ -38,7 +37,7 @@ export class TeamHome extends Home {
 
         this.settings = new JsonStore<TeamSettings>(this.fs, PATHS.SETTINGS, { calendar: { enabled: false } });
         this._drive = new Drive(this);
-        this._calendar = new Calendar(this, calendarStorage(this.homeDir));
+        this._calendar = new Calendar(this);
     }
 
     override get calendar(): Calendar {

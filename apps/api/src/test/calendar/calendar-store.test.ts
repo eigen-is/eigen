@@ -15,7 +15,7 @@ import { join } from 'node:path';
 import { eq, sql } from 'drizzle-orm';
 import { getTableConfig } from 'drizzle-orm/sqlite-core';
 import { Calendar } from '../../lib/calendar/calendar';
-import { calendarStorage, EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
+import { EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
 import * as schema from '../../lib/calendar/schema';
 import { LocalFilesystem, PATHS } from '../../lib/core';
 import { CALENDAR_TEST_ROOT, calendarsDirOf, DyingFilesystem, makeCalendar } from '../calendar-test-helpers';
@@ -761,10 +761,7 @@ describe('calendar file store', () => {
     });
 
     test('an index transaction that fails leaves the index stale and still opens the home', async () => {
-        const harness = await makeTestHome(
-            (home) => new TombstoneFailingCalendar(home, calendarStorage(home.homeDir)),
-            CALENDAR_TEST_ROOT,
-        );
+        const harness = await makeTestHome((home) => new TombstoneFailingCalendar(home), CALENDAR_TEST_ROOT);
         const calendarId = await defaultCalendarId(harness);
         await put(harness.instance, calendarId, 'vanishing.ics', vcal(event('vanishing@eigen', 'Vanishing')));
 

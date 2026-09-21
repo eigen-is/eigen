@@ -3,7 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import {
     isSafePathSegment,
-    LocalFilesystem,
+    type LocalFilesystem,
     PATHS,
     type ResourceScan,
     sanitizeResourceUri,
@@ -20,10 +20,6 @@ const ICS_SUFFIX = '.ics';
 // How large one calendar resource may be, the domain's own ceiling as CARD_MAX_BYTES is contacts'. CalDAV
 // bounds a PUT body against it before buffering and advertises it as C:max-resource-size.
 export const EVENT_MAX_BYTES = 5_242_880;
-
-export function calendarStorage(homeDir: string): LocalFilesystem {
-    return new LocalFilesystem(`${homeDir}/${PATHS.CALENDAR.ROOT}`);
-}
 
 export function calendarDir(calendarId: string): string {
     return `${PATHS.CALENDAR.CALENDARS}/${calendarId}`;
