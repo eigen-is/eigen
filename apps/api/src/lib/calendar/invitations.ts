@@ -1,0 +1,693 @@
+import { isInvitationFromOthers, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
+import type { Attendee, CalendarEvent, EventData } from '@workspace/lib/types/calendar';
+import { externalOwnerId, isExternalOwnerId } from '@workspace/lib/types/owner';
+import { SSEventType } from '@workspace/lib/types/sse';
+import { and, eq } from 'drizzle-orm';
+import type ICAL from 'ical.js';
+import { ApiError } from '../core';
+import { sendMail } from '../core/mailer';
+import { isNewerRevision, patchEvent, stampInvitationLink, storedOrganizerAddress, storedRevision } from '../ical';
+import type { EventPatch, Revision } from '../ical/ical-component';
+import type { ParsedEvent } from '../ical/ical-parse';
+import { computeOccurrenceTimes, storedRecurrenceKey, utcToLocal } from '../ical/wall-clock';
+import { actorDisplayName, type User } from '../user';
+import type { Calendar } from './calendar';
+import * as store from './calendar-store';
+import * as events from './events';
+import { composeRsvpReply } from './imip';
+import { propagateRsvp } from './invite-propagation';
+import { toEvent } from './mappers';
+import { constrainRRule } from './recurrence';
+import * as schema from './schema';
+import { buildCalendarEvent } from './sse-events';
+import type {
+    CreateEventArgs,
+    InvitationExceptionPayload,
+    InvitationUpdatePayload,
+    ReceiveInvitationPayload,
+} from './types';
+
+// Everything an inbound scheduling message does to this Home's copy of somebody else's event, and every
+// RSVP that answers one: the receivers, the revision guard that orders a replay out, and the notifications
+// each applied message owes (docs/CALENDAR.md § Invitations).
+
+// What the transport vouches for about an inbound REQUEST — never anything the body spells.
+type InvitationLink = {
+    organizerEmail: string;
+    organizerEventId: string;
+    organizerUserId: string;
+    createByUserId: string;
+};
+
+// What the inbound-REQUEST decision did, so the broadcast and the notification can run after release.
+type InboundRequestOutcome =
+    | { kind: 'dropped'; reason: string }
+    | { kind: 'updated'; event: CalendarEvent; title: string; startTime: Date }
+    | { kind: 'created'; event: CalendarEvent; payload: ReceiveInvitationPayload };
+
+// A fire-and-forget receiver has nobody to answer a 413 to, so an oversized message is dropped, not raised.
+async function unlessTooLarge<T>(uid: string, apply: () => Promise<T>, dropped: T): Promise<T> {
+    try {
+        return await apply();
+    } catch (e) {
+        if (!(e instanceof ApiError) || e.status !== 413) throw e;
+        console.info(`calendar: dropped a message for ${uid} — ${e.message}`);
+        return dropped;
+    }
+}
+
+const TOO_LARGE: InboundRequestOutcome = { kind: 'dropped', reason: 'the message is too large to store' };
+
+// The relay carries the same REQUEST an iMIP mail does, so it takes the same decision over the same shape.
+function relayedRequest(payload: ReceiveInvitationPayload): ParsedEvent {
+    return {
+        uid: payload.uid,
+        title: payload.title,
+        description: payload.description,
+        location: payload.location,
+        startTime: payload.startTime,
+        endTime: payload.endTime,
+        allDay: payload.allDay,
+        rrule: payload.rrule,
+        timezone: payload.timezone,
+        status: payload.status,
+        sequence: payload.sequence,
+        dtstamp: payload.dtstamp ?? null,
+        recurrenceDate: null,
+        recurrenceInstant: null,
+        data: payload.data,
+    };
+}
+
+function inboundUpdatePayload(parsed: ParsedEvent): InvitationUpdatePayload {
+    return {
+        title: parsed.title,
+        description: parsed.description,
+        location: parsed.location,
+        startTime: parsed.startTime,
+        endTime: parsed.endTime,
+        allDay: parsed.allDay,
+        rrule: parsed.rrule,
+        timezone: parsed.timezone,
+        status: parsed.status,
+        sequence: parsed.sequence,
+        dtstamp: parsed.dtstamp,
+        attendees: parsed.data?.attendees,
+    };
+}
+
+function inboundExceptionPayload(parsed: ParsedEvent): InvitationExceptionPayload {
+    return {
+        recurrenceDate: parsed.recurrenceDate!,
+        recurrenceInstant: parsed.recurrenceInstant,
+        title: parsed.title,
+        description: parsed.description,
+        location: parsed.location,
+        startTime: parsed.startTime,
+        endTime: parsed.endTime,
+        allDay: parsed.allDay,
+        timezone: parsed.timezone,
+        status: parsed.status,
+        sequence: parsed.sequence,
+        dtstamp: parsed.dtstamp,
+        attendees: parsed.data?.attendees,
+    };
+}
+
+function inboundInvitationPayload(parsed: ParsedEvent, link: InvitationLink): ReceiveInvitationPayload {
+    return {
+        uid: parsed.uid,
+        title: parsed.title,
+        description: parsed.description,
+        location: parsed.location,
+        startTime: parsed.startTime,
+        endTime: parsed.endTime,
+        allDay: parsed.allDay,
+        rrule: parsed.rrule,
+        timezone: parsed.timezone,
+        status: parsed.status,
+        sequence: parsed.sequence,
+        dtstamp: parsed.dtstamp,
+        data: {
+            ...parsed.data,
+            organizer: parsed.data?.organizer ? { ...parsed.data.organizer, userId: link.organizerUserId } : undefined,
+            organizerEventId: link.organizerEventId,
+        },
+        createByUserId: link.createByUserId,
+        organizerEventId: link.organizerEventId,
+        organizerUserId: link.organizerUserId,
+    };
+}
+
+function findLinkedEvent(calendar: Calendar, orgEventId: string, orgUserId: string): CalendarEvent | null {
+    const row = calendar
+        .joinedEvents()
+        .where(and(eq(schema.events.organizerEventId, orgEventId), eq(schema.events.organizerUserId, orgUserId)))
+        .get();
+    return row ? toEvent(row) : null;
+}
+
+// The row shape of an invitation payload: only the fields a trusted message stated ever reach it.
+function invitationInput(payload: ReceiveInvitationPayload): CreateEventArgs {
+    return {
+        title: payload.title,
+        description: payload.description,
+        location: payload.location,
+        startTime: payload.startTime,
+        endTime: payload.endTime,
+        allDay: payload.allDay,
+        rrule: payload.rrule,
+        timezone: payload.timezone,
+        status: payload.status,
+        sequence: payload.sequence,
+        dtstamp: payload.dtstamp,
+        data: {
+            ...payload.data,
+            organizer: payload.data.organizer
+                ? { ...payload.data.organizer, userId: payload.organizerUserId }
+                : undefined,
+            organizerEventId: payload.organizerEventId,
+        },
+        createByUserId: payload.createByUserId,
+        uid: payload.uid,
+    };
+}
+
+// A REQUEST relayed from the organizer's Home. Null when it was dropped, so the sender can say so.
+export async function receiveInvitation(calendar: Calendar, payload: ReceiveInvitationPayload): Promise<string | null> {
+    const link: InvitationLink = {
+        organizerEmail: payload.data.organizer?.email.toLowerCase() ?? '',
+        organizerEventId: payload.organizerEventId,
+        organizerUserId: payload.organizerUserId,
+        createByUserId: payload.createByUserId,
+    };
+    const outcome = await unlessTooLarge(
+        payload.uid,
+        () => calendar.gate.run(() => decideInboundRequest(calendar, relayedRequest(payload), link)),
+        TOO_LARGE,
+    );
+    if (outcome.kind === 'dropped') {
+        console.info(`calendar: dropped a relayed invitation for ${payload.uid} — ${outcome.reason}`);
+        return null;
+    }
+    return settleInboundRequest(calendar, outcome, link);
+}
+
+function notifyInvitationReceived(calendar: Calendar, payload: ReceiveInvitationPayload): void {
+    calendar.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_RECEIVED, payload.organizerUserId));
+    const organizer = payload.data?.organizer;
+    calendar.home.notifications?.persist({
+        type: 'calendar-invite',
+        actorEmail: organizer?.email,
+        title: `${actorDisplayName(organizer?.name, organizer?.email)} invited you`,
+        body: payload.title,
+        tag: `calendar-invite:${payload.organizerEventId}:${payload.startTime.getTime()}`,
+        details: { startTime: payload.startTime.getTime() },
+    });
+}
+
+export async function receiveInvitationUpdate(
+    calendar: Calendar,
+    orgEventId: string,
+    orgUserId: string,
+    payload: InvitationUpdatePayload,
+): Promise<void> {
+    const linked = await unlessTooLarge(
+        orgEventId,
+        () =>
+            calendar.gate.run(async () => {
+                const linked = findLinkedEvent(calendar, orgEventId, orgUserId);
+                return linked && (await applyInvitationUpdate(calendar, linked, payload)) ? linked : null;
+            }),
+        null,
+    );
+    if (linked) notifyInvitationUpdated(calendar, linked, payload.title, payload.startTime, orgEventId, orgUserId);
+}
+
+// Caller holds the gate. False when the message is a replay the stored copy already outranks.
+async function applyInvitationUpdate(
+    calendar: Calendar,
+    linked: CalendarEvent,
+    payload: InvitationUpdatePayload,
+): Promise<boolean> {
+    const resource = events.resourceOf(calendar, linked.id);
+    if (!resource) return false;
+    const component = await events.loadResource(calendar, resource.calendarId, resource.uri);
+    if (!component) return false;
+    if (!isNewerRevision(payload, storedRevision(component, null))) return false;
+
+    // Never extend the rrule past what the attendee has: they may have truncated it deliberately.
+    const rrule = constrainRRule(payload.rrule, linked.rrule);
+    // A redelivery patches to nothing, so it costs no ctag bump and tells the user nothing twice.
+    const changed = patchEvent(
+        component,
+        null,
+        invitationPatch(linked, payload, rrule),
+        events.writeContext(false, payload.dtstamp),
+    );
+    if (!changed) return false;
+    await store.writeResource(calendar, resource.calendarId, resource.uri, component, resource);
+    return true;
+}
+
+// What an organizer's REQUEST is allowed to move on the attendee's copy.
+function invitationPatch(linked: CalendarEvent, payload: InvitationUpdatePayload, rrule: string | null): EventPatch {
+    return {
+        title: payload.title,
+        description: payload.description,
+        location: payload.location,
+        startTime: payload.startTime,
+        endTime: payload.endTime,
+        allDay: payload.allDay,
+        rrule: rrule ?? undefined,
+        timezone: payload.timezone !== undefined ? payload.timezone : undefined,
+        status: payload.status,
+        data: payload.attendees ? { ...linked.data, attendees: payload.attendees } : undefined,
+        // The attendee's copy carries the organizer's revision, so the next message has a number to beat.
+        sequence: payload.sequence,
+    };
+}
+
+function notifyInvitationUpdated(
+    calendar: Calendar,
+    linked: CalendarEvent,
+    title: string,
+    startTime: Date,
+    orgEventId: string,
+    orgUserId: string,
+): void {
+    calendar.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_UPDATED, orgUserId));
+    const organizer = linked.data?.organizer;
+    calendar.home.notifications?.persist({
+        type: 'calendar-invite-updated',
+        actorEmail: organizer?.email,
+        title: `${actorDisplayName(organizer?.name, organizer?.email)} updated an invitation`,
+        body: title,
+        tag: `calendar-invite:${orgEventId}:${startTime.getTime()}`,
+        details: { startTime: startTime.getTime() },
+    });
+}
+
+// Caller holds the gate.
+async function applyInvitationException(
+    calendar: Calendar,
+    linked: CalendarEvent,
+    payload: InvitationExceptionPayload,
+): Promise<boolean> {
+    const recurrenceDate = recurrenceKeyForSeries(payload.recurrenceDate, payload.recurrenceInstant, linked.timezone);
+    const resource = events.resourceOf(calendar, linked.id);
+    if (!resource) return false;
+    const component = await events.loadResource(calendar, resource.calendarId, resource.uri);
+    if (!component) return false;
+    if (!isNewerRevision(payload, storedRevision(component, recurrenceDate))) return false;
+
+    const existing = events.exceptionOf(calendar, linked.id, recurrenceDate);
+    const data: EventData = {
+        ...linked.data,
+        attendees: payload.attendees ?? existing?.data?.attendees ?? linked.data?.attendees,
+    };
+    await events.writeEvent(calendar, linked.calendarId, {
+        title: payload.title,
+        description: payload.description,
+        location: payload.location,
+        startTime: payload.startTime,
+        endTime: payload.endTime,
+        allDay: payload.allDay,
+        timezone: payload.timezone ?? linked.timezone,
+        parentEventId: linked.id,
+        recurrenceDate,
+        status: payload.status,
+        sequence: payload.sequence,
+        dtstamp: payload.dtstamp,
+        data,
+        createByUserId: linked.createByUserId,
+        uid: linked.uid,
+    });
+    return true;
+}
+
+// Re-key a UTC-Z RECURRENCE-ID against the stored series' tz: a lone VEVENT cannot tell the parser its own.
+function recurrenceKeyForSeries(
+    recurrenceDate: string,
+    recurrenceInstant: Date | null | undefined,
+    tz: string | null,
+): string {
+    if (!recurrenceInstant || !tz) return recurrenceDate;
+    const { year, month, day } = utcToLocal(recurrenceInstant, tz);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${year}-${pad(month)}-${pad(day)}`;
+}
+
+// `sender` is the DKIM-aligned From address the caller verified (R13 2c, R19); the link is by address alone.
+export async function receiveImipRequest(calendar: Calendar, parsed: ParsedEvent, sender: string): Promise<void> {
+    const organizerUserId = externalOwnerId(sender);
+    const link: InvitationLink = {
+        organizerEmail: sender,
+        organizerEventId: parsed.uid,
+        organizerUserId,
+        createByUserId: organizerUserId,
+    };
+    const outcome = await unlessTooLarge(
+        parsed.uid,
+        () => calendar.gate.run(() => decideInboundRequest(calendar, parsed, link)),
+        TOO_LARGE,
+    );
+    if (outcome.kind === 'dropped') {
+        console.info(`iMIP: dropped a REQUEST for ${parsed.uid} from ${sender} — ${outcome.reason}`);
+        return;
+    }
+    settleInboundRequest(calendar, outcome, link);
+}
+
+// The broadcast and the notification an applied REQUEST owes, run after the gate is released.
+function settleInboundRequest(calendar: Calendar, outcome: InboundRequestOutcome, link: InvitationLink): string | null {
+    if (outcome.kind === 'dropped') return null;
+    if (outcome.kind === 'created') {
+        calendar.announce(outcome.event.calendarId, SSEventType.CALENDAR_EVENT_CREATED);
+        notifyInvitationReceived(calendar, outcome.payload);
+        return outcome.event.id;
+    }
+    calendar.announce(outcome.event.calendarId, SSEventType.CALENDAR_EVENT_UPDATED);
+    notifyInvitationUpdated(
+        calendar,
+        outcome.event,
+        outcome.title,
+        outcome.startTime,
+        link.organizerEventId,
+        link.organizerUserId,
+    );
+    return outcome.event.id;
+}
+
+// The ONE decision an inbound REQUEST takes: Home-wide, and inside the gate, so two concurrent
+// deliveries never file two masters for one UID. Caller holds the gate.
+async function decideInboundRequest(
+    calendar: Calendar,
+    parsed: ParsedEvent,
+    link: InvitationLink,
+): Promise<InboundRequestOutcome> {
+    const sender = link.organizerEmail;
+    const applied = (event: CalendarEvent): InboundRequestOutcome => ({
+        kind: 'updated',
+        event,
+        title: parsed.title,
+        startTime: parsed.startTime,
+    });
+    const stored = calendar.joinedEvents().where(eq(schema.events.uid, parsed.uid)).all().map(toEvent);
+    const linked = stored.find((e) => e.data?.organizer && e.data?.organizerEventId);
+
+    if (linked) {
+        // An update binds to the STORED organizer, so a co-attendee cannot hijack the invitation.
+        if (linked.data?.organizer?.email.toLowerCase() !== sender) {
+            return { kind: 'dropped', reason: 'the sender is not the organizer this copy is linked to' };
+        }
+        // A "this event" edit attaches as an exception: a full update would collapse the series (audit #A).
+        const moved = parsed.recurrenceDate
+            ? await applyInvitationException(calendar, linked, inboundExceptionPayload(parsed))
+            : await applyInvitationUpdate(calendar, linked, inboundUpdatePayload(parsed));
+        return moved ? applied(linked) : { kind: 'dropped', reason: 'nothing newer to apply' };
+    }
+
+    const master = stored.find((e) => !e.parentEventId);
+    if (master) {
+        // The organizer may claim an event nobody linked, but only when it names the verified sender (R19).
+        const resource = events.resourceOf(calendar, master.id);
+        const component = resource ? await events.loadResource(calendar, resource.calendarId, resource.uri) : null;
+        if (!resource || !component || storedOrganizerAddress(component) !== sender) {
+            return { kind: 'dropped', reason: 'the stored event names another organizer' };
+        }
+        if (parsed.recurrenceDate) {
+            return { kind: 'dropped', reason: 'an occurrence of a series nobody organizes here yet' };
+        }
+        await adoptAsInvitation(calendar, master, resource, component, parsed, link);
+        return applied(master);
+    }
+
+    // A new invitation is attributed to its sender, so the body's ORGANIZER must be that address.
+    if (parsed.data?.organizer?.email?.toLowerCase() !== sender) {
+        return { kind: 'dropped', reason: 'the ICS organizer is not the sender' };
+    }
+    // A lone exception REQUEST with no known master has nothing to attach to.
+    if (parsed.recurrenceDate) return { kind: 'dropped', reason: 'an exception with no series' };
+
+    const defaultCal = calendar.db
+        .select()
+        .from(schema.calendars)
+        .all()
+        .find((row) => row.isDefault);
+    if (!defaultCal) return { kind: 'dropped', reason: 'no default calendar' };
+    const payload = inboundInvitationPayload(parsed, link);
+    const event = await events.writeEvent(calendar, defaultCal.id, invitationInput(payload));
+    return { kind: 'created', event, payload };
+}
+
+// Caller holds the gate. Same file, same row ids; the link and the guest list come from the message.
+async function adoptAsInvitation(
+    calendar: Calendar,
+    master: CalendarEvent,
+    resource: typeof schema.resources.$inferSelect,
+    component: ICAL.Component,
+    parsed: ParsedEvent,
+    link: InvitationLink,
+): Promise<void> {
+    const organizer = {
+        userId: link.organizerUserId,
+        email: link.organizerEmail,
+        name: parsed.data?.organizer?.name,
+    };
+    stampInvitationLink(component, link);
+    patchEvent(
+        component,
+        null,
+        {
+            ...invitationPatch(master, inboundUpdatePayload(parsed), parsed.rrule),
+            data: { ...master.data, organizer, attendees: parsed.data?.attendees },
+        },
+        events.writeContext(false, parsed.dtstamp),
+    );
+    await store.writeResource(calendar, resource.calendarId, resource.uri, component, resource);
+}
+
+// Just that instance — removeInvitation would delete the attendee's entire linked series.
+export async function cancelInvitationOccurrence(
+    calendar: Calendar,
+    orgEventId: string,
+    orgUserId: string,
+    recurrenceDate: string,
+    recurrenceInstant: Date | null | undefined,
+    revision: Revision,
+): Promise<void> {
+    const cancelled = await unlessTooLarge(
+        orgEventId,
+        () =>
+            calendar.gate.run(async () => {
+                const linked = findLinkedEvent(calendar, orgEventId, orgUserId);
+                if (!linked) return false;
+                const resource = events.resourceOf(calendar, linked.id);
+                if (!resource) return false;
+                const component = await events.loadResource(calendar, resource.calendarId, resource.uri);
+                if (!component) return false;
+                const key = recurrenceKeyForSeries(recurrenceDate, recurrenceInstant, linked.timezone);
+                if (!isNewerRevision(revision, storedRevision(component, key))) return false;
+                await removeOccurrence(calendar, linked.id, key, revision);
+                return true;
+            }),
+        false,
+    );
+    if (cancelled) calendar.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_CANCELLED, orgUserId));
+}
+
+export async function removeInvitation(calendar: Calendar, orgEventId: string, orgUserId: string): Promise<void> {
+    const linked = await calendar.gate.run(async () => {
+        const linked = findLinkedEvent(calendar, orgEventId, orgUserId);
+        const resource = linked && events.resourceOf(calendar, linked.id);
+        if (!linked || !resource) return null;
+        await calendar.purgeResource(resource);
+        return linked;
+    });
+    if (!linked) return;
+
+    calendar.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_CANCELLED, orgUserId));
+    const organizer = linked.data?.organizer;
+    calendar.home.notifications?.persist({
+        type: 'calendar-invite-cancelled',
+        actorEmail: organizer?.email,
+        title: `${actorDisplayName(organizer?.name, organizer?.email)} canceled an invitation`,
+        body: linked.title,
+        tag: `calendar-invite:${orgEventId}:${linked.startTime.getTime()}`,
+    });
+}
+
+export async function updateAttendeeStatus(
+    calendar: Calendar,
+    eventId: string,
+    email: string,
+    status: Attendee['status'],
+): Promise<void> {
+    // The guest list is read inside the gate, so two RSVPs never merge into a list the other replaced.
+    await calendar.gate.run(async () => {
+        const event = events.eventById(calendar, eventId);
+        if (!event?.data?.attendees) return;
+        const resource = events.resourceOf(calendar, eventId);
+        if (!resource) return;
+
+        const attendees = event.data.attendees.map((a) =>
+            a.email.toLowerCase() === email.toLowerCase() ? { ...a, status } : a,
+        );
+        const key = event.recurrenceDate ? storedRecurrenceKey(event.recurrenceDate) : null;
+        await events.editResource(calendar, resource, (component) => {
+            patchEvent(component, key, { data: { ...event.data, attendees } }, events.writeContext(false));
+        });
+    });
+}
+
+// `restoreCancelled`: an attendee may un-cancel their own occurrence, an organizer-side receiver only
+// moves PARTSTAT — it never resurrects an occurrence the organizer deleted (RFC 5546).
+export async function rsvpForOccurrence(
+    calendar: Calendar,
+    eventId: string,
+    email: string,
+    status: Attendee['status'],
+    recurrenceDate: string,
+    recurrenceInstant?: Date | null,
+    restoreCancelled = true,
+): Promise<void> {
+    const calendarId = await calendar.gate.run(async () => {
+        const parent = events.eventById(calendar, eventId);
+        if (!parent) throw new ApiError(404, 'Event not found');
+
+        const key = recurrenceKeyForSeries(recurrenceDate, recurrenceInstant, parent.timezone);
+        const existing = events.exceptionOf(calendar, eventId, key);
+        // A deleted occurrence is an EXDATE, which carries no attendee list to record a PARTSTAT in.
+        if (existing?.status === 'cancelled' && !restoreCancelled) return null;
+        const data = existing?.data ?? parent.data ?? {};
+        // Only recorded invitees may leave a PARTSTAT; someone can be invited to a single occurrence only.
+        const invitees = data.attendees ?? parent.data?.attendees ?? [];
+        if (!invitees.some((a) => a.email.toLowerCase() === email.toLowerCase())) return null;
+        const attendees = invitees.map((a) => (a.email.toLowerCase() === email.toLowerCase() ? { ...a, status } : a));
+
+        if (existing && existing.status !== 'cancelled') {
+            const resource = events.resourceOf(calendar, existing.id);
+            if (!resource) return null;
+            await events.editResource(calendar, resource, (component) => {
+                patchEvent(component, key, { data: { ...data, attendees } }, events.writeContext(false));
+            });
+            return parent.calendarId;
+        }
+
+        const { startTime, endTime } = computeOccurrenceTimes(parent, key);
+        await events.writeEvent(calendar, parent.calendarId, {
+            title: existing?.title ?? parent.title,
+            description: parent.description,
+            location: parent.location,
+            startTime: existing?.startTime ?? startTime,
+            endTime: existing?.endTime ?? endTime,
+            allDay: parent.allDay,
+            timezone: parent.timezone,
+            parentEventId: eventId,
+            recurrenceDate: key,
+            status: existing && !restoreCancelled ? 'cancelled' : 'confirmed',
+            data: { ...data, attendees },
+            createByUserId: parent.createByUserId,
+            uid: parent.uid,
+        });
+        return parent.calendarId;
+    });
+    if (calendarId) calendar.announce(calendarId, SSEventType.CALENDAR_EVENT_UPDATED);
+}
+
+// Caller holds the gate. `revision` is the CANCEL's, so a stale redelivery can be ordered against it.
+async function removeOccurrence(
+    calendar: Calendar,
+    eventId: string,
+    recurrenceDate: string,
+    revision?: Revision,
+): Promise<void> {
+    const parent = events.eventById(calendar, eventId);
+    if (!parent) throw new ApiError(404, 'Event not found');
+    const { startTime, endTime } = computeOccurrenceTimes(parent, recurrenceDate);
+    await events.writeEvent(calendar, parent.calendarId, {
+        title: parent.title,
+        startTime,
+        endTime,
+        allDay: parent.allDay,
+        timezone: parent.timezone,
+        parentEventId: eventId,
+        recurrenceDate,
+        status: 'cancelled',
+        sequence: revision?.sequence,
+        dtstamp: revision?.dtstamp,
+        uid: parent.uid,
+    });
+}
+
+export async function rsvp(
+    calendar: Calendar,
+    eventId: string,
+    user: User,
+    input: {
+        status: Attendee['status'];
+        scope?: 'this' | 'this-and-following' | 'all';
+        recurrenceDate?: string;
+        remove?: boolean;
+    },
+): Promise<void> {
+    const event = events.eventById(calendar, eventId);
+    if (!event) throw new ApiError(404, 'Event not found');
+    if (!event.data?.organizer || !isInvitationFromOthers(event, calendar.home.user.email)) {
+        throw new ApiError(400, 'Not a linked event');
+    }
+
+    const isAttendee = event.data.attendees?.some((a) => a.email.toLowerCase() === user.email.toLowerCase());
+    if (!isAttendee) throw new ApiError(403, 'Not an attendee');
+
+    const scope = input.scope || 'all';
+    const organizerUserId = event.data.organizer.userId;
+    const organizerEventId = event.data.organizerEventId!;
+    const isExternalOrganizer = isExternalOwnerId(organizerUserId);
+
+    const sendRsvpReply = (status: Attendee['status'], recurrenceDate?: string) => {
+        const mail = composeRsvpReply(event, user.email, user.name ?? user.email, status, recurrenceDate);
+        sendMail(mail).catch(console.error);
+    };
+
+    if (scope === 'this' && input.recurrenceDate) {
+        const recurrenceDate = input.recurrenceDate;
+        const status = input.remove ? 'declined' : input.status;
+        if (input.remove) {
+            await calendar.gate.run(() => removeOccurrence(calendar, eventId, recurrenceDate));
+            calendar.announce(event.calendarId, SSEventType.CALENDAR_EVENT_UPDATED);
+        } else {
+            await rsvpForOccurrence(calendar, eventId, user.email, input.status, recurrenceDate);
+        }
+        if (isExternalOrganizer) {
+            sendRsvpReply(status, recurrenceDate);
+        } else {
+            propagateRsvp(organizerUserId, organizerEventId, user.email, status, recurrenceDate).catch(console.error);
+        }
+    } else if (scope === 'this-and-following' && input.remove && input.recurrenceDate) {
+        await removeThisAndFuture(calendar, eventId, input.recurrenceDate);
+        if (isExternalOrganizer) sendRsvpReply('declined');
+        else propagateRsvp(organizerUserId, organizerEventId, user.email, 'declined').catch(console.error);
+    } else if (input.remove) {
+        await events.deleteEvent(calendar, event.calendarId, eventId, user);
+    } else {
+        await updateAttendeeStatus(calendar, eventId, user.email, input.status);
+        if (isExternalOrganizer) sendRsvpReply(input.status);
+        else propagateRsvp(organizerUserId, organizerEventId, user.email, input.status).catch(console.error);
+    }
+}
+
+async function removeThisAndFuture(calendar: Calendar, eventId: string, recurrenceDate: string): Promise<void> {
+    await calendar.gate.run(async () => {
+        const event = events.eventById(calendar, eventId);
+        if (!event) throw new ApiError(404, 'Event not found');
+        if (!event.rrule) throw new ApiError(400, 'Not a recurring event');
+        const resource = events.resourceOf(calendar, eventId);
+        if (!resource) throw new ApiError(404, 'Event not found');
+        const truncated = truncateRRule(event.rrule, new Date(`${recurrenceDate}T00:00:00Z`));
+        await events.editResource(calendar, resource, (component) => {
+            patchEvent(component, null, { rrule: truncated }, events.writeContext(false));
+        });
+    });
+}
