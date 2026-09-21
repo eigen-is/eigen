@@ -15,7 +15,7 @@ import { ApiError, isEnoent, isSafePathSegment, LocalFilesystem, PATHS } from '.
 import type { Home } from '../home';
 import { parseEml, parseEmlBytes, parseEmlForReader } from './mail-parse';
 import type { DraftMeta, MailFlag, MailSearchOptions, MailStore, MailStoreEvents } from './mail-store';
-import MailDB from './maildb';
+import MailDB, { readMailIndexSize } from './maildb';
 import {
     applyFlagsFromFilename,
     buildMaildirFilename,
@@ -38,6 +38,12 @@ const DRAFT_ATTACHMENTS_DIR = 'draft-attachments';
 // Staged attachments are charged to the mail quota, and both surfaces that report it walk them here.
 export function readDraftStagingSize(homeFs: LocalFilesystem): Promise<number> {
     return homeFs.dirSize(path.join(PATHS.MAIL.ROOT, DRAFT_ATTACHMENTS_DIR));
+}
+
+// What Mail charges to the home data budget, for a Home nobody has booted (the admin usage view). Counts
+// what `MaildirStore.size()` counts: the index sum plus the bytes staged for a draft.
+export async function readMailTotalSize(homeFs: LocalFilesystem): Promise<number> {
+    return readMailIndexSize(homeFs.absolutePath(PATHS.MAIL.DB)) + (await readDraftStagingSize(homeFs));
 }
 
 // A segment is a directory name under the Maildir root, so the rule is what breaks a path or the hierarchy,

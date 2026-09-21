@@ -1025,7 +1025,7 @@ describe('GET /settings/users/usage', () => {
         const mine = usage[ctx.alice.user.id];
         expect(mine?.total.max).toBeGreaterThan(0);
         expect(mine?.drive.default).toBeDefined();
-        expect(mine?.mailAndContacts).toBeDefined();
+        expect(mine?.homeData).toBeDefined();
     });
 
     test('sizes a home without booting it', async () => {
@@ -1070,7 +1070,7 @@ describe('GET /settings/users/usage', () => {
         expect(sized).toEqual(live);
         // Both halves have to be reading something, or an always-zero reader would pass the above.
         expect(sized.drive.default.used).toBeGreaterThan(0);
-        expect(sized.mailAndContacts.used).toBeGreaterThan(0);
+        expect(sized.homeData.used).toBeGreaterThan(0);
 
         // A file no card reader indexes. Neither reader counts it, so a stray note cannot make the admin
         // view report a figure the owner's own storage page never shows.

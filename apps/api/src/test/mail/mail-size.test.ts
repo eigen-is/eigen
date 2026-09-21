@@ -6,8 +6,7 @@ import type { HomeSizeResponse } from '@workspace/lib/types/settings';
 import { getMailUploadMaxSize } from '../../lib/config/enforcement';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { getHome } from '../../lib/home';
-import { readMailTotalSize } from '../../lib/mail/maildb';
-import { readDraftStagingSize } from '../../lib/mail/maildir-store';
+import { readMailTotalSize } from '../../lib/mail/maildir-store';
 import { mailRootOf, makeEml } from '../mail-test-helpers';
 import { assertJson, authedRequest, createTestUser, ensureServer, putDraft, uploadDraftAttachment } from '../setup';
 
@@ -106,8 +105,7 @@ describe('Mail usage', () => {
         );
         await home.mail.messageImport(sizedEml('Run import', 'i'.repeat(512)));
 
-        const onDisk = readMailTotalSize(join(mailRootOf(userId), 'mail.db')) + (await readDraftStagingSize(home.fs));
-        expect(await home.mail.size()).toBe(onDisk);
+        expect(await home.mail.size()).toBe(await readMailTotalSize(home.fs));
     });
 
     // The admin usage view sizes homes nobody has loaded, so it reads the files and the DB itself. For a
@@ -116,7 +114,7 @@ describe('Mail usage', () => {
         const home = await getHome(userId);
         const reported = await assertJson<HomeSizeResponse>(await authedRequest(token, `/home/${userId}/size`));
 
-        expect(reported.mailAndContacts.used - (await home.contacts.size())).toBe(await home.mail.size());
+        expect(reported.homeData.used - (await home.contacts.size())).toBe(await home.mail.size());
     });
 });
 
@@ -142,7 +140,7 @@ describe('Staged draft attachment usage', () => {
 
     async function reportedUsage(): Promise<number> {
         const size = await assertJson<HomeSizeResponse>(await authedRequest(token, `/home/${userId}/size`));
-        return size.mailAndContacts.used;
+        return size.homeData.used;
     }
 
     test('staging grows reported usage, and saving the draft gives the staged bytes back', async () => {

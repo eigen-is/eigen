@@ -23,7 +23,7 @@ export class GuestHome extends Home {
 
     override async size(): Promise<HomeSizeResponse> {
         return {
-            mailAndContacts: { used: 0, max: 0 },
+            homeData: { used: 0, max: 0 },
             drive: { default: { used: 0, max: 0 } },
             total: { used: 0, max: 0 },
         };

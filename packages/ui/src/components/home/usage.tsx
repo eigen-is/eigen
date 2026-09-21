@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { EigenLoader } from '../braket/eigen-loader';
 
 export type StorageData = {
-    mailAndContacts: { used: number; max: number };
+    homeData: { used: number; max: number };
     drive: { default: { used: number; max: number } };
     total: { used: number; max: number };
 };
@@ -46,7 +46,7 @@ export function StorageUsageBars({ data, className }: { data: StorageData; class
             </div>
             <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Mail, contacts & calendar</span>
-                <span>{formatFileSize(data.mailAndContacts.used)}</span>
+                <span>{formatFileSize(data.homeData.used)}</span>
             </div>
         </div>
     );
@@ -99,7 +99,7 @@ export function StorageUsage({ className = '', condensed = false }: StorageUsage
                     <div className="space-y-2 mt-2 text-xs">
                         <div className="flex justify-between">
                             <span className="text-muted-foreground">Mail, Contacts & Calendar</span>
-                            <span>{formatFileSize(storageData.mailAndContacts.used)}</span>
+                            <span>{formatFileSize(storageData.homeData.used)}</span>
                         </div>
                         <div className="flex justify-between">
                             <span className="text-muted-foreground">Drive</span>

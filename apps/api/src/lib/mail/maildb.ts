@@ -16,7 +16,7 @@ import * as schema from './schema';
 // home at once, so it reads the same index sum the quota gate uses. Read-write on purpose: a WAL
 // database whose owner is not holding it open has no -shm beside it, and a read-only open of one
 // fails outright. Only ever used for this SELECT.
-export function readMailTotalSize(dbPath: string): number {
+export function readMailIndexSize(dbPath: string): number {
     if (!fs.existsSync(dbPath)) return 0;
     const db = new Database(dbPath, { readwrite: true, create: false });
     try {
