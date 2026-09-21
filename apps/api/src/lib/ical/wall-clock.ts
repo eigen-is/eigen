@@ -4,9 +4,7 @@ import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import { RRule } from 'rrule';
 import { isOutOfRangeRecurrenceStart, isSubDailyRrule, MAX_OCCURRENCES } from './recurrence-limits';
 
-// Wall-clock arithmetic and the occurrence one recurrence key names. Both the format layer and the
-// calendar domain compute times with these, so they live on the format side of the one-way edge:
-// `calendar` imports `ical`, never the reverse.
+// On the format side of the one-way edge: `calendar` imports `ical`, never the reverse.
 
 type LocalComponents = { year: number; month: number; day: number; hour: number; minute: number; second: number };
 
@@ -70,32 +68,25 @@ export function localToUtc(
         resolved = corrected;
     }
 
-    // RFC 5545: an ambiguous fall-back time resolves to the first (pre-transition) occurrence. The step back
-    // is the day's own shift, not an hour: Lord Howe moves 30 minutes and Troll two.
+    // RFC 5545 resolves an ambiguous fall-back time to the earlier occurrence; the step back is the day's own shift, and Lord Howe moves 30 minutes.
     const shift = offsetAt(resolved - 86400_000) - offsetAt(resolved + 86400_000);
     const earlier = resolved - shift;
     return new Date(shift > 0 && earlier + offsetAt(earlier) === targetMs ? earlier : resolved);
 }
 
-// Convert a real UTC instant to the Date whose UTC fields hold its wall-clock time in tz — the space
-// rrule expands in, since rrule's own tzid handling is broken.
+// rrule's own tzid handling is broken, so expansion runs in this wall-clock space instead.
 export function wallClockDate(date: Date, tz: string): Date {
     const local = utcToLocal(date, tz);
     return new Date(Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second));
 }
 
-// The wall-date key a stored recurrenceDate resolves to, or null when it can't name an occurrence. A
-// full ISO datetime truncates to its date part; anything else is inert (cancels/substitutes nothing).
-// Every reader of stored keys must resolve them through this — and never feed a raw one to
-// RRule.between, which throws on invalid dates.
+// Every reader resolves a stored key through this: RRule.between throws on an invalid date.
 export function storedRecurrenceKey(recurrenceDate: string): string | null {
     const key = recurrenceDate.substring(0, 10);
     return Number.isNaN(Date.parse(`${key}T00:00:00Z`)) ? null : key;
 }
 
-// Expand a rule and name each occurrence it produces. A zoned rule iterates in wall-clock space, because
-// rrule's own tzid handling is broken, and every hit converts back to the instant it stands for. The window
-// belongs to the caller, in whatever space it asked in. The count is capped (see recurrence-limits).
+// A zoned rule iterates in wall-clock space and each hit converts back; the window stays in whatever space the caller asked in.
 export function expandWallClock(
     rrule: string,
     dtstart: Date,
@@ -134,8 +125,7 @@ export function computeOccurrenceTimes(
     const tz = parent.timezone;
     const occDate = new Date(`${recurrenceDate}T00:00:00Z`);
 
-    // Skip a sub-daily rrule or out-of-range dtstart (only an untrusted file can carry one) — it would
-    // iterate to the day window and hang; fall through to the time-of-day fallback below.
+    // A sub-daily rule or out-of-range dtstart (untrusted files only) would iterate to the day window and hang.
     if (parent.rrule && !isSubDailyRrule(parent.rrule) && !isOutOfRangeRecurrenceStart(parent.startTime)) {
         const dayEnd = new Date(occDate);
         dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);

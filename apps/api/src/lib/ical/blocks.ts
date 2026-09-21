@@ -1,11 +1,7 @@
 import { unfoldContentLines } from '@workspace/lib/content-line';
 import { isEigenName } from './ical-parse';
 
-// The VTIMEZONE and VEVENT blocks of one stored resource, with every line Eigen owns dropped. A splice
-// rather than a parse → toString: ical.js rewrites parameter quoting and order on every line it re-emits
-// (a `VALUE=URI` folded into the jCal type, a quoted parameter re-escaped RFC 6868-style), and a file the
-// store only indexed was never Eigen's to rewrite. Only Eigen's own lines carry an Eigen parameter, so
-// dropping those lines whole is the strip `stripEigenStamps` performs.
+// Spliced, not re-emitted: ical.js rewrites parameter quoting and order, and an indexed-only file is not Eigen's to rewrite.
 export function spliceBlocks(ics: string, zones: Map<string, string[]>, events: string[][]): void {
     let block: string[] | null = null;
     let depth = 0;

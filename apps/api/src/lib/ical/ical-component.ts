@@ -1,8 +1,4 @@
-// The ical.js component seam every stored `.ics` goes through: build a VCALENDAR from projected rows,
-// patch one VEVENT in place, re-stamp an untrusted body against the stored resource, strip the lines
-// Eigen owns. `ICAL.Component.toString()` is the only serializer, so folding, escaping and parameter
-// quoting are the library's problem and an Eigen edit leaves every property it did not touch as the
-// client wrote it.
+// `ICAL.Component.toString()` is the only serializer here, so folding, escaping and quoting stay ical.js's problem and an untouched property survives an edit as the client wrote it.
 import { randomUUID } from 'node:crypto';
 import { normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
 import { stripControlChars, stripLineBreaks } from '@workspace/lib/content-line';
@@ -31,11 +27,9 @@ import { computeOccurrenceTimes, localToUtc, storedRecurrenceKey, utcToLocal } f
 
 export const PRODID = '-//Eigen//CalDAV//EN';
 
-// `dtstamp` is the instant the scheduling message this write applies was stamped with; a local edit states
-// none and the clock stands in.
+// `dtstamp` is the scheduling message's own stamp; a local edit states none and the clock stands in.
 export type WriteContext = { now: Date; actorIsOrganizer: boolean; dtstamp?: Date | null };
-// `sequence` is the one field no HTTP save submits: the invitation receivers carry the organizer's
-// revision number, and it wins over the bump rule.
+// `sequence` is the one field no HTTP save submits: an invitation receiver mirrors the organizer's number, which beats the bump rule.
 export type EventPatch = Omit<UpdateEventInput, 'calendarId' | 'id'> & { sequence?: number };
 type TrustedStamps = {
     createByUserId?: string | null;
@@ -44,12 +38,10 @@ type TrustedStamps = {
     importedOrganizer?: string | null;
 };
 
-// ical.js types every jCal array as `any[]`; this is the shape RFC 5545 gives it, narrowed once here
-// so nothing else in the module reaches into a raw jCal array.
+// ical.js types every jCal array as `any[]`; narrowed once here to the shape RFC 5545 gives it.
 type JCalProperty = [string, Record<string, string | string[]>, string, ...unknown[]];
 
-// Two properties are the same when their name, their parameters and their values are — never when
-// their bytes are, because ical.js reorders parameters and rewrites escapes as it likes.
+// Never compare bytes: ical.js reorders parameters and rewrites escapes as it likes.
 function propertyKey(prop: ICAL.Property): string {
     const [name, params, ...rest]: JCalProperty = prop.toJSON();
     return JSON.stringify([
@@ -111,9 +103,7 @@ function timeProperty(name: string, instant: Date, tzid: string | null, allDay: 
     return prop;
 }
 
-// The second pass through a repeated hour spells the same wall clock as the first and reads back as the
-// first, so an end there rides as a UTC DTEND — which RFC 5545 allows beside a TZID DTSTART — and the
-// duration survives the round trip.
+// An end inside a repeated hour reads back as the first pass, so it rides as a UTC DTEND — legal beside a TZID DTSTART — and the duration survives.
 function endProperty(instant: Date, tzid: string | null, allDay: boolean): ICAL.Property {
     if (!tzid || allDay) return timeProperty('dtend', instant, tzid, allDay);
     const local = utcToLocal(instant, tzid);
@@ -128,16 +118,14 @@ function utcStamp(name: string, instant: Date): ICAL.Property {
     return prop;
 }
 
-// C0 control bytes are illegal XML character data: one echoed into a calendar-data REPORT wedges the
-// whole collection client-side. ical.js escapes and folds everything else, newlines included.
+// C0 control bytes are illegal XML character data: one echoed into a calendar-data REPORT wedges the whole collection client-side.
 function textProperty(name: string, value: string): ICAL.Property {
     const prop = new ICAL.Property(name);
     prop.setValue(stripControlChars(value));
     return prop;
 }
 
-// A value ical.js writes verbatim rather than as escaped TEXT — a URI, an opaque id, a color. A CR or
-// LF would split it into a new content line, so it goes.
+// ical.js writes these verbatim rather than as escaped TEXT, so a CR or LF would split the content line.
 function rawProperty(name: string, value: string): ICAL.Property {
     const prop = new ICAL.Property(name);
     prop.setValue(stripLineBreaks(value));
@@ -151,8 +139,7 @@ function addressProperty(name: string, email: string, cn?: string): ICAL.Propert
     return prop;
 }
 
-// The parameters Eigen models on an ATTENDEE. CUTYPE and RSVP are not among them: a stored property's
-// CUTYPE=ROOM, and the RSVP a client asked for, outlive an Eigen edit.
+// CUTYPE and RSVP are deliberately absent: a stored CUTYPE=ROOM, and the RSVP a client asked for, outlive an Eigen edit.
 function attendeeParameters(attendee: Attendee): Array<[string, string]> {
     return [
         ['partstat', PARTSTAT[attendee.status]],
@@ -177,8 +164,7 @@ function rruleProperty(rrule: string): ICAL.Property {
     return prop;
 }
 
-// The ORIGINAL instant of one occurrence, which an EXDATE and a RECURRENCE-ID both name — never the
-// moved start of the override that replaced it.
+// An EXDATE and a RECURRENCE-ID both name the ORIGINAL instant, never the moved start of the override that replaced it.
 function occurrenceInstant(master: CalendarEvent, key: string): Date {
     return master.allDay ? new Date(`${key}T00:00:00Z`) : computeOccurrenceTimes(master, key).startTime;
 }
@@ -192,14 +178,12 @@ function exclusionStamp(key: string, id: string, sequence: number, dtstamp: Date
     prop.setValue(key);
     prop.setParameter(EIGEN.eventId, id);
     prop.setParameter(EIGEN.sequence, String(sequence));
-    // A cancelled occurrence keeps no VEVENT of its own, so the message that cancelled it leaves its
-    // revision stamp here for the RFC 5546 ordering rule to compare the next message against.
+    // A cancelled occurrence keeps no VEVENT, so its revision stamp rides here for the RFC 5546 ordering rule.
     if (dtstamp) prop.setParameter(EIGEN.dtstamp, utcStampString(dtstamp));
     return prop;
 }
 
-// RFC 5545 §3.6.6: an EMAIL alarm needs a SUMMARY, a DESCRIPTION and at least one ATTENDEE, so a mail
-// reminder on an event that names nobody is written as the display alarm every client can honor.
+// RFC 5545 §3.6.6: an EMAIL alarm needs a SUMMARY, a DESCRIPTION and an ATTENDEE, so a mail reminder naming nobody degrades to DISPLAY.
 function alarmComponent(reminder: Reminder, title: string, recipient: string): ICAL.Component {
     const alarm = new ICAL.Component('valarm');
     const mails = reminder.type === 'email' && recipient !== '';
@@ -251,8 +235,7 @@ function findVEvent(resource: ICAL.Component, recurrenceKey: string | null): ICA
     return vevents.find((v) => recurrenceKeyOf(v, zones.get(uidOf(v)) ?? null) === recurrenceKey) ?? null;
 }
 
-// ical.js keeps `EXDATE:a,b` as one two-valued property and clients rewrite the form freely, so only
-// the recurrence key identifies an exclusion.
+// ical.js keeps `EXDATE:a,b` as one two-valued property and clients rewrite the form freely, so only the recurrence key identifies an exclusion.
 function exdateKeys(vevent: ICAL.Component, seriesTz: string | null): Set<string> {
     const keys = new Set<string>();
     for (const prop of vevent.getAllProperties('exdate')) {
@@ -265,19 +248,16 @@ function exdateKeys(vevent: ICAL.Component, seriesTz: string | null): Set<string
 
 const STAMP_HORIZON_MS = 24 * 60 * 60 * 1000;
 
-// A message stamped far ahead of the receiver's clock would outrank every genuine update that follows it at
-// the same SEQUENCE, so the revision a receiver stores is bounded by its own clock (RFC 5546 § 2.1.5).
+// A stamp far ahead of the receiver's clock would outrank every genuine update at the same SEQUENCE (RFC 5546 § 2.1.5).
 export function clampStamp(dtstamp: Date | null | undefined, now: Date): Date | null {
     if (!dtstamp) return null;
     return dtstamp.getTime() > now.getTime() + STAMP_HORIZON_MS ? now : dtstamp;
 }
 
-// A submitted sequence is the organizer's own revision number, which an attendee copy mirrors rather
-// than computes; without one the three-way bump rule decides.
+// A submitted sequence is the organizer's own number, which an attendee copy mirrors rather than computes; without one the bump rule decides.
 function touch(vevent: ICAL.Component, ctx: WriteContext, scheduling: boolean, sequence?: number): void {
     setProperty(vevent, utcStamp('last-modified', ctx.now));
-    // DTSTAMP on a copy of somebody else's event is the organizer's own revision stamp, which the next
-    // message is ordered against: only a message moves it, never the attendee's local edit.
+    // DTSTAMP on a copy of somebody else's event orders the next message, so only a message moves it, never a local edit.
     if (ctx.dtstamp || readStamp(vevent, EIGEN.organizerEvent) === null) {
         setProperty(vevent, utcStamp('dtstamp', clampStamp(ctx.dtstamp, ctx.now) ?? ctx.now));
     }
@@ -289,9 +269,7 @@ function touch(vevent: ICAL.Component, ctx: WriteContext, scheduling: boolean, s
     vevent.updatePropertyWithValue('sequence', sequenceOf(vevent) + 1);
 }
 
-// Open-ended RRULEs recur past the stored times; regular zones compress to open-ended RRULE
-// observances anyway, so the horizon only bounds irregular zones. The span cap keeps a pathological
-// far-future event from turning the transition scan into a seconds-long stall.
+// Only irregular zones need the horizon — regular ones compress to open-ended RRULE observances — and the span cap keeps a far-future event from stalling the transition scan.
 function timezoneHorizon(years: number[], hasRrule: boolean): { minYear: number; maxYear: number } {
     const minYear = Math.min(...years);
     const stated = Math.max(...years);
@@ -303,8 +281,7 @@ function vtimezoneComponent(tzid: string, minYear: number, maxYear: number): ICA
     return new ICAL.Component(ICAL.parse(buildVTimezone(tzid, minYear, maxYear).join('\r\n')));
 }
 
-// One VTIMEZONE per IANA TZID the events reference (RFC 5545 §3.6.5) — without it, strict parsers
-// (including ical.js, i.e. a peer Eigen receiving this via iMIP) read the wall times as floating.
+// One VTIMEZONE per referenced IANA TZID (RFC 5545 §3.6.5): without it strict parsers, ical.js included, read the wall times as floating.
 function vtimezoneComponents(events: CalendarEvent[]): ICAL.Component[] {
     const tzids = new Set<string>();
     const years: number[] = [];
@@ -323,9 +300,7 @@ function vtimezoneComponents(events: CalendarEvent[]): ICAL.Component[] {
     return [...tzids].map((tzid) => vtimezoneComponent(tzid, minYear, maxYear));
 }
 
-// A VTIMEZONE a property still references is the client's own definition and is never rewritten; one
-// nothing references any more goes, and a referenced zone Intl knows but the file does not define gets
-// Eigen's.
+// A referenced VTIMEZONE is the client's own definition and is never rewritten; an unreferenced one goes, and a referenced zone the file leaves undefined gets Eigen's.
 function syncVTimezones(resource: ICAL.Component): void {
     const vevents = resource.getAllSubcomponents('vevent');
     const referenced = new Set<string>();
@@ -354,8 +329,7 @@ function syncVTimezones(resource: ICAL.Component): void {
     const added = [...referenced].filter((tzid) => normalizeTimezone(tzid));
     if (!added.length) return;
 
-    // A client reads the file top to bottom, so a TZID it meets before its definition is a floating
-    // wall time to it: the new blocks go in front, and re-adding the VEVENTs moves them back behind.
+    // A client reads top to bottom, so a TZID met before its definition is floating to it: new blocks go in front and re-adding the VEVENTs moves them behind.
     for (const tzid of added) resource.addSubcomponent(vtimezoneComponent(tzid, minYear, maxYear));
     for (const vevent of vevents) resource.addSubcomponent(vevent);
 }
@@ -364,8 +338,7 @@ type BuildOptions = { master?: CalendarEvent; exclusions?: CalendarEvent[] };
 
 function buildVEvent(event: CalendarEvent, options: BuildOptions = {}): ICAL.Component {
     const vevent = new ICAL.Component('vevent');
-    // Rows stored before ingestion normalized TZIDs can hold a non-IANA zone; serialize those like
-    // no-timezone events (absolute UTC) instead of letting Intl throw and 500 a whole CalDAV collection.
+    // A row holding a non-IANA zone serializes as absolute UTC, rather than letting Intl throw and 500 a whole CalDAV collection.
     const tzid = normalizeTimezone(event.timezone);
 
     vevent.addProperty(textProperty('uid', event.uid));
@@ -381,9 +354,7 @@ function buildVEvent(event: CalendarEvent, options: BuildOptions = {}): ICAL.Com
     vevent.addProperty(utcStamp('dtstamp', event.updatedAt));
     if (event.rrule) vevent.addProperty(rruleProperty(event.rrule));
 
-    // A canceled exception is a deleted occurrence: it rides as an EXDATE in the master's own DTSTART
-    // form — the shape every client round-trips — never as a STATUS:CANCELLED override VEVENT, which
-    // Thunderbird omits from its next PUT.
+    // A cancelled exception rides as an EXDATE in the master's own DTSTART form, never as a STATUS:CANCELLED override, which Thunderbird omits from its next PUT.
     const excluded: Array<{ key: string; exclusion: CalendarEvent }> = [];
     for (const exclusion of options.exclusions ?? []) {
         const key = exclusion.recurrenceDate ? storedRecurrenceKey(exclusion.recurrenceDate) : null;
@@ -392,14 +363,11 @@ function buildVEvent(event: CalendarEvent, options: BuildOptions = {}): ICAL.Com
         vevent.addProperty(exdateProperty(event, key, tzid));
     }
 
-    // RECURRENCE-ID names the ORIGINAL occurrence being overridden, in the master's TZID form
-    // (RFC 5545). The exception's own startTime may have been moved — echoing it back produces an
-    // override that matches no occurrence, so clients render the original slot too.
+    // RECURRENCE-ID names the ORIGINAL occurrence in the master's TZID form (RFC 5545): echoing a moved startTime back matches no occurrence and clients render the original slot too.
     if (event.recurrenceDate) {
         const key = storedRecurrenceKey(event.recurrenceDate);
         const master = options.master ?? event;
-        // An unkeyable legacy value falls back to the exception's own startTime (a possibly-orphaned
-        // override beats 500ing the whole resource).
+        // An unkeyable value falls back to the exception's own startTime: a possibly-orphaned override beats 500ing the whole resource.
         const when = key ? occurrenceInstant(master, key) : event.startTime;
         vevent.addProperty(timeProperty('recurrence-id', when, normalizeTimezone(master.timezone), event.allDay));
     }
@@ -411,8 +379,7 @@ function buildVEvent(event: CalendarEvent, options: BuildOptions = {}): ICAL.Com
 
     for (const attendee of event.data?.attendees ?? []) vevent.addProperty(attendeeProperty(attendee));
 
-    // Eigen's own lines come last, in the order restampResource rewrites them, so re-stamping a freshly
-    // built resource produces the same bytes.
+    // Eigen's own lines come last, in restampResource's order, so re-stamping a freshly built resource produces the same bytes.
     addStamp(vevent, EIGEN.eventId, event.id);
     addStamp(vevent, EIGEN.createdBy, event.createByUserId);
     addStamp(vevent, EIGEN.organizerEvent, event.data?.organizerEventId);
@@ -467,10 +434,7 @@ export function serializeResource(resource: ICAL.Component): string {
     return `${resource.toString()}\r\n`;
 }
 
-// What a scheduling message asks of the VEVENT the calendar stores: the organizer rides along as an
-// ACCEPTED attendee and a REQUEST asks every guest to reply (RFC 5546). No VALARM ever — the
-// organizer's own reminders are not the guests' business, and an `email` one would travel as an
-// ACTION:EMAIL alarm naming the organizer, so every guest's client would mail them at the trigger.
+// RFC 5546 shape: the organizer rides as an ACCEPTED attendee and a REQUEST asks for replies; no VALARM ever, or an `email` reminder would mail the organizer from every guest's client.
 function shapeForImip(vevent: ICAL.Component, event: CalendarEvent, method: ImipMethod): void {
     vevent.removeAllSubcomponents('valarm');
     if (method !== 'REQUEST') return;
@@ -483,13 +447,11 @@ function shapeForImip(vevent: ICAL.Component, event: CalendarEvent, method: Imip
     );
 }
 
-// `series` is the master of an event that is one occurrence of it: RECURRENCE-ID names the ORIGINAL
-// instant, which only the series' own recurrence knows once the override has been moved.
+// `series` is the master: RECURRENCE-ID names the ORIGINAL instant, which only the series' recurrence knows once the override has moved.
 export function serializeEventForImip(event: CalendarEvent, method: ImipMethod, series?: CalendarEvent): string {
     const vcalendar = newVCalendar();
     vcalendar.addPropertyWithValue('method', method);
-    // The RECURRENCE-ID of an occurrence names its instant in the SERIES' zone, which the occurrence's own
-    // may not be.
+    // A RECURRENCE-ID names its instant in the SERIES' zone, which the occurrence's own may not be.
     for (const vtimezone of vtimezoneComponents(series ? [event, series] : [event])) {
         vcalendar.addSubcomponent(vtimezone);
     }
@@ -501,12 +463,10 @@ export function serializeEventForImip(event: CalendarEvent, method: ImipMethod, 
     return serializeResource(vcalendar);
 }
 
-// Touch an attendee's own property rather than re-emitting the list, so CUTYPE, RSVP, SCHEDULE-STATUS
-// and every X- parameter a client hung on it survive an Eigen edit.
+// Each property is touched in place rather than re-emitted, so CUTYPE, RSVP, SCHEDULE-STATUS and every X- parameter a client hung on it survive.
 function patchAttendees(vevent: ICAL.Component, attendees: Attendee[]): { changed: boolean; membersChanged: boolean } {
     const current = vevent.getAllProperties('attendee');
-    // An address a client listed twice has two properties, and a PARTSTAT left on either one is the
-    // answer some reader takes.
+    // An address a client listed twice has two properties, and a PARTSTAT left on either one is the answer some reader takes.
     const byEmail = new Map<string, ICAL.Property[]>();
     for (const prop of current) {
         const email = calAddress(prop.getFirstValue()).toLowerCase();
@@ -561,10 +521,7 @@ function patchReminders(vevent: ICAL.Component, reminders: Reminder[]): boolean 
     return true;
 }
 
-// Write only the properties whose value actually changes (R16). The submitted form carries every field
-// on every save, so writing all of it would rebuild rich VALARMs from a {type, minutes} pair, drop
-// attendee parameters Eigen does not model and rewrite an RRULE from a projection that nulls the rules
-// the index cannot expand.
+// Only changed values are written: the save form carries every field, so writing all of it would rebuild rich VALARMs from a {type, minutes} pair, drop unmodelled attendee parameters and rewrite the RRULE from a lossy projection.
 export function patchEvent(
     resource: ICAL.Component,
     recurrenceKey: string | null,
@@ -615,8 +572,7 @@ export function patchEvent(
         syncVTimezones(resource);
     }
 
-    // A null incoming rrule never removes a stored one: the projection nulls the rules the index cannot
-    // expand (sub-daily, out-of-range dtstart), so "no rrule submitted" does not mean "no rrule".
+    // A null incoming rrule never removes a stored one: the projection nulls the rules the index cannot expand (sub-daily, out-of-range dtstart).
     if (patch.rrule) {
         const moved = setProperty(vevent, rruleProperty(patch.rrule));
         scheduling = scheduling || moved;
@@ -646,9 +602,7 @@ export function patchEvent(
     return true;
 }
 
-// Add or replace the override for one occurrence. A second override of the same key replaces the first,
-// and an occurrence the series excluded comes back: an EXDATE left beside the override would keep it
-// out of the expansion and project a second, cancelled row for the same key.
+// An EXDATE left beside a new override would keep the occurrence out of the expansion and project a second, cancelled row for the same key.
 export function putOverride(resource: ICAL.Component, master: CalendarEvent, override: CalendarEvent): void {
     const key = override.recurrenceDate ? storedRecurrenceKey(override.recurrenceDate) : null;
     if (!key) throw new Error('putOverride: the override names no occurrence');
@@ -682,8 +636,7 @@ function dropExclusion(vevent: ICAL.Component, recurrenceKey: string): boolean {
     return removed;
 }
 
-// Cancel one occurrence: an EXDATE on the master plus the stamp carrying the exclusion row's id and the
-// SEQUENCE the RFC 5546 replay guard compares. Any override of that key goes with it.
+// The stamp beside the EXDATE carries the exclusion row's id and the SEQUENCE the RFC 5546 replay guard compares.
 export function addExclusion(
     resource: ICAL.Component,
     master: CalendarEvent,
@@ -698,8 +651,7 @@ export function addExclusion(
     const override = findVEvent(resource, key);
     if (override) resource.removeSubcomponent(override);
 
-    // Cancelling an occurrence twice is one exclusion, not two: the key already excluded keeps its
-    // EXDATE and takes the new stamp, so the file never grows a second row for one occurrence.
+    // Cancelling twice is one exclusion: an already-excluded key keeps its EXDATE and takes the new stamp.
     const seriesTz = propTzid(vevent.getFirstProperty('dtstart'));
     if (!exdateKeys(vevent, seriesTz).has(key)) {
         vevent.addProperty(exdateProperty(master, key, normalizeTimezone(master.timezone)));
@@ -721,12 +673,7 @@ export function removeExclusion(resource: ICAL.Component, recurrenceKey: string,
 // What one revision of an event is known by: the sender's SEQUENCE and the instant it stamped.
 export type Revision = { sequence: number; dtstamp?: Date | null };
 
-// RFC 5546 § 2.1.5: a receiver orders messages on SEQUENCE first and DTSTAMP second, and one that arrived
-// behind a newer message — a greylisted mail, an unordered fan-out — is not applied. DTSTAMP has a
-// second's resolution, so two revisions inside one second are indistinguishable and an equal stamp is
-// applied as the redelivery it is: the patch then finds nothing to change. With no stamp on either side
-// an equal SEQUENCE has nothing to order it by and the message is applied for the same reason; only a
-// strictly lower SEQUENCE loses.
+// RFC 5546 § 2.1.5 orders on SEQUENCE then DTSTAMP; DTSTAMP's one-second resolution cannot separate two revisions, so an equal stamp is applied as the redelivery it is and only a strictly lower SEQUENCE loses.
 export function isNewerRevision(incoming: Revision, stored: Revision | null): boolean {
     if (!stored) return true;
     if (incoming.sequence !== stored.sequence) return incoming.sequence > stored.sequence;
@@ -734,9 +681,7 @@ export function isNewerRevision(incoming: Revision, stored: Revision | null): bo
     return incoming.dtstamp.getTime() >= stored.dtstamp.getTime();
 }
 
-// The revision a stored resource holds for one occurrence, or for the series itself with a null key. A
-// cancelled occurrence keeps no VEVENT, so its revision is the stamp beside its EXDATE — or the series'
-// own number when a client wrote that EXDATE itself.
+// A cancelled occurrence keeps no VEVENT, so its revision is the stamp beside its EXDATE — or the series' own number when a client wrote that EXDATE itself.
 export function storedRevision(resource: ICAL.Component, recurrenceKey: string | null): Revision | null {
     const vevent = findVEvent(resource, recurrenceKey);
     if (vevent) return { sequence: sequenceOf(vevent), dtstamp: readTimestamp(vevent, 'dtstamp') };
@@ -747,8 +692,7 @@ export function storedRevision(resource: ICAL.Component, recurrenceKey: string |
     return { sequence: stamp?.sequence ?? sequenceOf(master), dtstamp: stamp?.dtstamp ?? null };
 }
 
-// Who a stored resource nobody linked says its organizer is: the address it was imported with, else the
-// ORGANIZER the file carries. The inbound-REQUEST rule matches a verified sender against this.
+// The inbound-REQUEST rule matches a verified sender against this, so the imported address wins over the ORGANIZER the file carries.
 export function storedOrganizerAddress(resource: ICAL.Component): string | null {
     const vevent = masterVEvent(resource);
     if (!vevent) return null;
@@ -759,8 +703,7 @@ export function storedOrganizerAddress(resource: ICAL.Component): string | null 
     return address || null;
 }
 
-// Stamp a stored resource as the attendee-side copy of somebody else's event. The link comes from trusted
-// message fields only — the relay envelope, or `external_<address>` for a DKIM-aligned iMIP sender.
+// The link comes from trusted message fields only — the relay envelope, or `external_<address>` for a DKIM-aligned iMIP sender.
 export function stampInvitationLink(
     resource: ICAL.Component,
     link: { organizerEventId: string; organizerUserId: string },
@@ -773,8 +716,7 @@ export function stampInvitationLink(
     }
 }
 
-// A file whose row ids another resource already holds is a copy of it: every other Eigen line stays, and
-// the ids — the master's, the overrides', and the ones the exclusion stamps carry — are minted fresh.
+// A file whose row ids another resource already holds is a copy of it: every other Eigen line stays and the ids are minted fresh.
 export function remintEventIds(resource: ICAL.Component): void {
     for (const vevent of resource.getAllSubcomponents('vevent')) {
         vevent.removeAllProperties(EIGEN.eventId);
@@ -783,11 +725,8 @@ export function remintEventIds(resource: ICAL.Component): void {
     }
 }
 
-// Every `X-EIGEN-*` property and parameter, at every level. Export, iMIP and the relay all run through
-// this, and so does an incoming body before it is re-stamped.
 export function stripEigenStamps(comp: ICAL.Component): void {
-    // By name, once per name: ical.js scans the whole property array per single removal, which a body
-    // carrying 20 000 stamps turns into a quadratic stall.
+    // By name, once per name: ical.js scans the whole property array per removal, which 20 000 stamps turn into a quadratic stall.
     const names = new Set<string>();
     for (const prop of comp.getAllProperties()) {
         if (isEigenName(prop.name)) {
@@ -803,10 +742,7 @@ export function stripEigenStamps(comp: ICAL.Component): void {
     for (const sub of comp.getAllSubcomponents()) stripEigenStamps(sub);
 }
 
-// An incoming body is untrusted: every Eigen line it carries is discarded, then the server-owned ones
-// come back from the stored resource — matched by UID and recurrence key, never by string equality on
-// RECURRENCE-ID or on an EXDATE value, both of which clients rewrite between TZID, UTC and comma-joined
-// forms. With no stored resource everything is minted and the link is set from trusted fields only.
+// An incoming body is untrusted: Eigen's lines come back from the stored resource, matched by UID and recurrence key, because clients rewrite RECURRENCE-ID and EXDATE between TZID, UTC and comma-joined forms.
 export function restampResource(
     incoming: ICAL.Component,
     stored: ICAL.Component | null,
@@ -825,8 +761,7 @@ export function restampResource(
         for (const [exKey, stamp] of readExclusionStamps(vevent)) storedStamps.set(`${uid}|${exKey}`, stamp);
     }
 
-    // One stored id belongs to one row: two masters of a UID, or two overrides whose RECURRENCE-IDs key
-    // alike, both match the same stored VEVENT, and the second claimant gets a fresh id instead.
+    // One stored id belongs to one row, so a second claimant of the same stored VEVENT gets a fresh id.
     const claimed = new Set<string>();
     const claim = (stored: string | null | undefined): string => {
         const id = stored && !claimed.has(stored) ? stored : randomUUID();
