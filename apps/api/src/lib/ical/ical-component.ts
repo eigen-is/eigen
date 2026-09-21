@@ -574,7 +574,8 @@ export function patchEvent(
     const storedTz = propTzid(vevent.getFirstProperty('dtstart'));
     const tzid = patch.timezone !== undefined ? normalizeTimezone(patch.timezone) : storedTz;
     const storedStart = vevent.getFirstProperty('dtstart')?.getFirstValue();
-    const allDay = patch.allDay ?? (storedStart instanceof ICAL.Time && storedStart.isDate);
+    const storedAllDay = storedStart instanceof ICAL.Time && storedStart.isDate;
+    const allDay = patch.allDay ?? storedAllDay;
 
     let changed = false;
     let scheduling = false;
@@ -589,25 +590,32 @@ export function patchEvent(
         changed = changed || moved;
     }
 
-    if (
-        patch.startTime !== undefined ||
-        patch.endTime !== undefined ||
-        patch.allDay !== undefined ||
-        patch.timezone !== undefined
-    ) {
-        const bounds: Array<[string, Date | undefined]> = [
-            ['dtstart', patch.startTime],
-            ['dtend', patch.endTime],
-        ];
+    const bounds: Array<[string, Date | undefined]> = [
+        ['dtstart', patch.startTime],
+        ['dtend', patch.endTime],
+    ];
+    // WHEN the event is: the two instants and the all-day flag. A save that states them all over again
+    // unchanged states no move, so it writes no time property — which is what keeps an HTTP title edit
+    // from rewriting a client's DTSTART form. Only a zone Eigen itself named can be re-stated into
+    // another one: a UTC-Z, floating or client-defined DTSTART is the file's own form to keep.
+    const moves = bounds.some(([name, submitted]) => {
+        const stored = instantOf(vevent, name, storedTz);
+        return submitted !== undefined && stored !== null && stored.getTime() !== submitted.getTime();
+    });
+    const whenChanged = moves || allDay !== storedAllDay;
+    const zoneChanged = storedTz !== null && tzid !== storedTz;
+
+    if (whenChanged || zoneChanged) {
         for (const [name, submitted] of bounds) {
             const instant = submitted ?? instantOf(vevent, name, storedTz);
             if (!instant) continue;
             const written =
                 name === 'dtend' ? endProperty(instant, tzid, allDay) : timeProperty(name, instant, tzid, allDay);
-            const moved = setProperty(vevent, written);
-            scheduling = scheduling || moved;
-            changed = changed || moved;
+            changed = setProperty(vevent, written) || changed;
         }
+        // Re-spelling the same instants in another zone is a byte change, not a reason to mail the guests.
+        scheduling = scheduling || whenChanged;
+        syncVTimezones(resource);
     }
 
     // A null incoming rrule never removes a stored one: the projection nulls the rules the index cannot
@@ -637,7 +645,6 @@ export function patchEvent(
     if (patch.sequence !== undefined && sequenceOf(vevent) !== patch.sequence) changed = true;
 
     if (!changed) return false;
-    if (patch.timezone !== undefined) syncVTimezones(resource);
     touch(vevent, ctx, scheduling, patch.sequence);
     return true;
 }

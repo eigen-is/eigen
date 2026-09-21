@@ -193,6 +193,219 @@ describe('CalDAV round-trip fidelity', () => {
         });
     });
 
+    // The edit dialog carries no zone control, yet it posts the whole form back: the title plus the
+    // start, the end, the all-day flag it rendered and the zone it labelled them with. A save that
+    // states the same instants is the title-only change it looks like, whatever form the client chose
+    // to write the time in — so no time property, no VTIMEZONE and no SEQUENCE moves.
+    describe('a web save that states the same WHEN', () => {
+        const VTZ_CUSTOM = [
+            'BEGIN:VTIMEZONE',
+            'TZID:Custom/Amsterdam',
+            'BEGIN:STANDARD',
+            'DTSTART:19700101T000000',
+            'TZOFFSETFROM:+0200',
+            'TZOFFSETTO:+0200',
+            'TZNAME:CUS',
+            'END:STANDARD',
+            'END:VTIMEZONE',
+        ].join('\r\n');
+
+        const ORGANIZED_UID = 'rt-when-guests@client';
+        const ORGANIZED_GUEST = 'rt-when-guest@external.com';
+
+        // Everything a resource says about WHEN its event is, in jCal form: the time properties of the
+        // VEVENT plus every zone the file defines for them.
+        function whenOf(ics: string, uid: string): Record<string, unknown> {
+            const resource = parseResource(ics);
+            const vevent = findOrFail(
+                resource.getAllSubcomponents('vevent'),
+                (v) => v.getFirstPropertyValue('uid') === uid,
+            );
+            return {
+                dtstart: vevent.getFirstProperty('dtstart')?.toJSON(),
+                dtend: vevent.getFirstProperty('dtend')?.toJSON(),
+                sequence: vevent.getFirstPropertyValue('sequence'),
+                zones: resource.getAllSubcomponents('vtimezone').map((v) => v.getFirstPropertyValue('tzid')),
+            };
+        }
+
+        async function storedRow(uid: string): Promise<CalendarEvent> {
+            const home = await getHome(userId);
+            return findOrFail(await home.calendar.getRawEvents(calendarId), (e) => e.uid === uid);
+        }
+
+        // Exactly the payload the dialog posts: the title beside the times it rendered and the
+        // browser's zone as their label.
+        async function dialogSave(row: CalendarEvent, title: string, shiftMs = 0): Promise<CalendarEvent> {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${userId}/calendars/${calendarId}/events/${row.id}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title,
+                        startTime: new Date(row.startTime.getTime() + shiftMs),
+                        endTime: new Date(row.endTime.getTime() + shiftMs),
+                        allDay: row.allDay,
+                        timezone: row.allDay ? null : 'Europe/Amsterdam',
+                    }),
+                },
+            );
+            return assertJson<CalendarEvent>(res);
+        }
+
+        async function renameFromTheWeb(uri: string, uid: string, body: string) {
+            expect((await putIcs(uri, body)).status).toBe(201);
+            const before = whenOf(await getIcs(uri), uid);
+            const updated = await dialogSave(await storedRow(uid), 'Renamed from the web');
+            return { before, after: whenOf(await getIcs(uri), uid), updated };
+        }
+
+        test('a UTC event keeps its Z form, its zones and its SEQUENCE', async () => {
+            const { before, after, updated } = await renameFromTheWeb(
+                'rt-when-utc.ics',
+                'rt-when-utc@client',
+                vcal(
+                    [
+                        'BEGIN:VEVENT',
+                        'UID:rt-when-utc@client',
+                        'DTSTART:20260929T080000Z',
+                        'DTEND:20260929T090000Z',
+                        'SEQUENCE:3',
+                        'SUMMARY:UTC event',
+                        'END:VEVENT',
+                    ].join('\r\n'),
+                ),
+            );
+            expect(updated.title).toBe('Renamed from the web');
+            expect(after).toEqual(before);
+        });
+
+        test('a client-defined zone keeps its own TZID and its own VTIMEZONE', async () => {
+            const { before, after, updated } = await renameFromTheWeb(
+                'rt-when-custom.ics',
+                'rt-when-custom@client',
+                vcal(
+                    VTZ_CUSTOM,
+                    [
+                        'BEGIN:VEVENT',
+                        'UID:rt-when-custom@client',
+                        'DTSTART;TZID=Custom/Amsterdam:20260928T100000',
+                        'DTEND;TZID=Custom/Amsterdam:20260928T110000',
+                        'SEQUENCE:1',
+                        'SUMMARY:Custom zone event',
+                        'END:VEVENT',
+                    ].join('\r\n'),
+                ),
+            );
+            expect(updated.title).toBe('Renamed from the web');
+            expect(after).toEqual(before);
+        });
+
+        test('a floating event stays floating', async () => {
+            const { before, after } = await renameFromTheWeb(
+                'rt-when-floating.ics',
+                'rt-when-floating@client',
+                vcal(
+                    [
+                        'BEGIN:VEVENT',
+                        'UID:rt-when-floating@client',
+                        'DTSTART:20260927T090000',
+                        'DTEND:20260927T100000',
+                        'SUMMARY:Floating event',
+                        'END:VEVENT',
+                    ].join('\r\n'),
+                ),
+            );
+            expect(after).toEqual(before);
+        });
+
+        test('an all-day event keeps its DATE form', async () => {
+            const { before, after } = await renameFromTheWeb(
+                'rt-when-allday.ics',
+                'rt-when-allday@client',
+                vcal(
+                    [
+                        'BEGIN:VEVENT',
+                        'UID:rt-when-allday@client',
+                        'DTSTART;VALUE=DATE:20260930',
+                        'DTEND;VALUE=DATE:20261001',
+                        'SUMMARY:All-day event',
+                        'END:VEVENT',
+                    ].join('\r\n'),
+                ),
+            );
+            expect(after).toEqual(before);
+        });
+
+        test('an organized event tells its guests about the new title without rescheduling them', async () => {
+            const mailer = await import('../../lib/core/mailer');
+            const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+            spy.mockClear();
+
+            const put = await putIcs(
+                'rt-when-guests.ics',
+                vcal(
+                    [
+                        'BEGIN:VEVENT',
+                        `UID:${ORGANIZED_UID}`,
+                        'DTSTART:20260929T080000Z',
+                        'DTEND:20260929T090000Z',
+                        'SEQUENCE:4',
+                        'SUMMARY:Guest event',
+                        `ORGANIZER;CN=Alice:mailto:${ctx.alice.user.email}`,
+                        `ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION:mailto:${ORGANIZED_GUEST}`,
+                        'END:VEVENT',
+                    ].join('\r\n'),
+                ),
+            );
+            expect(put.status).toBe(201);
+            const before = whenOf(await getIcs('rt-when-guests.ics'), ORGANIZED_UID);
+
+            const row = await storedRow(ORGANIZED_UID);
+            const updated = await dialogSave(row, 'Guest event (renamed)');
+            const sent = await eventually(async () => {
+                const mails = spy.mock.calls.filter(
+                    (c) => c[0].subject === 'Updated invitation: Guest event (renamed)',
+                );
+                return mails.length ? mails : undefined;
+            }, 'the update mail to the guest');
+            spy.mockRestore();
+
+            expect(whenOf(await getIcs('rt-when-guests.ics'), ORGANIZED_UID)).toEqual(before);
+            expect(updated.sequence).toBe(row.sequence);
+            // The guest is told the title moved, and the message that tells them is the same revision
+            // at the same instant: nothing for a client to reschedule.
+            const content = sent[0][0].icalEvent!.content;
+            expect(content).toContain(`SEQUENCE:${row.sequence}`);
+            expect(content).toContain('DTSTART:20260929T080000Z');
+        });
+
+        test('moving that event an hour later writes the time and bumps the revision', async () => {
+            const row = await storedRow(ORGANIZED_UID);
+            const updated = await dialogSave(row, 'Guest event (renamed)', 3600_000);
+
+            expect(updated.sequence).toBe(row.sequence + 1);
+            expect(new Date(updated.startTime).toISOString()).toBe('2026-09-29T09:00:00.000Z');
+            // A real move writes the zone the save states, and the file defines it (RFC 5545 §3.6.5).
+            expect(whenOf(await getIcs('rt-when-guests.ics'), ORGANIZED_UID)).toMatchObject({
+                dtstart: ['dtstart', { tzid: 'Europe/Amsterdam' }, 'date-time', '2026-09-29T11:00:00'],
+                zones: ['Europe/Amsterdam'],
+            });
+        });
+
+        test("a real move drops the client's zone once nothing references it", async () => {
+            const row = await storedRow('rt-when-custom@client');
+            await dialogSave(row, 'Custom zone event', 3600_000);
+
+            expect(whenOf(await getIcs('rt-when-custom.ics'), 'rt-when-custom@client')).toMatchObject({
+                dtstart: ['dtstart', { tzid: 'Europe/Amsterdam' }, 'date-time', '2026-09-28T11:00:00'],
+                zones: ['Europe/Amsterdam'],
+            });
+        });
+    });
+
     describe('EXDATE forms', () => {
         // Same class as audit #8 — Exchange/Outlook and several CalDAV clients normalize EXDATE to
         // UTC (Z) form; the key must still be the series wall-clock date, not the UTC date.
