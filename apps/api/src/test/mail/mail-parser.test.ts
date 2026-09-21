@@ -205,6 +205,17 @@ describe('#14 boundary line with a bare-CR prefix', () => {
     });
 });
 
+describe('A UTF-8 BOM in front of the headers', () => {
+    test('the first header is still read', () => {
+        const bytes = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(PLAIN_EMAIL)]);
+        const mail = parseMail(bytes);
+
+        expect(mail.from?.value[0].address).toBe('sender@example.com');
+        expect(mail.subject).toBe('Test Subject');
+        expect(mail.text).toContain('Hello, this is a test email body.');
+    });
+});
+
 // #11 — htmlToText runs synchronously (~70-90 ms/MB) on the shared event loop for every mail
 // open + sync. A crafted multi-MB HTML body is a DoS lever. The fix truncates the htmlToText
 // input to a fixed cap: the rendered html stays whole (email readable), the derived text is

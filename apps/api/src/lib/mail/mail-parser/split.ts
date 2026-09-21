@@ -16,7 +16,10 @@ export type MimePart = {
     embedsMessage: boolean;
 };
 
-export function splitMime(bytes: Buffer): MimePart {
+export function splitMime(raw: Buffer): MimePart {
+    // A .eml an editor saved can open with a UTF-8 BOM. Left in place it becomes part of the first header's
+    // name, so that header — often the only envelope header a file carries — is silently lost.
+    const bytes = raw[0] === 0xef && raw[1] === 0xbb && raw[2] === 0xbf ? raw.subarray(3) : raw;
     let pos = 0;
     let count = 0;
 
