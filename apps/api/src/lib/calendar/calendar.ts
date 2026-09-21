@@ -28,7 +28,7 @@ import type { DeleteResourceResult, ManagedDatabase } from '../core/';
 import type { Home } from '../home';
 import { atHome } from '../home';
 import { parseResource } from '../ical';
-import type { Revision } from '../ical/ical-component';
+import type { EventPatch, Revision } from '../ical/ical-component';
 import type { ParsedEvent } from '../ical/ical-parse';
 import type { User } from '../user';
 import type { PutResourceOptions, ResourceCommit, ResourceRow } from './calendar-store';
@@ -54,7 +54,7 @@ import * as shares from './shares';
 import { buildCalendarEvent, buildEventsChangedEvent } from './sse-events';
 import { exportEvents, importEvents } from './transfer';
 
-import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload, UpdateEventArgs } from './types';
+import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload } from './types';
 
 function getCalendarDatabase(home: Home): Promise<ManagedDatabase<typeof schema>> {
     return home.getLocalDatabase(CALENDAR_DB_CONFIG, PATHS.CALENDAR.DB);
@@ -592,12 +592,7 @@ export class Calendar {
         return events.createEvent(this, calendarId, input, user);
     }
 
-    public async updateEvent(
-        calendarId: string,
-        id: string,
-        input: UpdateEventArgs,
-        user?: User,
-    ): Promise<CalendarEvent> {
+    public async updateEvent(calendarId: string, id: string, input: EventPatch, user?: User): Promise<CalendarEvent> {
         return events.updateEvent(this, calendarId, id, input, user);
     }
 

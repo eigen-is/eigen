@@ -21,7 +21,7 @@ import { propagateCancellation, propagateDecline, propagateInvitation } from './
 import { toEvent } from './mappers';
 import { gateKey, resourcePath, sanitizeEventUri } from './resource-store';
 import * as schema from './schema';
-import type { CreateEventArgs, UpdateEventArgs } from './types';
+import type { CreateEventArgs } from './types';
 
 // Event mutation over the Calendar facade: create, update, delete and move, plus the locked internals
 // every other sibling writes an event through. A function named for the gate it takes holds it; one
@@ -208,7 +208,7 @@ export async function updateEvent(
     calendar: Calendar,
     calendarId: string,
     id: string,
-    input: UpdateEventArgs,
+    input: EventPatch,
     user?: User,
 ): Promise<CalendarEvent> {
     const { updated, oldAttendees } = await calendar.gate.run(() =>
@@ -225,7 +225,7 @@ async function patchStoredEvent(
     calendar: Calendar,
     calendarId: string,
     id: string,
-    input: UpdateEventArgs,
+    input: EventPatch,
     user?: User,
 ): Promise<{ updated: CalendarEvent; oldAttendees: Attendee[] }> {
     const existing = eventById(calendar, id);
