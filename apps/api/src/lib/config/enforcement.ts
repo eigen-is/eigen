@@ -27,9 +27,7 @@ export async function getMountQuotaState(
     return { used, max: quotas.mountMax };
 }
 
-// addBytes is the bytes about to be written; creditExisting is the size of the
-// file being overwritten (subtracted from the projected total). Throws 507 if
-// the projection would exceed the mount's quota.
+// creditExisting is the size of the file being overwritten, so an in-place rewrite is charged only its growth.
 export async function enforceMountQuota(
     ownerId: string,
     userId: string,
@@ -54,11 +52,7 @@ export async function getUploadMaxSize(ownerId: string, userId: string, mountId:
 
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 
-// The other half of the storage budget — mail, contacts and calendar share one quota. Mirrors
-// getMountQuotaState, but resolves no mount, so a team Home (which has none) meters its calendar here too.
-// Every part answers from in-memory byte counters (MaildirStore.size, Contacts.size, Calendar.size), so a
-// device sync metering every resource it PUTs costs no query per write and each one is charged to the next
-// check.
+// Resolves no mount, so a team Home (which has none) meters its calendar here too; every part answers from an in-memory byte counter, so a device sync costs no query per write.
 async function getHomeDataQuotaState(ownerId: string): Promise<{ used: number; max: number }> {
     const home = await getHome(ownerId); // ownerId-routed: this is the Home whose bytes are being charged
     const { teamIds } = await getMemberships(ownerId);
@@ -89,14 +83,11 @@ export async function enforceAvatarUpload(userId: string, fileSize: number): Pro
     }
 }
 
-// How a user at a full budget still edits and cleans up: a rewrite growing by at most the grace passes while
-// the Home stays this far above its budget, so every edit together overshoots by at most the headroom.
+// How a user at a full budget still edits and cleans up: a rewrite growing by at most the grace passes, and every such edit together overshoots by at most the headroom.
 const HOME_DATA_EDIT_GRACE_BYTES = 1024;
 const HOME_DATA_EDIT_HEADROOM_BYTES = 1024 * 1024;
 
-// Bytes about to be written into the data half of the budget — a contact card, an imported message, a
-// calendar resource: addBytes is what lands, creditBytes the size of what it replaces (0 for a create).
-// Same credit convention as enforceMountQuota.
+// Same credit convention as enforceMountQuota: creditBytes is what the write replaces, 0 for a create.
 export async function enforceHomeDataQuota(ownerId: string, addBytes: number, creditBytes = 0): Promise<void> {
     if (creditBytes > 0 && addBytes <= creditBytes) return;
     const { used, max } = await getHomeDataQuotaState(ownerId);
