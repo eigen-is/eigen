@@ -285,7 +285,7 @@ A rule the index stripped stays in the file, and the resource is flagged `hasUni
 
 `startTime`/`endTime` of an all-day event are midnight UTC and `endTime` is exclusive (the day after the last day); the frontend must use the UTC date portion and never convert to local time.
 
-`createEvent`/`updateEvent` reject `endTime < startTime` with a 400, and REST and CalDAV PUT both funnel through them. Inbound iMIP bypasses them, so it **clamps** a reversed interval to zero duration at the parse boundary: an emailed invite is fire-and-forget, and dropping it over a malformed interval is worse than showing a zero-length event — the same degrade-don't-reject policy the parser applies to a malformed rrule or TZID. Zero duration stays legal (RFC 5545 §3.6.1). Because all-day uses an exclusive end, one invariant covers timed and all-day alike.
+`createEvent`/`updateEvent` reject `endTime < startTime` with a 400 and the put seam refuses the same interval with a 403 `valid-calendar-data`, so REST, import and CalDAV PUT all answer it alike. Inbound iMIP bypasses them, so it **clamps** a reversed interval to zero duration at the parse boundary: an emailed invite is fire-and-forget, and dropping it over a malformed interval is worse than showing a zero-length event — the same degrade-don't-reject policy the parser applies to a malformed rrule or TZID. Zero duration stays legal (RFC 5545 §3.6.1). Because all-day uses an exclusive end, one invariant covers timed and all-day alike.
 
 `timezone` is nullable: only the create/edit dialogs always store one, so API-, CalDAV- and iMIP-created events routinely carry `null` (all-day events store `null` by design). `formatEventWhen` therefore takes the fallback zone as a **required** argument:
 

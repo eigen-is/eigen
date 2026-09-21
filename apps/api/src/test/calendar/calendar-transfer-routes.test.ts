@@ -738,21 +738,21 @@ describe('Calendar transfer routes', () => {
         expect(listed.filter((e) => e.uid.includes(stamp)).map((e) => e.title)).toEqual(['Readable']);
     });
 
-    // One seam, one rule: an import writes through the same PUT a device takes, so a file stores what that
-    // PUT stores. A backwards DTEND is legal iCalendar the REST form refuses and a device may write.
-    test('an event whose end precedes its start imports, as a CalDAV PUT of it stores it', async () => {
+    // One seam, one rule: an import writes through the same PUT a device takes, so a file the PUT refuses
+    // fails here too. An event ending before it starts is nobody's real event, on either surface.
+    test('an event whose end precedes its start fails, as a CalDAV PUT of it is refused', async () => {
         const stamp = randomUUID();
         const uid = `reversed-${stamp}@other`;
         const file = vcal(vevent(uid, 'Backwards', '20260410T120000Z', '20260410T100000Z'));
 
         expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
-            imported: 1,
+            imported: 0,
             skipped: 0,
-            failed: 0,
+            failed: 1,
         });
-        expect((await april()).some((e) => e.title === 'Backwards')).toBe(true);
+        expect((await april()).some((e) => e.title === 'Backwards')).toBe(false);
 
-        expect((await putIcs(secondCalendarId, `${randomUUID()}.ics`, file)).status).toBe(201);
+        expect((await putIcs(secondCalendarId, `${randomUUID()}.ics`, file)).status).toBe(403);
     });
 
     test('two series with overrides in one file keep each override on its own master', async () => {
