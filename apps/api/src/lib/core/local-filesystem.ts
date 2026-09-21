@@ -80,27 +80,17 @@ export class LocalFilesystem {
     // write. Used for the vCard cards where a torn write would corrupt the source of truth; the temp
     // is `.`-prefixed so cleanup can sweep leftovers.
     async writeAtomic(filePath: string, data: Buffer | Uint8Array | string): Promise<void> {
-        const fullPath = this.getFilePath(filePath);
-        const dir = path.dirname(fullPath);
-        fs.mkdirSync(dir, { recursive: true });
-        const tempPath = path.join(dir, `.${path.basename(fullPath)}.tmp-${randomUUID()}`);
+        const tempPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.tmp-${randomUUID()}`);
         try {
-            const handle = await fsPromises.open(tempPath, 'w');
-            try {
-                await handle.writeFile(data);
-                await handle.sync();
-            } finally {
-                await handle.close();
-            }
-            await fsPromises.rename(tempPath, fullPath);
+            await this.writeDurable(tempPath, data);
+            await this.renameDurable(tempPath, filePath);
         } catch (error) {
             // A failure before the rename lands leaves the staged temp behind. The cards/ init sweep self-heals
             // its own leftovers, but any other caller would leak — best-effort unlink and rethrow the original
             // (swallow the unlink's own error: the temp may never have been created).
-            await fsPromises.unlink(tempPath).catch(() => {});
+            await fsPromises.unlink(this.getFilePath(tempPath)).catch(() => {});
             throw error;
         }
-        await this.syncDir(path.dirname(filePath));
     }
 
     async delete(filePath: string): Promise<boolean> {
