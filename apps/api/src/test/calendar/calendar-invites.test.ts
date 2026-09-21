@@ -556,6 +556,37 @@ describe('Calendar Invites', () => {
             );
         });
 
+        // An older client names an occurrence by its full instant, and an unkeyable value is a bad request.
+        test('a this-and-following decline keys a full ISO instant and refuses what keys to nothing', async () => {
+            await createRecurringInvite('Weekly Del Iso');
+            const linked = await bobOccurrence((e) => e.title === 'Weekly Del Iso' && !e.parentEventId);
+            const occurrences = (await getEventsInRange(ctx.bob.user.sessionToken, ctx.bob.user.id)).filter(
+                (e: CalendarEventOccurrence) => e.title === 'Weekly Del Iso',
+            );
+            expect(occurrences.length).toBe(5);
+
+            const bad = await rsvpAs(linked.id, {
+                status: 'declined',
+                scope: 'this-and-following',
+                recurrenceDate: 'the second one',
+                remove: true,
+            });
+            expect(bad.status).toBe(400);
+
+            const res = await rsvpAs(linked.id, {
+                status: 'declined',
+                scope: 'this-and-following',
+                recurrenceDate: new Date(occurrences[1].startTime).toISOString(),
+                remove: true,
+            });
+            expect(res.status).toBe(200);
+
+            const remaining = (await getEventsInRange(ctx.bob.user.sessionToken, ctx.bob.user.id)).filter(
+                (e: CalendarEventOccurrence) => e.title === 'Weekly Del Iso',
+            );
+            expect(remaining.length).toBe(1);
+        });
+
         test('organizer truncate does not extend attendee past their own truncation', async () => {
             const event = await createRecurringInvite('Weekly Constrain');
             const linked = await bobOccurrence((e) => e.title === 'Weekly Constrain' && !e.parentEventId);

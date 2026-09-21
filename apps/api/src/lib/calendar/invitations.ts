@@ -788,7 +788,9 @@ export async function rsvp(
             propagateRsvp(organizerUserId, organizerEventId, user.email, status, recurrenceDate).catch(console.error);
         }
     } else if (scope === 'this-and-following' && input.remove && input.recurrenceDate) {
-        await removeThisAndFuture(calendar, eventId, input.recurrenceDate);
+        const recurrenceDate = storedRecurrenceKey(input.recurrenceDate);
+        if (!recurrenceDate) throw new ApiError(400, 'Invalid recurrenceDate');
+        await removeThisAndFuture(calendar, eventId, recurrenceDate);
         if (isExternalOrganizer) sendRsvpReply('declined');
         else propagateRsvp(organizerUserId, organizerEventId, user.email, 'declined').catch(console.error);
     } else if (input.remove) {
