@@ -237,12 +237,96 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
         );
         expect(res.status).toBe(200);
 
-        const occurrences = await untilBob(series.uid, (occ) => occ.length === 4);
-        expect(occurrences.every((e) => e.title === 'Single Occurrence Then Series')).toBe(true);
+        const occurrences = await untilBob(
+            series.uid,
+            (occ) => occ.length === 4 && occ.some((e) => e.title === 'Only This One'),
+        );
+        // The occurrence the organizer named keeps its own title; the rest follow the series.
+        expect(findOrFail(occurrences, (e) => e.occurrenceDate === TARGET).title).toBe('Only This One');
+        expect(occurrences.filter((e) => e.title === 'Single Occurrence Then Series')).toHaveLength(3);
         // One resource, not two: the standalone occurrence gave way to the series.
         const home = await getHome(ctx.bob.user.id);
         const resources = (await home.calendar.listResources(bobCalendarId)).filter((r) => r.uid === series.uid);
         expect(resources).toHaveLength(1);
+    });
+
+    // A series carries its exceptions with it: a guest handed only the master would render a moved
+    // occurrence at its original slot and render one the organizer deleted at all.
+    const DROPPED = '2028-03-20';
+
+    async function inviteToSeries(series: CalendarEvent): Promise<void> {
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${series.id}`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: series.title, data: { attendees: guests() } }),
+            },
+        );
+        expect(res.status).toBe(200);
+    }
+
+    test('a guest added to the whole series receives its overrides and its exclusions', async () => {
+        const series = await createSeries('Series With Exceptions');
+        const movedStart = new Date(Date.parse(`${TARGET}T09:00:00Z`) + 2 * HOUR);
+        await editOccurrence(series.id, TARGET, {
+            title: 'Series With Exceptions',
+            startTime: movedStart,
+            endTime: new Date(movedStart.getTime() + HOUR),
+            data: { attendees: [] },
+        });
+        await editOccurrence(series.id, DROPPED, {
+            title: 'Series With Exceptions',
+            status: 'cancelled',
+            data: { attendees: [] },
+        });
+
+        await inviteToSeries(series);
+
+        const occurrences = await untilBob(
+            series.uid,
+            (occ) => occ.length === 3 && occ.some((e) => new Date(e.startTime).getTime() === movedStart.getTime()),
+        );
+        expect(occurrences.map((e) => e.occurrenceDate)).not.toContain(DROPPED);
+        expect(findOrFail(occurrences, (e) => e.occurrenceDate === TARGET).title).toBe('Series With Exceptions');
+
+        const stored = await bobStored(series.uid);
+        expect(findOrFail(stored, (e) => e.recurrenceDate === TARGET).startTime.toISOString()).toBe(
+            movedStart.toISOString(),
+        );
+        expect(findOrFail(stored, (e) => e.recurrenceDate === DROPPED).status).toBe('cancelled');
+    });
+
+    // The organizer's list for that occurrence is authoritative, and the override that follows the series
+    // carries it — so the answer the guest already gave to the occurrence stands.
+    test('the series invitation keeps the answer the guest gave to the single occurrence', async () => {
+        const series = await createSeries('Series After Answer');
+        await editOccurrence(series.id, TARGET, { title: 'Answered' });
+        const copy = await untilBob(series.uid, (occ) => occ.length === 1);
+
+        const res = await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/calendar/${ctx.bob.user.id}/calendars/${bobCalendarId}/events/${copy[0].id}/rsvp`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'accepted' }),
+            },
+        );
+        expect(res.status).toBe(200);
+        await untilAlice(series.uid, (e) => e.data?.attendees?.[0]?.status === 'accepted');
+
+        await inviteToSeries(series);
+
+        const occurrences = await untilBob(
+            series.uid,
+            (occ) =>
+                occ.length === 4 &&
+                occ.find((e) => e.occurrenceDate === TARGET)?.data?.attendees?.[0]?.status === 'accepted',
+        );
+        expect(findOrFail(occurrences, (e) => e.occurrenceDate === TARGET).title).toBe('Answered');
+        expect(occurrences.filter((e) => e.data?.attendees?.[0]?.status === 'pending')).toHaveLength(3);
     });
 
     // The same message over the other transport: a lone VEVENT with a RECURRENCE-ID for a UID this Home

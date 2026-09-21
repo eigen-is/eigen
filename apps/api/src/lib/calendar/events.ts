@@ -127,7 +127,9 @@ async function propagateWrite(
         await propagateCancellation(calendar.home, event, held, series);
         return;
     }
-    await propagateInvitation(calendar.home, event, user, held, attendees, series ?? undefined);
+    // A guest added to the series is new to its exceptions too; an occurrence write states them through the series it names.
+    const exceptions = series ? [] : exceptionsOf(calendar, event.id);
+    await propagateInvitation(calendar.home, event, user, held, attendees, series ?? undefined, exceptions);
 }
 
 // The locked core every writer of a NEW event shares: the checks that decide WHICH file is written run in it.
@@ -194,6 +196,11 @@ export function exceptionOf(
         .where(and(eq(schema.events.parentEventId, parentEventId), eq(schema.events.recurrenceDate, key)))
         .get();
     return row ? toEvent(row) : null;
+}
+
+// Every exception a master holds, overrides and cancellations alike, in the order the file lists them.
+export function exceptionsOf(calendar: Calendar, parentEventId: string): CalendarEvent[] {
+    return calendar.joinedEvents().where(eq(schema.events.parentEventId, parentEventId)).all().map(toEvent);
 }
 
 function uidHolder(calendar: Calendar, calendarId: string, uid: string): { uri: string } | undefined {
