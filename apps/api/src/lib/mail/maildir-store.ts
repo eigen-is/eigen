@@ -272,7 +272,7 @@ export class MaildirStore implements MailStore {
             const email = this.db.getEmail(messageId);
             if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
 
-            await this.deleteMessage(email.mailbox, email.filename);
+            await this.storage.unlinkDurable(path.join(this.mailboxDir(email.mailbox), PATHS.MAIL.CUR, email.filename));
             this.db.deleteEmail(messageId);
             this.indexBytes -= email.size;
         });
@@ -724,23 +724,13 @@ export class MaildirStore implements MailStore {
     private async moveMessage(fromMailbox: string, fromFilename: string, toMailbox: string): Promise<void> {
         const srcDir = path.join(this.mailboxDir(fromMailbox), PATHS.MAIL.CUR);
         const dstPath = path.join(this.mailboxDir(toMailbox), PATHS.MAIL.CUR, fromFilename);
-        await this.storage.renameDurable(path.join(srcDir, fromFilename), dstPath);
         // Both ends are indexed here: the old name must not come back after the index says it moved.
-        await this.storage.syncDir(srcDir);
+        await this.storage.moveDurable(path.join(srcDir, fromFilename), dstPath);
     }
 
     private async renameInCur(mailbox: string, oldFilename: string, newFilename: string): Promise<void> {
         const curPath = path.join(this.mailboxDir(mailbox), PATHS.MAIL.CUR);
         await this.storage.renameDurable(path.join(curPath, oldFilename), path.join(curPath, newFilename));
-    }
-
-    private async deleteMessage(mailbox: string, filename: string): Promise<void> {
-        const curPath = path.join(this.mailboxDir(mailbox), PATHS.MAIL.CUR);
-        const filePath = path.join(curPath, filename);
-        if (await this.storage.exists(filePath)) {
-            await this.storage.unlink(filePath);
-            await this.storage.syncDir(curPath);
-        }
     }
 
     // Either delimiter addresses one directory: `Clients/Acme` and `Clients.Acme` are both `.Clients.Acme`.

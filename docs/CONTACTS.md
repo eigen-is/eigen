@@ -63,9 +63,11 @@ adds the CardDAV store seam. Every mutation serializes through a one-slot write 
 file+index pair never straddles a reconcile or a racing write.
 
 **Atomic, fail-closed writes.** Each card write goes temp file → `fsync` → rename via
-`LocalFilesystem.writeAtomic` (the one place in the API that fsyncs — the maildir delivery precedent), then a
+`LocalFilesystem.writeAtomic` (`writeDurable` + `renameDurable` under it, the maildir delivery precedent —
+[MAIL.md](MAIL.md) § durability spells the family out), then a
 single SQLite transaction (`commitCard`) commits the index row, label junction, `cardCtag`, book `ctag` and
-tombstone changes together. The exact sequence every mutation runs: `gate.run()` (which drains first) → `enforceCardBudget`
+tombstone changes together. A delete is the same protocol in reverse: `unlinkDurable` removes the file and
+fsyncs `cards/`, so no power loss hands the name back under an acknowledged delete. The exact sequence every mutation runs: `gate.run()` (which drains first) → `enforceCardBudget`
 (the quota gate, *before* any intent is recorded) → `recordCardWrite(uri)` → `writeResourceFile` → (photo cache) →
 `commitCard` inside `try/catch`, and on any failure `gate.markDirty(uri)` + rethrow. `commitCard` is the single
 index-write seam: ctag bump, junction rebuild (`syncCardLabels`), tombstone clear by `uriKey`, and the
@@ -74,7 +76,7 @@ pending-write clear, all in one transaction.
 **Two failure windows, two guards.** If the index step throws *after* a successful rename, the uri is marked
 in the gate's in-memory dirty set and the book **fails closed**: the next public call — mutation *or read* — drains it
 (`gate.run()` at its entry, `gate.ensureDrained()` for a lock-free read) and re-indexes that card before observing
-the index, so no read is served past a torn write. A uri leaves the dirty set as its own re-index settles, so one card that can never recover does not re-commit the healthy ones — and the book `ctag` — on every later drain; `gate.run()` refuses re-entry outright and `gate.ensureDrained()` from inside the lock is a no-op. Process death takes that set with it, which is what `pending_card_writes` is
+the index, so no read is served past a torn write. A dirty card whose file already hashes to the row's `etag` is settled without a commit — no `ctag` bump, no `cardCtag` re-stamp, no SSE — because a lock-free read that raced a PUT marks a pair that is whole. A uri leaves the dirty set as its own re-index settles, so one card that can never recover does not re-commit the healthy ones — and the book `ctag` — on every later drain; `gate.run()` refuses re-entry outright and `gate.ensureDrained()` from inside the lock is a no-op. Process death takes that set with it, which is what `pending_card_writes` is
 for: a uri recorded there before its file was renamed and cleared inside the commit that settled the pair; a
 survivor means the pair never completed, so `recoverPendingWork` at init re-indexes it. This covers the one
 case a stat-only reconcile cannot see — a replacement carrying the very same `mtime` and `size`.
@@ -91,16 +93,29 @@ drains both before anything is served. A drain that fails inside init is logged,
   whose stat drifted get read, hashed and re-parsed; rows whose file vanished get tombstoned; the `ctag` bumps
   only if something actually changed. `cardParseCount` stays at `0` on a second init over an unchanged book
   (a pinned test).
+- **The restore rule**: a per-home restore does not preserve mtimes, so every card drifts at once. A drifted
+  file whose bytes still hash to the row's `etag`, under the same name and holding the same self-link,
+  changed nothing: it refreshes only the row's `mtime`/`size` — no `ctag` bump, no `cardCtag` re-stamp, no
+  tombstone, no SSE — and the refreshed stats keep the next init off the files. Every card the pass settled,
+  restored ones included, also drops its `pending_card_writes` row: an etag match proves the file and the row
+  are a pair, so the recovery drain behind init owes it nothing. A pass in which every drifted
+  card turns out unchanged is a clean pass for sync, so a restored book costs its clients zero re-downloads.
+  A card whose derived avatar cache is missing is excluded: the stats cannot see that drift, and the card is
+  in the re-read set to have its cache regenerated.
 - **`rebuildIndex` full-rehashes** every card — it runs when the book row is missing or on demand after manual
   disk surgery, and it catches the same-`stat` replacement (a selective `cp -p` restore) that the stat-only
   pass is blind to. It clears the index, re-derives every row, drops all tombstones, bumps `ctag`, and
-  **rotates `syncGen`** (`syncGen + 1`) — a rebuilt book can't honor old sync tokens, so the rotation forces
+  **rotates `syncGen`** — a rebuilt book can't honor old sync tokens, so the rotation forces
   every client through the RFC 6578 recovery instead of silently telling them "nothing changed" while
-  gap-deletions become ghosts.
+  gap-deletions become ghosts. The new generation is `nextSyncGen` (`lib/core/indexed-file-store.ts`):
+  `max(stored + 1, now in seconds)`, because the stored value is exactly what a lost book row takes with it —
+  counting from nothing alone would hand two rebuilds the same generation and let a client replay a token of
+  the dead history against the new one. The floor is one-second grained, so the one repeat left needs two
+  index losses inside the same second: a rebuild whose row survived is always strictly greater.
 
-There are **no fs-watchers**: unlike mail (Postfix delivers out of process), contacts have no out-of-process
-writer, so every in-process mutation updates file + index together under the lock, and reconcile-on-open plus
-the explicit `rebuildIndex` cover manual disk edits.
+There are **no fs-watchers**: unlike mail (Dovecot moves `new/` → `cur/` out of process), contacts have no
+out-of-process writer, so every in-process mutation updates file + index together under the lock, and
+reconcile-on-open plus the explicit `rebuildIndex` cover manual disk edits.
 
 ## CardDAV surface
 
@@ -171,9 +186,12 @@ name can't alias one file. Anything else → 400.
   RFC-required collations are supported (`i;ascii-casemap`, `i;unicode-casemap`); an unsupported collation →
   403 `CARDDAV:supported-collation`, an unmappable filter → 403 `CARDDAV:supported-filter`, never a superset.
   Results honor the client `limit` then a server cap of 1000 (truncate + log, never unbounded assembly).
-- **`sync-collection`** (RFC 6578) — generation-stamped tokens `urn:eigen:sync:<syncGen>-<ctag>`. The delta is
+- **`sync-collection`** (RFC 6578) — generation-stamped tokens `urn:eigen:sync:<syncGen>-<ctag>`, emitted and
+  parsed in `lib/dav/sync-token.ts` (the CalDAV twin shares its `invalidSyncToken` and keeps its own
+  generation-less grammar until its calendars carry one). The delta is
   `cardCtag > sinceCtag` as 200 rows plus tombstones as 404 rows. A token whose generation is **stale** (index
-  rebuilt) **or whose ctag is ahead** of the current book → 412 `D:valid-sync-token`, forcing the full
+  rebuilt) **or whose ctag is ahead** of the current book → 403 `D:valid-sync-token` (sabre's status, which
+  clients key their full resync on), forcing the full
   comparison that heals ghost deletions. (The ctag-ahead case is the live CalDAV bug this design must not
   inherit — the calendar answers a post-rebuild future token with an empty delta and a *lower* token,
   permanently stalling that client.)
@@ -188,7 +206,7 @@ XML parser), multiget hrefs at 500, query results at 1000.
 Reads touch `.vcf` files only where the payload *is* the card: `PROPFIND` Depth 1 is pure SQLite (uris, etags,
 tombstones), and so is `sync-collection` — unless the client also requests `address-data`, in which case each
 changed row streams its file bytes (as multiget does). GET / multiget / query always stream file bytes. Query
-filtering runs over a small book on a rare request, never on an app hot path. A GET reads the index row and then the file without taking the write lock, so a fetch that races a PUT can pair the new bytes with the previous etag (never the reverse: the row is read first and the file is renamed before the row changes). That is the safe direction — the bumped `cardCtag` lists the card in the next `sync-collection`, the client re-fetches, and an `If-Match` on the stale etag is a 412 — so the read stays lock-free.
+filtering runs over a small book on a rare request, never on an app hot path. A GET reads the index row and then the file without taking the write lock, and the etag it serves hashes **the bytes it just read** (`getCard`), not the row's — so body and validator are one revision by construction, whatever a racing PUT or a stale row does, and the read stays lock-free. A hash that differs from the row's marks the uri dirty, so the next drain re-indexes the card: otherwise the etag a GET serves is one the row's own etag refuses and the client loops on 412 forever, since `putCard`/`deleteCard` match `If-Match` against the row. Every response that carries card bytes follows that rule (multiget, `addressbook-query`, and a `sync-collection` row that also streams `address-data`); a response that reads no file — PROPFIND, a plain `sync-collection` row — quotes the index row's etag, which is what the book knows.
 
 ## Labels ↔ CATEGORIES
 
@@ -303,8 +321,8 @@ CardDAV address card next to CalDAV/IMAP/WebDAV, carrying the address-book URL.
 
 ## Where the code lives
 
-- **`apps/api/src/lib/contacts/`** — the domain, split Mount-style: `contacts.ts` (the `Contacts` facade — the write gate, the dirty/journal machinery, REST contact CRUD and the self card; every sibling call goes through it) with sibling modules of plain functions over the facade: `dav-store.ts` (the CardDAV store seam — the index reads plus `putCard`/`deleteCard` and the seam types), `reconcile.ts` (the stat-only reconcile, the from-scratch rebuild, and the self-link ranking), `labels.ts` (label definitions + the CATEGORIES fan-out and rename journal), `avatars.ts` (avatar staging + the derived photo cache). Beside them: `card-store.ts` (what `.vcf` and `cards/` mean — `sanitizeCardUri`, `listCardUris`, `cardPath`, `avatarCacheName` — over the domain-neutral machinery in `apps/api/src/lib/core/indexed-file-store.ts`: the write gate, the file/key helpers (`sanitizeResourceUri`, `uriKeyOf`, `computeResourceEtag`, `writeResourceFile`, `statResourceFile`, `readResourceFile`, `cleanupTempFiles`, `listResourceUris`), the stat diff `diffFileStats` and the uid guard `dedupeByUid`, none of which knows SQL), `transfer.ts` (whole-file vCard export and import, above), `schema.ts`, `db-config.ts`, `sse-events.ts`.
-- **`apps/api/src/lib/carddav/`** — the protocol layer: `carddav-router.ts`, `discovery.ts`, `resource.ts`, `report.ts`, `query-filter.ts`, `address-data.ts`, `vcard-serialize.ts` (the merge/create seam Eigen-owned edits go through), and `xml-builder.ts`/`xml-parser.ts`. The shared XML envelope and principal props live in `dav/xml.ts`, the store-result → HTTP mapping both write surfaces take in `dav/write-result.ts`, the OPTIONS header and realm in `app.ts`; the fold/escape/C0-strip primitives both the vCard and iCalendar serializers ride on live in `packages/lib/src/core/content-line.ts`, imported as `@workspace/lib/content-line`.
+- **`apps/api/src/lib/contacts/`** — the domain, split Mount-style: `contacts.ts` (the `Contacts` facade — the write gate, the dirty/journal machinery, REST contact CRUD and the self card; every sibling call goes through it) with sibling modules of plain functions over the facade: `dav-store.ts` (the CardDAV store seam — the index reads plus `putCard`/`deleteCard` and the seam types), `reconcile.ts` (the stat-only reconcile, the from-scratch rebuild, and the self-link ranking), `labels.ts` (label definitions + the CATEGORIES fan-out and rename journal), `avatars.ts` (avatar staging + the derived photo cache). Beside them: `card-store.ts` (what `.vcf` and `cards/` mean — `sanitizeCardUri`, `listCardUris`, `cardPath`, `avatarCacheName` — over the domain-neutral machinery in `apps/api/src/lib/core/indexed-file-store.ts`: the write gate, the file/key helpers (`sanitizeResourceUri`, `uriKeyOf`, `computeResourceEtag`, `writeResourceFile`, `statResourceFile`, `readResourceFile`, `cleanupTempFiles`, `listResourceUris`), the stat diff `diffFileStats`, the rebuild generation `nextSyncGen` and the uid guard `dedupeByUid`, none of which knows SQL), `transfer.ts` (whole-file vCard export and import, above), `schema.ts`, `db-config.ts`, `sse-events.ts`.
+- **`apps/api/src/lib/carddav/`** — the protocol layer: `carddav-router.ts`, `discovery.ts`, `resource.ts`, `report.ts`, `query-filter.ts`, `address-data.ts`, `vcard-serialize.ts` (the merge/create seam Eigen-owned edits go through), and `xml-builder.ts`/`xml-parser.ts`. The shared XML envelope and principal props live in `dav/xml.ts`, the store-result → HTTP mapping both write surfaces take in `dav/write-result.ts`, the sync-token grammar and the `valid-sync-token` refusal in `dav/sync-token.ts`, the OPTIONS header and realm in `app.ts`; the fold/escape/C0-strip primitives both the vCard and iCalendar serializers ride on live in `packages/lib/src/core/content-line.ts`, imported as `@workspace/lib/content-line`.
 - **`apps/api/src/lib/vcard/`** — the format itself: `ast.ts` (content-line parse/serialize, single-card envelope), `split.ts` (a multi-card file into one text per card), `parse.ts` (the `ParsedCard` projection), `to-contact.ts` (a parsed card as the `Contact` shape the app renders, for preview only), `transcode.ts` (vCard 4.0 -> 3.0), behind the `index.ts` barrel; the parser's own `VCardLine`/`ParsedCard`/`ParsedCardPhoto` types live in `types.ts` beside it, while `Contact` and `Address` stay shared in `packages/lib/src/types/contact.ts`.
 - **`apps/api/src/routes/contacts.ts`** — thin REST bindings: contact and label CRUD with the conditional-write `etag`, avatar staging, and the three transfer routes above.
 - **`packages/lib/src/core/contacts/`** — FE hooks + SSE handlers, including `hooks/use-transfer.ts` (`useExportContacts`, `useImportContacts` for a picked file, `useImportContactsFile` for a `FileImportSource`); the counted lines the Drive vCard preview ends on come from `core/transfer.ts` ([PREVIEWS.md](PREVIEWS.md)); shared types in `packages/lib/src/types/contact.ts`.

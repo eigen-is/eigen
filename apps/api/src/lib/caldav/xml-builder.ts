@@ -6,6 +6,8 @@ import type { PropMap } from '../dav/propfind';
 import { ownershipEntries } from '../dav/xml';
 
 export { DAV_BODY_MAX_BYTES, parsePropfind, selectProps, wantsBrief } from '../dav/propfind';
+// The refusal both collections share; the token grammar below is the calendar's own for now.
+export { invalidSyncToken } from '../dav/sync-token';
 export { davError, multistatusResponse, principalProps, propstatNotFound, propstatOk, response } from '../dav/xml';
 
 // For the discovery PROPFIND on /dav/ — returns current-user-principal
@@ -14,8 +16,8 @@ export function currentUserPrincipalProp(userId: string): string {
 }
 
 // RFC 6578 token, the calendar ctag stamped into a sync URN. The only two sites allowed to spell the
-// grammar — emit/parse drift would 412 every client into a full-resync loop. No generation stamp: unlike the
-// carddav twin, the CalDAV index is never rebuilt, so the ctag alone pins a sync point.
+// grammar — emit/parse drift would send every client into a full-resync loop. No generation stamp: unlike
+// the carddav twin, the CalDAV index is never rebuilt, so the ctag alone pins a sync point.
 export const formatSyncToken = (ctag: number) => `urn:eigen:sync:${ctag}`;
 
 export function parseSyncToken(token: string): { since: number } | null {

@@ -6,6 +6,7 @@ import {
     computeResourceEtag,
     dedupeByUid,
     diffFileStats,
+    nextSyncGen,
     PATHS,
     statResourceFile,
     uriKeyOf,
@@ -21,9 +22,10 @@ import * as schema from './schema';
 // from-scratch rebuild that re-derives the whole index and rotates syncGen — plus the ranking machinery that
 // hands the single self-link to exactly one card. See docs/CONTACTS.md § Reconcile vs. rebuild.
 
-// The only incumbent-row scalars the candidate build reads: a stable contact id, the uid fallback, and the
-// eigenId that ranks a self-link claim — never the `data` JSON, so init parses no stored projection.
-type IndexIncumbent = Pick<typeof schema.contacts.$inferSelect, 'id' | 'uid' | 'eigenId'>;
+// The only incumbent-row scalars the candidate build reads: a stable contact id, the uid fallback, the
+// eigenId that ranks a self-link claim, and the uri + etag a drifted file is compared against — never the
+// `data` JSON, so init parses no stored projection.
+type IndexIncumbent = Pick<typeof schema.contacts.$inferSelect, 'id' | 'uri' | 'uid' | 'eigenId' | 'etag'>;
 
 // One card file, prepared but not yet committed. The incumbent rides along so the caller can tell a new
 // card from an updated one.
@@ -98,7 +100,8 @@ async function buildCandidates(
 }
 
 // Stat-only reconcile: compare (mtime,size) to the index and re-read only what drifted, plus any row whose
-// derived avatar cache is gone. A fully clean pass parses nothing and bumps nothing. A same-size,
+// derived avatar cache is gone. A fully clean pass parses nothing and bumps nothing, and so does a pass whose
+// drifted files all hash back to what the index holds (the restore rule below). A same-size,
 // timestamp-preserving replacement is invisible here — that needs `rebuildIndex`.
 export async function reconcileIndex(contacts: Contacts): Promise<void> {
     return contacts.gate.run(async () => {
@@ -125,6 +128,7 @@ export async function reconcileIndex(contacts: Contacts): Promise<void> {
                 mtime: schema.contacts.mtime,
                 size: schema.contacts.size,
                 eigenId: schema.contacts.eigenId,
+                etag: schema.contacts.etag,
                 data: schema.contacts.data,
             })
             .from(schema.contacts)
@@ -135,10 +139,15 @@ export async function reconcileIndex(contacts: Contacts): Promise<void> {
         // contacts.db without avatars/ would otherwise leave its avatar URL 404ing forever, since no card
         // drifts on its own and nothing would ever regenerate the cache.
         const avatarFiles = new Set(await contacts.storage.list(PATHS.CONTACTS.AVATARS));
-        const diff = diffFileStats(present, rowByKey, (row) => {
-            const avatarName = row.data?.avatar ? avatarNameOf(row.data.avatar) : undefined;
-            return !!avatarName && !avatarFiles.has(avatarName);
-        });
+        const cacheMissing = new Set(
+            rows
+                .filter((row) => {
+                    const avatarName = row.data?.avatar ? avatarNameOf(row.data.avatar) : undefined;
+                    return !!avatarName && !avatarFiles.has(avatarName);
+                })
+                .map((row) => row.uriKey),
+        );
+        const diff = diffFileStats(present, rowByKey, (row) => cacheMissing.has(row.uriKey));
 
         // Re-read in the listing's sorted order: this pass's tie-breaks — the self-link winner, a uid
         // collision — take the earliest uri.
@@ -191,31 +200,57 @@ export async function reconcileIndex(contacts: Contacts): Promise<void> {
             if (winner) await applySelfLink(contacts, winner);
         }
 
+        // The restore rule: a per-home restore does not preserve mtimes, so a drifted card whose file still
+        // hashes to the indexed etag — under the same name, holding the same self-link — changed nothing. It
+        // refreshes its stat and stays out of the delta; re-stamping it would bump the book ctag and send
+        // every client back for the whole book. A missing avatar cache is drift the stats cannot see, so
+        // such a card is here to be regenerated, not to be left alone.
+        const isRestored = (c: CardCandidate) =>
+            !!c.existing &&
+            c.existing.etag === c.row.etag &&
+            c.existing.uri === c.row.uri &&
+            c.existing.eigenId === c.row.eigenId &&
+            !cacheMissing.has(c.row.uriKey);
+        const restored: CardCandidate[] = [];
+        const changed: CardCandidate[] = [];
+        for (const c of prepared) (isRestored(c) ? restored : changed).push(c);
+
         const createdLabelIds: string[] = [];
         contacts.db.transaction((tx) => {
-            const ctag = contacts.bumpCtag(tx);
-            // Vanished rows go first so a card renamed within this pass (old uri gone, new uri carrying the
-            // same UID) can't collide with the row it replaces on the uid UNIQUE index.
-            for (const r of vanished) {
-                tx.delete(schema.contacts).where(eq(schema.contacts.id, r.id)).run();
-                contacts.tombstone(tx, r.uri, r.uriKey, ctag);
-            }
-            for (const { row } of prepared) {
-                tx.insert(schema.contacts)
-                    .values({ ...row, cardCtag: ctag })
-                    .onConflictDoUpdate({
-                        target: schema.contacts.id,
-                        set: { ...cardUpdateSet(row, ctag), eigenId: row.eigenId },
-                    })
+            for (const { row } of restored) {
+                tx.update(schema.contacts)
+                    .set({ mtime: row.mtime, size: row.size })
+                    .where(eq(schema.contacts.id, row.id))
                     .run();
-                // A present card is alive again, so a card re-planted at a deleted uri drops its stale removal.
-                tx.delete(schema.contactTombstones).where(eq(schema.contactTombstones.uriKey, row.uriKey)).run();
-                // This pass just paid whatever write intent the uri carried, so the recovery drain that
-                // follows init's reconcile won't re-parse and re-bump the very card it re-indexed.
+            }
+            // A pass that only refreshed stats is a clean pass for sync purposes: no bump, so no delta.
+            if (changed.length > 0 || vanished.length > 0) {
+                const ctag = contacts.bumpCtag(tx);
+                // Vanished rows go first so a card renamed within this pass (old uri gone, new uri carrying
+                // the same UID) can't collide with the row it replaces on the uid UNIQUE index.
+                for (const r of vanished) {
+                    tx.delete(schema.contacts).where(eq(schema.contacts.id, r.id)).run();
+                    contacts.tombstone(tx, r.uri, r.uriKey, ctag);
+                }
+                for (const { row } of changed) {
+                    tx.insert(schema.contacts)
+                        .values({ ...row, cardCtag: ctag })
+                        .onConflictDoUpdate({
+                            target: schema.contacts.id,
+                            set: { ...cardUpdateSet(row, ctag), eigenId: row.eigenId },
+                        })
+                        .run();
+                    // A present card is alive again, so one re-planted at a deleted uri drops its stale removal.
+                    tx.delete(schema.contactTombstones).where(eq(schema.contactTombstones.uriKey, row.uriKey)).run();
+                }
+            }
+            // This pass paid whatever write intent each settled uri carried — a drifted card by re-indexing
+            // it, a restored one because an etag match proves the file and the row are already a pair — so
+            // the recovery drain that follows init's reconcile has nothing left to do for them.
+            for (const { row } of prepared) {
                 tx.delete(schema.pendingCardWrites).where(eq(schema.pendingCardWrites.uri, row.uri)).run();
             }
-            for (const { row, categories } of prepared)
-                contacts.syncCardLabels(tx, row.id, categories, createdLabelIds);
+            for (const { row, categories } of changed) contacts.syncCardLabels(tx, row.id, categories, createdLabelIds);
         });
 
         // Post-rewrite for a rematched card, the present size for a skipped one (its file is still there).
@@ -225,7 +260,7 @@ export async function reconcileIndex(contacts: Contacts): Promise<void> {
         contacts.cardsBytes = [...finalSize.values()].reduce((sum, v) => sum + v, 0);
 
         for (const labelId of createdLabelIds) contacts.emitLabel(SSEventType.LABEL_CREATED, labelId);
-        for (const { row, existing } of prepared) {
+        for (const { row, existing } of changed) {
             contacts.emitContact(existing ? SSEventType.CONTACT_UPDATED : SSEventType.CONTACT_CREATED, row.id);
         }
         for (const r of vanished) contacts.emitContact(SSEventType.CONTACT_DELETED, r.id);
@@ -242,9 +277,11 @@ export async function rebuildIndex(contacts: Contacts): Promise<void> {
             contacts.db
                 .select({
                     id: schema.contacts.id,
+                    uri: schema.contacts.uri,
                     uriKey: schema.contacts.uriKey,
                     uid: schema.contacts.uid,
                     eigenId: schema.contacts.eigenId,
+                    etag: schema.contacts.etag,
                 })
                 .from(schema.contacts)
                 .all()
@@ -252,7 +289,7 @@ export async function rebuildIndex(contacts: Contacts): Promise<void> {
         );
         const book = contacts.db.select().from(schema.book).where(eq(schema.book.id, 1)).get();
         const newCtag = (book?.ctag ?? 0) + 1;
-        const newSyncGen = (book?.syncGen ?? 1) + 1;
+        const newSyncGen = nextSyncGen(book?.syncGen, Date.now());
 
         // Pair each listed uri with its pre-clear incumbent, so a surviving self row still outranks an
         // email-only twin that sorts earlier.

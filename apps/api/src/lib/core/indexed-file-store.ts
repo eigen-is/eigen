@@ -17,6 +17,14 @@ export function uriKeyOf(uri: string): string {
     return uri.normalize('NFC').toLowerCase();
 }
 
+// The generation a from-scratch rebuild stamps into its sync tokens. Counting up from the stored value alone
+// hands a rebuild that LOST that value the same number twice, so a client can replay a token of the dead
+// history against the new one; the wall clock in seconds floors it. A repeat then takes two lost rows inside
+// one second, since both floor to the same second.
+export function nextSyncGen(stored: number | undefined, now: number): number {
+    return Math.max((stored ?? 0) + 1, Math.floor(now / 1000));
+}
+
 export function computeResourceEtag(bytes: Uint8Array): string {
     return new Bun.CryptoHasher('sha256').update(bytes).digest('hex');
 }
