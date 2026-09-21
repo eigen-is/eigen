@@ -160,9 +160,7 @@ export function EditEventDialog({
         const { start, end } = buildEventTimes(allDay, startDate, endDate, startTime, endTime);
 
         const data = { ...event.data, attendees: attendees.length > 0 ? attendees : undefined };
-        // The dialog has no zone control, so an event states the zone it is stored in and only one turning
-        // timed takes the viewer's: a UTC, floating or client-defined DTSTART is the file's own form to keep.
-        const timezone = allDay ? null : event.allDay ? viewerTimeZone() : event.timezone;
+        const timezone = allDay ? null : (event.timezone ?? viewerTimeZone());
         const updates = {
             title: title.trim(),
             startTime: start,
