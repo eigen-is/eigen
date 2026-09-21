@@ -65,9 +65,12 @@ const STANDARD_BY_NAME = new Set<string>(STANDARD_MAILBOXES);
 
 // The one name a mailbox answers to: the standard six case-fold onto their canonical spelling and `INBOX`
 // onto the inbox's empty name, while a folder the user (or their IMAP client) made keeps its own spelling.
+// Both hierarchy delimiters address one directory, so `/` folds onto Maildir++'s `.` here — or the DB
+// `mailbox` column, the SSE payloads and the query keys would hold a second spelling of the same folder.
 export function canonicalMailbox(mailbox: string): string {
     if (mailbox === MAILBOX_INBOX || mailbox.toLowerCase() === MAILBOX_INBOX_KEY) return MAILBOX_INBOX;
-    return STANDARD_MAILBOXES.find((m) => m.toLowerCase() === mailbox.toLowerCase()) ?? mailbox;
+    const dotted = mailbox.replaceAll('/', '.');
+    return STANDARD_MAILBOXES.find((m) => m.toLowerCase() === dotted.toLowerCase()) ?? dotted;
 }
 
 // Whether a name addresses one of the standard six. A `.archive` or `.INBOX` directory is Archive and the
@@ -83,10 +86,36 @@ export function mailboxRouteSegment(mailbox: string): string {
     return isStandardMailbox(mailbox) ? mailbox.toLowerCase() : mailbox;
 }
 
+// IMAP modified UTF-7 (RFC 3501 §5.1.3), which is how Dovecot spells a folder name holding `&` or anything
+// outside printable ASCII: `&` opens a base64 run that `-` closes, `&-` is a literal `&`, and the base64
+// alphabet spells UTF-16BE code units with `,` where base64 has `/`.
+const MODIFIED_BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+,';
+const MODIFIED_UTF7_RUN = /&([A-Za-z0-9+,]*)-/g;
+
+function decodeModifiedUtf7(segment: string): string {
+    return segment.replace(MODIFIED_UTF7_RUN, (raw, run: string) => {
+        if (run === '') return '&';
+        let acc = 0;
+        let bits = 0;
+        let decoded = '';
+        for (const char of run) {
+            acc = (acc << 6) | MODIFIED_BASE64.indexOf(char);
+            bits += 6;
+            if (bits >= 16) {
+                bits -= 16;
+                decoded += String.fromCharCode((acc >>> bits) & 0xffff);
+                acc &= (1 << bits) - 1;
+            }
+        }
+        // Leftover bits must be zero padding; anything else was never such a run, so show it as it stands.
+        return bits < 6 && acc === 0 ? decoded : raw;
+    });
+}
+
 // A custom folder's label — a standard one goes by its `SpecialMailbox.label`. The `.` delimiter is shown
-// as the `/` a reader takes for nesting.
+// as the `/` a reader takes for nesting, and each segment in the letters it stands for.
 export function mailboxDisplayName(mailbox: string): string {
-    return mailbox.replaceAll('.', '/');
+    return mailbox.split('.').map(decodeModifiedUtf7).join('/');
 }
 
 // The special mailbox a mailbox row's flags identify, if any — a custom folder matches none.

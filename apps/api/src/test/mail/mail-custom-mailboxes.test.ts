@@ -74,9 +74,10 @@ describe.skipIf(isWindows)('Mailboxes outside the standard six', () => {
     let userId: string;
     let token: string;
     let projectsId: string;
+    let email: string;
 
     beforeAll(async () => {
-        const email = `custombox-${Date.now()}@test.eigen.is`;
+        email = `custombox-${Date.now()}@test.eigen.is`;
         const user = await createTestUser(email, 'testpassword123', 'Custom Box Test');
         userId = user.id;
         token = user.sessionToken;
@@ -141,6 +142,43 @@ describe.skipIf(isWindows)('Mailboxes outside the standard six', () => {
         expect(messages[0].isRead).toBe(false);
     });
 
+    test('a nested folder addressed with / is the one dotted folder everywhere', async () => {
+        const raw = makeEml('Filed under a slash', email);
+        expect(
+            (
+                await app.handle(
+                    new Request(`http://localhost/mail/deliver/${email}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'message/rfc822' },
+                        body: new TextEncoder().encode(raw).buffer as ArrayBuffer,
+                    }),
+                )
+            ).status,
+        ).toBe(200);
+
+        const inbox = await assertJson<EmailSummary[]>(await authedRequest(token, `/mail/${userId}/mailbox/inbox`));
+        const moved = findOrFail(inbox, (message) => message.subject === 'Filed under a slash');
+
+        const res = await authedRequest(token, `/mail/${userId}/message/move`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messageId: moved.id, targetMailbox: 'Clients/Acme' }),
+        });
+        expect(res.status).toBe(200);
+
+        // Before anything opens the folder — a listing never syncs, so it reports the row exactly as the
+        // move wrote it: under the one dotted name, not a second spelling nothing enumerates.
+        const boxes = await listMailboxes(token, userId);
+        expect(boxes.filter((box) => box.path.startsWith('Clients')).map((box) => box.path)).toEqual(['Clients.Acme']);
+        expect(findOrFail(boxes, (box) => box.path === 'Clients.Acme').total).toBe(1);
+
+        const dotted = await assertJson<EmailSummary[]>(
+            await authedRequest(token, `/mail/${userId}/mailbox/Clients.Acme`),
+        );
+        expect(dotted.map((message) => message.id)).toEqual([moved.id]);
+        expect(dotted[0].mailbox).toBe('Clients.Acme');
+    });
+
     test('a folder name with a space is addressed percent-encoded in the URL', async () => {
         const res = await authedRequest(token, `/mail/${userId}/mailbox/My%20Stuff`);
         expect(res.status).toBe(200);
@@ -161,6 +199,134 @@ describe.skipIf(isWindows)('Mailboxes outside the standard six', () => {
 
         const boxes = await listMailboxes(token, userId);
         expect(boxes.filter((box) => box.path.toLowerCase() === MAILBOX_ARCHIVE.toLowerCase())).toHaveLength(1);
+    });
+});
+
+// Dovecot writes a name holding `&` or anything outside printable ASCII in modified UTF-7, and leaves the
+// rest of printable ASCII alone: all of these are folder names Eigen must list, open and move into.
+describe.skipIf(isWindows)('A folder name outside the ASCII letters and digits', () => {
+    const NAMES = ['&AMQ-rger', 'R&-D', "O'Brien", 'C++'];
+    let userId: string;
+    let token: string;
+    let email: string;
+
+    const openBox = (name: string) =>
+        authedRequest(token, `/mail/${userId}/mailbox/${encodeURIComponent(name)}`).then((res) =>
+            assertJson<EmailSummary[]>(res),
+        );
+
+    beforeAll(async () => {
+        email = `oddname-${Date.now()}@test.eigen.is`;
+        const user = await createTestUser(email, 'testpassword123', 'Odd Name Test');
+        userId = user.id;
+        token = user.sessionToken;
+        expect((await authedRequest(token, `/home/${userId}/size`)).status).toBe(200);
+
+        for (const name of NAMES) {
+            const folder = seedMaildirFolder(userId, `.${name}`);
+            seedNewFile(folder, `${Date.now()}.${NAMES.indexOf(name)}.odd`, makeEml(`Filed under ${name}`, email));
+        }
+    });
+
+    test('every such folder is listed, opens, and counts what it holds', async () => {
+        const boxes = await listMailboxes(token, userId);
+        expect(boxes.map((box) => box.path)).toEqual(expect.arrayContaining(NAMES));
+
+        for (const name of NAMES) {
+            const box = await mailboxWhenCounting(token, userId, name, 1);
+            expect(box.unread).toBe(1);
+            expect((await openBox(name)).map((message) => message.subject)).toEqual([`Filed under ${name}`]);
+        }
+    });
+
+    test('a message moves into such a folder and is listed there', async () => {
+        const raw = makeEml('Moved by hand', email);
+        expect(
+            (
+                await app.handle(
+                    new Request(`http://localhost/mail/deliver/${email}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'message/rfc822' },
+                        body: new TextEncoder().encode(raw).buffer as ArrayBuffer,
+                    }),
+                )
+            ).status,
+        ).toBe(200);
+
+        const inbox = await assertJson<EmailSummary[]>(await authedRequest(token, `/mail/${userId}/mailbox/inbox`));
+        const moved = findOrFail(inbox, (message) => message.subject === 'Moved by hand');
+
+        const res = await authedRequest(token, `/mail/${userId}/message/move`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messageId: moved.id, targetMailbox: "O'Brien" }),
+        });
+        expect(res.status).toBe(200);
+        expect((await openBox("O'Brien")).map((message) => message.id)).toContain(moved.id);
+    });
+});
+
+// Anything that would break a path or the Maildir++ hierarchy, refused at every entry that builds a
+// directory from a name — never mapped onto a safe one, which would make two names one folder.
+describe.skipIf(isWindows)('A folder name that cannot address a directory', () => {
+    const REFUSED = ['..', '.hidden', 'a/../b', 'ctrl\u0001name', 'bad..name', ' leading', 'trailing '];
+    let userId: string;
+    let token: string;
+    let messageId: string;
+
+    beforeAll(async () => {
+        const email = `badname-${Date.now()}@test.eigen.is`;
+        const user = await createTestUser(email, 'testpassword123', 'Bad Name Test');
+        userId = user.id;
+        token = user.sessionToken;
+        expect((await authedRequest(token, `/home/${userId}/size`)).status).toBe(200);
+
+        const raw = makeEml('Stays where it is', email);
+        await app.handle(
+            new Request(`http://localhost/mail/deliver/${email}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'message/rfc822' },
+                body: new TextEncoder().encode(raw).buffer as ArrayBuffer,
+            }),
+        );
+        const inbox = await assertJson<EmailSummary[]>(await authedRequest(token, `/mail/${userId}/mailbox/inbox`));
+        messageId = findOrFail(inbox, (message) => message.subject === 'Stays where it is').id;
+    });
+
+    test('creating one is refused', async () => {
+        for (const mailbox of REFUSED) {
+            const res = await authedRequest(token, `/mail/${userId}/mailbox`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mailbox }),
+            });
+            expect([mailbox, res.status]).toEqual([mailbox, 400]);
+        }
+    });
+
+    test('opening one is refused', async () => {
+        // `..` never reaches the route: the URL it spells normalizes away the segment, so the router 404s.
+        for (const mailbox of REFUSED.filter((name) => name !== '..')) {
+            const res = await authedRequest(
+                token,
+                `/mail/${userId}/mailbox/${encodeURIComponent(mailbox).replaceAll('.', '%2E')}`,
+            );
+            expect([mailbox, res.status]).toEqual([mailbox, 400]);
+        }
+    });
+
+    test('moving a message into one is refused and leaves the message where it was', async () => {
+        for (const targetMailbox of REFUSED) {
+            const res = await authedRequest(token, `/mail/${userId}/message/move`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ messageId, targetMailbox }),
+            });
+            expect([targetMailbox, res.status]).toEqual([targetMailbox, 400]);
+        }
+
+        const inbox = await assertJson<EmailSummary[]>(await authedRequest(token, `/mail/${userId}/mailbox/inbox`));
+        expect(inbox.map((message) => message.id)).toContain(messageId);
     });
 });
 

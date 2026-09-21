@@ -40,12 +40,23 @@ export function readDraftStagingSize(homeFs: LocalFilesystem): Promise<number> {
     return homeFs.dirSize(path.join(PATHS.MAIL.ROOT, DRAFT_ATTACHMENTS_DIR));
 }
 
-// A mailbox name is user-visible, so a segment may hold interior spaces — but never the `.` Maildir++
-// delimiter, and never nothing at all.
-const MAILBOX_SEGMENT = /^[A-Za-z0-9_\- ]+$/;
+// A segment is a directory name under the Maildir root, so the rule is what breaks a path or the hierarchy,
+// not an allowlist: Dovecot spells `&` and everything outside printable ASCII in modified UTF-7
+// (`Ärger` is `.&AMQ-rger`), and an allowlist dropped those folders from the listing. Splitting on both
+// delimiters leaves no separator inside a segment, so `..` and a leading dot are empty segments here.
+const MAILBOX_SEGMENT_MAX_CHARS = 200;
+const CONTROL_CHARACTER = /\p{Cc}/u;
 
 function isValidMailboxPath(mailbox: string): boolean {
-    return mailbox.split(/[./]/).every((segment) => MAILBOX_SEGMENT.test(segment) && segment.trim() === segment);
+    return mailbox
+        .split(/[./]/)
+        .every(
+            (segment) =>
+                segment.length > 0 &&
+                segment.length <= MAILBOX_SEGMENT_MAX_CHARS &&
+                !CONTROL_CHARACTER.test(segment) &&
+                segment.trim() === segment,
+        );
 }
 
 // Refused, never mapped onto a safe name: two mapped ids would collide on one file.

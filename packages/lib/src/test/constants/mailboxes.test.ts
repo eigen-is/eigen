@@ -6,6 +6,7 @@ import {
     MAILBOX_INBOX,
     MAILBOX_INBOX_KEY,
     MAILBOX_SENT,
+    mailboxDisplayName,
     mailboxListFlags,
     mailboxRouteSegment,
 } from '../../constants/mailboxes';
@@ -25,6 +26,12 @@ describe('canonicalMailbox', () => {
     test('a folder outside the standard set keeps its own name', () => {
         expect(canonicalMailbox('Projects')).toBe('Projects');
         expect(canonicalMailbox('projects')).toBe('projects');
+    });
+
+    test('either delimiter names one folder, and the dotted form is the one that travels', () => {
+        expect(canonicalMailbox('Clients/Acme')).toBe('Clients.Acme');
+        expect(canonicalMailbox('Clients/Acme/2026')).toBe('Clients.Acme.2026');
+        expect(canonicalMailbox('Clients.Acme')).toBe('Clients.Acme');
     });
 });
 
@@ -54,6 +61,24 @@ describe('mailboxRouteSegment', () => {
     test('a custom folder keeps its case, because the server takes its name literally', () => {
         expect(mailboxRouteSegment('Projects')).toBe('Projects');
         expect(mailboxRouteSegment('Clients.Acme')).toBe('Clients.Acme');
+    });
+});
+
+describe('mailboxDisplayName', () => {
+    test('the Maildir++ delimiter reads as nesting', () => {
+        expect(mailboxDisplayName('Clients.Acme')).toBe('Clients/Acme');
+    });
+
+    test('a name Dovecot spelled in modified UTF-7 reads as the letters it stands for', () => {
+        expect(mailboxDisplayName('&AMQ-rger')).toBe('Ärger');
+        expect(mailboxDisplayName('R&-D')).toBe('R&D');
+        expect(mailboxDisplayName('&U,BTFw-')).toBe('台北');
+        expect(mailboxDisplayName('Clients.&U,BTFw-')).toBe('Clients/台北');
+    });
+
+    test('a name that is not modified UTF-7 is shown as it stands', () => {
+        expect(mailboxDisplayName('R&D')).toBe('R&D');
+        expect(mailboxDisplayName('A&B-C')).toBe('A&B-C');
     });
 });
 
