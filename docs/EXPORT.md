@@ -20,7 +20,7 @@ Eigenslides and eigensheets reuse the same HTML→PDF pipeline (sheets also expo
 
 Every eigendoc/eigenslides/eigensheets/eigenvector export runs its Yjs reconstruction, rendering and sanitization in the one-shot document-transform Worker ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)): the main thread prepares media, the Worker returns the finished document bytes. The DOCX conversion runs there too — the Worker loads the externalized `@turbodocx/html-to-docx` from runtime `node_modules`. WeasyPrint stays a main-thread subprocess on top of the Worker's HTML.
 
-**Contacts export is a different thing with the same name.** `POST /contacts/:ownerId/export` concatenates the stored `.vcf` files and returns them as one `text/vcard` attachment: no renderer, no Worker, no sanitization pass, because the bytes on disk are already the format. Its import twins read a `.vcf` back into the address book. See [CONTACTS.md § vCard import / export](CONTACTS.md#vcard-import--export).
+**Contacts and calendar export are a different thing with the same name.** `POST /contacts/:ownerId/export` concatenates the stored `.vcf` files and returns them as one `text/vcard` attachment, and `POST /calendar/:ownerId/export` splices the `VEVENT` and `VTIMEZONE` blocks out of the stored `.ics` files into one `text/calendar` VCALENDAR, minus the `X-EIGEN-*` lines Eigen owns. No renderer, no Worker, no sanitization pass in either case, because the bytes on disk are already the format. Their import twins read the same file back into the address book or a calendar. See [CONTACTS.md § vCard import / export](CONTACTS.md#vcard-import--export) and [CALENDAR.md § iCalendar import / export](CALENDAR.md#icalendar-import--export).
 
 ## File Structure
 

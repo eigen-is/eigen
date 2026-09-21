@@ -32,7 +32,8 @@ A calendar someone shared with you from their own account is not in the list, an
 
 - The title, the date and time, the time zone, the location, the description, and whether the event lasts all day.
 - Repeating events keep the rule that repeats them, and any single occurrence that was moved or changed keeps its change.
-- Reminders come across, up to five per event.
+- Reminders come across, however many the event carries.
+- Anything else the file holds comes across with it. Eigen keeps every line an event was written with, including the parts it does not show you itself.
 
 Two things are deliberately left behind, so an imported file never sends mail on your behalf:
 

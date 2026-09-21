@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, quotas, storage, settings]
 related: [admin/server-settings, admin/teams]
 order: 60
-updated: 2026-06-08
+updated: 2026-09-21
 ---
 
 Storage quotas control how much space each user and team can use. You set server-wide defaults on the [**Settings**](/admin/settings) page, and you can raise those defaults for specific teams without changing the server-wide values. Only the server owner can access the **Settings** page.
@@ -15,7 +15,7 @@ Storage quotas control how much space each user and team can use. You set server
 1. Sign in to Eigen as the server owner and open [Admin](/admin).
 2. In the sidebar, click **Settings**.
 3. Under **Storage Quotas**, update the fields you want to change:
-   - **Mail & Contacts (MB)**: the combined storage limit for each user's email and contacts.
+   - **Mail, Contacts & Calendar (MB)**: the combined storage limit for each user's email, contacts, and calendars.
    - **Default Mount (MB)**: the storage limit for each user's primary Drive.
    - **Max Upload (MB)**: the largest single file any user can upload.
    - **Trash Retention (days)**: how long deleted files stay in the Trash before they are permanently removed.
@@ -43,12 +43,12 @@ The **Storage Type** setting under **Defaults** on the same **Settings** page co
 
 ## Override quotas for a team
 
-You can raise the mail and Drive limits above the server default for everyone in a specific team. This lets you give certain groups more space without changing the server-wide defaults for everyone else.
+You can raise both limits above the server default for everyone in a specific team. This lets you give certain groups more space without changing the server-wide defaults for everyone else.
 
 1. Open [Admin](/admin) and click the team's name in the sidebar.
 2. Click **Edit** at the top of the detail panel.
 3. Scroll to **Quota Overrides**.
-4. Enter a value in **Mail & Contacts (MB)** or **Default Mount (MB)** (or both). Leave a field empty to keep the server default for that quota type.
+4. Enter a value in **Mail, Contacts & Calendar (MB)** or **Default Mount (MB)** (or both). Leave a field empty to keep the server default for that quota type.
 5. Click **Save Settings**.
 
 The override applies to all current and future members of that team. If you later remove the override by clearing the field and saving, those members return to the server-wide defaults.
