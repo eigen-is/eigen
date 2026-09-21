@@ -75,7 +75,7 @@ export async function propagateCalendarShare(
     for (const [userId, email] of targets) {
         try {
             const memberships = await getMemberships(userId);
-            const permission = ownerHome.calendar.checkPermission(calendar.id, email, memberships.teamIds);
+            const permission = await ownerHome.calendar.checkPermission(calendar.id, email, memberships.teamIds);
 
             await sendToHome(userId, {
                 type: 'calendar:share',

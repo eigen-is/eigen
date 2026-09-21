@@ -61,10 +61,10 @@ export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
             for (const tc of teamCalendars) {
                 const permission =
                     (await pullCalendarPermission(teamOwner, tc.id, user.email, memberships.teamIds)) || 'read';
-                cal.ensureSharedEntry(teamOwner, tc.id, tc.name, tc.color, permission);
+                await cal.ensureSharedEntry(teamOwner, tc.id, tc.name, tc.color, permission);
             }
         } catch {
-            cal.removeSharedEntriesForOwner(teamOwner);
+            await cal.removeSharedEntriesForOwner(teamOwner);
         }
     }
 
@@ -74,7 +74,7 @@ export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
     // 1. Team membership changes (user joins/leaves a team) don't trigger
     //    propagateCalendarShare, so cached permissions may not reflect new team shares.
     // 2. If propagation failed silently for a user, the stale cache is repaired here.
-    const sharedCalendars = cal.getSharedCalendars();
+    const sharedCalendars = await cal.getSharedCalendars();
     for (const sc of sharedCalendars) {
         const parsed = parseOwnerId(sc.ownerUserId);
         if (parsed.type === 'team') continue;
@@ -86,7 +86,7 @@ export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
                 memberships.teamIds,
             );
             if (resolved && resolved !== sc.permission) {
-                cal.ensureSharedEntry(sc.ownerUserId, sc.calendarId, sc.calendarName, sc.calendarColor, resolved);
+                await cal.ensureSharedEntry(sc.ownerUserId, sc.calendarId, sc.calendarName, sc.calendarColor, resolved);
             }
         } catch {
             // Owner home not available, skip

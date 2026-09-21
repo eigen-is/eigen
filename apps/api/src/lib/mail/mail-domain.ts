@@ -128,7 +128,7 @@ export class Mail {
             const parsed = parseMail(message);
             const hasCalendar = parsed.attachments.some(isCalendarPart);
             if (hasCalendar) {
-                processInboundImip(this.home, parsed);
+                await processInboundImip(this.home, parsed);
             }
         } catch (error) {
             console.error('iMIP processing failed:', error);

@@ -35,7 +35,7 @@ export async function reconcileSharesForNewUser(user: User): Promise<void> {
             if (targetHome.hasCalendar) {
                 const calShares = await pullCalendarShares(fromUserId, user.email, []);
                 for (const result of calShares) {
-                    targetHome.calendar.receiveShare(
+                    await targetHome.calendar.receiveShare(
                         fromUserId,
                         result.calendarId,
                         result.name,
@@ -55,7 +55,7 @@ export async function reconcileSharesForNewUser(user: User): Promise<void> {
             if (targetHome.hasCalendar) {
                 const invitations = await pullPendingInvitations(fromUserId, user.email);
                 for (const event of invitations) {
-                    targetHome.calendar.receiveInvitation({
+                    await targetHome.calendar.receiveInvitation({
                         uid: event.uid,
                         title: event.title,
                         description: event.description,

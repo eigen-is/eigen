@@ -292,7 +292,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             const recurrenceDate = body.recurrenceDate
                 ? requireRecurrenceKey(body.recurrenceDate)
                 : body.recurrenceDate;
-            home.calendar.rsvp(params.id, user, { ...body, recurrenceDate });
+            await home.calendar.rsvp(params.id, user, { ...body, recurrenceDate });
             return { success: true };
         },
         {
@@ -361,7 +361,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             const cal = await resolveCalendar(user, user.id);
-            cal.deleteSharedCalendar(params.id);
+            await cal.deleteSharedCalendar(params.id);
             return { success: true };
         },
         { auth: true },
