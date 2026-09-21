@@ -29,8 +29,7 @@ export type ParsedCardPhoto =
     | { kind: 'inline'; bytes: Uint8Array; mediaType: string | null }
     | { kind: 'uri'; uri: string };
 
-// The projection parseVCard maps a card down to: the properties Eigen owns, plus the untouched AST in
-// `lines` so a write can merge edits back without disturbing properties we don't understand.
+// The untouched AST rides along in `lines`, so a write merges edits back without disturbing unknown properties.
 export type ParsedCard = {
     lines: VCardLine[];
     version: string | null;
