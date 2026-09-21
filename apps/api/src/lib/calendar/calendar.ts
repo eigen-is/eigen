@@ -355,7 +355,16 @@ export class Calendar {
             else overridesByUid.set(event.uid, new Map([[event.recurrenceDate, event]]));
         }
 
-        const result: ImportCountsResult = { imported: 0, skipped: 0, failed: 0 };
+        // A VEVENT the parser could not read, and an override whose master the file does not hold — it
+        // has no series to attach to — are members the import cannot write, counted as the failures they
+        // are rather than dropped in silence.
+        const masterUids = new Set(masters.map((event) => event.uid));
+        let unwritable = parsed.skipped;
+        for (const [uid, overrides] of overridesByUid) {
+            if (!masterUids.has(uid)) unwritable += overrides.size;
+        }
+
+        const result: ImportCountsResult = { imported: 0, skipped: 0, failed: unwritable };
         // One transaction for the file: a crash mid-loop would otherwise leave masters behind that a
         // retry skips, so a series would lose its overrides for good.
         this.db.transaction((tx) => {

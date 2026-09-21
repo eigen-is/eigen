@@ -97,6 +97,46 @@ describe('parseIcs over a file whose UIDs do not line up', () => {
     });
 });
 
+// One VEVENT a stranger's file spells wrong is not the whole calendar: the parser reports how many it
+// could not read, and every caller counts them as the members they are.
+describe('parseIcs over a file holding a VEVENT it cannot read', () => {
+    test('the readable events survive and the unreadable ones are counted', () => {
+        const { events, skipped } = parseIcs(
+            vcal([
+                'BEGIN:VEVENT',
+                'UID:good@eigen',
+                'DTSTART:20260601T100000Z',
+                'DTEND:20260601T110000Z',
+                'SUMMARY:Readable',
+                'END:VEVENT',
+                // No DTSTART at all: there is no instant to store, and no date to key an occurrence by.
+                'BEGIN:VEVENT',
+                'UID:broken@eigen',
+                'SUMMARY:Unreadable',
+                'END:VEVENT',
+                'BEGIN:VEVENT',
+                'UID:also-good@eigen',
+                'DTSTART:20260602T100000Z',
+                'DTEND:20260602T110000Z',
+                'SUMMARY:Readable too',
+                'END:VEVENT',
+            ]),
+        );
+
+        expect(events.map((event) => event.uid)).toEqual(['good@eigen', 'also-good@eigen']);
+        expect(skipped).toBe(1);
+    });
+
+    test('a readable file skips nothing', () => {
+        const { events, skipped } = parseIcs(
+            vcal(['BEGIN:VEVENT', 'UID:good@eigen', 'DTSTART:20260601T100000Z', 'END:VEVENT']),
+        );
+
+        expect(events).toHaveLength(1);
+        expect(skipped).toBe(0);
+    });
+});
+
 // A master that names no TZID keeps its series in UTC, which is not the same fact as "this file names no
 // master for that UID": the file's first master's zone is the fallback for the second case only.
 describe('parseIcs over a UTC series in a file that also holds a zoned one', () => {

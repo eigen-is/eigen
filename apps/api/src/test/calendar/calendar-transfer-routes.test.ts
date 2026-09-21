@@ -344,6 +344,33 @@ describe('Calendar transfer routes', () => {
         expect(listed.some((e) => e.title === 'Unusable')).toBe(false);
     });
 
+    // A whole file used to be "not a calendar" over one VEVENT the parser could not read. Both members it
+    // cannot write are counted as failures, and the readable event still lands.
+    test('a VEVENT with no start and an override with no master fail while the rest of the file imports', async () => {
+        const stamp = randomUUID();
+        const file = feed(
+            vevent(`readable-${stamp}@other`, 'Readable', '20260411T090000Z', '20260411T100000Z'),
+            ['BEGIN:VEVENT', `UID:no-start-${stamp}@other`, 'SUMMARY:No start at all', 'END:VEVENT'],
+            [
+                'BEGIN:VEVENT',
+                `UID:orphan-${stamp}@other`,
+                'RECURRENCE-ID:20260411T110000Z',
+                'DTSTART:20260411T120000Z',
+                'DTEND:20260411T130000Z',
+                'SUMMARY:Override of a series this file does not hold',
+                'END:VEVENT',
+            ],
+        );
+
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
+            imported: 1,
+            skipped: 0,
+            failed: 2,
+        });
+        const listed = await april();
+        expect(listed.filter((e) => e.uid.includes(stamp)).map((e) => e.title)).toEqual(['Readable']);
+    });
+
     test('an event whose end precedes its start fails while the rest of the file imports', async () => {
         const stamp = randomUUID();
         const file = feed(

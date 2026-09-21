@@ -27,6 +27,10 @@ export type ParsedEvent = {
 export type IcsParseResult = {
     method?: ImipMethod;
     events: ParsedEvent[];
+    // VEVENTs the parser could not read — no DTSTART to store, a value it cannot make a date of. One
+    // malformed event does not cost the file the rest of it, so every caller counts these as the members
+    // they are: a CalDAV PUT refuses the payload, a preview drops them, an import fails them.
+    skipped: number;
 };
 
 function parseImipMethod(raw: unknown): ImipMethod | undefined {
@@ -111,208 +115,217 @@ export function parseIcs(icsText: string): IcsParseResult {
     }
 
     const results: ParsedEvent[] = [];
+    let skipped = 0;
 
     for (const vevent of vevents) {
-        // Handed an exception list, ICAL.Event skips the sibling scan it otherwise runs to relate every
-        // override in the file — a scan per VEVENT, quadratic over a calendar export. This function
-        // relates overrides itself (RECURRENCE-ID, per UID) and reads only uid/summary/startDate/endDate
-        // off the event, none of which consult its exceptions.
-        const event = new ICAL.Event(vevent, { exceptions: [] });
+        // Every row this VEVENT yields, so a failure halfway through leaves none of it behind.
+        const parsed: ParsedEvent[] = [];
+        try {
+            // Handed an exception list, ICAL.Event skips the sibling scan it otherwise runs to relate every
+            // override in the file — a scan per VEVENT, quadratic over a calendar export. This function
+            // relates overrides itself (RECURRENCE-ID, per UID) and reads only uid/summary/startDate/endDate
+            // off the event, none of which consult its exceptions.
+            const event = new ICAL.Event(vevent, { exceptions: [] });
 
-        const uid = event.uid || '';
-        const title = event.summary || '';
+            const uid = event.uid || '';
+            const title = event.summary || '';
 
-        const descriptionRaw = vevent.getFirstPropertyValue('description');
-        const description = typeof descriptionRaw === 'string' ? descriptionRaw : null;
-        const locationRaw = vevent.getFirstPropertyValue('location');
-        const location = typeof locationRaw === 'string' ? locationRaw : null;
+            const descriptionRaw = vevent.getFirstPropertyValue('description');
+            const description = typeof descriptionRaw === 'string' ? descriptionRaw : null;
+            const locationRaw = vevent.getFirstPropertyValue('location');
+            const location = typeof locationRaw === 'string' ? locationRaw : null;
 
-        const dtstart = vevent.getFirstProperty('dtstart');
-        const dtend = vevent.getFirstProperty('dtend');
-        const allDay = event.startDate.isDate;
-        const tzid = propTzid(dtstart);
+            const dtstart = vevent.getFirstProperty('dtstart');
+            const dtend = vevent.getFirstProperty('dtend');
+            const allDay = event.startDate.isDate;
+            const tzid = propTzid(dtstart);
 
-        // An event states its length as a DTEND or as a DURATION (RFC 5545 §3.6.1) and ICAL.Event.endDate
-        // resolves either, plus the next day a bare all-day DTSTART means. A bare timed DTSTART is the one
-        // case it reads as zero-length, where a row needs the hour it is drawn as.
-        // For all-day events (VALUE=DATE), construct UTC midnight manually.
-        // ical.js toJSDate() converts through local timezone, shifting the date.
-        let startTime: Date;
-        let endTime: Date;
-        if (allDay) {
-            const s = event.startDate;
-            const e = event.endDate;
-            startTime = new Date(Date.UTC(s.year, s.month - 1, s.day));
-            endTime = new Date(Date.UTC(e.year, e.month - 1, e.day));
-        } else {
-            startTime = icalTimeToInstant(event.startDate, tzid);
-            endTime =
-                dtend || vevent.getFirstProperty('duration')
-                    ? icalTimeToInstant(event.endDate, propTzid(dtend) ?? tzid)
-                    : new Date(startTime.getTime() + 3600_000);
-        }
-
-        const rruleProp = vevent.getFirstPropertyValue('rrule');
-        const rruleRaw = rruleProp ? rruleProp.toString() : null;
-        // Strip a sub-daily recurrence — or any recurrence anchored at an out-of-range dtstart — from
-        // untrusted ICS the same way a non-IANA TZID is nulled above: both make rrule iterate to the
-        // query window (DoS) and no real client emits them, so degrade to a single event rather than
-        // reject the whole invite / CalDAV PUT.
-        const rrule =
-            rruleRaw && (isSubDailyRrule(rruleRaw) || isOutOfRangeRecurrenceStart(startTime)) ? null : rruleRaw;
-
-        const rawStatus = (vevent.getFirstPropertyValue('status') || 'CONFIRMED').toString().toLowerCase();
-        const status = (
-            ['confirmed', 'tentative', 'cancelled'].includes(rawStatus) ? rawStatus : 'confirmed'
-        ) as ParsedEvent['status'];
-
-        // Coerce a non-numeric SEQUENCE to 0 so a malformed value can't slip past the
-        // receiver's `<=` replay guard as NaN (NaN comparisons are always false).
-        const rawSequence = Number(vevent.getFirstPropertyValue('sequence') || 0);
-        const sequence = Number.isFinite(rawSequence) ? rawSequence : 0;
-
-        const recurrenceId = vevent.getFirstProperty('recurrence-id');
-        let recurrenceDate: string | null = null;
-        let recurrenceInstant: Date | null = null;
-        if (recurrenceId) {
-            const rid = recurrenceId.getFirstValue() as ICAL.Time | string | null;
-            if (rid instanceof ICAL.Time) {
-                // A master that named no TZID keeps its series in UTC: only a UID the file holds no master
-                // for falls back to this VEVENT's own zone and then to the file's first master's.
-                const seriesTz = seriesTzByUid.has(uid) ? (seriesTzByUid.get(uid) ?? null) : (tzid ?? fileTz);
-                recurrenceDate = icalTimeToRecurrenceKey(rid, seriesTz);
-                if (!rid.isDate && rid.zone === ICAL.Timezone.utcTimezone) {
-                    recurrenceInstant = rid.toJSDate();
-                }
+            // An event states its length as a DTEND or as a DURATION (RFC 5545 §3.6.1) and ICAL.Event.endDate
+            // resolves either, plus the next day a bare all-day DTSTART means. A bare timed DTSTART is the one
+            // case it reads as zero-length, where a row needs the hour it is drawn as.
+            // For all-day events (VALUE=DATE), construct UTC midnight manually.
+            // ical.js toJSDate() converts through local timezone, shifting the date.
+            let startTime: Date;
+            let endTime: Date;
+            if (allDay) {
+                const s = event.startDate;
+                const e = event.endDate;
+                startTime = new Date(Date.UTC(s.year, s.month - 1, s.day));
+                endTime = new Date(Date.UTC(e.year, e.month - 1, e.day));
+            } else {
+                startTime = icalTimeToInstant(event.startDate, tzid);
+                endTime =
+                    dtend || vevent.getFirstProperty('duration')
+                        ? icalTimeToInstant(event.endDate, propTzid(dtend) ?? tzid)
+                        : new Date(startTime.getTime() + 3600_000);
             }
-        }
 
-        const attendeeProps = vevent.getAllProperties('attendee');
-        const attendees: Attendee[] = attendeeProps.map((prop) => {
-            const email = calAddress(prop.getFirstValue());
-            const cnRaw = prop.getParameter('cn') || email;
-            const cn: string = Array.isArray(cnRaw) ? (cnRaw[0] ?? email) : cnRaw;
-            const partstatRaw = prop.getParameter('partstat') || 'NEEDS-ACTION';
-            const partstatStr = Array.isArray(partstatRaw) ? (partstatRaw[0] ?? 'NEEDS-ACTION') : partstatRaw;
-            const partstat = partstatStr.toUpperCase();
-            const roleRaw = prop.getParameter('role') || 'REQ-PARTICIPANT';
-            const roleStr = Array.isArray(roleRaw) ? (roleRaw[0] ?? 'REQ-PARTICIPANT') : roleRaw;
-            const role = roleStr.toUpperCase();
+            const rruleProp = vevent.getFirstPropertyValue('rrule');
+            const rruleRaw = rruleProp ? rruleProp.toString() : null;
+            // Strip a sub-daily recurrence — or any recurrence anchored at an out-of-range dtstart — from
+            // untrusted ICS the same way a non-IANA TZID is nulled above: both make rrule iterate to the
+            // query window (DoS) and no real client emits them, so degrade to a single event rather than
+            // reject the whole invite / CalDAV PUT.
+            const rrule =
+                rruleRaw && (isSubDailyRrule(rruleRaw) || isOutOfRangeRecurrenceStart(startTime)) ? null : rruleRaw;
 
-            const statusMap: Record<string, Attendee['status']> = {
-                'NEEDS-ACTION': 'pending',
-                ACCEPTED: 'accepted',
-                DECLINED: 'declined',
-                TENTATIVE: 'tentative',
-            };
-            const roleMap: Record<string, Attendee['role']> = {
-                'REQ-PARTICIPANT': 'required',
-                'OPT-PARTICIPANT': 'optional',
-            };
+            const rawStatus = (vevent.getFirstPropertyValue('status') || 'CONFIRMED').toString().toLowerCase();
+            const status = (
+                ['confirmed', 'tentative', 'cancelled'].includes(rawStatus) ? rawStatus : 'confirmed'
+            ) as ParsedEvent['status'];
 
-            return {
-                email,
-                name: cn !== email ? cn : undefined,
-                status: statusMap[partstat] || 'pending',
-                role: roleMap[role] || 'required',
-            };
-        });
+            // Coerce a non-numeric SEQUENCE to 0 so a malformed value can't slip past the
+            // receiver's `<=` replay guard as NaN (NaN comparisons are always false).
+            const rawSequence = Number(vevent.getFirstPropertyValue('sequence') || 0);
+            const sequence = Number.isFinite(rawSequence) ? rawSequence : 0;
 
-        const organizerProp = vevent.getFirstProperty('organizer');
-        let organizer: EventData['organizer'] | undefined;
-        if (organizerProp) {
-            const orgEmail = calAddress(organizerProp.getFirstValue());
-            const orgCnRaw = organizerProp.getParameter('cn') || orgEmail;
-            const orgCn: string = Array.isArray(orgCnRaw) ? (orgCnRaw[0] ?? orgEmail) : orgCnRaw;
-            organizer = {
-                userId: '',
-                email: orgEmail,
-                name: orgCn !== orgEmail ? orgCn : undefined,
-            };
-        }
-
-        const valarms = vevent.getAllSubcomponents('valarm');
-        const reminders = valarms.map((alarm) => {
-            const trigger = alarm.getFirstPropertyValue('trigger') as ICAL.Duration | string | null;
-            let minutes = 15;
-            if (trigger instanceof ICAL.Duration) {
-                minutes = Math.abs(Math.round(trigger.toSeconds() / 60));
-            }
-            const action = (alarm.getFirstPropertyValue('action') || 'DISPLAY').toString().toUpperCase();
-            return {
-                type: (action === 'EMAIL' ? 'email' : 'notification') as 'notification' | 'email',
-                minutes,
-            };
-        });
-
-        const data: EventData | null =
-            attendees.length || organizer || reminders.length
-                ? {
-                      attendees: attendees.length ? attendees : undefined,
-                      organizer,
-                      reminders: reminders.length ? reminders : undefined,
-                  }
-                : null;
-
-        results.push({
-            uid,
-            title,
-            description,
-            location,
-            startTime,
-            endTime,
-            allDay,
-            rrule,
-            timezone: tzid,
-            status,
-            sequence,
-            recurrenceDate,
-            recurrenceInstant,
-            data,
-        });
-
-        // EXDATE: Thunderbird uses EXDATE to exclude dates from recurring events
-        // (instead of separate VEVENT with STATUS:CANCELLED).
-        // Convert each EXDATE to a synthetic canceled ParsedEvent.
-        if (rrule) {
-            const exdateProps = vevent.getAllProperties('exdate');
-            for (const exdateProp of exdateProps) {
-                const exTzid = propTzid(exdateProp) ?? tzid;
-                const values = exdateProp.getValues() as ICAL.Time[];
-                for (const exVal of values) {
-                    const isDateOnly = exVal.isDate;
-                    const exDateStr = icalTimeToRecurrenceKey(exVal, tzid);
-
-                    let exStartTime: Date;
-                    let exEndTime: Date;
-                    if (isDateOnly) {
-                        exStartTime = new Date(Date.UTC(exVal.year, exVal.month - 1, exVal.day));
-                        exEndTime = new Date(exStartTime.getTime() + 86400_000);
-                    } else {
-                        exStartTime = icalTimeToInstant(exVal, exTzid);
-                        exEndTime = new Date(exStartTime.getTime() + (endTime.getTime() - startTime.getTime()));
+            const recurrenceId = vevent.getFirstProperty('recurrence-id');
+            let recurrenceDate: string | null = null;
+            let recurrenceInstant: Date | null = null;
+            if (recurrenceId) {
+                const rid = recurrenceId.getFirstValue() as ICAL.Time | string | null;
+                if (rid instanceof ICAL.Time) {
+                    // A master that named no TZID keeps its series in UTC: only a UID the file holds no master
+                    // for falls back to this VEVENT's own zone and then to the file's first master's.
+                    const seriesTz = seriesTzByUid.has(uid) ? (seriesTzByUid.get(uid) ?? null) : (tzid ?? fileTz);
+                    recurrenceDate = icalTimeToRecurrenceKey(rid, seriesTz);
+                    if (!rid.isDate && rid.zone === ICAL.Timezone.utcTimezone) {
+                        recurrenceInstant = rid.toJSDate();
                     }
-
-                    results.push({
-                        uid,
-                        title,
-                        description: null,
-                        location: null,
-                        startTime: exStartTime,
-                        endTime: exEndTime,
-                        allDay: isDateOnly,
-                        rrule: null,
-                        timezone: tzid,
-                        status: 'cancelled',
-                        sequence,
-                        recurrenceDate: exDateStr,
-                        recurrenceInstant: null,
-                        data: null,
-                    });
                 }
             }
+
+            const attendeeProps = vevent.getAllProperties('attendee');
+            const attendees: Attendee[] = attendeeProps.map((prop) => {
+                const email = calAddress(prop.getFirstValue());
+                const cnRaw = prop.getParameter('cn') || email;
+                const cn: string = Array.isArray(cnRaw) ? (cnRaw[0] ?? email) : cnRaw;
+                const partstatRaw = prop.getParameter('partstat') || 'NEEDS-ACTION';
+                const partstatStr = Array.isArray(partstatRaw) ? (partstatRaw[0] ?? 'NEEDS-ACTION') : partstatRaw;
+                const partstat = partstatStr.toUpperCase();
+                const roleRaw = prop.getParameter('role') || 'REQ-PARTICIPANT';
+                const roleStr = Array.isArray(roleRaw) ? (roleRaw[0] ?? 'REQ-PARTICIPANT') : roleRaw;
+                const role = roleStr.toUpperCase();
+
+                const statusMap: Record<string, Attendee['status']> = {
+                    'NEEDS-ACTION': 'pending',
+                    ACCEPTED: 'accepted',
+                    DECLINED: 'declined',
+                    TENTATIVE: 'tentative',
+                };
+                const roleMap: Record<string, Attendee['role']> = {
+                    'REQ-PARTICIPANT': 'required',
+                    'OPT-PARTICIPANT': 'optional',
+                };
+
+                return {
+                    email,
+                    name: cn !== email ? cn : undefined,
+                    status: statusMap[partstat] || 'pending',
+                    role: roleMap[role] || 'required',
+                };
+            });
+
+            const organizerProp = vevent.getFirstProperty('organizer');
+            let organizer: EventData['organizer'] | undefined;
+            if (organizerProp) {
+                const orgEmail = calAddress(organizerProp.getFirstValue());
+                const orgCnRaw = organizerProp.getParameter('cn') || orgEmail;
+                const orgCn: string = Array.isArray(orgCnRaw) ? (orgCnRaw[0] ?? orgEmail) : orgCnRaw;
+                organizer = {
+                    userId: '',
+                    email: orgEmail,
+                    name: orgCn !== orgEmail ? orgCn : undefined,
+                };
+            }
+
+            const valarms = vevent.getAllSubcomponents('valarm');
+            const reminders = valarms.map((alarm) => {
+                const trigger = alarm.getFirstPropertyValue('trigger') as ICAL.Duration | string | null;
+                let minutes = 15;
+                if (trigger instanceof ICAL.Duration) {
+                    minutes = Math.abs(Math.round(trigger.toSeconds() / 60));
+                }
+                const action = (alarm.getFirstPropertyValue('action') || 'DISPLAY').toString().toUpperCase();
+                return {
+                    type: (action === 'EMAIL' ? 'email' : 'notification') as 'notification' | 'email',
+                    minutes,
+                };
+            });
+
+            const data: EventData | null =
+                attendees.length || organizer || reminders.length
+                    ? {
+                          attendees: attendees.length ? attendees : undefined,
+                          organizer,
+                          reminders: reminders.length ? reminders : undefined,
+                      }
+                    : null;
+
+            parsed.push({
+                uid,
+                title,
+                description,
+                location,
+                startTime,
+                endTime,
+                allDay,
+                rrule,
+                timezone: tzid,
+                status,
+                sequence,
+                recurrenceDate,
+                recurrenceInstant,
+                data,
+            });
+
+            // EXDATE: Thunderbird uses EXDATE to exclude dates from recurring events
+            // (instead of separate VEVENT with STATUS:CANCELLED).
+            // Convert each EXDATE to a synthetic canceled ParsedEvent.
+            if (rrule) {
+                const exdateProps = vevent.getAllProperties('exdate');
+                for (const exdateProp of exdateProps) {
+                    const exTzid = propTzid(exdateProp) ?? tzid;
+                    const values = exdateProp.getValues() as ICAL.Time[];
+                    for (const exVal of values) {
+                        const isDateOnly = exVal.isDate;
+                        const exDateStr = icalTimeToRecurrenceKey(exVal, tzid);
+
+                        let exStartTime: Date;
+                        let exEndTime: Date;
+                        if (isDateOnly) {
+                            exStartTime = new Date(Date.UTC(exVal.year, exVal.month - 1, exVal.day));
+                            exEndTime = new Date(exStartTime.getTime() + 86400_000);
+                        } else {
+                            exStartTime = icalTimeToInstant(exVal, exTzid);
+                            exEndTime = new Date(exStartTime.getTime() + (endTime.getTime() - startTime.getTime()));
+                        }
+
+                        parsed.push({
+                            uid,
+                            title,
+                            description: null,
+                            location: null,
+                            startTime: exStartTime,
+                            endTime: exEndTime,
+                            allDay: isDateOnly,
+                            rrule: null,
+                            timezone: tzid,
+                            status: 'cancelled',
+                            sequence,
+                            recurrenceDate: exDateStr,
+                            recurrenceInstant: null,
+                            data: null,
+                        });
+                    }
+                }
+            }
+        } catch {
+            skipped++;
+            continue;
         }
+        results.push(...parsed);
     }
 
-    return { method, events: results };
+    return { method, events: results, skipped };
 }

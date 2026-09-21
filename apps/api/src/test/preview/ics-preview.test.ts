@@ -233,6 +233,44 @@ describe('buildIcsPreviewPayload', () => {
         expect(JSON.stringify(payload)).not.toContain(HOSTILE);
     });
 
+    // One VEVENT a stranger's file spells wrong used to cost the quick look the whole file. Every member
+    // the card cannot show is counted instead: a VEVENT with no start, and an override whose series the
+    // file does not hold.
+    test('a member the builder cannot read is counted, and the rest of the file still shows', () => {
+        const payload = payloadOf(
+            vcal([
+                ...timed('sane@eigen', '20260601T100000Z', '20260601T110000Z'),
+                ...event('no-start@eigen', ['SUMMARY:No start at all']),
+                ...event('orphan@eigen', [
+                    'RECURRENCE-ID:20260608T100000Z',
+                    'DTSTART:20260608T120000Z',
+                    'DTEND:20260608T130000Z',
+                    'SUMMARY:Override of a series this file does not hold',
+                ]),
+            ]),
+        );
+
+        expect(payload.events.map((e) => e.uid)).toEqual(['sane@eigen']);
+        expect(payload.total).toBe(3);
+        expect(payload.dropped).toBe(2);
+    });
+
+    test('a file of nothing but orphan overrides reads as a file of unreadable members', () => {
+        const payload = payloadOf(
+            vcal([
+                ...event('orphan@eigen', [
+                    'RECURRENCE-ID:20260608T100000Z',
+                    'DTSTART:20260608T120000Z',
+                    'DTEND:20260608T130000Z',
+                ]),
+            ]),
+        );
+
+        expect(payload.events).toEqual([]);
+        expect(payload.total).toBe(1);
+        expect(payload.dropped).toBe(1);
+    });
+
     // toISOString spells a year outside 1–9999 as "+010007-06-07T…", which a card prints as "Invalid
     // Date" — and the all-day slice of it ("+010007-06") is not even a date. A DTSTART of 99999999
     // overflows there: month 99 and day 99 normalize into the year.

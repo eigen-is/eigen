@@ -5,7 +5,7 @@ import { storedRecurrenceKey } from '../calendar/recurrence';
 import type { CalendarEventRow } from '../calendar/types';
 import { matchesIfMatch, matchesIfNoneMatch } from '../core/http';
 import { eventHref } from './discovery';
-import { type ParsedEvent, parseIcs } from './ical-parse';
+import { type IcsParseResult, type ParsedEvent, parseIcs } from './ical-parse';
 import { eventsToIcs } from './ical-serialize';
 
 // A calendar resource runs larger than a vCard (a recurring series carries an overridden VEVENT per exception),
@@ -53,12 +53,18 @@ export async function handlePut(
         return new Response('Precondition Failed', { status: 412 });
     }
 
-    let events: ReturnType<typeof parseIcs>['events'];
+    let parsed: IcsParseResult;
     try {
-        ({ events } = parseIcs(body));
+        parsed = parseIcs(body);
     } catch {
         return new Response('Bad Request: invalid iCalendar data', { status: 400 });
     }
+    // One resource is one series a client just wrote: a VEVENT of it the parser cannot read makes the
+    // whole payload malformed, where a previewed or imported file drops that one member and keeps going.
+    if (parsed.skipped) {
+        return new Response('Bad Request: invalid iCalendar data', { status: 400 });
+    }
+    const events = parsed.events;
     if (!events.length) {
         return new Response('Bad Request: no VEVENT found', { status: 400 });
     }

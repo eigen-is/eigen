@@ -67,12 +67,18 @@ export function buildIcsPreviewPayload(data: ArrayBuffer): IcsPreview {
     const datable = masters.filter((event) => isDatable(event.startTime) && isDatable(event.endTime));
     datable.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
 
-    // `dropped` is the masters the builder could not read, as it is in every preview payload; the ones
+    // A VEVENT the parser could not read, and an override whose master the file does not hold — it
+    // attaches to no series the card can show — are members like any other: counted, not silently gone.
+    const masterUids = new Set(masters.map((event) => event.uid));
+    const orphans = parsed.events.filter((event) => event.recurrenceDate !== null && !masterUids.has(event.uid)).length;
+    const unreadable = parsed.skipped + orphans;
+
+    // `dropped` is the members the builder could not read, as it is in every preview payload; the ones
     // merely past the cap are the consumer's own `total - dropped - events.length`.
     return {
         method: parsed.method,
         events: datable.slice(0, ICS_PREVIEW_MAX_EVENTS).map(previewEvent),
-        dropped: masters.length - datable.length,
-        total: masters.length,
+        dropped: masters.length - datable.length + unreadable,
+        total: masters.length + unreadable,
     };
 }
