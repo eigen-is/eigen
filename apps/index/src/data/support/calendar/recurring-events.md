@@ -5,7 +5,7 @@ type: how-to
 tags: [calendar, events, recurring, repeat]
 related: [calendar/create-event]
 order: 80
-updated: 2026-06-08
+updated: 2026-09-22
 ---
 
 A recurring event is one that repeats on a schedule. You set it up once and Calendar generates all the
@@ -24,7 +24,7 @@ given date, or the whole series.
    - **Daily**: every day from the start date.
    - **Weekly on [day]**: every week on the same day as the start date.
    - **Monthly on the [ordinal] [day]**: for example, "monthly on the second Tuesday".
-   - **Annually on [month] [day]**: the same date each year.
+   - **Annually on [day] [month]**: the same date each year, for example "Annually on 8 June".
    - **Every weekday (Monday to Friday)**: each working day.
 
    The day and month labels in the options come from the start date you set. If you change the start
