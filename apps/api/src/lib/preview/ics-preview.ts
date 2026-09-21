@@ -20,12 +20,15 @@ const dateString = (date: Date, allDay: boolean): string =>
 // the year. The card would print "Invalid Date", so the event is counted rather than listed.
 const isDatable = (date: Date): boolean => date.getUTCFullYear() >= 1 && date.getUTCFullYear() <= 9999;
 
+// A CAL-ADDRESS is a URI and only a mailto: one names an address, which parseIcs strips the scheme off.
+// Anything else the file spells reaches the card as an address it writes a `mailto:` link from, so it is
+// omitted — not one more guest the card promises to be hiding. A `?` passes the shared validator and
+// starts a mailto: URI's header fields, so an address carrying one is not a plain address either.
+const isPlainAddress = (email: string): boolean => validateEmailAddress(email) && !email.includes('?');
+
 function previewEvent(event: ParsedEvent): IcsPreviewEvent {
-    // A CAL-ADDRESS is a URI and only a mailto: one names an address, which parseIcs strips the scheme
-    // off. Anything else the file spells reaches the card as an address it writes a `mailto:` link from,
-    // so it is omitted — not one more guest the card promises to be hiding.
     const declared = event.data?.attendees ?? [];
-    const attendees = declared.filter((attendee) => validateEmailAddress(attendee.email));
+    const attendees = declared.filter((attendee) => isPlainAddress(attendee.email));
     const organizer = event.data?.organizer ?? null;
     return {
         uid: event.uid,
@@ -38,7 +41,7 @@ function previewEvent(event: ParsedEvent): IcsPreviewEvent {
         timezone: event.timezone,
         rrule: event.rrule,
         status: event.status,
-        organizer: organizer && validateEmailAddress(organizer.email) ? organizer : null,
+        organizer: organizer && isPlainAddress(organizer.email) ? organizer : null,
         attendees: attendees.slice(0, ICS_PREVIEW_MAX_ATTENDEES),
         remainingAttendees: Math.max(attendees.length - ICS_PREVIEW_MAX_ATTENDEES, 0),
     };

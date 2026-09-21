@@ -216,6 +216,9 @@ describe('buildIcsPreviewPayload', () => {
                 timed('uri@eigen', '20260601T100000Z', '20260601T110000Z', [
                     'ORGANIZER;CN=Ada:javascript:alert(1)',
                     `ATTENDEE:http://${HOSTILE}/x`,
+                    // A mailto: URI carries header fields after a `?`, which the card would write straight
+                    // back into the link it draws — an address with one in it is not a plain address.
+                    `ATTENDEE:mailto:mallory@example.com?subject=hi&body=https://${HOSTILE}/x`,
                     'ATTENDEE:mailto:bob@example.com',
                 ]),
             ),
