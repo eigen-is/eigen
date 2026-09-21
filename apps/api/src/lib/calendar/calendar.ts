@@ -499,9 +499,8 @@ export class Calendar {
 
     // Plus every resource the index cannot expand: a stripped rule or an RDATE still has occurrences to sync.
     public async getResourcesInRange(calendarId: string, from: Date, to: Date): Promise<ResourceRow[]> {
-        const rows = await this.getRawEventsInRange(calendarId, from, to);
+        const matched = await occurrences.getResourceUrisInRange(this, calendarId, from, to);
         await this.gate.ensureDrained();
-        const matched = new Set(rows.map((row) => row.uri));
         return (await this.listResources(calendarId)).filter(
             (resource) => matched.has(resource.uri) || resource.hasUnindexedRecurrence,
         );
@@ -541,10 +540,6 @@ export class Calendar {
     public async getRawEvents(calendarId: string): Promise<CalendarEvent[]> {
         await this.gate.ensureDrained();
         return this.joinedEvents().where(eq(schema.events.calendarId, calendarId)).all().map(toEvent);
-    }
-
-    public async getRawEventsInRange(calendarId: string, from: Date, to: Date): Promise<CalendarEvent[]> {
-        return occurrences.getRawEventsInRange(this, calendarId, from, to);
     }
 
     public async getEventsInRange(from: Date, to: Date, calendarId?: string): Promise<CalendarEventOccurrence[]> {

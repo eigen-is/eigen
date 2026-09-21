@@ -1,6 +1,6 @@
 import { occurrenceDateToString } from '@workspace/lib/calendar/calendar-utils';
-import type { CalendarEvent, CalendarEventOccurrence } from '@workspace/lib/types/calendar';
-import { and, eq, gte, isNull, lte, sql } from 'drizzle-orm';
+import type { CalendarEventOccurrence } from '@workspace/lib/types/calendar';
+import { and, eq, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import { clampRangeEnd } from '../ical/recurrence-limits';
 import { storedRecurrenceKey } from '../ical/wall-clock';
 import type { Calendar } from './calendar';
@@ -8,65 +8,9 @@ import { toEvent } from './mappers';
 import { expandRecurrence } from './recurrence';
 import * as schema from './schema';
 
-// The range reads over the Calendar facade: the stored rows a span touches, and the occurrences the
-// recurring ones among them expand to once their exceptions are folded in.
-
-export async function getRawEventsInRange(
-    calendar: Calendar,
-    calendarId: string,
-    from: Date,
-    to: Date,
-): Promise<CalendarEvent[]> {
-    // Clamp the span (see recurrence-limits) so an over-wide CalDAV time-range cannot block the event loop.
-    const clampedTo = clampRangeEnd(from, to);
-    await calendar.gate.ensureDrained();
-
-    const nonRecurring = calendar
-        .joinedEvents()
-        .where(
-            and(
-                eq(schema.events.calendarId, calendarId),
-                isNull(schema.events.rrule),
-                isNull(schema.events.parentEventId),
-                lte(schema.events.startTime, clampedTo),
-                gte(schema.events.endTime, from),
-            ),
-        )
-        .all()
-        .map(toEvent);
-
-    const matching: CalendarEvent[] = [];
-    const matchingIds = new Set<string>();
-    for (const row of calendar
-        .joinedEvents()
-        .where(
-            and(
-                eq(schema.events.calendarId, calendarId),
-                sql`${schema.events.rrule} IS NOT NULL`,
-                isNull(schema.events.parentEventId),
-            ),
-        )
-        .all()) {
-        const event = toEvent(row);
-        if (expandRecurrence(event, from, clampedTo).length > 0) {
-            matching.push(event);
-            matchingIds.add(event.id);
-        }
-    }
-
-    const exceptions: CalendarEvent[] = [];
-    if (matchingIds.size > 0) {
-        for (const row of calendar
-            .joinedEvents()
-            .where(and(eq(schema.events.calendarId, calendarId), sql`${schema.events.parentEventId} IS NOT NULL`))
-            .all()) {
-            const event = toEvent(row);
-            if (event.parentEventId && matchingIds.has(event.parentEventId)) exceptions.push(event);
-        }
-    }
-
-    return [...nonRecurring, ...matching, ...exceptions];
-}
+// The range reads over the Calendar facade: the occurrences a span touches, and the files they were
+// projected from. An override answers from its own times (RFC 4791 § 9.9), so moving one carries it out of
+// the window it was expanded in and into the one it now sits in.
 
 export async function getEventsInRange(
     calendar: Calendar,
@@ -79,36 +23,50 @@ export async function getEventsInRange(
     await calendar.gate.ensureDrained();
 
     const scoped = calendarId ? [eq(schema.events.calendarId, calendarId)] : [];
+    const overlaps = and(lte(schema.events.startTime, clampedTo), gte(schema.events.endTime, from));
 
     const nonRecurring = calendar
+        .joinedEvents()
+        .where(and(...scoped, isNull(schema.events.rrule), isNull(schema.events.parentEventId), overlaps))
+        .all()
+        .map(toEvent);
+
+    // A series starting after the window has no occurrence inside it; rrule never steps back before DTSTART.
+    const recurring = calendar
         .joinedEvents()
         .where(
             and(
                 ...scoped,
-                isNull(schema.events.rrule),
+                sql`${schema.events.rrule} IS NOT NULL`,
                 isNull(schema.events.parentEventId),
                 lte(schema.events.startTime, clampedTo),
-                gte(schema.events.endTime, from),
             ),
         )
         .all()
         .map(toEvent);
 
-    const recurring = calendar
+    // An override is read twice over: for the occurrence of its parent it replaces, and — when its own times
+    // overlap — as the occurrence it was moved to, whose parent may expand nowhere near this window.
+    const parentIds = recurring.map((event) => event.id);
+    const exceptions = calendar
         .joinedEvents()
-        .where(and(...scoped, sql`${schema.events.rrule} IS NOT NULL`, isNull(schema.events.parentEventId)))
+        .where(
+            and(
+                ...scoped,
+                sql`${schema.events.parentEventId} IS NOT NULL`,
+                or(parentIds.length > 0 ? inArray(schema.events.parentEventId, parentIds) : undefined, overlaps),
+            ),
+        )
         .all()
         .map(toEvent);
 
-    const exceptionsByParent = new Map<string, CalendarEvent[]>();
-    for (const row of calendar
-        .joinedEvents()
-        .where(and(...scoped, sql`${schema.events.parentEventId} IS NOT NULL`))
-        .all()) {
-        const event = toEvent(row);
-        const group = exceptionsByParent.get(event.parentEventId!) ?? [];
-        exceptionsByParent.set(event.parentEventId!, group);
-        group.push(event);
+    const replacedByParent = new Map<string, Set<string>>();
+    for (const exception of exceptions) {
+        const dateKey = exception.recurrenceDate ? storedRecurrenceKey(exception.recurrenceDate) : null;
+        if (!dateKey || !exception.parentEventId) continue;
+        const keys = replacedByParent.get(exception.parentEventId) ?? new Set<string>();
+        replacedByParent.set(exception.parentEventId, keys);
+        keys.add(dateKey);
     }
 
     const results: CalendarEventOccurrence[] = [];
@@ -117,23 +75,31 @@ export async function getEventsInRange(
     }
 
     for (const event of recurring) {
-        const cancelledDates = new Set<string>();
-        const modifiedDates = new Map<string, CalendarEvent>();
-        for (const exception of exceptionsByParent.get(event.id) ?? []) {
-            const dateKey = exception.recurrenceDate ? storedRecurrenceKey(exception.recurrenceDate) : null;
-            if (!dateKey) continue;
-            if (exception.status === 'cancelled') cancelledDates.add(dateKey);
-            else modifiedDates.set(dateKey, exception);
-        }
-
+        const replaced = replacedByParent.get(event.id);
         for (const occurrence of expandRecurrence(event, from, clampedTo)) {
-            if (cancelledDates.has(occurrence.occurrenceDate)) continue;
-            const modified = modifiedDates.get(occurrence.occurrenceDate);
-            // The stored key, not the moved startTime: the FE round-trips occurrenceDate into scope='this' RSVPs.
-            results.push(modified ? { ...modified, occurrenceDate: occurrence.occurrenceDate } : occurrence);
+            if (!replaced?.has(occurrence.occurrenceDate)) results.push(occurrence);
         }
+    }
+
+    for (const exception of exceptions) {
+        if (exception.status === 'cancelled') continue;
+        if (exception.startTime > clampedTo || exception.endTime < from) continue;
+        // The stored key, not the moved startTime: the FE round-trips occurrenceDate into scope='this' RSVPs.
+        const dateKey = exception.recurrenceDate ? storedRecurrenceKey(exception.recurrenceDate) : null;
+        if (dateKey) results.push({ ...exception, occurrenceDate: dateKey });
     }
 
     results.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
     return results;
+}
+
+// The files a window touches: a resource matches when an occurrence of it does.
+export async function getResourceUrisInRange(
+    calendar: Calendar,
+    calendarId: string,
+    from: Date,
+    to: Date,
+): Promise<Set<string>> {
+    const occurrences = await getEventsInRange(calendar, from, to, calendarId);
+    return new Set(occurrences.map((occurrence) => occurrence.uri));
 }
