@@ -243,7 +243,7 @@ describe('Calendar Invites', () => {
             // The client's sync token, captured after the first receive and before the delete + re-receive.
             const preCtag = (await cal.getCalendarById(defaultCal.id))!.ctag;
 
-            await cal.deleteEvent(defaultCal.id, firstId); // Bob deletes his linked copy → tombstones the uri
+            await cal.deleteEvent(defaultCal.id, firstId!); // Bob deletes his linked copy → tombstones the uri
             const secondId = await cal.receiveInvitation(payload); // Alice re-sends the same invite
             expect(secondId).not.toBe(firstId);
 
@@ -255,7 +255,7 @@ describe('Calendar Invites', () => {
             expect(deleted.some((d) => d.uri === changed[0].uri)).toBe(false);
         });
 
-        test('a colliding (calendarId, uri) insert fails without a phantom ctag bump', async () => {
+        test('a second link on one UID is dropped, and never a second master', async () => {
             const bobHome = await getHome(ctx.bob.user.id);
             const cal = bobHome.calendar;
             const defaultCal = findOrFail(await cal.getCalendars(), (c) => c.isDefault);
@@ -283,17 +283,17 @@ describe('Calendar Invites', () => {
             await cal.receiveInvitation(payload);
             const preCtag = (await cal.getCalendarById(defaultCal.id))!.ctag;
 
-            // The same uid (→ same uri) under a different organizer key slips past the linked-event dedupe and
-            // collides on the (calendarId, uri) unique index. The failure must not leave a phantom ctag bump —
-            // every client would poll an empty delta for it.
-            await expect(
-                cal.receiveInvitation({
-                    ...payload,
-                    organizerEventId: `org-b-${uid}`,
-                    organizerUserId: ctx.charlie.user.id,
-                }),
-            ).rejects.toThrow();
+            // The same uid under another organizer key slips past the linked-event dedupe; the calendar
+            // already holds that UID, so the invitation is dropped instead of throwing on the unique
+            // index, and it leaves no phantom ctag bump for every client to poll an empty delta for.
+            const second = await cal.receiveInvitation({
+                ...payload,
+                organizerEventId: `org-b-${uid}`,
+                organizerUserId: ctx.charlie.user.id,
+            });
+            expect(second).toBeNull();
             expect((await cal.getCalendarById(defaultCal.id))!.ctag).toBe(preCtag);
+            expect(await cal.getEventsByUid(uid)).toHaveLength(1);
         });
     });
 

@@ -693,6 +693,32 @@ export function removeExclusion(resource: ICAL.Component, recurrenceKey: string,
     if (dropExclusion(vevent, recurrenceKey)) touch(vevent, ctx, true);
 }
 
+// Who a stored resource nobody linked says its organizer is: the address it was imported with, else the
+// ORGANIZER the file carries. The inbound-REQUEST rule matches a verified sender against this.
+export function storedOrganizerAddress(resource: ICAL.Component): string | null {
+    const vevent = masterVEvent(resource);
+    if (!vevent) return null;
+    const imported = readStamp(vevent, EIGEN.importedOrganizer);
+    if (imported) return imported.toLowerCase();
+    const organizer = vevent.getFirstProperty('organizer');
+    const address = organizer ? calAddress(organizer.getFirstValue()).toLowerCase() : '';
+    return address || null;
+}
+
+// Stamp a stored resource as the attendee-side copy of somebody else's event. The link comes from trusted
+// message fields only — the relay envelope, or `external_<address>` for a DKIM-aligned iMIP sender.
+export function stampInvitationLink(
+    resource: ICAL.Component,
+    link: { organizerEventId: string; organizerUserId: string },
+): void {
+    for (const vevent of resource.getAllSubcomponents('vevent')) {
+        vevent.removeAllProperties(EIGEN.organizerEvent);
+        vevent.removeAllProperties(EIGEN.organizerUser);
+        vevent.addProperty(rawProperty(EIGEN.organizerEvent, link.organizerEventId));
+        vevent.addProperty(rawProperty(EIGEN.organizerUser, link.organizerUserId));
+    }
+}
+
 // A file whose row ids another resource already holds is a copy of it: every other Eigen line stays, and
 // the ids — the master's, the overrides', and the ones the exclusion stamps carry — are minted fresh.
 export function remintEventIds(resource: ICAL.Component): void {

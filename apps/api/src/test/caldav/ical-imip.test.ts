@@ -869,7 +869,7 @@ describe('Calendar timezone read-side degrade (audit P1-7b)', () => {
 
     const organizerId = 'external_outlook@external.com';
 
-    async function receivePoisonedInvite(uid: string): Promise<string> {
+    async function receivePoisonedInvite(uid: string): Promise<string | null> {
         const home = await getHome(ctx.charlie.user.id);
         return home.calendar.receiveInvitation({
             uid,

@@ -13,7 +13,7 @@ import type {
     EventData,
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
-import { isExternalOwnerId, parseOwnerId } from '@workspace/lib/types/owner';
+import { externalOwnerId, isExternalOwnerId, parseOwnerId } from '@workspace/lib/types/owner';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { and, count, eq, gte, isNull, lte, sql } from 'drizzle-orm';
@@ -34,7 +34,18 @@ import {
 import type { DeleteResourceResult, ManagedDatabase } from '../core/';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
-import { addExclusion, buildResource, parseResource, patchEvent, putOverride, removeExclusion } from '../ical';
+import {
+    addExclusion,
+    buildResource,
+    parseResource,
+    patchEvent,
+    putOverride,
+    removeExclusion,
+    stampInvitationLink,
+    storedOrganizerAddress,
+} from '../ical';
+import type { EventPatch } from '../ical/ical-component';
+import type { ParsedEvent } from '../ical/ical-parse';
 import { clampRangeEnd, isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../ical/recurrence-limits';
 import { computeOccurrenceTimes, storedRecurrenceKey, utcToLocal } from '../ical/wall-clock';
 import { actorDisplayName, type User } from '../user';
@@ -79,6 +90,71 @@ type Tx = Parameters<Parameters<BunSQLiteDatabase<typeof schema>['transaction']>
 
 // An event row and the file it was projected from — what every read of a stored event answers with.
 type JoinedEvent = { events: typeof schema.events.$inferSelect; resources: typeof schema.resources.$inferSelect };
+
+// What the inbound-REQUEST decision did, so the broadcast and the notification can run after release.
+type InboundRequestOutcome =
+    | { kind: 'dropped'; reason: string }
+    | { kind: 'updated'; linked: CalendarEvent }
+    | { kind: 'created'; calendarId: string; payload: ReceiveInvitationPayload };
+
+function inboundUpdatePayload(parsed: ParsedEvent): InvitationUpdatePayload {
+    return {
+        title: parsed.title,
+        description: parsed.description,
+        location: parsed.location,
+        startTime: parsed.startTime,
+        endTime: parsed.endTime,
+        allDay: parsed.allDay,
+        rrule: parsed.rrule,
+        timezone: parsed.timezone,
+        status: parsed.status,
+        sequence: parsed.sequence,
+        attendees: parsed.data?.attendees,
+    };
+}
+
+function inboundExceptionPayload(parsed: ParsedEvent): InvitationExceptionPayload {
+    return {
+        recurrenceDate: parsed.recurrenceDate!,
+        recurrenceInstant: parsed.recurrenceInstant,
+        title: parsed.title,
+        description: parsed.description,
+        location: parsed.location,
+        startTime: parsed.startTime,
+        endTime: parsed.endTime,
+        allDay: parsed.allDay,
+        timezone: parsed.timezone,
+        status: parsed.status,
+        sequence: parsed.sequence,
+        attendees: parsed.data?.attendees,
+    };
+}
+
+// An external organizer is known by address only, so the link is `external_<address>` on both stamps.
+function inboundInvitationPayload(parsed: ParsedEvent, sender: string): ReceiveInvitationPayload {
+    const organizerUserId = externalOwnerId(sender);
+    return {
+        uid: parsed.uid,
+        title: parsed.title,
+        description: parsed.description,
+        location: parsed.location,
+        startTime: parsed.startTime,
+        endTime: parsed.endTime,
+        allDay: parsed.allDay,
+        rrule: parsed.rrule,
+        timezone: parsed.timezone,
+        status: parsed.status,
+        sequence: parsed.sequence,
+        data: {
+            ...parsed.data,
+            organizer: parsed.data?.organizer ? { ...parsed.data.organizer, userId: organizerUserId } : undefined,
+            organizerEventId: parsed.uid,
+        },
+        createByUserId: organizerUserId,
+        organizerEventId: parsed.uid,
+        organizerUserId,
+    };
+}
 
 export class Calendar {
     private managedDb!: ManagedDatabase<typeof schema>;
@@ -754,25 +830,30 @@ export class Calendar {
     public async createEvent(calendarId: string, input: CreateEventArgs, user?: User): Promise<CalendarEvent> {
         const cal = this.calendarById(calendarId);
         if (!cal) throw new ApiError(404, 'Calendar not found');
-        validateEventInput(input);
 
-        const created = await this.gate.run(async () => {
-            if (input.parentEventId) return this.writeOverride(calendarId, input);
-
-            const uri = input.uri ?? `${randomUUID()}.ics`;
-            if (sanitizeEventUri(uri) !== uri) throw new ApiError(400, 'Invalid event name');
-            const uid = input.uid || randomUUID();
-            if (this.uidHolder(calendarId, uid)) throw new ApiError(409, 'An event with this UID already exists');
-            const event = eventForFile({ id: randomUUID(), calendarId, uid, input, now: new Date() });
-            await store.writeResource(this, calendarId, uri, buildResource([event]), null);
-            return this.eventById(event.id)!;
-        });
+        const created = await this.gate.run(() => this.writeEvent(calendarId, input));
 
         this.announce(calendarId, SSEventType.CALENDAR_EVENT_CREATED);
         if (user && created.data?.attendees?.length) {
             propagateInvitation(this.home, created, user, [], created.data.attendees).catch(console.error);
         }
         return created;
+    }
+
+    // The locked core every writer of a NEW event shares: the caller holds the gate, and the checks that
+    // decide WHICH file is written — the name, the UID, and an override's parent — run inside it.
+    // internal — used by calendar/*.ts
+    async writeEvent(calendarId: string, input: CreateEventArgs): Promise<CalendarEvent> {
+        validateEventInput(input);
+        if (input.parentEventId) return this.writeOverride(calendarId, input);
+
+        const uri = input.uri ?? `${randomUUID()}.ics`;
+        if (sanitizeEventUri(uri) !== uri) throw new ApiError(400, 'Invalid event name');
+        const uid = input.uid || randomUUID();
+        if (this.uidHolder(calendarId, uid)) throw new ApiError(409, 'An event with this UID already exists');
+        const event = eventForFile({ id: randomUUID(), calendarId, uid, input, now: new Date() });
+        await store.writeResource(this, calendarId, uri, buildResource([event]), null);
+        return this.eventById(event.id)!;
     }
 
     // An exception is one VEVENT inside its master's file: an override replaces the occurrence, a
@@ -1234,14 +1315,10 @@ export class Calendar {
         return row ? Calendar.toEvent(row) : null;
     }
 
-    public async receiveInvitation(payload: ReceiveInvitationPayload): Promise<string> {
-        const existing = this.findLinkedEvent(payload.organizerEventId, payload.organizerUserId);
-        if (existing) return existing.id;
-
-        const defaultCal = (await this.getCalendars()).find((c) => c.isDefault);
-        if (!defaultCal) throw new ApiError(500, 'No default calendar');
-
-        const created = await this.createEvent(defaultCal.id, {
+    // The row shape of an invitation payload: the link rides in `data`, and only the fields a trusted
+    // message stated ever reach it.
+    private invitationInput(payload: ReceiveInvitationPayload): CreateEventArgs {
+        return {
             title: payload.title,
             description: payload.description,
             location: payload.location,
@@ -1261,8 +1338,33 @@ export class Calendar {
             },
             createByUserId: payload.createByUserId,
             uid: payload.uid,
-        });
+        };
+    }
 
+    // Null when the invitation is dropped: the calendar already holds that UID under another link, which
+    // is one organizer re-using a UID somebody else already sent us — never a second master.
+    public async receiveInvitation(payload: ReceiveInvitationPayload): Promise<string | null> {
+        const existing = this.findLinkedEvent(payload.organizerEventId, payload.organizerUserId);
+        if (existing) return existing.id;
+
+        const defaultCal = (await this.getCalendars()).find((c) => c.isDefault);
+        if (!defaultCal) throw new ApiError(500, 'No default calendar');
+
+        const created = await this.gate.run(async () => {
+            if (this.uidHolder(defaultCal.id, payload.uid)) return null;
+            return this.writeEvent(defaultCal.id, this.invitationInput(payload));
+        });
+        if (!created) {
+            console.info(`calendar: dropped an invitation for ${payload.uid} — the calendar holds that UID already`);
+            return null;
+        }
+
+        this.announce(defaultCal.id, SSEventType.CALENDAR_EVENT_CREATED);
+        this.notifyInvitationReceived(payload);
+        return created.id;
+    }
+
+    private notifyInvitationReceived(payload: ReceiveInvitationPayload): void {
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_RECEIVED, payload.organizerUserId));
         const organizer = payload.data?.organizer;
         this.home.notifications?.persist({
@@ -1273,7 +1375,6 @@ export class Calendar {
             tag: `calendar-invite:${payload.organizerEventId}:${payload.startTime.getTime()}`,
             details: { startTime: payload.startTime.getTime() },
         });
-        return created.id;
     }
 
     public async receiveInvitationUpdate(
@@ -1283,53 +1384,65 @@ export class Calendar {
     ): Promise<void> {
         const linked = this.findLinkedEvent(orgEventId, orgUserId);
         if (!linked) return;
+        const applied = await this.gate.run(() => this.applyInvitationUpdate(linked, payload));
+        if (applied) this.notifyInvitationUpdated(linked, payload.title, payload.startTime, orgEventId, orgUserId);
+    }
 
+    // Caller holds the gate. False when the message is a replay the stored copy already outranks.
+    private async applyInvitationUpdate(linked: CalendarEvent, payload: InvitationUpdatePayload): Promise<boolean> {
         // RFC 5546 §3.2.2.1: ignore a REQUEST older than the stored revision — a stale or replayed
         // invite must not overwrite the attendee's live copy. An equal SEQUENCE still applies: a title,
         // description or location edit is not a significant change and never bumps it (RFC 5545 §3.8.7.4),
         // so the attendee would otherwise never see one.
-        if (payload.sequence < linked.sequence) return;
+        if (payload.sequence < linked.sequence) return false;
 
         const resource = this.resourceOf(linked.id);
-        if (!resource) return;
+        if (!resource) return false;
         // Don't extend rrule beyond what the attendee has locally — they may have truncated it via
         // "delete this and following" and that intent should stick.
         const rrule = constrainRRule(payload.rrule, linked.rrule);
 
-        await this.gate.run(() =>
-            this.editResource(resource, (component) => {
-                patchEvent(
-                    component,
-                    null,
-                    {
-                        title: payload.title,
-                        description: payload.description,
-                        location: payload.location,
-                        startTime: payload.startTime,
-                        endTime: payload.endTime,
-                        allDay: payload.allDay,
-                        rrule: rrule ?? undefined,
-                        timezone: payload.timezone !== undefined ? payload.timezone : undefined,
-                        status: payload.status,
-                        data: payload.attendees ? { ...linked.data, attendees: payload.attendees } : undefined,
-                        // The attendee's copy carries the organizer's revision, so the replay guard has
-                        // a number to compare the next message against.
-                        sequence: payload.sequence,
-                    },
-                    this.writeContext(false),
-                );
-            }),
-        );
+        await this.editResource(resource, (component) => {
+            patchEvent(component, null, this.invitationPatch(linked, payload, rrule), this.writeContext(false));
+        });
+        return true;
+    }
 
+    // What an organizer's REQUEST is allowed to move on the attendee's copy.
+    private invitationPatch(linked: CalendarEvent, payload: InvitationUpdatePayload, rrule: string | null): EventPatch {
+        return {
+            title: payload.title,
+            description: payload.description,
+            location: payload.location,
+            startTime: payload.startTime,
+            endTime: payload.endTime,
+            allDay: payload.allDay,
+            rrule: rrule ?? undefined,
+            timezone: payload.timezone !== undefined ? payload.timezone : undefined,
+            status: payload.status,
+            data: payload.attendees ? { ...linked.data, attendees: payload.attendees } : undefined,
+            // The attendee's copy carries the organizer's revision, so the replay guard has a number to
+            // compare the next message against.
+            sequence: payload.sequence,
+        };
+    }
+
+    private notifyInvitationUpdated(
+        linked: CalendarEvent,
+        title: string,
+        startTime: Date,
+        orgEventId: string,
+        orgUserId: string,
+    ): void {
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_UPDATED, orgUserId));
         const organizer = linked.data?.organizer;
         this.home.notifications?.persist({
             type: 'calendar-invite-updated',
             actorEmail: organizer?.email,
             title: `${actorDisplayName(organizer?.name, organizer?.email)} updated an invitation`,
-            body: payload.title,
-            tag: `calendar-invite:${orgEventId}:${payload.startTime.getTime()}`,
-            details: { startTime: payload.startTime.getTime() },
+            body: title,
+            tag: `calendar-invite:${orgEventId}:${startTime.getTime()}`,
+            details: { startTime: startTime.getTime() },
         });
     }
 
@@ -1343,7 +1456,15 @@ export class Calendar {
     ): Promise<void> {
         const linked = this.findLinkedEvent(orgEventId, orgUserId);
         if (!linked) return;
+        const applied = await this.gate.run(() => this.applyInvitationException(linked, payload));
+        if (applied) this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_UPDATED, orgUserId));
+    }
 
+    // Caller holds the gate.
+    private async applyInvitationException(
+        linked: CalendarEvent,
+        payload: InvitationExceptionPayload,
+    ): Promise<boolean> {
         const recurrenceDate = this.recurrenceKeyForSeries(
             payload.recurrenceDate,
             payload.recurrenceInstant,
@@ -1351,13 +1472,13 @@ export class Calendar {
         );
         const existing = this.exceptionOf(linked.id, recurrenceDate);
         // RFC 5546 §3.2.2.1: ignore a REQUEST whose SEQUENCE isn't newer than the stored exception.
-        if (existing && payload.sequence <= existing.sequence) return;
+        if (existing && payload.sequence <= existing.sequence) return false;
 
         const data: EventData = {
             ...linked.data,
             attendees: payload.attendees ?? existing?.data?.attendees ?? linked.data?.attendees,
         };
-        await this.createEvent(linked.calendarId, {
+        await this.writeEvent(linked.calendarId, {
             title: payload.title,
             description: payload.description,
             location: payload.location,
@@ -1373,7 +1494,7 @@ export class Calendar {
             createByUserId: linked.createByUserId,
             uid: linked.uid,
         });
-        this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_UPDATED, orgUserId));
+        return true;
     }
 
     // Re-key an inbound iMIP RECURRENCE-ID against the stored series' timezone. The payload is a single
@@ -1389,6 +1510,106 @@ export class Calendar {
         const { year, month, day } = utcToLocal(recurrenceInstant, tz);
         const pad = (n: number) => String(n).padStart(2, '0');
         return `${year}-${pad(month)}-${pad(day)}`;
+    }
+
+    // The ONE decision an inbound iMIP REQUEST takes, made inside the gate against the state it would
+    // overwrite: deliveries are concurrent HTTP requests, so a lookup outside it lets two of them file two
+    // masters for one UID. `sender` is the DKIM-aligned From address the caller verified (R13 2c, R19).
+    public async receiveImipRequest(parsed: ParsedEvent, sender: string): Promise<void> {
+        const outcome = await this.gate.run(() => this.decideInboundRequest(parsed, sender));
+        if (outcome.kind === 'dropped') {
+            console.info(`iMIP: dropped a REQUEST for ${parsed.uid} from ${sender} — ${outcome.reason}`);
+            return;
+        }
+        if (outcome.kind === 'created') {
+            this.announce(outcome.calendarId, SSEventType.CALENDAR_EVENT_CREATED);
+            this.notifyInvitationReceived(outcome.payload);
+            return;
+        }
+        this.announce(outcome.linked.calendarId, SSEventType.CALENDAR_EVENT_UPDATED);
+        this.notifyInvitationUpdated(
+            outcome.linked,
+            parsed.title,
+            parsed.startTime,
+            parsed.uid,
+            externalOwnerId(sender),
+        );
+    }
+
+    // Caller holds the gate.
+    private async decideInboundRequest(parsed: ParsedEvent, sender: string): Promise<InboundRequestOutcome> {
+        const stored = this.joinedEvents().where(eq(schema.events.uid, parsed.uid)).all().map(Calendar.toEvent);
+        const linked = stored.find((e) => e.data?.organizer && e.data?.organizerEventId);
+
+        if (linked) {
+            // An update binds to the STORED organizer, not the one the body spells, so a co-attendee
+            // cannot hijack the invitation.
+            if (linked.data?.organizer?.email.toLowerCase() !== sender) {
+                return { kind: 'dropped', reason: 'the sender is not the organizer this copy is linked to' };
+            }
+            // A single-occurrence move (Google/Outlook "this event" edit) attaches as an exception: a
+            // full-event update would null the master's rrule and collapse the whole series (audit #A).
+            const applied = parsed.recurrenceDate
+                ? await this.applyInvitationException(linked, inboundExceptionPayload(parsed))
+                : await this.applyInvitationUpdate(linked, inboundUpdatePayload(parsed));
+            return applied ? { kind: 'updated', linked } : { kind: 'dropped', reason: 'a stale revision' };
+        }
+
+        const master = stored.find((e) => !e.parentEventId);
+        if (master) {
+            // An event this Home already holds under nobody's link: the organizer may claim it, but only
+            // when the address it names is the verified sender (R19).
+            const resource = this.resourceOf(master.id);
+            const component = resource ? await this.loadResource(resource.calendarId, resource.uri) : null;
+            if (!component || storedOrganizerAddress(component) !== sender) {
+                return { kind: 'dropped', reason: 'the stored event names another organizer' };
+            }
+            if (parsed.recurrenceDate) {
+                return { kind: 'dropped', reason: 'an occurrence of a series nobody organizes here yet' };
+            }
+            await this.adoptAsInvitation(master, resource!, component, parsed, sender);
+            return { kind: 'updated', linked: master };
+        }
+
+        // A new invitation is attributed to its sender, so the body's ORGANIZER must be that address.
+        if (parsed.data?.organizer?.email?.toLowerCase() !== sender) {
+            return { kind: 'dropped', reason: 'the ICS organizer is not the sender' };
+        }
+        // A lone exception REQUEST with no known master has nothing to attach to.
+        if (parsed.recurrenceDate) return { kind: 'dropped', reason: 'an exception with no series' };
+
+        const defaultCal = this.db
+            .select()
+            .from(schema.calendars)
+            .all()
+            .find((row) => row.isDefault);
+        if (!defaultCal) return { kind: 'dropped', reason: 'no default calendar' };
+        const payload = inboundInvitationPayload(parsed, sender);
+        await this.writeEvent(defaultCal.id, this.invitationInput(payload));
+        return { kind: 'created', calendarId: defaultCal.id, payload };
+    }
+
+    // Caller holds the gate. The stored resource becomes the attendee-side copy of the organizer's event:
+    // same file, same row ids, the link and the guest list from the message.
+    private async adoptAsInvitation(
+        master: CalendarEvent,
+        resource: typeof schema.resources.$inferSelect,
+        component: ICAL.Component,
+        parsed: ParsedEvent,
+        sender: string,
+    ): Promise<void> {
+        const organizer = { userId: externalOwnerId(sender), email: sender, name: parsed.data?.organizer?.name };
+        stampInvitationLink(component, { organizerEventId: parsed.uid, organizerUserId: organizer.userId });
+        patchEvent(
+            component,
+            null,
+            {
+                ...this.invitationPatch(master, inboundUpdatePayload(parsed), parsed.rrule),
+                data: { ...master.data, organizer, attendees: parsed.data?.attendees },
+            },
+            this.writeContext(false),
+        );
+        await store.writeResource(this, resource.calendarId, resource.uri, component, resource);
     }
 
     // Inbound iMIP: an external organizer canceled ONE occurrence of a recurring invite. Cancel just

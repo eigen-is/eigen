@@ -9,6 +9,8 @@ export {
     restampResource,
     serializeEventForImip,
     serializeResource,
+    stampInvitationLink,
+    storedOrganizerAddress,
     stripEigenStamps,
 } from './ical-component';
 export { parseIcs, parseResource, projectResource } from './ical-parse';

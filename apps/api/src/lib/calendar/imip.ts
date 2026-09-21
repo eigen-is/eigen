@@ -12,8 +12,6 @@ import { normalizeTimezone } from '../ical/timezone';
 import { computeOccurrenceTimes } from '../ical/wall-clock';
 import { verifyImipSender } from '../mail/imip-auth';
 
-import type { ReceiveInvitationPayload } from './types';
-
 type Organizer = NonNullable<EventData['organizer']>;
 
 // Invitation mail has no viewer, so a timed event that stored no usable zone (CalDAV/iMIP import,
@@ -208,7 +206,7 @@ export async function processInboundImip(
     // DKIM pass; otherwise fail closed and leave the invite as a plain attachment.
     const sender = mail.from?.value?.[0]?.address?.toLowerCase() ?? null;
     const verdict = verifyImipSender(mail.authenticationResults, getMailDomain(), sender?.split('@')[1] ?? null);
-    if (!verdict.verified) {
+    if (!sender || !verdict.verified) {
         console.info(`iMIP: not acting on ${method} from ${sender ?? 'unknown sender'} — ${verdict.reason}`);
         return;
     }
@@ -226,79 +224,9 @@ export async function processInboundImip(
         if (parsed.endTime < parsed.startTime) parsed.endTime = parsed.startTime;
 
         if (method === 'REQUEST') {
-            const existing = await calendar.getEventsByUid(parsed.uid);
-            const linked = existing.find((e) => e.data?.organizer && e.data?.organizerEventId);
-
-            const orgEventId = linked?.data?.organizerEventId;
-            const orgUserId = linked?.data?.organizer?.userId;
-            if (orgEventId && orgUserId) {
-                // Updates bind to the STORED organizer, not the ICS one, so co-attendees can't hijack the invite.
-                if (!sentBy(linked?.data?.organizer?.email)) continue;
-                if (parsed.recurrenceDate) {
-                    // Single-occurrence move (Google/Outlook "this event" edit): attach an exception to
-                    // the linked series. A full-event update here would null the master's rrule and move
-                    // its start, collapsing the whole series (audit #A).
-                    await calendar.receiveInvitationException(orgEventId, orgUserId, {
-                        recurrenceDate: parsed.recurrenceDate,
-                        recurrenceInstant: parsed.recurrenceInstant,
-                        title: parsed.title,
-                        description: parsed.description,
-                        location: parsed.location,
-                        startTime: parsed.startTime,
-                        endTime: parsed.endTime,
-                        allDay: parsed.allDay,
-                        timezone: parsed.timezone,
-                        status: parsed.status,
-                        sequence: parsed.sequence,
-                        attendees: parsed.data?.attendees,
-                    });
-                } else {
-                    await calendar.receiveInvitationUpdate(orgEventId, orgUserId, {
-                        title: parsed.title,
-                        description: parsed.description,
-                        location: parsed.location,
-                        startTime: parsed.startTime,
-                        endTime: parsed.endTime,
-                        allDay: parsed.allDay,
-                        rrule: parsed.rrule,
-                        timezone: parsed.timezone,
-                        status: parsed.status,
-                        sequence: parsed.sequence,
-                        attendees: parsed.data?.attendees,
-                    });
-                }
-            } else {
-                // New invites are attributed to the sender, so the ICS organizer must equal the From address.
-                const organizerEmail = parsed.data?.organizer?.email;
-                if (!sentBy(organizerEmail)) continue;
-                // A lone exception REQUEST with no known master has nothing to attach to — ignore it
-                // rather than materialise a bogus single event under the series UID.
-                if (parsed.recurrenceDate) continue;
-                const payload: ReceiveInvitationPayload = {
-                    uid: parsed.uid,
-                    title: parsed.title,
-                    description: parsed.description,
-                    location: parsed.location,
-                    startTime: parsed.startTime,
-                    endTime: parsed.endTime,
-                    allDay: parsed.allDay,
-                    rrule: parsed.rrule,
-                    timezone: parsed.timezone,
-                    status: parsed.status,
-                    sequence: parsed.sequence,
-                    data: {
-                        ...parsed.data,
-                        organizer: parsed.data?.organizer
-                            ? { ...parsed.data.organizer, userId: externalOwnerId(organizerEmail) }
-                            : undefined,
-                        organizerEventId: parsed.uid,
-                    },
-                    createByUserId: externalOwnerId(organizerEmail),
-                    organizerEventId: parsed.uid,
-                    organizerUserId: externalOwnerId(organizerEmail),
-                };
-                await calendar.receiveInvitation(payload);
-            }
+            // Update, adopt or drop — one locked decision, because Postfix delivers concurrently and a
+            // lookup outside the gate would let two deliveries file two masters for one UID.
+            await calendar.receiveImipRequest(parsed, sender);
         } else if (method === 'CANCEL') {
             // CANCEL is an organizer action too — same sender binding as REQUEST.
             const organizerEmail = parsed.data?.organizer?.email;
