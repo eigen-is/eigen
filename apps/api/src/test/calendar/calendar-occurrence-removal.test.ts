@@ -3,6 +3,8 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { getHome } from '../../lib/home';
+import { davRequest } from '../dav-test-helpers';
+import { vcal } from '../ics-test-helpers';
 import { assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
 
 const FROM = Math.floor(Date.parse('2030-01-01T00:00:00Z') / 1000);
@@ -107,5 +109,53 @@ describe('Removing one occurrence of a series', () => {
         const restored = await occurrencesOf(parent.uid);
         expect(restored).toHaveLength(4);
         expect(findOrFail(restored, (e) => e.occurrenceDate === TARGET).title).toBe('Occurrence Delete Cancelled');
+    });
+
+    // A client may cancel an occurrence as a STATUS:CANCELLED override instead of an EXDATE. Deleting that
+    // row puts the occurrence back, exactly as deleting an EXDATE-cancelled one does.
+    test("deleting a client's cancelled override puts the occurrence back", async () => {
+        const uid = 'client-cancelled-override@device';
+        const put = await davRequest('PUT', `/dav/calendars/${ctx.alice.user.id}/${calendarId}/cancelled.ics`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar' },
+            body: vcal(
+                [
+                    'BEGIN:VEVENT',
+                    `UID:${uid}`,
+                    'SUMMARY:Client Cancelled Override',
+                    'DTSTART:20300107T090000Z',
+                    'DTEND:20300107T100000Z',
+                    'RRULE:FREQ=WEEKLY;COUNT=4',
+                    'DTSTAMP:20300101T100000Z',
+                    'END:VEVENT',
+                ],
+                [
+                    'BEGIN:VEVENT',
+                    `UID:${uid}`,
+                    'SUMMARY:Client Cancelled Override',
+                    `RECURRENCE-ID:${TARGET.replace(/-/g, '')}T090000Z`,
+                    `DTSTART:${TARGET.replace(/-/g, '')}T090000Z`,
+                    `DTEND:${TARGET.replace(/-/g, '')}T100000Z`,
+                    'STATUS:CANCELLED',
+                    'DTSTAMP:20300101T100000Z',
+                    'END:VEVENT',
+                ],
+            ),
+        });
+        expect(put.status).toBe(201);
+        expect(await occurrencesOf(uid)).toHaveLength(3);
+
+        const home = await getHome(ctx.alice.user.id);
+        const cancelled = findOrFail(
+            await home.calendar.getEventsByUid(uid),
+            (e) => e.status === 'cancelled' && e.recurrenceDate === TARGET,
+        );
+        await deleteEvent(cancelled.id);
+
+        const restored = await occurrencesOf(uid);
+        expect(restored).toHaveLength(4);
+        expect(findOrFail(restored, (e) => e.occurrenceDate === TARGET).title).toBe('Client Cancelled Override');
+        // The occurrence is the master's expansion again, so no row of its own survives — as an EXDATE restore leaves none.
+        expect((await home.calendar.getEventsByUid(uid)).filter((e) => e.parentEventId)).toHaveLength(0);
     });
 });

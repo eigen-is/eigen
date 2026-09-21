@@ -667,7 +667,13 @@ export function addExclusion(
 export function removeExclusion(resource: ICAL.Component, recurrenceKey: string, ctx: WriteContext): void {
     const vevent = masterVEvent(resource);
     if (!vevent) throw new Error('removeExclusion: the resource holds no master VEVENT');
-    if (dropExclusion(vevent, recurrenceKey)) touch(vevent, ctx, true);
+    // A client may cancel an occurrence as a STATUS:CANCELLED override rather than an EXDATE; both go back the same way.
+    const override = findVEvent(resource, recurrenceKey);
+    if (override) {
+        resource.removeSubcomponent(override);
+        syncVTimezones(resource);
+    }
+    if (dropExclusion(vevent, recurrenceKey) || override) touch(vevent, ctx, true);
 }
 
 // What one revision of an event is known by: the sender's SEQUENCE and the instant it stamped.
