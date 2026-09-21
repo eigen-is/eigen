@@ -9,7 +9,7 @@ import { RRule } from 'rrule';
 import { ApiError, readResourceFile, uriKeyOf } from '../core';
 import { sendMail } from '../core/mailer';
 import { addExclusion, buildResource, patchEvent, putOverride, removeExclusion } from '../ical';
-import type { WriteContext } from '../ical/ical-component';
+import type { EventPatch, WriteContext } from '../ical/ical-component';
 import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../ical/recurrence-limits';
 import { storedRecurrenceKey } from '../ical/wall-clock';
 import type { User } from '../user';
@@ -67,7 +67,7 @@ export function resourceOf(calendar: Calendar, eventId: string): typeof schema.r
 }
 
 // Caller holds the gate; a throw after the rename leaves the key dirty for the next drain.
-export async function editResource(
+async function editResource(
     calendar: Calendar,
     resource: typeof schema.resources.$inferSelect,
     mutate: (component: ICAL.Component) => void,
@@ -76,6 +76,20 @@ export async function editResource(
     if (!component) throw new ApiError(404, 'Event not found');
     mutate(component);
     await store.writeResource(calendar, resource.calendarId, resource.uri, component, resource);
+}
+
+// The edit every writer but the two exclusion paths makes: one stored VEVENT patched in place.
+// Caller holds the gate and has already resolved the resource it means.
+export async function patchResource(
+    calendar: Calendar,
+    resource: typeof schema.resources.$inferSelect,
+    recurrenceKey: string | null,
+    patch: EventPatch,
+    context: WriteContext,
+): Promise<void> {
+    await editResource(calendar, resource, (component) => {
+        patchEvent(component, recurrenceKey, patch, context);
+    });
 }
 
 export function writeContext(actorIsOrganizer: boolean, dtstamp?: Date | null): WriteContext {
@@ -241,25 +255,24 @@ async function patchStoredEvent(
     if (!resource) throw new ApiError(404, 'Event not found');
 
     const key = existing.recurrenceDate ? storedRecurrenceKey(existing.recurrenceDate) : null;
-    await editResource(calendar, resource, (component) => {
-        patchEvent(
-            component,
-            key,
-            {
-                title: input.title?.trim(),
-                description: input.description,
-                location: input.location,
-                startTime: input.startTime,
-                endTime: input.endTime,
-                allDay: input.allDay,
-                rrule: input.rrule ?? undefined,
-                timezone: input.timezone,
-                status: input.status,
-                data: input.data ?? undefined,
-            },
-            writeContext(!!user && !linked),
-        );
-    });
+    await patchResource(
+        calendar,
+        resource,
+        key,
+        {
+            title: input.title?.trim(),
+            description: input.description,
+            location: input.location,
+            startTime: input.startTime,
+            endTime: input.endTime,
+            allDay: input.allDay,
+            rrule: input.rrule ?? undefined,
+            timezone: input.timezone,
+            status: input.status,
+            data: input.data ?? undefined,
+        },
+        writeContext(!!user && !linked),
+    );
 
     return { updated: eventById(calendar, id)!, oldAttendees, linked };
 }

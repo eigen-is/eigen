@@ -535,9 +535,13 @@ export async function updateAttendeeStatus(
             a.email.toLowerCase() === email.toLowerCase() ? { ...a, status } : a,
         );
         const key = event.recurrenceDate ? storedRecurrenceKey(event.recurrenceDate) : null;
-        await events.editResource(calendar, resource, (component) => {
-            patchEvent(component, key, { data: { ...event.data, attendees } }, events.writeContext(false));
-        });
+        await events.patchResource(
+            calendar,
+            resource,
+            key,
+            { data: { ...event.data, attendees } },
+            events.writeContext(false),
+        );
     });
 }
 
@@ -569,9 +573,13 @@ export async function rsvpForOccurrence(
         if (existing && existing.status !== 'cancelled') {
             const resource = events.resourceOf(calendar, existing.id);
             if (!resource) return null;
-            await events.editResource(calendar, resource, (component) => {
-                patchEvent(component, key, { data: { ...data, attendees } }, events.writeContext(false));
-            });
+            await events.patchResource(
+                calendar,
+                resource,
+                key,
+                { data: { ...data, attendees } },
+                events.writeContext(false),
+            );
             return parent.calendarId;
         }
 
@@ -686,8 +694,6 @@ async function removeThisAndFuture(calendar: Calendar, eventId: string, recurren
         const resource = events.resourceOf(calendar, eventId);
         if (!resource) throw new ApiError(404, 'Event not found');
         const truncated = truncateRRule(event.rrule, new Date(`${recurrenceDate}T00:00:00Z`));
-        await events.editResource(calendar, resource, (component) => {
-            patchEvent(component, null, { rrule: truncated }, events.writeContext(false));
-        });
+        await events.patchResource(calendar, resource, null, { rrule: truncated }, events.writeContext(false));
     });
 }
