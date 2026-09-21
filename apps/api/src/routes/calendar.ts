@@ -10,7 +10,6 @@ import type {
 } from '@workspace/lib/types/calendar';
 import { ICS_CONTENT_TYPE, isIcsFile } from '@workspace/lib/types/drive';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
-import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { checkCalendarAccess, resolveCalendar, syncTeamCalendars } from '../lib/calendar/get-calendar';
 import { EVENT_MAX_BYTES } from '../lib/calendar/resource-store';
@@ -32,9 +31,12 @@ import { getMemberships, type User } from '../lib/user';
 import { betterAuth } from './auth';
 import { importFromDriveSchema } from './shared-schemas';
 
-// Field bounds in front of the event ceiling: no single value can be a whole event, and free text caps at the ceiling itself.
+// Field bounds in front of the event ceiling. TEXT is for the ids and keys Eigen mints; everything a CalDAV
+// PUT may store caps at the resource ceiling itself, or the event a device wrote would be uneditable here.
 const TEXT = { maxLength: 512 };
 const FREE_TEXT = { maxLength: EVENT_MAX_BYTES };
+// An attendee or a reminder is one line of the file, and a file holds no more lines than it holds bytes.
+const LINES = { maxItems: EVENT_MAX_BYTES };
 const NAME = { maxLength: CALENDAR_NAME_MAX_LENGTH };
 
 const CalendarShareSchema = t.Object({
@@ -59,28 +61,29 @@ const ReminderSchema = t.Object({
     minutes: t.Number(),
 });
 
+// A CAL-ADDRESS is a URI and a CN is free text, so both are the file's to spell however long.
 const AttendeeSchema = t.Object({
-    email: t.String({ maxLength: MAX_EMAIL_LENGTH }),
-    name: t.Optional(t.String(TEXT)),
+    email: t.String(FREE_TEXT),
+    name: t.Optional(t.String(FREE_TEXT)),
     status: t.Union([t.Literal('pending'), t.Literal('accepted'), t.Literal('declined'), t.Literal('tentative')]),
     role: t.Union([t.Literal('required'), t.Literal('optional')]),
 });
 
 const EventDataSchema = t.Object({
-    reminders: t.Optional(t.Array(ReminderSchema, { maxItems: 50 })),
-    attendees: t.Optional(t.Array(AttendeeSchema, { maxItems: 100 })),
-    url: t.Optional(t.String(TEXT)),
+    reminders: t.Optional(t.Array(ReminderSchema, LINES)),
+    attendees: t.Optional(t.Array(AttendeeSchema, LINES)),
+    url: t.Optional(t.String(FREE_TEXT)),
     color: t.Optional(t.String(TEXT)),
 });
 
 const CreateEventSchema = t.Object({
-    title: t.String(TEXT),
+    title: t.String(FREE_TEXT),
     startTime: t.Date(),
     endTime: t.Date(),
     allDay: t.Boolean(),
     description: t.Optional(t.Nullable(t.String(FREE_TEXT))),
-    location: t.Optional(t.Nullable(t.String(TEXT))),
-    rrule: t.Optional(t.Nullable(t.String(TEXT))),
+    location: t.Optional(t.Nullable(t.String(FREE_TEXT))),
+    rrule: t.Optional(t.Nullable(t.String(FREE_TEXT))),
     timezone: t.Optional(t.Nullable(t.String(TEXT))),
     parentEventId: t.Optional(t.Nullable(t.String(TEXT))),
     recurrenceDate: t.Optional(t.Nullable(t.String(TEXT))),
@@ -89,13 +92,13 @@ const CreateEventSchema = t.Object({
 });
 
 const UpdateEventSchema = t.Object({
-    title: t.Optional(t.String(TEXT)),
+    title: t.Optional(t.String(FREE_TEXT)),
     startTime: t.Optional(t.Date()),
     endTime: t.Optional(t.Date()),
     allDay: t.Optional(t.Boolean()),
     description: t.Optional(t.Nullable(t.String(FREE_TEXT))),
-    location: t.Optional(t.Nullable(t.String(TEXT))),
-    rrule: t.Optional(t.Nullable(t.String(TEXT))),
+    location: t.Optional(t.Nullable(t.String(FREE_TEXT))),
+    rrule: t.Optional(t.Nullable(t.String(FREE_TEXT))),
     timezone: t.Optional(t.Nullable(t.String(TEXT))),
     status: t.Optional(t.Union([t.Literal('confirmed'), t.Literal('tentative'), t.Literal('cancelled')])),
     data: t.Optional(t.Nullable(EventDataSchema)),
